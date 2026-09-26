@@ -21,9 +21,11 @@ export const desktopPreferenceKeys = {
   openOmiShortcut: 'shortcut_askOmiEnabled',
   pushToTalk: 'shortcut_pttEnabled',
   liveVoiceProvider: 'omi.live.voiceProvider',
+  appearance: 'omi.appearance',
 } as const;
 
 export type AudioRecordingMode = 'off' | 'always' | 'meetings';
+export type DesktopAppearance = 'dark' | 'light';
 export type LiveVoiceProvider = 'gpt_live' | 'gemini_live';
 export type PermissionKind = 'screen' | 'microphone' | 'notifications';
 export type PermissionState = 'unknown' | 'granted' | 'denied';
@@ -43,6 +45,7 @@ export type DesktopPreferences = {
   openOmiShortcut: boolean;
   pushToTalk: boolean;
   liveVoiceProvider: LiveVoiceProvider;
+  appearance: DesktopAppearance;
   stampedV5Origin: string | null;
 };
 
@@ -71,6 +74,7 @@ const memoryPreferences: DesktopPreferences = {
   openOmiShortcut: true,
   pushToTalk: true,
   liveVoiceProvider: 'gpt_live',
+  appearance: 'dark',
   stampedV5Origin: null,
 };
 
@@ -83,6 +87,13 @@ export function parseAudioRecordingMode(value: unknown): AudioRecordingMode {
     return value;
   }
   return 'off';
+}
+
+export function parseDesktopAppearance(value: unknown): DesktopAppearance {
+  if (value === 'light') {
+    return 'light';
+  }
+  return 'dark';
 }
 
 export function parseLiveVoiceProvider(value: unknown): LiveVoiceProvider {
@@ -132,6 +143,7 @@ function snapshotFromRecord(
     openOmiShortcut: record.openOmiShortcut !== false,
     pushToTalk: record.pushToTalk !== false,
     liveVoiceProvider: parseLiveVoiceProvider(record.liveVoiceProvider),
+    appearance: parseDesktopAppearance(record.appearance),
     stampedV5Origin,
   };
 }

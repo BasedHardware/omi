@@ -1,5 +1,6 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import type {useRewindCapture} from '../app/useRewindCapture';
+import type {useAmbientAudio} from '../app/useAmbientAudio';
 import {Animated, ScrollView, Switch, Text, View} from 'react-native';
 import SettingsIcon from 'lucide-react-native/icons/settings';
 import UserRound from 'lucide-react-native/icons/user-round';
@@ -8,9 +9,11 @@ import History from 'lucide-react-native/icons/rotate-ccw-clock';
 import ShieldCheck from 'lucide-react-native/icons/shield-check';
 import Sparkles from 'lucide-react-native/icons/sparkles';
 import Info from 'lucide-react-native/icons/info';
+import Puzzle from 'lucide-react-native/icons/puzzle';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {desktopEaseSmoothOut} from './desktopMotion';
 import {ScrollFade, useScrollFade} from './ScrollFade';
+import {AppsPage} from './DesktopPages';
 import {
   loadAccountSettings,
   setPrivateCloudSync,
@@ -39,10 +42,15 @@ import {
 } from './desktopChrome';
 import {ShippingStage} from './ShippingStage';
 import {PageHeading} from './DesktopRows';
-import {desktopTokens as token} from './tokens';
+import {
+  type DesktopTokens,
+  useDesktopTheme,
+  useDesktopStyleSheets,
+} from './DesktopTheme';
 
 type Props = {
   capture?: ReturnType<typeof useRewindCapture>;
+  ambient?: ReturnType<typeof useAmbientAudio>;
   deviceContent?: React.ReactNode;
   session: DesktopSession;
   signingIn: boolean;
@@ -56,10 +64,10 @@ type Props = {
 const PANE_ITEM_HEIGHT = 40;
 const PANE_ITEM_GAP = 4;
 const PANE_PILL_RADIUS = 10;
-const switchColors = {
+const switchTrackColors = (token: DesktopTokens) => ({
   false: token.color.glassSelected,
   true: token.color.inkMuted,
-};
+});
 const paneInfo: Record<
   DesktopSettingsPane,
   {icon: typeof SettingsIcon; title: string; description: string}
@@ -89,6 +97,11 @@ const paneInfo: Record<
     title: 'Privacy',
     description: 'Decide what stays local and what goes to the cloud.',
   },
+  Apps: {
+    icon: Puzzle,
+    title: 'Apps & integrations',
+    description: 'Your Omi app catalog and connected accounts.',
+  },
   'AI & Automation': {
     icon: Sparkles,
     title: 'AI & automation',
@@ -114,6 +127,7 @@ function Row({
   title: string;
   trailing?: React.ReactNode;
 }) {
+  const styles = useDesktopStyleSheets(createStyles);
   return (
     <View style={styles.row}>
       <View style={styles.rowCopy}>
@@ -145,6 +159,7 @@ function Segmented<Value extends string>({
   options: readonly Value[];
   value: Value;
 }) {
+  const styles = useDesktopStyleSheets(createStyles);
   return (
     <View style={styles.segments}>
       {options.map(option => (
@@ -183,6 +198,8 @@ function SettingsNav({
   pane: DesktopSettingsPane;
   onChange: (pane: DesktopSettingsPane) => void;
 }) {
+  const {tokens: token} = useDesktopTheme();
+  const styles = useDesktopStyleSheets(createStyles);
   const reduceMotion = useReduceMotion();
   const index = Math.max(0, desktopSettingsPanes.indexOf(pane));
   const translateY = useRef(
@@ -244,6 +261,7 @@ function SettingsNav({
 
 export function DesktopSettings({
   capture,
+  ambient,
   deviceContent,
   onSignIn,
   onSignOut,
@@ -253,6 +271,8 @@ export function DesktopSettings({
   signingIn,
   softwarePlaneLocked,
 }: Props) {
+  const {tokens: token} = useDesktopTheme();
+  const styles = useDesktopStyleSheets(createStyles);
   const [pane, setPane] = useState<DesktopSettingsPane>('General');
   const fade = useScrollFade();
   const [prefs, setPrefs] = useState<DesktopPreferences>(
@@ -400,6 +420,28 @@ export function DesktopSettings({
       />
       <Row
         copy={
+          prefs.appearance === 'light'
+            ? 'Light chrome and surfaces across the app.'
+            : 'Dark chrome and surfaces across the app.'
+        }
+        title="Appearance"
+        trailing={
+          <Segmented
+            onChange={value => {
+              runAction(async () => {
+                await setPref(
+                  'appearance',
+                  value === 'Light' ? 'light' : 'dark',
+                );
+              });
+            }}
+            options={['Dark', 'Light'] as const}
+            value={prefs.appearance === 'light' ? 'Light' : 'Dark'}
+          />
+        }
+      />
+      <Row
+        copy={
           prefs.liveVoiceProvider === 'gemini_live'
             ? 'Uses models/gemini-3.1-flash-live-preview over Gemini Live. Fails closed if GEMINI_API_KEY is missing on the server.'
             : 'Uses gpt-live-1 over OpenAI WebRTC. Fails closed if OPENAI_API_KEY is missing on the server.'
@@ -439,11 +481,16 @@ export function DesktopSettings({
         trailing={
           <Switch
             accessibilityLabel="Screen capture setting"
-            trackColor={switchColors}
+            trackColor={switchTrackColors(token)}
             onValueChange={value => {
               if (capture?.available) {
-                if (value) void capture.start();
-                else void capture.stop();
+                if (value) {
+                  void capture.start();
+                  void setPref('screenCapture', true);
+                } else {
+                  void capture.stop();
+                  void setPref('screenCapture', false);
+                }
                 return;
               }
               if (value) {
@@ -466,7 +513,10 @@ export function DesktopSettings({
         copy={
           permissions.microphone === 'denied'
             ? 'Microphone access is denied in System Settings.'
-            : 'Off, always, or only while a meeting is in the foreground.'
+            : ambient?.error ??
+              (ambient?.running
+                ? 'Listening on this Mac. Audio is saved locally.'
+                : 'Off, or always on. Meeting-only capture arrives soon.')
         }
         title="Audio Recording"
         trailing={
@@ -475,13 +525,18 @@ export function DesktopSettings({
               runAction(async () => {
                 if (
                   value === 'off' ||
+                  permissions.microphone === 'granted' ||
                   (await request('microphone')) === 'granted'
                 ) {
                   await setPref('audioMode', value);
                 }
               });
             }}
-            options={['off', 'always', 'meetings']}
+            options={
+              prefs.audioMode === 'meetings'
+                ? ['off', 'always', 'meetings']
+                : ['off', 'always']
+            }
             value={prefs.audioMode}
           />
         }
@@ -496,7 +551,7 @@ export function DesktopSettings({
         trailing={
           <Switch
             accessibilityLabel="Notifications setting"
-            trackColor={switchColors}
+            trackColor={switchTrackColors(token)}
             onValueChange={value => {
               if (value) {
                 runAction(async () => {
@@ -572,7 +627,7 @@ export function DesktopSettings({
         trailing={
           <Switch
             accessibilityLabel="Automatic language detection"
-            trackColor={switchColors}
+            trackColor={switchTrackColors(token)}
             onValueChange={value => {
               runAction(() => setPref('transcriptionAutoDetect', value));
             }}
@@ -586,7 +641,7 @@ export function DesktopSettings({
         trailing={
           <Switch
             accessibilityLabel="Skip silence"
-            trackColor={switchColors}
+            trackColor={switchTrackColors(token)}
             onValueChange={value => {
               runAction(() => setPref('vadGate', value));
             }}
@@ -618,7 +673,7 @@ export function DesktopSettings({
         trailing={
           <Switch
             accessibilityLabel="Meeting screenshots"
-            trackColor={switchColors}
+            trackColor={switchTrackColors(token)}
             onValueChange={value => {
               runAction(() => setPref('meetingNoteScreenshots', value));
             }}
@@ -688,6 +743,8 @@ export function DesktopSettings({
     </>
   );
 
+  const apps = <AppsPage session={session} />;
+
   const about = (
     <>
       <Row copy="Omi v5 for Mac" title="Version" />
@@ -709,6 +766,8 @@ export function DesktopSettings({
       ? alerts
       : pane === 'AI & Automation'
       ? advanced
+      : pane === 'Apps'
+      ? apps
       : about;
 
   return (
@@ -743,7 +802,7 @@ export function DesktopSettings({
   );
 }
 
-const styles = {
+const createStyles = (token: DesktopTokens) => ({
   root: {
     flex: 1,
     flexDirection: 'row' as const,
@@ -868,4 +927,4 @@ const styles = {
     textTransform: 'capitalize' as const,
   },
   segmentTextActive: {color: token.color.ink},
-};
+});

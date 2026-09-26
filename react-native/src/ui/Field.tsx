@@ -9,7 +9,11 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
-import {tokens} from './tokens';
+import {
+  type KitTokens,
+  useDesktopThemeKit,
+  useKitStyleSheets,
+} from '../desktop/DesktopTheme';
 
 export type InputProps = Omit<TextInputProps, 'style'> & {
   containerStyle?: StyleProp<ViewStyle>;
@@ -26,14 +30,19 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
     editable = true,
     invalid = false,
     leading,
-    placeholderTextColor = tokens.color.textSubtle,
-    selectionColor = tokens.color.focus,
+    placeholderTextColor,
+    selectionColor,
     style,
     trailing,
     ...props
   },
   ref,
 ) {
+  const {tokens} = useDesktopThemeKit();
+  const styles = useKitStyleSheets(createStyles);
+  const resolvedPlaceholderTextColor =
+    placeholderTextColor ?? tokens.color.textSubtle;
+  const resolvedSelectionColor = selectionColor ?? tokens.color.focus;
   return (
     <View
       style={[
@@ -48,9 +57,9 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
         accessibilityState={accessibilityState}
         aria-invalid={invalid}
         editable={editable}
-        placeholderTextColor={placeholderTextColor}
+        placeholderTextColor={resolvedPlaceholderTextColor}
         ref={ref}
-        selectionColor={selectionColor}
+        selectionColor={resolvedSelectionColor}
         style={[styles.input, style]}
       />
       {trailing}
@@ -68,6 +77,7 @@ export const Field = forwardRef<TextInput, FieldProps>(function Field(
   {error, hint, label, ...props},
   ref,
 ) {
+  const styles = useKitStyleSheets(createStyles);
   return (
     <View style={styles.field}>
       {label === undefined ? null : <Text style={styles.label}>{label}</Text>}
@@ -80,28 +90,29 @@ export const Field = forwardRef<TextInput, FieldProps>(function Field(
   );
 });
 
-const styles = StyleSheet.create({
-  field: {gap: tokens.space.xs},
-  label: {color: tokens.color.text, ...tokens.type.label},
-  inputFrame: {
-    alignItems: 'center',
-    backgroundColor: tokens.color.input,
-    borderColor: tokens.color.line,
-    borderRadius: tokens.radius.md,
-    borderWidth: tokens.border.width,
-    flexDirection: 'row',
-    gap: tokens.space.sm,
-    minHeight: tokens.size.control,
-    paddingHorizontal: tokens.space.md,
-  },
-  inputFrameInvalid: {borderColor: tokens.color.danger},
-  input: {
-    color: tokens.color.text,
-    flex: tokens.layout.grow,
-    padding: tokens.space.none,
-    ...tokens.type.body,
-  },
-  hint: {color: tokens.color.textMuted, ...tokens.type.caption},
-  error: {color: tokens.color.danger, ...tokens.type.caption},
-  disabled: {opacity: tokens.opacity.disabled},
-});
+const createStyles = (tokens: KitTokens) =>
+  StyleSheet.create({
+    field: {gap: tokens.space.xs},
+    label: {color: tokens.color.text, ...tokens.type.label},
+    inputFrame: {
+      alignItems: 'center',
+      backgroundColor: tokens.color.input,
+      borderColor: tokens.color.line,
+      borderRadius: tokens.radius.md,
+      borderWidth: tokens.border.width,
+      flexDirection: 'row',
+      gap: tokens.space.sm,
+      minHeight: tokens.size.control,
+      paddingHorizontal: tokens.space.md,
+    },
+    inputFrameInvalid: {borderColor: tokens.color.danger},
+    input: {
+      color: tokens.color.text,
+      flex: tokens.layout.grow,
+      padding: tokens.space.none,
+      ...tokens.type.body,
+    },
+    hint: {color: tokens.color.textMuted, ...tokens.type.caption},
+    error: {color: tokens.color.danger, ...tokens.type.caption},
+    disabled: {opacity: tokens.opacity.disabled},
+  });

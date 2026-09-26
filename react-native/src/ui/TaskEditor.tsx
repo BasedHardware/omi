@@ -1,7 +1,10 @@
 import {FocusPressable as Pressable} from './Pressable';
 import React, {useEffect, useRef, useState} from 'react';
 import {Platform, StyleSheet, Text, TextInput, View} from 'react-native';
-import {desktopTokens as token} from '../desktop/tokens';
+import {
+  type DesktopTokens,
+  useDesktopStyleSheets,
+} from '../desktop/DesktopTheme';
 
 export type TaskMutationProps = {
   onTaskToggle?: (id: string) => void;
@@ -20,6 +23,7 @@ export function TaskMutationStatus({
   onDismissTaskMutation,
   desktop = Platform.OS === 'macos',
 }: TaskMutationProps & {desktop?: boolean}) {
+  const styles = useDesktopStyleSheets(createStyles);
   return (
     <View>
       {!writesAvailable && (
@@ -75,6 +79,7 @@ export function TaskEditor({
   onClose: () => void;
   desktop?: boolean;
 }) {
+  const styles = useDesktopStyleSheets(createStyles);
   const [description, setDescription] = useState(title);
   const previousTask = useRef({id, title});
   useEffect(() => {
@@ -124,35 +129,36 @@ export function TaskEditor({
   );
 }
 
-const styles = StyleSheet.create({
-  lightText: {color: token.color.ink},
-  lightInput: {
-    backgroundColor: token.color.glassStrong,
-    color: token.color.ink,
-    borderColor: token.color.lineStrong,
-    fontSize: 14,
-    lineHeight: 21,
-  },
-  saveButton: {backgroundColor: token.color.ink, borderRadius: 10},
-  editor: {paddingVertical: 12, gap: 8},
-  input: {
-    borderColor: '#b9b9b9',
-    borderWidth: 1,
-    borderRadius: 12,
-    color: '#ffffff',
-    backgroundColor: '#1f1f25',
-    padding: 12,
-    minHeight: 64,
-    textAlignVertical: 'top',
-  },
-  actions: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
-  button: {
-    minHeight: 44,
-    minWidth: 44,
-    paddingHorizontal: 12,
-    justifyContent: 'center',
-  },
-  label: {color: '#ffffff', fontSize: 14, fontWeight: '600'},
-  copy: {color: '#a1a1a1', fontSize: 13, lineHeight: 19, paddingVertical: 8},
-  disabled: {opacity: 0.45},
-});
+const createStyles = (token: DesktopTokens) =>
+  StyleSheet.create({
+    lightText: {color: token.color.ink},
+    lightInput: {
+      backgroundColor: token.color.glassStrong,
+      color: token.color.ink,
+      borderColor: token.color.lineStrong,
+      fontSize: 14,
+      lineHeight: 21,
+    },
+    saveButton: {backgroundColor: token.color.ink, borderRadius: 10},
+    editor: {paddingVertical: 12, gap: 8},
+    input: {
+      borderColor: '#b9b9b9',
+      borderWidth: 1,
+      borderRadius: 12,
+      color: '#ffffff',
+      backgroundColor: '#1f1f25',
+      padding: 12,
+      minHeight: 64,
+      textAlignVertical: 'top',
+    },
+    actions: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
+    button: {
+      minHeight: 44,
+      minWidth: 44,
+      paddingHorizontal: 12,
+      justifyContent: 'center',
+    },
+    label: {color: '#ffffff', fontSize: 14, fontWeight: '600'},
+    copy: {color: '#a1a1a1', fontSize: 13, lineHeight: 19, paddingVertical: 8},
+    disabled: {opacity: 0.45},
+  });

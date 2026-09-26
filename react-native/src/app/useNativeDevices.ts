@@ -56,6 +56,15 @@ function mergeBattery(
 const pausedUploadMessage =
   'Recording is saved on this device. Upload is paused and will retry automatically.';
 
+function isCaptureOwnershipUnavailable(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    'code' in error &&
+    (error as {code?: unknown}).code === 'OMI_CAPTURE_OWNERSHIP_UNAVAILABLE'
+  );
+}
+
 export const DEVICE_UPLOAD_LIMITS = {
   maxPendingBytes: 8_388_608,
   maxSessionBytes: 8_388_608,
@@ -648,13 +657,22 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
             deviceId: target.deviceId,
             deviceName: target.deviceName,
             codec: target.codec,
-          }).then(journal => {
-            if (!enabledRef.current || epoch !== epochRef.current) {
-              throw new Error('Recording retired');
-            }
-            target.journal = journal;
-            target.captureId = journal.captureId;
-          });
+          }).then(
+            journal => {
+              if (!enabledRef.current || epoch !== epochRef.current) {
+                throw new Error('Recording retired');
+              }
+              target.journal = journal;
+              target.captureId = journal.captureId;
+            },
+            error => {
+              if (!isCaptureOwnershipUnavailable(error)) {
+                throw error;
+              }
+              // Backends without capture ownership have no durable journals;
+              // leave the capture on the direct device-session upload path.
+            },
+          );
           void target.journalWork.catch(() => failJournal(target, epoch));
         }
       }
@@ -862,7 +880,7 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
       recoveryRunning = true;
       const backend = omiBackend;
       const epoch = epochRef.current;
-      const ready = backend.listRecordingJournals!().then(descriptors => {
+      const listed = backend.listRecordingJournals!().then(descriptors => {
         if (!active) {
           return;
         }
@@ -945,6 +963,15 @@ export function useNativeDevices(options?: {enabled?: boolean}) {
               recoverSavedRecordings();
             }
           });
+      });
+      const ready = listed.catch(error => {
+        if (!isCaptureOwnershipUnavailable(error)) {
+          throw error;
+        }
+        // This backend has no native recording journals (it reports capture
+        // ownership as unavailable). Keep connecting available and upload
+        // captures through the direct device-session path instead.
+        recoveryRunning = false;
       });
       journalReadyRef.current = ready;
       void ready.catch(() => {

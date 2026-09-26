@@ -23,6 +23,7 @@ import {
   type TaskMutationProps,
 } from '../ui/TaskEditor';
 import {ReadStatus} from '../ui/ReadStatus';
+import {matchesSearchQuery} from '../searchText';
 import {styles} from '../ui/styles';
 
 const taskGroups: TaskGroup[] = ['Today', 'Tomorrow', 'Later'];
@@ -66,14 +67,10 @@ export function TasksPage({
         : [],
     [outcome],
   );
-  const filtered = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase();
-    return normalized === ''
-      ? tasks
-      : tasks.filter(task =>
-          task.title.toLocaleLowerCase().includes(normalized),
-        );
-  }, [query, tasks]);
+  const filtered = useMemo(
+    () => tasks.filter(task => matchesSearchQuery(task.title, query)),
+    [query, tasks],
+  );
   const grouped = useMemo(
     () =>
       taskGroups.map(label => ({

@@ -41,8 +41,8 @@ test('desktop chrome includes a dedicated Chat destination', () => {
     'Conversations',
     'Rewind',
     'Tasks',
-    'Apps',
   ]);
+  expect(isShippingDesktopNav('Apps')).toBe(false);
   expect(isShippingDesktopNav('Home')).toBe(true);
   expect(isShippingDesktopNav('Conversations')).toBe(true);
   expect(isShippingDesktopNav('Chat')).toBe(true);
@@ -110,6 +110,7 @@ test('settings IA keeps wired panes and drops no-op duplicates', () => {
     'Rewind',
     'Alerts & Privacy',
     'AI & Automation',
+    'Apps',
     'About',
   ]);
   expect(desktopSettingsPanes).not.toContain('Floating Bar');

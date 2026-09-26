@@ -17,7 +17,7 @@ import {
 } from '../liveWebRtc';
 import {LiveGeminiSession, resolveLiveGeminiScope} from '../liveGemini';
 import {FocusPressable} from './Pressable';
-import {desktopTokens} from '../desktop/tokens';
+import {useDesktopTheme} from '../desktop/DesktopTheme';
 import {mobileColor} from '../mobile/mobileTokens';
 
 type Props = {
@@ -37,6 +37,7 @@ export function LiveVoiceButton({
   desktop = false,
   provider = 'gpt_live',
 }: Props) {
+  const {tokens: desktopTokens} = useDesktopTheme();
   const [phase, setPhase] = useState<LiveVoicePhase>('idle');
   const [message, setMessage] = useState<string | null>(null);
   const sessionRef = useRef<ActiveSession | null>(null);

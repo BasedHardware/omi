@@ -41,7 +41,11 @@ import {
   uploadVoicePrint,
   VOICE_PRINT_MIN_SECONDS,
 } from '../app/voicePrint';
-import {desktopTokens} from '../desktop/tokens';
+import {
+  type DesktopTokens,
+  useDesktopTheme,
+  useDesktopStyleSheets,
+} from '../desktop/DesktopTheme';
 import type {OmiAuthDesktopHandoff} from '../omiNativeTypes';
 import {Button} from './Button';
 import {Field} from './Field';
@@ -82,6 +86,8 @@ export function Onboarding({
   onSignOut?: () => void;
   desktopHandoff?: OmiAuthDesktopHandoff | null;
 }) {
+  const styles = useDesktopStyleSheets(createStyles);
+  const {tokens: desktopTokens} = useDesktopTheme();
   const reduceMotion = useReduceMotion();
   const desktop = Platform.OS === 'macos';
   const browser = Platform.OS === 'web';
@@ -697,72 +703,73 @@ export function Onboarding({
   );
 }
 
-const styles = StyleSheet.create({
-  surface: {
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: tokens.space.xxl,
-    paddingVertical: tokens.space.xl,
-  },
-  links: {flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center'},
-  column: {
-    alignItems: 'center',
-    gap: tokens.space.sm,
-    maxWidth: tokens.size.content,
-    width: '100%',
-  },
-  dots: {
-    marginBottom: tokens.space.none,
-  },
-  title: {
-    color: tokens.color.text,
-    fontSize: 32,
-    fontWeight: '700',
-    letterSpacing: -1,
-    lineHeight: 38,
-    textAlign: 'center',
-  },
-  titleStart: {alignSelf: 'stretch', textAlign: 'left'},
-  copy: {
-    color: tokens.color.menuText,
-    fontSize: 15,
-    lineHeight: 22,
-    textAlign: 'center',
-  },
-  copyStart: {alignSelf: 'stretch', textAlign: 'left'},
-  error: {
-    color: tokens.color.menuText,
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: 'center',
-  },
-  unreachable: {
-    color: uiColor.danger,
-  },
-  meta: {color: tokens.color.textMuted, fontSize: 12, textAlign: 'center'},
-  choices: {
-    alignSelf: 'stretch',
-    gap: tokens.space.xs,
-  },
-  choice: {
-    alignSelf: 'stretch',
-    alignItems: 'center',
-    borderColor: tokens.color.line,
-    borderRadius: tokens.radius.md,
-    borderWidth: tokens.border.width,
-    gap: tokens.space.xs,
-    padding: tokens.space.md,
-  },
-  choiceTitle: {
-    color: tokens.color.text,
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  desktopTitle: {color: desktopTokens.color.ink},
-  desktopCopy: {color: desktopTokens.color.inkMuted},
-  desktopUnreachable: {color: desktopTokens.color.red},
-  desktopButton: {backgroundColor: desktopTokens.color.dark},
-  desktopButtonLabel: {color: desktopTokens.color.white},
-});
+const createStyles = (desktopTokens: DesktopTokens) =>
+  StyleSheet.create({
+    surface: {
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      flexGrow: 1,
+      justifyContent: 'center',
+      paddingHorizontal: tokens.space.xxl,
+      paddingVertical: tokens.space.xl,
+    },
+    links: {flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center'},
+    column: {
+      alignItems: 'center',
+      gap: tokens.space.sm,
+      maxWidth: tokens.size.content,
+      width: '100%',
+    },
+    dots: {
+      marginBottom: tokens.space.none,
+    },
+    title: {
+      color: tokens.color.text,
+      fontSize: 32,
+      fontWeight: '700',
+      letterSpacing: -1,
+      lineHeight: 38,
+      textAlign: 'center',
+    },
+    titleStart: {alignSelf: 'stretch', textAlign: 'left'},
+    copy: {
+      color: tokens.color.menuText,
+      fontSize: 15,
+      lineHeight: 22,
+      textAlign: 'center',
+    },
+    copyStart: {alignSelf: 'stretch', textAlign: 'left'},
+    error: {
+      color: tokens.color.menuText,
+      fontSize: 13,
+      lineHeight: 18,
+      textAlign: 'center',
+    },
+    unreachable: {
+      color: uiColor.danger,
+    },
+    meta: {color: tokens.color.textMuted, fontSize: 12, textAlign: 'center'},
+    choices: {
+      alignSelf: 'stretch',
+      gap: tokens.space.xs,
+    },
+    choice: {
+      alignSelf: 'stretch',
+      alignItems: 'center',
+      borderColor: tokens.color.line,
+      borderRadius: tokens.radius.md,
+      borderWidth: tokens.border.width,
+      gap: tokens.space.xs,
+      padding: tokens.space.md,
+    },
+    choiceTitle: {
+      color: tokens.color.text,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    desktopTitle: {color: desktopTokens.color.ink},
+    desktopCopy: {color: desktopTokens.color.inkMuted},
+    desktopUnreachable: {color: desktopTokens.color.red},
+    desktopButton: {backgroundColor: desktopTokens.color.dark},
+    desktopButtonLabel: {color: desktopTokens.color.white},
+  });

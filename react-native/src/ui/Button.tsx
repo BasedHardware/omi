@@ -7,7 +7,7 @@ import {
   type TextStyle,
 } from 'react-native';
 import {FocusPressable} from './Pressable';
-import {tokens} from './tokens';
+import {type KitTokens, useKitStyleSheets} from '../desktop/DesktopTheme';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 export type ButtonSize = 'compact' | 'default' | 'large' | 'icon';
@@ -31,6 +31,7 @@ export function Button({
   variant = 'primary',
   ...props
 }: ButtonProps) {
+  const styles = useKitStyleSheets(createStyles);
   const isDisabled = disabled === true;
   const content =
     typeof children === 'string' || typeof children === 'number' ? (
@@ -74,40 +75,41 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
-  base: {
-    alignItems: 'center',
-    borderRadius: tokens.radius.md,
-    flexDirection: 'row',
-    gap: tokens.space.sm,
-    justifyContent: 'center',
-    paddingHorizontal: tokens.space.md,
-  },
-  primary: {backgroundColor: tokens.color.primary},
-  secondary: {
-    backgroundColor: tokens.color.input,
-    borderColor: tokens.color.line,
-    borderWidth: tokens.border.width,
-  },
-  ghost: {backgroundColor: tokens.color.transparent},
-  danger: {
-    backgroundColor: tokens.color.transparent,
-    borderColor: tokens.color.danger,
-    borderWidth: tokens.border.width,
-  },
-  compact: {height: tokens.size.controlCompact},
-  defaultSize: {height: tokens.size.control},
-  large: {height: tokens.size.controlLarge},
-  icon: {
-    height: tokens.size.control,
-    paddingHorizontal: tokens.space.none,
-    width: tokens.size.control,
-  },
-  pressed: {opacity: tokens.opacity.pressed},
-  disabled: {opacity: tokens.opacity.disabled},
-  label: tokens.type.label,
-  primaryLabel: {color: tokens.color.textInverse},
-  secondaryLabel: {color: tokens.color.text},
-  ghostLabel: {color: tokens.color.text},
-  dangerLabel: {color: tokens.color.danger},
-});
+const createStyles = (tokens: KitTokens) =>
+  StyleSheet.create({
+    base: {
+      alignItems: 'center',
+      borderRadius: tokens.radius.md,
+      flexDirection: 'row',
+      gap: tokens.space.sm,
+      justifyContent: 'center',
+      paddingHorizontal: tokens.space.md,
+    },
+    primary: {backgroundColor: tokens.color.primary},
+    secondary: {
+      backgroundColor: tokens.color.input,
+      borderColor: tokens.color.line,
+      borderWidth: tokens.border.width,
+    },
+    ghost: {backgroundColor: tokens.color.transparent},
+    danger: {
+      backgroundColor: tokens.color.transparent,
+      borderColor: tokens.color.danger,
+      borderWidth: tokens.border.width,
+    },
+    compact: {height: tokens.size.controlCompact},
+    defaultSize: {height: tokens.size.control},
+    large: {height: tokens.size.controlLarge},
+    icon: {
+      height: tokens.size.control,
+      paddingHorizontal: tokens.space.none,
+      width: tokens.size.control,
+    },
+    pressed: {opacity: tokens.opacity.pressed},
+    disabled: {opacity: tokens.opacity.disabled},
+    label: tokens.type.label,
+    primaryLabel: {color: tokens.color.textInverse},
+    secondaryLabel: {color: tokens.color.text},
+    ghostLabel: {color: tokens.color.text},
+    dangerLabel: {color: tokens.color.danger},
+  });

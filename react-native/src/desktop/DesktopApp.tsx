@@ -23,36 +23,35 @@ import {
   type OmnibarMode,
 } from './DesktopTopChrome';
 import {DesktopHome, DesktopReadBanner} from './DesktopHome';
-import {PostSetupOverlay} from './PostSetupOverlay';
-import {AppsPage, LibraryPage, TasksPage} from './DesktopPages';
+import {PostSetupConfetti, PostSetupOverlay} from './PostSetupOverlay';
+import {DesktopThemeProvider, type DesktopThemeName} from './DesktopTheme';
+import {UnifiedTimeline} from './timeline/UnifiedTimeline';
+import {unifiedTimelineEnabled} from './timeline/flag';
+import {LibraryPage, TasksPage} from './DesktopPages';
 import type {TaskMutationProps} from '../ui/TaskEditor';
 import {DesktopSettings} from './DesktopSettings';
 import type {DesktopPreferences} from '../desktopSettingsClient';
 import {DesktopChat} from './DesktopChat';
 import {DesktopRewind} from './DesktopRewind';
 import {useRewindCapture} from '../app/useRewindCapture';
+import type {useAmbientAudio} from '../app/useAmbientAudio';
 import {ShippingStage} from './ShippingStage';
-import {OmiAvatar} from '../ui/OmiAvatar';
-import {desktopTokens as token} from './tokens';
+import {OmiLoadingMark} from '../ui/OmiLoadingMark';
+import {useDesktopTheme} from './DesktopTheme';
 
 export type {DesktopSession};
 
 // The probing window keeps traffic-light space and the mark — never an empty
 // sheet, and never signed-in chrome, while OmiAuth is still unresolved.
 export function DesktopSessionProbe() {
+  const {tokens: token} = useDesktopTheme();
   return (
     <View accessibilityLabel="Session check" style={styles.probe}>
       <View pointerEvents="none" style={styles.probeRow}>
         <View pointerEvents="none" style={styles.probeControls} />
       </View>
       <View pointerEvents="none" style={styles.probeMark}>
-        <OmiAvatar
-          animate
-          identity="omi"
-          inkColor={token.color.ink}
-          size={80}
-          tone="ink"
-        />
+        <OmiLoadingMark inkColor={token.color.ink} size={80} />
       </View>
     </View>
   );
@@ -65,6 +64,7 @@ type Props = TaskMutationProps & {
   taskPagination?: React.ReactNode;
   deviceContent?: React.ReactNode;
   liveVoiceControl?: React.ReactNode;
+  ambient?: ReturnType<typeof useAmbientAudio>;
   activeGenerationId: string | null;
   authError: string | null;
   outcomes: DesktopReadOutcomes | null;
@@ -90,6 +90,9 @@ type Props = TaskMutationProps & {
   onStop: () => void;
   onWorkspaceReload?: () => void;
   onPreferencesChange?: (prefs: DesktopPreferences) => void;
+  initialAppearance?: DesktopThemeName;
+  onAppearanceChange?: (name: DesktopThemeName) => void;
+  captureAutoStart?: boolean;
 };
 
 export function DesktopApp({
@@ -101,6 +104,7 @@ export function DesktopApp({
   deviceContent,
   chatBusy,
   chatError,
+  ambient,
   draft,
   hasOlderChat,
   loadingOlderChat,
@@ -117,6 +121,9 @@ export function DesktopApp({
   onSignOut,
   onWorkspaceReload,
   onPreferencesChange,
+  initialAppearance = 'dark',
+  onAppearanceChange,
+  captureAutoStart = false,
   outcomes,
   postSetupHomeCue = null,
   reads,
@@ -126,31 +133,23 @@ export function DesktopApp({
   ...taskMutations
 }: Props) {
   const [captureRevision, setCaptureRevision] = useState(0);
-  const capture = useRewindCapture(session === 'ready', () =>
-    setCaptureRevision(value => value + 1),
+  const capture = useRewindCapture(
+    session === 'ready',
+    () => setCaptureRevision(value => value + 1),
+    captureAutoStart,
   );
   const [route, setRoute] = useState<DesktopRoute>('Home');
   const [proveItSeen, setProveItSeen] = useState(false);
+  const [confettiFalling, setConfettiFalling] = useState(false);
   const [mode, setMode] = useState<OmnibarMode>('Ask');
   const [recallQuery, setRecallQuery] = useState('');
   const [chatSubmission, setChatSubmission] = useState(0);
-  const beforeChat = useRef<{route: DesktopRoute; mode: OmnibarMode}>({
-    route: 'Home',
-    mode: 'Ask',
-  });
   const openChat = () => {
-    if (route !== 'Chat') {
-      beforeChat.current = {route, mode};
-    }
     setMode('Ask');
     setRoute('Chat');
   };
-  const closeChat = () => {
-    setRoute(beforeChat.current.route);
-    setMode(beforeChat.current.mode);
-  };
   useEffect(() => {
-    if (mode !== 'Recall') {
+    if (mode !== 'Search') {
       return;
     }
     const timer = setTimeout(
@@ -166,8 +165,8 @@ export function DesktopApp({
     }
     setRoute(next);
     if (next === 'Rewind') {
-      setMode('Recall');
-    } else if (mode === 'Recall') {
+      setMode('Search');
+    } else if (mode === 'Search') {
       setMode('Ask');
     }
   };
@@ -206,124 +205,136 @@ export function DesktopApp({
   }
   if (session === 'probing') {
     return (
-      <View accessibilityLabel="Omi desktop" style={styles.root}>
-        <DesktopSessionProbe />
-      </View>
+      <DesktopThemeProvider
+        initialName={initialAppearance}
+        onSetName={onAppearanceChange}>
+        <View accessibilityLabel="Omi desktop" style={styles.root}>
+          <DesktopSessionProbe />
+        </View>
+      </DesktopThemeProvider>
     );
   }
   return (
-    <View accessibilityLabel="Omi desktop" style={styles.root}>
-      <DesktopChrome
-        chatBusy={chatBusy}
-        capture={capture}
-        activeGenerationId={activeGenerationId}
-        chatNotice={null}
-        draft={draft}
-        omnibarRef={omnibarRef}
-        onDraftChange={onDraftChange}
-        mode={mode}
-        onModeChange={next => {
-          setMode(next);
-          if (next === 'Recall') {
-            setRoute('Rewind');
-          } else if (next === 'Search') {
-            if (route === 'Chat') {
-              setRoute(beforeChat.current.route);
+    <DesktopThemeProvider
+      initialName={initialAppearance}
+      onSetName={onAppearanceChange}>
+      <View accessibilityLabel="Omi desktop" style={styles.root}>
+        <DesktopChrome
+          chatBusy={chatBusy}
+          capture={capture}
+          activeGenerationId={activeGenerationId}
+          chatNotice={null}
+          draft={draft}
+          omnibarRef={omnibarRef}
+          onDraftChange={onDraftChange}
+          liveControl={route === 'Chat' ? liveVoiceControl : undefined}
+          mode={mode}
+          onModeChange={next => {
+            setMode(next);
+            if (next === 'Search') {
+              setRoute('Rewind');
             } else if (route === 'Rewind') {
               setRoute('Home');
             }
-          } else if (route === 'Rewind') {
-            setRoute('Home');
-          }
-        }}
-        onNavigate={navigate}
-        onSend={() => {
-          if (mode === 'Ask') {
-            setChatSubmission(value => value + 1);
-            openChat();
-            onSend();
-          } else if (mode === 'Recall') {
-            setRecallQuery(draft.trim().slice(0, 200));
-            setRoute('Rewind');
-          } else {
-            setRoute('Home');
-          }
-        }}
-        onStop={onStop}
-        route={route}
-      />
-      {route === 'Conversations' || route === 'Tasks' ? (
-        <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
-      ) : null}
-      <ShippingStage stageKey={route} variant="page">
-        {route === 'Home' ? (
-          <DesktopHome
-            draft={mode === 'Search' ? draft : ''}
-            onOpenRewind={() => navigate('Rewind')}
-            onOpenTasks={() => setRoute('Tasks')}
-            onOpenConversations={() => setRoute('Conversations')}
-            onRefresh={onRefresh}
-            outcomes={outcomes}
-            reads={reads}
-            readsPhase={readsPhase}
-          />
-        ) : route === 'Chat' ? (
-          <DesktopChat
-            submission={chatSubmission}
-            messages={messages}
-            busy={chatBusy || activeGenerationId !== null}
-            onClose={closeChat}
-            onSuggest={prompt => {
-              setMode('Ask');
-              onDraftChange(prompt);
-              omnibarRef.current?.focus();
-            }}
-            error={chatNotice}
-            hasOlder={hasOlderChat}
-            loadingOlder={loadingOlderChat}
-            loadingHistory={loadingHistory}
-            liveControl={liveVoiceControl}
-            onLoadOlder={onLoadOlderChat}
-          />
-        ) : route === 'Conversations' ? (
-          <LibraryPage
-            outcomes={outcomes}
-            query={mode === 'Search' ? draft : ''}
-            onLoadMore={onLoadMoreConversations}
-            loadingMore={conversationsLoadingMore}
-            notice={conversationNotice}
-          />
-        ) : route === 'Rewind' ? (
-          <DesktopRewind
-            captureRevision={captureRevision}
-            query={recallQuery}
-          />
-        ) : route === 'Tasks' ? (
-          <TasksPage outcomes={outcomes} {...taskMutations} />
-        ) : route === 'Apps' ? (
-          <AppsPage session={session} />
-        ) : (
-          <View style={styles.page}>
-            <DesktopSettings
-              capture={capture}
-              deviceContent={deviceContent}
-              onSignIn={onSignIn}
-              onSignOut={onSignOut}
-              onWorkspaceReload={onWorkspaceReload}
-              onPreferencesChange={onPreferencesChange}
-              session={session}
-              signingIn={signingIn}
-              softwarePlaneLocked={chatBusy}
+          }}
+          onNavigate={navigate}
+          onSend={() => {
+            if (mode === 'Ask') {
+              setChatSubmission(value => value + 1);
+              openChat();
+              onSend();
+            } else {
+              setRecallQuery(draft.trim().slice(0, 200));
+              setRoute('Rewind');
+            }
+          }}
+          onStop={onStop}
+          route={route}
+        />
+        {route === 'Conversations' || route === 'Tasks' ? (
+          <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
+        ) : null}
+        <ShippingStage stageKey={route} variant="page">
+          {route === 'Home' ? (
+            <DesktopHome
+              draft={mode === 'Search' ? draft : ''}
+              onOpenRewind={() => navigate('Rewind')}
+              onOpenTasks={() => setRoute('Tasks')}
+              onOpenConversations={() => setRoute('Conversations')}
+              onRefresh={onRefresh}
+              outcomes={outcomes}
+              reads={reads}
+              readsPhase={readsPhase}
             />
-          </View>
-        )}
-      </ShippingStage>
-      {postSetupHomeCue === 'proven' &&
-      readsPhase === 'ready' &&
-      !proveItSeen ? (
-        <PostSetupOverlay onClose={() => setProveItSeen(true)} />
-      ) : null}
-    </View>
+          ) : route === 'Chat' ? (
+            <DesktopChat
+              submission={chatSubmission}
+              messages={messages}
+              busy={chatBusy || activeGenerationId !== null}
+              onSuggest={prompt => {
+                setMode('Ask');
+                onDraftChange(prompt);
+                omnibarRef.current?.focus();
+              }}
+              error={chatNotice}
+              hasOlder={hasOlderChat}
+              loadingOlder={loadingOlderChat}
+              loadingHistory={loadingHistory}
+              onLoadOlder={onLoadOlderChat}
+            />
+          ) : route === 'Conversations' ? (
+            unifiedTimelineEnabled ? (
+              <UnifiedTimeline
+                outcomes={outcomes}
+                query={mode === 'Search' ? draft : ''}
+                loading={readsPhase === 'initial-loading'}
+              />
+            ) : (
+              <LibraryPage
+                outcomes={outcomes}
+                query={mode === 'Search' ? draft : ''}
+                onLoadMore={onLoadMoreConversations}
+                loadingMore={conversationsLoadingMore}
+                notice={conversationNotice}
+              />
+            )
+          ) : route === 'Rewind' ? (
+            <DesktopRewind
+              captureRevision={captureRevision}
+              query={recallQuery}
+            />
+          ) : route === 'Tasks' ? (
+            <TasksPage outcomes={outcomes} {...taskMutations} />
+          ) : (
+            <View style={styles.page}>
+              <DesktopSettings
+                ambient={ambient}
+                capture={capture}
+                deviceContent={deviceContent}
+                onSignIn={onSignIn}
+                onSignOut={onSignOut}
+                onWorkspaceReload={onWorkspaceReload}
+                onPreferencesChange={onPreferencesChange}
+                session={session}
+                signingIn={signingIn}
+                softwarePlaneLocked={chatBusy}
+              />
+            </View>
+          )}
+        </ShippingStage>
+        {postSetupHomeCue === 'proven' &&
+        readsPhase === 'ready' &&
+        !proveItSeen ? (
+          <PostSetupOverlay
+            onContinue={() => setConfettiFalling(true)}
+            onClose={() => setProveItSeen(true)}
+          />
+        ) : null}
+        {confettiFalling ? (
+          <PostSetupConfetti onDone={() => setConfettiFalling(false)} />
+        ) : null}
+      </View>
+    </DesktopThemeProvider>
   );
 }
 

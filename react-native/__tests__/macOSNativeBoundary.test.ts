@@ -18,7 +18,7 @@ test('keeps a transparent glass window over the desktop', () => {
   expect(source).toContain('window.opaque = NO;');
   expect(source).toContain('window.backgroundColor = NSColor.clearColor;');
   expect(source).toContain(
-    'window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];',
+    'window.appearance = [NSAppearance appearanceNamed:OmiPreferredDesktopAppearance()];',
   );
   expect(source).toContain('OmiGlassPanelView');
   expect(source).toContain('setGlassCornerRadius:0');
@@ -647,7 +647,7 @@ test('static guard: keeps the glass reduce-transparency fallback intact', () => 
   expect(source).toContain('self.material.hidden = reduceTransparency;');
   expect(source).toContain('self.sheen.hidden = reduceTransparency;');
   expect(source).toContain(
-    'CGFloat alpha = reduceTransparency ? 1.0 : OmiGlassScrimAlpha;',
+    'CGFloat alpha = reduceTransparency ? 1.0 : (light ? OmiGlassLightScrimAlpha : OmiGlassScrimAlpha);',
   );
 });
 
@@ -663,16 +663,18 @@ test('static guard: window glass uses a backdrop material, not an empty floating
   expect(source).toContain('self.sheen');
   expect(source).toContain('NSMaxY(self.bounds) - OmiGlassSheenHeight');
   expect(source).toContain(
-    '[NSColor.whiteColor colorWithAlphaComponent:OmiGlassSheenAlpha]',
+    'colorWithAlphaComponent:(light ? OmiGlassLightSheenAlpha : OmiGlassSheenAlpha)].CGColor;',
   );
   expect(source).toContain(
-    '[NSColor colorWithCalibratedWhite:0.11 alpha:1.0].CGColor;',
+    '[NSColor colorWithCalibratedWhite:(light ? 0.96 : 0.11) alpha:1.0].CGColor;',
   );
+  // Dark (the default) keeps the HUD vibrancy; light switches to the
+  // under-window background so the vibrancy base is light.
   expect(source).toContain(
-    'self.material.material = NSVisualEffectMaterialHUDWindow;',
+    'self.material.material = light ? NSVisualEffectMaterialUnderWindowBackground',
   );
+  expect(source).toContain(': NSVisualEffectMaterialHUDWindow;');
   expect(source).not.toContain('self.appearance = nil;');
-  expect(source).not.toContain('NSVisualEffectMaterialUnderWindowBackground');
   expect(source).not.toContain('NSAppearanceNameVibrantDark');
   expect(source).not.toContain('shadowColor');
   expect(source).not.toContain('shadowRadius');
@@ -680,7 +682,7 @@ test('static guard: window glass uses a backdrop material, not an empty floating
   expect(source).not.toContain('shadowOffset');
   expect(source).not.toContain('shadowPath');
   expect(source).toContain(
-    'self.scrim.backgroundColor = [NSColor.blackColor colorWithAlphaComponent:alpha].CGColor;',
+    'self.scrim.backgroundColor = [scrimBase colorWithAlphaComponent:alpha].CGColor;',
   );
 });
 
@@ -696,7 +698,7 @@ test('lets the host choose the glass radius so one panel can run full-bleed', ()
   );
 });
 
-test('does not construct CBCentralManager until an explicit scan or connect', () => {
+test('constructs CBCentralManager eagerly so state is never unknown at rest', () => {
   const source = readNativeSource('OmiNativeModule.mm');
   const initStart = source.indexOf('- (instancetype)init');
   expect(initStart).toBeGreaterThan(-1);
@@ -705,24 +707,23 @@ test('does not construct CBCentralManager until an explicit scan or connect', ()
     source.indexOf('\n}\n', initStart),
   );
   expect(initSource).toContain('_lastEvent = @"Bluetooth adapter not checked"');
-  expect(initSource).not.toContain('CBCentralManager');
-  expect(initSource).not.toContain('initWithDelegate');
+  // The adapter is created eagerly (main thread) so the first snapshot
+  // reports a real power state instead of a permanent "unknown".
+  expect(initSource).toContain('[self ensureCentral]');
 
   const snapshotStart = source.indexOf('RCT_REMAP_METHOD(getSnapshot');
   const snapshotSource = source.slice(
     snapshotStart,
     source.indexOf('RCT_REMAP_METHOD(getBluetoothState', snapshotStart),
   );
-  expect(snapshotSource).not.toContain('ensureCentral');
-  expect(snapshotSource).not.toContain('initWithDelegate');
+  expect(snapshotSource).toContain('[self ensureCentral]');
 
   const bluetoothStart = source.indexOf('RCT_REMAP_METHOD(getBluetoothState');
   const bluetoothSource = source.slice(
     bluetoothStart,
     source.indexOf('RCT_REMAP_METHOD(requestPermissions', bluetoothStart),
   );
-  expect(bluetoothSource).not.toContain('ensureCentral');
-  expect(bluetoothSource).not.toContain('initWithDelegate');
+  expect(bluetoothSource).toContain('[self ensureCentral]');
 
   expect(source).toContain('- (void)ensureCentral');
   expect(source).toContain(

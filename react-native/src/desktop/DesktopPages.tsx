@@ -23,12 +23,15 @@ import {ConnectionGallery} from './ConnectionGallery';
 import {
   ConversationRow,
   DesktopEmptyState,
-  PageHeading,
   ReadRow,
   TaskRow,
 } from './DesktopRows';
 import type {DesktopSession} from './desktopChrome';
-import {desktopTokens as token} from './tokens';
+import {
+  type DesktopTokens,
+  useDesktopTheme,
+  useDesktopStyleSheets,
+} from './DesktopTheme';
 
 export function LibraryPage({
   outcomes,
@@ -43,6 +46,7 @@ export function LibraryPage({
   loadingMore?: boolean;
   notice?: string | null;
 }) {
+  const styles = useDesktopStyleSheets(createStyles);
   const fade = useScrollFade();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   useEffect(
@@ -81,14 +85,6 @@ export function LibraryPage({
       : 'Nothing captured in this window yet.';
   return (
     <View style={styles.page}>
-      <PageHeading
-        title="Conversations & memories"
-        subtitle={
-          query.trim() !== ''
-            ? `From your loaded history, matching “${query.trim()}”.`
-            : 'The moments worth coming back to.'
-        }
-      />
       {readError && items.length > 0 ? (
         <Text accessibilityRole="alert" style={styles.rowMeta}>
           {readError}
@@ -250,6 +246,7 @@ export function TasksPage({
   outcomes: DesktopReadOutcomes | null;
   taskPagination?: React.ReactNode;
 }) {
+  const styles = useDesktopStyleSheets(createStyles);
   const [editingId, setEditingId] = useState<string | null>(null);
   const fade = useScrollFade();
   const outcome = outcomes?.tasks ?? null;
@@ -262,11 +259,6 @@ export function TasksPage({
       : 'No tasks yet';
   return (
     <View style={styles.page}>
-      <PageHeading
-        title="A little follow-through."
-        subtitle="Your tasks, with room to focus on what’s next."
-        eyebrow="TASKS"
-      />
       <TaskMutationStatus
         desktop
         writesAvailable={writesAvailable}
@@ -411,6 +403,8 @@ function tilesFromCatalog(apps: CloudApp[]): AppTileModel[] {
 }
 
 function AppTile({item}: {item: AppTileModel}) {
+  const styles = useDesktopStyleSheets(createStyles);
+  const {tokens: token} = useDesktopTheme();
   const Icon = item.Icon;
   return (
     <View style={styles.appSlot}>
@@ -427,6 +421,7 @@ function AppTile({item}: {item: AppTileModel}) {
 }
 
 export function AppsPage({session}: {session: DesktopSession}) {
+  const styles = useDesktopStyleSheets(createStyles);
   const [section, setSection] = useState<
     'AI assistants' | 'Connect data' | 'Your apps'
   >('Your apps');
@@ -480,20 +475,6 @@ export function AppsPage({session}: {session: DesktopSession}) {
         )}
       </View>
       <ScrollView contentContainerStyle={styles.galleryContent}>
-        <PageHeading
-          title={
-            section === 'AI assistants'
-              ? 'Find your next collaborator.'
-              : section === 'Connect data'
-              ? 'Bring your world together.'
-              : 'Made for your everyday.'
-          }
-          subtitle={
-            section === 'Your apps'
-              ? 'Your Omi app catalog and connected accounts.'
-              : 'Explore what’s coming to Omi. These integrations are not available yet.'
-          }
-        />
         <ShippingStage
           stageKey={section}
           variant="hub"
@@ -536,148 +517,149 @@ export function AppsPage({session}: {session: DesktopSession}) {
   );
 }
 
-const styles = StyleSheet.create({
-  page: {flex: 1, paddingHorizontal: 24, paddingTop: 8},
-  libraryRow: {
-    paddingHorizontal: 18,
-    paddingVertical: 6,
-    borderRadius: 14,
-    backgroundColor: token.color.glassStrong,
-    borderWidth: 1,
-    borderColor: token.color.line,
-    marginBottom: 8,
-  },
-  selectedRow: {backgroundColor: token.color.glassSelected},
-  galleryStage: {flexBasis: 'auto', flexGrow: 0, flexShrink: 0},
-  galleryTabs: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    paddingHorizontal: 0,
-    paddingVertical: 8,
-  },
-  galleryTab: {paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12},
-  galleryTabActive: {backgroundColor: token.color.glassSelected},
-  galleryContent: {
-    paddingVertical: 24,
-    maxWidth: 1040,
-    width: '100%',
-    alignSelf: 'center',
-  },
-  conversationDetail: {gap: 16, padding: 16},
-  memoryDetail: {gap: 16},
-  memoryBody: {color: token.color.ink, fontSize: 15, lineHeight: 22},
-  backAction: {alignSelf: 'flex-start'},
-  taskActions: {flexDirection: 'row', alignItems: 'center', gap: 8},
-  taskToggle: {flex: 1, minHeight: 44},
-  taskEdit: {
-    minWidth: 44,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  hubRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 14,
-    minHeight: 32,
-  },
-  hubItem: {
-    alignItems: 'center',
-    height: 28,
-    justifyContent: 'center',
-  },
-  hubText: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.caption,
-    fontWeight: '600',
-  },
-  hubTextActive: {color: token.color.ink},
-  list: {flex: 1},
-  listContent: {paddingBottom: 24, paddingTop: 4},
-  pageTitle: {
-    color: token.color.ink,
-    fontFamily: token.font,
-    fontSize: token.type.title,
-    fontWeight: '600',
-  },
-  tasksHeader: {alignItems: 'center', flexDirection: 'row', gap: 12},
-  searchControl: {
-    alignItems: 'center',
-    flex: 1,
-    flexDirection: 'row',
-    gap: 8,
-    height: 32,
-  },
-  searchInput: {
-    color: token.color.ink,
-    flex: 1,
-    fontFamily: token.font,
-    fontSize: token.type.body,
-    height: 32,
-    minWidth: 0,
-    paddingVertical: 0,
-  },
-  rowTitle: {
-    color: token.color.ink,
-    fontFamily: token.font,
-    fontSize: token.type.title,
-    fontWeight: '500',
-  },
-  rowMeta: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.meta,
-    marginTop: 2,
-  },
-  emptyTitle: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.search,
-    fontWeight: '400',
-    textAlign: 'center',
-  },
-  centerState: {
-    alignItems: 'center',
-    flex: 1,
-    gap: 8,
-    justifyContent: 'center',
-    paddingVertical: 40,
-  },
-  appGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: 6,
-    paddingTop: 12,
-  },
-  appSlot: {
-    padding: 6,
-    width: '50%',
-    maxWidth: 360,
-  },
-  appCard: {
-    minHeight: 200,
-    backgroundColor: token.color.glassStrong,
-    borderColor: token.color.line,
-    borderWidth: 1,
-    borderRadius: 18,
-    padding: 22,
-  },
-  appIcon: {
-    alignItems: 'center',
-    backgroundColor: token.color.glassStrong,
-    borderRadius: 12,
-    height: 40,
-    justifyContent: 'center',
-    marginBottom: 12,
-    width: 40,
-  },
-  appStatus: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.meta,
-    marginTop: 12,
-  },
-});
+const createStyles = (token: DesktopTokens) =>
+  StyleSheet.create({
+    page: {flex: 1, paddingHorizontal: 24, paddingTop: 8},
+    libraryRow: {
+      paddingHorizontal: 18,
+      paddingVertical: 6,
+      borderRadius: 14,
+      backgroundColor: token.color.glassStrong,
+      borderWidth: 1,
+      borderColor: token.color.line,
+      marginBottom: 8,
+    },
+    selectedRow: {backgroundColor: token.color.glassSelected},
+    galleryStage: {flexBasis: 'auto', flexGrow: 0, flexShrink: 0},
+    galleryTabs: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      paddingHorizontal: 0,
+      paddingVertical: 8,
+    },
+    galleryTab: {paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12},
+    galleryTabActive: {backgroundColor: token.color.glassSelected},
+    galleryContent: {
+      paddingVertical: 24,
+      maxWidth: 1040,
+      width: '100%',
+      alignSelf: 'center',
+    },
+    conversationDetail: {gap: 16, padding: 16},
+    memoryDetail: {gap: 16},
+    memoryBody: {color: token.color.ink, fontSize: 15, lineHeight: 22},
+    backAction: {alignSelf: 'flex-start'},
+    taskActions: {flexDirection: 'row', alignItems: 'center', gap: 8},
+    taskToggle: {flex: 1, minHeight: 44},
+    taskEdit: {
+      minWidth: 44,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    hubRow: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 14,
+      minHeight: 32,
+    },
+    hubItem: {
+      alignItems: 'center',
+      height: 28,
+      justifyContent: 'center',
+    },
+    hubText: {
+      color: token.color.inkMuted,
+      fontFamily: token.font,
+      fontSize: token.type.caption,
+      fontWeight: '600',
+    },
+    hubTextActive: {color: token.color.ink},
+    list: {flex: 1},
+    listContent: {paddingBottom: 24, paddingTop: 4},
+    pageTitle: {
+      color: token.color.ink,
+      fontFamily: token.font,
+      fontSize: token.type.title,
+      fontWeight: '600',
+    },
+    tasksHeader: {alignItems: 'center', flexDirection: 'row', gap: 12},
+    searchControl: {
+      alignItems: 'center',
+      flex: 1,
+      flexDirection: 'row',
+      gap: 8,
+      height: 32,
+    },
+    searchInput: {
+      color: token.color.ink,
+      flex: 1,
+      fontFamily: token.font,
+      fontSize: token.type.body,
+      height: 32,
+      minWidth: 0,
+      paddingVertical: 0,
+    },
+    rowTitle: {
+      color: token.color.ink,
+      fontFamily: token.font,
+      fontSize: token.type.title,
+      fontWeight: '500',
+    },
+    rowMeta: {
+      color: token.color.inkMuted,
+      fontFamily: token.font,
+      fontSize: token.type.meta,
+      marginTop: 2,
+    },
+    emptyTitle: {
+      color: token.color.inkMuted,
+      fontFamily: token.font,
+      fontSize: token.type.search,
+      fontWeight: '400',
+      textAlign: 'center',
+    },
+    centerState: {
+      alignItems: 'center',
+      flex: 1,
+      gap: 8,
+      justifyContent: 'center',
+      paddingVertical: 40,
+    },
+    appGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      paddingHorizontal: 6,
+      paddingTop: 12,
+    },
+    appSlot: {
+      padding: 6,
+      width: '50%',
+      maxWidth: 360,
+    },
+    appCard: {
+      minHeight: 200,
+      backgroundColor: token.color.glassStrong,
+      borderColor: token.color.line,
+      borderWidth: 1,
+      borderRadius: 18,
+      padding: 22,
+    },
+    appIcon: {
+      alignItems: 'center',
+      backgroundColor: token.color.glassStrong,
+      borderRadius: 12,
+      height: 40,
+      justifyContent: 'center',
+      marginBottom: 12,
+      width: 40,
+    },
+    appStatus: {
+      color: token.color.inkMuted,
+      fontFamily: token.font,
+      fontSize: token.type.meta,
+      marginTop: 12,
+    },
+  });

@@ -9,7 +9,11 @@ import PanelLeftClose from 'lucide-react-native/icons/panel-left-close';
 import type {Route} from '../app/routes';
 import {Icon, type IconComponent} from './Icon';
 import {FocusPressable} from './Pressable';
-import {tokens} from './tokens';
+import {
+  type KitTokens,
+  useDesktopThemeKit,
+  useKitStyleSheets,
+} from '../desktop/DesktopTheme';
 
 const destinations: Array<{
   fallback: IconComponent;
@@ -37,6 +41,8 @@ export function Sheet({
   onSelect: (route: Route) => void;
   route: Route;
 }) {
+  const styles = useKitStyleSheets(createStyles);
+  const {tokens} = useDesktopThemeKit();
   return (
     <View pointerEvents="box-none" style={styles.layer}>
       <FocusPressable
@@ -88,56 +94,57 @@ export function Sheet({
   );
 }
 
-const styles = StyleSheet.create({
-  layer: {
-    bottom: tokens.space.none,
-    left: tokens.space.none,
-    position: 'absolute',
-    right: tokens.space.none,
-    top: tokens.space.none,
-    zIndex: 40,
-  },
-  dismiss: {
-    bottom: tokens.space.none,
-    left: tokens.space.none,
-    position: 'absolute',
-    right: tokens.space.none,
-    top: tokens.space.none,
-  },
-  menu: {
-    backgroundColor: tokens.color.menu,
-    borderColor: tokens.color.line,
-    borderRadius: tokens.radius.md,
-    borderWidth: tokens.border.width,
-    gap: tokens.space.xxs,
-    padding: 7,
-    pointerEvents: 'auto',
-    position: 'absolute',
-    right: tokens.space.lg,
-    top: tokens.size.sheetTop,
-    width: tokens.size.sheet,
-    zIndex: 41,
-  },
-  item: {
-    alignItems: 'center',
-    borderRadius: tokens.space.sm,
-    flexDirection: 'row',
-    gap: 10,
-    minHeight: tokens.size.control,
-    paddingHorizontal: tokens.space.md,
-  },
-  itemActive: {backgroundColor: tokens.color.input},
-  itemText: {
-    color: tokens.color.menuTextStrong,
-    flex: 1,
-    ...tokens.type.label,
-  },
-  itemTextActive: {color: tokens.color.text},
-  selection: {
-    backgroundColor: tokens.color.focus,
-    borderRadius: 3,
-    height: 6,
-    width: 6,
-  },
-  pressed: {opacity: tokens.opacity.pressed},
-});
+const createStyles = (tokens: KitTokens) =>
+  StyleSheet.create({
+    layer: {
+      bottom: tokens.space.none,
+      left: tokens.space.none,
+      position: 'absolute',
+      right: tokens.space.none,
+      top: tokens.space.none,
+      zIndex: 40,
+    },
+    dismiss: {
+      bottom: tokens.space.none,
+      left: tokens.space.none,
+      position: 'absolute',
+      right: tokens.space.none,
+      top: tokens.space.none,
+    },
+    menu: {
+      backgroundColor: tokens.color.menu,
+      borderColor: tokens.color.line,
+      borderRadius: tokens.radius.md,
+      borderWidth: tokens.border.width,
+      gap: tokens.space.xxs,
+      padding: 7,
+      pointerEvents: 'auto',
+      position: 'absolute',
+      right: tokens.space.lg,
+      top: tokens.size.sheetTop,
+      width: tokens.size.sheet,
+      zIndex: 41,
+    },
+    item: {
+      alignItems: 'center',
+      borderRadius: tokens.space.sm,
+      flexDirection: 'row',
+      gap: 10,
+      minHeight: tokens.size.control,
+      paddingHorizontal: tokens.space.md,
+    },
+    itemActive: {backgroundColor: tokens.color.input},
+    itemText: {
+      color: tokens.color.menuTextStrong,
+      flex: 1,
+      ...tokens.type.label,
+    },
+    itemTextActive: {color: tokens.color.text},
+    selection: {
+      backgroundColor: tokens.color.focus,
+      borderRadius: 3,
+      height: 6,
+      width: 6,
+    },
+    pressed: {opacity: tokens.opacity.pressed},
+  });

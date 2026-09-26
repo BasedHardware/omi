@@ -15,7 +15,7 @@ import {
 } from '../app/onboardingHarnesses';
 import {ShippingPressable} from './ShippingPressable';
 import {ShippingStage} from './ShippingStage';
-import {desktopTokens as token} from './tokens';
+import {type DesktopTokens, useDesktopStyleSheets} from './DesktopTheme';
 
 const artwork: Record<
   string,
@@ -86,6 +86,7 @@ const artwork: Record<
 /** A browsable catalog, not connection state. Integrations need a real adapter
  * before this surface may offer Connect or claim that an account is connected. */
 export function ConnectionGallery({kind}: {kind: HarnessKind}) {
+  const styles = useDesktopStyleSheets(createStyles);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [width, setWidth] = useState(0);
   const selected = ONBOARDING_HARNESSES.find(
@@ -159,62 +160,63 @@ export function ConnectionGallery({kind}: {kind: HarnessKind}) {
   );
 }
 
-const styles = StyleSheet.create({
-  root: {gap: 16},
-  grid: {flexDirection: 'row', flexWrap: 'wrap', margin: -6},
-  slot: {padding: 6},
-  card: {
-    flex: 1,
-    minHeight: 174,
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: token.color.glassStrong,
-    borderColor: token.color.line,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  cardSelected: {borderColor: token.color.inkMuted},
-  cardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  icon: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  category: {
-    color: token.color.inkMuted,
-    fontSize: 11,
-    letterSpacing: 0.1,
-  },
-  name: {
-    color: token.color.ink,
-    fontSize: 17,
-    fontWeight: '600',
-    letterSpacing: -0.5,
-    marginBottom: 6,
-  },
-  detail: {color: token.color.inkMuted, fontSize: 13, lineHeight: 19},
-  availability: {
-    color: token.color.ink,
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 14,
-  },
-  coming: {color: token.color.inkMuted, fontWeight: '400'},
-  explanation: {
-    flexBasis: 'auto',
-    flexGrow: 0,
-    flexShrink: 0,
-    borderLeftWidth: 2,
-    borderColor: token.color.inkMuted,
-    padding: 16,
-    gap: 8,
-  },
-  explanationTitle: {color: token.color.ink, fontSize: 15, fontWeight: '600'},
-});
+const createStyles = (token: DesktopTokens) =>
+  StyleSheet.create({
+    root: {gap: 16},
+    grid: {flexDirection: 'row', flexWrap: 'wrap', margin: -6},
+    slot: {padding: 6},
+    card: {
+      flex: 1,
+      minHeight: 174,
+      padding: 16,
+      borderRadius: 16,
+      backgroundColor: token.color.glassStrong,
+      borderColor: token.color.line,
+      borderWidth: 1,
+      overflow: 'hidden',
+    },
+    cardSelected: {borderColor: token.color.inkMuted},
+    cardTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 12,
+    },
+    icon: {
+      width: 36,
+      height: 36,
+      borderRadius: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    category: {
+      color: token.color.inkMuted,
+      fontSize: 11,
+      letterSpacing: 0.1,
+    },
+    name: {
+      color: token.color.ink,
+      fontSize: 17,
+      fontWeight: '600',
+      letterSpacing: -0.5,
+      marginBottom: 6,
+    },
+    detail: {color: token.color.inkMuted, fontSize: 13, lineHeight: 19},
+    availability: {
+      color: token.color.ink,
+      fontSize: 12,
+      fontWeight: '600',
+      marginTop: 14,
+    },
+    coming: {color: token.color.inkMuted, fontWeight: '400'},
+    explanation: {
+      flexBasis: 'auto',
+      flexGrow: 0,
+      flexShrink: 0,
+      borderLeftWidth: 2,
+      borderColor: token.color.inkMuted,
+      padding: 16,
+      gap: 8,
+    },
+    explanationTitle: {color: token.color.ink, fontSize: 15, fontWeight: '600'},
+  });

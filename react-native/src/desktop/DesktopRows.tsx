@@ -10,7 +10,11 @@ import {
   type MemoryProjection,
   type TaskProjection,
 } from '../desktopReadClient';
-import {desktopTokens as token} from './tokens';
+import {
+  type DesktopTokens,
+  useDesktopTheme,
+  useDesktopStyleSheets,
+} from './DesktopTheme';
 
 function timeLabel(item: DesktopReadProjection): string {
   const timestamp = projectionTimestamp(item);
@@ -24,6 +28,8 @@ function timeLabel(item: DesktopReadProjection): string {
 }
 
 function RowGlyph({kind}: {kind: DesktopReadProjection['kind']}) {
+  const styles = useDesktopStyleSheets(createStyles);
+  const {tokens: token} = useDesktopTheme();
   const Icon =
     kind === 'conversation'
       ? MessageCircle
@@ -47,10 +53,12 @@ function conversationTitle(item: ConversationProjection): string {
 }
 
 export function SectionTitle({children}: {children: string}) {
+  const styles = useDesktopStyleSheets(createStyles);
   return <Text style={styles.sectionTitle}>{children}</Text>;
 }
 
 export function EmptyCopy({children}: {children: string}) {
+  const styles = useDesktopStyleSheets(createStyles);
   return <Text style={styles.emptyCopy}>{children}</Text>;
 }
 
@@ -63,6 +71,7 @@ export function PageHeading({
   subtitle: string;
   eyebrow?: string;
 }) {
+  const styles = useDesktopStyleSheets(createStyles);
   return (
     <View style={styles.heading}>
       {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
@@ -85,6 +94,8 @@ export function DesktopEmptyState({
   icon?: typeof MessageCircle;
   error?: boolean;
 }) {
+  const styles = useDesktopStyleSheets(createStyles);
+  const {tokens: token} = useDesktopTheme();
   return (
     <View
       style={styles.emptyState}
@@ -103,6 +114,7 @@ export const ReadRow = memo(function ReadRow({
 }: {
   item: DesktopReadProjection;
 }) {
+  const styles = useDesktopStyleSheets(createStyles);
   const meta =
     item.kind === 'conversation'
       ? [timeLabel(item), item.summary]
@@ -129,6 +141,7 @@ export const ConversationRow = memo(function ConversationRow({
 }: {
   item: ConversationProjection;
 }) {
+  const styles = useDesktopStyleSheets(createStyles);
   return (
     <View style={styles.row}>
       <RowGlyph kind="conversation" />
@@ -151,6 +164,7 @@ export const MemoryRow = memo(function MemoryRow({
 }: {
   item: MemoryProjection;
 }) {
+  const styles = useDesktopStyleSheets(createStyles);
   return (
     <View style={styles.memoryCard}>
       <Text numberOfLines={3} style={styles.memoryText}>
@@ -166,6 +180,7 @@ export const MemoryRow = memo(function MemoryRow({
 });
 
 export const TaskRow = memo(function TaskRow({item}: {item: TaskProjection}) {
+  const styles = useDesktopStyleSheets(createStyles);
   return (
     <View style={styles.taskRow}>
       <View
@@ -178,134 +193,135 @@ export const TaskRow = memo(function TaskRow({item}: {item: TaskProjection}) {
   );
 });
 
-const styles = StyleSheet.create({
-  heading: {gap: 10, paddingBottom: 24},
-  eyebrow: {
-    fontSize: 10,
-    letterSpacing: 1.4,
-    fontWeight: '600',
-    color: token.color.inkMuted,
-  },
-  pageTitle: {
-    fontSize: 29,
-    lineHeight: 36,
-    letterSpacing: -0.9,
-    fontWeight: '500',
-    color: token.color.ink,
-  },
-  subtitle: {fontSize: 14, lineHeight: 22, color: token.color.inkMuted},
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 32,
-    minHeight: 240,
-    gap: 12,
-    backgroundColor: token.color.glassStrong,
-    borderWidth: 1,
-    borderColor: token.color.line,
-    borderRadius: 18,
-  },
-  emptyGlyph: {
-    width: 52,
-    height: 52,
-    borderRadius: 18,
-    backgroundColor: token.color.glassQuiet,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  emptyTitle: {
-    fontSize: 19,
-    lineHeight: 26,
-    color: token.color.ink,
-    textAlign: 'center',
-    fontWeight: '500',
-  },
-  emptyDetail: {
-    fontSize: 13,
-    lineHeight: 21,
-    color: token.color.inkMuted,
-    textAlign: 'center',
-    maxWidth: 380,
-  },
-  row: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 10,
-    minHeight: 64,
-    paddingVertical: 8,
-  },
-  glyph: {
-    alignItems: 'center',
-    backgroundColor: token.color.glassQuiet,
-    borderRadius: 12,
-    height: 30,
-    justifyContent: 'center',
-    width: 30,
-  },
-  rowCopy: {flex: 1},
-  rowTitle: {
-    color: token.color.ink,
-    fontFamily: token.font,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  rowMeta: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.meta,
-    lineHeight: 19,
-    marginTop: 2,
-  },
-  sectionTitle: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.caption,
-    fontWeight: '600',
-    marginTop: 0,
-  },
-  emptyCopy: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.meta,
-    lineHeight: 18,
-    marginTop: 6,
-  },
-  memoryCard: {
-    backgroundColor: token.color.glassQuiet,
-    borderRadius: 16,
-    marginBottom: 10,
-    padding: 14,
-  },
-  memoryText: {
-    color: token.color.ink,
-    fontFamily: token.font,
-    fontSize: token.type.body,
-    lineHeight: 20,
-  },
-  taskRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
-    minHeight: 44,
-  },
-  taskCircle: {
-    borderColor: token.color.inkMuted,
-    borderRadius: 11,
-    borderWidth: 1.5,
-    height: 22,
-    width: 22,
-  },
-  taskCircleDone: {backgroundColor: token.color.ink},
-  taskText: {
-    flex: 1,
-    lineHeight: 22,
-    color: token.color.ink,
-    fontFamily: token.font,
-    fontSize: token.type.body,
-  },
-  taskTextDone: {
-    color: token.color.inkFaint,
-    textDecorationLine: 'line-through',
-  },
-});
+const createStyles = (token: DesktopTokens) =>
+  StyleSheet.create({
+    heading: {gap: 10, paddingBottom: 24},
+    eyebrow: {
+      fontSize: 10,
+      letterSpacing: 1.4,
+      fontWeight: '600',
+      color: token.color.inkMuted,
+    },
+    pageTitle: {
+      fontSize: 29,
+      lineHeight: 36,
+      letterSpacing: -0.9,
+      fontWeight: '500',
+      color: token.color.ink,
+    },
+    subtitle: {fontSize: 14, lineHeight: 22, color: token.color.inkMuted},
+    emptyState: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 32,
+      minHeight: 240,
+      gap: 12,
+      backgroundColor: token.color.glassStrong,
+      borderWidth: 1,
+      borderColor: token.color.line,
+      borderRadius: 18,
+    },
+    emptyGlyph: {
+      width: 52,
+      height: 52,
+      borderRadius: 18,
+      backgroundColor: token.color.glassQuiet,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 6,
+    },
+    emptyTitle: {
+      fontSize: 19,
+      lineHeight: 26,
+      color: token.color.ink,
+      textAlign: 'center',
+      fontWeight: '500',
+    },
+    emptyDetail: {
+      fontSize: 13,
+      lineHeight: 21,
+      color: token.color.inkMuted,
+      textAlign: 'center',
+      maxWidth: 380,
+    },
+    row: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: 10,
+      minHeight: 64,
+      paddingVertical: 8,
+    },
+    glyph: {
+      alignItems: 'center',
+      backgroundColor: token.color.glassQuiet,
+      borderRadius: 12,
+      height: 30,
+      justifyContent: 'center',
+      width: 30,
+    },
+    rowCopy: {flex: 1},
+    rowTitle: {
+      color: token.color.ink,
+      fontFamily: token.font,
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    rowMeta: {
+      color: token.color.inkMuted,
+      fontFamily: token.font,
+      fontSize: token.type.meta,
+      lineHeight: 19,
+      marginTop: 2,
+    },
+    sectionTitle: {
+      color: token.color.inkMuted,
+      fontFamily: token.font,
+      fontSize: token.type.caption,
+      fontWeight: '600',
+      marginTop: 0,
+    },
+    emptyCopy: {
+      color: token.color.inkMuted,
+      fontFamily: token.font,
+      fontSize: token.type.meta,
+      lineHeight: 18,
+      marginTop: 6,
+    },
+    memoryCard: {
+      backgroundColor: token.color.glassQuiet,
+      borderRadius: 16,
+      marginBottom: 10,
+      padding: 14,
+    },
+    memoryText: {
+      color: token.color.ink,
+      fontFamily: token.font,
+      fontSize: token.type.body,
+      lineHeight: 20,
+    },
+    taskRow: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      gap: 12,
+      minHeight: 44,
+    },
+    taskCircle: {
+      borderColor: token.color.inkMuted,
+      borderRadius: 11,
+      borderWidth: 1.5,
+      height: 22,
+      width: 22,
+    },
+    taskCircleDone: {backgroundColor: token.color.ink},
+    taskText: {
+      flex: 1,
+      lineHeight: 22,
+      color: token.color.ink,
+      fontFamily: token.font,
+      fontSize: token.type.body,
+    },
+    taskTextDone: {
+      color: token.color.inkFaint,
+      textDecorationLine: 'line-through',
+    },
+  });

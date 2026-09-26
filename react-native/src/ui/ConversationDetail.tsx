@@ -4,7 +4,7 @@ import type {ConversationProjection} from '../desktopReadClient';
 import {RecordingTranscript} from './RecordingTranscript';
 import {ChatConversationHistory} from './ChatConversationHistory';
 import {MAIN_CHAT_CONVERSATION_ID} from '../chatConversationHistory';
-import {desktopTokens} from '../desktop/tokens';
+import {useDesktopTheme} from '../desktop/DesktopTheme';
 import {styles} from './styles';
 import {FocusPressable} from './Pressable';
 import {useLegacyConversationDetail} from '../useLegacyConversationDetail';
@@ -52,6 +52,7 @@ export function ConversationDetail({
   desktop?: boolean;
   apiContract?: 'omi';
 }) {
+  const {tokens: desktopTokens} = useDesktopTheme();
   if (apiContract === 'omi') {
     return (
       <LegacyConversationBody
@@ -131,6 +132,7 @@ function LegacyConversationBody({
   conversation: ConversationProjection;
   desktop: boolean;
 }) {
+  const {tokens: desktopTokens} = useDesktopTheme();
   const {result, reload} = useLegacyConversationDetail(
     conversation.id,
     conversation.updatedAt,

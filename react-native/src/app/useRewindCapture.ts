@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {NativeModules, Platform} from 'react-native';
+import {AppState, NativeModules, Platform} from 'react-native';
 
 type CaptureNative = {
   requestCapturePermission(): Promise<
@@ -10,7 +10,11 @@ type CaptureNative = {
   captureFrame(): Promise<{captured: boolean}>;
 };
 
-export function useRewindCapture(enabled: boolean, onCaptured: () => void) {
+export function useRewindCapture(
+  enabled: boolean,
+  onCaptured: () => void,
+  autoStart = false,
+) {
   const candidate =
     Platform.OS === 'macos'
       ? (NativeModules.OmiRewind as CaptureNative | undefined)
@@ -74,6 +78,22 @@ export function useRewindCapture(enabled: boolean, onCaptured: () => void) {
       void native?.stopCapture().catch(() => undefined);
     };
   }, [enabled, native, stop]);
+  // "Always capture" runs from launch and re-arms after the native layer
+  // stops on sleep/lock: start() no-ops while a capture loop is already
+  // active, so the foreground listener only fills the gap.
+  useEffect(() => {
+    if (!enabled || !autoStart) {
+      return;
+    }
+    void start();
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        void start();
+      }
+    });
+    return () => subscription.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, autoStart]);
   const start = useCallback(async () => {
     if (
       !enabledRef.current ||

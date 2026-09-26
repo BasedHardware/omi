@@ -14,7 +14,6 @@ import House from 'lucide-react-native/icons/house';
 import MessageCircle from 'lucide-react-native/icons/message-circle';
 import MessageSquare from 'lucide-react-native/icons/message-square';
 import ListFilter from 'lucide-react-native/icons/list-filter';
-import Puzzle from 'lucide-react-native/icons/puzzle';
 import History from 'lucide-react-native/icons/rotate-ccw-clock';
 import Settings from 'lucide-react-native/icons/settings';
 import {FocusPressable} from '../ui/Pressable';
@@ -33,7 +32,11 @@ import {
 } from './desktopChrome';
 import {desktopEaseSmoothOut} from './desktopMotion';
 import {ShippingPressable} from './ShippingPressable';
-import {desktopTokens as token} from './tokens';
+import {
+  type DesktopTokens,
+  useDesktopTheme,
+  useDesktopStyleSheets,
+} from './DesktopTheme';
 
 export type DesktopRoute = DesktopNavItem | 'Settings';
 
@@ -43,10 +46,9 @@ const navIcons: Record<DesktopNavItem, typeof House> = {
   Conversations: MessageCircle,
   Rewind: History,
   Tasks: ListFilter,
-  Apps: Puzzle,
 };
 
-export type OmnibarMode = 'Ask' | 'Search' | 'Recall';
+export type OmnibarMode = 'Ask' | 'Search';
 
 type Props = {
   chatBusy?: boolean;
@@ -55,6 +57,7 @@ type Props = {
   >;
   mode?: OmnibarMode;
   onModeChange?: (mode: OmnibarMode) => void;
+  liveControl?: React.ReactNode;
   activeGenerationId: string | null;
   route: DesktopRoute;
   onNavigate: (route: DesktopRoute) => void;
@@ -71,6 +74,7 @@ export function DesktopChrome({
   capture,
   mode = 'Ask',
   onModeChange,
+  liveControl,
   activeGenerationId,
   chatNotice,
   draft,
@@ -81,6 +85,8 @@ export function DesktopChrome({
   onStop,
   route,
 }: Props) {
+  const styles = useDesktopStyleSheets(createStyles);
+  const {tokens: token} = useDesktopTheme();
   const reduceMotion = useReduceMotion();
   const canStop = mode === 'Ask' && activeGenerationId !== null;
   const sending = mode === 'Ask' && chatBusy && !canStop;
@@ -158,6 +164,52 @@ export function DesktopChrome({
     pillX,
     reduceMotion,
   ]);
+
+  // Sliding selection pill for the omnibar mode switcher, mirroring the nav
+  // pill above so the two controls feel like one system.
+  const [modeFrames, setModeFrames] = useState<
+    Partial<Record<OmnibarMode, {x: number; width: number}>>
+  >({});
+  const modePillX = useRef(new Animated.Value(0)).current;
+  const modePillW = useRef(new Animated.Value(0)).current;
+  const modePillOpacity = useRef(new Animated.Value(0)).current;
+  const modePlaced = useRef(false);
+  const activeModeFrame = modeFrames[mode];
+  useEffect(() => {
+    if (activeModeFrame === undefined) {
+      return;
+    }
+    if (!modePlaced.current || reduceMotion) {
+      modePillX.setValue(activeModeFrame.x);
+      modePillW.setValue(activeModeFrame.width);
+      modePillOpacity.setValue(1);
+      modePlaced.current = true;
+      return;
+    }
+    const ease = desktopEaseSmoothOut();
+    const animation = Animated.parallel([
+      Animated.timing(modePillX, {
+        duration: desktopMotion.navMs,
+        easing: ease,
+        toValue: activeModeFrame.x,
+        useNativeDriver: false,
+      }),
+      Animated.timing(modePillW, {
+        duration: desktopMotion.navMs,
+        easing: ease,
+        toValue: activeModeFrame.width,
+        useNativeDriver: false,
+      }),
+      Animated.timing(modePillOpacity, {
+        duration: desktopMotion.quickMs,
+        easing: ease,
+        toValue: 1,
+        useNativeDriver: false,
+      }),
+    ]);
+    animation.start();
+    return () => animation.stop();
+  }, [activeModeFrame, modePillOpacity, modePillW, modePillX, reduceMotion]);
 
   return (
     <View accessibilityLabel="Omi desktop chrome" style={styles.chrome}>
@@ -268,24 +320,37 @@ export function DesktopChrome({
       ) : null}
       <View style={styles.omnibar}>
         <View style={styles.modes}>
-          {(['Ask', 'Search', 'Recall'] as const).map(value => {
-            const Icon =
-              value === 'Ask'
-                ? MessageCircle
-                : value === 'Search'
-                ? Search
-                : History;
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              top: 4,
+              bottom: 4,
+              left: 0,
+              borderRadius: 10,
+              backgroundColor: token.color.glassSelected,
+              transform: [{translateX: modePillX}],
+              width: modePillW,
+              opacity: modePillOpacity,
+            }}
+          />
+          {(['Ask', 'Search'] as const).map(value => {
+            const Icon = value === 'Ask' ? MessageCircle : Search;
             return (
               <FocusPressable
                 key={value}
                 accessibilityRole="button"
                 accessibilityLabel={`Use ${value} mode`}
                 accessibilityState={{selected: mode === value}}
+                onLayout={event => {
+                  const {x, width} = event.nativeEvent.layout;
+                  setModeFrames(current => ({
+                    ...current,
+                    [value]: {x, width},
+                  }));
+                }}
                 onPress={() => onModeChange?.(value)}
-                style={[
-                  styles.modeButton,
-                  mode === value && styles.modeActive,
-                ]}>
+                style={styles.modeButton}>
                 <Icon
                   size={15}
                   color={
@@ -304,13 +369,7 @@ export function DesktopChrome({
           })}
         </View>
         <TextInput
-          accessibilityLabel={
-            mode === 'Ask'
-              ? 'Ask Omi'
-              : mode === 'Recall'
-              ? 'Search Recall'
-              : 'Search history'
-          }
+          accessibilityLabel={mode === 'Ask' ? 'Ask Omi' : 'Search Recall'}
           blurOnSubmit={false}
           onChangeText={onDraftChange}
           onSubmitEditing={() => {
@@ -319,17 +378,16 @@ export function DesktopChrome({
             }
           }}
           placeholder={
-            mode === 'Recall'
-              ? 'Find a moment on your screen…'
-              : mode === 'Ask'
-              ? 'Ask about your day…'
-              : desktopSearchPlaceholder
+            mode === 'Search' ? desktopSearchPlaceholder : 'Ask about your day…'
           }
           placeholderTextColor={token.color.inkMuted}
           ref={omnibarRef}
           style={styles.omnibarInput}
           value={draft}
         />
+        {liveControl ? (
+          <View style={styles.liveSlot}>{liveControl}</View>
+        ) : null}
         <FocusPressable
           accessibilityLabel={
             canStop
@@ -358,11 +416,11 @@ export function DesktopChrome({
             pressed && styles.pressed,
           ]}>
           {canStop ? (
-            <Square size={13} color={token.color.white} />
+            <Square size={13} color={token.color.dark} />
           ) : mode === 'Ask' ? (
-            <ArrowUp size={17} color={token.color.white} />
+            <ArrowUp size={17} color={token.color.dark} />
           ) : (
-            <Search size={16} color={token.color.white} />
+            <Search size={16} color={token.color.dark} />
           )}
         </FocusPressable>
       </View>
@@ -378,144 +436,151 @@ export function DesktopChrome({
   );
 }
 
-const styles = StyleSheet.create({
-  captureControl: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginHorizontal: 8,
-  },
-  captureLabel: {fontSize: 12, color: token.color.inkMuted},
-  modes: {flexDirection: 'row', alignItems: 'center', gap: 2},
-  modeButton: {
-    height: 32,
-    flexDirection: 'row',
-    gap: 6,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 12,
-  },
-  modeText: {fontSize: 12, color: token.color.inkMuted},
-  modeActive: {backgroundColor: token.color.glassSelected},
-  chrome: {
-    gap: 14,
-    marginBottom: 4,
-  },
-  row: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    height: desktopNavBarHeight,
-  },
-  windowControls: {
-    alignSelf: 'center',
-    height: desktopTrafficLightButton,
-    width: desktopTrafficLightRowWidth,
-  },
-  nav: {
-    alignItems: 'center',
-    flex: 1,
-    flexDirection: 'row',
-    flexShrink: 1,
-    position: 'relative',
-  },
-  navPill: {
-    backgroundColor: token.color.glassSelected,
-    borderRadius: token.radius.chip,
-    bottom: 6,
-    left: 0,
-    position: 'absolute',
-    top: 6,
-  },
-  navItem: {
-    height: 40,
-    paddingHorizontal: 10,
-    zIndex: 1,
-  },
-  navItemFollow: {
-    marginRight: 4,
-  },
-  navHit: {
-    alignItems: 'center',
-    flex: 1,
-    flexDirection: 'row',
-    height: 40,
-    justifyContent: 'center',
-  },
-  navIcon: {
-    marginRight: 7,
-  },
-  navText: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.nav,
-    fontWeight: '500',
-  },
-  navTextActive: {
-    color: token.color.ink,
-  },
-  omnibar: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: 992,
-    backgroundColor: token.color.glassStrong,
-    borderWidth: 1,
-    borderColor: token.color.line,
-    borderRadius: 14,
-    flexDirection: 'row',
-    gap: 8,
-    height: desktopOmnibarHeight,
-    minWidth: 220,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  omnibarInput: {
-    color: token.color.ink,
-    flex: 1,
-    flexGrow: 1,
-    flexShrink: 1,
-    fontFamily: token.font,
-    fontSize: token.type.search,
-    fontWeight: '400',
-    lineHeight: 20,
-    minWidth: 0,
-    height: 32,
-    paddingHorizontal: 4,
-    paddingVertical: 6,
-    textAlignVertical: 'center',
-  },
-  notice: {
-    color: token.color.inkMuted,
-    fontFamily: token.font,
-    fontSize: token.type.meta,
-    paddingHorizontal: 4,
-  },
-  send: {
-    alignItems: 'center',
-    flexShrink: 0,
-    height: 32,
-    width: 32,
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-    borderRadius: 16,
-    backgroundColor: token.color.ink,
-  },
-  sendDisabled: {opacity: 0.3},
-  sendText: {
-    color: token.color.ink,
-    fontFamily: token.font,
-    fontSize: token.type.caption,
-    fontWeight: '600',
-  },
-  settingsButton: {
-    alignItems: 'center',
-    borderRadius: 17,
-    flexShrink: 0,
-    height: 34,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    width: 34,
-  },
-  pressed: {opacity: 0.78},
-});
+const createStyles = (token: DesktopTokens) =>
+  StyleSheet.create({
+    captureControl: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginHorizontal: 8,
+    },
+    captureLabel: {fontSize: 12, color: token.color.inkMuted},
+    modes: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+      // Anchors the sliding mode pill behind the buttons.
+      position: 'relative' as const,
+    },
+    liveSlot: {alignItems: 'center', flexShrink: 0},
+    modeButton: {
+      height: 32,
+      flexDirection: 'row',
+      gap: 6,
+      paddingHorizontal: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 12,
+    },
+    modeText: {fontSize: 12, color: token.color.inkMuted},
+    chrome: {
+      gap: 14,
+      marginBottom: 4,
+    },
+    row: {
+      alignItems: 'center',
+      flexDirection: 'row',
+      height: desktopNavBarHeight,
+    },
+    windowControls: {
+      alignSelf: 'center',
+      height: desktopTrafficLightButton,
+      width: desktopTrafficLightRowWidth,
+    },
+    nav: {
+      alignItems: 'center',
+      flex: 1,
+      flexDirection: 'row',
+      flexShrink: 1,
+      position: 'relative',
+    },
+    navPill: {
+      backgroundColor: token.color.glassSelected,
+      borderRadius: token.radius.chip,
+      bottom: 6,
+      left: 0,
+      position: 'absolute',
+      top: 6,
+    },
+    navItem: {
+      height: 40,
+      paddingHorizontal: 10,
+      zIndex: 1,
+    },
+    navItemFollow: {
+      marginRight: 4,
+    },
+    navHit: {
+      alignItems: 'center',
+      flex: 1,
+      flexDirection: 'row',
+      height: 40,
+      justifyContent: 'center',
+    },
+    navIcon: {
+      marginRight: 7,
+    },
+    navText: {
+      color: token.color.inkMuted,
+      fontFamily: token.font,
+      fontSize: token.type.nav,
+      fontWeight: '500',
+    },
+    navTextActive: {
+      color: token.color.ink,
+    },
+    omnibar: {
+      alignItems: 'center',
+      alignSelf: 'center',
+      width: '100%',
+      maxWidth: 992,
+      backgroundColor: token.color.glassStrong,
+      borderWidth: 1,
+      borderColor: token.color.line,
+      borderRadius: 14,
+      flexDirection: 'row',
+      gap: 8,
+      height: desktopOmnibarHeight,
+      minWidth: 220,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+    omnibarInput: {
+      color: token.color.ink,
+      flex: 1,
+      flexGrow: 1,
+      flexShrink: 1,
+      fontFamily: token.font,
+      fontSize: token.type.search,
+      fontWeight: '400',
+      lineHeight: 20,
+      minWidth: 0,
+      height: 32,
+      paddingHorizontal: 4,
+      paddingVertical: 6,
+      textAlignVertical: 'center',
+    },
+    notice: {
+      color: token.color.inkMuted,
+      fontFamily: token.font,
+      fontSize: token.type.meta,
+      paddingHorizontal: 4,
+    },
+    send: {
+      alignItems: 'center',
+      flexShrink: 0,
+      height: 32,
+      width: 32,
+      justifyContent: 'center',
+      paddingHorizontal: 6,
+      borderRadius: 16,
+      backgroundColor: token.color.ink,
+    },
+    sendDisabled: {opacity: 0.3},
+    sendText: {
+      color: token.color.ink,
+      fontFamily: token.font,
+      fontSize: token.type.caption,
+      fontWeight: '600',
+    },
+    settingsButton: {
+      alignItems: 'center',
+      borderRadius: 17,
+      flexShrink: 0,
+      height: 34,
+      justifyContent: 'center',
+      overflow: 'hidden',
+      width: 34,
+    },
+    pressed: {opacity: 0.78},
+  });

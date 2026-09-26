@@ -26,6 +26,7 @@ import {
   formatConversationDuration,
 } from '../ui/ConversationDetail';
 import {ReadStatus} from '../ui/ReadStatus';
+import {matchesSearchQuery} from '../searchText';
 import {styles} from '../ui/styles';
 import {mobileColor} from '../mobile/mobileTokens';
 import {OmiAvatar} from '../ui/OmiAvatar';
@@ -164,13 +165,11 @@ export function ConversationsPage({
 
   const error = outcome?.status === 'error' ? outcome.error : null;
   const filtered = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase();
     return conversations.filter(
       item =>
         (!starredOnly || item.starred) &&
-        (normalized === '' ||
-          item.title.toLocaleLowerCase().includes(normalized) ||
-          item.summary.toLocaleLowerCase().includes(normalized)),
+        (matchesSearchQuery(item.title, query) ||
+          matchesSearchQuery(item.summary, query)),
     );
   }, [conversations, query, starredOnly]);
   useEffect(() => {

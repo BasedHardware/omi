@@ -88,6 +88,9 @@ RCT_EXPORT_MODULE(OmiNative)
 
 - (void)startObserving {
   self.observing = YES;
+  // Deliver the current adapter state to new subscribers; the state may have
+  // settled before anyone was listening.
+  [self emitSnapshot];
 }
 
 - (void)invalidate {
@@ -118,6 +121,10 @@ RCT_EXPORT_MODULE(OmiNative)
     _batteries = [NSMutableDictionary dictionary];
     _connectionState = @"disconnected";
     _lastEvent = @"Bluetooth adapter not checked";
+    // Create the central up front so the adapter state is reported before the
+    // first scan; otherwise snapshots forever claim the state is unknown.
+    if (NSThread.isMainThread) [self ensureCentral];
+    else dispatch_async(dispatch_get_main_queue(), ^{ [self ensureCentral]; });
   }
   return self;
 }
@@ -132,6 +139,7 @@ RCT_EXPORT_MODULE(OmiNative)
 RCT_REMAP_METHOD(getSnapshot,
                  getSnapshotWithResolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
+  [self ensureCentral];
 #if TARGET_OS_OSX
   resolve([self snapshotDictionary]);
 #else
@@ -146,6 +154,7 @@ RCT_REMAP_METHOD(getSnapshot,
 RCT_REMAP_METHOD(getBluetoothState,
                  getBluetoothStateWithResolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
+  [self ensureCentral];
   resolve([self bluetoothState]);
 }
 
