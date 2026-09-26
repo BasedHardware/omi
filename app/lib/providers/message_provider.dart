@@ -18,6 +18,7 @@ import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
@@ -743,7 +744,9 @@ class MessageProvider extends ChangeNotifier {
             message.text = l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             if (playResponseAudio) {
-              await OmiVoicePlaybackService.instance.interrupt();
+              await OmiVoicePlaybackService.instance.interrupt(
+                source: VoiceReplyPlaybackInterruptSource.quotaError,
+              );
             }
             notifyListeners();
             setShowTypingIndicator(false);
@@ -752,6 +755,11 @@ class MessageProvider extends ChangeNotifier {
           }
           Logger.debug('Voice chat reply failed: ${chunk.text}');
           _markReplyFailed(message, const _FailedReply());
+          if (playResponseAudio) {
+            await OmiVoicePlaybackService.instance.interrupt(
+              source: VoiceReplyPlaybackInterruptSource.streamError,
+            );
+          }
           completeChat(ProductOutcome.failure, failure: ProductFailure.server);
           notifyListeners();
           continue;
@@ -760,7 +768,9 @@ class MessageProvider extends ChangeNotifier {
     } catch (e) {
       _markReplyFailed(message, const _FailedReply());
       if (playResponseAudio) {
-        await OmiVoicePlaybackService.instance.interrupt();
+        await OmiVoicePlaybackService.instance.interrupt(
+          source: VoiceReplyPlaybackInterruptSource.streamError,
+        );
       }
       completeChat(ProductOutcome.failure, failure: ProductFailure.network);
       notifyListeners();
@@ -770,6 +780,11 @@ class MessageProvider extends ChangeNotifier {
 
     setShowTypingIndicator(false);
     if (!chatAttemptCompleted) {
+      if (playResponseAudio) {
+        await OmiVoicePlaybackService.instance.interrupt(
+          source: VoiceReplyPlaybackInterruptSource.streamError,
+        );
+      }
       completeChat(ProductOutcome.failure, failure: ProductFailure.incomplete);
     }
   }
@@ -784,7 +799,9 @@ class MessageProvider extends ChangeNotifier {
     // If Omi was still speaking a prior voice reply, stop it — the user's
     // typed message takes precedence.
     if (OmiVoicePlaybackService.instance.isSpeaking) {
-      await OmiVoicePlaybackService.instance.interrupt();
+      await OmiVoicePlaybackService.instance.interrupt(
+        source: VoiceReplyPlaybackInterruptSource.userTyped,
+      );
     }
     setShowTypingIndicator(true);
     var currentAppId = appProvider?.selectedChatAppId;

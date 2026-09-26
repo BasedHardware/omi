@@ -1045,7 +1045,8 @@ after 0.
 Provider times. Every selected provider socket — initial fallback and
 send-path failover — gets its own epoch translator created at callback
 creation. Sockets record only sends the provider accepted (pre-roll spans
-included through the VAD gate; SafeDeepgram keepalives are never audio);
+included through the VAD gate; the legacy direct socket still records sends
+when VAD is disabled or fails to initialize; SafeDeepgram keepalives are never audio);
 provider timestamps map through those spans to capture samples, then to the
 wall axis, before `_enqueue_stt_segments`. A zero-duration provider point
 inside an accepted send gets a one-sample capture window and a `recovered`

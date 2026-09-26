@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.400",
+      "date": "2026-09-26",
+      "changes": [
+        "Beta experiment: a randomized group sees Omi as memory first — the daily postcard leads, Interject on, proactive director quiet, generic web answers starved — while everyone else keeps today's experience"
+      ]
+    },
+    {
       "version": "0.12.399",
       "date": "2026-09-26",
       "changes": [

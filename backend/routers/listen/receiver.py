@@ -131,6 +131,32 @@ CAPTURE_RANGE_RETENTION_SECONDS = 120.0
 CAPTURE_RANGE_MAX_RUNS = 512
 
 
+class _RecordingSTTSocket:
+    """Account for direct sends while preserving the provider socket's state and API."""
+
+    def __init__(self, raw: Any, epoch: ProviderEpochTranslator):
+        self._conn = raw
+        self._epoch = epoch
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._conn, name)
+
+    def send(self, data: bytes, start_sample: Optional[int] = None) -> bool:
+        try:
+            accepted = (
+                self._conn.send(data, start_sample=start_sample) if start_sample is not None else self._conn.send(data)
+            )
+        except TypeError:
+            # Match send_live_stt_audio's legacy socket fallback. Only the raw
+            # provider decides whether the bytes were accepted.
+            if start_sample is None:
+                raise
+            accepted = self._conn.send(data)
+        if accepted is True and start_sample is not None and len(data) >= 2:
+            self._epoch.note_accepted(start_sample, len(data) // 2)
+        return accepted
+
+
 def opus_decode_capacity(sample_rate: int) -> int:
     """Samples to hand `Decoder.decode` as its output-buffer size.
 
@@ -966,19 +992,36 @@ class ListenReceiver:
         self.stt_socket = None
         self.stt_sockets_multi = [None] * len(self.channel_configs)
 
-    def _record_selected_epoch(self, epoch: Optional[ProviderEpochTranslator], raw: Any) -> None:
+    def _wrap_legacy_stt_socket(self, raw: Any, epoch: Optional[ProviderEpochTranslator]) -> Any:
+        """Keep send accounting when VAD is disabled or fails to initialize."""
+        if getattr(raw, 'manages_vad', False):
+            return raw
+        if self.vad_gate is None:
+            return _RecordingSTTSocket(raw, epoch) if epoch is not None else raw
+        return GatedSTTSocket(
+            raw,
+            gate=self.vad_gate,
+            passthrough_audio=self.host.stt_service == STTService.modulate,
+            send_tracker=epoch,
+        )
+
+    def _record_selected_epoch(self, epoch: Optional[ProviderEpochTranslator], socket: Any) -> None:
         if epoch is None:
             return
-        if getattr(raw, 'manages_vad', False):
+        if getattr(socket, 'manages_vad', False):
             path = 'managed_chain'
-            vad_state = 'active' if getattr(raw, 'gate', None) is not None else 'off'
-        elif self.vad_gate is None:
-            path = 'direct_unrecorded'
-            vad_state = 'off'
+            vad_state = 'active' if getattr(socket, 'gate', None) is not None else 'off'
+        elif isinstance(socket, _RecordingSTTSocket):
+            path, vad_state = 'direct_recorded', 'off'
+        elif isinstance(socket, GatedSTTSocket):
+            if socket._gate is None:  # type: ignore[reportPrivateUsage]  # selected socket's actual path
+                path, vad_state = 'direct_recorded', 'off'
+            elif socket._passthrough_audio:  # type: ignore[reportPrivateUsage]  # selected socket's actual path
+                path, vad_state = 'vad_gate_passthrough', 'passthrough'
+            else:
+                path, vad_state = 'vad_gate_active', 'active'
         else:
-            passthrough = self.host.stt_service == STTService.modulate
-            path = 'vad_gate_passthrough' if passthrough else 'vad_gate_active'
-            vad_state = 'passthrough' if passthrough else 'active'
+            path, vad_state = 'direct_unrecorded', 'off'
         epoch.send_path = path
         OMI_AUDIO_TIMELINE_PROVIDER_SOCKETS_TOTAL.labels(
             provider=audio_timeline_provider_label(epoch.provider_label), send_path=path, vad_state=vad_state
@@ -1049,13 +1092,8 @@ class ListenReceiver:
                 return False
             if epoch is not None:
                 epoch.provider_label = audio_timeline_provider_label(getattr(self.host.stt_service, 'value', None))
-            self._record_selected_epoch(epoch, raw)
-            passthrough = self.host.stt_service == STTService.modulate
-            self.stt_socket = (
-                GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough, send_tracker=epoch)
-                if self.vad_gate and not getattr(raw, 'manages_vad', False)
-                else raw
-            )
+            self.stt_socket = self._wrap_legacy_stt_socket(raw, epoch)
+            self._record_selected_epoch(epoch, self.stt_socket)
             # Retained so a mid-session failover can rebuild the socket against the
             # next provider without re-deriving the callbacks or the gate.
             self._stt_rebuild = (self._build_stt_callbacks, request.sample_rate)
@@ -1145,14 +1183,8 @@ class ListenReceiver:
                 self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
             return False
 
-        self._record_selected_epoch(epoch, raw)
-
-        passthrough = self.host.stt_service == STTService.modulate
-        self.stt_socket = (
-            GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough, send_tracker=epoch)
-            if self.vad_gate and not getattr(raw, 'manages_vad', False)
-            else raw
-        )
+        self.stt_socket = self._wrap_legacy_stt_socket(raw, epoch)
+        self._record_selected_epoch(epoch, self.stt_socket)
         self._pending_live_failover = hop
         record_live_stt_failover_accepted(provider=self.host.stt_service.value, platform=self._telemetry_platform())
         logger.info(f'STT failover mid-session: {dead_provider} -> {self.host.stt_service.value}')
