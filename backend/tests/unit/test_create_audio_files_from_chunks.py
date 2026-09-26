@@ -152,6 +152,21 @@ class TestCreateAudioFilesFromChunks:
         assert len(files) == 1
         assert files[0].chunk_timestamps == [5000.0]
 
+    def test_chunk_with_none_size_defaults_gracefully(self):
+        """Blobs reporting None size must not raise TypeError when estimating duration."""
+        blobs = {
+            'chunks/uid-a/conv-none-size/': [
+                _blob('chunks/uid-a/conv-none-size/6000.000.opus', None),
+            ],
+        }
+        with patch.object(storage_mod, '_get_storage_client', return_value=_fake_client(blobs)):
+            files = conversations_db.create_audio_files_from_chunks('uid-a', 'conv-none-size')
+
+        assert len(files) == 1
+        assert files[0].chunk_timestamps == [6000.0]
+        assert files[0].duration == 5.0
+
+
 
 class TestModuleImportSurface:
     def test_list_audio_chunks_is_module_level_name(self):
