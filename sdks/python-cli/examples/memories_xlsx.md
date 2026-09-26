@@ -6,7 +6,7 @@ boolean flags (`manually_added`, `reviewed`) stay typed, the header row is
 frozen, and an AutoFilter is enabled across the table. It reads a saved JSON
 export, makes no network requests, and does not require a running server. It
 complements [`memories_markdown.md`](memories_markdown.md) and
-[`memories_sqlite.md`](memories_sqlite.md); this recipe needs one extra package.
+[`conversations_sqlite.md`](conversations_sqlite.md); this recipe needs one extra package.
 
 You need Python 3.10+, an authenticated `omi-cli` for the initial export, and
 [`openpyxl`](https://pypi.org/project/openpyxl/):
@@ -15,14 +15,14 @@ You need Python 3.10+, an authenticated `omi-cli` for the initial export, and
 pip install openpyxl
 ```
 
-Export your memories (up to 500):
+Export your memories (up to 200 per page):
 
 ```sh
-omi --json memory list --limit 500 > memories.json
+omi --json memory list --limit 200 > memories.json
 ```
 
 Check that the command succeeded before converting the file. This is one page;
-to retrieve more, increase `--offset` by 500 and use a different filename.
+to retrieve more, increase `--offset` by 200 and use a different filename.
 
 Save the following as `memories_to_xlsx.py`:
 
@@ -45,7 +45,8 @@ FIELDS = (
     "updated_at",
     "manually_added",
     "reviewed",
-    "conversation_id",
+    "visibility",
+    "tags",
 )
 DATETIME_FORMAT = "yyyy-mm-dd hh:mm:ss"
 
@@ -133,7 +134,8 @@ def convert(source, destination):
             updated,
             cell_bool(item.get("manually_added")),
             cell_bool(item.get("reviewed")),
-            cell_text(item.get("conversation_id")),
+            cell_text(item.get("visibility")),
+            cell_text(item.get("tags")),
         )
         sheet.append(row)
         for cell in sheet[sheet.max_row]:
