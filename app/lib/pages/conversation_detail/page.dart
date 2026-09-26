@@ -544,8 +544,13 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         routeToPage(context, TestPromptsPage(conversation: provider.conversation));
         break;
       case 'reprocess':
-        if (!provider.loadingReprocessConversation) {
+        if (!provider.loadingReprocessConversation && !provider.loadingReprocessTranscription) {
           await provider.reprocessConversation();
+        }
+        break;
+      case 'reprocess_transcription':
+        if (!provider.loadingReprocessConversation && !provider.loadingReprocessTranscription) {
+          await provider.reprocessTranscription();
         }
         break;
       case 'link_event':
@@ -840,6 +845,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           iconWidget: const FaIcon(FontAwesomeIcons.share, size: 16),
           onTap: _isDownloadingAudio ? null : () => _handleMenuSelection(context, 'download_audio', provider),
         ),
+      if (provider.conversation.hasAudio())
+        PullDownMenuItem(
+          title: l10n.reprocessTranscription,
+          iconWidget: const FaIcon(FontAwesomeIcons.microphone, size: 16),
+          onTap: () => _handleMenuSelection(context, 'reprocess_transcription', provider),
+        ),
       if (provider.conversation.calendarEvent == null)
         PullDownMenuItem(
           title: l10n.linkEvent,
@@ -1002,7 +1013,13 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
 
     return MessageListener<ConversationDetailProvider>(
       showError: (error) {
-        if (error == 'REPROCESS_FAILED') OmiFeedback.error(context, context.l10n.errorProcessingConversation);
+        if (error == 'REPROCESS_FAILED') {
+          OmiFeedback.error(context, context.l10n.errorProcessingConversation);
+        } else if (error == 'REPROCESS_TRANSCRIPTION_FAILED') {
+          OmiFeedback.error(context, context.l10n.errorReprocessingTranscription);
+        } else if (error == 'REPROCESS_TRANSCRIPTION_NO_AUDIO') {
+          OmiFeedback.error(context, context.l10n.errorNoStoredAudio);
+        }
       },
       showInfo: (info) {},
       child: Scaffold(

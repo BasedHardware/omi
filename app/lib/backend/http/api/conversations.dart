@@ -129,6 +129,42 @@ Future<ServerConversation?> reProcessConversationServer(String conversationId, {
   return null;
 }
 
+class TranscriptionReprocessResult {
+  final ServerConversation? conversation;
+  final String? errorCode;
+
+  const TranscriptionReprocessResult({this.conversation, this.errorCode});
+}
+
+String transcriptionReprocessErrorCode(int? statusCode, String body) {
+  if (statusCode == 400) {
+    final lower = body.toLowerCase();
+    if (lower.contains('no stored audio') || lower.contains('no speech')) {
+      return 'no_audio';
+    }
+  }
+  return 'failed';
+}
+
+Future<TranscriptionReprocessResult> reProcessTranscriptionServer(String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess-transcription',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) {
+    return const TranscriptionReprocessResult(errorCode: 'failed');
+  }
+  Logger.debug('reProcessTranscriptionServer: ${response.statusCode}');
+  if (response.statusCode == 200) {
+    return TranscriptionReprocessResult(
+      conversation: ServerConversation.fromJson(jsonDecode(response.body) as Map<String, dynamic>),
+    );
+  }
+  return TranscriptionReprocessResult(errorCode: transcriptionReprocessErrorCode(response.statusCode, response.body));
+}
+
 Future<bool> deleteConversationServer(String conversationId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId?cascade=true',

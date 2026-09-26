@@ -78,6 +78,18 @@ class AppLocalizationsHe extends AppLocalizations {
   String get reprocessConversation => 'עבד מחדש שיחה';
 
   @override
+  String get reprocessTranscription => 'עבד מחדש תמלול';
+
+  @override
+  String get retranscribingConversation => 'מתמלל את השיחה מחדש...\nזה עשוי לקחת כמה שניות';
+
+  @override
+  String get errorReprocessingTranscription => 'שגיאה בעיבוד מחדש של התמלול. נסה שוב מאוחר יותר.';
+
+  @override
+  String get errorNoStoredAudio => 'אין שמע שמור לשיחה זו.';
+
+  @override
   String get deleteConversation => 'מחק שיחה';
 
   @override

@@ -84,6 +84,22 @@
     "@reprocessConversation": {
         "description": "Menu item to reprocess a conversation"
     },
+    "reprocessTranscription": "ಲಿಪ್ಯಂತರವನ್ನು ಮರುಪ್ರಕ್ರಿಯೆಗೊಳಿಸಿ",
+    "@reprocessTranscription": {
+        "description": "Menu item to re-run speech-to-text on stored conversation audio"
+    },
+    "retranscribingConversation": "ಸಂವಾದವನ್ನು ಮತ್ತೆ ಲಿಪ್ಯಂತರಿಸಲಾಗುತ್ತಿದೆ...\nಇದಕ್ಕೆ ಕೆಲವು ಸೆಕೆಂಡುಗಳು ಬೇಕಾಗಬಹುದು",
+    "@retranscribingConversation": {
+        "description": "Loading message shown while transcription is being reprocessed"
+    },
+    "errorReprocessingTranscription": "ಲಿಪ್ಯಂತರವನ್ನು ಮರುಪ್ರಕ್ರಿಯೆಗೊಳಿಸುವಾಗ ದೋಷ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "@errorReprocessingTranscription": {
+        "description": "Error message when transcription reprocess fails"
+    },
+    "errorNoStoredAudio": "ಈ ಸಂವಾದಕ್ಕೆ ಸಂಗ್ರಹಿತ ಆಡಿಯೋ ಇಲ್ಲ.",
+    "@errorNoStoredAudio": {
+        "description": "Error message when a conversation has no stored audio to retranscribe"
+    },
     "deleteConversation": "ಸಂವಾದ ಅಳಿಸಿ",
     "@deleteConversation": {
         "description": "Menu item to delete a conversation"

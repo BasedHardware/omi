@@ -78,6 +78,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reprocessConversation => '重新处理对话';
 
   @override
+  String get reprocessTranscription => '重新处理转写';
+
+  @override
+  String get retranscribingConversation => '正在重新转写对话...\n这可能需要几秒钟';
+
+  @override
+  String get errorReprocessingTranscription => '重新处理转写时出错。请稍后再试。';
+
+  @override
+  String get errorNoStoredAudio => '此对话没有已存储的音频。';
+
+  @override
   String get deleteConversation => '删除对话';
 
   @override

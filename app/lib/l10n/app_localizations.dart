@@ -327,6 +327,30 @@ abstract class AppLocalizations {
   /// **'Reprocess Conversation'**
   String get reprocessConversation;
 
+  /// Menu item to re-run speech-to-text on stored conversation audio
+  ///
+  /// In en, this message translates to:
+  /// **'Reprocess Transcription'**
+  String get reprocessTranscription;
+
+  /// Loading message shown while transcription is being reprocessed
+  ///
+  /// In en, this message translates to:
+  /// **'Retranscribing conversation...\nThis may take a few seconds'**
+  String get retranscribingConversation;
+
+  /// Error message when transcription reprocess fails
+  ///
+  /// In en, this message translates to:
+  /// **'Error while reprocessing transcription. Please try again later.'**
+  String get errorReprocessingTranscription;
+
+  /// Error message when a conversation has no stored audio to retranscribe
+  ///
+  /// In en, this message translates to:
+  /// **'No stored audio available for this conversation.'**
+  String get errorNoStoredAudio;
+
   /// Menu item to delete a conversation
   ///
   /// In en, this message translates to:

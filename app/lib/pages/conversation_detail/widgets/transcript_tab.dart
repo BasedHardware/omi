@@ -187,6 +187,14 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
         onTap: _dismissSearchIfEmpty,
         child: Consumer<ConversationDetailProvider>(
           builder: (context, provider, child) {
+            if (provider.loadingReprocessTranscription &&
+                provider.reprocessConversationId == provider.conversation.id) {
+              return Padding(
+                padding: const EdgeInsets.only(top: 18.0),
+                child: OmiLoadingState(label: context.l10n.retranscribingConversation),
+              );
+            }
+
             final conversation = provider.conversation;
             final segments = conversation.transcriptSegments;
             final photos = conversation.photos;
