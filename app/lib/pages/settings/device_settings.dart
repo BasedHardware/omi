@@ -13,7 +13,6 @@ import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
-import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'package:omi/pages/settings/device/device_control_sheets.dart';
 import 'package:omi/pages/settings/device/device_info_groups.dart';
 import 'package:omi/pages/settings/device/device_page_header.dart';
@@ -26,7 +25,6 @@ import 'package:omi/services/devices/connectors/rayban_meta_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/intercom.dart';
-import 'package:omi/utils/device.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
@@ -509,15 +507,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           showChevron: true,
           onTap: () => _openOfflineSync(provider),
         ),
-        // The interactive tutorial teaches CV1 button behaviour. DevKit, Glass and Neo share
-        // DeviceType.omi, so gate on the GATT model as well.
-        if (connected?.type == DeviceType.omi &&
-            DeviceUtils.isOmiCv1(modelNumber: paired?.modelNumber, deviceName: connected?.name))
-          OmiSettingsRow(
-            leading: const FaIcon(FontAwesomeIcons.graduationCap),
-            title: l10n.deviceTutorial,
-            onTap: () => routeToPage(context, const InteractiveDeviceOnboardingWrapper(allowExit: true)),
-          ),
+        // The interactive device tutorial ("Speak Into Your Omi") is retired (2026-09-26): it
+        // confused new accounts, and getting Omi to know you lives in To do now ("Teach Omi your
+        // voice"). Its code stays in onboarding/interactive_device_onboarding, unreachable.
         // Ray-Ban Meta: on-demand photo capture.
         if (isRayBan)
           OmiSettingsRow(

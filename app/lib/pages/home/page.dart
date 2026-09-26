@@ -43,7 +43,6 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/integrations/apple_reminders_sync_service.dart';
 import 'package:omi/services/quick_actions_service.dart';
-import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/announcement_service.dart';
 import 'package:omi/services/account_cutover/account_cutover_blocking_gate.dart';
@@ -63,7 +62,6 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 import 'package:omi/widgets/header_circle_button.dart';
-import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/ui/ui.dart';
 import 'home_deep_links.dart';
@@ -600,54 +598,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           },
         );
 
-        // Register callback for device connection to check firmware announcements and device onboarding
-        deviceProvider.onDeviceConnected = (BtDevice device) {
-          _onDeviceConnectedForAnnouncements(device);
-          _checkDeviceOnboarding(device);
-        };
-
-        // Also check if already connected right now
-        if (deviceProvider.isConnected && deviceProvider.connectedDevice != null) {
-          _checkDeviceOnboarding(deviceProvider.connectedDevice!);
-        }
+        // A device connecting checks its firmware announcements. (The device tutorial that used to
+        // open here is retired: getting Omi to know you is the first To do now.)
+        deviceProvider.onDeviceConnected = _onDeviceConnectedForAnnouncements;
       });
     });
-  }
-
-  bool _deviceOnboardingShown = false;
-
-  void _checkDeviceOnboarding(BtDevice device) async {
-    if (device.type != DeviceType.omi) return;
-    if (!mounted) return;
-
-    // Onboarding is the CV1 consumer-pendant button tutorial. DevKit/Glass/Neo/
-    // Friend all also enumerate as DeviceType.omi, so only proceed for a positively
-    // identified CV1. pairedDevice has the GATT model by now.
-    final pairedModel = Provider.of<DeviceProvider>(context, listen: false).pairedDevice?.modelNumber;
-    if (!DeviceUtils.isOmiCv1(modelNumber: pairedModel, deviceName: device.name)) return;
-
-    if (_deviceOnboardingShown) return;
-    if (SharedPreferencesUtil().deviceOnboardingCompleted) return;
-
-    // Double-check with Firestore
-    final state = await getUserOnboardingState();
-    if (state?['device_onboarding_completed'] == true) {
-      SharedPreferencesUtil().deviceOnboardingCompleted = true;
-      return;
-    }
-
-    if (!mounted || _deviceOnboardingShown) return;
-    _deviceOnboardingShown = true;
-    PromptQueue.instance.enqueue(
-      'device-tutorial',
-      PromptPriority.normal,
-      // The tutorial needs the pendant in hand; wait while it is disconnected.
-      canShowNow: () => mounted && context.read<DeviceProvider>().isConnected,
-      show: (_) async {
-        if (!mounted || SharedPreferencesUtil().deviceOnboardingCompleted) return;
-        await routeToPage(context, const InteractiveDeviceOnboardingWrapper());
-      },
-    );
   }
 
   void _registerAutoSyncCallback() {
