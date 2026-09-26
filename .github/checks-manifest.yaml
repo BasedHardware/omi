@@ -154,6 +154,11 @@ checks:
     triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Graph null collections and HTTP-date Retry-After crashed mail/teams/sharepoint/calendar tools (#14247)"
+  - id: memory-tools-sanitization-tests
+    command: ["python3", "backend/tests/unit/test_memory_tools_sanitization.py"]
+    triggers: ["backend/utils/retrieval/tools/memory_tools.py", "backend/tests/unit/test_memory_tools_sanitization.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Memory chat tools must safely handle retrieval and search exceptions and never leak internal database or vector store traces"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
