@@ -24,6 +24,11 @@ def _admission_limits_enabled() -> bool:
     return os.getenv('SYNC_BACKFILL_ADMISSION_LIMITS', 'false').lower() == 'true'
 
 
+def _inflight_limit_enabled() -> bool:
+    """One concurrent backfill job per uid; only an explicit ``false`` disables it."""
+    return os.getenv('SYNC_BACKFILL_INFLIGHT_LIMIT', 'true').strip().lower() != 'false'
+
+
 def per_user_daily_limit_ms() -> int:
     return max(0, int(float(os.getenv('SYNC_BACKFILL_USER_DAILY_HOURS', '4')) * 60 * 60 * 1000))
 
@@ -43,9 +48,8 @@ def _day_suffix() -> str:
 
 
 def try_acquire_backfill_slot(uid: str, job_id: str) -> bool:
-    # Admission gating disabled by default: always admit so the upload is
-    # accepted (202) and Cloud Tasks paces processing. See _admission_limits_enabled.
-    if not _admission_limits_enabled():
+    """Claim the per-uid in-flight slot; ``True`` when acquired or already held by ``job_id``."""
+    if not (_inflight_limit_enabled() or _admission_limits_enabled()):
         return True
     key = f'sync_backfill:inflight:{uid}'
     acquired = redis_client.set(key, job_id, nx=True, ex=BACKFILL_SLOT_TTL_SECONDS)

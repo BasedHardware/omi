@@ -295,10 +295,12 @@ jobs:
         uses: actions/checkout@v7
 
       # slice-2 WIF diagnostics re-run trigger (2026-09-18)
+      # slice-2 impersonated-mint bake trigger (2026-09-18)
       - name: Deploy backend stack
         uses: ./.github/actions/deploy-backend-stack
         with:
           deploy_profile: auto-dev
+          dev_free_tier_local_processing_cohort: ${{ vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT }}
           admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
           environment: development
           deploy_targets: all

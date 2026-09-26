@@ -123,7 +123,7 @@ def _historical(service_mod, memory_id, *, content=None):
 
 @pytest.fixture
 def service_mod(monkeypatch):
-    monkeypatch.setenv("MEMORY_MODE", "read")
+    monkeypatch.setenv("MEMORY_ENABLED", "on")
     module = _load_memory_service(monkeypatch)
 
     @contextmanager
@@ -152,7 +152,7 @@ def test_global_write_pause_blocks_intake_but_not_reads_or_privacy_delete(servic
     review_cleanup = MagicMock()
     monkeypatch.setattr(service_mod, "purge_stale_review_conflicts_for_memories", review_cleanup)
     monkeypatch.setattr(service_mod.HistoricalMemoryAdapter, "cleanup", MagicMock())
-    monkeypatch.setenv("MEMORY_MODE", "off")
+    monkeypatch.setenv("MEMORY_ENABLED", "off")
 
     assert service.read("uid-test") == []
     with pytest.raises(service_mod.HTTPException) as exc_info:
@@ -2352,24 +2352,32 @@ def test_required_historical_cleanup_keeps_content_when_vector_delete_fails(serv
     delete_content.assert_not_called()
 
 
-def test_required_historical_cleanup_requires_initialized_vector_authority(service_mod, monkeypatch):
+def test_required_historical_cleanup_completes_when_vector_store_unconfigured(service_mod, monkeypatch):
+    """Deletion must stay available on deployments with no vector store.
+
+    ``delete_memory_vector`` no-ops when Pinecone is not configured, so there is
+    no vector copy to purge and the desired absence is trivially confirmed. The
+    production backend and prod desktop-backend deployments run without
+    ``PINECONE_API_KEY`` (see ``backend/deploy/runtime_env.yaml`` and
+    ``desktop_backend_prod.yml``'s ``--remove-secrets=PINECONE_API_KEY``), so
+    requiring an initialized index here made every explicit delete 503 forever
+    (#10446 recurrence: desktop delete errors, mobile silently re-adds).
+    """
     delete_content = MagicMock()
-    delete_vector = MagicMock()
     monkeypatch.setattr(service_mod.vector_db, "index", None)
+    delete_vector = MagicMock()
     monkeypatch.setattr(service_mod, "delete_memory_vector", delete_vector)
     monkeypatch.setattr(service_mod.memories_db, "delete_memory", delete_content)
 
-    with pytest.raises(service_mod.HTTPException) as exc_info:
-        service_mod.HistoricalMemoryAdapter.cleanup(
-            "uid-test",
-            "legacy",
-            db_client=_Db(),
-            required=True,
-        )
+    service_mod.HistoricalMemoryAdapter.cleanup(
+        "uid-test",
+        "legacy",
+        db_client=_Db(),
+        required=True,
+    )
 
-    assert exc_info.value.status_code == 503
-    delete_vector.assert_not_called()
-    delete_content.assert_not_called()
+    delete_vector.assert_called_once()
+    delete_content.assert_called_once()
 
 
 def test_required_historical_cleanup_deletes_vector_before_content(service_mod, monkeypatch):

@@ -1,3 +1,4 @@
+# slice-2 impersonated-mint bake trigger (2026-09-18)
 import asyncio
 import json
 import logging
@@ -36,6 +37,7 @@ from routers import (
     auto_model,
     notifications,
     speech_profile,
+    speaker_tag_prompts,
     agents,
     users,
     trends,
@@ -108,6 +110,7 @@ from routers import (
     csat,
     jit_rollout,
     email_preferences,
+    mobile_feedback,
 )
 from routers.listen.registry import proactive_message_dispatcher
 
@@ -184,6 +187,8 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
     expose_headers=[
+        'X-Next-Cursor',
+        'X-Scan-Truncated',
         'X-Omi-Memory-As-Of',
         'X-Omi-Memory-Belief-Enabled',
         'X-Omi-Memory-Canonical-Lifecycle-Exposed',
@@ -220,6 +225,7 @@ app.include_router(memories.router)
 app.include_router(memory_use.router)
 app.include_router(chat.router)
 app.include_router(speech_profile.router)
+app.include_router(speaker_tag_prompts.router)
 app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
@@ -228,6 +234,7 @@ app.include_router(referrals.router)
 app.include_router(csat.router)
 app.include_router(feedback_admin.router)
 app.include_router(email_preferences.router)
+app.include_router(mobile_feedback.router)
 app.include_router(desktop_prompts.router)
 app.include_router(conversation_finalization.router)
 app.include_router(trends.router)
@@ -317,13 +324,17 @@ from utils.byok import BYOKMiddleware
 
 app.add_middleware(BYOKMiddleware)
 
+from database.firestore_tier_context import FirestoreTierMiddleware
+
+app.add_middleware(FirestoreTierMiddleware)
+
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
     start_metrics_sidecar_server()
     validate_account_deletion_dispatch_configuration()
     validate_streaming_stt_env()
-    asyncio.create_task(log_executor_health())
+    start_background_task(log_executor_health(), name='executor_health')
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
     # to db_executor so the blocking Firestore queries don't stall event-loop startup.
     start_background_task(

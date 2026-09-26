@@ -1,11 +1,93 @@
 import os
+import re
 import requests
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any, Tuple
 from dotenv import load_dotenv
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
 load_dotenv()
+
+
+def parse_channel_target(channel: Any) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Extracts raw channel ID and/or channel name candidate from various Slack input formats:
+    - Slack mentions/links: <#C012345678|general> or <#C012345678>
+    - Slack archive URLs: https://myworkspace.slack.com/archives/C012345678
+    - Raw channel IDs: C012345678, G012345678, D012345678
+    - Channel names: #general, general
+    Returns (channel_id_candidate, channel_name_candidate).
+    """
+    if not isinstance(channel, str):
+        return None, None
+    raw = channel.strip()
+    if not raw:
+        return None, None
+
+    # Slack mention / link: <#C123|general> or <#C123>
+    mention_match = re.search(r"<#([A-Za-z0-9]+)(?:\|([^>]*))?>", raw)
+    if mention_match:
+        cid = mention_match.group(1)
+        cname = mention_match.group(2).strip().lstrip('#') if mention_match.group(2) else None
+        return cid, cname or None
+
+    # Slack archive URL: https://.../archives/C123...
+    url_match = re.search(r"/archives/([A-Za-z0-9]+)", raw)
+    if url_match:
+        return url_match.group(1), None
+
+    # Explicit channel name with # prefix
+    if raw.startswith('#'):
+        return None, raw.lstrip('#').strip()
+
+    # Raw Slack channel ID (typically C..., G..., D... followed by alphanumeric chars)
+    if re.fullmatch(r"[CGD][A-Za-z0-9]{2,14}", raw):
+        return raw, None
+
+    # Fallback to plain channel name
+    return None, raw.lstrip('#').strip()
+
+
+def resolve_channel_id(channel: Any, channels: Optional[List[Dict[str, Any]]] = None) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Resolves channel parameter to (channel_id, channel_name).
+    Matches against channels list by ID and name (case-insensitive).
+    If channels list is unavailable or empty but channel is a valid direct ID,
+    preserves the direct ID.
+    """
+    if not isinstance(channel, str):
+        return None, None
+
+    channel_id_cand, channel_name_cand = parse_channel_target(channel)
+    if not channel_id_cand and not channel_name_cand:
+        return None, None
+
+    if channels:
+        # Match by channel ID
+        if channel_id_cand:
+            for ch in channels:
+                if ch.get("id") == channel_id_cand or ch.get("id", "").upper() == channel_id_cand.upper():
+                    return ch["id"], ch.get("name", channel_name_cand or ch["id"])
+
+        # Match by channel name
+        name_to_match = channel_name_cand.lower() if channel_name_cand else None
+        if name_to_match:
+            for ch in channels:
+                if ch.get("name", "").lower() == name_to_match:
+                    return ch["id"], ch.get("name", channel_name_cand)
+
+        # Fallback: check if raw string matches channel ID
+        raw_clean = channel.strip()
+        for ch in channels:
+            if ch.get("id", "").upper() == raw_clean.upper():
+                return ch["id"], ch.get("name", raw_clean)
+
+    # When channels list is empty or lookup fails, but direct ID was supplied
+    if channel_id_cand and channel_id_cand.upper().startswith(("C", "G", "D")):
+        return channel_id_cand, channel_name_cand or channel_id_cand
+
+    return None, None
+
 
 
 class SlackClient:
@@ -183,13 +265,12 @@ class SlackClient:
         With user tokens, messages automatically post as the user.
         Returns message data if successful.
         """
-        client = WebClient(token=access_token)
-        
-        # Debug: Check token type
-        token_type = "USER" if access_token and access_token.startswith("xoxp-") else "BOT" if access_token and access_token.startswith("xoxb-") else "UNKNOWN"
-        print(f"🔑 Sending with {token_type} token", flush=True)
-        
         try:
+            client = WebClient(token=access_token)
+            
+            # Debug: Check token type
+            token_type = "USER" if access_token and access_token.startswith("xoxp-") else "BOT" if access_token and access_token.startswith("xoxb-") else "UNKNOWN"
+            print(f"🔑 Sending with {token_type} token", flush=True)
             # Note: as_user parameter is deprecated and not needed with user tokens
             # User tokens automatically post messages as the authenticated user
             result = client.chat_postMessage(
@@ -235,7 +316,7 @@ class SlackClient:
             traceback.print_exc()
             return {
                 "success": False,
-                "error": str(e)
+                "error": "Internal error sending message"
             }
     
     def get_channel_history(
@@ -250,9 +331,8 @@ class SlackClient:
         Use this for getting recent messages (like today's messages).
         Requires channels:history scope.
         """
-        client = WebClient(token=access_token)
-        
         try:
+            client = WebClient(token=access_token)
             params = {
                 "channel": channel_id,
                 "limit": limit
@@ -288,7 +368,7 @@ class SlackClient:
             traceback.print_exc()
             return {
                 "success": False,
-                "error": str(e)
+                "error": "Internal error getting channel history"
             }
     
     async def search_messages(
@@ -302,32 +382,17 @@ class SlackClient:
         For recent messages in a specific channel, prefers using channel history.
         Returns list of matching messages.
         """
-        client = WebClient(token=access_token)
-        
         try:
+            client = WebClient(token=access_token)
+            
             # If searching in a specific channel and query is simple (like "today" or empty),
             # use channel history instead of search API for better results
             if channel:
+                if not isinstance(channel, str) or not channel.strip():
+                    return {"success": False, "error": "channel_not_found_or_unavailable"}
                 # Find channel ID
                 channels = self.list_channels(access_token)
-                channel_id = None
-                channel_name = None
-                
-                if not channel.startswith('C') and not channel.startswith('G'):
-                    # It's a channel name, find the ID
-                    channel_search = channel.lower().lstrip('#')
-                    for ch in channels:
-                        if ch["name"].lower() == channel_search:
-                            channel_id = ch["id"]
-                            channel_name = ch["name"]
-                            break
-                else:
-                    channel_id = channel
-                    # Find channel name
-                    for ch in channels:
-                        if ch["id"] == channel_id:
-                            channel_name = ch["name"]
-                            break
+                channel_id, channel_name = resolve_channel_id(channel, channels)
                 
                 if not channel_id:
                     # An explicit channel must never degrade into a workspace-wide search.
@@ -335,7 +400,8 @@ class SlackClient:
 
                 if channel_id:
                     # Check if query is asking for recent messages (today, recent, etc.)
-                    query_lower = query.lower().strip()
+                    query_str = str(query).strip() if query is not None else ""
+                    query_lower = query_str.lower()
                     is_recent_query = (
                         not query_lower or 
                         query_lower in ["today", "recent", "latest", "last", "new", "*", "all"]
@@ -425,7 +491,7 @@ class SlackClient:
             traceback.print_exc()
             return {
                 "success": False,
-                "error": str(e)
+                "error": "Internal error searching messages"
             }
     
     def search_channels(
@@ -445,19 +511,23 @@ class SlackClient:
             # Get all channels
             all_channels = self.list_channels(access_token)
             
+            query_str = str(query).strip() if query is not None else ""
             # If query is empty or "all", return all channels
-            if not query or query.lower().strip() == "all":
-                print(f"🔍 Returning all {len(all_channels)} channels (query: '{query}')", flush=True)
+            if not query_str or query_str.lower() == "all":
+                print(f"🔍 Returning all {len(all_channels)} channels (query: '{query_str}')", flush=True)
                 return all_channels
             
             # Filter channels by query (case-insensitive)
-            query_lower = query.lower().lstrip('#').strip()
+            # Support link syntax <#C123|general> or direct channel ID
+            cid, cname = parse_channel_target(query_str)
+            target = (cname or cid or query_str).lower().lstrip('#').strip()
             for channel in all_channels:
                 channel_name = channel.get("name", "").lower()
-                if query_lower in channel_name:
+                channel_id = channel.get("id", "").lower()
+                if (target and target in channel_name) or target == channel_id or (cid and cid.lower() == channel_id):
                     matching_channels.append(channel)
             
-            print(f"🔍 Found {len(matching_channels)} channels matching '{query}'", flush=True)
+            print(f"🔍 Found {len(matching_channels)} channels matching '{query_str}'", flush=True)
             return matching_channels
             
         except Exception as e:

@@ -400,6 +400,11 @@ class WalSyncs implements IWalSync {
     _phoneSync.cancelSync();
   }
 
+  void clearUserData() {
+    _phoneSync.clearUserData();
+    cancelSync();
+  }
+
   bool get isStorageSyncing => _storageSync.isSyncing || _ringSync.isSyncing;
 
   double get storageSpeedKBps => _ringSync.isSyncing ? _ringSync.currentSpeedKBps : _storageSync.currentSpeedKBps;

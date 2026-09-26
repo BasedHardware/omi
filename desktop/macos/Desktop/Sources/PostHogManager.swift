@@ -310,7 +310,9 @@ extension PostHogManager {
       properties: Self.transcriptionStartedProperties(attemptId: attemptId, mode: mode, intent: intent))
   }
 
-  static func transcriptionStoppedProperties(wordCount: Int, attemptId: String? = nil) -> [String: Any] {
+  static func transcriptionStoppedProperties(
+    wordCount: Int, attemptId: String? = nil, reason: String? = nil
+  ) -> [String: Any] {
     var properties: [String: Any] = [
       "platform": "macos",
       "word_count": wordCount,
@@ -318,13 +320,17 @@ extension PostHogManager {
     if let attemptId {
       properties["attempt_id"] = attemptId
     }
+    if let reason {
+      properties["finalization_reason"] = reason
+    }
     return properties
   }
 
-  func transcriptionStopped(wordCount: Int, attemptId: String? = nil) {
+  func transcriptionStopped(wordCount: Int, attemptId: String? = nil, reason: String? = nil) {
     track(
       "Desktop Recording Stopped",
-      properties: Self.transcriptionStoppedProperties(wordCount: wordCount, attemptId: attemptId))
+      properties: Self.transcriptionStoppedProperties(
+        wordCount: wordCount, attemptId: attemptId, reason: reason))
   }
 
   // MARK: - Capture Attempt Outcome
@@ -367,6 +373,12 @@ extension PostHogManager {
 
   func captureAttemptOutcome(properties: [String: Any]) {
     track(Self.captureAttemptOutcomeEventName, properties: properties)
+  }
+
+  /// One local day's per-bundle call-audio counts. `track` already drops the
+  /// event when analytics is uninitialized or the user has opted out.
+  func callAppAudioSummary(_ summary: CallAppAudioSummary) {
+    track(CallAppAudioSummaryTelemetry.eventName, properties: CallAppAudioSummaryTelemetry.properties(summary))
   }
 
   func recordingError(

@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, tzinfo
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
 
@@ -57,7 +57,7 @@ def validate_task_relationship_in_transaction(
         goal_snapshot = user_ref.collection('goals').document(goal_id).get(transaction=transaction)
         if not goal_snapshot.exists:
             raise TaskRelationshipConflictError('goal does not exist')
-        goal = _typed_doc(goal_snapshot)
+        goal = typed_doc(goal_snapshot)
         if account_generation is not None and goal.get('account_generation', 0) != account_generation:
             raise TaskRelationshipConflictError('goal account generation mismatch')
         status = goal.get('status')
@@ -69,14 +69,14 @@ def validate_task_relationship_in_transaction(
         workstream_snapshot = user_ref.collection('workstreams').document(workstream_id).get(transaction=transaction)
         if not workstream_snapshot.exists:
             raise TaskRelationshipConflictError('workstream does not exist')
-        workstream = _typed_doc(workstream_snapshot)
+        workstream = typed_doc(workstream_snapshot)
         if account_generation is not None and workstream.get('account_generation', 0) != account_generation:
             raise TaskRelationshipConflictError('workstream account generation mismatch')
         if workstream.get('goal_id') != goal_id:
             raise TaskRelationshipConflictError('task goal_id must match workstream goal_id')
 
 
-def _typed_doc(doc: Any) -> Dict[str, Any]:
+def typed_doc(doc: Any) -> Dict[str, Any]:
     """Typed adapter for a Firestore DocumentSnapshot.to_dict() result.
 
     Returns an empty dict when the document has no fields (None payload),
@@ -174,7 +174,7 @@ def get_visible_action_item_ids(
     doc_count = 0
     for doc in _iter_query_pages(query):
         doc_count += 1
-        data = _typed_doc(doc)
+        data = typed_doc(doc)
         if data.get('deleted'):
             continue
         visible_ids.append(doc.id)
@@ -249,7 +249,7 @@ def _prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial:
     return action_item_data
 
 
-def _prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str, Any]:
+def prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str, Any]:
     """Prepare action item data for reading from database"""
     # `completed` may be missing OR explicitly null (legacy/partial writes). setdefault
     # won't overwrite an existing null, so drop it first and let status derive a concrete
@@ -309,13 +309,13 @@ def create_action_item(
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
 
-    if 'created_at' not in action_item_data:
+    if not action_item_data.get('created_at'):
         action_item_data['created_at'] = datetime.now(timezone.utc)
-    if 'updated_at' not in action_item_data:
+    if not action_item_data.get('updated_at'):
         action_item_data['updated_at'] = datetime.now(timezone.utc)
 
     # Set completed_at if the item is being created as completed
-    if action_item_data.get('completed', False) and 'completed_at' not in action_item_data:
+    if action_item_data.get('completed', False) and not action_item_data.get('completed_at'):
         action_item_data['completed_at'] = datetime.now(timezone.utc)
 
     if idempotency_key:
@@ -334,7 +334,7 @@ def create_action_item(
             .document(TASK_INTELLIGENCE_CONTROL_DOCUMENT)
             .get(transaction=write_transaction)
         )
-        control = _typed_doc(control_snapshot) if control_snapshot.exists else {}
+        control = typed_doc(control_snapshot) if control_snapshot.exists else {}
         account_generation = int(control.get('account_generation', 0))
         if idempotency_key:
             existing_query = action_items_ref.where(filter=FieldFilter('idempotency_key', '==', idempotency_key)).where(
@@ -346,7 +346,7 @@ def create_action_item(
                 )
             existing_query = existing_query.limit(5)
             for existing in existing_query.stream(transaction=write_transaction):
-                data = _typed_doc(existing)
+                data = typed_doc(existing)
                 if account_generation == 0 and int(data.get('account_generation', 0)) != 0:
                     continue
                 if not data.get('deleted'):
@@ -354,7 +354,7 @@ def create_action_item(
         if document_id is not None:
             existing_document = doc_ref.get(transaction=write_transaction)
             if existing_document.exists:
-                existing_generation = int(_typed_doc(existing_document).get('account_generation', 0))
+                existing_generation = int(typed_doc(existing_document).get('account_generation', 0))
                 if existing_generation != account_generation:
                     raise TaskRelationshipConflictError('document id belongs to another account generation')
                 return document_id
@@ -415,13 +415,12 @@ def create_action_items_batch(
     for index, action_item_data in enumerate(action_items_data):
         action_item_data = _prepare_action_item_for_write(action_item_data)
 
-        if 'created_at' not in action_item_data:
+        if not action_item_data.get('created_at'):
             action_item_data['created_at'] = datetime.now(timezone.utc)
-        if 'updated_at' not in action_item_data:
+        if not action_item_data.get('updated_at'):
             action_item_data['updated_at'] = datetime.now(timezone.utc)
-
         # Set completed_at if the item is being created as completed
-        if action_item_data.get('completed', False) and 'completed_at' not in action_item_data:
+        if action_item_data.get('completed', False) and not action_item_data.get('completed_at'):
             action_item_data['completed_at'] = datetime.now(timezone.utc)
 
         doc_ref = (
@@ -441,7 +440,7 @@ def create_action_items_batch(
             .document(TASK_INTELLIGENCE_CONTROL_DOCUMENT)
             .get(transaction=write_transaction)
         )
-        control = _typed_doc(control_snapshot) if control_snapshot.exists else {}
+        control = typed_doc(control_snapshot) if control_snapshot.exists else {}
         account_generation = int(control.get('account_generation', 0))
         if any(item.get('goal_id') is not None or item.get('workstream_id') is not None for item in prepared_items):
             for item in prepared_items:
@@ -492,9 +491,9 @@ def get_action_item(uid: str, action_item_id: str) -> Optional[Dict[str, Any]]:
     if not doc.exists:
         return None
 
-    data: Dict[str, Any] = _typed_doc(doc)
+    data: Dict[str, Any] = typed_doc(doc)
     data['id'] = doc.id
-    return _prepare_action_item_for_read(data)
+    return prepare_action_item_for_read(data)
 
 
 # Hard safety caps for list reads. Unbounded streams + in-process sort caused prod GET
@@ -506,7 +505,7 @@ _ACTION_ITEMS_LIST_DELETED_SLACK = 32
 # payload on large accounts; ActionItemResponse defaults it to []). Do not add
 # `order_by due_at` here: missing `due_at` is excluded from that index and would
 # drop undated tasks. Existing `action_items_completed_due` stays for due-range reads.
-_ACTION_ITEMS_LIST_SELECT_FIELDS = (
+ACTION_ITEMS_LIST_SELECT_FIELDS = (
     'description',
     'status',
     'completed',
@@ -548,7 +547,7 @@ def _action_item_list_sort_key(item: Dict[str, Any]) -> tuple:
         bool(item.get('completed')),
         item.get('due_at') is None,
         item.get('due_at') or datetime.max.replace(tzinfo=timezone.utc),
-        -(item.get('created_at', datetime.min.replace(tzinfo=timezone.utc)).timestamp()),
+        -((item.get('created_at') or datetime.min.replace(tzinfo=timezone.utc)).timestamp()),
     )
 
 
@@ -571,7 +570,7 @@ def _stream_action_items_bounded(
     document_count = 0
     if max_docs <= 0:
         return action_items, 0
-    query = query.select(list(_ACTION_ITEMS_LIST_SELECT_FIELDS)).limit(max_docs)
+    query = query.select(list(ACTION_ITEMS_LIST_SELECT_FIELDS)).limit(max_docs)
     if budget is None:
         iterator = query.stream()
     else:
@@ -586,13 +585,13 @@ def _stream_action_items_bounded(
             if budget is not None:
                 budget.charge(1)
             document_count += 1
-            data: Dict[str, Any] = _typed_doc(doc)
+            data: Dict[str, Any] = typed_doc(doc)
             if data.get('deleted'):
                 if document_count >= max_docs:
                     break
                 continue
             data['id'] = doc.id
-            action_items.append(_prepare_action_item_for_read(data))
+            action_items.append(prepare_action_item_for_read(data))
             if document_count >= max_docs:
                 break
     except ListReadBudgetExhausted:
@@ -724,7 +723,7 @@ def get_action_items(
     Default (completed=None) lists preserve active-first product order by reading the
     incomplete bucket first, then the completed bucket — never a full-collection stream.
     Legacy documents with missing/null ``completed`` are harvested via a separate bounded
-    unfiltered scan and treated as active after ``_prepare_action_item_for_read``.
+    unfiltered scan and treated as active after ``prepare_action_item_for_read``.
     All paths are hard-capped so GET /v1/action-items cannot unbounded-scan under
     HTTP_GET_TIMEOUT. Pagination is applied after the product sort. When
     ``completed`` is set, the scan budget is the page plus deleted slack
@@ -924,12 +923,12 @@ def get_active_action_item_by_description(uid: str, description: str) -> Optiona
     ).order_by('__name__')
 
     for doc in _iter_query_pages(query):
-        data: Dict[str, Any] = _typed_doc(doc)
+        data: Dict[str, Any] = typed_doc(doc)
         if data.get('deleted'):
             continue
         if _normalize_description(data.get('description')) == target:
             data['id'] = doc.id
-            return _prepare_action_item_for_read(data)
+            return prepare_action_item_for_read(data)
 
     return None
 
@@ -1010,9 +1009,9 @@ def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[Dict[s
     action_items_map: Dict[str, Dict[str, Any]] = {}
     for doc in docs:
         if doc.exists:
-            data: Dict[str, Any] = _typed_doc(doc)
+            data: Dict[str, Any] = typed_doc(doc)
             data['id'] = doc.id
-            action_item = _prepare_action_item_for_read(data)
+            action_item = prepare_action_item_for_read(data)
             action_items_map[doc.id] = action_item
 
     # Return in the same order as input IDs
@@ -1055,7 +1054,7 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
             snapshot = action_item_ref.get(transaction=write_transaction)
             if not snapshot.exists:
                 return False
-            current = _typed_doc(snapshot)
+            current = typed_doc(snapshot)
             goal_id = update_data.get('goal_id') if 'goal_id' in update_data else current.get('goal_id')
             workstream_id = (
                 update_data.get('workstream_id') if 'workstream_id' in update_data else current.get('workstream_id')
@@ -1326,11 +1325,11 @@ def get_pending_apple_reminders_sync(uid: str) -> Dict[str, Any]:
     pending_docs = pending_query.stream()
     pending_export: List[Dict[str, Any]] = []
     for doc in pending_docs:
-        data: Dict[str, Any] = _typed_doc(doc)
+        data: Dict[str, Any] = typed_doc(doc)
         if data.get('exported') is True:
             continue
         data['id'] = doc.id
-        pending_export.append(_prepare_action_item_for_read(data))
+        pending_export.append(prepare_action_item_for_read(data))
 
     # Synced items: exported to apple_reminders (for bidirectional sync)
     # Uses only equality filters to avoid composite index requirement
@@ -1342,9 +1341,9 @@ def get_pending_apple_reminders_sync(uid: str) -> Dict[str, Any]:
     synced_docs = synced_query.stream()
     synced_items: List[Dict[str, Any]] = []
     for doc in synced_docs:
-        data = _typed_doc(doc)
+        data = typed_doc(doc)
         data['id'] = doc.id
-        synced_items.append(_prepare_action_item_for_read(data))
+        synced_items.append(prepare_action_item_for_read(data))
     # Sort by updated_at desc in Python instead of Firestore (avoids composite index)
     synced_items.sort(key=lambda x: x.get('updated_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
 
@@ -1398,7 +1397,7 @@ def unlock_all_action_items(uid: str) -> None:
     docs = locked_items_query.stream()
     count = 0
     for doc in docs:
-        batch.update(doc.reference, {'is_locked': False})
+        batch.update(doc.reference, {'is_locked': False, 'updated_at': datetime.now(timezone.utc)})
         count += 1
         if count >= 499:  # Firestore batch limit is 500
             batch.commit()
@@ -1415,12 +1414,12 @@ def unlock_all_action_items(uid: str) -> None:
 # ============================================================================
 
 
-def get_daily_score(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
+def get_daily_score(uid: str, date: Optional[str] = None, tz: tzinfo = timezone.utc) -> Dict[str, Any]:
     """Compute productivity score for a single day from action_items."""
     if date:
-        day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+        day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=tz)
     else:
-        day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        day = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
 
     day_end = day + timedelta(days=1)
     col = db.collection('users').document(uid).collection(action_items_collection)
@@ -1430,7 +1429,7 @@ def get_daily_score(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
     total = 0
     completed = 0
     for doc in due_query.stream():
-        data: Dict[str, Any] = _typed_doc(doc)
+        data: Dict[str, Any] = typed_doc(doc)
         if data.get('deleted'):
             continue
         total += 1
@@ -1441,7 +1440,9 @@ def get_daily_score(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
     return {'date': day.strftime('%Y-%m-%d'), 'score': score, 'completed_tasks': completed, 'total_tasks': total}
 
 
-def get_scores(uid: str, date: Optional[str] = None, *, firestore_client: Any = None) -> Dict[str, Any]:
+def get_scores(
+    uid: str, date: Optional[str] = None, *, firestore_client: Any = None, tz: tzinfo = timezone.utc
+) -> Dict[str, Any]:
     """Compute daily, weekly, and overall scores (matching Rust backend behavior).
 
     Takes a single date (or defaults to today) and returns:
@@ -1450,9 +1451,9 @@ def get_scores(uid: str, date: Optional[str] = None, *, firestore_client: Any = 
       overall — all non-deleted tasks
     """
     if date:
-        day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+        day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=tz)
     else:
-        day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        day = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
 
     day_start = day
     day_end = day + timedelta(days=1)
@@ -1475,7 +1476,7 @@ def get_scores(uid: str, date: Optional[str] = None, *, firestore_client: Any = 
     # Firestore equality predicate without also dropping legacy rows where ``deleted``
     # is absent, so read only that small subset once and subtract it below.
     deleted_items = [
-        _typed_doc(doc)
+        typed_doc(doc)
         for doc in _iter_query_pages(col.where(filter=FieldFilter('deleted', '==', True)).order_by('__name__'))
     ]
 

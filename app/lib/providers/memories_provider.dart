@@ -438,6 +438,13 @@ class MemoriesProvider extends ChangeNotifier {
 
   void clearUserData() {
     _sessionGeneration++;
+    // Break the load-coalescing join: a caller that arrives after the clear
+    // must start a fresh load, not await the retired session's in-flight one
+    // (whose result the generation guard would then discard).
+    _inFlightLoad = null;
+    _inFlightLoadLimit = 100;
+    _inFlightLoadDeviceScoped = false;
+    _inFlightLoadView = MemoryCollectionView.usefulNow;
     _memories = [];
     _selectedCategories = {};
     _showOnlyManual = false;
@@ -1308,6 +1315,9 @@ class MemoriesProvider extends ChangeNotifier {
 
   void deleteMemory(Memory memory) {
     _cancelDeletionTimer();
+    if (_pendingDeletionId != null) {
+      unawaited(_finalizeDeletion());
+    }
 
     _lastDeletedMemory = memory;
     _pendingDeletionId = memory.id;
@@ -1320,17 +1330,14 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   void _cancelDeletionTimer() {
-    if (_deletionTimer != null && _deletionTimer!.isActive) {
-      _deletionTimer!.cancel();
-      _deletionTimer = null;
-    }
+    _deletionTimer?.cancel();
+    _deletionTimer = null;
   }
 
-  void _startDeletionTimer() {
-    _deletionTimer = Timer(const Duration(seconds: 4), () async {
-      await _finalizeDeletion();
-    });
-  }
+  /// Backstop commit; the Undo toast (OmiFeedbackTiming.undo) commits sooner and must close first.
+  static const Duration pendingDeletionWindow = Duration(seconds: 8);
+
+  void _startDeletionTimer() => _deletionTimer = Timer(pendingDeletionWindow, _finalizeDeletion);
 
   Future<void> _finalizeDeletion() async {
     if (_pendingDeletionId == null) {
@@ -1356,7 +1363,7 @@ class MemoriesProvider extends ChangeNotifier {
       }
     }
 
-    if (!deleteSucceeded && _pendingDeletionId == id && deletedMemory?.id == id) {
+    if (!deleteSucceeded && deletedMemory?.id == id) {
       if (!_memories.any((memory) => memory.id == id)) {
         _memories.add(deletedMemory!);
       }
@@ -1370,14 +1377,16 @@ class MemoriesProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> confirmPendingDeletion() async {
+  /// Commits now; with [id], only if that memory is still the pending one (a stale toast must not).
+  Future<void> confirmPendingDeletion({String? id}) async {
+    if (id != null && id != _pendingDeletionId) return;
     _cancelDeletionTimer();
     await _finalizeDeletion();
   }
 
-  // Restore the last deleted memory
-  Future<bool> restoreLastDeletedMemory() async {
-    if (_lastDeletedMemory == null) return false;
+  /// Restores the pending deletion; with [id], only if still pending (a stale toast must not restore).
+  Future<bool> restoreLastDeletedMemory({String? id}) async {
+    if (_lastDeletedMemory == null || (id != null && _lastDeletedMemory!.id != id)) return false;
 
     _cancelDeletionTimer();
     _pendingDeletionId = null;
@@ -1391,9 +1400,9 @@ class MemoriesProvider extends ChangeNotifier {
     return true;
   }
 
-  void deleteAllMemories() async {
+  Future<bool> deleteAllMemories() async {
     final int countBeforeDeletion = _memories.length;
-    await deleteAllMemoriesServer();
+    if (!await deleteAllMemoriesServer()) return false;
     _memories.clear();
     if (countBeforeDeletion > 0) {
       PlatformManager.instance.analytics.memoriesAllDeleted(
@@ -1401,6 +1410,7 @@ class MemoriesProvider extends ChangeNotifier {
       );
     }
     _setCategories();
+    return true;
   }
 
   /// Create a memory - works offline by saving locally first, then syncing
@@ -1460,11 +1470,11 @@ class MemoriesProvider extends ChangeNotifier {
     return true;
   }
 
-  Future<void> updateMemoryVisibility(
+  Future<bool> updateMemoryVisibility(
     Memory memory,
     MemoryVisibility visibility,
   ) async {
-    await updateMemoryVisibilityServer(memory.id, visibility.name);
+    if (!await updateMemoryVisibilityServer(memory.id, visibility.name)) return false;
 
     final idx = _memories.indexWhere((m) => m.id == memory.id);
     if (idx != -1) {
@@ -1478,6 +1488,7 @@ class MemoriesProvider extends ChangeNotifier {
       );
       _setCategories();
     }
+    return true;
   }
 
   Future<bool> toggleMemoryBaseline(Memory memory, bool isBaseline) async {
@@ -1551,15 +1562,19 @@ class MemoriesProvider extends ChangeNotifier {
     return result.persisted;
   }
 
-  Future<void> updateAllMemoriesVisibility(bool makePrivate) async {
+  Future<bool> updateAllMemoriesVisibility(bool makePrivate) async {
     final visibility = makePrivate ? MemoryVisibility.private : MemoryVisibility.public;
     int updatedCount = 0;
+    var allUpdated = true;
     List<Memory> memoriesSuccessfullyUpdated = [];
 
     for (var memory in List.from(_memories)) {
       if (memory.visibility != visibility) {
         try {
-          await updateMemoryVisibilityServer(memory.id, visibility.name);
+          if (!await updateMemoryVisibilityServer(memory.id, visibility.name)) {
+            allUpdated = false;
+            continue;
+          }
           final idx = _memories.indexWhere((m) => m.id == memory.id);
           if (idx != -1) {
             _memories[idx].visibility = visibility;
@@ -1567,6 +1582,7 @@ class MemoriesProvider extends ChangeNotifier {
             updatedCount++;
           }
         } catch (e) {
+          allUpdated = false;
           print('Failed to update visibility for memory ${memory.id}: $e');
         }
       }
@@ -1580,5 +1596,6 @@ class MemoriesProvider extends ChangeNotifier {
     }
 
     _setCategories();
+    return allUpdated;
   }
 }

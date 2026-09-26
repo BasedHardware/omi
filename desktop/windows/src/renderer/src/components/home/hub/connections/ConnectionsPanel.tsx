@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { ChevronLeft, LayoutGrid, ArrowRight, X } from 'lucide-react'
 import type { HubConnectSlotProps } from '../hubConnectSlot'
 import { CalendarConnector } from './CalendarConnector'
-import { GmailConnector } from './GmailConnector'
 import { StickyNotesConnector } from './StickyNotesConnector'
 import { XConnector } from './XConnector'
 import { PasteImportConnector } from './PasteImportConnector'
@@ -37,7 +36,7 @@ type ExportId = 'claude' | 'chatgpt' | 'openclaw' | 'hermes'
 
 type View =
   | { kind: 'tray' }
-  | { kind: 'source'; id: 'gmail' | 'calendar' | 'sticky' | 'x' }
+  | { kind: 'source'; id: 'calendar' | 'sticky' | 'x' }
   | { kind: 'imports' }
   | { kind: 'exports' }
   | { kind: 'export'; id: ExportId }
@@ -156,9 +155,7 @@ export function ConnectionsPanel({ onDismiss }: HubConnectSlotProps): React.JSX.
 
   if (view.kind === 'source') {
     const detail =
-      view.id === 'gmail' ? (
-        <GmailConnector />
-      ) : view.id === 'calendar' ? (
+      view.id === 'calendar' ? (
         <CalendarConnector />
       ) : view.id === 'x' ? (
         <XConnector />
@@ -178,7 +175,6 @@ export function ConnectionsPanel({ onDismiss }: HubConnectSlotProps): React.JSX.
         <SectionHeader>Imports</SectionHeader>
         <div className="flex flex-col">
           <CalendarConnector />
-          <GmailConnector />
           <StickyNotesConnector />
           <XConnector />
           <PasteImportConnector source="chatgpt" />

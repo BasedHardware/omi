@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/services/capture/capture_composition.dart';
 import 'package:omi/services/capture/capture_seams.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
@@ -23,6 +24,7 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/enums.dart';
 
 import '../../support/capture/capture_replay_world.dart';
+import '../../support/capture/scripted_device_connection.dart';
 import '../../support/capture/virtual_capture_time.dart';
 import '../../spine/c1_async_boundaries_test.dart' show HeldLocation;
 import '../../spine/c1_location_completion_test.dart' show PhoneSpy, WalSpy;
@@ -39,7 +41,7 @@ CaptureDependencies _deps({
 }) {
   final clock = world?.clock ?? VirtualClock(DateTime.utc(2026));
   return CaptureDependencies(
-    ensureDeviceConnection: (_) async => null,
+    ensureDeviceConnection: (_) async => world?.deviceConnection,
     wal: world?.wal ?? _InertWal(),
     phoneMic: world?.mic ?? _InertMic(),
     batchSupported: false,
@@ -244,11 +246,13 @@ void main() {
     final world = await CaptureReplayWorld.boot(tempDir: dir);
     try {
       world.disposeController();
+      world.deviceConnection = ScriptedDeviceConnection();
       final gate = Completer<BleAudioCodec>();
       var opens = 0;
+      var holdCodec = false;
       final deps = _deps(
         world: world,
-        codec: (_) => gate.future,
+        codec: (_) => holdCodec ? gate.future : Future.value(BleAudioCodec.pcm16),
         open: ({
           required codec,
           required sampleRate,
@@ -265,20 +269,24 @@ void main() {
       );
       final p = composeCaptureProvider(deps);
       final device = BtDevice(id: 'synthetic-device', name: 'fixture', type: DeviceType.omi, rssi: -50);
-      p.updateRecordingDevice(device);
-      p.updateRecordingState(RecordingState.deviceRecord);
+      await p.streamDeviceRecording(device: device);
+      expect(p.liveCaptureSource, 'omi');
+      final initialOpens = opens;
+      holdCodec = true;
       final before = deps.owner.token;
       final pending = p.reconnectActiveCaptureForTesting();
       await pumpEventQueue();
       p.updateRecordingDevice(null);
       p.updateRecordingDevice(device);
-      p.updateRecordingState(RecordingState.deviceRecord);
-      expect(deps.owner.isCurrent(before), isFalse);
+      expect(deps.owner.isCurrent(before), isTrue);
       gate.complete(BleAudioCodec.pcm16);
       await pending;
-      expect(opens, 0);
-      await p.reconnectActiveCaptureForTesting();
-      expect(opens, 1);
+      await p.pendingSourceSwitch;
+      expect(opens, initialOpens);
+      expect(deps.owner.isCurrent(before), isFalse);
+      holdCodec = false;
+      await p.streamDeviceRecording(device: device);
+      expect(opens, initialOpens + 1);
       p.dispose();
     } finally {
       await world.dispose();
@@ -585,5 +593,110 @@ void main() {
       await world.dispose();
       await dir.delete(recursive: true);
     }
+  });
+
+  group('capture wedge detection through the real provider', () {
+    CaptureWedgeMonitor installMonitor(List<Map<String, Object>> detected) {
+      final monitor = CaptureWedgeMonitor(
+        featureGate: () async => true,
+        track: (event, properties) {
+          if (event == 'Capture Wedge Detected') detected.add(properties);
+        },
+        bleRetry: (_) async {},
+        appBuild: () => '1',
+        platform: () => 'ios',
+      );
+      final previous = CaptureWedgeMonitor.instance;
+      CaptureWedgeMonitor.instance = monitor;
+      addTearDown(() => CaptureWedgeMonitor.instance = previous);
+      return monitor;
+    }
+
+    CaptureDependencies wedgeDeps(CaptureReplayWorld world, List<ScriptedPureSocket> transports) {
+      return _deps(
+        world: world,
+        open: ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+          geolocation,
+        }) async {
+          final transport = ScriptedPureSocket();
+          transports.add(transport);
+          final socket =
+              TranscriptSegmentSocketService.withSocket(sampleRate, codec, language, transport, source: source);
+          await socket.start();
+          return socket;
+        },
+      );
+    }
+
+    test('three connected zero-byte pendant socket sessions declare a wedge', () async {
+      final dir = await Directory.systemTemp.createTemp('c1-wedge-');
+      final world = await CaptureReplayWorld.boot(tempDir: dir);
+      try {
+        world.disposeController();
+        world.deviceConnection = ScriptedDeviceConnection();
+        final detected = <Map<String, Object>>[];
+        final monitor = installMonitor(detected);
+        final transports = <ScriptedPureSocket>[];
+        final p = composeCaptureProvider(wedgeDeps(world, transports));
+        final device = BtDevice(id: 'omi-1', name: 'Omi', type: DeviceType.omi, rssi: -50);
+        await p.streamDeviceRecording(device: device);
+        expect(p.liveCaptureSource, 'omi');
+
+        for (var i = 0; i < 3; i++) {
+          if (i != 0) await p.reconnectActiveCaptureForTesting();
+          expect(transports, hasLength(i + 1));
+          transports.last.emitClose();
+          await pumpEventQueue();
+        }
+        await pumpEventQueue();
+
+        expect(detected, hasLength(1));
+        expect(detected.single['source'], 'omi');
+        expect(detected.single['trigger'], 'zero_byte_streak');
+        expect(monitor.visiblePrompt, isNotNull);
+        p.dispose();
+      } finally {
+        await world.dispose();
+        await dir.delete(recursive: true);
+      }
+    });
+
+    test('a phone-mic session while a pendant is paired does not feed the detector', () async {
+      final dir = await Directory.systemTemp.createTemp('c1-wedge-phone-');
+      final world = await CaptureReplayWorld.boot(tempDir: dir);
+      try {
+        world.disposeController();
+        final detected = <Map<String, Object>>[];
+        installMonitor(detected);
+        final transports = <ScriptedPureSocket>[];
+        final p = composeCaptureProvider(wedgeDeps(world, transports));
+        final device = BtDevice(id: 'omi-2', name: 'Omi', type: DeviceType.omi, rssi: -50);
+        p.updateRecordingDevice(device);
+
+        await p.streamRecording();
+        await pumpEventQueue();
+        expect(transports, isNotEmpty);
+
+        for (var i = 0; i < 3; i++) {
+          transports.last.emitClose();
+          await pumpEventQueue();
+          world.scheduler.elapse(const Duration(seconds: 30));
+          await pumpEventQueue();
+        }
+
+        expect(detected, isEmpty);
+        p.dispose();
+      } finally {
+        await world.dispose();
+        await dir.delete(recursive: true);
+      }
+    });
   });
 }

@@ -12,6 +12,7 @@ import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/power_c
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/double_press_config_step.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_intro_screen.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
 class InteractiveDeviceOnboardingWrapper extends StatefulWidget {
@@ -59,6 +60,13 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
   void dispose() {
     if (_started && !_completed) {
       AnalyticsManager().deviceOnboardingAbandoned(_onboardingProvider.currentStep);
+    }
+    // Cancel only a tutorial-owned voice session. Opening Settings → Device
+    // Tutorial attaches CaptureProvider in the post-frame callback before the
+    // user starts the flow; exiting the intro must not discard an unrelated
+    // in-flight Omi voice command. `_showIntro` stays true until `_startTutorial`.
+    if (!_showIntro) {
+      _captureProvider?.cancelTutorialOwnedVoiceSession();
     }
     _captureProvider?.restoreBatchModeAfterOnboarding();
     _captureProvider?.deviceOnboardingProvider = null;
@@ -116,8 +124,9 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
       value: _onboardingProvider,
       child: PopScope(
         // Intercept system back so leaving mid-tutorial persists completion —
-        // otherwise the forced flow re-fires on next launch. _completeOnboarding
-        // and _skipOnboarding pop directly (didPop == true) and skip this path.
+        // otherwise the forced flow re-fires on next launch. System back does what
+        // the on-screen close X does. _completeOnboarding and _skipOnboarding pop
+        // directly (didPop == true) and skip this path.
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
           if (didPop) return;
@@ -130,12 +139,12 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xFF2A2342), Colors.black],
+                colors: [OmiColors.surface1, OmiColors.surface0],
               ),
             ),
             child: SafeArea(
               child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 320),
+                duration: OmiMotion.of(context).standard,
                 child: _showIntro
                     ? OnboardingIntroScreen(
                         key: const ValueKey('intro'),
@@ -146,13 +155,15 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
                         key: const ValueKey('steps'),
                         children: [
                           // Always dismissible: a stuck step (e.g. the mic-test
-                          // waiting on a response) must never trap the user.
+                          // waiting on a response) must never trap the user. The
+                          // tutorial floats over the app, so it leaves by a trailing
+                          // close X, never a back chevron (docs/ux-contract.md §1).
                           SizedBox(
                             height: 48,
                             child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: IconButton(
-                                icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+                              alignment: AlignmentDirectional.centerEnd,
+                              child: OmiCloseButton(
+                                key: const Key('device_onboarding_close_button'),
                                 onPressed: _skipOnboarding,
                               ),
                             ),

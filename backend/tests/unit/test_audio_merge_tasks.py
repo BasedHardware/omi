@@ -11,6 +11,7 @@ playback/; request paths are pure metadata reads.
 import os
 import sys
 import unittest
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -80,6 +81,21 @@ AUDIO_ENV = {
     'SYNC_TASKS_INVOKER_SA': 'invoker@proj.iam.gserviceaccount.com',
 }
 
+# Production clone of backend-sync onto backend-sync-backfill overlays these to the
+# backfill worker's own sync-jobs URL while leaving AUDIO_MERGE_HANDLER_URL pointing
+# at backend-sync. That pair is the live 403: token audience != handler URL.
+BACKFILL_CLONE_ENV = {
+    **AUDIO_ENV,
+    'SYNC_TASKS_HANDLER_URL': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+    'SYNC_TASKS_OIDC_AUDIENCE': 'https://backend-sync-backfill.example.com/v2/sync-jobs/run',
+}
+
+
+def _request_with(headers: dict):
+    request = MagicMock()
+    request.headers = headers
+    return request
+
 
 class TestEnqueueAudioMergeJob:
     def test_task_named_by_conversation_and_file(self):
@@ -124,6 +140,43 @@ class TestEnqueueAudioMergeJob:
         with patch.dict(os.environ, {'AUDIO_MERGE_DISPATCH_MODE': 'cloud_tasks'}):
             assert ct.is_audio_merge_dispatch_enabled() is True
 
+    def test_enqueued_audience_matches_handler_when_sync_audience_is_backfill(self):
+        """Regression: backfill clones overlay SYNC_TASKS_* to the backfill worker
+        while AUDIO_MERGE_HANDLER_URL still names backend-sync. The minted OIDC
+        audience must be the merge handler URL, not the sync-jobs audience.
+        """
+        ct = _load_cloud_tasks()
+        merge_url = BACKFILL_CLONE_ENV['AUDIO_MERGE_HANDLER_URL']
+        with patch.dict(os.environ, BACKFILL_CLONE_ENV), patch.object(ct, '_enqueue_named_task') as enqueue:
+            ct.enqueue_audio_merge_job(
+                {'conversation_id': 'conv1', 'audio_file_id': 'file1', 'uid': 'u', 'timestamps': [1.0]}
+            )
+        enqueue.assert_called_once()
+        assert enqueue.call_args.args[1] == merge_url
+        assert enqueue.call_args.kwargs['audience'] == merge_url
+        assert enqueue.call_args.kwargs['audience'] != BACKFILL_CLONE_ENV['SYNC_TASKS_OIDC_AUDIENCE']
+
+    def test_schema_v2_enqueued_audience_matches_handler_when_sync_audience_is_backfill(self):
+        ct = _load_cloud_tasks()
+        merge_url = BACKFILL_CLONE_ENV['AUDIO_MERGE_HANDLER_URL']
+        with patch.dict(os.environ, BACKFILL_CLONE_ENV), patch.object(ct, '_enqueue_named_task') as enqueue:
+            ct.enqueue_audio_merge_job(
+                {'schema_version': 2, 'conversation_id': 'conv1', 'fingerprint': 'abc123def456', 'uid': 'u'}
+            )
+        assert enqueue.call_args.kwargs['audience'] == merge_url
+        assert enqueue.call_args.args[1] == merge_url
+
+    def test_audio_merge_oidc_verification_uses_handler_url_not_sync_audience(self):
+        ct = _load_cloud_tasks()
+        merge_url = BACKFILL_CLONE_ENV['AUDIO_MERGE_HANDLER_URL']
+        claims = {'email': BACKFILL_CLONE_ENV['SYNC_TASKS_INVOKER_SA'], 'email_verified': True}
+        with patch.dict(os.environ, BACKFILL_CLONE_ENV), patch.object(
+            ct.id_token, 'verify_oauth2_token', return_value=claims
+        ) as verify:
+            assert ct.verify_audio_merge_cloud_tasks_oidc(_request_with({'authorization': 'Bearer t'})) == 0
+        assert verify.call_args.kwargs['audience'] == merge_url
+        assert verify.call_args.kwargs['audience'] != BACKFILL_CLONE_ENV['SYNC_TASKS_OIDC_AUDIENCE']
+
 
 class TestPlaybackReadPathsStructure:
     """Request paths must never merge when artifact dispatch is enabled."""
@@ -132,7 +185,8 @@ class TestPlaybackReadPathsStructure:
         src = _read_source(os.path.join('routers', 'sync.py'))
         assert '"/v2/audio-merge-jobs/run"' in src
         handler = src[src.index('async def run_audio_merge_job') :]
-        assert 'Depends(verify_cloud_tasks_oidc)' in handler[:200]
+        assert 'Depends(verify_audio_merge_cloud_tasks_oidc)' in handler[:200]
+        assert 'Depends(verify_cloud_tasks_oidc)' not in handler[:200]
         assert 'try_acquire_job_run_lock' in handler
         assert 'status_code=409' in handler
         assert "reason': 'chunks_missing'" in handler
@@ -249,6 +303,68 @@ class TestV2HandlerRetrySemantics:
         resp = await routers_sync.run_audio_merge_job(req, task_retry_count=0)
         assert resp.status_code == 200
         assert b'invalid_payload' in resp.body
+
+
+class TestConversationMergeStartedAtCoercion:
+    """Firestore rows written before the datetime-only invariant can carry
+    ``started_at`` as an ISO string, a bare epoch number, or leave it/``created_at``
+    both unset. ``.timestamp()`` on any of those crashes with an unhandled
+    AttributeError that isn't caught anywhere in this job, so the task retries
+    forever on a 500 instead of ever reaching the max-attempts final-failure path.
+    """
+
+    @staticmethod
+    def _patched(conversation, build_side_effect):
+        return (
+            patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='tok'),
+            patch.object(routers_sync, 'release_job_run_lock'),
+            patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False),
+            patch.object(routers_sync.conversations_db, 'get_conversation', return_value=conversation),
+            patch.object(routers_sync, 'compute_audio_files_fingerprint', return_value='fp1'),
+            patch.object(
+                routers_sync.sync_playback, 'build_conversation_playback_artifact', side_effect=build_side_effect
+            ),
+            patch.object(routers_sync, 'upload_conversation_playback_artifact'),
+            patch.object(routers_sync.conversations_db, 'update_conversation'),
+        )
+
+    async def test_iso_string_started_at_does_not_crash(self):
+        conversation = {
+            'started_at': '2026-01-01T00:00:00+00:00',
+            'audio_files': [{'id': 'af1', 'chunk_timestamps': [100.0, 101.0]}],
+        }
+        payload = {'uid': 'u1', 'conversation_id': 'c1', 'fingerprint': 'fp1'}
+        captured = {}
+
+        def fake_build(uid, conversation_id, audio_files, started_at_ts):
+            captured['started_at_ts'] = started_at_ts
+            return b'mp3', [{'len': 1.0, 'wall_offset': 0.0}]
+
+        patches = self._patched(conversation, fake_build)
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7]:
+            result = await routers_sync._run_conversation_merge_job(payload, task_retry_count=0)
+
+        assert result.status_code == 200
+        assert captured['started_at_ts'] == datetime.fromisoformat('2026-01-01T00:00:00+00:00').timestamp()
+
+    async def test_missing_started_at_falls_back_to_earliest_chunk_timestamp(self):
+        conversation = {
+            'started_at': None,
+            'audio_files': [{'id': 'af1', 'chunk_timestamps': [150.0, 200.0]}],
+        }
+        payload = {'uid': 'u1', 'conversation_id': 'c1', 'fingerprint': 'fp1'}
+        captured = {}
+
+        def fake_build(uid, conversation_id, audio_files, started_at_ts):
+            captured['started_at_ts'] = started_at_ts
+            return b'mp3', [{'len': 1.0, 'wall_offset': 0.0}]
+
+        patches = self._patched(conversation, fake_build)
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7]:
+            result = await routers_sync._run_conversation_merge_job(payload, task_retry_count=0)
+
+        assert result.status_code == 200
+        assert captured['started_at_ts'] == 150.0
 
 
 if __name__ == '__main__':

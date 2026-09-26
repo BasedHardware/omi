@@ -1,6 +1,8 @@
 import os
 import json
 import base64
+import hashlib
+import hmac
 import requests
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, Depends, Request, status, Form, BackgroundTasks
@@ -12,6 +14,7 @@ import asyncio
 
 from .db import store_notion_credentials, get_notion_credentials, store_memory
 from .omi_api import store_fact
+from .tools_auth import require_composio_tools_auth
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -37,6 +40,25 @@ def init_notion_credentials(client_id: str, client_secret: str, redirect_uri: st
     logger.info(f"Redirect URI: {redirect_uri}")
 
 
+def _signed_state(uid: str) -> str:
+    """Bind the uid to a state value this server issued (HMAC-SHA256)."""
+    if not NOTION_CLIENT_SECRET:
+        raise RuntimeError("NOTION_CLIENT_SECRET not configured")
+    sig = hmac.new(NOTION_CLIENT_SECRET.encode("utf-8"), uid.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
+    return f"{uid}:{sig}"
+
+
+def _uid_from_state(state: str) -> Optional[str]:
+    """Return the uid from a signed state, or None if it wasn't issued here."""
+    if not NOTION_CLIENT_SECRET:
+        return None
+    uid, sep, sig = state.rpartition(":")
+    if not sep or not uid:
+        return None
+    expected = _signed_state(uid).rpartition(":")[2]
+    return uid if hmac.compare_digest(expected, sig) else None
+
+
 # Models
 class NotionSearchRequest(BaseModel):
     uid: str
@@ -54,7 +76,7 @@ class NotionBlocksRequest(BaseModel):
 @router.get("/auth", response_class=HTMLResponse)
 async def auth_notion(request: Request, uid: str):
     """Start Notion OAuth flow"""
-    if not NOTION_CLIENT_ID:
+    if not NOTION_CLIENT_ID or not NOTION_CLIENT_SECRET:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="NOTION_CLIENT_ID not configured")
 
     if not uid:
@@ -62,7 +84,7 @@ async def auth_notion(request: Request, uid: str):
 
     # URL encode both the redirect_uri and state
     encoded_redirect_uri = requests.utils.quote(NOTION_REDIRECT_URI, safe='')
-    encoded_state = requests.utils.quote(uid)
+    encoded_state = requests.utils.quote(_signed_state(uid), safe='')
 
     oauth_url = f"https://api.notion.com/v1/oauth/authorize?client_id={NOTION_CLIENT_ID}&response_type=code&owner=user&redirect_uri={encoded_redirect_uri}&state={encoded_state}"
 
@@ -81,7 +103,7 @@ def split_into_chunks(content_blocks):
 
     for block in content_blocks:
         block_type = block.get("type", "")
-        if block_type in [
+        if block_type in (
             "paragraph",
             "heading_1",
             "heading_2",
@@ -91,7 +113,7 @@ def split_into_chunks(content_blocks):
             "to_do",
             "toggle",
             "quote",
-        ]:
+        ):
             text_content = block.get(block_type, {}).get("rich_text", [])
             block_text = ""
             for text in text_content:
@@ -223,8 +245,11 @@ async def extract_all_pages(access_token: str, uid: str):
 @router.get("/callback")
 async def notion_callback(request: Request, background_tasks: BackgroundTasks, code: str, state: str):
     """Handle Notion OAuth callback"""
+    uid = _uid_from_state(state)
+    if not uid:
+        logger.warning("Rejected Notion OAuth callback with invalid state")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OAuth state")
     try:
-        # Exchange code for access token
         response = requests.post(
             "https://api.notion.com/v1/oauth/token",
             headers={
@@ -234,22 +259,15 @@ async def notion_callback(request: Request, background_tasks: BackgroundTasks, c
         )
         response.raise_for_status()
         token_data = response.json()
-
-        # Store credentials
         access_token = token_data.get("access_token")
         workspace_id = token_data.get("workspace_id")
-        workspace_name = token_data.get("workspace_name", "Notion Workspace")  # Get workspace name from response
-        store_notion_credentials(state, access_token, workspace_id, workspace_name)
-
-        # Start page extraction in background
-        background_tasks.add_task(extract_all_pages, access_token, state)
-
-        # Redirect to success page immediately
+        workspace_name = token_data.get("workspace_name", "Notion Workspace")
+        store_notion_credentials(uid, access_token, workspace_id, workspace_name)
+        background_tasks.add_task(extract_all_pages, access_token, uid)
         return templates.TemplateResponse("notion_success.html", {"request": request})
-
     except Exception as e:
         logger.error(f"Error in notion_callback: {type(e).__name__}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to complete Notion OAuth")
 
 
 @router.get("/import", response_class=HTMLResponse)
@@ -257,14 +275,10 @@ async def import_page(request: Request, uid: str):
     """Render the Notion import page"""
     if not uid:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing uid parameter")
-
-    # Check if the user has connected Notion
     creds = get_notion_credentials(uid)
     if not creds or not creds.get("notion_access_token"):
         return RedirectResponse(url=f"/api/notion/auth?uid={uid}")
-
     workspace_name = creds.get("notion_workspace_name", "Notion Workspace")
-
     return templates.TemplateResponse(
         "notion_import.html", {"request": request, "uid": uid, "workspace_name": workspace_name}
     )
@@ -308,7 +322,11 @@ async def search_notion(request: NotionSearchRequest):
 
 
 @router.post("/blocks/{block_id}")
-async def get_blocks(block_id: str, request: NotionBlocksRequest):
+async def get_blocks(
+    block_id: str,
+    request: NotionBlocksRequest,
+    _: None = Depends(require_composio_tools_auth),
+):
     """Get blocks from a Notion page or block"""
     creds = get_notion_credentials(request.uid)
     if not creds or not creds.get("notion_access_token"):
@@ -331,7 +349,11 @@ async def get_blocks(block_id: str, request: NotionBlocksRequest):
 
 
 @router.get("/page/{page_id}")
-async def get_page(page_id: str, uid: str):
+async def get_page(
+    page_id: str,
+    uid: str,
+    _: None = Depends(require_composio_tools_auth),
+):
     """Get content of a Notion page"""
     creds = get_notion_credentials(uid)
     if not creds or not creds.get("notion_access_token"):

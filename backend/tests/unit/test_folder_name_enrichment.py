@@ -29,7 +29,7 @@ os.environ.setdefault(
 # by the ``render`` fixture below.
 _mock_get_folders = MagicMock(return_value=[])
 _mock_get_folder = MagicMock(return_value=None)
-_mock_get_user_profile = MagicMock(return_value={"name": "TestUser"})
+_mock_get_user_name = MagicMock(return_value="TestUser")
 _mock_get_people_by_ids = MagicMock(return_value=[])
 
 
@@ -41,10 +41,13 @@ def render():
     folders_mod.get_folder = _mock_get_folder
 
     users_mod = ModuleType("database.users")
-    users_mod.get_user_profile = _mock_get_user_profile
     users_mod.get_people_by_ids = _mock_get_people_by_ids
 
+    auth_mod = ModuleType("database.auth")
+    auth_mod.get_user_name = _mock_get_user_name
+
     fakes = {
+        "database.auth": auth_mod,
         "database.folders": folders_mod,
         "database.users": users_mod,
     }
@@ -191,9 +194,9 @@ class TestAddSpeakerNames:
     """Tests for populate_speaker_names enrichment."""
 
     def setup_method(self):
-        _mock_get_user_profile.reset_mock()
+        _mock_get_user_name.reset_mock()
         _mock_get_people_by_ids.reset_mock()
-        _mock_get_user_profile.return_value = {"name": "TestUser"}
+        _mock_get_user_name.return_value = "TestUser"
         _mock_get_people_by_ids.return_value = []
 
     def test_user_segments_get_user_name(self, render):
@@ -228,14 +231,14 @@ class TestAddSpeakerNames:
         assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Speaker 0'
 
     def test_user_profile_missing_name_falls_back_to_user(self, render):
-        _mock_get_user_profile.return_value = {"name": None}
+        _mock_get_user_name.return_value = None
         conversations = [{'transcript_segments': [{'text': 'hi', 'is_user': True, 'speaker_id': 0}]}]
         render.populate_speaker_names('uid1', conversations)
         assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'User'
 
     def test_empty_conversations_list(self, render):
         render.populate_speaker_names('uid1', [])
-        _mock_get_user_profile.assert_called_once_with('uid1')
+        _mock_get_user_name.assert_called_once_with('uid1', use_default=False)
         _mock_get_people_by_ids.assert_not_called()
 
     def test_no_transcript_segments_key(self, render):

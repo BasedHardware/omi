@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -10,11 +9,9 @@ import 'package:provider/provider.dart';
 import 'package:omi/models/playback_state.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
-import 'package:omi/widgets/omi_confirm_dialog.dart';
 import 'package:omi/utils/device.dart';
-import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/waveform_section.dart';
+import 'package:omi/ui/ui.dart';
 
 class WalItemDetailPage extends StatefulWidget {
   final Wal wal;
@@ -88,45 +85,35 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     );
   }
 
-  void _showSnackBar(String message, [Color? backgroundColor]) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: backgroundColor));
-    }
+  void _showConfirm(String message) {
+    if (mounted) OmiFeedback.confirm(context, message);
+  }
+
+  void _showError(String message) {
+    if (mounted) OmiFeedback.error(context, message);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        elevation: 0,
-        automaticallyImplyLeading: true,
-        title: Text(context.l10n.recordingDetails, style: Theme.of(context).textTheme.titleLarge),
-        centerTitle: true,
+        leading: const OmiBackButton(),
+        title: Text(context.l10n.recordingDetails),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.more_horiz, color: Colors.white),
+          OmiIconButton(
+            icon: const Icon(Icons.more_horiz),
+            label: context.l10n.moreOptions,
             onPressed: () => _showOptionsMenu(context),
           ),
+          const SizedBox(width: OmiSpacing.xxs),
         ],
       ),
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: OmiColors.surface0,
       body: _needsTransfer ? _buildDeviceTransferUI() : _buildPlaybackUI(),
     );
   }
 
-  String _formatTransferEta(int seconds) {
-    if (seconds < 60) {
-      return '${seconds}s';
-    } else if (seconds < 3600) {
-      final minutes = seconds ~/ 60;
-      final secs = seconds % 60;
-      return '${minutes}m ${secs}s';
-    } else {
-      final hours = seconds ~/ 3600;
-      final minutes = (seconds % 3600) ~/ 60;
-      return '${hours}h ${minutes}m';
-    }
-  }
+  String _formatTransferEta(int seconds) => OmiDuration.compact(seconds, context.l10n);
 
   String _getStorageLocationLabel(WalStorage storage, BuildContext context) {
     switch (storage) {
@@ -146,7 +133,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     final storageLabel =
         isFlashPage ? context.l10n.storageLocationLimitlessPendant : context.l10n.storageLocationSdCard;
     final storageIcon = isFlashPage ? Icons.memory : Icons.sd_card;
-    final storageColor = isFlashPage ? Colors.teal : Colors.deepPurpleAccent;
+    final storageColor = isFlashPage ? Colors.teal : OmiColors.textSecondary;
 
     return Consumer<SyncProvider>(
       builder: (context, syncProvider, child) {
@@ -163,7 +150,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
               Navigator.of(context).pop();
             }
           });
-          return const Center(child: CircularProgressIndicator());
+          return const OmiLoadingState();
         }
 
         return Column(
@@ -174,12 +161,12 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
               child: Column(
                 children: [
                   Text(
-                    dateTimeFormat('dd MMM yyyy', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
-                    style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 28, fontWeight: FontWeight.w600),
+                    OmiDateFormat.of(context).date(DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
+                    style: OmiType.title1,
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    dateTimeFormat('H:mm', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
+                    OmiDateFormat.of(context).time(DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
                     style: Theme.of(context).textTheme.bodyMedium!.copyWith(
                           color: Colors.grey.shade400,
                           fontSize: 16,
@@ -222,15 +209,12 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                       Container(
                         width: 120,
                         height: 120,
-                        decoration: BoxDecoration(
-                          color: Colors.deepPurple.withValues(alpha: 0.1),
-                          shape: BoxShape.circle,
-                        ),
+                        decoration: const BoxDecoration(color: OmiColors.surface1, shape: BoxShape.circle),
                         child: Center(
                           child: Icon(
                             isTransferring ? Icons.downloading : Icons.sd_card,
                             size: 56,
-                            color: Colors.deepPurpleAccent,
+                            color: OmiColors.textPrimary,
                           ),
                         ),
                       ),
@@ -262,7 +246,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                           child: LinearProgressIndicator(
                             value: transferProgress > 0 ? transferProgress : null,
                             backgroundColor: Colors.grey.shade800,
-                            color: Colors.deepPurpleAccent,
+                            color: OmiColors.accent,
                             minHeight: 6,
                           ),
                         ),
@@ -286,7 +270,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                         if (transferEtaSeconds != null && transferEtaSeconds > 0) ...[
                           const SizedBox(height: 8),
                           Text(
-                            'ETA: ${_formatTransferEta(transferEtaSeconds)}',
+                            context.l10n.etaLabel(_formatTransferEta(transferEtaSeconds)),
                             style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
                           ),
                         ],
@@ -300,28 +284,19 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
             // Transfer button
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 42),
-              child: SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: isTransferring ? _handleCancelTransfer : _handleTransferToPhone,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isTransferring ? Colors.orange : Colors.deepPurpleAccent,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(isTransferring ? Icons.close : Icons.download, color: Colors.white, size: 22),
-                      const SizedBox(width: 12),
-                      Text(
-                        isTransferring ? context.l10n.cancelTransfer : context.l10n.transferToPhone,
-                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              child: isTransferring
+                  ? OmiButton.secondary(
+                      label: context.l10n.cancelTransfer,
+                      icon: Icons.close,
+                      expand: true,
+                      onPressed: _handleCancelTransfer,
+                    )
+                  : OmiButton(
+                      label: context.l10n.transferToPhone,
+                      icon: Icons.download,
+                      expand: true,
+                      onPressed: _handleTransferToPhone,
+                    ),
             ),
           ],
         );
@@ -343,12 +318,12 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
               child: Column(
                 children: [
                   Text(
-                    dateTimeFormat('dd MMM yyyy', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
-                    style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 28, fontWeight: FontWeight.w600),
+                    OmiDateFormat.of(context).date(DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
+                    style: OmiType.title1,
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    dateTimeFormat('H:mm', DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
+                    OmiDateFormat.of(context).time(DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
                     style: Theme.of(context).textTheme.bodyMedium!.copyWith(
                           color: Colors.grey.shade400,
                           fontSize: 16,
@@ -452,12 +427,8 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     );
   }
 
-  String _formatDuration(Duration duration) {
-    final minutes = duration.inMinutes.remainder(60);
-    final seconds = duration.inSeconds.remainder(60);
-    final milliseconds = (duration.inMilliseconds.remainder(1000) / 10).floor();
-    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')},${milliseconds.toString().padLeft(2, '0')}';
-  }
+  /// The playback position ("3:38", "1:02:05"); never drops the hours (tokens audit #20).
+  String _formatDuration(Duration duration) => OmiDuration.offset(duration.inSeconds);
 
   Widget _buildControlButton({
     required FaIconData icon,
@@ -488,12 +459,12 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       await syncProvider.transferWalToPhone(widget.wal);
 
       if (mounted) {
-        _showSnackBar(context.l10n.transferCompleteMessage, Colors.green);
+        _showConfirm(context.l10n.transferCompleteMessage);
         Navigator.of(context).pop();
       }
     } catch (e) {
       if (mounted) {
-        _showSnackBar(context.l10n.transferFailedMessage(readableError(e)), Colors.red);
+        _showError(context.l10n.transferFailedMessage(readableError(e)));
       }
     }
   }
@@ -501,7 +472,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   void _handleCancelTransfer() {
     final syncProvider = context.read<SyncProvider>();
     syncProvider.cancelSync();
-    _showSnackBar(context.l10n.transferCancelled, Colors.orange);
+    if (mounted) OmiFeedback.info(context, context.l10n.transferCancelled);
     // Pop back since the WAL state will change
     Navigator.of(context).pop();
   }
@@ -523,80 +494,70 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     final currentWal = syncProvider.getWalById(widget.wal.id) ?? widget.wal;
     final isTransferring = currentWal.isSyncing;
 
-    showModalBottomSheet(
+    showOmiSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF1F1F25),
-      builder: (sheetContext) => Container(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.info_outline, color: Colors.white),
-              title: Text(context.l10n.recordingInfo, style: Theme.of(sheetContext).textTheme.bodyMedium),
-              onTap: () {
-                Navigator.pop(sheetContext);
-                _showFileDetailsDialog(context);
-              },
-            ),
-            if (_needsTransfer) ...[
-              ListTile(
-                leading: Icon(Icons.download, color: isTransferring ? Colors.grey : Colors.white),
-                title: Text(
-                  isTransferring ? context.l10n.transferInProgress : context.l10n.transferToPhone,
-                  style: Theme.of(
-                    sheetContext,
-                  ).textTheme.bodyMedium!.copyWith(color: isTransferring ? Colors.grey : Colors.white),
-                ),
-                onTap: isTransferring
-                    ? null
-                    : () {
-                        Navigator.pop(sheetContext);
-                        _handleTransferToPhone();
-                      },
-              ),
-            ] else ...[
-              ListTile(
-                leading: const FaIcon(FontAwesomeIcons.share, color: Colors.white, size: 18),
-                title: Text(context.l10n.shareRecording, style: Theme.of(sheetContext).textTheme.bodyMedium),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _handleShare(context.read<SyncProvider>());
-                },
-              ),
-            ],
-            ListTile(
-              leading: Icon(Icons.delete, color: isTransferring ? Colors.grey : Colors.red),
-              title: Text(
-                context.l10n.deleteRecording,
-                style: Theme.of(
-                  sheetContext,
-                ).textTheme.bodyMedium!.copyWith(color: isTransferring ? Colors.grey : Colors.red),
-              ),
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.md),
+      builder: (sheetContext) => OmiSettingsGroup(
+        children: [
+          OmiSettingsRow(
+            leading: const Icon(Icons.info_outline),
+            title: context.l10n.recordingInfo,
+            showChevron: false,
+            onTap: () {
+              Navigator.pop(sheetContext);
+              _showFileDetailsDialog(context);
+            },
+          ),
+          if (_needsTransfer)
+            OmiSettingsRow(
+              leading: const Icon(Icons.download),
+              title: isTransferring ? context.l10n.transferInProgress : context.l10n.transferToPhone,
+              showChevron: false,
               onTap: isTransferring
                   ? null
                   : () {
                       Navigator.pop(sheetContext);
-                      _showDeleteDialog(context);
+                      _handleTransferToPhone();
                     },
+            )
+          else
+            OmiSettingsRow(
+              leading: const Icon(Icons.ios_share_rounded),
+              title: context.l10n.shareRecording,
+              showChevron: false,
+              onTap: () {
+                Navigator.pop(sheetContext);
+                _handleShare(context.read<SyncProvider>());
+              },
             ),
-          ],
-        ),
+          OmiSettingsRow(
+            leading: const Icon(Icons.delete_outline),
+            title: context.l10n.deleteRecording,
+            isDestructive: !isTransferring,
+            showChevron: false,
+            onTap: isTransferring
+                ? null
+                : () {
+                    Navigator.pop(sheetContext);
+                    _showDeleteDialog(context);
+                  },
+          ),
+        ],
       ),
     );
   }
 
   void _showDeleteDialog(BuildContext context) async {
     final uploading = widget.wal.syncDisplayState == WalSyncDisplayState.uploaded;
-    final confirmed = await OmiConfirmDialog.show(
+    final confirmed = await showOmiConfirm(
       context,
       title: uploading ? context.l10n.deleteWhileProcessingTitle : context.l10n.deleteRecording,
       message: uploading ? context.l10n.deleteWhileProcessingMessage : context.l10n.deleteRecordingConfirmation,
       confirmLabel: context.l10n.delete,
-      confirmColor: Colors.red,
+      destructive: true,
     );
 
-    if (confirmed == true && context.mounted) {
+    if (confirmed && context.mounted) {
       Navigator.of(context).pop(); // Go back to previous screen
       context.read<SyncProvider>().deleteWal(widget.wal);
     }
@@ -608,22 +569,20 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     } catch (e) {
       Logger.error('AudioPlayerUtils: Failed to share WAL audio: $e');
       if (mounted) {
-        AppSnackbar.showSnackbarError(context.l10n.audioPlaybackFailed);
+        OmiFeedback.error(context, context.l10n.audioPlaybackFailed);
       }
     }
   }
 
   void _showFileDetailsDialog(BuildContext context) {
-    final theme = Theme.of(context);
     final recordingDate = DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000);
     final estimatedSize = _estimateFileSize();
 
-    showDialog(
+    showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        content: SingleChildScrollView(
+      builder: (dialogContext) => OmiAlertDialog(
+        content: Material(
+          type: MaterialType.transparency,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -635,8 +594,8 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                 ),
               ),
               _buildDetailRow(context.l10n.recordingIdLabel, widget.wal.id),
-              _buildDetailRow(context.l10n.dateTimeLabel, dateTimeFormat('MMM dd, yyyy h:mm:ss a', recordingDate)),
-              _buildDetailRow(context.l10n.durationLabel, secondsToHumanReadable(widget.wal.seconds, context)),
+              _buildDetailRow(context.l10n.dateTimeLabel, OmiDateFormat.of(context).dateTime(recordingDate)),
+              _buildDetailRow(context.l10n.durationLabel, OmiDuration.long(widget.wal.seconds, context.l10n)),
               _buildDetailRow(context.l10n.audioFormatLabel, widget.wal.codec.toFormattedString()),
               _buildDetailRow(context.l10n.storageLocationLabel, _getStorageLocationLabel(widget.wal.storage, context)),
               _buildDetailRow(context.l10n.estimatedSizeLabel, estimatedSize),
@@ -651,12 +610,10 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(
-              context.l10n.close,
-              style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.secondary),
-            ),
+          OmiDialogAction(
+            label: context.l10n.close,
+            isDefault: true,
+            onPressed: () => Navigator.of(dialogContext).pop(),
           ),
         ],
       ),
@@ -669,7 +626,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: Theme.of(context).textTheme.labelMedium!.copyWith(color: Colors.grey.shade400)),
+          Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
           const SizedBox(height: 2),
           Text(value, style: Theme.of(context).textTheme.bodyMedium),
         ],

@@ -109,18 +109,18 @@ packages:
     dependency: "direct main"
     description:
       name: awesome_notifications
-      sha256: "0d5fa4457f2ba4e536adc3ef6af709cdcecf4a05a1f3035981e9afa2f899b2a8"
+      sha256: f8e62944f03cda0ed62d445a71b8c36298f0c8ed368d18a551e7d202b1693021
       url: "https://pub.dev"
     source: hosted
-    version: "0.10.1"
+    version: "0.12.1"
   awesome_notifications_core:
     dependency: "direct main"
     description:
       name: awesome_notifications_core
-      sha256: "38c9f9d2618c0c2abe0cea267dc161aa8c4a0a239ca2263400900b9610f33e6f"
+      sha256: f8a227159f70e30d0f4c1d8996cf7e3865fec7c9030df752dfa51d177dc08b38
       url: "https://pub.dev"
     source: hosted
-    version: "0.9.3"
+    version: "0.10.1"
   boolean_selector:
     dependency: transitive
     description:
@@ -274,7 +274,7 @@ packages:
     source: hosted
     version: "6.1.5"
   connectivity_plus_platform_interface:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: connectivity_plus_platform_interface
       sha256: "42657c1715d48b167930d5f34d00222ac100475f73d10162ddf43e714932f204"
@@ -1095,6 +1095,22 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.4.1"
+  in_app_review:
+    dependency: "direct main"
+    description:
+      name: in_app_review
+      sha256: "364db0c160b37fe7fad9cdaa18f968473924b17368869010af902760421b6bf8"
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.12"
+  in_app_review_platform_interface:
+    dependency: transitive
+    description:
+      name: in_app_review_platform_interface
+      sha256: fed2c755f2125caa9ae10495a3c163aa7fab5af3585a9c62ef4a6920c5b45f10
+      url: "https://pub.dev"
+    source: hosted
+    version: "2.0.5"
   inject_js:
     dependency: transitive
     description:

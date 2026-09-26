@@ -366,7 +366,11 @@ actor APIClient {
         statusCode: httpResponse.statusCode,
         payload: payload,
         provider: provider)
-      throw RealtimeTokenMintError(statusCode: httpResponse.statusCode, healthError: healthError, payload: payload)
+      throw RealtimeTokenMintError(
+        statusCode: httpResponse.statusCode,
+        healthError: healthError,
+        payload: payload,
+        responseBody: data)
     }
 
     let resp = try decoder.decode(Resp.self, from: data)
@@ -686,6 +690,21 @@ struct RealtimeTokenMintError: LocalizedError {
   let statusCode: Int
   let healthError: CredentialHealthError
   let payload: APIErrorPayload?
+  /// Raw HTTP body so `ManagedPlanGateHTTP` can read FastAPI nested `detail.error`
+  /// (`plan_gated`) that `APIErrorPayload` cannot decode as a string.
+  let responseBody: Data
+
+  init(
+    statusCode: Int,
+    healthError: CredentialHealthError,
+    payload: APIErrorPayload?,
+    responseBody: Data = Data()
+  ) {
+    self.statusCode = statusCode
+    self.healthError = healthError
+    self.payload = payload
+    self.responseBody = responseBody
+  }
 
   var errorDescription: String? {
     var description = healthError.localizedDescription
@@ -844,6 +863,13 @@ extension APIClient {
     let response: ConversationMutationResponse = try await performRequest(request)
     invalidateConversationsCountCache()
     return response.conversation
+  }
+
+  /// Separates a conversation from its cross-surface capture group. Sticky: the
+  /// server never regroups it with the members it left.
+  func separateConversationFromCaptureGroup(id: String) async throws {
+    struct SeparateResponse: Decodable { let status: String }
+    let _: SeparateResponse = try await post("v1/conversations/\(id)/capture-group/separate")
   }
 
   /// Sets the visibility of a conversation for sharing

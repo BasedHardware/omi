@@ -61,6 +61,7 @@ jobs:
     environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}
     permissions:
       contents: 'read'
+      id-token: 'write'
     runs-on: ubuntu-latest
     steps:
       - name: Validate Firestore migration input
@@ -104,10 +105,22 @@ jobs:
           fi
           echo "Reconciling Firestore indexes from dispatched commit $checked_sha."
 
-      - name: Google Auth for Firestore schema migration
+      # Prod: GitHub WIF as omi-ci-schema-prod@ (index/field config only, no
+      # document access; credential-hygiene WS-C). Development keeps JSON.
+      - name: Google Auth for Firestore schema migration (prod WIF)
+        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod') == 'prod' }}
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-schema-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Google Auth for Firestore schema migration
+        if: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod') != 'prod' }}
+        uses: google-github-actions/auth@v3
+        with:
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -170,6 +183,7 @@ jobs:
       group: firestore-schema-development
       cancel-in-progress: false
     permissions:
+      id-token: 'write'
       contents: 'read'
     runs-on: ubuntu-latest
     steps:
@@ -190,7 +204,9 @@ jobs:
       - name: Google Auth for development Firestore schema migration
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -231,6 +247,7 @@ jobs:
     environment: prod
     permissions:
       contents: 'read'
+      id-token: 'write'
     runs-on: ubuntu-latest
     steps:
       - name: Validate destructive Firestore field-exemption input
@@ -260,7 +277,9 @@ jobs:
       - name: Google Auth for Firestore field exemptions
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # Prod GitHub WIF (credential-hygiene WS-C); this job is prod-only.
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-schema-prod@based-hardware.iam.gserviceaccount.com
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3

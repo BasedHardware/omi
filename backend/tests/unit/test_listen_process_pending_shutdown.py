@@ -18,6 +18,7 @@ calls and drives the real process_pending. No patching and no sys.modules mutati
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from database import conversations as conversations_db
 from database.conversations import select_stale_in_progress
@@ -44,6 +45,7 @@ class _Host:
         }
         self.waited: list[float] = []
         self.persistence = SimpleNamespace(call=self._call)
+        self.speakers = SimpleNamespace(refresh_for_conversation=AsyncMock())
 
     async def wait(self, seconds: float) -> bool:
         self.waited.append(seconds)
@@ -227,6 +229,21 @@ def test_stale_recovery_queries_oldest_rows_before_bounding_the_read():
 # ── Custom-STT marker on session resume (#7690) ─────────────────────────────
 
 
+def _resumable_in_progress(*, uses_custom_stt: bool = False) -> dict:
+    """A same-device in-window in_progress row: the resume path now requires the
+    shared continuity predicate, which production conversations already satisfy.
+    """
+    return {
+        'id': 'conv-1',
+        'status': 'in_progress',
+        'discarded': False,
+        'uses_custom_stt': uses_custom_stt,
+        'source': 'omi',
+        'client_device_id': 'dev-1',
+        'finished_at': datetime.now(timezone.utc),
+    }
+
+
 class _ResumeHost:
     """Minimal host for create_new_in_progress_conversation's resume branch."""
 
@@ -238,9 +255,11 @@ class _ResumeHost:
         self.client_conversation_id = None
         self.recording_session_id = 'session-1'
         self.is_multi_channel = False
+        self.conversation_creation_timeout = 120
         self.state = SimpleNamespace(current_conversation_id=None)
         self.recording_session_ids_by_conversation = {}
         self.persistence = SimpleNamespace(call=self._call)
+        self.speakers = SimpleNamespace(refresh_for_conversation=AsyncMock())
         self.calls: list[tuple] = []
         self._existing = existing_conversation
 
@@ -271,7 +290,7 @@ async def test_resume_persists_custom_stt_marker_when_session_uses_custom_stt():
     must get the durable uses_custom_stt marker, or its custom-STT provenance is
     lost for metering and the fair-use lane (#7690)."""
     host = _ResumeHost(
-        existing_conversation={'id': 'conv-1', 'status': 'in_progress', 'discarded': False, 'uses_custom_stt': False},
+        existing_conversation=_resumable_in_progress(uses_custom_stt=False),
         use_custom_stt=True,
     )
     controller = _ResumeController(host)
@@ -286,7 +305,7 @@ async def test_resume_persists_custom_stt_marker_when_session_uses_custom_stt():
 async def test_resume_does_not_rewrite_marker_for_normal_stt_session():
     """A normal-STT resume of a normal-STT conversation must not write anything."""
     host = _ResumeHost(
-        existing_conversation={'id': 'conv-1', 'status': 'in_progress', 'discarded': False, 'uses_custom_stt': False},
+        existing_conversation=_resumable_in_progress(uses_custom_stt=False),
         use_custom_stt=False,
     )
     controller = _ResumeController(host)
@@ -329,9 +348,11 @@ class _CreateConversationHost:
         self.client_conversation_id = client_conversation_id
         self.recording_session_id = 'session-1'
         self.is_multi_channel = False
+        self.conversation_creation_timeout = 120
         self.state = SimpleNamespace(current_conversation_id=None)
         self.recording_session_ids_by_conversation = {}
         self.persistence = SimpleNamespace(call=self._call)
+        self.speakers = SimpleNamespace(refresh_for_conversation=AsyncMock())
         self.calls: list[tuple] = []
         self._existing = existing_conversation
         self._conversation_snapshot = conversation_snapshot
@@ -350,6 +371,8 @@ class _CreateConversationHost:
             return binding
         if fn.__name__ == 'get_conversation':
             return self._existing
+        if fn.__name__ == 'resolve_live_continuation':
+            return None
         if fn.__name__ in ('set_in_progress_conversation_id', 'update_conversation', 'create_in_progress_conversation'):
             return None
         return None
@@ -378,17 +401,22 @@ async def test_fresh_server_generated_id_skips_the_existence_read():
     create_calls = [c for c in host.calls if c[0] == 'create_in_progress_conversation']
     assert len(create_calls) == 1, f'expected the new-conversation path to run, got {host.calls}'
     assert host.state.current_conversation_id is not None
+    host.speakers.refresh_for_conversation.assert_awaited_once_with(host.state.current_conversation_id)
 
 
 async def test_rollover_generation_skips_the_existence_read():
-    """rollover=True always mints a fresh server-generated id even when a
-    client_conversation_id is present (silence/status rollovers must not reuse
-    or mutate the prior binding), so the existence read must still be skipped."""
+    """rollover=True first resolves a durable continuation, then mints a fresh
+    server-generated id even when a client_conversation_id is present
+    (silence/status rollovers must not reuse or mutate the prior binding). The
+    minted id is a guaranteed miss, so the existence read must still be skipped.
+    """
     host = _CreateConversationHost(client_conversation_id='client-supplied-id')
     controller = _CreateConversationController(host)
 
     await controller.create_new_in_progress_conversation(rollover=True)
 
+    continuation_calls = [c for c in host.calls if c[0] == 'resolve_live_continuation']
+    assert continuation_calls, f'rollover must resolve a durable continuation first, got {host.calls}'
     get_conversation_calls = [c for c in host.calls if c[0] == 'get_conversation']
     assert get_conversation_calls == [], f'unexpected get_conversation call(s): {get_conversation_calls}'
     open_calls = [c for c in host.calls if c[0] == 'open_live_recording_session']
@@ -403,7 +431,7 @@ async def test_resume_with_client_id_naming_existing_conversation_still_reads_it
     not be skipped; the same reconnect action must still be taken."""
     host = _CreateConversationHost(
         client_conversation_id='conv-1',
-        existing_conversation={'id': 'conv-1', 'status': 'in_progress', 'discarded': False},
+        existing_conversation=_resumable_in_progress(),
     )
     controller = _CreateConversationController(host)
 
