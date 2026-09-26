@@ -509,6 +509,27 @@ class TestTranslatorDegenerateIntervals:
         assert collected[0]['_capture_end_sample'] == int(0.401 * RATE)
         assert collected[0]['end'] > collected[0]['start']
 
+    def test_translate_returns_copies_not_adapter_dicts(self):
+        """P3-1: the adapter's dict is never the dict the pipeline mutates.
+
+        translate projected start/end and attached ``_capture_*`` keys in
+        place on the input dicts, so every downstream mutation (gate remap,
+        offset rebase, enqueue pops) rewrote fields the adapter could still
+        read after the callback — the exact shape of the window-adapter
+        collapse. The input stays byte-identical; the returned copy carries
+        the projection.
+        """
+        translator = ProviderEpochTranslator(self._timeline(), RATE, project_times=True)
+        translator.note_accepted(0, 2 * RATE)
+        adapter_segment = {'start': 0.25, 'end': 1.25, 'text': 'hello', 'speaker': 'SPEAKER_00'}
+        before = dict(adapter_segment)
+        translated = translator.translate([adapter_segment])
+        assert adapter_segment == before
+        assert '_capture_start_sample' not in adapter_segment
+        assert translated[0] is not adapter_segment
+        assert translated[0]['text'] == 'hello'
+        assert translated[0]['start'] != before['start'] or translated[0]['end'] != before['end']
+
 
 # ---------------------------------------------------------------------------
 # LIVE_SPEAKER_CAPTURE_CLOCK: runtime kill switch for the always-on §9 path
@@ -637,6 +658,39 @@ def _audit_receiver(monkeypatch, *, gate):
     receiver.vad_gate = gate
     _parakeet_callback, _modulate_callback, epoch = receiver._build_stt_callbacks()
     return receiver, epoch
+
+
+@pytest.mark.asyncio
+async def test_receiver_callback_chain_mutates_only_copies(monkeypatch):
+    """P3-1: no adapter-owned dict is mutated by the callback chain.
+
+    Drives the receiver's own epoch callbacks (v2 projection and the
+    clock-only attach/rebase path) with an adapter-owned segment: the input
+    dict must stay byte-identical while the enqueued copy carries the
+    projection/attach work.
+    """
+    for v2 in (False, True):
+        receiver = _receiver(monkeypatch, v2=v2, conversation='conv-copy')
+        receiver.vad_gate = None
+        gated_callback, _passthrough_callback, epoch = receiver._build_stt_callbacks()
+        timeline = receiver.capture_timeline
+        timeline.accept(b'\x01\x00' * (2 * RATE), arrival_wall=T0, arrival_monotonic=0.0)
+        epoch.note_accepted(0, 2 * RATE)
+        adapter_segment = {'start': 0.25, 'end': 1.25, 'text': 'hello', 'speaker': 'SPEAKER_00'}
+        before = dict(adapter_segment)
+
+        gated_callback([adapter_segment])
+
+        assert adapter_segment == before, v2
+        assert '_capture_start_sample' not in adapter_segment
+        enqueued = receiver.collected[0]
+        assert enqueued is not adapter_segment
+        assert enqueued['text'] == 'hello'
+        if v2:
+            assert enqueued['start'] == pytest.approx(timeline.wall(int(0.25 * RATE)))
+            assert enqueued['end'] == pytest.approx(timeline.wall(int(1.25 * RATE)))
+        else:
+            assert enqueued['start'] == 0.25 and enqueued['end'] == 1.25
 
 
 @pytest.mark.asyncio

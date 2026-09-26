@@ -452,6 +452,13 @@ class ProviderEpochTranslator:
     def translate(self, segments: List[Dict]) -> List[Dict]:
         """Map provider-relative segment times onto absolute wall seconds.
 
+        Each input segment is copied before any field is touched and the
+        copies are returned: the adapter owns its dicts, and downstream
+        mutation (gate remap, offset rebase, enqueue key pops) must never
+        rewrite a provider-time field the adapter might still read after the
+        callback returns — comparing such a boundary against another clock
+        was the dev 2026-09-26 collapse.
+
         Segments whose provider timestamps cannot be proven to fall inside
         accepted send spans are dropped (fail closed), never clamped onto a
         neighboring epoch; so are degenerate provider intervals (start >= end)
@@ -470,7 +477,8 @@ class ProviderEpochTranslator:
         transcript.
         """
         translated: List[Dict] = []
-        for segment in segments:
+        for original in segments:
+            segment = dict(original)
             try:
                 start, end = float(cast(Any, segment.get('start'))), float(cast(Any, segment.get('end')))
             except (TypeError, ValueError):
