@@ -49,6 +49,7 @@ omi auth login
 
 # 2. Start using it:
 omi memory list
+omi memory search "food preferences" --limit 5  # API key required; see scope/grant requirements below
 omi conversation list --limit 5
 omi action-item list --open
 omi goal list
@@ -101,6 +102,18 @@ Tables without predefined columns include fields from every row, in first-seen o
 > Looking for localized guides? See the [føroysk byrjanarvegleiðing (Faroese Quickstart)](examples/quickstart.fo.md), the [lëtzebuergesch Ufanksguide (Luxembourgish Quickstart)](examples/quickstart.lb.md), the [Fryske flugge startgids (Frisian Quickstart)](examples/quickstart.fy.md), the [stiùireadh tòiseachaidh Gàidhlig (Scottish Gaelic Quickstart)](examples/quickstart.gd.md), or the [huanadenn deraouiñ e brezhoneg (Breton Quickstart)](examples/quickstart.br.md).
 > Looking for localized guides? See the [guida rapida n sicilianu (Sicilian Quickstart)](examples/quickstart.scn.md), the [guida de començament rapid en occitan (Occitan Quickstart)](examples/quickstart.oc.md), the [aratohu tere mō te reo Māori (Māori Quickstart)](examples/quickstart.mi.md), the [guía ñepyrũ pya'e avañe'ẽme (Guarani Quickstart)](examples/quickstart.gn.md), or the [ئۇيغۇرچە تېز باشلاش قوللانمىسى (Uyghur Quickstart)](examples/quickstart.ug.md).
 > Looking for localized guides? See the [omi-cli ho Twi kasa mu (Twi Quickstart)](examples/quickstart.tw.md), the [pituduh kapertama basa Bali (Balinese Quickstart)](examples/quickstart.ban.md), the [mehato ea pele ka Sesotho (Southern Sotho Quickstart)](examples/quickstart.st.md), the [is primos passos in sardu (Sardinian Quickstart)](examples/quickstart.sc.md), or the [ערשטע טריט מיט omi-cli (Yiddish Quickstart)](examples/quickstart.yi.md).
+
+`omi memory search QUERY` uses the developer API's semantic memory search.
+It requires a developer API key with `memories:read` scope and a persisted
+default-memory read grant. Access denials remain errors; the command does not
+fall back to listing other memories. `--limit` defaults to 10 and accepts
+1–100; the server may return fewer results (currently at most 20).
+JSON mode preserves the full response envelope, including `items`,
+`returned_count`, `archive_default_visible`, and `policy`:
+
+```bash
+omi --json memory search "food preferences" | jq '.items[] | {id, content, relevance_score}'
+```
 
 ## Auth
 
@@ -252,6 +265,7 @@ omi
 │       └── delete <name>
 ├── memory
 │   ├── list [--limit N] [--offset N] [--categories ...]
+│   ├── search <query> [--limit N]
 │   ├── get <id>
 │   ├── create <content> [--category ...] [--visibility ...] [--tag ...]
 │   ├── update <id> [--content ...] [--category ...] [--visibility ...] [--tag ...]
