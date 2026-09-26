@@ -2510,12 +2510,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Detailed na mga diagnostic messages';
 
   @override
-  String get autoCreateSpeakers => 'Awtomatikong Lumikha ng Speakers';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Awtomatikong lumikha kapag ang pangalan ay natuklasan';
-
-  @override
   String get followUpQuestions => 'Follow-up Questions';
 
   @override
@@ -11270,9 +11264,6 @@ class AppLocalizationsTl extends AppLocalizations {
       'Hindi available ang mga transcript, nagpapatuloy ang pag-record sa device at ipoproseso mamaya';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Hindi available ang transcript · naka-save sa device';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Mga transcript na naghihintay $pending/$total';
   }
@@ -11331,6 +11322,48 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Hindi nakakarating sa app ang audio ng pendant — i-tap para ayusin';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Itigil ang Transcribe Later sa iyong pendant bago mag-record gamit ang telepono.';
+
+  @override
+  String get captureNotTranscribing => 'Hindi nagta-transcribe';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Na-save ang audio, ita-transcribe mamaya';
+
+  @override
+  String get captureStillRecording => 'Nagre-record pa rin';
+
+  @override
+  String get captureMicInUseElsewhere => 'Ginagamit ng ibang app ang mic';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Kinuha ng isang tawag o ibang app ang mikropono, kaya hindi nakakarinig ang Omi ngayon. Kusang magpapatuloy ang Omi kapag malaya na ang mikropono. Ligtas ang lahat ng na-record bago nito.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Hindi maabot ang iyong custom na speech-to-text na serbisyo. Itinatabi ng Omi ang audio sa teleponong ito at ipapadala kapag bumalik ang serbisyo. Walang mawawala.';
+
+  @override
+  String get captureStarting => 'Nagsisimula…';
+
+  @override
+  String get capturePhoneStorageFull => 'Puno na ang storage ng telepono';
+
+  @override
+  String get captureStorageAlmostFull => 'Halos puno na ang storage';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name at iba pa';
+  }
 
   @override
   String get showOnLockScreen => 'Ipakita sa lock screen';

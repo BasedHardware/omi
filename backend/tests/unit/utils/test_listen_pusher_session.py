@@ -269,11 +269,13 @@ def test_bounded_audio_and_transcript_buffers():
 
     session.audio_bytes_send(b"abc", received_at=1.0)
     session.audio_bytes_send(b"def", received_at=2.0)
-    assert b"".join(session.audio_chunks) == b"def"
+    # Audio runs (not bare chunks) since audio-timeline v2: each run carries
+    # its conversation binding and projected start alongside the bytes.
+    assert b"".join(run.data for run in session.audio_runs) == b"def"
     assert session.audio_total_size == 3
 
     session.audio_bytes_send(b"123456789", received_at=3.0)
-    assert b"".join(session.audio_chunks) == b"56789"
+    assert b"".join(run.data for run in session.audio_runs) == b"56789"
     assert session.audio_total_size == 5
 
 
@@ -301,11 +303,11 @@ async def test_failed_audio_send_retains_buffer_for_retry():
     session.audio_bytes_send(b"abcd", received_at=100.0)
 
     await session._audio_bytes_flush()
-    assert b"".join(session.audio_chunks) == b"abcd"
+    assert b"".join(run.data for run in session.audio_runs) == b"abcd"
     assert session.audio_total_size == 4
 
     await session._audio_bytes_flush()
-    assert list(session.audio_chunks) == []
+    assert list(session.audio_runs) == []
     assert session.audio_total_size == 0
     assert ws.sent[-1][12:] == b"abcd"
 
@@ -325,7 +327,7 @@ async def test_cancelled_send_retains_buffer(flush):
         session.audio_bytes_send(b"abcd", received_at=100.0)
         with pytest.raises(asyncio.CancelledError):
             await session._audio_bytes_flush()
-        assert b"".join(session.audio_chunks) == b"abcd"
+        assert b"".join(run.data for run in session.audio_runs) == b"abcd"
         assert session.audio_total_size == 4
 
 
@@ -625,3 +627,69 @@ async def test_pusher_connection_defaults_to_unknown_rather_than_guessing():
     await session.connect()
 
     assert client_kind_calls == ["unknown"]
+
+
+@pytest.mark.anyio
+async def test_v2_runs_split_into_separate_101_frames_across_a_wall_gap():
+    """A wall gap between buffered runs must not be concatenated into one frame.
+
+    Two v2 runs of the same conversation with a 0.5 s projected gap flush as
+    two opcode-101 frames, each header carrying its own run's projected start;
+    concatenating them would delete the gap from the stored audio while the
+    header still claimed the first run's position.
+    """
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws, config_overrides={'max_audio_buffer_size': 1_000_000})
+    await session.connect()
+
+    rate = 8000
+    run_a = b'\x01\x00' * rate  # 1 s at 100.0
+    run_b = b'\x02\x00' * rate  # 1 s at 101.5 (0.5 s past run A's end)
+    session.audio_bytes_send(run_a, received_at=100.5, conversation_id='conv-1', start_wall=100.0)
+    session.audio_bytes_send(run_b, received_at=101.5, conversation_id='conv-1', start_wall=101.5)
+    await session._audio_bytes_flush()
+
+    audio_frames = [frame for frame in ws.sent if frame_type(frame) == 101]
+    assert len(audio_frames) == 2, 'a projected discontinuity must flush separate frames'
+    first_ts = struct.unpack('d', audio_frames[0][4:12])[0]
+    second_ts = struct.unpack('d', audio_frames[1][4:12])[0]
+    assert first_ts == 100.0
+    assert second_ts == 101.5
+    assert audio_frames[0][12:] == run_a
+    assert audio_frames[1][12:] == run_b
+
+
+@pytest.mark.anyio
+async def test_v2_contiguous_runs_still_share_one_101_frame():
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws, config_overrides={'max_audio_buffer_size': 1_000_000})
+    await session.connect()
+
+    rate = 8000
+    run_a = b'\x03\x00' * rate
+    run_b = b'\x04\x00' * rate
+    session.audio_bytes_send(run_a, received_at=100.9, conversation_id='conv-1', start_wall=100.0)
+    # Contiguous within 1 ms: exactly run A's end.
+    session.audio_bytes_send(run_b, received_at=102.0, conversation_id='conv-1', start_wall=101.0)
+    await session._audio_bytes_flush()
+
+    audio_frames = [frame for frame in ws.sent if frame_type(frame) == 101]
+    assert len(audio_frames) == 1
+    assert struct.unpack('d', audio_frames[0][4:12])[0] == 100.0
+    assert audio_frames[0][12:] == run_a + run_b
+
+
+@pytest.mark.anyio
+async def test_legacy_runs_without_projection_keep_legacy_grouping():
+    """Runs without a projected start (flag-off sessions) never split on gaps."""
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws)
+    await session.connect()
+
+    session.audio_bytes_send(b'abcd', received_at=100.0)
+    session.audio_bytes_send(b'efgh', received_at=200.0)
+    await session._audio_bytes_flush()
+
+    audio_frames = [frame for frame in ws.sent if frame_type(frame) == 101]
+    assert len(audio_frames) == 1
+    assert audio_frames[0][12:] == b'abcdefgh'

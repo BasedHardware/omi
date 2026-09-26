@@ -1008,14 +1008,12 @@ final class DesktopAutomationActionRegistry {
       name: "configure_contextual_task_interruptions",
       summary: "Configure the non-production contextual task interruption gate",
       params: [
-        "enabled", "shipped_cohorts_enabled", "daily_limit", "minimum_spacing_seconds",
+        "enabled", "daily_limit", "minimum_spacing_seconds",
         "notifications_enabled", "frequency", "task_notifications_enabled",
       ]
     ) { params in
       var configuration = ProactiveTaskInterruptionSettings.load()
       configuration.userOptedIn = boolParam(params["enabled"], default: false)
-      configuration.shippedCohortsEnabled = boolParam(
-        params["shipped_cohorts_enabled"], default: false)
       configuration.dailyLimit = max(0, intParam(params["daily_limit"], default: configuration.dailyLimit))
       configuration.minimumSpacing = TimeInterval(
         max(
@@ -1039,7 +1037,6 @@ final class DesktopAutomationActionRegistry {
       }
       return [
         "enabled": configuration.userOptedIn ? "true" : "false",
-        "shipped_cohorts_enabled": configuration.shippedCohortsEnabled ? "true" : "false",
         "cohort": ProactiveTaskCohort.current.rawValue,
       ]
     }

@@ -2496,12 +2496,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get detailedDiagnosticMessages => 'तपशीलवार निदान संदेश';
 
   @override
-  String get autoCreateSpeakers => 'स्वयंचलितपणे व्यक्तीची निर्मिती करा';
-
-  @override
-  String get autoCreateWhenNameDetected => 'नाव सापडल्यावर स्वयंचलितपणे निर्मिती करा';
-
-  @override
   String get followUpQuestions => 'अनुवर्तन प्रश्न';
 
   @override
@@ -11181,9 +11175,6 @@ class AppLocalizationsMr extends AppLocalizations {
       'ट्रान्सक्रिप्शन उपलब्ध नाही, रेकॉर्डिंग डिव्हाइसवर सुरू आहे आणि नंतर प्रोसेस होईल';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'ट्रान्सक्रिप्शन अनुपलब्ध · डिव्हाइसवर जतन केले जात आहे';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'प्रलंबित ट्रान्सक्रिप्शन $pending/$total';
   }
@@ -11242,6 +11233,48 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'पेंडंटचे ऑडिओ ॲपपर्यंत पोहोचत नाही — दुरुस्त करण्यासाठी टॅप करा';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'फोनने रेकॉर्ड करण्यापूर्वी तुमच्या पेंडंटवर Transcribe Later थांबवा.';
+
+  @override
+  String get captureNotTranscribing => 'लिप्यंतरण होत नाही';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'ऑडिओ जतन केला, नंतर लिप्यंतरण होईल';
+
+  @override
+  String get captureStillRecording => 'अजूनही रेकॉर्डिंग सुरू आहे';
+
+  @override
+  String get captureMicInUseElsewhere => 'माइक दुसरे ॲप वापरत आहे';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'एखाद्या कॉलने किंवा दुसऱ्या ॲपने मायक्रोफोन घेतला आहे, त्यामुळे Omi आत्ता ऐकू शकत नाही. मायक्रोफोन मोकळा झाल्यावर Omi आपोआप पुन्हा सुरू होईल. याआधी रेकॉर्ड झालेले सर्व सुरक्षित आहे.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'तुमच्या कस्टम स्पीच-टू-टेक्स्ट सेवेपर्यंत पोहोचता येत नाही. Omi ऑडिओ या फोनवर ठेवतो आणि सेवा परत आल्यावर पाठवेल. काहीही गमावले जात नाही.';
+
+  @override
+  String get captureStarting => 'सुरू होत आहे…';
+
+  @override
+  String get capturePhoneStorageFull => 'फोन स्टोरेज भरले';
+
+  @override
+  String get captureStorageAlmostFull => 'स्टोरेज जवळजवळ भरले';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'तुमच्या पेंडंटचा या फोनशी संपर्क तुटला. पेंडंट चालू आणि जवळ असल्यावर Omi आपोआप पुन्हा कनेक्ट होईल. याआधी रेकॉर्ड झालेले सर्व सुरक्षित आहे.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name आणि इतर';
+  }
 
   @override
   String get showOnLockScreen => 'लॉक स्क्रीनवर दाखवा';
