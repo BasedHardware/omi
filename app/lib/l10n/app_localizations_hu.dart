@@ -7070,9 +7070,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi emlékeztető';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName lecsatlakoztatva';
   }
@@ -11267,15 +11264,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'Jó reggelt';
-
-  @override
-  String get goodAfternoon => 'Jó napot';
-
-  @override
-  String get goodEvening => 'Jó estét';
-
-  @override
   String get alreadyHaveAccount => 'Már van fiókod?';
 
   @override
@@ -11735,4 +11723,65 @@ class AppLocalizationsHu extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done/$total';
   }
+
+  @override
+  String get noFailedRecordings => 'Nincsenek sikertelen felvételek';
+
+  @override
+  String get mapNoPlacesTitle => 'Még nincsenek helyek';
+
+  @override
+  String get mapNoPlacesMessage => 'A beszélgetések itt jelennek meg, ha az Omi tudja, hol zajlottak.';
+
+  @override
+  String get mergeWithEllipsis => 'Egyesítés ezzel…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Fejezd be a(z) $appName beállítását a bekapcsoláshoz';
+  }
+
+  @override
+  String get greetingUpLate => 'Késő éjjel';
+
+  @override
+  String get greetingLunchtime => 'Ebédidő';
+
+  @override
+  String get greetingWindingDown => 'Pihenőidő';
+
+  @override
+  String get greetingGoodNight => 'Jó éjszakát';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Még ébren';
+
+  @override
+  String get greetingEarlyStart => 'Korai kezdés';
+
+  @override
+  String get greetingNewDay => 'Új nap';
+
+  @override
+  String get greetingMorning => 'Jó reggelt';
+
+  @override
+  String get greetingBusyMorning => 'Pörgős délelőtt';
+
+  @override
+  String get greetingAfternoon => 'Jó napot';
+
+  @override
+  String get greetingHomeStretch => 'Hajrá';
+
+  @override
+  String get greetingEvening => 'Jó estét';
+
+  @override
+  String get unlimitedBadge => 'Korlátlan';
 }

@@ -8653,10 +8653,6 @@
             }
         }
     },
-    "actionItemReminderTitle": "یادآور Omi",
-    "@actionItemReminderTitle": {
-        "description": "Title for action item reminder notifications"
-    },
     "deviceDisconnectedTitle": "{deviceName} قطع شد",
     "@deviceDisconnectedTitle": {
         "description": "Notification title when a device disconnects",
@@ -11075,9 +11071,6 @@
     "captureStorageAlmostFull": "حافظه تقریباً پر است",
     "capturePendantDisconnectedDetail": "آویز شما اتصالش را با این تلفن از دست داد. وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود. هر آنچه پیش از این ضبط شده محفوظ است.",
     "participantsSummaryUncounted": "{name} و دیگران",
-    "goodMorning": "صبح بخیر",
-    "goodAfternoon": "بعدازظهر بخیر",
-    "goodEvening": "عصر بخیر",
     "alreadyHaveAccount": "از قبل حساب داری؟",
     "signInToOmi": "ورود به Omi",
     "signInSubtitle": "گفتگوها و خاطراتت با حسابت در تلفن، Mac و وب همراهت هستند.",
@@ -11216,5 +11209,24 @@
     "tipStarBody": "گفتگوهای ستاره‌دار بعداً به‌راحتی پیدا می‌شوند.",
     "tipPrivateTitle": "به‌طور پیش‌فرض خصوصی",
     "tipPrivateBody": "گفتگوهای شما خصوصی می‌مانند مگر آنکه آن‌ها را به اشتراک بگذارید.",
-    "homeGettingStartedProgress": "{done} از {total}"
+    "homeGettingStartedProgress": "{done} از {total}",
+    "noFailedRecordings": "هیچ ضبط ناموفقی وجود ندارد",
+    "mapNoPlacesTitle": "هنوز مکانی نیست",
+    "mapNoPlacesMessage": "گفتگوها وقتی Omi بداند کجا انجام شده‌اند اینجا نمایش داده می‌شوند.",
+    "mergeWithEllipsis": "ادغام با…",
+    "finishSetupToEnable": "برای روشن کردن {appName}، راه‌اندازی آن را تمام کنید",
+    "greetingUpLate": "شب‌بیداری",
+    "greetingLunchtime": "وقت ناهار",
+    "greetingWindingDown": "وقت استراحت",
+    "greetingGoodNight": "شب بخیر",
+    "greetingWithName": "{greeting}، {name}",
+    "greetingStillUp": "هنوز بیدار",
+    "greetingEarlyStart": "سحرخیز",
+    "greetingNewDay": "روز نو",
+    "greetingMorning": "صبح بخیر",
+    "greetingBusyMorning": "صبح پرکار",
+    "greetingAfternoon": "بعدازظهر بخیر",
+    "greetingHomeStretch": "آخر روز",
+    "greetingEvening": "عصر بخیر",
+    "unlimitedBadge": "نامحدود"
 }

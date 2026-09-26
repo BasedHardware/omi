@@ -109,16 +109,6 @@ void main() {
     expect(world.controller.isPaused, false);
   });
 
-  test('Star (Lock Screen design) marks the ongoing conversation, and again unmarks it', () async {
-    expect(presentation.snapshot['canStar'], true);
-    expect(presentation.snapshot['starred'], false);
-    await sink.action(request('star'));
-    expect(world.controller.isConversationMarkedForStarring, true);
-    expect(presentation.snapshot['starred'], true);
-    await sink.action(request('star'));
-    expect(world.controller.isConversationMarkedForStarring, false);
-  });
-
   test('after Finish the presentation stays closed until capture runs again', () async {
     await sink.action(request('finish'));
     await world.settle();

@@ -148,7 +148,7 @@ void main() {
     testWidgets('a mic stall (interrupted, OS not holding the mic) reads Reconnecting, not Paused', (tester) async {
       // The controller marks phone capture `interrupted` without the OS holding the mic for a
       // silent-mic stall (the socket still up): capture is restarting the microphone on its own,
-      // so it reads Reconnecting and keeps Pause. Only an OS interruption (`isCallActive`) is
+      // so it reads Reconnecting and keeps Mute. Only an OS interruption (`isCallActive`) is
       // Paused with no control (#4706), covered in capture_home_ui_test.
       final captureProvider = _SocketUpCaptureProvider();
       addTearDown(captureProvider.dispose);
@@ -163,7 +163,7 @@ void main() {
       // It claims neither "still recording" (the mic is restarting) nor "mic in use".
       expect(find.textContaining(l10n.captureStillRecording), findsNothing);
       expect(find.textContaining(l10n.captureMicInUseElsewhere), findsNothing);
-      expect(find.bySemanticsLabel(l10n.pause), findsOneWidget);
+      expect(find.bySemanticsLabel(l10n.mute), findsOneWidget);
     });
 
     testWidgets('a dropped transcription socket reads Reconnecting, not Paused', (tester) async {
@@ -230,7 +230,7 @@ void main() {
       expect(find.byIcon(Icons.cloud_off), findsNothing);
     });
 
-    testWidgets('paused state overrides Listening during device recording', (tester) async {
+    testWidgets("the reader's mute overrides Listening during device recording", (tester) async {
       final captureProvider = _DeviceCardCaptureProvider();
       addTearDown(captureProvider.dispose);
       captureProvider.updateRecordingState(RecordingState.deviceRecord);
@@ -239,8 +239,8 @@ void main() {
 
       final context = tester.element(find.byType(ConversationCaptureWidget));
       final listeningText = AppLocalizations.of(context).listening;
-      // Paused, not "Muted": one word for a pause on every source (the control is Pause/Resume).
-      final pausedText = AppLocalizations.of(context).paused;
+      // Muted: one word for the reader's pause on every source (the control is Mute/Unmute).
+      final mutedText = AppLocalizations.of(context).muted;
 
       // Initially should show Listening
       expect(find.text(listeningText), findsWidgets);
@@ -249,8 +249,8 @@ void main() {
       await tester.runAsync(() => captureProvider.pauseDeviceRecording());
       await tester.pump();
 
-      // Paused should override Listening for device recording
-      expect(find.text(pausedText), findsWidgets);
+      // Muted overrides Listening for device recording
+      expect(find.text(mutedText), findsWidgets);
     });
   });
 }

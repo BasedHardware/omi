@@ -7093,9 +7093,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi நினைவூட்டல்';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName துண்டிக்கப்பட்டது';
   }
@@ -11300,15 +11297,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'காலை வணக்கம்';
-
-  @override
-  String get goodAfternoon => 'மதிய வணக்கம்';
-
-  @override
-  String get goodEvening => 'மாலை வணக்கம்';
-
-  @override
   String get alreadyHaveAccount => 'ஏற்கனவே கணக்கு உள்ளதா?';
 
   @override
@@ -11769,4 +11757,65 @@ class AppLocalizationsTa extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done/$total';
   }
+
+  @override
+  String get noFailedRecordings => 'தோல்வியடைந்த பதிவுகள் இல்லை';
+
+  @override
+  String get mapNoPlacesTitle => 'இன்னும் இடங்கள் இல்லை';
+
+  @override
+  String get mapNoPlacesMessage => 'உரையாடல்கள் எங்கு நடந்தன என்று Omi அறிந்ததும் இங்கே தோன்றும்.';
+
+  @override
+  String get mergeWithEllipsis => 'இதனுடன் இணை…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return '$appName ஐ இயக்க அதன் அமைப்பை முடிக்கவும்';
+  }
+
+  @override
+  String get greetingUpLate => 'நள்ளிரவு';
+
+  @override
+  String get greetingLunchtime => 'மதிய உணவு நேரம்';
+
+  @override
+  String get greetingWindingDown => 'ஓய்வு நேரம்';
+
+  @override
+  String get greetingGoodNight => 'இனிய இரவு';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'விடியற்காலை';
+
+  @override
+  String get greetingEarlyStart => 'அதிகாலை';
+
+  @override
+  String get greetingNewDay => 'புதிய நாள்';
+
+  @override
+  String get greetingMorning => 'காலை வணக்கம்';
+
+  @override
+  String get greetingBusyMorning => 'பரபரப்பான காலை';
+
+  @override
+  String get greetingAfternoon => 'மதிய வணக்கம்';
+
+  @override
+  String get greetingHomeStretch => 'நாளின் இறுதி';
+
+  @override
+  String get greetingEvening => 'மாலை வணக்கம்';
+
+  @override
+  String get unlimitedBadge => 'வரம்பற்றது';
 }

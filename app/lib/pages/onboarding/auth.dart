@@ -304,7 +304,8 @@ class _DeviceChip extends StatelessWidget {
       // Centred on its own width: a Container with an alignment would stretch to the row.
       child: Center(
         widthFactor: 1,
-        child: Text(name, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600, color: OmiColors.textSecondary)),
+        child:
+            Text(name, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600, color: OmiColors.textSecondary)),
       ),
     );
   }

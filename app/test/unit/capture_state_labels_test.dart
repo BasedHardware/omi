@@ -14,9 +14,10 @@ void main() {
       expect(captureStateLabel(l10n, state), 'Paused');
     });
 
-    test('a paused device is Muted, a paused phone is Paused', () {
-      expect(liveCaptureDisplayState(paused: true, deviceMuted: true), CaptureDisplayState.muted);
-      expect(liveCaptureDisplayState(paused: true), CaptureDisplayState.paused);
+    test('the reader\'s pause is Muted, whatever the source', () {
+      // The reader's Mute reads Muted; only the OS taking the microphone reads Paused.
+      expect(liveCaptureDisplayState(paused: true), CaptureDisplayState.muted);
+      expect(liveCaptureDisplayState(audioInterrupted: true), CaptureDisplayState.paused);
     });
 
     test('a server-side failure outranks buffering and reconnecting', () {

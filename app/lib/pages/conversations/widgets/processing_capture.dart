@@ -29,10 +29,14 @@ import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/ui/ui.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
-  const ConversationCaptureWidget({super.key, this.showsCall = false});
+  const ConversationCaptureWidget({super.key, this.showsCall = false, this.idle});
 
   /// Home shows an Omi call on this card; the Conversations tab has its own call banner.
   final bool showsCall;
+
+  /// Shown when nothing records (Home's "Not listening" card). A pendant that dropped mid-capture
+  /// shows its Disconnected card in this place instead, so the two never stack.
+  final Widget? idle;
 
   @override
   State<ConversationCaptureWidget> createState() => _ConversationCaptureWidgetState();
@@ -140,8 +144,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             provider.recordingState == RecordingState.interrupted ||
             provider.recordingState == RecordingState.systemAudioRecord ||
             provider.isPhoneMicPaused;
-        if (provider.liveCaptureSource == null && !phoneLive && !batch) {
-          return const SizedBox.shrink();
+        // Nothing recording, or the reader pressed Stop (a stopped pendant waits for Start).
+        if ((provider.liveCaptureSource == null && !phoneLive && !batch) || (provider.isCaptureStopped && !phoneLive)) {
+          return widget.idle ?? const SizedBox.shrink();
         }
 
         return GestureDetector(
@@ -197,6 +202,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   /// pendant it came from is still paired but not connected. See [_droppedSource].
   bool _trackPendantDrop(CaptureProvider provider, {required bool connected, required bool paired}) {
     final source = provider.liveCaptureSource;
+    if (provider.isCaptureStopped) {
+      // Stopped is not capturing: a pendant that drops now has nothing to lose.
+      _droppedSource = null;
+      _droppedStartedAt = null;
+      _droppedAt = null;
+      return false;
+    }
     if (source != null && source != 'phone' && !SharedPreferencesUtil().batchModeEnabled) {
       _droppedSource = source;
       _droppedStartedAt = provider.liveCaptureStartedAt ?? _droppedStartedAt;
@@ -228,14 +240,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     );
   }
 
-  /// Finish: ends and processes this conversation (a phone recording stops first; a pendant keeps
-  /// listening for the next one). Same call as the live page's Finish.
+  /// Stop: saves this conversation and stops listening until Start ([CaptureController.stopCapture]),
+  /// as the Live page's Stop and the Lock Screen's do.
   Future<void> _finish(CaptureProvider provider) async {
     final phone = provider.liveCaptureSource == 'phone' || provider.liveCaptureSource == null;
     // "Finish a conversation": a success notification (the Haptics board).
     OmiHaptics.success();
     try {
-      await provider.finishCapture();
+      await provider.stopCapture();
     } catch (_) {
       if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
       return;
@@ -243,13 +255,16 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
   }
 
-  Future<void> _togglePause(CaptureProvider provider) async {
+  /// Mute or Unmute, whichever the card shows ([muted]), so the tap always does what it says.
+  Future<void> _togglePause(CaptureProvider provider, {required bool muted}) async {
     final phone = provider.liveCaptureSource == 'phone';
     try {
       OmiHaptics.medium();
-      if (provider.isPaused) {
+      if (muted) {
         await provider.resumeCapture();
-        if (phone && !provider.isPaused) PlatformManager.instance.analytics.phoneMicRecordingStarted();
+        // Still muted: say so rather than leave a button that seems to do nothing.
+        if (provider.isPaused) throw StateError('capture stayed muted');
+        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStarted();
       } else {
         await provider.pauseCapture();
         if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
@@ -334,20 +349,19 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         status: copy.status,
         detail: copy.detail,
         explanation: copy.explanation,
-        // Resume only when the status says Paused and the reader paused it; a degraded transcription
-        // is still live, so its control is Pause.
+        // Unmute only when the status says Muted; a degraded transcription is still live, so its
+        // control is Mute.
         paused: isPaused,
         // The LED means audio is being captured now: not while paused, the OS holds the mic, or the
         // microphone is still opening.
         live: !isPaused && !micTaken && !starting,
-        elapsed: startedAt == null ? null : DateTime.now().difference(startedAt),
+        // The one capture clock: it stands still while muted, and every surface shows the same time.
+        elapsed: startedAt == null ? null : provider.captureElapsed,
         lastLine: provider.segments.lastOrNull?.text,
         note:
             isPhoneRecording && provider.pendantPausedForPhone ? context.l10n.pendantPausedResumesWhenYouFinish : null,
-        // Photo-capture devices (OmiGlass) keep capturing photos; there is nothing to pause.
-        onPauseToggle: !LiveCaptureCard.canPause(provider.recordingDevice, source: liveSource) || micTaken
-            ? null
-            : () => _togglePause(provider),
+        // Photo-capture devices (OmiGlass) keep capturing photos; there is nothing to mute.
+        onPauseToggle: !provider.canMuteLiveSource || micTaken ? null : () => _togglePause(provider, muted: isPaused),
         onFinish: () => _finish(provider),
       );
       return Column(
@@ -409,17 +423,17 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       copy = CaptureCardCopy(l10n.paused,
           detail: l10n.capturePhoneStorageFull, explanation: l10n.transcribeLaterStorageFull);
     } else if (muted) {
-      copy = CaptureCardCopy(l10n.paused);
+      copy = CaptureCardCopy(l10n.muted);
     } else {
       copy = CaptureCardCopy(l10n.recording, detail: l10n.captureAudioSavedTranscribesLater);
     }
 
     final actions = <_OfflineAction>[
-      // Pause glyphs, as on the live card: mics belong to Ask Omi. Storage-full is already paused.
+      // Mute, as on the live card. Storage-full is already paused.
       if (!isLimitless && !storageFull)
         (
-          icon: muted ? Icons.play_arrow_rounded : Icons.pause_rounded,
-          label: muted ? l10n.resume : l10n.pause,
+          icon: muted ? Icons.mic_rounded : Icons.mic_off_rounded,
+          label: muted ? l10n.unmute : l10n.mute,
           onTap: () async {
             try {
               await provider.toggleOfflineMute();
@@ -429,8 +443,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           },
         ),
       // Mute / New recording drive the native writer prefs, which the Limitless drain path doesn't
-      // use — that pendant records on its own.
-      if (!isLimitless)
+      // use — that pendant records on its own. The phone's session has Stop instead (two controls at
+      // most; Stop then Start is a new recording).
+      if (!isLimitless && !provider.isPhoneMicBatchRecording)
         (icon: Icons.add_circle_outline_rounded, label: l10n.newRecording, onTap: provider.startNewOfflineRecording),
       // Phone-mic batch is user-driven (not ambient like BLE), so it needs an explicit Stop that ends
       // the session. BLE batch has no Stop by design.

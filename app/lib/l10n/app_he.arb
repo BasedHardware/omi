@@ -8653,10 +8653,6 @@
             }
         }
     },
-    "actionItemReminderTitle": "תזכורת Omi",
-    "@actionItemReminderTitle": {
-        "description": "Title for action item reminder notifications"
-    },
     "deviceDisconnectedTitle": "{deviceName} התנתק",
     "@deviceDisconnectedTitle": {
         "description": "Notification title when a device disconnects",
@@ -11075,9 +11071,6 @@
     "captureStorageAlmostFull": "האחסון כמעט מלא",
     "capturePendantDisconnectedDetail": "התליון איבד את החיבור לטלפון הזה. Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב. כל מה שהוקלט עד עכשיו שמור.",
     "participantsSummaryUncounted": "{name} ואחרים",
-    "goodMorning": "בוקר טוב",
-    "goodAfternoon": "צהריים טובים",
-    "goodEvening": "ערב טוב",
     "alreadyHaveAccount": "כבר יש לך חשבון?",
     "signInToOmi": "התחברות ל‑Omi",
     "signInSubtitle": "השיחות והזיכרונות שלך עוברים עם החשבון שלך בטלפון, ב‑Mac ובאינטרנט.",
@@ -11216,5 +11209,24 @@
     "tipStarBody": "קל למצוא אחר כך שיחות שסומנו בכוכב.",
     "tipPrivateTitle": "פרטי כברירת מחדל",
     "tipPrivateBody": "השיחות שלכם נשארות פרטיות אלא אם תשתפו אותן.",
-    "homeGettingStartedProgress": "{done} מתוך {total}"
+    "homeGettingStartedProgress": "{done} מתוך {total}",
+    "noFailedRecordings": "אין הקלטות שנכשלו",
+    "mapNoPlacesTitle": "עדיין אין מקומות",
+    "mapNoPlacesMessage": "שיחות מופיעות כאן כש-Omi יודע איפה הן התקיימו.",
+    "mergeWithEllipsis": "מיזוג עם…",
+    "finishSetupToEnable": "יש להשלים את ההגדרה של {appName} כדי להפעיל אותה",
+    "greetingUpLate": "ער עד מאוחר",
+    "greetingLunchtime": "שעת צהריים",
+    "greetingWindingDown": "זמן להירגע",
+    "greetingGoodNight": "לילה טוב",
+    "greetingWithName": "{greeting}, {name}",
+    "greetingStillUp": "עדיין ערים",
+    "greetingEarlyStart": "משכימים קום",
+    "greetingNewDay": "יום חדש",
+    "greetingMorning": "בוקר טוב",
+    "greetingBusyMorning": "בוקר עמוס",
+    "greetingAfternoon": "צהריים טובים",
+    "greetingHomeStretch": "הישורת האחרונה",
+    "greetingEvening": "ערב טוב",
+    "unlimitedBadge": "בלתי מוגבל"
 }

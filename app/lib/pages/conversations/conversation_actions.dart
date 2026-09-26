@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -8,6 +7,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/capture_group_separation.dart';
+import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/share.dart';
 import 'package:omi/pages/conversation_detail/widgets/capture_recordings.dart';
@@ -213,57 +213,58 @@ Future<void> moveConversationToFolder(BuildContext context, ServerConversation c
 }
 
 /// The actions a conversation row's long-press offers.
-enum ConversationRowAction { open, star, move, share, recordings, separate, select, delete }
+enum ConversationRowAction { star, move, share, copySummary, recordings, separate, select, delete }
 
-/// Long-press menu of a conversation row: Open, Star / Unstar, Move to Folder, Share, Select
-/// (enters multi-select) and Delete. A row that stands for an event several devices recorded also
-/// offers Recordings and Separate… (design ruling 2026-09-24). Resolves the chosen action, or null
-/// when dismissed.
-Future<ConversationRowAction?> showConversationActionsSheet(
+/// Long-press menu of a conversation row (v2 `ContextMenu`): Star / Unstar, Move to Folder, Share,
+/// Copy Summary, Merge With… (multi-select, where merging happens) and Delete, opening under the
+/// row. A row that stands for an event several devices recorded also offers Recordings and
+/// Separate… (design ruling 2026-09-24). A tap on the row opens it. [anchor] is the row's rect in
+/// global coordinates. Resolves the chosen action, or null when dismissed.
+Future<ConversationRowAction?> showConversationRowMenu(
   BuildContext context,
   ServerConversation conversation, {
+  required Rect anchor,
   bool canSelect = true,
-}) {
+}) async {
   final l10n = context.l10n;
-  final title = conversation.structured.title.trim();
-  return showOmiSheet<ConversationRowAction>(
-    context: context,
-    title: title.isEmpty ? l10n.untitledConversation : title,
-    padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.md),
-    builder: (sheetContext) {
-      // FontAwesome glyphs, the same ones the conversation page's "…" menu uses for the same actions.
-      Widget row(ConversationRowAction action, FaIconData icon, String label, {bool destructive = false}) {
-        return OmiSettingsRow(
-          key: ValueKey('conversation_action_${action.name}'),
-          leading: FaIcon(icon, size: 18),
-          title: label,
-          showChevron: false,
-          isDestructive: destructive,
-          onTap: () => Navigator.of(sheetContext).pop(action),
-        );
-      }
-
-      return SingleChildScrollView(
-        child: OmiSettingsGroup(
-          children: [
-            row(ConversationRowAction.open, FontAwesomeIcons.upRightAndDownLeftFromCenter, l10n.open),
-            row(
-              ConversationRowAction.star,
-              conversation.starred ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
-              conversation.starred ? l10n.unstarConversation : l10n.starConversation,
-            ),
-            row(ConversationRowAction.move, FontAwesomeIcons.folder, l10n.moveToFolder),
-            row(ConversationRowAction.share, FontAwesomeIcons.arrowUpFromBracket, l10n.share),
-            if (CaptureGroupPresentation.recordings(conversation).length > 1) ...[
-              row(ConversationRowAction.recordings, FontAwesomeIcons.layerGroup, l10n.recordings),
-              row(ConversationRowAction.separate, FontAwesomeIcons.codeBranch, l10n.captureRecordingSeparate),
-            ],
-            if (canSelect) row(ConversationRowAction.select, FontAwesomeIcons.circleCheck, l10n.selectOption),
-            row(ConversationRowAction.delete, FontAwesomeIcons.trashCan, l10n.delete, destructive: true),
-          ],
-        ),
+  ConversationRowAction? chosen;
+  OmiMenuAction entry(ConversationRowAction action, IconData icon, String label, {bool destructive = false}) =>
+      OmiMenuAction(
+        key: ValueKey('conversation_action_${action.name}'),
+        icon: icon,
+        label: label,
+        isDestructive: destructive,
+        onSelected: () => chosen = action,
       );
-    },
+  await showOmiContextMenu(
+    context,
+    anchor: anchor,
+    actions: [
+      entry(
+        ConversationRowAction.star,
+        conversation.starred ? Icons.star_rounded : Icons.star_border_rounded,
+        conversation.starred ? l10n.unstarConversation : l10n.starConversation,
+      ),
+      entry(ConversationRowAction.move, Icons.folder_outlined, l10n.moveToFolder),
+      entry(ConversationRowAction.share, Icons.ios_share_rounded, l10n.share),
+      entry(ConversationRowAction.copySummary, Icons.copy_rounded, l10n.copySummary),
+      if (canSelect) entry(ConversationRowAction.select, Icons.call_merge_rounded, l10n.mergeWithEllipsis),
+      if (CaptureGroupPresentation.recordings(conversation).length > 1) ...[
+        entry(ConversationRowAction.recordings, Icons.layers_outlined, l10n.recordings),
+        entry(ConversationRowAction.separate, Icons.call_split_rounded, l10n.captureRecordingSeparate),
+      ],
+      entry(ConversationRowAction.delete, Icons.delete_outline_rounded, l10n.delete, destructive: true),
+    ],
+  );
+  return chosen;
+}
+
+/// Copies the conversation's summary as its page shows it (the same text as its Copy Summary).
+Future<void> copyConversationSummary(BuildContext context, ServerConversation conversation) async {
+  await OmiClipboard.copy(
+    context,
+    ConversationSummarySelection.select(conversation).content,
+    what: context.l10n.summary,
   );
 }
 

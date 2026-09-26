@@ -804,11 +804,19 @@ class _AppDetailPageState extends State<AppDetailPage> {
     if (!mounted) return;
 
     if (!enabled) {
-      // Setup is only the right guess when the backend gave no reason. A
-      // disabled app used to land here and get sent to setup instructions,
-      // so the developer re-ran a setup that was never the problem.
-      if (app.worksExternally() && detail.isEmpty) {
+      // An integration whose setup (its connect or sign-in step) is not done yet goes to that step:
+      // "App setup is not completed" is a step to take, not an error to read. Otherwise setup is
+      // only the right guess when the backend gave no reason — a disabled app used to land here
+      // and get sent to setup instructions, so the developer re-ran a setup that was never the
+      // problem.
+      final integration = app.externalIntegration;
+      final needsSetup = app.worksExternally() &&
+          !setupCompleted &&
+          ((integration?.authSteps.isNotEmpty ?? false) ||
+              (integration?.setupInstructionsFilePath?.isNotEmpty ?? false));
+      if (app.worksExternally() && (detail.isEmpty || needsSetup)) {
         setState(() => appLoading = false);
+        if (needsSetup) OmiFeedback.info(context, context.l10n.finishSetupToEnable(app.name));
         await _navigateToSetup();
         return;
       } else {

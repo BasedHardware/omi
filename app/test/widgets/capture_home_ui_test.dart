@@ -14,6 +14,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
+import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/devices/recording_source_sheet.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:omi/pages/home/widgets/idle_capture_card.dart';
@@ -23,10 +24,11 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/capture/capture_controller.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
 
-enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, pendantBatch, phone, phoneAfterPendant }
+enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, pendantStopped, pendantBatch, phone, phoneAfterPendant }
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
   _Capture(this.live,
@@ -50,13 +52,16 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   int pauses = 0;
   int resumes = 0;
   int finishes = 0;
+  int stops = 0;
+  int starts = 0;
   int phoneStarts = 0;
   Object? phoneStartFailure;
+  Object? finishFailure;
 
   @override
   String? get liveCaptureSource => switch (live) {
         _Live.idle || _Live.idleDeviceConnected => null,
-        _Live.pendant || _Live.pendantPaused || _Live.pendantBatch => 'omi',
+        _Live.pendant || _Live.pendantPaused || _Live.pendantStopped || _Live.pendantBatch => 'omi',
         _ => 'phone',
       };
   @override
@@ -67,7 +72,7 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
           : switch (live) {
               _Live.idle || _Live.idleDeviceConnected => RecordingState.stop,
               _Live.pendant || _Live.pendantBatch => RecordingState.deviceRecord,
-              _Live.pendantPaused => RecordingState.pause,
+              _Live.pendantPaused || _Live.pendantStopped => RecordingState.pause,
               _ => RecordingState.record,
             };
   @override
@@ -75,7 +80,14 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   @override
   BtDevice? get recordingDevice => null;
   @override
-  bool get isPaused => live == _Live.pendantPaused || readerPaused;
+  bool get isPaused => live == _Live.pendantPaused || live == _Live.pendantStopped || readerPaused;
+  @override
+  bool get isCaptureStopped => live == _Live.pendantStopped;
+  @override
+  bool get canMuteLiveSource => true;
+  @override
+  Duration? get captureElapsed =>
+      live == _Live.idle || live == _Live.idleDeviceConnected ? null : const Duration(minutes: 12, seconds: 4);
   @override
   bool get isPhoneMicPaused => readerPaused;
   @override
@@ -132,9 +144,28 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   @override
   Future<void> resumeCapture() async => resumes++;
   @override
-  Future<void> finishCapture() async => finishes++;
+  Future<void> finishCapture() async {
+    finishes++;
+    final failure = finishFailure;
+    if (failure != null) throw failure;
+  }
+
   @override
-  Future<void> streamRecording({bool resumeCapture = true}) async => phoneStarts++;
+  Future<bool> stopCapture() async {
+    stops++;
+    return segments.isNotEmpty;
+  }
+
+  @override
+  Future<void> startCapture() async => starts++;
+
+  @override
+  Future<void> streamRecording({bool resumeCapture = true}) async {
+    phoneStarts++;
+    final failure = phoneStartFailure;
+    if (failure != null) throw failure;
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -219,39 +250,60 @@ void main() {
   }
 
   group('live card', () {
-    testWidgets('names the state, the source under it and the time, with Pause', (tester) async {
+    testWidgets('names the state, the source under it and the time, with Mute', (tester) async {
       final capture = _Capture(_Live.pendant);
       await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
       // Liquid Dock live card: the orb, the short state and the source's name under it.
       expect(find.text(en.captureSourcePendant), findsOneWidget);
       expect(find.text(en.listening), findsOneWidget);
       expect(find.text('12:04'), findsOneWidget);
-      expect(find.bySemanticsLabel(en.pause), findsOneWidget);
-      expect(find.byIcon(Icons.mic), findsNothing, reason: 'mics belong to Ask Omi');
+      expect(find.bySemanticsLabel(en.mute), findsOneWidget);
+      expect(find.bySemanticsLabel(en.stop), findsOneWidget);
+      expect(find.byIcon(Icons.mic_off_rounded), findsOneWidget, reason: 'Mute reads as a muted mic');
 
-      await tester.tap(find.byKey(const Key('live_capture_pause')));
+      await tester.tap(find.byKey(const Key('live_capture_mute')));
       await tester.pump();
       expect(capture.pauses, 1);
     });
 
-    testWidgets('Finish ends and processes the conversation through the one capture API', (tester) async {
+    testWidgets('Stop saves the conversation and stops listening until Start', (tester) async {
       final capture = _Capture(_Live.pendant);
       await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
-      // v2: the card's primary action reads End (it ends this conversation; capture goes on).
-      expect(find.text(en.endCapture), findsOneWidget);
-      await tester.tap(find.byKey(const Key('live_capture_finish')));
+      // The card's primary action reads Stop: the controller saves this conversation and stops
+      // listening, rather than letting the pendant start the next conversation by itself.
+      expect(find.text(en.stop), findsOneWidget);
+      await tester.tap(find.byKey(const Key('live_capture_stop')));
       await tester.pump();
-      expect(capture.finishes, 1);
-      expect(capture.pauses, 0);
+      expect(capture.stops, 1);
     });
 
-    testWidgets('a paused pendant offers Resume', (tester) async {
+    testWidgets('a muted pendant reads Muted and offers Unmute', (tester) async {
       final capture = _Capture(_Live.pendantPaused);
       await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
-      expect(find.text(en.paused), findsOneWidget);
-      await tester.tap(find.bySemanticsLabel(en.resume));
+      expect(find.text(en.muted), findsOneWidget);
+      expect(find.byIcon(Icons.mic_rounded), findsOneWidget);
+      await tester.tap(find.bySemanticsLabel(en.unmute));
       await tester.pump();
       expect(capture.resumes, 1);
+    });
+
+    testWidgets('a stopped pendant is not a card of its own: Home offers one Start that wakes it', (tester) async {
+      final capture = _Capture(_Live.pendantStopped);
+      await pump(tester, const ConversationCaptureWidget(showsCall: true, idle: IdleCaptureCard()),
+          capture: capture, device: _Device());
+      expect(find.byType(LiveCaptureCard), findsNothing, reason: 'no Muted card with Unmute and Stop');
+      expect(find.byKey(const ValueKey('idle_capture_card')), findsOneWidget);
+      expect(find.text(en.notListeningTitle), findsOneWidget);
+      expect(find.text('${en.captureSourcePendant} · ${en.deviceReady}'), findsOneWidget);
+      expect(find.text(en.start), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('idle_capture_start')));
+      await tester.pump();
+      expect(capture.starts, 1, reason: 'the pendant listens again');
+      expect(capture.phoneStarts, 0, reason: 'never the phone instead');
+
+      // The Conversations tab has no idle card: nothing shows there while stopped.
+      await pump(tester, const ConversationCaptureWidget(), capture: capture, device: _Device());
+      expect(find.byType(LiveCaptureCard), findsNothing);
     });
 
     testWidgets('the phone taking over from the pendant says the pendant waits', (tester) async {
@@ -289,7 +341,7 @@ void main() {
       expect(card.explanation, isNull, reason: 'ringing is not a problem');
     });
 
-    testWidgets('a transcription outage is still live: Pause, a warning, and a sheet that explains', (tester) async {
+    testWidgets('a transcription outage is still live: Mute, a warning, and a sheet that explains', (tester) async {
       final capture = _Capture(_Live.pendant, failure: true);
       await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
       expect(find.text(en.captureNotTranscribing), findsOneWidget);
@@ -297,9 +349,9 @@ void main() {
       expect(find.text('12:04'), findsOneWidget);
       expect(find.text('${en.captureSourcePendant} · ${en.captureAudioSavedTranscribesLater}'), findsOneWidget);
       expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
-      // The control matches the state: capture is live, so it pauses (it never reads Resume here).
-      expect(find.bySemanticsLabel(en.resume), findsNothing);
-      await tester.tap(find.bySemanticsLabel(en.pause));
+      // The control matches the state: capture is live, so it mutes (it never reads Unmute here).
+      expect(find.bySemanticsLabel(en.unmute), findsNothing);
+      await tester.tap(find.bySemanticsLabel(en.mute));
       await tester.pump();
       expect(capture.pauses, 1);
       expect(capture.resumes, 0);
@@ -326,12 +378,12 @@ void main() {
       expect(semantics, isNotNull);
     });
 
-    testWidgets('photo-capture devices have no Pause', (tester) async {
-      expect(
-          LiveCaptureCard.canPause(BtDevice(id: 'g', name: 'Glass', type: DeviceType.openglass, rssi: -40),
-              source: 'openglass'),
-          isFalse);
-      expect(LiveCaptureCard.canPause(null, source: 'phone'), isTrue);
+    testWidgets('photo-capture devices have no Mute: Stop is their one control', (tester) async {
+      expect(captureSourceCanMute(DeviceType.openglass, source: 'openglass'), isFalse);
+      expect(captureSourceCanMute(DeviceType.raybanMeta, source: 'raybanMeta'), isFalse);
+      expect(captureSourceCanMute(DeviceType.omi, source: 'omi'), isTrue);
+      expect(captureSourceCanMute(DeviceType.plaud, source: 'plaud'), isTrue);
+      expect(captureSourceCanMute(null, source: 'phone'), isTrue);
     });
   });
 
@@ -341,15 +393,15 @@ void main() {
           capture: _Capture(_Live.phone, interrupted: true, callActive: true));
       expect(find.text(en.paused), findsOneWidget);
       expect(find.textContaining(en.captureMicInUseElsewhere), findsOneWidget);
-      expect(find.byKey(const Key('live_capture_pause')), findsNothing, reason: 'the OS resumes capture itself');
+      expect(find.byKey(const Key('live_capture_mute')), findsNothing, reason: 'the OS resumes capture itself');
     });
 
-    testWidgets('an interruption on a recording the reader paused keeps Resume', (tester) async {
+    testWidgets('an interruption on a recording the reader muted keeps Unmute', (tester) async {
       final capture = _Capture(_Live.phone, interrupted: true, callActive: true, readerPaused: true);
       await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
-      expect(find.text(en.paused), findsOneWidget);
+      expect(find.text(en.muted), findsOneWidget);
       expect(find.textContaining(en.captureMicInUseElsewhere), findsNothing);
-      await tester.tap(find.bySemanticsLabel(en.resume));
+      await tester.tap(find.bySemanticsLabel(en.unmute));
       await tester.pump();
       expect(capture.resumes, 1);
     });
@@ -377,6 +429,25 @@ void main() {
       expect(find.text(en.capturePendantDisconnectedDetail), findsOneWidget);
     });
 
+    testWidgets("on Home the Disconnected card takes the idle card's place, never beside it", (tester) async {
+      const home = ConversationCaptureWidget(showsCall: true, idle: IdleCaptureCard());
+      final device = _Device();
+      await pump(tester, home, capture: _Capture(_Live.pendant), device: device);
+      expect(find.byKey(const ValueKey('idle_capture_card')), findsNothing, reason: 'the pendant is live');
+
+      device.drop();
+      await pump(tester, home, capture: _Capture(_Live.idleDeviceConnected), device: device);
+      expect(find.text(en.disconnected), findsOneWidget);
+      expect(find.byKey(const ValueKey('idle_capture_card')), findsNothing);
+    });
+
+    testWidgets('with nothing live and nothing dropped, Home shows the idle card', (tester) async {
+      await pump(tester, const ConversationCaptureWidget(showsCall: true, idle: IdleCaptureCard()),
+          capture: _Capture(_Live.idle));
+      expect(find.byKey(const ValueKey('idle_capture_card')), findsOneWidget);
+      expect(find.byType(LiveCaptureCard), findsNothing);
+    });
+
     testWidgets('a paired pendant that was never capturing stays hidden', (tester) async {
       await pump(tester, const ConversationCaptureWidget(showsCall: true),
           capture: _Capture(_Live.idle), device: _Device(connected: false));
@@ -385,14 +456,15 @@ void main() {
   });
 
   group('Transcribe Later card', () {
-    testWidgets('storage full: no Pause, a warning that explains, controls at least 44pt', (tester) async {
+    testWidgets('storage full: no Mute, a warning that explains, controls at least 44pt', (tester) async {
       SharedPreferences.setMockInitialValues({'batchStorageFull': true});
       await SharedPreferencesUtil.init();
       await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: _Capture(_Live.phone, batch: true));
       expect(find.text(en.paused), findsOneWidget);
       expect(find.textContaining(en.capturePhoneStorageFull), findsOneWidget);
-      expect(find.bySemanticsLabel(en.pause), findsNothing);
-      for (final label in [en.newRecording, en.stop]) {
+      expect(find.bySemanticsLabel(en.mute), findsNothing);
+      expect(find.text(en.newRecording), findsNothing, reason: "the phone's session has Stop, then Start");
+      for (final label in [en.stop]) {
         final size = tester.getSize(find.ancestor(of: find.text(label), matching: find.byType(TextButton)));
         expect(size.height, greaterThanOrEqualTo(44));
       }
@@ -406,13 +478,13 @@ void main() {
       expect(find.text(en.recording), findsOneWidget);
       expect(find.text('2:05'), findsOneWidget);
       expect(find.textContaining(en.captureAudioSavedTranscribesLater), findsOneWidget);
-      expect(find.text(en.pause), findsOneWidget);
+      expect(find.text(en.mute), findsOneWidget);
       expect(find.text(en.transcribeLaterNote), findsNothing, reason: 'settings copy is not a status');
     });
   });
 
   group('starting to listen (Rev 3: no record button; the idle card and Recording from)', () {
-    testWidgets('idle: Not listening, and Start listening records with this phone', (tester) async {
+    testWidgets('idle: Not listening, and Start records with this phone', (tester) async {
       final capture = _Capture(_Live.idle);
       await pump(tester, const IdleCaptureCard(), capture: capture);
       expect(find.text(en.notListeningTitle), findsOneWidget);
@@ -453,6 +525,58 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text(en.pendantIsListeningTitle), findsNothing);
       expect(capture.phoneStarts, 0);
+    });
+
+    // Starting with this phone is fenced the same way on every path (PhoneCapture.start).
+    testWidgets('a Transcribe Later pendant rejects a phone takeover with visible feedback', (tester) async {
+      final capture = _Capture(_Live.pendantBatch);
+      await pump(
+        tester,
+        Builder(
+          builder: (context) => TextButton(onPressed: () => PhoneCapture.start(context), child: const Text('start')),
+        ),
+        capture: capture,
+      );
+      await tester.tap(find.text('start'));
+      await tester.pump();
+      expect(find.text(en.phoneRecordingBlockedByPendantBatch), findsOneWidget);
+      expect(capture.phoneStarts, 0);
+      expect(find.text(en.pendantIsListeningTitle), findsNothing, reason: 'no choice that would fail');
+    });
+
+    testWidgets('finishing a running phone recording that fails says so', (tester) async {
+      final capture = _Capture(_Live.phone)..finishFailure = StateError('refused');
+      await pump(
+        tester,
+        Builder(
+          builder: (context) => TextButton(onPressed: () => PhoneCapture.start(context), child: const Text('start')),
+        ),
+        capture: capture,
+      );
+      await tester.tap(find.text('start'));
+      await tester.pump();
+      expect(capture.finishes, 1);
+      expect(find.text(en.somethingWentWrong), findsOneWidget);
+    });
+
+    testWidgets('a start that fails says so and never opens the capturing page', (tester) async {
+      final capture = _Capture(_Live.idle)..phoneStartFailure = StateError('refused');
+      await pump(tester, const IdleCaptureCard(), capture: capture);
+      await tester.tap(find.byKey(const ValueKey('idle_capture_start')));
+      await tester.pump();
+      expect(capture.phoneStarts, 1);
+      expect(find.text(en.somethingWentWrong), findsOneWidget);
+      expect(find.byType(ConversationCapturingPage), findsNothing);
+    });
+
+    testWidgets('a start that resolves without phone ownership navigates nowhere', (tester) async {
+      final capture = _Capture(_Live.idle);
+      await pump(tester, const IdleCaptureCard(), capture: capture);
+      await tester.tap(find.byKey(const ValueKey('idle_capture_start')));
+      await tester.pump();
+      expect(capture.phoneStarts, 1);
+      expect(find.byType(ConversationCapturingPage), findsNothing);
+      expect(find.text(en.somethingWentWrong), findsNothing, reason: 'a refusal is not an error toast');
     });
 
     testWidgets('Recording from: with nothing live, This phone starts listening', (tester) async {

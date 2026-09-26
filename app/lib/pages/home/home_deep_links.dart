@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
-import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/memories/page.dart';
@@ -54,7 +53,10 @@ class HomeDeepLink {
   /// The home tab the link belongs to, so the parent (the tab) shows before the child (the page
   /// pushed over it). Null keeps the current tab.
   int? get tabIndex => switch (alias) {
+        'conversations' => 1,
         'action-items' => 2,
+        // Apps is a tab again; an app's own page opens over the current tab.
+        'apps' when id == null => 3,
         'memories' || 'facts' => 0,
         _ => null,
       };
@@ -77,11 +79,8 @@ Future<void> openHomeDeepLink(
       if (capture.activeRecordingId == null || capture.activeRecordingId != link.query['recording']) return;
       unawaited(routeToPage(context, const ConversationCapturingPage()));
     case 'apps':
-      // Rev 3: Apps lives in Settings; a bare /apps opens the Apps page itself.
-      if (id == null) {
-        unawaited(routeToPage(context, const AppsPage(showAppBar: true)));
-        return;
-      }
+      // A bare /apps is the Apps tab ([HomeDeepLink.tabIndex]); an app's id opens its page.
+      if (id == null) return;
       final app = await context.read<AppProvider>().getAppFromId(id);
       if (!context.mounted) return;
       if (app == null) {

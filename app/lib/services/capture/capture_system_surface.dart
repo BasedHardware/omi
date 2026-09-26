@@ -34,9 +34,6 @@ class CaptureSystemSurface {
   bool _closed = false;
   bool _busy = false;
 
-  /// Finish on the Lock Screen or in the island stops capture for good, so the presentation closes
-  /// and stays closed until capture runs again (a resume or a new recording in Omi).
-  bool _closedByFinish = false;
   bool _ready = false;
   CaptureOwned? _listener;
   Timer? _heartbeat;
@@ -54,11 +51,13 @@ class CaptureSystemSurface {
       // The OS cannot loop animations here; each update animates the strip
       // forward, so while audio is flowing the strip gets one update a second
       // (the presentation glides it across that second), plus one to settle it
-      // when audio stops or capture pauses.
+      // when audio stops or capture pauses. While the mic is on the orb breathes
+      // and the wave ripples on the same beat even when the audio cannot be
+      // measured, as they do on Home.
       _voiceTick = capture.lifetime.periodic(const Duration(seconds: 1), (_) {
         final value = snapshot;
         final moving = (value['levels'] as List).isNotEmpty;
-        if (moving || _waveMoving) _changed(force: true, value: value);
+        if (moving || _waveMoving || _micOn(value)) _changed(force: true, value: value);
       });
     }
     try {
@@ -85,13 +84,8 @@ class CaptureSystemSurface {
     // Only a user pause offers Resume. Connecting and interruptions recover on
     // their own; they freeze the clock but still offer Pause for privacy.
     final userPaused = capture.isPaused || state == RecordingState.pause;
-    if (_closedByFinish) {
-      if (active && !userPaused && state != RecordingState.initialising) {
-        _closedByFinish = false; // capturing again: show it again
-      } else {
-        active = false;
-      }
-    }
+    // Stopped (Stop in Omi, on the Lock Screen or in the island): nothing to show until Start.
+    if (capture.isCaptureStopped) active = false;
     final interrupted = state == RecordingState.interrupted;
     final connecting = state == RecordingState.initialising;
     final paused = userPaused || interrupted || connecting;
@@ -136,16 +130,20 @@ class CaptureSystemSurface {
       'startedAt': _anchor == null ? 0.0 : _anchor!.millisecondsSinceEpoch / 1000,
       'elapsed': _anchor == null ? 0 : (_pausedAt ?? now).difference(_anchor!).inSeconds.clamp(0, 2147483647),
       'paused': paused,
-      'canPause': active && !capture.isCallActive,
-      // Finish always stops: with nothing heard yet there is simply nothing to process.
+      'canPause': active && !capture.isCallActive && capture.canMuteLiveSource,
+      // Stop always works: with nothing heard yet there is simply nothing to save.
       'canFinish': active,
-      'starred': capture.isConversationMarkedForStarring,
-      'canStar': active,
       'busy': _busy,
       'actionFailed': false,
       ..._voice(active && !paused),
     };
   }
+
+  /// Audio is being captured: live, not muted, not waiting on the OS or a connection.
+  static bool _micOn(Map<String, Object?> value) =>
+      value['active'] == true &&
+      value['paused'] != true &&
+      (value['status'] == 'listening' || value['status'] == 'recording');
 
   /// Levels for the waveform; empty levels draw it still.
   ///
@@ -217,7 +215,6 @@ class CaptureSystemSurface {
     final allowed = switch (action) {
       'pause' || 'resume' => current['canPause'],
       'finish' => current['canFinish'],
-      'star' => current['canStar'],
       _ => false,
     };
     if (allowed != true) throw StateError('Action is unavailable for this recording');
@@ -226,7 +223,6 @@ class CaptureSystemSurface {
     try {
       await capture.performSystemSurfaceAction(action as String,
           recordingId: current['recordingId'] as String, conversationRevision: current['conversationRevision'] as int);
-      if (action == 'finish') _closedByFinish = true;
       return snapshot;
     } finally {
       _busy = false;

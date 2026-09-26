@@ -9,8 +9,10 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 /// An app's screenshots, scrolled horizontally. Tapping one opens the media viewer as a modal
-/// (it floats over the page, so it leaves by its close X — docs/ux-contract.md §1).
-class AppPreviewGallery extends StatelessWidget {
+/// (it floats over the page, so it leaves by its close X — docs/ux-contract.md §1). A screenshot
+/// that does not load drops out rather than leaving a broken tile, and with none left the section
+/// is gone.
+class AppPreviewGallery extends StatefulWidget {
   const AppPreviewGallery({super.key, required this.imageUrls, this.onImageOpened});
 
   final List<String> imageUrls;
@@ -18,14 +20,29 @@ class AppPreviewGallery extends StatelessWidget {
   /// Called with the index of the screenshot the reader opened (analytics).
   final ValueChanged<int>? onImageOpened;
 
-  void _open(BuildContext context, int index) {
-    onImageOpened?.call(index);
-    openAppScreenshots(context, imageUrls, index);
+  @override
+  State<AppPreviewGallery> createState() => _AppPreviewGalleryState();
+}
+
+class _AppPreviewGalleryState extends State<AppPreviewGallery> {
+  final Set<String> _failed = {};
+
+  void _open(BuildContext context, List<String> shown, int index) {
+    widget.onImageOpened?.call(widget.imageUrls.indexOf(shown[index]));
+    openAppScreenshots(context, shown, index);
+  }
+
+  void _dropFailed(String url) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _failed.add(url)) setState(() {});
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final imageUrls = widget.imageUrls.where((url) => !_failed.contains(url)).toList();
+    if (imageUrls.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -44,7 +61,7 @@ class AppPreviewGallery extends StatelessWidget {
                 button: true,
                 label: l10n.previewImageLabel(index + 1, imageUrls.length),
                 child: GestureDetector(
-                  onTap: () => _open(context, index),
+                  onTap: () => _open(context, imageUrls, index),
                   child: Container(
                     margin: EdgeInsets.only(
                       left: index == 0 ? OmiSpacing.md : OmiSpacing.xs,
@@ -67,13 +84,10 @@ class AppPreviewGallery extends StatelessWidget {
                             child: Container(color: OmiColors.surface0),
                           ),
                         ),
-                        errorWidget: (context, url, error) => Container(
-                          width: 150,
-                          color: OmiColors.surface1,
-                          child: Center(
-                            child: FaIcon(FontAwesomeIcons.circleExclamation, color: OmiColors.textTertiary),
-                          ),
-                        ),
+                        errorWidget: (context, url, error) {
+                          _dropFailed(url);
+                          return const SizedBox.shrink();
+                        },
                       ),
                     ),
                   ),

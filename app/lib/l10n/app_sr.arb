@@ -8653,10 +8653,6 @@
             }
         }
     },
-    "actionItemReminderTitle": "Omi подсетник",
-    "@actionItemReminderTitle": {
-        "description": "Title for action item reminder notifications"
-    },
     "deviceDisconnectedTitle": "{deviceName} је одсоединут",
     "@deviceDisconnectedTitle": {
         "description": "Notification title when a device disconnects",
@@ -11075,9 +11071,6 @@
     "captureStorageAlmostFull": "Меморија је скоро пуна",
     "capturePendantDisconnectedDetail": "Привезак је изгубио везу са овим телефоном. Omi ће се сам поново повезати кад је привезак укључен и у близини. Све снимљено до сада је безбедно.",
     "participantsSummaryUncounted": "{name} и други",
-    "goodMorning": "Добро јутро",
-    "goodAfternoon": "Добар дан",
-    "goodEvening": "Добро вече",
     "alreadyHaveAccount": "Већ имаш налог?",
     "signInToOmi": "Пријави се на Omi",
     "signInSubtitle": "Твоји разговори и успомене прате твој налог на телефону, Mac-у и вебу.",
@@ -11216,5 +11209,24 @@
     "tipStarBody": "Разговоре са звездицом лако је касније пронаћи.",
     "tipPrivateTitle": "Приватно подразумевано",
     "tipPrivateBody": "Твоји разговори остају приватни осим ако их не поделиш.",
-    "homeGettingStartedProgress": "{done} од {total}"
+    "homeGettingStartedProgress": "{done} од {total}",
+    "noFailedRecordings": "Нема неуспелих снимака",
+    "mapNoPlacesTitle": "Још нема места",
+    "mapNoPlacesMessage": "Разговори се овде приказују када Omi зна где су се одвили.",
+    "mergeWithEllipsis": "Споји са…",
+    "finishSetupToEnable": "Завршите подешавање апликације {appName} да бисте је укључили",
+    "greetingUpLate": "Касно је",
+    "greetingLunchtime": "Време за ручак",
+    "greetingWindingDown": "Време за одмор",
+    "greetingGoodNight": "Лаку ноћ",
+    "greetingWithName": "{greeting}, {name}",
+    "greetingStillUp": "Још будни",
+    "greetingEarlyStart": "Рани почетак",
+    "greetingNewDay": "Нови дан",
+    "greetingMorning": "Добро јутро",
+    "greetingBusyMorning": "Ужурбано јутро",
+    "greetingAfternoon": "Добар дан",
+    "greetingHomeStretch": "Финиш дана",
+    "greetingEvening": "Добро вече",
+    "unlimitedBadge": "Неограничено"
 }

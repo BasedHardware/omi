@@ -7089,9 +7089,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Υπενθύμιση Omi';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName αποσυνδέθηκε';
   }
@@ -11300,15 +11297,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'Καλημέρα';
-
-  @override
-  String get goodAfternoon => 'Καλό απόγευμα';
-
-  @override
-  String get goodEvening => 'Καλησπέρα';
-
-  @override
   String get alreadyHaveAccount => 'Έχεις ήδη λογαριασμό;';
 
   @override
@@ -11767,4 +11755,65 @@ class AppLocalizationsEl extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done από $total';
   }
+
+  @override
+  String get noFailedRecordings => 'Καμία αποτυχημένη ηχογράφηση';
+
+  @override
+  String get mapNoPlacesTitle => 'Δεν υπάρχουν μέρη ακόμα';
+
+  @override
+  String get mapNoPlacesMessage => 'Οι συνομιλίες εμφανίζονται εδώ όταν το Omi γνωρίζει πού έγιναν.';
+
+  @override
+  String get mergeWithEllipsis => 'Συγχώνευση με…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Ολοκληρώστε τη ρύθμιση του $appName για να το ενεργοποιήσετε';
+  }
+
+  @override
+  String get greetingUpLate => 'Ξενύχτι';
+
+  @override
+  String get greetingLunchtime => 'Ώρα για φαγητό';
+
+  @override
+  String get greetingWindingDown => 'Ώρα για χαλάρωση';
+
+  @override
+  String get greetingGoodNight => 'Καληνύχτα';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Ακόμα ξύπνιοι';
+
+  @override
+  String get greetingEarlyStart => 'Πρωί πρωί';
+
+  @override
+  String get greetingNewDay => 'Νέα μέρα';
+
+  @override
+  String get greetingMorning => 'Καλημέρα';
+
+  @override
+  String get greetingBusyMorning => 'Γεμάτο πρωινό';
+
+  @override
+  String get greetingAfternoon => 'Καλό απόγευμα';
+
+  @override
+  String get greetingHomeStretch => 'Τελική ευθεία';
+
+  @override
+  String get greetingEvening => 'Καλησπέρα';
+
+  @override
+  String get unlimitedBadge => 'Απεριόριστο';
 }

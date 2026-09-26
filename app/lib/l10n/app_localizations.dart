@@ -13251,12 +13251,6 @@ abstract class AppLocalizations {
   /// **'{count} conversations have been merged successfully'**
   String mergeConversationsSuccessBody(int count);
 
-  /// Title for action item reminder notifications
-  ///
-  /// In en, this message translates to:
-  /// **'Omi Reminder'**
-  String get actionItemReminderTitle;
-
   /// Notification title when a device disconnects
   ///
   /// In en, this message translates to:
@@ -20439,24 +20433,6 @@ abstract class AppLocalizations {
   /// **'{name} + others'**
   String participantsSummaryUncounted(String name);
 
-  /// Home greeting before noon, above the user's name and today's date
-  ///
-  /// In en, this message translates to:
-  /// **'Good morning'**
-  String get goodMorning;
-
-  /// Home greeting from noon to 6 PM, above the user's name and today's date
-  ///
-  /// In en, this message translates to:
-  /// **'Good afternoon'**
-  String get goodAfternoon;
-
-  /// Home greeting after 6 PM, above the user's name and today's date
-  ///
-  /// In en, this message translates to:
-  /// **'Good evening'**
-  String get goodEvening;
-
   /// Welcome screen, before the Sign In link
   ///
   /// In en, this message translates to:
@@ -21290,6 +21266,120 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{done} of {total}'**
   String homeGettingStartedProgress(int done, int total);
+
+  /// Offline Sync: empty state of the Failed filter when no recording failed
+  ///
+  /// In en, this message translates to:
+  /// **'No failed recordings'**
+  String get noFailedRecordings;
+
+  /// Conversation Map: empty state title when no conversation has a location
+  ///
+  /// In en, this message translates to:
+  /// **'No places yet'**
+  String get mapNoPlacesTitle;
+
+  /// Conversation Map: empty state message under 'No places yet'
+  ///
+  /// In en, this message translates to:
+  /// **'Conversations appear here when Omi knows where they happened.'**
+  String get mapNoPlacesMessage;
+
+  /// Conversation long-press menu: start choosing other conversations to merge this one with
+  ///
+  /// In en, this message translates to:
+  /// **'Merge With…'**
+  String get mergeWithEllipsis;
+
+  /// Shown when Enable is tapped on an integration whose setup (a connect or sign-in step) is not done yet; the setup step opens next
+  ///
+  /// In en, this message translates to:
+  /// **'Finish setting up {appName} to turn it on'**
+  String finishSetupToEnable(String appName);
+
+  /// Home greeting (large title) for midnight to 2 AM; keep it short (fits one line with the first name after it)
+  ///
+  /// In en, this message translates to:
+  /// **'Up late'**
+  String get greetingUpLate;
+
+  /// Home greeting (large title) for noon to 2 PM; keep it short (fits one line with the first name after it)
+  ///
+  /// In en, this message translates to:
+  /// **'Lunchtime'**
+  String get greetingLunchtime;
+
+  /// Home greeting (large title) for 8 PM to 10 PM; keep it short (fits one line with the first name after it)
+  ///
+  /// In en, this message translates to:
+  /// **'Winding down'**
+  String get greetingWindingDown;
+
+  /// Home greeting (large title) for 10 PM to midnight; keep it short (fits one line with the first name after it)
+  ///
+  /// In en, this message translates to:
+  /// **'Good night'**
+  String get greetingGoodNight;
+
+  /// Home's greeting with the reader's first name after it, when it fits one line
+  ///
+  /// In en, this message translates to:
+  /// **'{greeting}, {name}'**
+  String greetingWithName(String greeting, String name);
+
+  /// Home greeting (large title) for 2 AM to 4 AM; keep it short so the first name fits after it on one line
+  ///
+  /// In en, this message translates to:
+  /// **'Still up'**
+  String get greetingStillUp;
+
+  /// Home greeting (large title) for 4 AM to 6 AM; keep it short so the first name fits after it on one line
+  ///
+  /// In en, this message translates to:
+  /// **'Early start'**
+  String get greetingEarlyStart;
+
+  /// Home greeting (large title) for 6 AM to 8 AM; keep it short so the first name fits after it on one line
+  ///
+  /// In en, this message translates to:
+  /// **'New day'**
+  String get greetingNewDay;
+
+  /// Home greeting (large title) for 8 AM to 10 AM; keep it short so the first name fits after it on one line
+  ///
+  /// In en, this message translates to:
+  /// **'Morning'**
+  String get greetingMorning;
+
+  /// Home greeting (large title) for 10 AM to noon; keep it short so the first name fits after it on one line
+  ///
+  /// In en, this message translates to:
+  /// **'Busy morning'**
+  String get greetingBusyMorning;
+
+  /// Home greeting (large title) for 2 PM to 4 PM; keep it short so the first name fits after it on one line
+  ///
+  /// In en, this message translates to:
+  /// **'Afternoon'**
+  String get greetingAfternoon;
+
+  /// Home greeting (large title) for 4 PM to 6 PM, the end of the working day; keep it short so the first name fits after it on one line
+  ///
+  /// In en, this message translates to:
+  /// **'Home stretch'**
+  String get greetingHomeStretch;
+
+  /// Home greeting (large title) for 6 PM to 8 PM; keep it short so the first name fits after it on one line
+  ///
+  /// In en, this message translates to:
+  /// **'Evening'**
+  String get greetingEvening;
+
+  /// The plan name on the small lock badge over a locked conversation (unlocks with that plan); keep it one short word
+  ///
+  /// In en, this message translates to:
+  /// **'Unlimited'**
+  String get unlimitedBadge;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

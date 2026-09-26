@@ -8653,10 +8653,6 @@
             }
         }
     },
-    "actionItemReminderTitle": "Omi நினைவூட்டல்",
-    "@actionItemReminderTitle": {
-        "description": "Title for action item reminder notifications"
-    },
     "deviceDisconnectedTitle": "{deviceName} துண்டிக்கப்பட்டது",
     "@deviceDisconnectedTitle": {
         "description": "Notification title when a device disconnects",
@@ -11075,9 +11071,6 @@
     "captureStorageAlmostFull": "சேமிப்பகம் கிட்டத்தட்ட நிரம்பியது",
     "capturePendantDisconnectedDetail": "உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது. பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.",
     "participantsSummaryUncounted": "{name} மற்றும் மற்றவர்கள்",
-    "goodMorning": "காலை வணக்கம்",
-    "goodAfternoon": "மதிய வணக்கம்",
-    "goodEvening": "மாலை வணக்கம்",
     "alreadyHaveAccount": "ஏற்கனவே கணக்கு உள்ளதா?",
     "signInToOmi": "Omi-இல் உள்நுழைக",
     "signInSubtitle": "உங்கள் உரையாடல்களும் நினைவுகளும் உங்கள் கணக்குடன் தொலைபேசி, Mac, இணையத்தில் இருக்கும்.",
@@ -11216,5 +11209,24 @@
     "tipStarBody": "நட்சத்திரமிட்ட உரையாடல்களைப் பின்னர் எளிதாகக் கண்டுபிடிக்கலாம்.",
     "tipPrivateTitle": "இயல்பாகவே தனிப்பட்டது",
     "tipPrivateBody": "நீங்கள் பகிராத வரை உங்கள் உரையாடல்கள் தனிப்பட்டவையாகவே இருக்கும்.",
-    "homeGettingStartedProgress": "{done}/{total}"
+    "homeGettingStartedProgress": "{done}/{total}",
+    "noFailedRecordings": "தோல்வியடைந்த பதிவுகள் இல்லை",
+    "mapNoPlacesTitle": "இன்னும் இடங்கள் இல்லை",
+    "mapNoPlacesMessage": "உரையாடல்கள் எங்கு நடந்தன என்று Omi அறிந்ததும் இங்கே தோன்றும்.",
+    "mergeWithEllipsis": "இதனுடன் இணை…",
+    "finishSetupToEnable": "{appName} ஐ இயக்க அதன் அமைப்பை முடிக்கவும்",
+    "greetingUpLate": "நள்ளிரவு",
+    "greetingLunchtime": "மதிய உணவு நேரம்",
+    "greetingWindingDown": "ஓய்வு நேரம்",
+    "greetingGoodNight": "இனிய இரவு",
+    "greetingWithName": "{greeting}, {name}",
+    "greetingStillUp": "விடியற்காலை",
+    "greetingEarlyStart": "அதிகாலை",
+    "greetingNewDay": "புதிய நாள்",
+    "greetingMorning": "காலை வணக்கம்",
+    "greetingBusyMorning": "பரபரப்பான காலை",
+    "greetingAfternoon": "மதிய வணக்கம்",
+    "greetingHomeStretch": "நாளின் இறுதி",
+    "greetingEvening": "மாலை வணக்கம்",
+    "unlimitedBadge": "வரம்பற்றது"
 }

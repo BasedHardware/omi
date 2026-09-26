@@ -113,6 +113,42 @@ void main() {
     expect(_probeColor(tester), OmiPalette.dark.surface0);
   });
 
+  testWidgets('a sheet left open under a theme switch repaints itself, not just its content', (tester) async {
+    // Settings → Appearance: the sheet stays open under the page where the switch happens, and must
+    // not come back dark behind light cards (or the other way round).
+    OmiAppearance.mode.value = OmiAppearanceMode.dark;
+    await tester.pumpWidget(OmiAppearanceScope(
+      builder: (_) => MaterialApp(
+        theme: buildOmiTheme(),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: TextButton(
+                onPressed: () => showOmiSheet<void>(context: context, builder: (_) => const _Probe()),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    Color sheetColor() => tester
+        .widget<Material>(find.descendant(of: find.byType(BottomSheet), matching: find.byType(Material)).first)
+        .color!;
+    expect(sheetColor(), OmiPalette.dark.sheet);
+
+    OmiAppearance.mode.value = OmiAppearanceMode.light;
+    await tester.pumpAndSettle();
+    expect(sheetColor(), OmiPalette.light.sheet);
+    expect(_probeColor(tester), OmiPalette.light.surface0);
+
+    OmiAppearance.mode.value = OmiAppearanceMode.dark;
+    await tester.pumpAndSettle();
+    expect(sheetColor(), OmiPalette.dark.sheet);
+  });
+
   testWidgets('System follows the phone when it switches between light and dark', (tester) async {
     addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
     tester.platformDispatcher.platformBrightnessTestValue = Brightness.light;

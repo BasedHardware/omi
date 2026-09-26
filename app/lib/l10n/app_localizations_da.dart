@@ -7024,9 +7024,6 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi-påmindelse';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName frakoblet';
   }
@@ -11211,15 +11208,6 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'Godmorgen';
-
-  @override
-  String get goodAfternoon => 'God eftermiddag';
-
-  @override
-  String get goodEvening => 'Godaften';
-
-  @override
   String get alreadyHaveAccount => 'Har du allerede en konto?';
 
   @override
@@ -11677,4 +11665,65 @@ class AppLocalizationsDa extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done af $total';
   }
+
+  @override
+  String get noFailedRecordings => 'Ingen mislykkede optagelser';
+
+  @override
+  String get mapNoPlacesTitle => 'Ingen steder endnu';
+
+  @override
+  String get mapNoPlacesMessage => 'Samtaler vises her, når Omi ved, hvor de fandt sted.';
+
+  @override
+  String get mergeWithEllipsis => 'Flet med…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Gør opsætningen af $appName færdig for at slå den til';
+  }
+
+  @override
+  String get greetingUpLate => 'Oppe sent';
+
+  @override
+  String get greetingLunchtime => 'Frokosttid';
+
+  @override
+  String get greetingWindingDown => 'Tid til at slappe af';
+
+  @override
+  String get greetingGoodNight => 'Godnat';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Stadig vågen';
+
+  @override
+  String get greetingEarlyStart => 'Tidlig start';
+
+  @override
+  String get greetingNewDay => 'Ny dag';
+
+  @override
+  String get greetingMorning => 'Godmorgen';
+
+  @override
+  String get greetingBusyMorning => 'Travl formiddag';
+
+  @override
+  String get greetingAfternoon => 'God eftermiddag';
+
+  @override
+  String get greetingHomeStretch => 'Sidste stræk';
+
+  @override
+  String get greetingEvening => 'Godaften';
+
+  @override
+  String get unlimitedBadge => 'Ubegrænset';
 }

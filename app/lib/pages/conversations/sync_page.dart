@@ -607,17 +607,12 @@ class _SyncPageState extends State<SyncPage> {
     final isPending = filter == WalStatusFilter.pending;
     final isCorrupted = filter == WalStatusFilter.corrupted;
     return OmiEmptyState(
-      glyph: FaIcon(
-        isPending
-            ? FontAwesomeIcons.circleCheck
-            : isCorrupted
-                ? FontAwesomeIcons.triangleExclamation
-                : FontAwesomeIcons.clockRotateLeft,
-      ),
+      // An empty Failed list is good news: nothing failed (not "File unavailable", a per-file state).
+      glyph: FaIcon(isPending || isCorrupted ? FontAwesomeIcons.circleCheck : FontAwesomeIcons.clockRotateLeft),
       title: isPending
           ? context.l10n.noPendingRecordings
           : isCorrupted
-              ? context.l10n.syncStatusFileUnavailable
+              ? context.l10n.noFailedRecordings
               : context.l10n.noProcessedRecordings,
       message: isPending ? context.l10n.allCaughtUp : null,
     );

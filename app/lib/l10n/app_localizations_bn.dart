@@ -7048,9 +7048,6 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi রিমাইন্ডার';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName সংযোগ বিচ্ছিন্ন';
   }
@@ -11226,15 +11223,6 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'সুপ্রভাত';
-
-  @override
-  String get goodAfternoon => 'শুভ অপরাহ্ন';
-
-  @override
-  String get goodEvening => 'শুভ সন্ধ্যা';
-
-  @override
   String get alreadyHaveAccount => 'ইতিমধ্যে অ্যাকাউন্ট আছে?';
 
   @override
@@ -11690,4 +11678,65 @@ class AppLocalizationsBn extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done/$total';
   }
+
+  @override
+  String get noFailedRecordings => 'কোনো ব্যর্থ রেকর্ডিং নেই';
+
+  @override
+  String get mapNoPlacesTitle => 'এখনো কোনো স্থান নেই';
+
+  @override
+  String get mapNoPlacesMessage => 'Omi যখন জানে কথোপকথনগুলো কোথায় হয়েছে, তখন সেগুলো এখানে দেখা যায়।';
+
+  @override
+  String get mergeWithEllipsis => 'এর সাথে মার্জ করুন…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return '$appName চালু করতে এর সেটআপ শেষ করুন';
+  }
+
+  @override
+  String get greetingUpLate => 'গভীর রাত';
+
+  @override
+  String get greetingLunchtime => 'দুপুরের খাবারের সময়';
+
+  @override
+  String get greetingWindingDown => 'বিশ্রামের সময়';
+
+  @override
+  String get greetingGoodNight => 'শুভ রাত্রি';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'এখনও জেগে';
+
+  @override
+  String get greetingEarlyStart => 'ভোরের শুরু';
+
+  @override
+  String get greetingNewDay => 'নতুন দিন';
+
+  @override
+  String get greetingMorning => 'সুপ্রভাত';
+
+  @override
+  String get greetingBusyMorning => 'ব্যস্ত সকাল';
+
+  @override
+  String get greetingAfternoon => 'শুভ অপরাহ্ন';
+
+  @override
+  String get greetingHomeStretch => 'দিনের শেষ ভাগ';
+
+  @override
+  String get greetingEvening => 'শুভ সন্ধ্যা';
+
+  @override
+  String get unlimitedBadge => 'আনলিমিটেড';
 }

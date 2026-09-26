@@ -8653,10 +8653,6 @@
             }
         }
     },
-    "actionItemReminderTitle": "Omi রিমাইন্ডার",
-    "@actionItemReminderTitle": {
-        "description": "Title for action item reminder notifications"
-    },
     "deviceDisconnectedTitle": "{deviceName} সংযোগ বিচ্ছিন্ন",
     "@deviceDisconnectedTitle": {
         "description": "Notification title when a device disconnects",
@@ -11075,9 +11071,6 @@
     "captureStorageAlmostFull": "স্টোরেজ প্রায় পূর্ণ",
     "capturePendantDisconnectedDetail": "আপনার পেনড্যান্ট এই ফোনের সাথে সংযোগ হারিয়েছে। পেনড্যান্ট চালু ও কাছে থাকলে Omi নিজে থেকেই আবার সংযোগ করবে। এর আগে যা রেকর্ড হয়েছে তা নিরাপদ।",
     "participantsSummaryUncounted": "{name} ও অন্যরা",
-    "goodMorning": "সুপ্রভাত",
-    "goodAfternoon": "শুভ অপরাহ্ন",
-    "goodEvening": "শুভ সন্ধ্যা",
     "alreadyHaveAccount": "ইতিমধ্যে অ্যাকাউন্ট আছে?",
     "signInToOmi": "Omi-তে সাইন ইন করুন",
     "signInSubtitle": "আপনার কথোপকথন ও স্মৃতি আপনার অ্যাকাউন্টের সাথে ফোন, Mac ও ওয়েবে থাকে।",
@@ -11216,5 +11209,24 @@
     "tipStarBody": "স্টার দেওয়া কথোপকথন পরে সহজে খুঁজে পাওয়া যায়।",
     "tipPrivateTitle": "ডিফল্টভাবে ব্যক্তিগত",
     "tipPrivateBody": "আপনি শেয়ার না করলে আপনার কথোপকথন ব্যক্তিগতই থাকে।",
-    "homeGettingStartedProgress": "{done}/{total}"
+    "homeGettingStartedProgress": "{done}/{total}",
+    "noFailedRecordings": "কোনো ব্যর্থ রেকর্ডিং নেই",
+    "mapNoPlacesTitle": "এখনো কোনো স্থান নেই",
+    "mapNoPlacesMessage": "Omi যখন জানে কথোপকথনগুলো কোথায় হয়েছে, তখন সেগুলো এখানে দেখা যায়।",
+    "mergeWithEllipsis": "এর সাথে মার্জ করুন…",
+    "finishSetupToEnable": "{appName} চালু করতে এর সেটআপ শেষ করুন",
+    "greetingUpLate": "গভীর রাত",
+    "greetingLunchtime": "দুপুরের খাবারের সময়",
+    "greetingWindingDown": "বিশ্রামের সময়",
+    "greetingGoodNight": "শুভ রাত্রি",
+    "greetingWithName": "{greeting}, {name}",
+    "greetingStillUp": "এখনও জেগে",
+    "greetingEarlyStart": "ভোরের শুরু",
+    "greetingNewDay": "নতুন দিন",
+    "greetingMorning": "সুপ্রভাত",
+    "greetingBusyMorning": "ব্যস্ত সকাল",
+    "greetingAfternoon": "শুভ অপরাহ্ন",
+    "greetingHomeStretch": "দিনের শেষ ভাগ",
+    "greetingEvening": "শুভ সন্ধ্যা",
+    "unlimitedBadge": "আনলিমিটেড"
 }

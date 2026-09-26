@@ -8653,10 +8653,6 @@
             }
         }
     },
-    "actionItemReminderTitle": "Omi Reminder",
-    "@actionItemReminderTitle": {
-        "description": "Title for action item reminder notifications"
-    },
     "deviceDisconnectedTitle": "{deviceName} Nadiskonekta",
     "@deviceDisconnectedTitle": {
         "description": "Notification title when a device disconnects",
@@ -11075,9 +11071,6 @@
     "captureStorageAlmostFull": "Halos puno na ang storage",
     "capturePendantDisconnectedDetail": "Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.",
     "participantsSummaryUncounted": "{name} at iba pa",
-    "goodMorning": "Magandang umaga",
-    "goodAfternoon": "Magandang hapon",
-    "goodEvening": "Magandang gabi",
     "alreadyHaveAccount": "May account ka na?",
     "signInToOmi": "Mag-sign in sa Omi",
     "signInSubtitle": "Kasama ng account mo ang iyong mga usapan at alaala sa telepono, Mac at web.",
@@ -11216,5 +11209,24 @@
     "tipStarBody": "Madaling mahanap mamaya ang mga usapang may star.",
     "tipPrivateTitle": "Pribado bilang default",
     "tipPrivateBody": "Pribado ang mga usapan mo maliban kung ibahagi mo.",
-    "homeGettingStartedProgress": "{done} sa {total}"
+    "homeGettingStartedProgress": "{done} sa {total}",
+    "noFailedRecordings": "Walang nabigong recording",
+    "mapNoPlacesTitle": "Wala pang mga lugar",
+    "mapNoPlacesMessage": "Lumalabas dito ang mga usapan kapag alam ng Omi kung saan ito nangyari.",
+    "mergeWithEllipsis": "Pagsamahin sa…",
+    "finishSetupToEnable": "Tapusin ang pag-set up ng {appName} para i-on ito",
+    "greetingUpLate": "Hatinggabi na",
+    "greetingLunchtime": "Tanghalian na",
+    "greetingWindingDown": "Oras ng pahinga",
+    "greetingGoodNight": "Mahimbing na tulog",
+    "greetingWithName": "{greeting}, {name}",
+    "greetingStillUp": "Gising pa rin",
+    "greetingEarlyStart": "Maagang simula",
+    "greetingNewDay": "Bagong araw",
+    "greetingMorning": "Magandang umaga",
+    "greetingBusyMorning": "Abalang umaga",
+    "greetingAfternoon": "Magandang hapon",
+    "greetingHomeStretch": "Huling bahagi",
+    "greetingEvening": "Magandang gabi",
+    "unlimitedBadge": "Unlimited"
 }

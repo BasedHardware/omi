@@ -379,6 +379,40 @@ class _UpNextRow extends StatelessWidget {
 class HomeThisWeek extends StatelessWidget {
   const HomeThisWeek({super.key});
 
+  /// The last week counted from the whole list. The loaded list follows the Conversations tab's
+  /// filters (Starred, a folder, a device, a date, a search) — counting it then showed a filtered
+  /// sliver as the week (39 s instead of 3 h 18 m) until the filter was cleared.
+  static ({DateTime weekStart, List<int> seconds})? _lastWeek;
+
+  @visibleForTesting
+  static void resetForTest() => _lastWeek = null;
+
+  /// Seconds captured each day of the week starting [weekStart], or null when the loaded list cannot
+  /// say: it is filtered, or does not reach back to Monday yet.
+  static List<int>? countWeek(ConversationProvider provider, DateTime weekStart) {
+    final filtered = provider.showStarredOnly ||
+        provider.selectedFolderId != null ||
+        provider.sourceFilter != ConversationSourceFilter.all ||
+        provider.selectedStartDate != null ||
+        provider.hasActiveSearch;
+    if (filtered) return null;
+    final conversations = provider.conversations.where((c) => !c.discarded).toList();
+    if (conversations.isEmpty) return null;
+    final oldest =
+        conversations.map((c) => (c.startedAt ?? c.createdAt).toLocal()).reduce((a, b) => a.isBefore(b) ? a : b);
+    final complete = oldest.isBefore(weekStart) || !provider.hasMoreConversations;
+    if (!complete) return null;
+    final seconds = List<int>.filled(7, 0);
+    for (final c in conversations) {
+      final start = (c.startedAt ?? c.createdAt).toLocal();
+      if (start.isBefore(weekStart)) continue;
+      final day = DateTime(start.year, start.month, start.day).difference(weekStart).inDays;
+      if (day < 0 || day > 6) continue;
+      seconds[day] += c.getDurationInSeconds();
+    }
+    return seconds;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<ConversationProvider>(
@@ -386,21 +420,12 @@ class HomeThisWeek extends StatelessWidget {
         final now = DateTime.now();
         final today = DateTime(now.year, now.month, now.day);
         final weekStart = today.subtract(Duration(days: today.weekday - DateTime.monday));
-        final conversations = provider.conversations.where((c) => !c.discarded).toList();
-        if (conversations.isEmpty) return const SizedBox.shrink();
-        final oldest =
-            conversations.map((c) => (c.startedAt ?? c.createdAt).toLocal()).reduce((a, b) => a.isBefore(b) ? a : b);
-        final complete = oldest.isBefore(weekStart) || !provider.hasMoreConversations;
-        if (!complete) return const SizedBox.shrink();
-
-        final seconds = List<int>.filled(7, 0);
-        for (final c in conversations) {
-          final start = (c.startedAt ?? c.createdAt).toLocal();
-          if (start.isBefore(weekStart)) continue;
-          final day = DateTime(start.year, start.month, start.day).difference(weekStart).inDays;
-          if (day < 0 || day > 6) continue;
-          seconds[day] += c.getDurationInSeconds();
-        }
+        final counted = countWeek(provider, weekStart);
+        if (counted != null) _lastWeek = (weekStart: weekStart, seconds: counted);
+        final last = _lastWeek;
+        // While the list is filtered, the week last counted from the whole list (this week's only).
+        final seconds = counted ?? (last != null && last.weekStart == weekStart ? last.seconds : null);
+        if (seconds == null) return const SizedBox.shrink();
         final total = seconds.fold<int>(0, (a, b) => a + b);
         if (total == 0) return const SizedBox.shrink();
         final peak = seconds.reduce(math.max);

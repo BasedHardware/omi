@@ -6981,9 +6981,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'תזכורת Omi';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName התנתק';
   }
@@ -11135,15 +11132,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'בוקר טוב';
-
-  @override
-  String get goodAfternoon => 'צהריים טובים';
-
-  @override
-  String get goodEvening => 'ערב טוב';
-
-  @override
   String get alreadyHaveAccount => 'כבר יש לך חשבון?';
 
   @override
@@ -11594,4 +11582,65 @@ class AppLocalizationsHe extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done מתוך $total';
   }
+
+  @override
+  String get noFailedRecordings => 'אין הקלטות שנכשלו';
+
+  @override
+  String get mapNoPlacesTitle => 'עדיין אין מקומות';
+
+  @override
+  String get mapNoPlacesMessage => 'שיחות מופיעות כאן כש-Omi יודע איפה הן התקיימו.';
+
+  @override
+  String get mergeWithEllipsis => 'מיזוג עם…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'יש להשלים את ההגדרה של $appName כדי להפעיל אותה';
+  }
+
+  @override
+  String get greetingUpLate => 'ער עד מאוחר';
+
+  @override
+  String get greetingLunchtime => 'שעת צהריים';
+
+  @override
+  String get greetingWindingDown => 'זמן להירגע';
+
+  @override
+  String get greetingGoodNight => 'לילה טוב';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'עדיין ערים';
+
+  @override
+  String get greetingEarlyStart => 'משכימים קום';
+
+  @override
+  String get greetingNewDay => 'יום חדש';
+
+  @override
+  String get greetingMorning => 'בוקר טוב';
+
+  @override
+  String get greetingBusyMorning => 'בוקר עמוס';
+
+  @override
+  String get greetingAfternoon => 'צהריים טובים';
+
+  @override
+  String get greetingHomeStretch => 'הישורת האחרונה';
+
+  @override
+  String get greetingEvening => 'ערב טוב';
+
+  @override
+  String get unlimitedBadge => 'בלתי מוגבל';
 }

@@ -7048,9 +7048,6 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi подсетник';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName је одсоединут';
   }
@@ -11239,15 +11236,6 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'Добро јутро';
-
-  @override
-  String get goodAfternoon => 'Добар дан';
-
-  @override
-  String get goodEvening => 'Добро вече';
-
-  @override
   String get alreadyHaveAccount => 'Већ имаш налог?';
 
   @override
@@ -11701,4 +11689,65 @@ class AppLocalizationsSr extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done од $total';
   }
+
+  @override
+  String get noFailedRecordings => 'Нема неуспелих снимака';
+
+  @override
+  String get mapNoPlacesTitle => 'Још нема места';
+
+  @override
+  String get mapNoPlacesMessage => 'Разговори се овде приказују када Omi зна где су се одвили.';
+
+  @override
+  String get mergeWithEllipsis => 'Споји са…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Завршите подешавање апликације $appName да бисте је укључили';
+  }
+
+  @override
+  String get greetingUpLate => 'Касно је';
+
+  @override
+  String get greetingLunchtime => 'Време за ручак';
+
+  @override
+  String get greetingWindingDown => 'Време за одмор';
+
+  @override
+  String get greetingGoodNight => 'Лаку ноћ';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Још будни';
+
+  @override
+  String get greetingEarlyStart => 'Рани почетак';
+
+  @override
+  String get greetingNewDay => 'Нови дан';
+
+  @override
+  String get greetingMorning => 'Добро јутро';
+
+  @override
+  String get greetingBusyMorning => 'Ужурбано јутро';
+
+  @override
+  String get greetingAfternoon => 'Добар дан';
+
+  @override
+  String get greetingHomeStretch => 'Финиш дана';
+
+  @override
+  String get greetingEvening => 'Добро вече';
+
+  @override
+  String get unlimitedBadge => 'Неограничено';
 }

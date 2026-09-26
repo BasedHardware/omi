@@ -1,6 +1,11 @@
+import 'dart:async';
+import 'dart:ui' as ui;
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -74,7 +79,7 @@ const List<_Tab> _tabs = [
   _Tab('Home', 'assets/icons/tab-today.svg', 'assets/icons/tab-today-fill.svg'),
   _Tab('Conversations', 'assets/icons/tab-conversations.svg', 'assets/icons/tab-conversations-fill.svg'),
   _Tab('Tasks', 'assets/icons/tab-todo.svg', 'assets/icons/tab-todo-fill.svg'),
-  _Tab('Devices', 'assets/icons/tab-devices.svg', 'assets/icons/tab-devices-fill.svg'),
+  _Tab('Apps', 'assets/icons/grid.svg', 'assets/icons/grid-fill.svg'),
 ];
 
 /// Dock geometry, expanded and folded (Liquid Dock).
@@ -128,6 +133,12 @@ class _DockMetrics {
 }
 
 const double _kGap = 2;
+
+/// The narrowest the open Ask field lays out at (mark, field, send), however narrow the dock is.
+const double _kAskFieldMinWidth = 200;
+
+/// How long the Omi mark is held to open Memories instead of Ask.
+const Duration kAskHoldDuration = Duration(seconds: 2);
 const Duration _kFold = Duration(milliseconds: 550);
 const Duration _kGlide = Duration(milliseconds: 500);
 
@@ -142,6 +153,7 @@ class BottomNavBar extends StatefulWidget {
     this.onTabWarmup,
     this.onAskTap,
     this.onAskSubmit,
+    this.onAskHold,
     this.compact,
   });
 
@@ -157,6 +169,10 @@ class BottomNavBar extends StatefulWidget {
   /// A question typed into the open dock. Null makes Ask open Chat directly.
   final ValueChanged<String>? onAskSubmit;
 
+  /// Holding the Omi mark for [kAskHoldDuration] (a firm haptic when it fires): Memories. A hidden
+  /// shortcut, also offered to screen readers as a named action.
+  final VoidCallback? onAskHold;
+
   /// Scroll-driven fold (labels hidden). Null keeps the dock expanded.
   final ValueListenable<bool>? compact;
 
@@ -168,6 +184,12 @@ class _BottomNavBarState extends State<BottomNavBar> {
   bool _asking = false;
   final TextEditingController _question = TextEditingController();
   final FocusNode _questionFocus = FocusNode();
+
+  /// While asking, the dock and its scrim rise above the whole screen — the header, To do's New
+  /// Task, any floating bar — so only the question is lit. The dock keeps its state on the way up
+  /// and back ([_dockKey]), so it still grows into the field.
+  final OverlayPortalController _askLayer = OverlayPortalController();
+  final GlobalKey _dockKey = GlobalKey(debugLabel: 'bottom_nav_dock');
 
   @override
   void dispose() {
@@ -182,6 +204,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
       return;
     }
     OmiHaptics.selection();
+    _askLayer.show();
     setState(() => _asking = true);
     Future.delayed(const Duration(milliseconds: 380), () {
       if (mounted && _asking) _questionFocus.requestFocus();
@@ -190,7 +213,9 @@ class _BottomNavBarState extends State<BottomNavBar> {
 
   void _closeAsk() {
     _questionFocus.unfocus();
-    if (mounted) setState(() => _asking = false);
+    if (!mounted) return;
+    _askLayer.hide();
+    setState(() => _asking = false);
   }
 
   void _submit() {
@@ -223,12 +248,21 @@ class _BottomNavBarState extends State<BottomNavBar> {
 
   @override
   Widget build(BuildContext context) {
+    final dock = KeyedSubtree(key: _dockKey, child: _buildDock(context));
+    return OverlayPortal(
+      controller: _askLayer,
+      overlayChildBuilder: (_) => dock,
+      child: _askLayer.isShowing ? const SizedBox.shrink() : dock,
+    );
+  }
+
+  Widget _buildDock(BuildContext context) {
     // Keep the provider-dependent subtree narrow when HomePage's broad Consumer rebuilds for
     // unrelated focus or loading changes.
     return Selector<HomeProvider, int>(
       selector: (_, home) => home.selectedIndex,
       builder: (context, selectedIndex, _) {
-        final labels = [context.l10n.today, context.l10n.conversations, context.l10n.toDo, context.l10n.devices];
+        final labels = [context.l10n.today, context.l10n.conversations, context.l10n.toDo, context.l10n.apps];
         final compactListenable = widget.compact ?? const _AlwaysFalse();
         return ValueListenableBuilder<bool>(
           valueListenable: compactListenable,
@@ -261,7 +295,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
                     child: GestureDetector(
                       key: const Key('bottom_nav_ask_scrim'),
                       onTap: _closeAsk,
-                      child: ColoredBox(color: OmiColors.scrim),
+                      child: const _AskScrim(),
                     ),
                   ),
                 Align(
@@ -439,19 +473,41 @@ class _BottomNavBarState extends State<BottomNavBar> {
       loops: omiLoopsEnabled(context) ? null : 1,
     );
     if (!_asking) {
+      final hold = widget.onAskHold;
       return Semantics(
         button: true,
         label: l10n.askOmi,
         onTap: _openAsk,
+        customSemanticsActions: hold == null ? null : {CustomSemanticsAction(label: l10n.memories): hold},
         excludeSemantics: true,
-        child: GestureDetector(
+        child: _AskMark(
           key: const Key('bottom_nav_ask'),
-          behavior: HitTestBehavior.opaque,
+          size: m.ask,
           onTap: _openAsk,
-          child: SizedBox(width: m.ask, height: m.ask, child: Center(child: ring)),
+          onHold: hold,
+          child: ring,
         ),
       );
     }
+    // The field is laid out at full width from the first frame and clipped while the dock grows
+    // around it, so nothing squeezes or overflows mid-animation.
+    return ClipRect(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth < _kAskFieldMinWidth ? _kAskFieldMinWidth : constraints.maxWidth;
+          return OverflowBox(
+            alignment: Alignment.centerLeft,
+            minWidth: width,
+            maxWidth: width,
+            child: _askField(context, ring),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _askField(BuildContext context, Widget ring) {
+    final l10n = context.l10n;
     return Row(
       children: [
         // The mark opens Chat itself (history, voice).
@@ -514,6 +570,124 @@ class _BottomNavBarState extends State<BottomNavBar> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Behind the open Ask field: everything else blurs and dims in a quarter second, so the question
+/// is the one lit thing on screen.
+class _AskScrim extends StatelessWidget {
+  const _AskScrim();
+
+  @override
+  Widget build(BuildContext context) {
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: reduce ? 1 : 0, end: 1),
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOut,
+      builder: (context, t, _) => ClipRect(
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 14 * t, sigmaY: 14 * t),
+          child: ColoredBox(color: OmiColors.scrim.withValues(alpha: OmiColors.scrim.a * t)),
+        ),
+      ),
+    );
+  }
+}
+
+/// The dock's Omi mark: a tap asks; held for [kAskHoldDuration] it runs [onHold] with a firm
+/// haptic, and letting go then does nothing more. Read from raw touches rather than the gesture
+/// arena so nothing around the dock can claim the hold, and a thumb may drift a little while it
+/// waits. The mark swells while held so the reader can tell something is coming.
+class _AskMark extends StatefulWidget {
+  const _AskMark({super.key, required this.size, required this.onTap, this.onHold, required this.child});
+
+  final double size;
+  final VoidCallback onTap;
+  final VoidCallback? onHold;
+  final Widget child;
+
+  @override
+  State<_AskMark> createState() => _AskMarkState();
+}
+
+class _AskMarkState extends State<_AskMark> with SingleTickerProviderStateMixin {
+  /// How far a held thumb may wander before the touch counts as neither a tap nor a hold.
+  static const double _slop = kTouchSlop * 1.5;
+
+  late final AnimationController _swell = AnimationController(vsync: this, duration: kAskHoldDuration);
+  Timer? _timer;
+  int? _pointer;
+  Offset? _start;
+  bool _held = false;
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _swell.dispose();
+    super.dispose();
+  }
+
+  void _down(PointerDownEvent event) {
+    if (_pointer != null) return;
+    _pointer = event.pointer;
+    _start = event.position;
+    _held = false;
+    final hold = widget.onHold;
+    if (hold == null) return;
+    if (!MediaQuery.disableAnimationsOf(context)) _swell.forward(from: 0);
+    _timer = Timer(kAskHoldDuration, () {
+      _held = true;
+      _swell.reverse();
+      OmiHaptics.heavy();
+      hold();
+    });
+  }
+
+  void _move(PointerMoveEvent event) {
+    final start = _start;
+    if (event.pointer != _pointer || start == null) return;
+    if ((event.position - start).distance > _slop) _end();
+  }
+
+  void _up(PointerUpEvent event) {
+    if (event.pointer != _pointer) return;
+    final tapped = !_held && _start != null;
+    _end();
+    if (tapped) widget.onTap();
+  }
+
+  void _cancel(PointerCancelEvent event) {
+    if (event.pointer == _pointer) _end();
+  }
+
+  void _end() {
+    _timer?.cancel();
+    _timer = null;
+    _pointer = null;
+    _start = null;
+    if (_swell.value > 0) _swell.reverse();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: _down,
+      onPointerMove: _move,
+      onPointerUp: _up,
+      onPointerCancel: _cancel,
+      child: SizedBox(
+        width: widget.size,
+        height: widget.size,
+        child: Center(
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 1, end: 1.3).animate(CurvedAnimation(parent: _swell, curve: Curves.easeIn)),
+            child: widget.child,
+          ),
+        ),
+      ),
     );
   }
 }

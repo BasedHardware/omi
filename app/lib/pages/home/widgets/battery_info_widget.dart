@@ -169,6 +169,7 @@ class _DevicePill extends StatelessWidget {
         onTap: onTap,
         // v2: a 44pt glass pill (the device, its battery) on the leading edge of Home.
         child: OmiGlass(
+          inHeader: true,
           borderRadius: OmiRadius.pillAll,
           child: Container(
             height: OmiSize.minTap,
@@ -242,7 +243,12 @@ abstract final class PhoneCapture {
     if (captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused) {
       // A phone recording is running: finish it (processed, except Transcribe Later,
       // whose local file is finalized on stop), then any pendant it paused resumes.
-      await captureProvider.finishCapture();
+      try {
+        await captureProvider.finishCapture();
+      } catch (_) {
+        if (context.mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+        return;
+      }
       PlatformManager.instance.analytics.phoneMicRecordingStopped();
       return;
     }

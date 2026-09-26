@@ -16,7 +16,8 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
-import 'package:omi/pages/devices/devices_page.dart';
+import 'package:omi/pages/apps/page.dart';
+import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
@@ -67,6 +68,7 @@ import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/ui/ui.dart';
 import 'home_deep_links.dart';
 import 'home_navigation.dart';
+import 'home_widgets_publisher.dart';
 import 'home_prompt_gate.dart';
 import 'widgets/battery_info_widget.dart';
 import 'package:omi/pages/search/search_page.dart';
@@ -146,7 +148,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   final GlobalKey<HomeContentPageState> _homeContentPageKey = GlobalKey<HomeContentPageState>();
   final GlobalKey<State<ConversationsPage>> _conversationsPageKey = GlobalKey<State<ConversationsPage>>();
   final GlobalKey<State<ActionItemsPage>> _actionItemsPageKey = GlobalKey<State<ActionItemsPage>>();
-  final GlobalKey<DevicesPageState> _devicesPageKey = GlobalKey<DevicesPageState>();
+  final GlobalKey<AppsPageState> _appsPageKey = GlobalKey<AppsPageState>();
   // Keep the IndexedStack slots stable, but defer constructing non-selected
   // tabs until the user visits them. Once created, a tab remains in the stack
   // so its scroll position and other state are preserved.
@@ -217,7 +219,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         _pages[pageIndex] = ActionItemsPage(key: _actionItemsPageKey, onAddGoal: _addGoal);
         break;
       case 3:
-        _pages[pageIndex] = DevicesPage(key: _devicesPageKey);
+        _pages[pageIndex] = AppsPage(key: _appsPageKey);
         break;
     }
   }
@@ -283,7 +285,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         }
         break;
       case 3:
-        _devicesPageKey.currentState?.scrollToTop();
+        _appsPageKey.currentState?.scrollToTop();
         break;
     }
   }
@@ -527,6 +529,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     _checkForAnnouncements();
     _registerAutoSyncCallback();
     _initQuickActions();
+    _startHomeWidgets();
     // Toasts float above the tab bar (and the chat bar on Home) while this shell is the visible route.
     OmiFeedback.bottomClearance = (ctx) {
       final onHome = ctx.read<HomeProvider>().selectedIndex == 0;
@@ -669,6 +672,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           syncProvider.syncWals(trigger: WakeTrigger.deviceConnected);
         }
       };
+    });
+  }
+
+  /// The iOS Home Screen widgets (Devices, Up next, Latest) follow what this Home shows.
+  HomeWidgetsPublisher? _homeWidgets;
+
+  void _startHomeWidgets() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _homeWidgets != null) return;
+      _homeWidgets = HomeWidgetsPublisher(
+        devices: context.read<DeviceProvider>(),
+        tasks: context.read<ActionItemsProvider>(),
+        conversations: context.read<ConversationProvider>(),
+        l10n: () => context.l10n,
+      )..start();
     });
   }
 
@@ -829,6 +847,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 // in onTapDown makes the tap itself feel stuck.
                                 onTabWarmup: _schedulePageInitialization,
                                 onAskTap: _openChat,
+                                onAskHold: _openMemories,
                                 onAskSubmit: (question) => routeToPage(
                                   context,
                                   ChatPage(isPivotBottom: false, initialQuestion: question),
@@ -876,6 +895,12 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     routeToPage(context, ChatPage(isPivotBottom: false, autoStartVoice: voice));
   }
 
+  /// Holding the dock's Omi mark: Memories (a hidden shortcut; screen readers get it as an action).
+  void _openMemories() {
+    PlatformManager.instance.analytics.pageOpened('Memories');
+    routeToPage(context, const MemoriesPage());
+  }
+
   /// v2 shell header, per tab: Home has the device pill and the account button; the other tabs
   /// group their actions in one glass capsule on the trailing edge.
   PreferredSizeWidget _buildAppBar(BuildContext context) {
@@ -884,6 +909,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       backgroundColor: OmiColors.surface0,
       titleSpacing: OmiSpacing.sm,
       elevation: 0,
+      // The header's glass casts a small contact shadow; the bar must not cut it into a hard edge.
+      clipBehavior: Clip.none,
       title: Selector<HomeProvider, int>(
         selector: (_, home) => home.selectedIndex,
         builder: (context, index, _) => Row(
@@ -898,6 +925,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             ],
             if (index == 1) ..._conversationsActions(context),
             if (index == 2) _tasksActions(context),
+            if (index == 3) const AppsCreateMenu(),
           ],
         ),
       ),
@@ -1014,6 +1042,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void dispose() {
+    _homeWidgets?.dispose();
     _dockCompact.dispose();
     HomeNavigation.unregister(_openRoute);
     _promptGate.detach();

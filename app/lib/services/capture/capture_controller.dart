@@ -72,6 +72,14 @@ import 'package:omi/backend/schema/message_event.dart'
         FreemiumThresholdReachedEvent,
         SegmentsDeletedEvent;
 
+/// Whether a live source can be muted: the phone and pendants can; glasses (OmiGlass, Ray-Ban Meta)
+/// keep taking photos, so Stop is their only control. The capture card, the Live page and the
+/// Lock Screen use this one rule.
+bool captureSourceCanMute(DeviceType? device, {required String? source}) {
+  if (source == null || source == ConversationSource.phone.name) return true;
+  return device != DeviceType.openglass && device != DeviceType.raybanMeta;
+}
+
 class CaptureController extends ChangeNotifier
     with MessageNotifierMixin
     implements ITransctiptSegmentSocketServiceListener {
@@ -525,12 +533,6 @@ class CaptureController extends ChangeNotifier
             }
           }
         }
-      case 'star':
-        if (isConversationMarkedForStarring) {
-          unmarkConversationForStarring();
-        } else {
-          markConversationForStarring();
-        }
       case 'finish':
         if (phone) {
           final hasContent = segments.isNotEmpty || photos.isNotEmpty;
@@ -540,14 +542,18 @@ class CaptureController extends ChangeNotifier
           }
           if (!batch && hasContent) await forceProcessingCurrentConversation();
         } else {
-          // From the Lock Screen or the island, Finish stops for good: this conversation is closed
-          // and the pendant pauses, so the presentation ends instead of starting the next one.
+          // From the Lock Screen or the island, Stop is the app's Stop: this conversation is closed
+          // and the pendant stops listening until Start, so the presentation ends. Glasses cannot
+          // pause; their next conversation simply begins.
           if (batch) {
             startNewOfflineRecording();
           } else if (segments.isNotEmpty || photos.isNotEmpty) {
             await forceProcessingCurrentConversation();
           }
-          if (!isPaused) await pauseDeviceRecording();
+          if (canMuteLiveSource) {
+            if (!isPaused) await pauseDeviceRecording();
+            await _markStopped();
+          }
         }
       default:
         throw ArgumentError.value(action, 'action');
@@ -599,9 +605,13 @@ class CaptureController extends ChangeNotifier
       if (committed.muted) {
         if (_offlineSessionStartSeconds != 0) _offlineMuteStartedAt ??= _nowSeconds;
         updateRecordingState(RecordingState.pause);
-      } else if (_offlineSessionStartSeconds != 0 && _offlineMuteStartedAt != null) {
-        _offlineSessionStartSeconds += _nowSeconds - _offlineMuteStartedAt!;
-        _offlineMuteStartedAt = null;
+      } else {
+        // Listening again (Start, Unmute, the pendant's double tap): no longer stopped.
+        if (_preferences.getBool(_stoppedKey)) await _preferences.saveBool(_stoppedKey, false);
+        if (_offlineSessionStartSeconds != 0 && _offlineMuteStartedAt != null) {
+          _offlineSessionStartSeconds += _nowSeconds - _offlineMuteStartedAt!;
+          _offlineMuteStartedAt = null;
+        }
       }
       notifyListeners();
       return committed.revision;
@@ -802,6 +812,56 @@ class CaptureController extends ChangeNotifier
 
   /// When the live recording started (it keeps counting through a pause), or null.
   DateTime? get liveCaptureStartedAt => _recordingTelemetry.startedAt;
+
+  // The one capture clock every surface shows (Home card, Live page): how long this recording has
+  // been listening. It stands still while muted and starts again from zero after Stop.
+  String? _clockRecordingId;
+  DateTime? _clockAnchor;
+  DateTime? _clockPausedAt;
+  bool _clockRestartsOnStart = false;
+
+  /// Listening time of the current recording, or null when nothing is recording.
+  Duration? get captureElapsed {
+    final anchor = _clockAnchor;
+    if (anchor == null) return null;
+    final elapsed = (_clockPausedAt ?? _now()).difference(anchor);
+    return elapsed.isNegative ? Duration.zero : elapsed;
+  }
+
+  void _advanceCaptureClock() {
+    final id = activeRecordingId;
+    final startedAt = liveCaptureStartedAt;
+    if (id == null || startedAt == null) {
+      _clockRecordingId = null;
+      _clockAnchor = null;
+      _clockPausedAt = null;
+      return;
+    }
+    final now = _now();
+    if (id != _clockRecordingId || _clockAnchor == null) {
+      // Counted from when this recording is first seen, as the Lock Screen counts it.
+      _clockRecordingId = id;
+      _clockAnchor = now;
+      _clockPausedAt = null;
+    }
+    final stopped = isPaused || isCallActive || recordingState == RecordingState.pause;
+    if (stopped) {
+      _clockPausedAt ??= now;
+    } else if (_clockRestartsOnStart) {
+      _clockRestartsOnStart = false;
+      _clockAnchor = now;
+      _clockPausedAt = null;
+    } else if (_clockPausedAt != null) {
+      _clockAnchor = _clockAnchor!.add(now.difference(_clockPausedAt!));
+      _clockPausedAt = null;
+    }
+  }
+
+  @override
+  void notifyListeners() {
+    _advanceCaptureClock();
+    super.notifyListeners();
+  }
 
   /// Committed ownership for controller/API reads. Effect bodies that must see
   /// the in-flight target read `_capture.stagedReadModel.phoneOwnsCapture`.
@@ -2607,6 +2667,51 @@ class CaptureController extends ChangeNotifier
   Future<void> finishCapture() async {
     final outcome = await _capture.dispatch(const FinishRequested());
     outcome.throwIfFailed();
+  }
+
+  // -- Start / Stop / Mute: the reader's two controls ----------------------------------------------
+
+  static const String _stoppedKey = 'captureStoppedByReader';
+
+  /// The reader pressed Stop and has not pressed Start since. A connected pendant stays paused
+  /// while stopped; a phone recording simply ends. Mute is the other pause: it keeps the
+  /// conversation open, so Unmute carries on where it left off.
+  bool get isCaptureStopped => isPaused && _preferences.getBool(_stoppedKey);
+
+  /// Whether the live source can be muted ([captureSourceCanMute]).
+  bool get canMuteLiveSource => captureSourceCanMute(_recordingDevice?.type, source: liveCaptureSource);
+
+  /// Stop: this conversation is saved and listening stops until Start — a pendant would otherwise
+  /// listen on and begin the next conversation by itself. With nothing heard there is nothing to
+  /// save, so no empty conversation appears. Returns whether anything was heard, so the caller can
+  /// show where it went.
+  Future<bool> stopCapture() async {
+    final heard = segments.isNotEmpty || photos.isNotEmpty;
+    final source = liveCaptureSource;
+    if (source == null || source == ConversationSource.phone.name) {
+      // Finishing is the phone's stop and processes what it heard; a silent one only stops.
+      if (heard) {
+        await finishCapture();
+      } else {
+        await stopStreamRecording();
+      }
+      return heard;
+    }
+    if (heard) await finishCapture();
+    if (canMuteLiveSource) {
+      if (!isPaused) await pauseCapture();
+      await _markStopped();
+    }
+    return heard;
+  }
+
+  /// Start after Stop: the stopped source listens again, as a new conversation from zero.
+  Future<void> startCapture() => resumeCapture();
+
+  Future<void> _markStopped() async {
+    _clockRestartsOnStart = true;
+    await _preferences.saveBool(_stoppedKey, true);
+    notifyListeners();
   }
 
   // -- Pendant suspension ------------------------------------------------------

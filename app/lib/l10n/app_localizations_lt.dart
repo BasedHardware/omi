@@ -7042,9 +7042,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi priminimas';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName atjungtas';
   }
@@ -11243,15 +11240,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'Labas rytas';
-
-  @override
-  String get goodAfternoon => 'Laba diena';
-
-  @override
-  String get goodEvening => 'Labas vakaras';
-
-  @override
   String get alreadyHaveAccount => 'Jau turi paskyrą?';
 
   @override
@@ -11706,4 +11694,65 @@ class AppLocalizationsLt extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done iš $total';
   }
+
+  @override
+  String get noFailedRecordings => 'Nepavykusių įrašų nėra';
+
+  @override
+  String get mapNoPlacesTitle => 'Vietų dar nėra';
+
+  @override
+  String get mapNoPlacesMessage => 'Pokalbiai čia rodomi, kai Omi žino, kur jie vyko.';
+
+  @override
+  String get mergeWithEllipsis => 'Sujungti su…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Užbaikite $appName sąranką, kad galėtumėte ją įjungti';
+  }
+
+  @override
+  String get greetingUpLate => 'Vėlus metas';
+
+  @override
+  String get greetingLunchtime => 'Pietų metas';
+
+  @override
+  String get greetingWindingDown => 'Laikas atsipūsti';
+
+  @override
+  String get greetingGoodNight => 'Labanakt';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Dar nemiegate';
+
+  @override
+  String get greetingEarlyStart => 'Ankstyva pradžia';
+
+  @override
+  String get greetingNewDay => 'Nauja diena';
+
+  @override
+  String get greetingMorning => 'Labas rytas';
+
+  @override
+  String get greetingBusyMorning => 'Įtemptas rytas';
+
+  @override
+  String get greetingAfternoon => 'Laba diena';
+
+  @override
+  String get greetingHomeStretch => 'Finišo tiesioji';
+
+  @override
+  String get greetingEvening => 'Labas vakaras';
+
+  @override
+  String get unlimitedBadge => 'Neribojamas';
 }

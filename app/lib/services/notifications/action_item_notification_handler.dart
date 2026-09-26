@@ -1,6 +1,8 @@
 import 'package:awesome_notifications/awesome_notifications.dart';
+import 'package:intl/intl.dart';
 
 import 'package:omi/app_globals.dart';
+import 'package:omi/ui/format/omi_date_format.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -35,13 +37,23 @@ class ActionItemNotificationHandler {
       // Use action item ID hash as notification ID
       final notificationId = actionItemId.hashCode;
 
+      // v2 Notifications: the task is the notification — its words as the title, when it is due
+      // under them ("Today, 5:00 PM"). The app's icon already says it comes from Omi.
       final ctx = globalNavigatorKey.currentContext;
+      final String when;
+      if (ctx != null && ctx.mounted) {
+        final dates = OmiDateFormat.of(ctx);
+        when = ctx.l10n.taskDueDayTime(dates.dayHeader(dueAt), dates.time(dueAt));
+      } else {
+        // In the background there is no screen to borrow the reader's formats from.
+        when = DateFormat.MMMd().add_jm().format(dueAt);
+      }
       await _awesomeNotifications.createNotification(
         content: NotificationContent(
           id: notificationId,
           channelKey: channelKey,
-          title: '⏰ ${ctx?.l10n.actionItemReminderTitle ?? 'Omi Reminder'}',
-          body: description,
+          title: description,
+          body: when,
           payload: {'action_item_id': actionItemId, 'navigate_to': '/action-items'},
           notificationLayout: NotificationLayout.Default,
           wakeUpScreen: true,

@@ -6920,9 +6920,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omiリマインダー';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceNameが切断されました';
   }
@@ -11039,15 +11036,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'おはようございます';
-
-  @override
-  String get goodAfternoon => 'こんにちは';
-
-  @override
-  String get goodEvening => 'こんばんは';
-
-  @override
   String get alreadyHaveAccount => 'すでにアカウントをお持ちですか?';
 
   @override
@@ -11495,4 +11483,65 @@ class AppLocalizationsJa extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done/$total';
   }
+
+  @override
+  String get noFailedRecordings => '失敗した録音はありません';
+
+  @override
+  String get mapNoPlacesTitle => 'まだ場所がありません';
+
+  @override
+  String get mapNoPlacesMessage => 'Omiが会話の場所を把握すると、ここに表示されます。';
+
+  @override
+  String get mergeWithEllipsis => '結合…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return '$appName をオンにするには、設定を完了してください';
+  }
+
+  @override
+  String get greetingUpLate => '夜更かし中';
+
+  @override
+  String get greetingLunchtime => 'お昼どき';
+
+  @override
+  String get greetingWindingDown => 'ひと息つく時間';
+
+  @override
+  String get greetingGoodNight => 'おやすみなさい';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting、$nameさん';
+  }
+
+  @override
+  String get greetingStillUp => 'まだ起きてる';
+
+  @override
+  String get greetingEarlyStart => '早起きですね';
+
+  @override
+  String get greetingNewDay => '新しい一日';
+
+  @override
+  String get greetingMorning => 'おはよう';
+
+  @override
+  String get greetingBusyMorning => '忙しい午前';
+
+  @override
+  String get greetingAfternoon => 'こんにちは';
+
+  @override
+  String get greetingHomeStretch => 'あと少し';
+
+  @override
+  String get greetingEvening => 'こんばんは';
+
+  @override
+  String get unlimitedBadge => '無制限';
 }

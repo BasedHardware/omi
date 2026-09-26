@@ -205,7 +205,16 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
   }
 
   Future<void> _setTranscribeLater(bool value) async {
-    final accepted = await context.read<CaptureProvider>().setBatchMode(value);
+    final bool accepted;
+    try {
+      accepted = await context.read<CaptureProvider>().setBatchMode(value);
+    } catch (_) {
+      // The capture owner could not switch modes: the toggle stays as it was, and says so.
+      if (!mounted) return;
+      OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      setState(() {});
+      return;
+    }
     if (!mounted) return;
     if (!accepted) OmiFeedback.error(context, context.l10n.transcribeLaterNote);
     setState(() {});

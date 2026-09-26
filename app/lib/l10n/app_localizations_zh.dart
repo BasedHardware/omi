@@ -6911,9 +6911,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi 提醒';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName 已断开连接';
   }
@@ -11017,15 +11014,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => '早上好';
-
-  @override
-  String get goodAfternoon => '下午好';
-
-  @override
-  String get goodEvening => '晚上好';
-
-  @override
   String get alreadyHaveAccount => '已有账户？';
 
   @override
@@ -11473,4 +11461,65 @@ class AppLocalizationsZh extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done/$total';
   }
+
+  @override
+  String get noFailedRecordings => '没有失败的录音';
+
+  @override
+  String get mapNoPlacesTitle => '还没有地点';
+
+  @override
+  String get mapNoPlacesMessage => '当 Omi 知道对话发生的地点时，对话会显示在这里。';
+
+  @override
+  String get mergeWithEllipsis => '合并…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return '完成 $appName 的设置后即可开启';
+  }
+
+  @override
+  String get greetingUpLate => '夜深了';
+
+  @override
+  String get greetingLunchtime => '午饭时间';
+
+  @override
+  String get greetingWindingDown => '放松时间';
+
+  @override
+  String get greetingGoodNight => '晚安';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting，$name';
+  }
+
+  @override
+  String get greetingStillUp => '还没睡';
+
+  @override
+  String get greetingEarlyStart => '起得真早';
+
+  @override
+  String get greetingNewDay => '新的一天';
+
+  @override
+  String get greetingMorning => '早上好';
+
+  @override
+  String get greetingBusyMorning => '忙碌的上午';
+
+  @override
+  String get greetingAfternoon => '下午好';
+
+  @override
+  String get greetingHomeStretch => '冲刺时刻';
+
+  @override
+  String get greetingEvening => '晚上好';
+
+  @override
+  String get unlimitedBadge => '无限';
 }

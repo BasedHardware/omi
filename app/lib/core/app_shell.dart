@@ -63,9 +63,14 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
+  /// The places Omi's own links open (see [openAppLink]).
+  static const Set<String> _appLinkRoutes = {'capture', 'action-items', 'conversation', 'conversations', 'settings'};
+
   void openAppLink(Uri uri) async {
-    if (uri.host == 'app' && uri.path == '/capture') {
-      await HomeNavigation.openRoute('/capture?${uri.query}');
+    // Omi's own links — the Lock Screen's recording card and the Home Screen widgets:
+    // <scheme>://app/<route> opens that place in Home (To do, a conversation, device settings).
+    if (uri.host == 'app' && _appLinkRoutes.contains(uri.pathSegments.firstOrNull)) {
+      await HomeNavigation.openRoute(uri.hasQuery ? '${uri.path}?${uri.query}' : uri.path);
       return;
     }
     if (uri.pathSegments.isEmpty) {

@@ -8653,10 +8653,6 @@
             }
         }
     },
-    "actionItemReminderTitle": "Нагадаванне Omi",
-    "@actionItemReminderTitle": {
-        "description": "Title for action item reminder notifications"
-    },
     "deviceDisconnectedTitle": "{deviceName} адключаны",
     "@deviceDisconnectedTitle": {
         "description": "Notification title when a device disconnects",
@@ -11075,9 +11071,6 @@
     "captureStorageAlmostFull": "Памяць амаль запоўнена",
     "capturePendantDisconnectedDetail": "Кулон страціў сувязь з гэтым тэлефонам. Omi перападключыцца сам, калі кулон уключаны і побач. Усё, што запісана да гэтага, захавана.",
     "participantsSummaryUncounted": "{name} і іншыя",
-    "goodMorning": "Добрай раніцы",
-    "goodAfternoon": "Добры дзень",
-    "goodEvening": "Добры вечар",
     "alreadyHaveAccount": "Ужо ёсць уліковы запіс?",
     "signInToOmi": "Увайдзіце ў Omi",
     "signInSubtitle": "Вашы размовы і ўспаміны даступныя ў вашым уліковым запісе на тэлефоне, Mac і ў вэбе.",
@@ -11216,5 +11209,24 @@
     "tipStarBody": "Размовы з зоркай лёгка знайсці потым.",
     "tipPrivateTitle": "Прыватна па змаўчанні",
     "tipPrivateBody": "Вашы размовы застаюцца прыватнымі, пакуль вы імі не падзеліцеся.",
-    "homeGettingStartedProgress": "{done} з {total}"
+    "homeGettingStartedProgress": "{done} з {total}",
+    "noFailedRecordings": "Няма няўдалых запісаў",
+    "mapNoPlacesTitle": "Пакуль няма месцаў",
+    "mapNoPlacesMessage": "Размовы з'яўляюцца тут, калі Omi ведае, дзе яны адбыліся.",
+    "mergeWithEllipsis": "Аб'яднаць з…",
+    "finishSetupToEnable": "Завяршыце наладку {appName}, каб уключыць",
+    "greetingUpLate": "Позняя гадзіна",
+    "greetingLunchtime": "Час абеду",
+    "greetingWindingDown": "Час адпачыць",
+    "greetingGoodNight": "Дабранач",
+    "greetingWithName": "{greeting}, {name}",
+    "greetingStillUp": "Яшчэ не спіце",
+    "greetingEarlyStart": "Ранні пачатак",
+    "greetingNewDay": "Новы дзень",
+    "greetingMorning": "Добрай раніцы",
+    "greetingBusyMorning": "Насычаная раніца",
+    "greetingAfternoon": "Добры дзень",
+    "greetingHomeStretch": "Фінішная прамая",
+    "greetingEvening": "Добры вечар",
+    "unlimitedBadge": "Неабмежаваны"
 }

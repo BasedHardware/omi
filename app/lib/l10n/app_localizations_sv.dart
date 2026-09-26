@@ -7044,9 +7044,6 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi-påminnelse';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName frånkopplad';
   }
@@ -11233,15 +11230,6 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'God morgon';
-
-  @override
-  String get goodAfternoon => 'God eftermiddag';
-
-  @override
-  String get goodEvening => 'God kväll';
-
-  @override
   String get alreadyHaveAccount => 'Har du redan ett konto?';
 
   @override
@@ -11696,4 +11684,65 @@ class AppLocalizationsSv extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done av $total';
   }
+
+  @override
+  String get noFailedRecordings => 'Inga misslyckade inspelningar';
+
+  @override
+  String get mapNoPlacesTitle => 'Inga platser än';
+
+  @override
+  String get mapNoPlacesMessage => 'Samtal visas här när Omi vet var de ägde rum.';
+
+  @override
+  String get mergeWithEllipsis => 'Slå ihop med…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Slutför konfigurationen av $appName för att slå på den';
+  }
+
+  @override
+  String get greetingUpLate => 'Uppe sent';
+
+  @override
+  String get greetingLunchtime => 'Lunchdags';
+
+  @override
+  String get greetingWindingDown => 'Dags att varva ner';
+
+  @override
+  String get greetingGoodNight => 'God natt';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Fortfarande vaken';
+
+  @override
+  String get greetingEarlyStart => 'Tidig start';
+
+  @override
+  String get greetingNewDay => 'Ny dag';
+
+  @override
+  String get greetingMorning => 'God morgon';
+
+  @override
+  String get greetingBusyMorning => 'Full förmiddag';
+
+  @override
+  String get greetingAfternoon => 'God eftermiddag';
+
+  @override
+  String get greetingHomeStretch => 'Upploppet';
+
+  @override
+  String get greetingEvening => 'God kväll';
+
+  @override
+  String get unlimitedBadge => 'Obegränsad';
 }

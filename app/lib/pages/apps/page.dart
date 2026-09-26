@@ -54,43 +54,6 @@ class AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin {
   }
 
   /// "+": create an app or add an MCP server.
-  Widget _createMenu(BuildContext context) {
-    return PullDownButton(
-      itemBuilder: (context) => [
-        PullDownMenuItem(
-          title: context.l10n.createAnApp,
-          subtitle: context.l10n.createAndShareYourApp,
-          iconWidget: const Icon(Icons.apps, size: 18),
-          onTap: () {
-            PlatformManager.instance.analytics.pageOpened('Submit App');
-            routeToPage(context, const AddAppPage());
-          },
-        ),
-        PullDownMenuItem(
-          title: context.l10n.addMcpServer,
-          subtitle: context.l10n.connectExternalAiTools,
-          iconWidget: const Icon(Icons.cable, size: 18),
-          onTap: () {
-            PlatformManager.instance.analytics.pageOpened('Add MCP Server');
-            routeToPage(context, const AddMcpServerPage());
-          },
-        ),
-      ],
-      buttonBuilder: (context, showMenu) => OmiToolbarCapsule(
-        children: [
-          OmiIconButton(
-            icon: const Icon(Icons.add),
-            label: context.l10n.createAnApp,
-            onPressed: () {
-              OmiHaptics.selection();
-              showMenu();
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   void dispose() {
     _scrollController.dispose();
@@ -104,7 +67,7 @@ class AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin {
       backgroundColor: OmiColors.surface0,
       // Pushed as a page (Settings → Apps): the round back button and "+" to create an app or add
       // an MCP server; the body carries the large "Apps" title.
-      appBar: widget.showAppBar ? OmiAppBar(leading: const OmiBackButton(), actions: [_createMenu(context)]) : null,
+      appBar: widget.showAppBar ? const OmiAppBar(leading: OmiBackButton(), actions: [AppsCreateMenu()]) : null,
       body: DefaultTabController(
         length: 1,
         initialIndex: 0,
@@ -162,6 +125,49 @@ class EmptyAppsWidget extends StatelessWidget {
               )
             : const SliverToBoxAdapter(child: SizedBox.shrink());
       },
+    );
+  }
+}
+
+/// "+" on Apps: create an app, or add an MCP server (the tab header and the pushed page).
+class AppsCreateMenu extends StatelessWidget {
+  const AppsCreateMenu({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return PullDownButton(
+      itemBuilder: (context) => [
+        PullDownMenuItem(
+          title: context.l10n.createAnApp,
+          subtitle: context.l10n.createAndShareYourApp,
+          iconWidget: const Icon(Icons.apps, size: 18),
+          onTap: () {
+            PlatformManager.instance.analytics.pageOpened('Submit App');
+            routeToPage(context, const AddAppPage());
+          },
+        ),
+        PullDownMenuItem(
+          title: context.l10n.addMcpServer,
+          subtitle: context.l10n.connectExternalAiTools,
+          iconWidget: const Icon(Icons.cable, size: 18),
+          onTap: () {
+            PlatformManager.instance.analytics.pageOpened('Add MCP Server');
+            routeToPage(context, const AddMcpServerPage());
+          },
+        ),
+      ],
+      buttonBuilder: (context, showMenu) => OmiToolbarCapsule(
+        children: [
+          OmiIconButton(
+            icon: const Icon(Icons.add),
+            label: context.l10n.createAnApp,
+            onPressed: () {
+              OmiHaptics.selection();
+              showMenu();
+            },
+          ),
+        ],
+      ),
     );
   }
 }

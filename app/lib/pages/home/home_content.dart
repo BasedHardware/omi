@@ -22,6 +22,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/ui_guidelines.dart';
@@ -99,11 +100,13 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
 
               // Live capture widget — shows when device or phone mic is recording; its quiet twin
               // (how to start listening) takes the same place when nothing is.
-              if (firstDay)
-                const SliverToBoxAdapter(child: FirstDayListeningHero())
-              else
-                const SliverToBoxAdapter(child: ConversationCaptureWidget(showsCall: true)),
-              const SliverToBoxAdapter(child: IdleCaptureCard()),
+              if (firstDay) ...[
+                const SliverToBoxAdapter(child: FirstDayListeningHero()),
+                const SliverToBoxAdapter(child: IdleCaptureCard()),
+              ] else
+                const SliverToBoxAdapter(
+                  child: ConversationCaptureWidget(showsCall: true, idle: IdleCaptureCard()),
+                ),
 
               const SliverToBoxAdapter(child: CaptureRecoveryBanner()),
 
@@ -192,36 +195,42 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     return provider.conversations.where((c) => !c.discarded).length;
   }
 
-  /// v2 Main: "Good afternoon" as the large title, then the user's first name and today's date.
+  /// v2 Main: the greeting for the hour as the large title — with the reader's first name when it
+  /// fits the line ("Busy morning, Ashwin"), else the name moves to the line under it — then today.
   Widget _buildGreeting(BuildContext context) {
     final l10n = context.l10n;
     final now = DateTime.now();
-    final greeting = now.hour < 12
-        ? l10n.goodMorning
-        : now.hour < 18
-            ? l10n.goodAfternoon
-            : l10n.goodEvening;
+    final greeting = HomeGreeting.forHour(l10n, now.hour);
     final name = SharedPreferencesUtil().givenName.trim();
     final day = OmiDateFormat.of(context).longDay(now);
     return Padding(
       // v2: the title sits 4pt inside the 16pt page margin, like every large title.
       padding:
           const EdgeInsets.fromLTRB(OmiSize.screenMargin + OmiSpacing.xxs, OmiSpacing.xxs, OmiSize.screenMargin, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Semantics(
-            header: true,
-            child: Text(greeting, style: OmiType.largeTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            name.isEmpty ? day : '$name · $day',
-            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final personal = name.isEmpty ? null : l10n.greetingWithName(greeting, name);
+          final fits = personal != null &&
+              HomeGreeting.fitsOneLine(personal, OmiType.largeTitle, constraints.maxWidth,
+                  MediaQuery.textScalerOf(context), Directionality.of(context));
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Semantics(
+                header: true,
+                child: Text(fits ? personal : greeting,
+                    style: OmiType.largeTitle, maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                fits || name.isEmpty ? day : '$name · $day',
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -297,5 +306,37 @@ class HomeConversationsPreview extends StatelessWidget {
         );
       }),
     );
+  }
+}
+
+/// Home's greeting: something different every two hours, from Up late to Good night, short enough
+/// that the reader's first name fits after it.
+abstract final class HomeGreeting {
+  static String forHour(AppLocalizations l10n, int hour) => switch ((hour % 24) ~/ 2) {
+        0 => l10n.greetingUpLate,
+        1 => l10n.greetingStillUp,
+        2 => l10n.greetingEarlyStart,
+        3 => l10n.greetingNewDay,
+        4 => l10n.greetingMorning,
+        5 => l10n.greetingBusyMorning,
+        6 => l10n.greetingLunchtime,
+        7 => l10n.greetingAfternoon,
+        8 => l10n.greetingHomeStretch,
+        9 => l10n.greetingEvening,
+        10 => l10n.greetingWindingDown,
+        _ => l10n.greetingGoodNight,
+      };
+
+  /// Whether [text] fits one line of [maxWidth] in [style] at the reader's text size.
+  static bool fitsOneLine(String text, TextStyle style, double maxWidth, TextScaler scaler, TextDirection direction) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      maxLines: 1,
+      textScaler: scaler,
+      textDirection: direction,
+    )..layout(maxWidth: maxWidth);
+    final fits = !painter.didExceedMaxLines;
+    painter.dispose();
+    return fits;
   }
 }

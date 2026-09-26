@@ -7040,9 +7040,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi meeldetuletus';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName ühendus katkestatud';
   }
@@ -11221,15 +11218,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'Tere hommikust';
-
-  @override
-  String get goodAfternoon => 'Tere päevast';
-
-  @override
-  String get goodEvening => 'Tere õhtust';
-
-  @override
   String get alreadyHaveAccount => 'Kas sul on juba konto?';
 
   @override
@@ -11684,4 +11672,65 @@ class AppLocalizationsEt extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done/$total';
   }
+
+  @override
+  String get noFailedRecordings => 'Nurjunud salvestusi pole';
+
+  @override
+  String get mapNoPlacesTitle => 'Kohti veel pole';
+
+  @override
+  String get mapNoPlacesMessage => 'Vestlused ilmuvad siia, kui Omi teab, kus need toimusid.';
+
+  @override
+  String get mergeWithEllipsis => 'Ühenda…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Lõpeta rakenduse $appName seadistamine, et see sisse lülitada';
+  }
+
+  @override
+  String get greetingUpLate => 'Hiline tund';
+
+  @override
+  String get greetingLunchtime => 'Lõunaaeg';
+
+  @override
+  String get greetingWindingDown => 'Aeg puhata';
+
+  @override
+  String get greetingGoodNight => 'Head ööd';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Veel üleval';
+
+  @override
+  String get greetingEarlyStart => 'Varajane algus';
+
+  @override
+  String get greetingNewDay => 'Uus päev';
+
+  @override
+  String get greetingMorning => 'Tere hommikust';
+
+  @override
+  String get greetingBusyMorning => 'Tihe hommik';
+
+  @override
+  String get greetingAfternoon => 'Tere päevast';
+
+  @override
+  String get greetingHomeStretch => 'Lõpusirge';
+
+  @override
+  String get greetingEvening => 'Tere õhtust';
+
+  @override
+  String get unlimitedBadge => 'Piiramatu';
 }

@@ -12,7 +12,11 @@ class OmiMenuAction {
     required this.label,
     required this.onSelected,
     this.isDestructive = false,
+    this.key,
   });
+
+  /// Identifies the entry's row (automation and tests).
+  final Key? key;
 
   final IconData icon;
 

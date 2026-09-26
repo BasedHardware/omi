@@ -949,7 +949,7 @@
     "@rememberingSubtitle": {
         "description": "Remembering stat subtitle"
     },
-    "unlimitedPlan": "मर्यादित योजना",
+    "unlimitedPlan": "अमर्यादित योजना",
     "@unlimitedPlan": {
         "description": "Unlimited plan name"
     },
@@ -989,7 +989,7 @@
     "@upgrade": {
         "description": "Upgrade button"
     },
-    "upgradeToUnlimited": "मर्यादित अपग्रेड करा",
+    "upgradeToUnlimited": "अमर्यादित वर अपग्रेड करा",
     "@upgradeToUnlimited": {
         "description": "Message shown on locked memory items"
     },
@@ -8653,10 +8653,6 @@
             }
         }
     },
-    "actionItemReminderTitle": "Omi स्मरणपत्र",
-    "@actionItemReminderTitle": {
-        "description": "Title for action item reminder notifications"
-    },
     "deviceDisconnectedTitle": "{deviceName} डिस्कनेक्ट झाली",
     "@deviceDisconnectedTitle": {
         "description": "Notification title when a device disconnects",
@@ -11075,9 +11071,6 @@
     "captureStorageAlmostFull": "स्टोरेज जवळजवळ भरले",
     "capturePendantDisconnectedDetail": "तुमच्या पेंडंटचा या फोनशी संपर्क तुटला. पेंडंट चालू आणि जवळ असल्यावर Omi आपोआप पुन्हा कनेक्ट होईल. याआधी रेकॉर्ड झालेले सर्व सुरक्षित आहे.",
     "participantsSummaryUncounted": "{name} आणि इतर",
-    "goodMorning": "सुप्रभात",
-    "goodAfternoon": "शुभ दुपार",
-    "goodEvening": "शुभ संध्याकाळ",
     "alreadyHaveAccount": "आधीपासून खाते आहे?",
     "signInToOmi": "Omi मध्ये साइन इन करा",
     "signInSubtitle": "तुमची संभाषणे आणि आठवणी तुमच्या खात्यासोबत फोन, Mac आणि वेबवर राहतात.",
@@ -11216,5 +11209,24 @@
     "tipStarBody": "स्टार केलेली संभाषणे नंतर सहज सापडतात.",
     "tipPrivateTitle": "डीफॉल्टनुसार खाजगी",
     "tipPrivateBody": "तुम्ही शेअर करेपर्यंत तुमची संभाषणे खाजगी राहतात.",
-    "homeGettingStartedProgress": "{done}/{total}"
+    "homeGettingStartedProgress": "{done}/{total}",
+    "noFailedRecordings": "कोणतीही अयशस्वी रेकॉर्डिंग नाही",
+    "mapNoPlacesTitle": "अजून कोणतीही ठिकाणे नाहीत",
+    "mapNoPlacesMessage": "संभाषणे कुठे झाली हे Omi ला कळल्यावर ती इथे दिसतात.",
+    "mergeWithEllipsis": "यासोबत विलीन करा…",
+    "finishSetupToEnable": "{appName} सुरू करण्यासाठी त्याचे सेटअप पूर्ण करा",
+    "greetingUpLate": "रात्री उशिरा",
+    "greetingLunchtime": "जेवणाची वेळ",
+    "greetingWindingDown": "आरामाची वेळ",
+    "greetingGoodNight": "शुभ रात्री",
+    "greetingWithName": "{greeting}, {name}",
+    "greetingStillUp": "अजून जागे",
+    "greetingEarlyStart": "भल्या पहाटे",
+    "greetingNewDay": "नवा दिवस",
+    "greetingMorning": "सुप्रभात",
+    "greetingBusyMorning": "धावपळीची सकाळ",
+    "greetingAfternoon": "शुभ दुपार",
+    "greetingHomeStretch": "दिवस संपत आला",
+    "greetingEvening": "शुभ संध्याकाळ",
+    "unlimitedBadge": "अमर्यादित"
 }

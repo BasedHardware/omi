@@ -37,15 +37,12 @@ class SettingsDrawer extends StatefulWidget {
     // Settings is a grouped list: surface1 rows on the black page colour, so the sheet itself is
     // surface0 (showOmiSheet paints surface1). Same shell otherwise: OmiSheetScaffold content,
     // framework drag handle, trailing close X.
-    final showSheet = showModalBottomSheet<void>; // omi-ux-allow: raw-bottom-sheet -- surface0 grouped sheet
-    return showSheet(
+    // The colour is read each time the sheet paints, so Settings follows a light/dark switch made
+    // on a page opened from it.
+    return showOmiModalSheet<void>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      backgroundColor: OmiColors.surface0,
+      color: () => OmiColors.surface0,
       shape: const RoundedRectangleBorder(borderRadius: OmiRadius.sheetTop),
-      clipBehavior: Clip.antiAlias,
       builder: (context) => const FractionallySizedBox(heightFactor: 0.92, child: SettingsDrawer()),
     );
   }
@@ -185,9 +182,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 key: 'settings_group_privacy', icon: FontAwesomeIcons.shield, title: l10n.dataAndPrivacy),
             // Rev 3: bringing recordings over from Plaud, Limitless, Bee… sits at the top level.
             _row(SettingsDestination.importData,
-                key: 'settings_row_importData',
-                icon: FontAwesomeIcons.fileImport,
-                title: l10n.importFromOtherApps),
+                key: 'settings_row_importData', icon: FontAwesomeIcons.fileImport, title: l10n.importFromOtherApps),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
