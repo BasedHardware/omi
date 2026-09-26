@@ -5,20 +5,20 @@ import XCTest
 final class APIClientAssistantSettingsTests: XCTestCase {
 
   @MainActor
-  func testShippedTaskPromptExceedsBackendBoundAndIsOmittedFromSync() {
-    // The shipped default task prompt has been over the backend's 10k-code-point
-    // bound since at least June 2026, so it is deliberately omitted from sync
-    // (partial PATCH semantics) rather than truncated or sent to be 422-rejected.
-    // Raising the bound needs the backend limit deployed first: issue #11481.
-    XCTAssertGreaterThan(
+  func testShippedTaskPromptFitsBackendSyncContract() {
+    // The shipped default task prompt must fit the backend's 10k-code-point bound
+    // so it can sync. Oversized prompts are omitted (never truncated) to protect
+    // user-authored text; the shipped default is not that case (issue #11481).
+    XCTAssertLessThanOrEqual(
       TaskAssistantSettings.defaultAnalysisPrompt.unicodeScalars.count,
       TaskAssistantSettings.maximumSyncedAnalysisPromptLength)
-    XCTAssertNil(
+    XCTAssertEqual(
       SettingsSyncManager.promptForSync(
         TaskAssistantSettings.defaultAnalysisPrompt,
         assistantName: "task",
         maximumLength: TaskAssistantSettings.maximumSyncedAnalysisPromptLength,
-        shippedDefault: TaskAssistantSettings.defaultAnalysisPrompt))
+        shippedDefault: TaskAssistantSettings.defaultAnalysisPrompt),
+      TaskAssistantSettings.defaultAnalysisPrompt)
   }
 
   @MainActor
@@ -90,13 +90,14 @@ final class APIClientAssistantSettingsTests: XCTestCase {
     XCTAssertEqual(TaskAssistantSettings.shared.analysisPrompt, localPrompt)
   }
 
-  // MARK: - The shipped default is not unsynced user data (#11481)
+  // MARK: - A shipped default is not unsynced user data (#11481)
   //
   // The oversized-prompt protection defends text the user wrote that the server never
-  // accepted. The shipped task default is not that: it is over the 10k bound, but every
-  // install already has it, so there is nothing unsynced to lose. Treating it as owned
-  // made `applyRemotePrompt` refuse every remote prompt, so a prompt customised on one
-  // Mac could never reach a Mac still sitting on the default.
+  // accepted. A shipped task default is not that: every install already has it, so there
+  // is nothing unsynced to lose. Treating it as owned made `applyRemotePrompt` refuse
+  // every remote prompt, so a prompt customised on one Mac could never reach a Mac still
+  // sitting on a default. The current default now fits the bound and syncs; the legacy
+  // oversized-default case is pinned below with a synthetic previous default.
   //
   // Ownership is asserted through its observable consequence — whether a later pull is
   // allowed to hydrate — rather than by reading the bookkeeping key.
@@ -123,13 +124,17 @@ final class APIClientAssistantSettingsTests: XCTestCase {
       AssistantSettingsResponse(task: TaskSettingsResponse(analysisPrompt: remotePrompt)))
   }
 
-  /// Fresh install: nothing stored, so the getter serves the shipped default. The push
-  /// still omits it — it is over the bound — but must not claim it as unsynced user data,
-  /// or the account's own prompt can never arrive.
+  /// Legacy oversized shipped default (pre-trim builds). The push omits it because it is
+  /// over the bound, but must not claim it as unsynced user data, or the account's own
+  /// prompt can never arrive. The current default fits and syncs; see
+  /// testShippedTaskPromptFitsBackendSyncContract.
   @MainActor
-  func testShippedDefaultIsOmittedFromSyncWithoutBlockingLaterHydration() {
+  func testOversizedShippedDefaultIsOmittedFromSyncWithoutBlockingLaterHydration() {
     withTaskPromptState(owner: "owner-fresh-install") {
-      TaskAssistantSettings.shared.resetPromptToDefault()
+      let oversizedPreviousDefault = String(
+        repeating: "z", count: TaskAssistantSettings.maximumSyncedAnalysisPromptLength + 1)
+      TaskAssistantSettings.shared.analysisPrompt = oversizedPreviousDefault
+      SettingsSyncManager.recordLocalPromptOwner("task", isShippedDefault: true)
 
       XCTAssertNil(
         SettingsSyncManager.promptForSync(
@@ -137,7 +142,7 @@ final class APIClientAssistantSettingsTests: XCTestCase {
           assistantName: "task",
           maximumLength: TaskAssistantSettings.maximumSyncedAnalysisPromptLength,
           shippedDefault: TaskAssistantSettings.defaultAnalysisPrompt),
-        "the shipped default is over the bound, so it still cannot be sent")
+        "an oversized shipped default is omitted rather than truncated or sent")
 
       hydrateTaskPrompt("prompt from another mac")
 
