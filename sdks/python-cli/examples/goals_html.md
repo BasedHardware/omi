@@ -15,9 +15,9 @@ Export goals (up to 100 per page, including inactive/completed milestones):
 omi --json goal list --limit 100 --include-inactive > goals_0.json
 ```
 
-Check that the command succeeded before building the report. To retrieve
-subsequent pages, increase `--offset` by 100 into a separate file. The converter
-accepts multiple files and merges duplicate IDs seamlessly.
+Check that the command succeeded before building the report. The CLI caps
+exports at 100 goals. The converter accepts multiple files and merges duplicate IDs
+seamlessly if you merge exports across accounts or runs.
 
 Save the following as `goals_to_html.py`:
 
@@ -101,7 +101,16 @@ def load(sources: Iterable[str | Path]) -> list[dict[str, Any]]:
         path = Path(source)
         content = path.read_bytes().decode("utf-8-sig")
         data = json.loads(content)
-        raw_items = data.get("goals") or data.get("items") or data.get("data") or [data] if isinstance(data, dict) else data
+        if isinstance(data, dict):
+            raw_items = None
+            for key in ("goals", "items", "data"):
+                if key in data and isinstance(data[key], list):
+                    raw_items = data[key]
+                    break
+            if raw_items is None:
+                raw_items = [data]
+        else:
+            raw_items = data
         if not isinstance(raw_items, list):
             raise ValueError(f"{source}: expected JSON array or wrapped object containing goals")
         for item in raw_items:
@@ -252,6 +261,7 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 ```
 
 Run the converter (repeat with new exports at any time):
@@ -263,7 +273,7 @@ python goals_to_html.py goals_report.html goals_0.json
 To display dates in your local timezone, pass `--utc-offset`:
 
 ```sh
-python goals_to_html.py goals_report.html goals_0.json --utc-offset -05:00
+python goals_to_html.py goals_report.html goals_0.json --utc-offset=-05:00
 ```
 
 Open `goals_report.html` in any browser or print it (`Ctrl+P` / `Cmd+P`). The

@@ -77,7 +77,16 @@ def load(sources: Iterable[str | Path]) -> list[dict[str, Any]]:
         path = Path(source)
         content = path.read_bytes().decode("utf-8-sig")
         data = json.loads(content)
-        raw_items = data.get("goals") or data.get("items") or data.get("data") or [data] if isinstance(data, dict) else data
+        if isinstance(data, dict):
+            raw_items = None
+            for key in ("goals", "items", "data"):
+                if key in data and isinstance(data[key], list):
+                    raw_items = data[key]
+                    break
+            if raw_items is None:
+                raw_items = [data]
+        else:
+            raw_items = data
         if not isinstance(raw_items, list):
             raise ValueError(f"{source}: expected JSON array or wrapped object containing goals")
         for item in raw_items:
