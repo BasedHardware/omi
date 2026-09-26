@@ -130,8 +130,46 @@ def _plan_data_questions(value: Dict[str, Any]) -> int:
         if isinstance(child, dict):
             total += _plan_data_questions(child)
         elif key == 'quota_questions':
-            total += int(child or 0)
+            total += _safe_counter(child)
     return total
+
+
+_HOURLY_COUNTER_KEYS = (
+    'transcription_seconds',
+    'words_transcribed',
+    'insights_gained',
+    'memories_created',
+    'speech_seconds',
+)
+_HISTORY_COUNTER_KEYS = ('transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created')
+
+
+def _unwrap_value(value: Any) -> Any:
+    return getattr(value, '_value', getattr(value, 'value', value)) if value is not None else None
+
+
+def _safe_counter(value: Any) -> int:
+    raw = _unwrap_value(value)
+    if raw is None or isinstance(raw, bool):
+        return 0
+    try:
+        return max(0, int(raw))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _safe_bucket_int(value: Any, default: Optional[int] = None) -> Optional[int]:
+    raw = _unwrap_value(value)
+    if raw is None or isinstance(raw, bool):
+        return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+def _history_zero_row() -> Dict[str, int]:
+    return {key: 0 for key in _HISTORY_COUNTER_KEYS}
 
 
 def _accumulate_plan_data(row: Dict[str, Any], value: Dict[str, Any]) -> None:
@@ -142,42 +180,73 @@ def _accumulate_plan_data(row: Dict[str, Any], value: Dict[str, Any]) -> None:
         if isinstance(child, dict):
             _accumulate_plan_data(row, child)
             continue
+        raw = _unwrap_value(child)
         if key == 'quota_questions':
-            row['questions'] += int(child or 0)
+            row['questions'] += _safe_counter(raw)
         elif key == 'input_tokens':
-            row['input_tokens'] += int(child or 0)
+            row['input_tokens'] += _safe_counter(raw)
         elif key == 'output_tokens':
-            row['output_tokens'] += int(child or 0)
+            row['output_tokens'] += _safe_counter(raw)
         elif key == 'total_tokens':
-            row['total_tokens'] += int(child or 0)
-        elif key == 'cost_usd':
-            row['cost_usd'] = (row['cost_usd'] or 0.0) + float(child or 0.0)
-        elif key in {
-            'transcription_seconds',
-            'words_transcribed',
-            'insights_gained',
-            'memories_created',
-            'speech_seconds',
-        }:
-            row[key] = row.get(key, 0) + int(child or 0)
+            row['total_tokens'] += _safe_counter(raw)
+        elif key == 'cost_usd' and raw is not None and not isinstance(raw, bool):
+            row['cost_usd'] = (row['cost_usd'] or 0.0) + float(raw or 0.0)
+        elif key in _HOURLY_COUNTER_KEYS:
+            row[key] = row.get(key, 0) + _safe_counter(raw)
+
+
+def _extract_plan_usage(data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """Reconstruct per-plan usage dicts from both nested `plan_usage` and flat `plan_usage.<plan>.*` keys."""
+    extracted: Dict[str, Dict[str, Any]] = {}
+    nested_plan_usage = data.get('plan_usage')
+    if isinstance(nested_plan_usage, dict):
+        for plan_id, plan_data in nested_plan_usage.items():
+            if isinstance(plan_data, dict):
+                extracted[str(plan_id)] = dict(plan_data)
+
+    for key, raw_val in data.items():
+        if not key.startswith('plan_usage.'):
+            continue
+        parts = [part for part in key.split('.')[1:] if part]
+        if len(parts) < 2:
+            continue
+        plan_id, *subpath = parts
+        cursor: Dict[str, Any] = extracted.setdefault(plan_id, {})
+        for segment in subpath[:-1]:
+            existing = cursor.get(segment)
+            branch = dict(existing) if isinstance(existing, dict) else {}
+            cursor[segment] = branch
+            cursor = branch
+        leaf = subpath[-1]
+        val = _unwrap_value(raw_val)
+        if leaf in cursor and isinstance(cursor[leaf], (int, float)) and isinstance(val, (int, float)):
+            cursor[leaf] = cursor[leaf] + val
+        else:
+            cursor[leaf] = val
+    return extracted
+
+
+def _apply_plan_usage_entry(row: Dict[str, Any], plan_data: Dict[str, Any]) -> None:
+    metadata = plan_data.get('_metadata')
+    if isinstance(metadata, dict):
+        status_counts = metadata.get('cost_status_counts')
+        if isinstance(status_counts, dict):
+            for status, count in status_counts.items():
+                if _safe_counter(count) > 0:
+                    row['cost_status'] = _merge_cost_status(row['cost_status'], str(status))
+        exclusions = metadata.get('cost_exclusions')
+        if isinstance(exclusions, dict):
+            for exclusion, count in exclusions.items():
+                key = str(exclusion)
+                row['cost_exclusions'][key] = row['cost_exclusions'].get(key, 0) + _safe_counter(count)
+    _accumulate_plan_data(row, plan_data)
 
 
 def get_monthly_chat_usage(
     uid: str, now: Optional[datetime] = None, *, firestore_client: Any | None = None
 ) -> Dict[str, Any]:
-    """Sum current-month chat usage from `users/{uid}/llm_usage/{YYYY-MM-DD}` docs.
-
-    Returns keys:
-      - questions: total user-initiated chat calls (desktop/backend quota counters + legacy backend `chat.*`)
-      - cost_usd:  legacy total desktop_chat* cost_usd for existing quota callers
-      - usage_by_plan: catalog-plan rows; missing cost is ``None``, never a fake zero
-      - reset_at:  unix seconds of the start of next UTC month (when the bucket resets)
-
-    Proactive, memory-extraction, knowledge-graph, conversation-processing etc. are
-    excluded on purpose — those are company-driven, not user-initiated questions.
-    """
+    """Sum current-month chat usage from `users/{uid}/llm_usage/{YYYY-MM-DD}` docs."""
     now = now or datetime.now(timezone.utc)
-
     llm_usage_ref = (firestore_client or db).collection('users').document(uid).collection('llm_usage')
     questions = 0
     cost_usd = 0.0
@@ -187,27 +256,12 @@ def get_monthly_chat_usage(
         document_count += 1
         data: Dict[str, Any] = _typed_doc(snap)
         questions_before_document = questions
-        plan_usage = data.get('plan_usage')
+        plan_usage = _extract_plan_usage(data)
         plan_attributed_questions = 0
-        if isinstance(plan_usage, dict):
-            for plan_id, plan_data in plan_usage.items():
-                if not isinstance(plan_data, dict):
-                    continue
-                plan_attributed_questions += _plan_data_questions(plan_data)
-                row = usage_by_plan.setdefault(str(plan_id), _plan_usage_row())
-                metadata = plan_data.get('_metadata')
-                if isinstance(metadata, dict):
-                    status_counts = metadata.get('cost_status_counts')
-                    if isinstance(status_counts, dict):
-                        for status, count in status_counts.items():
-                            if int(count or 0) > 0:
-                                row['cost_status'] = _merge_cost_status(row['cost_status'], str(status))
-                    exclusions = metadata.get('cost_exclusions')
-                    if isinstance(exclusions, dict):
-                        for exclusion, count in exclusions.items():
-                            key = str(exclusion)
-                            row['cost_exclusions'][key] = row['cost_exclusions'].get(key, 0) + int(count or 0)
-                _accumulate_plan_data(row, plan_data)
+        for plan_id, plan_data in plan_usage.items():
+            plan_attributed_questions += _plan_data_questions(plan_data)
+            row = usage_by_plan.setdefault(str(plan_id), _plan_usage_row())
+            _apply_plan_usage_entry(row, plan_data)
 
         has_desktop_realtime_quota_questions = 'desktop_chat_realtime.quota_questions' in data or (
             isinstance(data.get('desktop_chat_realtime'), dict) and 'quota_questions' in data['desktop_chat_realtime']
@@ -218,25 +272,17 @@ def get_monthly_chat_usage(
             for key, value in data.items()
         )
         for key, value in data.items():
-            # The Rust desktop-backend commits desktop_chat usage via dotted Firestore
-            # fieldPaths, which Firestore materializes as a NESTED map. Keep
-            # `call_count` as internal generation telemetry; quota enforcement uses
-            # `quota_questions`, incremented once per visible desktop user turn.
             if isinstance(value, dict):
                 value_dict = cast(Dict[str, Any], value)
                 if key == 'desktop_chat':
-                    questions += int(value_dict.get('quota_questions', 0) or 0)
+                    questions += _safe_counter(value_dict.get('quota_questions', 0))
                     cost_usd += float(value_dict.get('cost_usd', 0) or 0)
                 elif key == 'desktop_chat_realtime' and not has_desktop_realtime_quota_questions:
-                    # Rollout bridge: old managed realtime turns only wrote
-                    # call_count. New realtime writes both the grand-total
-                    # desktop_chat.quota_questions counter and this breakdown's
-                    # quota_questions, so only fall back when the breakdown is absent.
-                    questions += int(value_dict.get('call_count', 0) or 0)
+                    questions += _safe_counter(value_dict.get('call_count', 0))
                 elif key == 'backend_chat':
-                    questions += int(value_dict.get('quota_questions', 0) or 0)
+                    questions += _safe_counter(value_dict.get('quota_questions', 0))
                 continue
-            if not isinstance(value, (int, float)):
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
                 continue
             if key.startswith('desktop_chat'):
                 if key == 'desktop_chat.quota_questions':
@@ -248,27 +294,10 @@ def get_monthly_chat_usage(
             elif key == 'backend_chat.quota_questions':
                 questions += int(value)
             elif key.startswith('chat.') and key.endswith('.call_count') and not has_backend_quota_questions:
-                # Legacy user-initiated backend chat (any model). New writes use
-                # backend_chat.quota_questions so LLM telemetry no longer drives quota.
                 questions += int(value)
 
-        # Anything the document's root counters report that `plan_usage` does not
-        # account for is unattributed. Two cases reach here:
-        #
-        #  * No plan_usage at all -- a historical row written before attribution.
-        #  * MIXED rows: the first post-deploy write adds plan_usage to a document
-        #    that already carries pre-deploy root counters. Keying only on the
-        #    absence of plan_usage would drop that residual entirely, so a user's
-        #    earlier questions would silently vanish from per-plan reporting for
-        #    the rest of the month.
-        #
-        # Reporting the residual as `_unattributed` keeps the totals honest. It is
-        # never folded into a real plan, because we do not know which plan earned it.
         document_questions = questions - questions_before_document
         residual_questions = document_questions - plan_attributed_questions
-        # A document with no plan_usage is entirely unattributed; one WITH plan_usage
-        # contributes only what plan_usage fails to account for. Guard on the residual
-        # in both cases so a fully attributed document creates no phantom row.
         if residual_questions > 0:
             legacy_row = usage_by_plan.setdefault(_UNATTRIBUTED_PLAN, _plan_usage_row())
             legacy_row['questions'] += residual_questions
@@ -277,13 +306,7 @@ def get_monthly_chat_usage(
                 legacy_row['cost_exclusions'].get('plan_snapshot_missing', 0) + 1
             )
 
-    record_firestore_read(
-        FirestoreReadFamily.CHAT_QUOTA_MONTHLY_USAGE,
-        FirestoreReadMode.BOUNDED,
-        document_count,
-    )
-
-    # Compute end-of-month boundary in UTC for the reset timestamp.
+    record_firestore_read(FirestoreReadFamily.CHAT_QUOTA_MONTHLY_USAGE, FirestoreReadMode.BOUNDED, document_count)
     next_year, next_month = _next_month(now)
     reset_at = int(datetime(next_year, next_month, 1, tzinfo=timezone.utc).timestamp())
 
@@ -304,12 +327,7 @@ def get_usage_by_plan(
     *,
     firestore_client: Any | None = None,
 ) -> Dict[str, Dict[str, Any]]:
-    """Join current-month chat and hourly usage under server-resolved plans.
-
-    Rows are safe to join to the catalog by key. Historical rows without a
-    plan snapshot use ``_unattributed`` and retain ``None`` for unmeasured
-    cost, so this report cannot turn missing COGS into a free-looking zero.
-    """
+    """Join current-month chat and hourly usage under server-resolved plans."""
     now = now or datetime.now(timezone.utc)
     monthly = get_monthly_chat_usage(uid, now=now, firestore_client=firestore_client)
     report: Dict[str, Dict[str, Any]] = {plan_id: dict(row) for plan_id, row in monthly['usage_by_plan'].items()}
@@ -319,79 +337,56 @@ def get_usage_by_plan(
     )
     for snap in query.stream():
         data = _typed_doc(snap)
-        plan_usage = data.get('plan_usage')
-        if not isinstance(plan_usage, dict):
+        plan_usage = _extract_plan_usage(data)
+        if not plan_usage:
             row = report.setdefault(_UNATTRIBUTED_PLAN, _plan_usage_row())
             _accumulate_plan_data(row, data)
             row['cost_status'] = 'missing'
             row['cost_exclusions']['plan_snapshot_missing'] = row['cost_exclusions'].get('plan_snapshot_missing', 0) + 1
             continue
+        attributed_counters = {key: 0 for key in _HOURLY_COUNTER_KEYS}
         for plan_id, plan_data in plan_usage.items():
-            if not isinstance(plan_data, dict):
-                continue
             row = report.setdefault(str(plan_id), _plan_usage_row())
-            metadata = plan_data.get('_metadata')
-            if isinstance(metadata, dict):
-                counts = metadata.get('cost_status_counts')
-                if isinstance(counts, dict):
-                    for status, count in counts.items():
-                        if int(count or 0) > 0:
-                            row['cost_status'] = _merge_cost_status(row['cost_status'], str(status))
-                exclusions = metadata.get('cost_exclusions')
-                if isinstance(exclusions, dict):
-                    for exclusion, count in exclusions.items():
-                        key = str(exclusion)
-                        row['cost_exclusions'][key] = row['cost_exclusions'].get(key, 0) + int(count or 0)
-            _accumulate_plan_data(row, plan_data)
+            before = {key: row.get(key, 0) for key in _HOURLY_COUNTER_KEYS}
+            _apply_plan_usage_entry(row, plan_data)
+            for key in _HOURLY_COUNTER_KEYS:
+                attributed_counters[key] += row.get(key, 0) - before[key]
+        residuals = {
+            key: _safe_counter(data.get(key, 0)) - attributed_counters[key]
+            for key in _HOURLY_COUNTER_KEYS
+            if _safe_counter(data.get(key, 0)) > attributed_counters[key]
+        }
+        if residuals:
+            legacy_row = report.setdefault(_UNATTRIBUTED_PLAN, _plan_usage_row())
+            for key, diff in residuals.items():
+                legacy_row[key] = legacy_row.get(key, 0) + diff
+            legacy_row['cost_status'] = 'missing'
+            legacy_row['cost_exclusions']['plan_snapshot_missing'] = (
+                legacy_row['cost_exclusions'].get('plan_snapshot_missing', 0) + 1
+            )
 
     for row in report.values():
         row['cost_status'] = row['cost_status'] or 'missing'
     return report
 
 
-def update_hourly_usage(
+def _populate_hourly_plan_usage_increments(
+    update_doc: Dict[str, Any],
     uid: str,
-    date: datetime,
     updates: Dict[str, Any],
-    platform: Optional[str] = None,
     *,
-    cost_usd: float | None = None,
-    cost_status: str = 'missing',
-    cost_exclusion: str | None = None,
-    firestore_client: Any | None = None,
+    cost_usd: float | None,
+    cost_status: str,
+    cost_exclusion: str | None,
+    client: Any,
 ) -> None:
-    """Updates or creates usage stats for a specific hour using Firestore atomic increments.
-
-    Optional `platform` ('desktop' | 'mobile') is accumulated as an
-    ArrayUnion so a single `hourly_usage/{date-hour}` doc can record activity
-    from both platforms in the same hour without double-writing.
-    """
-    client = firestore_client or db
-    user_ref = client.collection('users').document(uid)
-    doc_id = f'{date.year}-{date.month:02d}-{date.day:02d}-{date.hour:02d}'
-    hourly_usage_ref = user_ref.collection('hourly_usage').document(doc_id)
-
-    update_doc: Dict[str, Any] = {'last_updated': datetime.now(timezone.utc)}
-    has_increments = False
-
-    for key, value in updates.items():
-        if (
-            key
-            in ['transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds']
-            and value > 0
-        ):
-            update_doc[key] = firestore.Increment(value)
-            has_increments = True
-
-    if not has_increments:
-        return
-
     plan_key = resolve_usage_plan_id(uid, firestore_client=client) or _UNATTRIBUTED_PLAN
     plan_prefix = f'plan_usage.{plan_key}'
     for key, value in updates.items():
         if (
-            key
-            in {'transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds'}
+            key in _HOURLY_COUNTER_KEYS
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
             and value > 0
         ):
             update_doc[f'{plan_prefix}.{key}'] = firestore.Increment(value)
@@ -407,15 +402,50 @@ def update_hourly_usage(
         safe_exclusion = effective_exclusion.replace('.', '_').replace('/', '_')
         update_doc[f'{plan_prefix}._metadata.cost_exclusions.{safe_exclusion}'] = firestore.Increment(1)
 
-    # Add year, month, day, hour fields for querying
-    update_doc['year'] = date.year
-    update_doc['month'] = date.month
-    update_doc['day'] = date.day
-    update_doc['hour'] = date.hour
-    update_doc['id'] = doc_id
+
+def update_hourly_usage(
+    uid: str,
+    date: datetime,
+    updates: Dict[str, Any],
+    platform: Optional[str] = None,
+    *,
+    cost_usd: float | None = None,
+    cost_status: str = 'missing',
+    cost_exclusion: str | None = None,
+    firestore_client: Any | None = None,
+) -> None:
+    """Updates or creates usage stats for a specific hour using Firestore atomic increments."""
+    client = firestore_client or db
+    user_ref = client.collection('users').document(uid)
+    doc_id = f'{date.year}-{date.month:02d}-{date.day:02d}-{date.hour:02d}'
+    hourly_usage_ref = user_ref.collection('hourly_usage').document(doc_id)
+
+    update_doc: Dict[str, Any] = {'last_updated': datetime.now(timezone.utc)}
+    has_increments = False
+    for key, value in updates.items():
+        if (
+            key in _HOURLY_COUNTER_KEYS
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and value > 0
+        ):
+            update_doc[key] = firestore.Increment(value)
+            has_increments = True
+    if not has_increments:
+        return
+
+    _populate_hourly_plan_usage_increments(
+        update_doc,
+        uid,
+        updates,
+        cost_usd=cost_usd,
+        cost_status=cost_status,
+        cost_exclusion=cost_exclusion,
+        client=client,
+    )
+    update_doc.update({'year': date.year, 'month': date.month, 'day': date.day, 'hour': date.hour, 'id': doc_id})
     if platform in ('desktop', 'mobile'):
         update_doc['platforms'] = firestore.ArrayUnion([platform])
-
     hourly_usage_ref.set(update_doc, merge=True)
 
 
@@ -462,37 +492,23 @@ def update_hourly_usage_once(
     }
     for key, value in updates.items():
         if (
-            key
-            in {'transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds'}
+            key in _HOURLY_COUNTER_KEYS
+            and isinstance(value, (int, float))
+            and not isinstance(value, bool)
             and value > 0
         ):
             update_doc[key] = firestore.Increment(value)
-    has_increments = any(
-        key in {'transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds'}
-        for key in update_doc
-    )
-    if not has_increments:
+    if not any(key in _HOURLY_COUNTER_KEYS for key in update_doc):
         return False
-    plan_key = resolve_usage_plan_id(uid, firestore_client=client) or _UNATTRIBUTED_PLAN
-    plan_prefix = f'plan_usage.{plan_key}'
-    for key, value in updates.items():
-        if (
-            key
-            in {'transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds'}
-            and value > 0
-        ):
-            update_doc[f'{plan_prefix}.{key}'] = firestore.Increment(value)
-    if cost_usd is not None:
-        update_doc[f'{plan_prefix}.cost_usd'] = firestore.Increment(cost_usd)
-    normalized_status = cost_status if cost_status in {'complete', 'partial', 'missing', 'excluded'} else 'missing'
-    effective_exclusion = cost_exclusion or (
-        'provider_cost_not_recorded' if normalized_status in {'missing', 'partial'} else None
+    _populate_hourly_plan_usage_increments(
+        update_doc,
+        uid,
+        updates,
+        cost_usd=cost_usd,
+        cost_status=cost_status,
+        cost_exclusion=cost_exclusion,
+        client=client,
     )
-    update_doc[f'{plan_prefix}._metadata.cost_status_counts.{normalized_status}'] = firestore.Increment(1)
-    update_doc[f'{plan_prefix}._metadata.last_cost_status'] = normalized_status
-    if effective_exclusion:
-        safe_exclusion = effective_exclusion.replace('.', '_').replace('/', '_')
-        update_doc[f'{plan_prefix}._metadata.cost_exclusions.{safe_exclusion}'] = firestore.Increment(1)
     return _update_hourly_usage_once_transaction(client.transaction(), marker_ref, usage_ref, update_doc)
 
 
@@ -507,38 +523,26 @@ def batch_update_hourly_usage(uid: str, hourly_updates: Dict[datetime, Dict[str,
         for date, updates in chunk:
             doc_id = f'{date.year}-{date.month:02d}-{date.day:02d}-{date.hour:02d}'
             hourly_usage_ref = db.collection('users').document(uid).collection('hourly_usage').document(doc_id)
-
             update_doc: Dict[str, Any] = updates.copy()
-            # Add year, month, day, hour fields for querying
-            update_doc['year'] = date.year
-            update_doc['month'] = date.month
-            update_doc['day'] = date.day
-            update_doc['hour'] = date.hour
-            update_doc['id'] = doc_id
-            update_doc['last_updated'] = datetime.now(timezone.utc)
-
+            update_doc.update(
+                {
+                    'year': date.year,
+                    'month': date.month,
+                    'day': date.day,
+                    'hour': date.hour,
+                    'id': doc_id,
+                    'last_updated': datetime.now(timezone.utc),
+                }
+            )
             batch.set(hourly_usage_ref, update_doc, merge=True)
         batch.commit()
 
 
 def get_today_usage_stats(uid: str, start: datetime, end: datetime) -> Dict[str, Any]:
-    """Aggregates hourly usage stats for the UTC bucket range [start, end).
-
-    The range may span two UTC calendar days when it represents the caller's
-    local "today" rather than a UTC day (see get_current_user_usage) — hourly
-    docs are written keyed by UTC date, so a user whose local midnight doesn't
-    land on a UTC midnight has their day's buckets split across two UTC dates.
-    """
+    """Aggregates hourly usage stats for the UTC bucket range [start, end)."""
     user_ref = db.collection('users').document(uid)
     hourly_usage_collection = user_ref.collection('hourly_usage')
-
-    stats: Dict[str, Any] = {
-        'transcription_seconds': 0,
-        'words_transcribed': 0,
-        'insights_gained': 0,
-        'memories_created': 0,
-        'speech_seconds': 0,
-    }
+    stats: Dict[str, Any] = {key: 0 for key in _HOURLY_COUNTER_KEYS}
     cursor = start.replace(hour=0, minute=0, second=0, microsecond=0)
     while cursor < end:
         query = (
@@ -548,10 +552,13 @@ def get_today_usage_stats(uid: str, start: datetime, end: datetime) -> Dict[str,
         )
         for doc in query.stream():
             data = _typed_doc(doc)
-            bucket_hour = cursor.replace(hour=int(data.get('hour', 0)))
+            hour_val = _safe_bucket_int(data.get('hour', 0), default=0)
+            if hour_val is None or not 0 <= hour_val <= 23:
+                continue
+            bucket_hour = cursor.replace(hour=hour_val)
             if start <= bucket_hour < end:
                 for key in stats:
-                    stats[key] += data.get(key, 0)
+                    stats[key] += _safe_counter(data.get(key, 0))
         cursor += timedelta(days=1)
     return stats
 
@@ -566,22 +573,13 @@ def _aggregate_stats_from_docs(docs: Iterable[Any]) -> Dict[str, Any]:
 
 
 def _aggregate_stats_with_count(docs: Iterable[Any]) -> Tuple[Dict[str, Any], int]:
-    stats: Dict[str, Any] = {
-        'transcription_seconds': 0,
-        'words_transcribed': 0,
-        'insights_gained': 0,
-        'memories_created': 0,
-        'speech_seconds': 0,
-    }
+    stats: Dict[str, Any] = {key: 0 for key in _HOURLY_COUNTER_KEYS}
     document_count = 0
     for doc in docs:
         document_count += 1
         data: Dict[str, Any] = _typed_doc(doc)
-        stats['transcription_seconds'] += data.get('transcription_seconds', 0)
-        stats['words_transcribed'] += data.get('words_transcribed', 0)
-        stats['insights_gained'] += data.get('insights_gained', 0)
-        stats['memories_created'] += data.get('memories_created', 0)
-        stats['speech_seconds'] += data.get('speech_seconds', 0)
+        for key in _HOURLY_COUNTER_KEYS:
+            stats[key] += _safe_counter(data.get(key, 0))
     return stats, document_count
 
 
@@ -589,7 +587,6 @@ def get_monthly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
     """Aggregates hourly usage stats for a given month from Firestore."""
     user_ref = db.collection('users').document(uid)
     hourly_usage_collection = user_ref.collection('hourly_usage')
-
     query = hourly_usage_collection.where(filter=FieldFilter('year', '==', date.year)).where(
         filter=FieldFilter('month', '==', date.month)
     )
@@ -600,20 +597,14 @@ def get_monthly_usage_stats_since(uid: str, date: datetime, start_date: datetime
     """Aggregates hourly usage stats for a given month from Firestore, starting from a specific date."""
     user_ref = db.collection('users').document(uid)
     hourly_usage_collection = user_ref.collection('hourly_usage')
-
     start_doc_id = f'{start_date.year}-{start_date.month:02d}-{start_date.day:02d}-00'
-
     query = (
         hourly_usage_collection.where(filter=FieldFilter('year', '==', date.year))
         .where(filter=FieldFilter('month', '==', date.month))
         .where(filter=FieldFilter('id', '>=', start_doc_id))
     )
     stats, document_count = _aggregate_stats_with_count(query.stream())
-    record_firestore_read(
-        FirestoreReadFamily.LISTEN_MONTHLY_USAGE,
-        FirestoreReadMode.UNBOUNDED,
-        document_count,
-    )
+    record_firestore_read(FirestoreReadFamily.LISTEN_MONTHLY_USAGE, FirestoreReadMode.UNBOUNDED, document_count)
     return stats
 
 
@@ -645,21 +636,15 @@ def get_hourly_history_for_today(uid: str, start: datetime, end: datetime) -> Li
         )
         for doc in query.stream():
             data: Dict[str, Any] = _typed_doc(doc)
-            bucket = cursor.replace(hour=int(data.get('hour', 0)))
+            hour_val = _safe_bucket_int(data.get('hour', 0), default=0)
+            if hour_val is None or not 0 <= hour_val <= 23:
+                continue
+            bucket = cursor.replace(hour=hour_val)
             if not start <= bucket < end:
                 continue
-            if bucket not in hourly_totals:
-                hourly_totals[bucket] = {
-                    'transcription_seconds': 0,
-                    'words_transcribed': 0,
-                    'insights_gained': 0,
-                    'memories_created': 0,
-                }
-
-            hourly_totals[bucket]['transcription_seconds'] += cast(int, data.get('transcription_seconds', 0))
-            hourly_totals[bucket]['words_transcribed'] += cast(int, data.get('words_transcribed', 0))
-            hourly_totals[bucket]['insights_gained'] += cast(int, data.get('insights_gained', 0))
-            hourly_totals[bucket]['memories_created'] += cast(int, data.get('memories_created', 0))
+            row = hourly_totals.setdefault(bucket, _history_zero_row())
+            for key in _HISTORY_COUNTER_KEYS:
+                row[key] += _safe_counter(data.get(key, 0))
         cursor += timedelta(days=1)
 
     history: List[Dict[str, Any]] = [
@@ -676,23 +661,15 @@ def get_daily_history_for_month(uid: str, date: datetime) -> List[Dict[str, Any]
     query = hourly_usage_collection.where(filter=FieldFilter('year', '==', date.year)).where(
         filter=FieldFilter('month', '==', date.month)
     )
-    docs = query.stream()
     daily_totals: Dict[int, Dict[str, int]] = {}
-    for doc in docs:
+    for doc in query.stream():
         data: Dict[str, Any] = _typed_doc(doc)
-        day = cast(int, data.get('day', 0))
-        if day not in daily_totals:
-            daily_totals[day] = {
-                'transcription_seconds': 0,
-                'words_transcribed': 0,
-                'insights_gained': 0,
-                'memories_created': 0,
-            }
-
-        daily_totals[day]['transcription_seconds'] += cast(int, data.get('transcription_seconds', 0))
-        daily_totals[day]['words_transcribed'] += cast(int, data.get('words_transcribed', 0))
-        daily_totals[day]['insights_gained'] += cast(int, data.get('insights_gained', 0))
-        daily_totals[day]['memories_created'] += cast(int, data.get('memories_created', 0))
+        day = _safe_bucket_int(data.get('day'))
+        if day is None or not 1 <= day <= 31:
+            continue
+        row = daily_totals.setdefault(day, _history_zero_row())
+        for key in _HISTORY_COUNTER_KEYS:
+            row[key] += _safe_counter(data.get(key, 0))
 
     history: List[Dict[str, Any]] = [
         {'date': f"{date.year}-{date.month:02d}-{day:02d}", **stats} for day, stats in daily_totals.items()
@@ -706,23 +683,15 @@ def get_monthly_history_for_year(uid: str, date: datetime) -> List[Dict[str, Any
     user_ref = db.collection('users').document(uid)
     hourly_usage_collection = user_ref.collection('hourly_usage')
     query = hourly_usage_collection.where(filter=FieldFilter('year', '==', date.year))
-    docs = query.stream()
     monthly_totals: Dict[int, Dict[str, int]] = {}
-    for doc in docs:
+    for doc in query.stream():
         data: Dict[str, Any] = _typed_doc(doc)
-        month = cast(int, data.get('month', 0))
-        if month not in monthly_totals:
-            monthly_totals[month] = {
-                'transcription_seconds': 0,
-                'words_transcribed': 0,
-                'insights_gained': 0,
-                'memories_created': 0,
-            }
-
-        monthly_totals[month]['transcription_seconds'] += cast(int, data.get('transcription_seconds', 0))
-        monthly_totals[month]['words_transcribed'] += cast(int, data.get('words_transcribed', 0))
-        monthly_totals[month]['insights_gained'] += cast(int, data.get('insights_gained', 0))
-        monthly_totals[month]['memories_created'] += cast(int, data.get('memories_created', 0))
+        month = _safe_bucket_int(data.get('month'))
+        if month is None or not 1 <= month <= 12:
+            continue
+        row = monthly_totals.setdefault(month, _history_zero_row())
+        for key in _HISTORY_COUNTER_KEYS:
+            row[key] += _safe_counter(data.get(key, 0))
 
     history: List[Dict[str, Any]] = [
         {'date': f"{date.year}-{month:02d}-01", **stats} for month, stats in monthly_totals.items()
@@ -735,23 +704,15 @@ def get_yearly_history(uid: str) -> List[Dict[str, Any]]:
     """Gets yearly usage for all time by aggregating hourly data."""
     user_ref = db.collection('users').document(uid)
     hourly_usage_collection = user_ref.collection('hourly_usage')
-    docs = hourly_usage_collection.stream()
     yearly_totals: Dict[int, Dict[str, int]] = {}
-    for doc in docs:
+    for doc in hourly_usage_collection.stream():
         data: Dict[str, Any] = _typed_doc(doc)
-        year = cast(int, data.get('year', 0))
-        if year not in yearly_totals:
-            yearly_totals[year] = {
-                'transcription_seconds': 0,
-                'words_transcribed': 0,
-                'insights_gained': 0,
-                'memories_created': 0,
-            }
-
-        yearly_totals[year]['transcription_seconds'] += cast(int, data.get('transcription_seconds', 0))
-        yearly_totals[year]['words_transcribed'] += cast(int, data.get('words_transcribed', 0))
-        yearly_totals[year]['insights_gained'] += cast(int, data.get('insights_gained', 0))
-        yearly_totals[year]['memories_created'] += cast(int, data.get('memories_created', 0))
+        year = _safe_bucket_int(data.get('year'))
+        if year is None or year <= 0:
+            continue
+        row = yearly_totals.setdefault(year, _history_zero_row())
+        for key in _HISTORY_COUNTER_KEYS:
+            row[key] += _safe_counter(data.get(key, 0))
 
     history: List[Dict[str, Any]] = [{'date': f"{year}-01-01", **stats} for year, stats in yearly_totals.items()]
     history.sort(key=lambda x: cast(str, x['date']))
@@ -762,38 +723,22 @@ def _read_all_time_usage(uid: str) -> Tuple[Dict[str, Any], List[Dict[str, Any]]
     """Read hourly usage once while building both the total and yearly history."""
     user_ref = db.collection('users').document(uid)
     hourly_usage_collection = user_ref.collection('hourly_usage')
-    stats: Dict[str, Any] = {
-        'transcription_seconds': 0,
-        'words_transcribed': 0,
-        'insights_gained': 0,
-        'memories_created': 0,
-        'speech_seconds': 0,
-    }
+    stats: Dict[str, Any] = {key: 0 for key in _HOURLY_COUNTER_KEYS}
     yearly_totals: Dict[int, Dict[str, int]] = {}
     document_count = 0
     for doc in hourly_usage_collection.stream():
         document_count += 1
         data = _typed_doc(doc)
         for key in stats:
-            stats[key] += data.get(key, 0)
-        year = cast(int, data.get('year', 0))
-        year_stats = yearly_totals.setdefault(
-            year,
-            {
-                'transcription_seconds': 0,
-                'words_transcribed': 0,
-                'insights_gained': 0,
-                'memories_created': 0,
-            },
-        )
-        for key in year_stats:
-            year_stats[key] += data.get(key, 0)
+            stats[key] += _safe_counter(data.get(key, 0))
+        year = _safe_bucket_int(data.get('year'))
+        if year is None or year <= 0:
+            continue
+        year_stats = yearly_totals.setdefault(year, _history_zero_row())
+        for key in _HISTORY_COUNTER_KEYS:
+            year_stats[key] += _safe_counter(data.get(key, 0))
 
-    record_firestore_read(
-        FirestoreReadFamily.ALL_TIME_USAGE,
-        FirestoreReadMode.UNBOUNDED,
-        document_count,
-    )
+    record_firestore_read(FirestoreReadFamily.ALL_TIME_USAGE, FirestoreReadMode.UNBOUNDED, document_count)
     history = [{'date': f"{year}-01-01", **year_stats} for year, year_stats in yearly_totals.items()]
     history.sort(key=lambda x: cast(str, x['date']))
     return stats, history
