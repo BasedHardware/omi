@@ -242,7 +242,7 @@ class CaptureTimeline:
         # strict readers must refuse them instead of extrapolating across the
         # dropped hiatuses.
         oldest_retained_interior = self.anchors[1][0]
-        if self.compacted_below_sample is None or self.compacted_below_sample > oldest_retained_interior:
+        if self.compacted_below_sample is None or self.compacted_below_sample < oldest_retained_interior:
             self.compacted_below_sample = oldest_retained_interior
 
     def wall(self, sample: int) -> float:
