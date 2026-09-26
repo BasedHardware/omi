@@ -11223,6 +11223,19 @@ class AppLocalizationsNo extends AppLocalizations {
   String get openCall => 'Åpne anrop';
 
   @override
+  String get secondDevice => 'Andre enhet';
+
+  @override
+  String get pairSecondDevice => 'Par en annen enhet';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Koble til OmiGlass sammen med Omi slik at bilder og lyd havner i samme samtale.';
+
+  @override
+  String get forgetSecondDevice => 'Glem andre enhet';
+
+  @override
   String get captureRecoveryBanner => 'Lyden fra anhenget når ikke frem til appen — trykk for å reparere';
 
   @override

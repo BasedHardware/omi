@@ -11258,6 +11258,19 @@ class AppLocalizationsPl extends AppLocalizations {
   String get openCall => 'Otwórz połączenie';
 
   @override
+  String get secondDevice => 'Drugie urządzenie';
+
+  @override
+  String get pairSecondDevice => 'Sparuj drugie urządzenie';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Podłącz OmiGlass obok swojego Omi, aby zdjęcia i dźwięk trafiały do tej samej rozmowy.';
+
+  @override
+  String get forgetSecondDevice => 'Zapomnij drugie urządzenie';
+
+  @override
   String get captureRecoveryBanner => 'Dźwięk z zawieszki nie dociera do aplikacji — dotknij, aby naprawić';
 
   @override

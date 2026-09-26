@@ -11257,6 +11257,19 @@ class AppLocalizationsNl extends AppLocalizations {
   String get openCall => 'Gesprek openen';
 
   @override
+  String get secondDevice => 'Tweede apparaat';
+
+  @override
+  String get pairSecondDevice => 'Tweede apparaat koppelen';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Verbind OmiGlass naast je Omi zodat foto\'s en audio in hetzelfde gesprek terechtkomen.';
+
+  @override
+  String get forgetSecondDevice => 'Tweede apparaat vergeten';
+
+  @override
   String get captureRecoveryBanner => 'De audio van de hanger komt niet aan in de app — tik om te repareren';
 
   @override

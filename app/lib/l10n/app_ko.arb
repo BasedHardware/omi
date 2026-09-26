@@ -3555,5 +3555,9 @@
     "capturePhoneStorageFull": "휴대폰 저장 공간 부족",
     "captureStorageAlmostFull": "저장 공간 거의 참",
     "capturePendantDisconnectedDetail": "펜던트와 이 휴대폰의 연결이 끊겼어요. 펜던트가 켜져 있고 가까이 있으면 Omi가 자동으로 다시 연결해요. 그 전에 녹음된 내용은 안전하게 보관돼요.",
-    "participantsSummaryUncounted": "{name} 외 여러 명"
+    "participantsSummaryUncounted": "{name} 외 여러 명",
+    "secondDevice": "두 번째 기기",
+    "pairSecondDevice": "두 번째 기기 페어링",
+    "pairSecondDeviceDescription": "Omi와 함께 OmiGlass를 연결하면 사진과 오디오가 같은 대화에 담깁니다.",
+    "forgetSecondDevice": "두 번째 기기 삭제"
 }

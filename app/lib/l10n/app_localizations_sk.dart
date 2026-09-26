@@ -11214,6 +11214,19 @@ class AppLocalizationsSk extends AppLocalizations {
   String get openCall => 'Otvoriť hovor';
 
   @override
+  String get secondDevice => 'Druhé zariadenie';
+
+  @override
+  String get pairSecondDevice => 'Spárovať druhé zariadenie';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Pripojte OmiGlass k svojmu Omi, aby fotky a zvuk išli do rovnakej konverzácie.';
+
+  @override
+  String get forgetSecondDevice => 'Zabudnúť druhé zariadenie';
+
+  @override
   String get captureRecoveryBanner => 'Zvuk prívesku sa do aplikácie nedostáva — opravte klepnutím';
 
   @override

@@ -11218,6 +11218,19 @@ class AppLocalizationsVi extends AppLocalizations {
   String get openCall => 'Mở cuộc gọi';
 
   @override
+  String get secondDevice => 'Thiết bị thứ hai';
+
+  @override
+  String get pairSecondDevice => 'Ghép nối thiết bị thứ hai';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Kết nối OmiGlass cùng với Omi để ảnh và âm thanh đi vào cùng một cuộc trò chuyện.';
+
+  @override
+  String get forgetSecondDevice => 'Quên thiết bị thứ hai';
+
+  @override
   String get captureRecoveryBanner => 'Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa';
 
   @override

@@ -3555,5 +3555,9 @@
     "capturePhoneStorageFull": "Ο χώρος του τηλεφώνου γέμισε",
     "captureStorageAlmostFull": "Ο χώρος σχεδόν γέμισε",
     "capturePendantDisconnectedDetail": "Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο. Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.",
-    "participantsSummaryUncounted": "{name} και άλλοι"
+    "participantsSummaryUncounted": "{name} και άλλοι",
+    "secondDevice": "Δεύτερη συσκευή",
+    "pairSecondDevice": "Σύζευξη δεύτερης συσκευής",
+    "pairSecondDeviceDescription": "Συνδέστε τα OmiGlass μαζί με το Omi σας, ώστε φωτογραφίες και ήχος να πηγαίνουν στην ίδια συζήτηση.",
+    "forgetSecondDevice": "Διαγραφή δεύτερης συσκευής"
 }

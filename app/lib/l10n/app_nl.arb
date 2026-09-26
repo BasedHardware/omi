@@ -3555,5 +3555,9 @@
     "capturePhoneStorageFull": "Telefoonopslag vol",
     "captureStorageAlmostFull": "Opslag bijna vol",
     "capturePendantDisconnectedDetail": "Je hanger heeft de verbinding met deze telefoon verloren. Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is. Alles wat eerder is opgenomen, is veilig.",
-    "participantsSummaryUncounted": "{name} en anderen"
+    "participantsSummaryUncounted": "{name} en anderen",
+    "secondDevice": "Tweede apparaat",
+    "pairSecondDevice": "Tweede apparaat koppelen",
+    "pairSecondDeviceDescription": "Verbind OmiGlass naast je Omi zodat foto's en audio in hetzelfde gesprek terechtkomen.",
+    "forgetSecondDevice": "Tweede apparaat vergeten"
 }

@@ -11232,6 +11232,19 @@ class AppLocalizationsSv extends AppLocalizations {
   String get openCall => 'Öppna samtal';
 
   @override
+  String get secondDevice => 'Andra enhet';
+
+  @override
+  String get pairSecondDevice => 'Para ihop en andra enhet';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Anslut OmiGlass tillsammans med din Omi så att bilder och ljud hamnar i samma konversation.';
+
+  @override
+  String get forgetSecondDevice => 'Glöm andra enhet';
+
+  @override
   String get captureRecoveryBanner => 'Ljudet från hänget når inte appen — tryck för att reparera';
 
   @override

@@ -3555,5 +3555,9 @@
     "capturePhoneStorageFull": "Storan telefon penuh",
     "captureStorageAlmostFull": "Storan hampir penuh",
     "capturePendantDisconnectedDetail": "Loket anda terputus sambungan dengan telefon ini. Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan. Semua yang dirakam sebelum ini selamat.",
-    "participantsSummaryUncounted": "{name} dan lain-lain"
+    "participantsSummaryUncounted": "{name} dan lain-lain",
+    "secondDevice": "Peranti kedua",
+    "pairSecondDevice": "Pasangkan peranti kedua",
+    "pairSecondDeviceDescription": "Sambungkan OmiGlass bersama Omi anda supaya foto dan audio masuk ke perbualan yang sama.",
+    "forgetSecondDevice": "Lupakan peranti kedua"
 }

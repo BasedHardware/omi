@@ -11315,6 +11315,19 @@ class AppLocalizationsDe extends AppLocalizations {
   String get openCall => 'Anruf öffnen';
 
   @override
+  String get secondDevice => 'Zweites Gerät';
+
+  @override
+  String get pairSecondDevice => 'Zweites Gerät koppeln';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Verbinde OmiGlass zusätzlich zu deinem Omi, damit Fotos und Audio in dieselbe Unterhaltung fließen.';
+
+  @override
+  String get forgetSecondDevice => 'Zweites Gerät vergessen';
+
+  @override
   String get captureRecoveryBanner => 'Der Ton des Pendants erreicht die App nicht — zum Reparieren tippen';
 
   @override

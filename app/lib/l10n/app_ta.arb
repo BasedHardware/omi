@@ -11115,5 +11115,9 @@
     "capturePhoneStorageFull": "ஃபோன் சேமிப்பகம் நிரம்பியது",
     "captureStorageAlmostFull": "சேமிப்பகம் கிட்டத்தட்ட நிரம்பியது",
     "capturePendantDisconnectedDetail": "உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது. பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.",
-    "participantsSummaryUncounted": "{name} மற்றும் மற்றவர்கள்"
+    "participantsSummaryUncounted": "{name} மற்றும் மற்றவர்கள்",
+    "secondDevice": "இரண்டாவது சாதனம்",
+    "pairSecondDevice": "இரண்டாவது சாதனத்தை இணைக்கவும்",
+    "pairSecondDeviceDescription": "புகைப்படங்களும் ஒலியும் ஒரே உரையாடலுக்குச் செல்ல, உங்கள் Omi உடன் OmiGlass ஐ இணைக்கவும்.",
+    "forgetSecondDevice": "இரண்டாவது சாதனத்தை மறக்கவும்"
 }

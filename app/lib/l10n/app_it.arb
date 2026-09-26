@@ -3555,5 +3555,9 @@
     "capturePhoneStorageFull": "Memoria del telefono piena",
     "captureStorageAlmostFull": "Memoria quasi piena",
     "capturePendantDisconnectedDetail": "Il ciondolo ha perso la connessione con questo telefono. Omi si riconnetterà da solo quando il ciondolo sarà acceso e vicino. Tutto ciò che è stato registrato prima è al sicuro.",
-    "participantsSummaryUncounted": "{name} e altri"
+    "participantsSummaryUncounted": "{name} e altri",
+    "secondDevice": "Secondo dispositivo",
+    "pairSecondDevice": "Associa un secondo dispositivo",
+    "pairSecondDeviceDescription": "Collega OmiGlass insieme al tuo Omi così foto e audio finiscono nella stessa conversazione.",
+    "forgetSecondDevice": "Dimentica il secondo dispositivo"
 }

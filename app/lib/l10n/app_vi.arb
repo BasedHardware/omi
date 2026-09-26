@@ -3555,5 +3555,9 @@
     "capturePhoneStorageFull": "Bộ nhớ điện thoại đầy",
     "captureStorageAlmostFull": "Bộ nhớ gần đầy",
     "capturePendantDisconnectedDetail": "Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.",
-    "participantsSummaryUncounted": "{name} và những người khác"
+    "participantsSummaryUncounted": "{name} và những người khác",
+    "secondDevice": "Thiết bị thứ hai",
+    "pairSecondDevice": "Ghép nối thiết bị thứ hai",
+    "pairSecondDeviceDescription": "Kết nối OmiGlass cùng với Omi để ảnh và âm thanh đi vào cùng một cuộc trò chuyện.",
+    "forgetSecondDevice": "Quên thiết bị thứ hai"
 }

@@ -3555,5 +3555,9 @@
     "capturePhoneStorageFull": "Telefono atmintis pilna",
     "captureStorageAlmostFull": "Atmintis beveik pilna",
     "capturePendantDisconnectedDetail": "Pakabukas prarado ryšį su šiuo telefonu. Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese. Viskas, kas įrašyta iki šiol, išsaugota.",
-    "participantsSummaryUncounted": "{name} ir kiti"
+    "participantsSummaryUncounted": "{name} ir kiti",
+    "secondDevice": "Antras įrenginys",
+    "pairSecondDevice": "Susieti antrą įrenginį",
+    "pairSecondDeviceDescription": "Prijunkite OmiGlass kartu su savo Omi, kad nuotraukos ir garsas patektų į tą patį pokalbį.",
+    "forgetSecondDevice": "Pamiršti antrą įrenginį"
 }

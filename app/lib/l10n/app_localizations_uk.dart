@@ -11244,6 +11244,19 @@ class AppLocalizationsUk extends AppLocalizations {
   String get openCall => 'Відкрити дзвінок';
 
   @override
+  String get secondDevice => 'Другий пристрій';
+
+  @override
+  String get pairSecondDevice => 'Підключити другий пристрій';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Підключіть OmiGlass разом з Omi, щоб фото та звук потрапляли в одну розмову.';
+
+  @override
+  String get forgetSecondDevice => 'Забути другий пристрій';
+
+  @override
   String get captureRecoveryBanner => 'Звук кулона не надходить до застосунку — натисніть, щоб виправити';
 
   @override

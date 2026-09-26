@@ -114,6 +114,20 @@ class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
   @override
   bool get isCharging => charging;
   @override
+  BtDevice? get companionDevice => null;
+  @override
+  bool get isCompanionConnected => false;
+  @override
+  int get companionBatteryLevel => -1;
+  @override
+  BtDevice? get pairedCompanionDevice => null;
+  @override
+  List<BtDevice> get connectedDevices => const [];
+  @override
+  Future<void> forgetCompanionDevice() async {}
+  @override
+  void markDisconnectIntentional(String deviceId) {}
+  @override
   bool get havingNewFirmware => newFirmware;
   @override
   String get latestStableFirmwareVersion => '';

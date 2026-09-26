@@ -426,6 +426,29 @@ class CaptureController extends ChangeNotifier
   BtDevice? _recordingDevice;
   BtDevice? _sessionRecordingDevice;
 
+  /// Camera device paired next to the recording device (OmiGlass alongside an
+  /// Omi pendant). Its photos go into the same `/v4/listen` session as the
+  /// pendant audio, producing one multi-modal conversation. Null when the
+  /// recording device is the only device (an OmiGlass on its own still streams
+  /// its own photos through [photoDevice]).
+  BtDevice? _companionPhotoDevice;
+
+  /// Device whose camera stream is currently open, so teardown stops the right
+  /// camera even after roles change.
+  String? _photoStreamDeviceId;
+
+  /// Bumped when photo streaming stops or moves so in-flight chunk callbacks
+  /// cannot send to a superseded `/v4/listen` session.
+  int _photoStreamGeneration = 0;
+
+  BtDevice? get companionPhotoDevice => _companionPhotoDevice;
+
+  /// The device whose camera is streamed during the active device session.
+  BtDevice? get photoDevice => _companionPhotoDevice ?? _recordingDevice;
+
+  @visibleForTesting
+  String? get photoStreamDeviceIdForTesting => _photoStreamDeviceId;
+
   /// Monotonic fence for pendant identity changes: bumped synchronously on every
   /// recording-device notification so an in-flight socket/BLE open that awaited a
   /// codec or resolver result cannot install transport across a same-id ABA.
@@ -819,6 +842,9 @@ class CaptureController extends ChangeNotifier
     if (!phoneOwns) _rollCaptureSession(next?.id ?? 'none');
     _deviceIdentityRevision++;
     _recordingDevice = next;
+    // A device cannot hold both roles; when the camera device is promoted to
+    // audio (pendant went offline) it streams its own photos as recording device.
+    if (next != null && _companionPhotoDevice?.id == next.id) _companionPhotoDevice = null;
     if (next == null && !phoneOwns) _endOfflineSession();
     notifyListeners();
   }
@@ -831,9 +857,38 @@ class CaptureController extends ChangeNotifier
         !_capture.readModel.callActive) {
       _rollCaptureSession(device?.id ?? 'none');
     }
-    _recordingDevice = _recordingDevicePreservingNormalizedType(device);
+    final next = _recordingDevicePreservingNormalizedType(device);
+    _recordingDevice = next;
+    // A device cannot hold both roles; when the camera device is promoted to
+    // audio (pendant went offline) it streams its own photos as recording device.
+    // Clear the companion role synchronously so the promotion cannot briefly
+    // leave one device double-booked until the coordinator round-trips.
+    if (next != null && _companionPhotoDevice?.id == next.id) _companionPhotoDevice = null;
     notifyListeners();
     unawaited(_dispatchLogged(DeviceUpdated(device)));
+  }
+
+  /// Sets (or clears) the camera device paired next to the recording device.
+  ///
+  /// If a device session is active, the camera stream is moved right away: the
+  /// previous camera is stopped and the new one started. Otherwise the new
+  /// device is picked up by the next [streamDeviceRecording].
+  Future<void> updatePhotoDevice(BtDevice? device) async {
+    final companion = device != null && device.id != _recordingDevice?.id ? device : null;
+    final changed = companion?.id != _companionPhotoDevice?.id;
+    _companionPhotoDevice = companion;
+    if (!changed) return;
+    Logger.debug('companion photo device changed to ${companion?.id}');
+
+    if (_photoStreamDeviceId != null && _photoStreamDeviceId != photoDevice?.id) {
+      await _stopDevicePhotoStreaming();
+    }
+    final sessionActive = _recordingDevice != null &&
+        (recordingState == RecordingState.deviceRecord || recordingState == RecordingState.pause);
+    if (sessionActive) {
+      await _initiateDevicePhotoStreaming();
+    }
+    notifyListeners();
   }
 
   Future _resetStateVariables() async {
@@ -1824,13 +1879,9 @@ class CaptureController extends ChangeNotifier
     await _ensureDeviceSocketConnection();
     await _initiateDeviceAudioStreaming();
 
-    // Additionally, stream photos if the device supports it
-    if (_recordingDevice != null) {
-      var connection = await _ensureDeviceConnection(_recordingDevice!.id);
-      if (connection != null && await connection.hasPhotoStreamingCharacteristic()) {
-        await _initiateDevicePhotoStreaming();
-      }
-    }
+    // Additionally, stream photos from the camera device (the companion
+    // OmiGlass, or the recording device itself when it has a camera).
+    await _initiateDevicePhotoStreaming();
 
     notifyListeners();
   }
@@ -2168,16 +2219,24 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> _initiateDevicePhotoStreaming() async {
-    if (_recordingDevice == null) return;
-    final deviceId = _recordingDevice!.id;
-    var connection = await _ensureDeviceConnection(deviceId);
-    if (connection == null) return;
+    // Photos ride on the audio session's socket, so a camera without a
+    // recording device has nowhere to send them.
+    final device = photoDevice;
+    if (device == null || _recordingDevice == null) return;
+    if (_blePhotoStream != null && _photoStreamDeviceId == device.id) return;
+    final connection = await _ensureDeviceConnection(device.id);
+    if (connection == null || !await connection.hasPhotoStreamingCharacteristic()) return;
 
+    await _blePhotoStream?.cancel();
+    _blePhotoStream = null;
+    final generation = ++_photoStreamGeneration;
+    _photoStreamDeviceId = device.id;
     await connection.performCameraStartPhotoController();
     _blePhotoStream = lifetime.takeSubscription(
       _blePhotoStream,
       await connection.performGetImageListener(
         onImageReceived: (orientedImage) async {
+          if (generation != _photoStreamGeneration) return;
           final rotatedImageBytes = rotateImage(orientedImage);
           final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
           final String base64Image = base64Encode(rotatedImageBytes);
@@ -2191,6 +2250,7 @@ class CaptureController extends ChangeNotifier
             base64Image,
             id: tempId,
             emit: (payload) async {
+              if (generation != _photoStreamGeneration) return;
               if (_socket?.state == SocketServiceState.connected) {
                 _socket?.send(payload);
               }
@@ -2199,7 +2259,24 @@ class CaptureController extends ChangeNotifier
         },
       ),
     );
+    if (_blePhotoStream == null) {
+      await _stopDevicePhotoStreaming();
+    }
     notifyListeners();
+  }
+
+  /// Cancels the photo listener and tells the camera device to stop capturing.
+  Future<void> _stopDevicePhotoStreaming() async {
+    await _blePhotoStream?.cancel();
+    _blePhotoStream = null;
+    _photoStreamGeneration++;
+    final deviceId = _photoStreamDeviceId;
+    _photoStreamDeviceId = null;
+    if (deviceId == null) return;
+    final connection = await _ensureDeviceConnection(deviceId);
+    if (connection != null && await connection.hasPhotoStreamingCharacteristic()) {
+      await connection.performCameraStopPhotoController();
+    }
   }
 
   void clearTranscripts() {
@@ -2237,7 +2314,6 @@ class CaptureController extends ChangeNotifier
 
   Future _closeBleStream({bool disableNativeBackground = false}) async {
     await _bleBytesStream?.cancel();
-    await _blePhotoStream?.cancel();
     await _bleButtonStream?.cancel();
     _stopMetricsTracking();
     if (disableNativeBackground) {
@@ -2246,12 +2322,7 @@ class CaptureController extends ChangeNotifier
     } else {
       await _preferences.saveBool('nativeBleForegroundReady', false);
     }
-    if (_recordingDevice != null) {
-      var connection = await _ensureDeviceConnection(_recordingDevice!.id);
-      if (connection != null && await connection.hasPhotoStreamingCharacteristic()) {
-        await connection.performCameraStopPhotoController();
-      }
-    }
+    await _stopDevicePhotoStreaming();
     notifyListeners();
   }
 

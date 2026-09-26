@@ -3651,5 +3651,9 @@
     "capturePhoneStorageFull": "A telefon tárhelye megtelt",
     "captureStorageAlmostFull": "A tárhely majdnem megtelt",
     "capturePendantDisconnectedDetail": "A medál elvesztette a kapcsolatot ezzel a telefonnal. Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van. Minden, amit eddig rögzített, biztonságban van.",
-    "participantsSummaryUncounted": "{name} és mások"
+    "participantsSummaryUncounted": "{name} és mások",
+    "secondDevice": "Második eszköz",
+    "pairSecondDevice": "Második eszköz párosítása",
+    "pairSecondDeviceDescription": "Csatlakoztasd az OmiGlass-t az Omi mellé, hogy a fotók és a hang ugyanabba a beszélgetésbe kerüljenek.",
+    "forgetSecondDevice": "Második eszköz elfelejtése"
 }

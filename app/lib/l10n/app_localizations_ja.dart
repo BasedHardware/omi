@@ -11038,6 +11038,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get openCall => '通話を開く';
 
   @override
+  String get secondDevice => '2台目のデバイス';
+
+  @override
+  String get pairSecondDevice => '2台目のデバイスをペアリング';
+
+  @override
+  String get pairSecondDeviceDescription => 'Omi と一緒に OmiGlass を接続すると、写真と音声が同じ会話にまとまります。';
+
+  @override
+  String get forgetSecondDevice => '2台目のデバイスを忘れる';
+
+  @override
   String get captureRecoveryBanner => 'ペンダントの音声がアプリに届いていません — タップして修復';
 
   @override

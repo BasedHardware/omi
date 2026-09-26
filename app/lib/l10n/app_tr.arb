@@ -3590,5 +3590,9 @@
     "capturePhoneStorageFull": "Telefon depolama alanı dolu",
     "captureStorageAlmostFull": "Depolama neredeyse dolu",
     "capturePendantDisconnectedDetail": "Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.",
-    "participantsSummaryUncounted": "{name} ve diğerleri"
+    "participantsSummaryUncounted": "{name} ve diğerleri",
+    "secondDevice": "İkinci cihaz",
+    "pairSecondDevice": "İkinci cihazı eşleştir",
+    "pairSecondDeviceDescription": "Fotoğraflar ve ses aynı sohbete gitsin diye OmiGlass'ı Omi'nizin yanına bağlayın.",
+    "forgetSecondDevice": "İkinci cihazı unut"
 }

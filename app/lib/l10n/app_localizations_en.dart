@@ -11212,6 +11212,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get openCall => 'Open call';
 
   @override
+  String get secondDevice => 'Second device';
+
+  @override
+  String get pairSecondDevice => 'Pair a second device';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Connect OmiGlass next to your Omi so photos and audio go into the same conversation.';
+
+  @override
+  String get forgetSecondDevice => 'Forget second device';
+
+  @override
   String get captureRecoveryBanner => 'Pendant audio is not reaching the app — tap to repair';
 
   @override

@@ -11220,6 +11220,19 @@ class AppLocalizationsCs extends AppLocalizations {
   String get openCall => 'Otevřít hovor';
 
   @override
+  String get secondDevice => 'Druhé zařízení';
+
+  @override
+  String get pairSecondDevice => 'Spárovat druhé zařízení';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Připojte OmiGlass k vašemu Omi, aby fotky a zvuk šly do stejné konverzace.';
+
+  @override
+  String get forgetSecondDevice => 'Zapomenout druhé zařízení';
+
+  @override
   String get captureRecoveryBanner => 'Zvuk přívěsku se do aplikace nedostává — opravte klepnutím';
 
   @override

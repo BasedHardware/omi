@@ -11284,6 +11284,19 @@ class AppLocalizationsMk extends AppLocalizations {
   String get openCall => 'Отвори го повикот';
 
   @override
+  String get secondDevice => 'Втор уред';
+
+  @override
+  String get pairSecondDevice => 'Спари втор уред';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Поврзете OmiGlass заедно со вашиот Omi за фотографиите и звукот да одат во истиот разговор.';
+
+  @override
+  String get forgetSecondDevice => 'Заборави го вториот уред';
+
+  @override
   String get captureRecoveryBanner => 'Аудиото од привезокот не стигнува до апликацијата — допрете за поправка';
 
   @override

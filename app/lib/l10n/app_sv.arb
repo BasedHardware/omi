@@ -3555,5 +3555,9 @@
     "capturePhoneStorageFull": "Telefonens lagring är full",
     "captureStorageAlmostFull": "Lagringen är nästan full",
     "capturePendantDisconnectedDetail": "Hängsmycket tappade anslutningen till den här telefonen. Omi ansluter igen av sig själv när hängsmycket är på och i närheten. Allt som spelats in innan är säkert.",
-    "participantsSummaryUncounted": "{name} och andra"
+    "participantsSummaryUncounted": "{name} och andra",
+    "secondDevice": "Andra enhet",
+    "pairSecondDevice": "Para ihop en andra enhet",
+    "pairSecondDeviceDescription": "Anslut OmiGlass tillsammans med din Omi så att bilder och ljud hamnar i samma konversation.",
+    "forgetSecondDevice": "Glöm andra enhet"
 }

@@ -11115,5 +11115,9 @@
     "capturePhoneStorageFull": "ఫోన్ స్టోరేజ్ నిండింది",
     "captureStorageAlmostFull": "స్టోరేజ్ దాదాపు నిండింది",
     "capturePendantDisconnectedDetail": "మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.",
-    "participantsSummaryUncounted": "{name} మరియు ఇతరులు"
+    "participantsSummaryUncounted": "{name} మరియు ఇతరులు",
+    "secondDevice": "రెండవ పరికరం",
+    "pairSecondDevice": "రెండవ పరికరాన్ని జోడించండి",
+    "pairSecondDeviceDescription": "ఫోటోలు మరియు ఆడియో ఒకే సంభాషణలోకి వెళ్లేలా మీ Omi తో పాటు OmiGlass ను కనెక్ట్ చేయండి.",
+    "forgetSecondDevice": "రెండవ పరికరాన్ని మర్చిపోండి"
 }

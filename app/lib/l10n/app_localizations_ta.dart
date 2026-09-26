@@ -11300,6 +11300,19 @@ class AppLocalizationsTa extends AppLocalizations {
   String get openCall => 'அழைப்பைத் திறக்கவும்';
 
   @override
+  String get secondDevice => 'இரண்டாவது சாதனம்';
+
+  @override
+  String get pairSecondDevice => 'இரண்டாவது சாதனத்தை இணைக்கவும்';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'புகைப்படங்களும் ஒலியும் ஒரே உரையாடலுக்குச் செல்ல, உங்கள் Omi உடன் OmiGlass ஐ இணைக்கவும்.';
+
+  @override
+  String get forgetSecondDevice => 'இரண்டாவது சாதனத்தை மறக்கவும்';
+
+  @override
   String get captureRecoveryBanner => 'பென்டன்ட் ஆடியோ செயலியை அடையவில்லை — சரிசெய்ய தட்டவும்';
 
   @override

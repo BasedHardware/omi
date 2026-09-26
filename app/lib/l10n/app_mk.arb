@@ -11115,5 +11115,9 @@
     "capturePhoneStorageFull": "Меморијата на телефонот е полна",
     "captureStorageAlmostFull": "Меморијата е речиси полна",
     "capturePendantDisconnectedDetail": "Приврзокот ја изгуби врската со овој телефон. Omi ќе се поврзе повторно сам кога приврзокот е вклучен и во близина. Сè што е снимено досега е безбедно.",
-    "participantsSummaryUncounted": "{name} и други"
+    "participantsSummaryUncounted": "{name} и други",
+    "secondDevice": "Втор уред",
+    "pairSecondDevice": "Спари втор уред",
+    "pairSecondDeviceDescription": "Поврзете OmiGlass заедно со вашиот Omi за фотографиите и звукот да одат во истиот разговор.",
+    "forgetSecondDevice": "Заборави го вториот уред"
 }

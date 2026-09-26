@@ -11287,6 +11287,19 @@ class AppLocalizationsCa extends AppLocalizations {
   String get openCall => 'Obre la trucada';
 
   @override
+  String get secondDevice => 'Segon dispositiu';
+
+  @override
+  String get pairSecondDevice => 'Vincula un segon dispositiu';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Connecta les OmiGlass al costat del teu Omi perquè les fotos i l\'àudio vagin a la mateixa conversa.';
+
+  @override
+  String get forgetSecondDevice => 'Oblida el segon dispositiu';
+
+  @override
   String get captureRecoveryBanner => 'L\'àudio del penjoll no arriba a l\'aplicació — toca\'l per reparar';
 
   @override

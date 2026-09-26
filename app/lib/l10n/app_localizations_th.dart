@@ -11159,6 +11159,19 @@ class AppLocalizationsTh extends AppLocalizations {
   String get openCall => 'เปิดการโทร';
 
   @override
+  String get secondDevice => 'อุปกรณ์เครื่องที่สอง';
+
+  @override
+  String get pairSecondDevice => 'จับคู่อุปกรณ์เครื่องที่สอง';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'เชื่อมต่อ OmiGlass ควบคู่กับ Omi ของคุณ เพื่อให้รูปภาพและเสียงอยู่ในบทสนทนาเดียวกัน';
+
+  @override
+  String get forgetSecondDevice => 'ลืมอุปกรณ์เครื่องที่สอง';
+
+  @override
   String get captureRecoveryBanner => 'เสียงจากจี้ไม่ถึงแอป — แตะเพื่อซ่อมแซม';
 
   @override

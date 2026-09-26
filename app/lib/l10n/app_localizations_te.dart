@@ -11271,6 +11271,19 @@ class AppLocalizationsTe extends AppLocalizations {
   String get openCall => 'కాల్‌ను తెరవండి';
 
   @override
+  String get secondDevice => 'రెండవ పరికరం';
+
+  @override
+  String get pairSecondDevice => 'రెండవ పరికరాన్ని జోడించండి';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'ఫోటోలు మరియు ఆడియో ఒకే సంభాషణలోకి వెళ్లేలా మీ Omi తో పాటు OmiGlass ను కనెక్ట్ చేయండి.';
+
+  @override
+  String get forgetSecondDevice => 'రెండవ పరికరాన్ని మర్చిపోండి';
+
+  @override
   String get captureRecoveryBanner => 'పెండెంట్ ఆడియో యాప్‌కు చేరడం లేదు — రిపేర్ చేయడానికి ట్యాప్ చేయండి';
 
   @override

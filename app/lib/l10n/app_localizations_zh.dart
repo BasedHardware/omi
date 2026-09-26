@@ -11019,6 +11019,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openCall => '打开通话';
 
   @override
+  String get secondDevice => '第二台设备';
+
+  @override
+  String get pairSecondDevice => '配对第二台设备';
+
+  @override
+  String get pairSecondDeviceDescription => '将 OmiGlass 与你的 Omi 一起连接，让照片和音频进入同一段对话。';
+
+  @override
+  String get forgetSecondDevice => '忘记第二台设备';
+
+  @override
   String get captureRecoveryBanner => '吊坠音频未送达应用 — 轻点以修复';
 
   @override

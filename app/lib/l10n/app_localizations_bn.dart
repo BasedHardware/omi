@@ -11224,6 +11224,19 @@ class AppLocalizationsBn extends AppLocalizations {
   String get openCall => 'কল খুলুন';
 
   @override
+  String get secondDevice => 'দ্বিতীয় ডিভাইস';
+
+  @override
+  String get pairSecondDevice => 'দ্বিতীয় ডিভাইস যুক্ত করুন';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'আপনার Omi-এর পাশে OmiGlass সংযুক্ত করুন, যাতে ছবি ও অডিও একই কথোপকথনে যায়।';
+
+  @override
+  String get forgetSecondDevice => 'দ্বিতীয় ডিভাইস ভুলে যান';
+
+  @override
   String get captureRecoveryBanner => 'পেন্ডেন্টের অডিও অ্যাপে পৌঁছাচ্ছে না — মেরামত করতে ট্যাপ করুন';
 
   @override

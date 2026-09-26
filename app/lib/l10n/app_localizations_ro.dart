@@ -11275,6 +11275,19 @@ class AppLocalizationsRo extends AppLocalizations {
   String get openCall => 'Deschide apelul';
 
   @override
+  String get secondDevice => 'Al doilea dispozitiv';
+
+  @override
+  String get pairSecondDevice => 'Asociază un al doilea dispozitiv';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Conectează OmiGlass alături de Omi, astfel încât fotografiile și sunetul să ajungă în aceeași conversație.';
+
+  @override
+  String get forgetSecondDevice => 'Uită al doilea dispozitiv';
+
+  @override
   String get captureRecoveryBanner => 'Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara';
 
   @override

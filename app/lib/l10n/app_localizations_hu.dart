@@ -11266,6 +11266,19 @@ class AppLocalizationsHu extends AppLocalizations {
   String get openCall => 'Hívás megnyitása';
 
   @override
+  String get secondDevice => 'Második eszköz';
+
+  @override
+  String get pairSecondDevice => 'Második eszköz párosítása';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Csatlakoztasd az OmiGlass-t az Omi mellé, hogy a fotók és a hang ugyanabba a beszélgetésbe kerüljenek.';
+
+  @override
+  String get forgetSecondDevice => 'Második eszköz elfelejtése';
+
+  @override
   String get captureRecoveryBanner => 'A medál hangja nem érkezik meg az alkalmazásba — a javításhoz koppintson';
 
   @override

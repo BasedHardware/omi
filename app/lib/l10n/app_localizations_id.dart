@@ -11233,6 +11233,19 @@ class AppLocalizationsId extends AppLocalizations {
   String get openCall => 'Buka panggilan';
 
   @override
+  String get secondDevice => 'Perangkat kedua';
+
+  @override
+  String get pairSecondDevice => 'Pasangkan perangkat kedua';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Sambungkan OmiGlass bersama Omi Anda agar foto dan audio masuk ke percakapan yang sama.';
+
+  @override
+  String get forgetSecondDevice => 'Lupakan perangkat kedua';
+
+  @override
   String get captureRecoveryBanner => 'Audio pendant tidak sampai ke aplikasi — ketuk untuk memperbaiki';
 
   @override

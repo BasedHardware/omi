@@ -3555,5 +3555,9 @@
     "capturePhoneStorageFull": "Telefoni mälu on täis",
     "captureStorageAlmostFull": "Mälu on peaaegu täis",
     "capturePendantDisconnectedDetail": "Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.",
-    "participantsSummaryUncounted": "{name} ja teised"
+    "participantsSummaryUncounted": "{name} ja teised",
+    "secondDevice": "Teine seade",
+    "pairSecondDevice": "Seo teine seade",
+    "pairSecondDeviceDescription": "Ühenda OmiGlass oma Omi kõrvale, et fotod ja heli jõuaksid samasse vestlusse.",
+    "forgetSecondDevice": "Unusta teine seade"
 }

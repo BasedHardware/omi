@@ -3555,5 +3555,9 @@
     "capturePhoneStorageFull": "Úložiště telefonu je plné",
     "captureStorageAlmostFull": "Úložiště je téměř plné",
     "capturePendantDisconnectedDetail": "Přívěsek ztratil spojení s tímto telefonem. Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž. Vše nahrané předtím je v bezpečí.",
-    "participantsSummaryUncounted": "{name} a další"
+    "participantsSummaryUncounted": "{name} a další",
+    "secondDevice": "Druhé zařízení",
+    "pairSecondDevice": "Spárovat druhé zařízení",
+    "pairSecondDeviceDescription": "Připojte OmiGlass k vašemu Omi, aby fotky a zvuk šly do stejné konverzace.",
+    "forgetSecondDevice": "Zapomenout druhé zařízení"
 }

@@ -366,21 +366,21 @@ class BtDevice {
 
   Future<BtDevice> getDeviceInfo(DeviceConnection? conn) async {
     if (conn == null) {
-      if (SharedPreferencesUtil().btDevice.id.isNotEmpty) {
-        var device = SharedPreferencesUtil().btDevice;
-        return copyWith(
-          id: device.id,
-          name: device.name,
-          type: device.type,
-          rssi: device.rssi,
-          modelNumber: device.modelNumber,
-          firmwareRevision: device.firmwareRevision,
-          hardwareRevision: device.hardwareRevision,
-          manufacturerName: device.manufacturerName,
-        );
-      } else {
-        return BtDevice.empty();
-      }
+      // No live link: reuse the info read on an earlier connection of *this*
+      // device. With two saved devices (Omi + OmiGlass) the primary slot is
+      // not necessarily the device asking, so match by id rather than
+      // assuming the primary.
+      final saved = SharedPreferencesUtil().btDevices.where((device) => device.id == id).firstOrNull;
+      if (saved == null) return this;
+      return copyWith(
+        name: saved.name,
+        type: saved.type,
+        rssi: saved.rssi,
+        modelNumber: saved.modelNumber,
+        firmwareRevision: saved.firmwareRevision,
+        hardwareRevision: saved.hardwareRevision,
+        manufacturerName: saved.manufacturerName,
+      );
     }
 
     if (type == DeviceType.bee) {

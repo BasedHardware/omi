@@ -3555,5 +3555,9 @@
     "capturePhoneStorageFull": "Puhelimen tallennustila täynnä",
     "captureStorageAlmostFull": "Tallennustila melkein täynnä",
     "capturePendantDisconnectedDetail": "Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa.",
-    "participantsSummaryUncounted": "{name} ja muut"
+    "participantsSummaryUncounted": "{name} ja muut",
+    "secondDevice": "Toinen laite",
+    "pairSecondDevice": "Yhdistä toinen laite",
+    "pairSecondDeviceDescription": "Yhdistä OmiGlass Omi-laitteesi rinnalle, jotta kuvat ja ääni päätyvät samaan keskusteluun.",
+    "forgetSecondDevice": "Unohda toinen laite"
 }

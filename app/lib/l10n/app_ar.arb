@@ -3555,5 +3555,9 @@
     "capturePhoneStorageFull": "مساحة الهاتف ممتلئة",
     "captureStorageAlmostFull": "المساحة ممتلئة تقريبًا",
     "capturePendantDisconnectedDetail": "فقد القلادة اتصالها بهذا الهاتف. سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة. كل ما سُجّل قبل ذلك محفوظ.",
-    "participantsSummaryUncounted": "{name} وآخرون"
+    "participantsSummaryUncounted": "{name} وآخرون",
+    "secondDevice": "الجهاز الثاني",
+    "pairSecondDevice": "إقران جهاز ثانٍ",
+    "pairSecondDeviceDescription": "اربط OmiGlass بجانب جهاز Omi حتى تذهب الصور والصوت إلى المحادثة نفسها.",
+    "forgetSecondDevice": "نسيان الجهاز الثاني"
 }

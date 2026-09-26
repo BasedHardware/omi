@@ -606,6 +606,9 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   BtDevice? get pairedDevice => null;
 
   @override
+  BtDevice? get pairedCompanionDevice => null;
+
+  @override
   Future<void> getDeviceInfo() async {}
 
   @override

@@ -11260,6 +11260,19 @@ class AppLocalizationsRu extends AppLocalizations {
   String get openCall => 'Открыть звонок';
 
   @override
+  String get secondDevice => 'Второе устройство';
+
+  @override
+  String get pairSecondDevice => 'Подключить второе устройство';
+
+  @override
+  String get pairSecondDeviceDescription =>
+      'Подключите OmiGlass вместе с Omi, чтобы фото и звук попадали в один разговор.';
+
+  @override
+  String get forgetSecondDevice => 'Забыть второе устройство';
+
+  @override
   String get captureRecoveryBanner => 'Звук кулона не доходит до приложения — нажмите, чтобы исправить';
 
   @override

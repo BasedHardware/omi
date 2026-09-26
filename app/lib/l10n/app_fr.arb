@@ -3590,5 +3590,9 @@
     "capturePhoneStorageFull": "Stockage du téléphone plein",
     "captureStorageAlmostFull": "Stockage presque plein",
     "capturePendantDisconnectedDetail": "Votre pendentif a perdu la connexion avec ce téléphone. Omi se reconnectera tout seul quand le pendentif sera allumé et à proximité. Tout ce qui a été enregistré avant est en sécurité.",
-    "participantsSummaryUncounted": "{name} et d'autres"
+    "participantsSummaryUncounted": "{name} et d'autres",
+    "secondDevice": "Deuxième appareil",
+    "pairSecondDevice": "Associer un deuxième appareil",
+    "pairSecondDeviceDescription": "Connectez OmiGlass en plus de votre Omi pour que les photos et l'audio rejoignent la même conversation.",
+    "forgetSecondDevice": "Oublier le deuxième appareil"
 }

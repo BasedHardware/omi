@@ -20445,6 +20445,30 @@ abstract class AppLocalizations {
   /// **'Open call'**
   String get openCall;
 
+  /// Section title on the device page for the device paired next to the primary one (Omi + OmiGlass)
+  ///
+  /// In en, this message translates to:
+  /// **'Second device'**
+  String get secondDevice;
+
+  /// Action on the device page that opens the device picker to pair an OmiGlass next to an Omi (or vice versa)
+  ///
+  /// In en, this message translates to:
+  /// **'Pair a second device'**
+  String get pairSecondDevice;
+
+  /// Explains what pairing a second device does; product names Omi and OmiGlass stay untranslated
+  ///
+  /// In en, this message translates to:
+  /// **'Connect OmiGlass next to your Omi so photos and audio go into the same conversation.'**
+  String get pairSecondDeviceDescription;
+
+  /// Action that unpairs the second (companion) device only
+  ///
+  /// In en, this message translates to:
+  /// **'Forget second device'**
+  String get forgetSecondDevice;
+
   /// Persistent repair banner shown when a connected pendant's audio is not reaching the app; tapping opens device repair settings
   ///
   /// In en, this message translates to:
