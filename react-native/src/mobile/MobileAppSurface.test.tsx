@@ -430,7 +430,14 @@ test('Home shows open task metadata and opens all tasks with the Tasks tab selec
   ];
   const tree = render({...props, tasks});
   const text = renderedText(tree);
-  expect(text).toContain('Due Sep 18 · Sam');
+  const dueLabel = `Due ${new Date(
+    Date.parse('2026-09-18T12:00:00Z'),
+  ).toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  })} · Sam`;
+  expect(text).toContain(dueLabel);
   expect(text).toContain('Unscheduled idea');
   expect(text).not.toContain('Already finished');
   expect(text).not.toContain('No due date');
