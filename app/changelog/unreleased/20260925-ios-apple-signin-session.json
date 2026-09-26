@@ -1,0 +1,3 @@
+{
+  "change": "Preserve existing user session when Apple sign-in sheet is presented and handle sheet cancellation cleanly without error toasts"
+}

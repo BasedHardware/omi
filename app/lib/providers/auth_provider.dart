@@ -208,19 +208,15 @@ class AuthenticationProvider extends BaseProvider {
         }
         if (credential != null && _hasFirebaseUser) {
           await _signIn(onSignIn, credential: credential, authProvider: 'apple');
-        } else {
-          AppSnackbar.showSnackbarError(
-            globalNavigatorKey.currentContext?.l10n.authFailedToSignInWithApple ??
-                'Failed to sign in with Apple, please try again.',
-          );
         }
       } catch (e) {
         Logger.debug('OAuth Apple sign in error: $e');
         AppSnackbar.showSnackbarError(
           globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
         );
+      } finally {
+        setLoadingState(false);
       }
-      setLoadingState(false);
     }
   }
 
