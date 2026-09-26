@@ -68,6 +68,10 @@ DISCARD_KEEP_AUDIO_PASSES = 8
 ALIGNMENT_DELIVERED_SILENCE_SECONDS = 5.0
 ALIGNMENT_INTERARRIVAL_GAP_SECONDS = 4.0
 ALIGNMENT_COVERAGE_TOLERANCE_SECONDS = 0.001
+# Private-cloud chunks upload asynchronously after finalization (batches up to
+# 60 s old), so coverage is polled rather than read once at terminal.
+ALIGNMENT_COVERAGE_WAIT_SECONDS = 150
+ALIGNMENT_COVERAGE_POLL_SECONDS = 5
 
 
 class ProbeError(RuntimeError):
@@ -294,6 +298,21 @@ def _http_json(url: str, token: str) -> tuple[int, dict[str, Any] | None]:
     return status, payload if isinstance(payload, dict) else None
 
 
+def _epoch_seconds(value: Any) -> float | None:
+    """Wall-epoch seconds of an API datetime (ISO string, naive = UTC) or number, else None."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp()
+    return None
+
+
 def _alignment_covered(spans: list[Any], start: float, end: float) -> bool:
     """Union-cover [start, end) with the conversation's validated chunk spans."""
     merged: list[list[float]] = []
@@ -500,28 +519,42 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
             hold.set()
         live_segments = await listen_task
         quoted = urllib.parse.quote(conversation_id, safe="")
-        status, conversation = await asyncio.to_thread(_http_json_method, f"{base}/v1/conversations/{quoted}", token)
-        if status != 200 or not conversation or conversation.get("id") != conversation_id:
-            raise ProbeError("consumer_readback")
-        marker_ok = (conversation.get("audio_timeline") or {}).get("version") == 2
-        if not marker_ok:
-            raise ProbeError("audio_timeline_marker")
-        windows = sorted(
-            (float(item["start"]), float(item["end"]))
-            for item in conversation.get("transcript_segments") or []
-            if isinstance(item, dict) and item.get("start") is not None and item.get("end") is not None
-        )
-        # A zero-length segment is a distinct bug signal (a provider interval
-        # collapsed onto one point instead of being mapped or rejected), not a
-        # coverage question: name it so the receipt points at the real defect.
-        if any(end <= start for start, end in windows):
-            raise ProbeError("zero_length_segment")
-        spans: list[Any] = []
-        for audio_file in conversation.get("audio_files") or []:
-            spans.extend(audio_file.get("chunk_spans") or [])
-        coverage_ok = bool(spans) and all(_alignment_covered(spans, start, end) for start, end in windows)
-        if not coverage_ok:
-            raise ProbeError("span_coverage")
+        coverage_deadline = time.monotonic() + ALIGNMENT_COVERAGE_WAIT_SECONDS
+        while True:
+            status, conversation = await asyncio.to_thread(
+                _http_json_method, f"{base}/v1/conversations/{quoted}", token
+            )
+            if status != 200 or not conversation or conversation.get("id") != conversation_id:
+                raise ProbeError("consumer_readback")
+            marker_ok = (conversation.get("audio_timeline") or {}).get("version") == 2
+            if not marker_ok:
+                raise ProbeError("audio_timeline_marker")
+            windows = sorted(
+                (float(item["start"]), float(item["end"]))
+                for item in conversation.get("transcript_segments") or []
+                if isinstance(item, dict) and item.get("start") is not None and item.get("end") is not None
+            )
+            # A zero-length segment is a distinct bug signal (a provider interval
+            # collapsed onto one point instead of being mapped or rejected), not a
+            # coverage question: name it so the receipt points at the real defect.
+            if any(end <= start for start, end in windows):
+                raise ProbeError("zero_length_segment")
+            spans: list[Any] = []
+            for audio_file in conversation.get("audio_files") or []:
+                spans.extend(audio_file.get("chunk_spans") or [])
+            # Segment times are seconds from started_at; chunk spans are wall-epoch
+            # seconds. Compare them on one axis.
+            origin = _epoch_seconds(conversation.get("started_at"))
+            coverage_ok = (
+                origin is not None
+                and bool(spans)
+                and all(_alignment_covered(spans, origin + start, origin + end) for start, end in windows)
+            )
+            if coverage_ok:
+                break
+            if time.monotonic() >= coverage_deadline:
+                raise ProbeError("span_coverage")
+            await asyncio.sleep(ALIGNMENT_COVERAGE_POLL_SECONDS)
         # Live speaker identity rides the same capture clock: when the probe
         # identity has a voiceprint (enrolled from the fixture voice), every
         # persisted segment must be is_user and at least one live-delivered

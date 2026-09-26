@@ -261,3 +261,15 @@ async def test_terminal_readback_enforces_the_fixture_phrase_in_the_durable_tran
                 1,
                 expected_phrase='he began a confused complaint against the wizard',
             )
+
+
+def test_alignment_coverage_compares_segments_and_spans_on_one_axis(probe):
+    origin = probe._epoch_seconds('2026-09-26T07:08:30.000000Z')
+    assert origin == probe._epoch_seconds('2026-09-26T07:08:30')  # naive ISO is UTC
+    spans = [{'start': origin, 'end': origin + 9.9}, {'start': origin + 14.086, 'end': origin + 18.986}]
+    # Segment times are seconds from started_at; spans are wall-epoch seconds.
+    assert probe._alignment_covered(spans, origin + 0.28, origin + 4.66)
+    assert probe._alignment_covered(spans, origin + 14.186, origin + 18.746)
+    assert not probe._alignment_covered(spans, origin + 10.0, origin + 12.0)
+    # The relative segment offsets alone never overlap wall-epoch spans.
+    assert not probe._alignment_covered(spans, 0.28, 4.66)

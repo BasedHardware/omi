@@ -91,9 +91,14 @@ def conversation_clip_pcm(
         relevant = _v2_relevant_timestamps(conversation, abs_start, abs_end)
         if not relevant:
             return None
-        merged = download_audio_chunks_and_merge(
-            uid, conversation['id'], relevant, fill_gaps=True, sample_rate=sample_rate
-        )
+        try:
+            merged = download_audio_chunks_and_merge(
+                uid, conversation['id'], relevant, fill_gaps=True, sample_rate=sample_rate
+            )
+        except FileNotFoundError:
+            # Listed chunks that storage cannot return are missing audio, not a
+            # server error: callers answer 404 / "no sample".
+            return None
         spans = [
             bounds
             for audio_file in conversation.get('audio_files') or []
@@ -114,7 +119,12 @@ def conversation_clip_pcm(
     if not relevant:
         return None
 
-    merged = download_audio_chunks_and_merge(uid, conversation['id'], relevant, fill_gaps=True, sample_rate=sample_rate)
+    try:
+        merged = download_audio_chunks_and_merge(
+            uid, conversation['id'], relevant, fill_gaps=True, sample_rate=sample_rate
+        )
+    except FileNotFoundError:
+        return None
     buffer_start = min(relevant)
     pcm = trim_pcm16(merged, sample_rate, abs_start - buffer_start, abs_end - buffer_start)
     return pcm or None
