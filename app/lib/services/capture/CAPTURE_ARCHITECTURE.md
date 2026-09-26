@@ -258,19 +258,27 @@ recovery, batch-mode/settings/onboarding tails.
   historical non-throwing completion (`absorbed`).
 - A `PolicyWrite` that comes back `superseded` (a newer out-of-band intent won
   the policy revision) abandons the rest of the transition. If no effect had
-  run yet the dispatch keeps the pre-transition state and reports `false`
-  (the legacy `stopStreamRecording` supersede contract) — with one exception:
-  over a committed `phoneBatchPaused` or `pendantBatchPaused` session the
-  superseding write has already unmuted shared admission while a native batch
-  writer stays open in its file, so that combination fails closed instead —
-  writer gates denied, mic/BLE stopped, socket closed, then mute `true`
-  restored after the deny before the safe idle commit (a superseded or failed
-  safety mute changes nothing physically; it never reopens hardware). A
-  `phoneBatchPaused` failure that held a phone-reason pendant suspension keeps
-  that exact debt and sets `awaitingPhoneResume`, so a later explicit phone
-  stop can still resume the pendant. If physical effects
-  already ran the transition fails closed, since neither old nor target state
-  matches the physical world anymore.
+  run yet the dispatch normally keeps the pre-transition state and reports
+  `false` (the legacy `stopStreamRecording` supersede contract). Over a
+  committed `phoneBatchPaused` or `pendantBatchPaused` session the outcome
+  depends on the newer intent's effective policy, re-read after the lost
+  write: a still-muted policy is already safe — the paused writer stays
+  closed in its file and the dispatch keeps the committed state, `.bin`,
+  identity and debt untouched. An unmuted effective policy means shared
+  admission opened under a live native batch writer, so the transition fails
+  closed — writer gates denied, mic/BLE stopped, socket closed, mute `true`
+  restored after the deny (a superseded or failed safety mute changes nothing
+  physically; it never reopens hardware) — and the session-cleanup stage the
+  early return skipped still runs best-effort before the safe commit:
+  `StopPhoneBatchStage` for a phone-batch stop/finish, `StopDeviceSessionStage`
+  and `DeviceStopTelemetryStage` for a pendant disconnect, `SuspendPendantStage`
+  for a call start. A transition that had already latched `callActive` — a
+  phone stop under a call, or a call starting over the paused pendant —
+  keeps the call phase and its converted call-reason suspension instead of
+  idle; without a call, a `phoneBatchPaused` failure keeps its phone-reason
+  pendant debt with `awaitingPhoneResume` for a later explicit stop. If
+  physical effects already ran the transition fails closed, since neither old
+  nor target state matches the physical world anymore.
 - Snapshot persistence is required durability: the snapshot of the target
   state is written before the in-memory publish, and a failed write fails the
   transition closed (physical deny + safe idle) exactly like an effect failure.

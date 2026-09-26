@@ -1433,12 +1433,33 @@ class CaptureCoordinator {
             if (value.superseded) {
               if (i == 0) {
                 if (_state.phase == CapturePhase.phoneBatchPaused || _state.phase == CapturePhase.pendantBatchPaused) {
+                  var effectiveMuted = false;
+                  try {
+                    effectiveMuted = _readEnvironment().policyMuted;
+                  } catch (_) {}
+                  if (effectiveMuted) {
+                    return CaptureDispatchOutcome.completed(state: _state, result: false);
+                  }
+                  final error = StateError('capture transition superseded by a newer capture intent');
+                  final cleanupStages = transition.effects
+                      .whereType<RunStage>()
+                      .map((effect) => effect.stage)
+                      .where((stage) =>
+                          stage is StopPhoneBatchStage ||
+                          stage is StopDeviceSessionStage ||
+                          stage is DeviceStopTelemetryStage ||
+                          stage is SuspendPendantStage)
+                      .toList();
                   final supersedeDebt =
                       _state.phase == CapturePhase.phoneBatchPaused && priorDebt?.reason == SuspendReason.phone
                           ? priorDebt
                           : null;
-                  return _failClosed(working, StateError('capture transition superseded by a newer capture intent'),
-                      recoverPendant: recoverPendant, preserveDebt: supersedeDebt, restorePolicy: true);
+                  return _failClosed(working, error,
+                      recoverPendant: working.callActive ? null : recoverPendant,
+                      preserveDebt: working.callActive ? null : supersedeDebt,
+                      restorePolicy: true,
+                      cleanupStages: cleanupStages,
+                      safeState: working.callActive ? working.copyWith(lastFailure: () => error.toString()) : null);
                 }
                 return CaptureDispatchOutcome.completed(state: _state, result: false);
               }
@@ -1503,7 +1524,9 @@ class CaptureCoordinator {
       bool absorbed = false,
       SuspendedCapture? recoverPendant,
       SuspendedCapture? preserveDebt,
-      bool? restorePolicy}) async {
+      bool? restorePolicy,
+      List<CaptureStage> cleanupStages = const [],
+      CaptureCoordinatorState? safeState}) async {
     for (final deny in [
       () => _ports.setNativeWriterGate(CaptureSource.pendant, false),
       () => _ports.setNativeWriterGate(CaptureSource.phone, false),
@@ -1520,7 +1543,12 @@ class CaptureCoordinator {
         await _ports.writePolicy(restorePolicy);
       } catch (_) {}
     }
-    var closed = working.failedClosed(error);
+    for (final stage in cleanupStages) {
+      try {
+        await _ports.runStage(stage);
+      } catch (_) {}
+    }
+    var closed = safeState ?? working.failedClosed(error);
     if (preserveDebt != null) {
       closed = closed.copyWith(suspended: [preserveDebt], awaitingPhoneResume: true);
     }
