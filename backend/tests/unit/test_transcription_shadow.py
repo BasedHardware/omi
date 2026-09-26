@@ -51,7 +51,7 @@ def test_pass_uses_each_blob_clock_and_restores_first_word_offset(monkeypatch):
 def test_decoded_audio_cannot_exceed_reserved_budget(monkeypatch):
     monkeypatch.setattr(shadow, 'iter_audio_chunk_pcm', lambda *_args: iter([(100.0, bytes(3 * 32000))]))
     monkeypatch.setattr(shadow, 'build_person_embeddings_cache', lambda _uid: {})
-    monkeypatch.setattr(shadow, '_reserve_budget', lambda *_args: False)
+    monkeypatch.setattr(shadow, '_reserve_budget', lambda *_args: 'budget_exhausted')
     conversation = SimpleNamespace(id='synthetic', audio_files=[SimpleNamespace(chunk_timestamps=[100.0])])
     try:
         shadow._make_pass('synthetic', conversation, deadline=float('inf'), reserved_seconds=2)
@@ -74,3 +74,25 @@ def test_comparison_persists_only_bounded_scalars_and_detects_owner_parity():
     assert result['live_owner_seconds'] == result['pass_owner_seconds'] == 2
     assert result['remap_safe']
     assert 'Synthetic private words' not in repr(result)
+
+
+def test_duplicate_reservation_never_writes_or_counts_result(monkeypatch):
+    conversation = SimpleNamespace(audio_files=[SimpleNamespace(duration=10, chunk_timestamps=[100])])
+    monkeypatch.setattr(shadow.conversations_db, 'get_conversation', lambda *_args: {'synthetic': True})
+    monkeypatch.setattr(shadow, 'deserialize_conversation', lambda _raw: conversation)
+    monkeypatch.setattr(shadow, '_enabled', lambda *_args: True)
+    monkeypatch.setattr(shadow, '_reserve_budget', lambda *_args: 'duplicate')
+    writes = []
+    monkeypatch.setattr(shadow, '_store_result', lambda *_args: writes.append(_args))
+    monkeypatch.setattr(
+        shadow.SHADOW_OUTCOMES, 'labels', lambda **_kwargs: (_ for _ in ()).throw(AssertionError('counted'))
+    )
+    shadow._run_shadow('synthetic-uid', 'synthetic-conversation')
+    assert writes == []
+
+
+def test_budget_reservation_distinguishes_duplicate_from_exhaustion(monkeypatch):
+    monkeypatch.setenv('TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS', '1')
+    for code, expected in ((0, 'budget_exhausted'), (1, 'reserved'), (2, 'duplicate')):
+        monkeypatch.setattr(shadow.redis_client, 'eval', lambda *_args, code=code: code)
+        assert shadow._reserve_budget('synthetic-conversation', 10) == expected

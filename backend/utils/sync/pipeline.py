@@ -1010,9 +1010,7 @@ def identify_speakers_for_segments(
                     evidence_seconds += seconds
                 except Exception as error:
                     failed_clips += 1
-                    logger.info(
-                        'Speaker ID: embedding failed speaker=%s type=%s uid=%s', speaker_id, type(error).__name__, uid
-                    )
+                    logger.info('Speaker ID: embedding failed speaker=%s type=%s', speaker_id, type(error).__name__)
             if not embeddings:
                 outcome = (
                     'audio_error'
@@ -1021,11 +1019,10 @@ def identify_speakers_for_segments(
                 )
                 SYNC_SPEAKER_DECISIONS.labels(outcome=outcome).inc()
                 logger.info(
-                    'speaker_id_decision surface=sync uid=%s speaker=%s clip_seconds=%.1f '
+                    'speaker_id_decision surface=sync speaker=%s clip_seconds=%.1f '
                     'best=None best_distance=inf runner_up_distance=inf accepted=False '
                     'segments=%d clips=0 evidence_seconds=0 available_seconds=%.3f '
                     'failed_clips=%d outcome=%s evidence_policy=pooled_v1',
-                    uid,
                     speaker_id,
                     seg_duration,
                     len(segments),
@@ -1048,14 +1045,12 @@ def identify_speakers_for_segments(
             outcome = 'accepted' if accepted else 'duplicate_person' if decision.accepted else 'no_match'
             SYNC_SPEAKER_DECISIONS.labels(outcome=outcome).inc()
             logger.info(
-                'speaker_id_decision surface=sync uid=%s speaker=%s clip_seconds=%.1f '
-                'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s '
+                'speaker_id_decision surface=sync speaker=%s clip_seconds=%.1f '
+                'best_distance=%.3f runner_up_distance=%.3f accepted=%s '
                 'segments=%d clips=%d evidence_seconds=%.3f available_seconds=%.3f '
                 'failed_clips=%d outcome=%s evidence_policy=pooled_v1',
-                uid,
                 speaker_id,
                 seg_duration,
-                decision.best_id,
                 decision.best_distance,
                 decision.runner_up_distance,
                 accepted,
@@ -1092,10 +1087,7 @@ def identify_speakers_for_segments(
                     # Update speaker map only when diarization is active
                     if speaker_id > 0:
                         speaker_to_person_map[speaker_id] = (person['id'], person['name'])
-                    logger.info(
-                        f'Speaker ID (sync): text detection speaker {speaker_id} -> '
-                        f'{person["id"]} via "{detected_name}" uid={uid}'
-                    )
+                    logger.info('speaker_id_decision surface=sync speaker=%s source=text accepted=True', speaker_id)
                     if speaker_id > 0:
                         break  # One match per diarized speaker is enough
 

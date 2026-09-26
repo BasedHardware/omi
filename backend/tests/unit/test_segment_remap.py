@@ -64,6 +64,22 @@ def test_gaps_empty_and_overlap_ambiguity():
     assert plan_segment_remap(old, new, offset_seconds=0).ambiguous == ('a',)
 
 
+def test_concurrent_targets_are_ambiguous_even_when_text_similarity_differs():
+    old = [segment('source', 0, 10, 'this phrase matches the first target')]
+    new = [
+        segment('first', 0, 10, 'this phrase matches the first target'),
+        segment('second', 2, 8, 'entirely unrelated words'),
+    ]
+    plan = plan_segment_remap(old, new, offset_seconds=0)
+    assert plan.ids == {}
+    assert plan.ambiguous == ('source',)
+    receipt = {'segments': {'source': {'person_id': 'synthetic-person', 'is_user': False}}}
+    with pytest.raises(ValueError, match='no safe target'):
+        remap_receipt(receipt, old, new, plan)
+    with pytest.raises(ValueError, match='no safe target'):
+        remap_source_ids(['source'], plan)
+
+
 def test_text_anchor_estimates_rebased_clock_without_using_started_at():
     old = [
         segment('a', 10, 13, 'the distinctly blue harbor crane'),

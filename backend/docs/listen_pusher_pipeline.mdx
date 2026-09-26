@@ -31,7 +31,13 @@ generation, and Pusher claims that Firestore-owned job before processing.
 
 After a finalization lease is acquired, `finalizer.py` may admit a Parakeet
 **shadow** pass before canonical processing. Admission schedules a tracked task
-and does not await STT. The pass waits for the 60-second pusher upload flush,
+on the finalizer host: the pusher GKE pod for live WebSocket handoff, or
+backend-sync Cloud Run for a Cloud Tasks retry. The listen backend dispatches
+finalization and does not run this pass. Shutdown cancels the tracked coroutine;
+an active worker thread can run until process exit, then be lost with no shadow
+retry. Keep the Cloud Run
+shadow flag off until a separate durable task exists. Admission does not await
+STT. The pass waits for the 60-second pusher upload flush,
 reads only registered private-cloud chunks, transcribes each blob on its own
 timestamp with 90-second Parakeet `/v2` slices, runs Omi speaker matching and
 conversation-wide clustering, then compares the result with the streaming

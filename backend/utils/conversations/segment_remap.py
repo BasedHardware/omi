@@ -80,7 +80,7 @@ def plan_segment_remap(
     offset_seconds: float | None = None,
 ) -> RemapPlan:
     shift = estimate_offset(old, new) if offset_seconds is None else offset_seconds
-    targets = [(str(s['id']), *_bounds(s), _tokens(s)) for s in new]
+    targets = [(str(s['id']), *_bounds(s)) for s in new]
     if len({item[0] for item in targets}) != len(targets):
         raise ValueError('duplicate target segment id')
     mapped: dict[str, tuple[str, ...]] = {}
@@ -95,30 +95,27 @@ def plan_segment_remap(
         start, end = _bounds(source)
         start += shift
         end += shift
-        choices: list[tuple[str, float, float]] = []
-        for tid, left, right, phrase in targets:
+        choices: list[str] = []
+        for tid, left, right in targets:
             overlap = max(0.0, min(end, right) - max(start, left))
             if overlap <= 0:
                 continue
             fraction = overlap / min(end - start, right - left)
-            similarity = SequenceMatcher(None, _tokens(source), phrase, autojunk=False).ratio()
             if fraction >= 0.5:
-                choices.append((tid, fraction, similarity))
+                choices.append(tid)
         if not choices:
             unresolved.append(sid)
             continue
-        # A split or merge can have several real overlaps.  Two target voices
-        # occupying the same interval cannot be disambiguated by clock alone.
+        # Sequential splits can inherit one source annotation. Concurrent
+        # target intervals may be different voices; text similarity does not
+        # prove which one owns the source annotation.
         if len(choices) > 1:
-            ranked = sorted(choices, key=lambda item: (item[1], item[2]), reverse=True)
-            tied = abs(ranked[0][1] - ranked[1][1]) < 0.05
-            if tied and abs(ranked[0][2] - ranked[1][2]) < 0.15:
-                first = next(t for t in targets if t[0] == ranked[0][0])
-                second = next(t for t in targets if t[0] == ranked[1][0])
-                if min(first[2], second[2]) - max(first[1], second[1]) > 0.25:
-                    ambiguous.append(sid)
-                    continue
-        mapped[sid] = tuple(tid for tid, _, _ in choices)
+            selected = set(choices)
+            intervals = sorted((left, right) for tid, left, right in targets if tid in selected)
+            if any(next_left < left_right for (_, left_right), (next_left, _) in zip(intervals, intervals[1:])):
+                ambiguous.append(sid)
+                continue
+        mapped[sid] = tuple(choices)
     return RemapPlan(shift, mapped, tuple(unresolved), tuple(ambiguous))
 
 

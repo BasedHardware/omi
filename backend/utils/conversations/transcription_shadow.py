@@ -115,10 +115,10 @@ async def _run_later(uid: str, conversation_id: str) -> None:
         _slots.release()
 
 
-def _reserve_budget(conversation_id: str, seconds: float) -> bool:
+def _reserve_budget(conversation_id: str, seconds: float) -> str:
     hours = float(os.getenv('TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS', '0'))
     if hours <= 0:
-        return False
+        return 'budget_exhausted'
     requested = max(1, int(seconds * 1000 + 0.999))
     limit = int(hours * 3600 * 1000)
     day = datetime.now(timezone.utc).strftime('%Y%m%d')
@@ -130,8 +130,9 @@ def _reserve_budget(conversation_id: str, seconds: float) -> bool:
         requested,
         limit,
     )
-    # A duplicate worker never earns a second transcription call.
-    return int(result) == 1
+    # A duplicate worker never earns a second transcription call or writes to
+    # the first worker's result document.
+    return {0: 'budget_exhausted', 1: 'reserved', 2: 'duplicate'}[int(result)]
 
 
 def _words(text: str) -> list[str]:
@@ -204,7 +205,7 @@ def _make_pass(
             continue
         if covered + len(pcm) / 32000 > reserved_seconds + 0.01:
             extra = covered + len(pcm) / 32000 - reserved_seconds
-            if not _reserve_budget(f'{conversation.id}:extra:{chunk_count}', extra):
+            if _reserve_budget(f'{conversation.id}:extra:{chunk_count}', extra) != 'reserved':
                 raise _BudgetExceeded('decoded audio exceeds daily budget')
             reserved_seconds += extra
         for offset in range(0, len(pcm), 90 * 32000):
@@ -300,6 +301,7 @@ def _run_shadow(uid: str, conversation_id: str) -> None:
     began = time.monotonic()
     outcome = 'failed'
     result: dict[str, Any] = {}
+    record_result = False
     try:
         raw = conversations_db.get_conversation(uid, conversation_id)
         if not raw:
@@ -307,6 +309,7 @@ def _run_shadow(uid: str, conversation_id: str) -> None:
         conversation = deserialize_conversation(raw)
         if not _enabled(uid, conversation):
             return
+        record_result = True
         if not conversation.audio_files:
             outcome = 'no_audio'
         else:
@@ -318,7 +321,11 @@ def _run_shadow(uid: str, conversation_id: str) -> None:
                 sum(max(0.0, file.duration) for file in conversation.audio_files),
                 max(timestamps) - min(timestamps) + 120.0 if timestamps else 0.0,
             )
-            if not _reserve_budget(conversation_id, estimated):
+            reservation = _reserve_budget(conversation_id, estimated)
+            if reservation == 'duplicate':
+                record_result = False
+                return
+            if reservation != 'reserved':
                 outcome = 'skipped_budget'
             else:
                 deadline = began + max(30.0, float(os.getenv('TRANSCRIPTION_SHADOW_TIMEOUT_SECONDS', '600')))
@@ -339,18 +346,19 @@ def _run_shadow(uid: str, conversation_id: str) -> None:
         logger.warning('event=transcription_shadow outcome=failed exception_type=%s', type(error).__name__)
         outcome = 'failed'
     finally:
-        elapsed = round(time.monotonic() - began, 3)
-        result.update(outcome=outcome, latency_seconds=elapsed, measured_at=datetime.now(timezone.utc))
-        SHADOW_OUTCOMES.labels(outcome=outcome if outcome in _OUTCOMES else 'failed').inc()
-        SHADOW_LATENCY.observe(elapsed)
-        # A child of the conversation inherits its deletion lifetime. The
-        # parent read in the transaction fences a concurrent parent delete.
-        try:
-            _store_result(uid, conversation_id, result)
-        except Exception as error:
-            logger.warning(
-                'event=transcription_shadow outcome=metric_write_failed exception_type=%s', type(error).__name__
-            )
+        if record_result:
+            elapsed = round(time.monotonic() - began, 3)
+            result.update(outcome=outcome, latency_seconds=elapsed, measured_at=datetime.now(timezone.utc))
+            SHADOW_OUTCOMES.labels(outcome=outcome if outcome in _OUTCOMES else 'failed').inc()
+            SHADOW_LATENCY.observe(elapsed)
+            # A child of the conversation inherits its deletion lifetime. The
+            # parent read in the transaction fences a concurrent parent delete.
+            try:
+                _store_result(uid, conversation_id, result)
+            except Exception as error:
+                logger.warning(
+                    'event=transcription_shadow outcome=metric_write_failed exception_type=%s', type(error).__name__
+                )
 
 
 def _store_result(uid: str, conversation_id: str, result: dict[str, Any]) -> None:
