@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: omi-world-bank-tests
+    command: ["python3", "plugins/omi-world-bank-app/test_main.py"]
+    triggers: ["plugins/omi-world-bank-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "World Bank economic snapshots, indicator histories, and country comparisons must safely handle unmanaged HTTP clients, timeouts, missing indicator values, and malformed responses without 500s or unhandled exceptions"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
