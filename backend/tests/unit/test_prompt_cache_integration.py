@@ -23,6 +23,8 @@ from datetime import timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
@@ -37,6 +39,13 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 _STUBBED_MODULE_NAMES: set[str] = set()
+# name -> the stub ModuleType this file installed, so a re-entry after the module
+# teardown restore can put the exact same stub back.
+_INSTALLED_STUBS: dict[str, types.ModuleType] = {}
+# name -> what sys.modules held before this file's stub replaced it (None = absent).
+# The module teardown fixture restores these, so the stub graph never outlives this
+# file's tests in a shared pytest process (threads: order-dependent pollution).
+_STUB_ORIGINALS: dict[str, types.ModuleType | None] = {}
 
 # Real modules this file stubs that are safe and cheap to actually import (pure
 # Python / lazy client construction, no database or network access at import
@@ -98,13 +107,53 @@ def _stub_module(name: str) -> types.ModuleType:
                 importlib.import_module(name)
             except Exception:
                 pass
-        stub = types.ModuleType(name)
         existing = sys.modules.get(name)
+        stub = types.ModuleType(name)
         if existing is not None:
             stub.__dict__.update(existing.__dict__)
+        # Record the pre-stub sys.modules state exactly once: the module teardown
+        # fixture (`_restore_stubbed_modules`) puts it back once this file's
+        # tests finish, so the stub graph never outlives this file in a shared
+        # pytest process.
+        _STUB_ORIGINALS.setdefault(name, existing)
         sys.modules[name] = stub
+        _INSTALLED_STUBS[name] = stub
         _STUBBED_MODULE_NAMES.add(name)
-    return sys.modules[name]
+        return stub
+    stub = _INSTALLED_STUBS[name]
+    if sys.modules.get(name) is not stub:
+        # Normally unreachable under pytest (all _stub_module calls happen at
+        # this file's import time, before the teardown fixture runs), but kept
+        # as a guard: if anything re-invokes this file's stub setup after the
+        # teardown restored the real module, reinstall the recorded stub instead
+        # of letting callers below mutate the real module in place.
+        sys.modules[name] = stub
+    return stub
+
+
+def _restore_stubbed_modules_now() -> None:
+    """Put back every sys.modules entry this file stubbed (see `_restore_stubbed_modules`)."""
+    from tests.unit.memory_import_isolation import restore_sys_modules
+
+    restore_sys_modules(_STUB_ORIGINALS)
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _restore_stubbed_modules():
+    """Restore sys.modules entries this file stubbed once its tests finish.
+
+    The stubs above are installed at module import (collection) time. Without
+    this teardown they persist for the rest of the pytest process: later test
+    files that lazily import e.g. `database.auth` silently bind this stub
+    graph, and the divergence between files that imported the real modules at
+    their own collection time and files that lazily import them at test time
+    shows up as order-dependent failures (e.g. this file before
+    test_agent_tools_isolation.py). Restoring the recorded originals keeps the
+    stubbing scoped to this file, mirroring the monkeypatch/restore pattern in
+    tests/unit/memory_import_isolation.py.
+    """
+    yield
+    _restore_stubbed_modules_now()
 
 
 # --- database stubs ---
@@ -196,6 +245,11 @@ tracker_mod.track_usage = MagicMock()
 gateway_mod = _stub_module("utils.llm.gateway_client")
 gateway_mod.invoke_chat_structured_gateway = MagicMock(return_value=None)
 gateway_mod.is_auto_lane_id = lambda value: isinstance(value, str) and value.startswith('omi:auto:')
+# agentic.py resolves the Perplexity tool's args_schema lazily, so utils.retrieval.tools.
+# perplexity_tools is imported under this harness and needs the gateway surface it names.
+gateway_mod.feature_auto_lane_id = lambda feature: f"omi:auto:{feature.replace('_', '-')}"
+gateway_mod.get_llm_gateway_base_url = MagicMock(return_value='https://llm-gateway.test')
+gateway_mod.llm_gateway_headers = MagicMock(return_value={})
 gateway_mod.record_chat_extraction_gateway_result = MagicMock()
 gateway_mod.raise_if_gateway_feature_mode_blocks_direct_model_surface = MagicMock()
 
@@ -212,6 +266,30 @@ langchain_runnables_mod = _stub_module("langchain_core.runnables")
 langchain_runnables_mod.RunnableConfig = dict
 langchain_callbacks_mod = _stub_module("langchain_core.callbacks")
 langchain_callbacks_mod.BaseCallbackHandler = type("BaseCallbackHandler", (), {})
+
+
+def _passthrough_tool(target=None, **_kwargs):
+    # Mirrors the langchain @tool decorator shape for module-import compatibility only:
+    # agentic.py now imports utils.retrieval.tools.web_tools directly, and web_tools.py
+    # decorates fetch_url_tool with @tool at import time. The agentic harness never
+    # invokes web tools, so the real wrapper is not needed here.
+    if callable(target):
+        return target
+    return lambda fn: fn
+
+
+_langchain_tools_was_stubbed = "langchain_core.tools" not in sys.modules
+langchain_tools_mod = _stub_module("langchain_core.tools")
+# Installed on the stub itself rather than through an autouse fixture. The fixture only ran
+# for tests in this file, so any other module that imports _get_agentic_module from here
+# (test_chat_agent_provider_retry.py) reached web_tools' import-time `from langchain_core.tools
+# import tool` against a bare stub and failed collection with ImportError.
+# Only patched when this file created the stub: when the real langchain_core.tools is already
+# imported, its own @tool works and overwriting it here would leak a passthrough decorator into
+# every production tool module imported afterwards in the same process.
+if _langchain_tools_was_stubbed:
+    langchain_tools_mod.tool = _passthrough_tool
+
 
 # --- LLMs/memory stubs ---
 llms_mod = _stub_module("utils.llms")
@@ -798,6 +876,16 @@ def test_convert_tools_produces_valid_openai_schemas():
         props = function['parameters'].get('properties', {})
         assert 'config' not in props, f"Tool {function['name']} should not expose 'config' parameter"
         assert 'defer_loading' not in schema, f"Core tool {function['name']} should not have defer_loading"
+
+
+def test_convert_tools_does_not_enable_server_web_search_by_default():
+    """Server-side web search stays off the converted tool contract by default."""
+    agentic_mod = _get_agentic_module()
+
+    tool_schemas, _ = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
+
+    assert all(_openai_tool_name(schema) != "web_search" for schema in tool_schemas)
+    assert all(schema.get("type") != "web_search_20260209" for schema in tool_schemas)
 
 
 def test_entity_timeline_is_registered_with_schema_and_display_status():
@@ -1450,3 +1538,39 @@ def _find_first_diff(a: str, b: str) -> str:
     if len(a) != len(b):
         return f"strings differ in length: {len(a)} vs {len(b)}"
     return "no difference found"
+
+
+def test_module_teardown_removes_the_stub_graph():
+    """The module teardown (`_restore_stubbed_modules`) must put back every sys.modules
+    entry this file stubbed, so tests that dynamically import production modules
+    afterwards — later files in a shared pytest process — receive the real modules,
+    not the incomplete stubs installed at collection time.
+
+    Must stay the last test in this file: it performs the teardown restore directly,
+    and the stub graph is what every earlier test in this file runs against.
+
+    https://github.com/BasedHardware/omi/pull/11015 review thread 3747824073.
+    """
+    import importlib
+
+    installed = _INSTALLED_STUBS["langchain_core.tools"]
+    assert sys.modules.get("langchain_core.tools") is installed
+
+    _restore_stubbed_modules_now()
+
+    original = _STUB_ORIGINALS["langchain_core.tools"]
+    if original is None:
+        # The stub created the entry; the teardown removes it so the next import
+        # loads the real package instead of recycling the stub.
+        assert "langchain_core.tools" not in sys.modules
+    else:
+        assert sys.modules["langchain_core.tools"] is original
+
+    tools = importlib.import_module("langchain_core.tools")
+
+    @tools.tool
+    def _probe(value: str) -> str:
+        """Probe."""
+        return value
+
+    assert hasattr(_probe, "ainvoke")

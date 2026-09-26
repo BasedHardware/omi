@@ -357,8 +357,8 @@ export default function PluginDetailPage() {
                       {plugin.payment_plan === 'monthly_recurring'
                         ? '(Monthly subscription)'
                         : plugin.payment_plan === 'one_time'
-                          ? '(One-time purchase)'
-                          : '(Paid)'}
+                        ? '(One-time purchase)'
+                        : '(Paid)'}
                     </span>
                   </div>
                 </div>

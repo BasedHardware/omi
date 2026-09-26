@@ -266,3 +266,64 @@ def test_managed_lane_never_ships_the_provider_executed_tool():
     )
     assert WEB_SEARCH_NAME not in [tool['function']['name'] for tool in converted]
     assert [tool['function']['name'] for tool in converted] == ['lookup']
+
+
+def _openai_transcript_with_tool_result(tool_name, content):
+    """OpenAI-shaped transcript with one completed tool call, as carried in
+    ``configurable['agent_messages']`` on the managed lane."""
+    return [
+        {'role': 'user', 'content': 'hello'},
+        {
+            'role': 'assistant',
+            'content': '',
+            'tool_calls': [{'id': 'call_1', 'type': 'function', 'function': {'name': tool_name, 'arguments': '{}'}}],
+        },
+        {'role': 'tool', 'tool_call_id': 'call_1', 'content': content},
+    ]
+
+
+def test_managed_perplexity_search_is_withheld_after_private_tool_output(monkeypatch):
+    """Managed (Perplexity) searches leave through ``_execute_tool``, so the provenance
+    check runs at call time against the live transcript: once private tool output is in
+    context, the outbound query must be refused before the tool is reached."""
+    fallbacks = []
+    monkeypatch.setattr(web_search_gate, 'record_fallback', lambda **fields: fallbacks.append(fields))
+
+    class _RefusingTool:
+        name = 'perplexity_web_search_tool'
+
+        async def ainvoke(self, tool_input, config=None):
+            raise AssertionError('the managed search tool must not be reached')
+
+    registry = {'perplexity_web_search_tool': _RefusingTool()}
+    configurable = {
+        'agent_messages': _openai_transcript_with_tool_result('get_memories_tool', 'secret: board deck passphrase'),
+    }
+
+    result = asyncio.run(
+        agentic._execute_tool('perplexity_web_search_tool', {'query': 'anything'}, registry, configurable)
+    )
+
+    assert result == web_search_gate.MANAGED_WEB_SEARCH_WITHHELD_MESSAGE
+    assert configurable['managed_web_search_withheld'] is True
+    assert [fallback['from_mode'] for fallback in fallbacks] == ['managed_web_search']
+    assert fallbacks[0]['reason'] == 'private_tool_output_in_context'
+    assert fallbacks[0]['outcome'] == 'degraded'
+
+
+def test_managed_perplexity_search_runs_after_public_safe_tool_output(monkeypatch):
+    """Product-doc lookups carry no user data, so the managed feature must not regress."""
+    monkeypatch.setattr(web_search_gate, 'record_fallback', lambda **fields: pytest.fail('no fallback expected'))
+    registry = {'perplexity_web_search_tool': _FakeTool('perplexity_web_search_tool', 'search results')}
+    configurable = {
+        'agent_messages': _openai_transcript_with_tool_result(
+            'get_omi_product_info_tool', 'Omi docs: battery lasts 3 days'
+        ),
+    }
+
+    result = asyncio.run(
+        agentic._execute_tool('perplexity_web_search_tool', {'query': 'battery'}, registry, configurable)
+    )
+
+    assert result == 'search results'
+    assert 'managed_web_search_withheld' not in configurable

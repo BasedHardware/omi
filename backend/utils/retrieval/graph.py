@@ -392,6 +392,7 @@ async def execute_chat_stream(
     platform: Optional[str] = None,
     client_kind: Optional[ClientKind] = None,
     client_tz: Optional[str] = None,
+    initiating_message_id: Optional[str] = None,
 ) -> AsyncGenerator[Optional[str], None]:
     """Route chat requests to the appropriate handler.
 
@@ -474,6 +475,7 @@ async def execute_chat_stream(
         current_datetime_block=current_datetime_block,
         tz=tz,
         setup_deadline_at=setup_deadline_at,
+        initiating_message_id=initiating_message_id,
     ):
         yield chunk
 

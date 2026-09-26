@@ -177,8 +177,26 @@ def test_pin_ipv4_preserves_path_and_query():
 def test_pin_ipv6_brackets_host_and_preserves_port():
     pinned_url, extra = pin_to_resolved_ip('http://example.com:8080/x', '2001:db8::1')
     assert pinned_url == 'http://[2001:db8::1]:8080/x'
-    assert extra['headers']['Host'] == 'example.com'
+    # The Host header must carry the full original authority: a non-default port is
+    # part of the virtual-host identity on the wire (PR #11015 review thread 3772025283).
+    assert extra['headers']['Host'] == 'example.com:8080'
     assert extra['extensions']['sni_hostname'] == 'example.com'
+
+
+def test_pin_omits_default_ports_from_the_host_header():
+    _, extra = pin_to_resolved_ip('https://example.com/x', '203.0.113.5')
+    assert extra['headers']['Host'] == 'example.com'
+
+
+def test_pin_idna_encodes_host_header_and_sni():
+    """Unicode hostnames must reach the wire as ASCII A-labels: HTTPX 0.28 encodes
+    header values as ASCII, and the TLS SNI extension is ASCII-only."""
+    pinned_url, extra = pin_to_resolved_ip('https://bücher.example:8443/', '203.0.113.5')
+    assert extra['headers']['Host'] == 'xn--bcher-kva.example:8443'
+    sni = extra['extensions']['sni_hostname']
+    assert sni == 'xn--bcher-kva.example'
+    assert isinstance(sni, str), 'httpcore passes sni_hostname straight to ssl as server_hostname, which must be text'
+    assert pinned_url == 'https://203.0.113.5:8443/'
 
 
 # ---------------------------------------------------------------------------
