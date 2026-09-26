@@ -1074,7 +1074,6 @@ class AnalyticsManager {
   }
 
   void memoriesFiltered(String filter) => track('Facts Filtered', properties: {'filter': filter});
-
   void memoriesManagementSheetOpened() => const TypedEvents().emit(const MemoriesManagementSheetOpened());
 
   Map<String, dynamic> _getTranscriptProperties(String transcript) {
@@ -2398,7 +2397,6 @@ class AnalyticsManager {
   }
 
   void permissionsInterstitialShown() => const TypedEvents().emit(const PermissionsInterstitialShown());
-
   void permissionsInterstitialCompleted() => const TypedEvents().emit(const PermissionsInterstitialCompleted());
 
   void permissionsInterstitialSkipped() => const TypedEvents().emit(const PermissionsInterstitialSkipped());
