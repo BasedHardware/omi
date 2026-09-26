@@ -10,6 +10,7 @@ import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'guided_voice_controller.dart';
 import 'guided_voice_io.dart';
 
@@ -129,7 +130,9 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
         await _startTask;
         try {
           await resume();
-        } catch (_) {}
+        } catch (e, st) {
+          Logger.error('[SpeechProfileWidget] capture restart on dispose failed: $e\n$st');
+        }
       }());
     }
     super.dispose();

@@ -1391,9 +1391,11 @@ class CaptureCoordinator {
   }
 
   Future<CaptureDispatchOutcome> _run(CaptureEvent event) async {
+    late final CaptureEnvironment env;
     final CaptureTransition transition;
     try {
-      transition = transitionCapture(_state, event, _readEnvironment());
+      env = _readEnvironment();
+      transition = transitionCapture(_state, event, env);
     } catch (error, stack) {
       // Nothing physical could have started; keep the committed state.
       return CaptureDispatchOutcome.completed(state: _state, error: error, stackTrace: stack);
@@ -1413,6 +1415,7 @@ class CaptureCoordinator {
             priorDebt?.reason == SuspendReason.phone
         ? priorDebt
         : null;
+    final restoreHeldDebtPolicy = preserveDebt != null ? env.policyMuted : null;
 
     try {
       Object? result = transition.result;
@@ -1429,18 +1432,25 @@ class CaptureCoordinator {
           } else if (value is PolicyWriteOutcome) {
             if (value.superseded) {
               if (i == 0) {
-                if (_state.phase == CapturePhase.phoneBatchPaused) {
+                if (_state.phase == CapturePhase.phoneBatchPaused || _state.phase == CapturePhase.pendantBatchPaused) {
+                  final supersedeDebt =
+                      _state.phase == CapturePhase.phoneBatchPaused && priorDebt?.reason == SuspendReason.phone
+                          ? priorDebt
+                          : null;
                   return _failClosed(working, StateError('capture transition superseded by a newer capture intent'),
-                      recoverPendant: recoverPendant, preserveDebt: preserveDebt);
+                      recoverPendant: recoverPendant, preserveDebt: supersedeDebt, restorePolicy: true);
                 }
                 return CaptureDispatchOutcome.completed(state: _state, result: false);
               }
               return _failClosed(working, StateError('capture transition superseded by a newer capture intent'),
-                  recoverPendant: recoverPendant, preserveDebt: preserveDebt);
+                  recoverPendant: recoverPendant, preserveDebt: preserveDebt, restorePolicy: restoreHeldDebtPolicy);
             }
           } else if (value is CaptureStageFailure) {
             return _failClosed(working, value.error,
-                absorbed: value.absorbed, recoverPendant: recoverPendant, preserveDebt: preserveDebt);
+                absorbed: value.absorbed,
+                recoverPendant: recoverPendant,
+                preserveDebt: preserveDebt,
+                restorePolicy: restoreHeldDebtPolicy);
           } else if (value != null) {
             result = value;
           }
@@ -1449,7 +1459,10 @@ class CaptureCoordinator {
             return CaptureDispatchOutcome.completed(state: _state, error: error, stackTrace: stack);
           }
           return _failClosed(working, error,
-              stackTrace: stack, recoverPendant: recoverPendant, preserveDebt: preserveDebt);
+              stackTrace: stack,
+              recoverPendant: recoverPendant,
+              preserveDebt: preserveDebt,
+              restorePolicy: restoreHeldDebtPolicy);
         }
       }
 
@@ -1463,12 +1476,19 @@ class CaptureCoordinator {
         }
       } catch (error, stack) {
         return _failClosed(working, error,
-            stackTrace: stack, recoverPendant: recoverPendant, preserveDebt: preserveDebt);
+            stackTrace: stack,
+            recoverPendant: recoverPendant,
+            preserveDebt: preserveDebt,
+            restorePolicy: restoreHeldDebtPolicy);
       }
       _commit(working);
       return CaptureDispatchOutcome.completed(state: _state, result: result);
     } catch (error, stack) {
-      return _failClosed(working, error, stackTrace: stack, recoverPendant: recoverPendant, preserveDebt: preserveDebt);
+      return _failClosed(working, error,
+          stackTrace: stack,
+          recoverPendant: recoverPendant,
+          preserveDebt: preserveDebt,
+          restorePolicy: restoreHeldDebtPolicy);
     } finally {
       _staged = null;
       _ports.clearPhonePermissionGrant?.call();
@@ -1482,7 +1502,8 @@ class CaptureCoordinator {
       {StackTrace? stackTrace,
       bool absorbed = false,
       SuspendedCapture? recoverPendant,
-      SuspendedCapture? preserveDebt}) async {
+      SuspendedCapture? preserveDebt,
+      bool? restorePolicy}) async {
     for (final deny in [
       () => _ports.setNativeWriterGate(CaptureSource.pendant, false),
       () => _ports.setNativeWriterGate(CaptureSource.phone, false),
@@ -1492,6 +1513,11 @@ class CaptureCoordinator {
     ]) {
       try {
         await deny();
+      } catch (_) {}
+    }
+    if (restorePolicy != null) {
+      try {
+        await _ports.writePolicy(restorePolicy);
       } catch (_) {}
     }
     var closed = working.failedClosed(error);
@@ -1588,6 +1614,9 @@ CaptureTransition transitionCapture(CaptureCoordinatorState state, CaptureEvent 
     };
 
 CaptureTransition _reducePhoneStart(CaptureCoordinatorState state, PhoneStartRequested event, CaptureEnvironment env) {
+  if (state.callActive && state.awaitingPhoneResume) {
+    return CaptureTransition(state, const [], result: false);
+  }
   // An explicit restart rolls the old phone session before minting a new id;
   // socket recovery uses its own events and never rolls the conversation.
   // A batch pendant's native writer owns its file under the shared policy; no

@@ -412,7 +412,17 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       // Phone-mic batch is user-driven (not ambient like BLE), so it needs an explicit Stop that ends
       // the session. BLE batch has no Stop by design.
       if (provider.isPhoneMicBatchRecording)
-        (icon: Icons.stop_rounded, label: l10n.stop, onTap: () => provider.stopStreamRecording()),
+        (
+          icon: Icons.stop_rounded,
+          label: l10n.stop,
+          onTap: () async {
+            try {
+              await provider.stopStreamRecording();
+            } catch (_) {
+              if (mounted) AppSnackbar.showSnackbar(context.l10n.somethingWentWrong);
+            }
+          },
+        ),
     ];
 
     return Column(

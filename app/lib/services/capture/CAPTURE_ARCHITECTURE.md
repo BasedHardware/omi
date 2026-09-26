@@ -59,9 +59,11 @@ recording id. A call suspension that was never taken over keeps its session
 identity and resumes without a roll. A call that *starts* over a held
 phone-reason debt (`awaitingPhoneResume`) does none of that: it only flags
 `callActive`, the phone debt and its awaiting marker are untouched, the call
-end releases `callActive` without popping them, and a `DeviceStartRequested`
-during the hold refreshes the pendant's identity without resuming audio —
-only an explicit later phone start/stop resolves the debt. Repeated
+end releases `callActive` without popping them, a `PhoneStartRequested` while
+the call holds is refused outright (`result: false`), and a
+`DeviceStartRequested` during the hold refreshes the pendant's identity
+without resuming audio — only an explicit later phone start/stop resolves the
+debt. Repeated
 call-start or reconnect events
 while a call already holds add no debt, a repeated pendant start under an
 owner only refreshes the suspended entry's device identity, and a suspension
@@ -169,6 +171,10 @@ already-installed BLE bytes subscription the per-frame admission is narrower —
 frames are dropped only when the controller is disposed, the policy revision
 moved, or the recording device *id* actually changed — so a same-id device
 refresh or metadata normalization never starves a stream it cannot invalidate.
+A *different*-device identity change mid-open can leave the old
+characteristic's subscription installed until `_closeBleStream` runs; the
+installed frame guards already drop its bytes by device id and policy, so the
+residual subscription never reaches a new socket's traffic.
 
 One strictly test-only compatibility lane exists on top of that fence:
 `reconnectActiveCaptureForTesting` dispatches `KeepAliveTick(testingProbe: true)`.
@@ -254,10 +260,15 @@ recovery, batch-mode/settings/onboarding tails.
   the policy revision) abandons the rest of the transition. If no effect had
   run yet the dispatch keeps the pre-transition state and reports `false`
   (the legacy `stopStreamRecording` supersede contract) — with one exception:
-  over a committed `phoneBatchPaused` session the superseding write has
-  already unmuted shared admission while the native batch writer stays open
-  in its file, so that combination fails closed (writer denied, mic stopped)
-  instead of pretending nothing changed. If physical effects
+  over a committed `phoneBatchPaused` or `pendantBatchPaused` session the
+  superseding write has already unmuted shared admission while a native batch
+  writer stays open in its file, so that combination fails closed instead —
+  writer gates denied, mic/BLE stopped, socket closed, then mute `true`
+  restored after the deny before the safe idle commit (a superseded or failed
+  safety mute changes nothing physically; it never reopens hardware). A
+  `phoneBatchPaused` failure that held a phone-reason pendant suspension keeps
+  that exact debt and sets `awaitingPhoneResume`, so a later explicit phone
+  stop can still resume the pendant. If physical effects
   already ran the transition fails closed, since neither old nor target state
   matches the physical world anymore.
 - Snapshot persistence is required durability: the snapshot of the target
@@ -299,7 +310,9 @@ recovery, batch-mode/settings/onboarding tails.
   `connectedDevice` identity survive. The one scoped exception is the held
   phone-reason onboarding debt above: a failed phone start over
   `awaitingPhoneResume` (outside a call) reinstates that single original
-  suspension entry and the flag rather than clearing them.
+  suspension entry and the flag rather than clearing them, and the
+  pre-transition policy mute is re-written after the physical deny so a start
+  that unmuted admission before failing never leaves it open.
 - `dispose()` denies new dispatch (`admitted: false`) and completes what is
   still queued as denied.
 

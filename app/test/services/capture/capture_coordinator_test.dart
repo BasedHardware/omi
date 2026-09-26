@@ -910,7 +910,7 @@ void main() {
     coordinator.dispose();
   });
 
-  test('failed phone restart over onboarding debt never releases the held pendant', () async {
+  test('failed phone restart over onboarding debt remutes policy and never releases the held pendant', () async {
     final fake = HarnessPorts();
     late CaptureCoordinator coordinator;
     coordinator = CaptureCoordinator(
@@ -921,6 +921,7 @@ void main() {
     await coordinator.dispatch(const PhoneStartRequested());
     await coordinator
         .dispatch(const PhoneStopRequested(reason: 'user_stopped', userStop: true, resumeSuspendedPendant: false));
+    expect(fake.muted, isTrue);
     final logBefore = fake.log.length;
     fake.failNextPhoneStart = true;
     final result = await coordinator.dispatch(const PhoneStartRequested());
@@ -928,9 +929,52 @@ void main() {
     expect(coordinator.state.phase, CapturePhase.idle);
     expect(coordinator.state.awaitingPhoneResume, isTrue);
     expect(coordinator.state.pendantSuspension?.reason, SuspendReason.phone);
+    expect(fake.muted, isTrue);
+    expect(fake.mic, isFalse);
     expect(fake.ble, isFalse);
+    expect(fake.log.skip(logBefore).where((line) => line == 'policy:false' || line == 'policy:true'),
+        ['policy:false', 'policy:true']);
     expect(fake.log.skip(logBefore).where((line) => line == 'ble:start' || line == 'stage:StartDeviceSessionStage'),
         isEmpty);
+    expect(CaptureCoordinatorState.tryParse(fake.snapshot)?.encode(), coordinator.state.encode());
+    coordinator.dispose();
+  });
+
+  test('phone start during a call leaves the speech-profile hold and call active', () async {
+    final fake = HarnessPorts();
+    var call = false;
+    late CaptureCoordinator coordinator;
+    coordinator = CaptureCoordinator(
+      ports: fake.ports,
+      readEnvironment: () => environment(coordinator.state, muted: fake.muted, call: call),
+    );
+    await coordinator.dispatch(DeviceStartRequested(device: pendant));
+    await coordinator.dispatch(const PhoneStartRequested());
+    await coordinator
+        .dispatch(const PhoneStopRequested(reason: 'user_stopped', userStop: true, resumeSuspendedPendant: false));
+    call = true;
+    await coordinator.dispatch(const CallStateChanged());
+    final before = coordinator.state.encode();
+    final logBefore = fake.log.length;
+    final result = await coordinator.dispatch(const PhoneStartRequested());
+    expect(result.failed, isFalse);
+    expect(result.result, isFalse);
+    expect(coordinator.state.encode(), before);
+    expect(coordinator.state.callActive, isTrue);
+    expect(coordinator.state.awaitingPhoneResume, isTrue);
+    expect(coordinator.state.pendantSuspension?.reason, SuspendReason.phone);
+    expect(fake.muted, isTrue);
+    expect(fake.mic, isFalse);
+    expect(fake.ble, isFalse);
+    expect(
+        fake.log
+            .skip(logBefore)
+            .where((line) => line == 'permission:check' || line.startsWith('policy:') || line.startsWith('stage:')),
+        isEmpty);
+    call = false;
+    await coordinator.dispatch(const CallStateChanged());
+    expect(coordinator.state.awaitingPhoneResume, isTrue);
+    expect(coordinator.state.pendantSuspension?.reason, SuspendReason.phone);
     coordinator.dispose();
   });
 
@@ -1069,26 +1113,67 @@ void main() {
     coordinator.dispose();
   });
 
-  test('superseded stop cannot expose the paused batch writer under an unmuted policy', () async {
+  test('superseded stop closes a paused phone batch writer and keeps pendant debt resumable', () async {
+    final fake = HarnessPorts();
+    late CaptureCoordinator coordinator;
+    coordinator = CaptureCoordinator(
+      ports: fake.ports,
+      readEnvironment: () => environment(coordinator.state, muted: fake.muted, batch: fake.batch),
+    );
+    await coordinator.dispatch(DeviceStartRequested(device: pendant));
+    await coordinator.dispatch(const PhoneStartRequested());
+    await coordinator.dispatch(const BatchModeSetRequested(enabled: true));
+    await coordinator.dispatch(const PauseCaptureRequested());
+    expect(coordinator.state.phase, CapturePhase.phoneBatchPaused);
+    expect(coordinator.state.pendantSuspension?.reason, SuspendReason.phone);
+    expect(fake.mic, isTrue);
+    expect(fake.muted, isTrue);
+    final logBefore = fake.log.length;
+    fake.supersedeNextPolicy = true;
+    final result = await coordinator.dispatch(const PhoneStopRequested(reason: 'user_stopped', userStop: true));
+    expect(result.failed, isTrue);
+    expect(coordinator.state.phase, CapturePhase.idle);
+    expect(coordinator.state.pendantSuspension?.reason, SuspendReason.phone);
+    expect(coordinator.state.awaitingPhoneResume, isTrue);
+    expect(fake.muted, isTrue);
+    expect(fake.mic, isFalse);
+    expect(fake.ble, isFalse);
+    expect(fake.socket, isFalse);
+    expect(fake.log.skip(logBefore).where((line) => line == 'policy:true'), ['policy:true', 'policy:true']);
+    expect(CaptureCoordinatorState.tryParse(fake.snapshot)?.encode(), coordinator.state.encode());
+    final resumed = await coordinator.dispatch(const PhoneStopRequested(reason: 'user_stopped', userStop: true));
+    expect(resumed.failed, isFalse);
+    expect(coordinator.state.phase, CapturePhase.pendantLive);
+    expect(coordinator.state.suspended, isEmpty);
+    expect(fake.ble, isTrue);
+    expect(fake.recordingId, coordinator.state.active?.recordingId);
+    coordinator.dispose();
+  });
+
+  test('superseded pendant batch resume closes the admitted writer instead of retaining paused ownership', () async {
     final fake = HarnessPorts()..batch = true;
     late CaptureCoordinator coordinator;
     coordinator = CaptureCoordinator(
       ports: fake.ports,
       readEnvironment: () => environment(coordinator.state, muted: fake.muted, batch: fake.batch),
     );
-    await coordinator.dispatch(const PhoneStartRequested());
+    await coordinator.dispatch(DeviceStartRequested(device: pendant));
     await coordinator.dispatch(const PauseCaptureRequested());
-    expect(coordinator.state.phase, CapturePhase.phoneBatchPaused);
-    expect(fake.mic, isTrue);
+    expect(coordinator.state.phase, CapturePhase.pendantBatchPaused);
     expect(fake.muted, isTrue);
+    final logBefore = fake.log.length;
     fake.supersedeNextPolicy = true;
-    final result = await coordinator.dispatch(const PhoneStopRequested(reason: 'user_stopped', userStop: true));
+    final result = await coordinator.dispatch(const ResumeCaptureRequested());
     expect(result.failed, isTrue);
     expect(coordinator.state.phase, CapturePhase.idle);
+    expect(coordinator.state.suspended, isEmpty);
+    expect(fake.muted, isTrue);
     expect(fake.mic, isFalse);
     expect(fake.ble, isFalse);
     expect(fake.socket, isFalse);
-    expect(CaptureCoordinatorState.tryParse(fake.snapshot)?.phase, CapturePhase.idle);
+    expect(fake.log.skip(logBefore).where((line) => line == 'policy:false' || line == 'policy:true'),
+        ['policy:false', 'policy:true']);
+    expect(CaptureCoordinatorState.tryParse(fake.snapshot)?.encode(), coordinator.state.encode());
     coordinator.dispose();
   });
 
