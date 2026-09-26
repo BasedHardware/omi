@@ -39541,7 +39541,7 @@
             "name": "include_discarded",
             "required": false,
             "schema": {
-              "default": true,
+              "default": false,
               "title": "Include Discarded",
               "type": "boolean"
             }

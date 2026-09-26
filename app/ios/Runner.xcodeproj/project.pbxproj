@@ -69,6 +69,7 @@
 		715D47AFEB21D49E37F16F3B /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */; };
 		7361ED343F303C57EF2931A2 /* OmiCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
+		51794E0351794E0351794E03 /* SyncTransferBackgroundLease.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51794E0151794E0151794E01 /* SyncTransferBackgroundLease.swift */; };
 		E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1293503E1293503E1293503 /* SpeechDeadline.swift */; };
 		7B703A24854FEB9BACB52CCA /* PhoneMicOpusShim.m in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */; };
 		7BB46D8ED545353079641366 /* BatteryWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2BF831EA0797124264B67C /* BatteryWidget.swift */; };
@@ -76,6 +77,7 @@
 		7CB1B7DE57C0BCCDA9AB4B9E /* prodProfile.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = B52E83A1CC630E163A04DC50 /* prodProfile.xcconfig */; };
 		83D001C5192F68F4DD76AB23 /* PhoneMicBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0B /* PhoneMicBatchAudioWriter.swift */; };
 		873C99F3D85C142369688A1D /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
+		51794E0451794E0451794E04 /* SyncTransferBackgroundLease.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51794E0151794E0151794E01 /* SyncTransferBackgroundLease.swift */; };
 		E1293502E1293502E1293502 /* SpeechDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1293503E1293503E1293503 /* SpeechDeadline.swift */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
@@ -244,6 +246,7 @@
 		5FCEB2FF2C2758C000B17EE8 /* RunnerRelease-dev.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "RunnerRelease-dev.entitlements"; sourceTree = "<group>"; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		51794E0151794E0151794E01 /* SyncTransferBackgroundLease.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncTransferBackgroundLease.swift; sourceTree = "<group>"; };
 		E1293503E1293503E1293503 /* SpeechDeadline.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SpeechDeadline.swift; sourceTree = "<group>"; };
 		79B00761CB247C7EC7C8983B /* devRelease.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devRelease.xcconfig; path = Flutter/devRelease.xcconfig; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
@@ -500,6 +503,7 @@
 				1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */,
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
+				51794E0151794E0151794E01 /* SyncTransferBackgroundLease.swift */,
 				E1293503E1293503E1293503 /* SpeechDeadline.swift */,
 				CD12345678901234567890CD /* AppleRemindersService.swift */,
 				CD12345678901234567890CE /* AppleHealthService.swift */,
@@ -955,6 +959,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
+				51794E0351794E0351794E03 /* SyncTransferBackgroundLease.swift in Sources */,
 				E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */,
 				E91B0002E91B0002E91B0002 /* OmiBleEnergyPolicy.swift in Sources */,
 				DAD10002DAD10002DAD10002 /* OmiBleConnectionPolicy.swift in Sources */,
@@ -1005,6 +1010,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				873C99F3D85C142369688A1D /* AppDelegate.swift in Sources */,
+				51794E0451794E0451794E04 /* SyncTransferBackgroundLease.swift in Sources */,
 				E1293502E1293502E1293502 /* SpeechDeadline.swift in Sources */,
 				E91B0003E91B0003E91B0003 /* OmiBleEnergyPolicy.swift in Sources */,
 				DAD10003DAD10003DAD10003 /* OmiBleConnectionPolicy.swift in Sources */,

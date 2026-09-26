@@ -716,6 +716,14 @@ class ListenReceiver:
 
         return getattr(getattr(self.host, 'client_device_context', None), 'platform', None)
 
+    def _note_audio_activity(self) -> None:
+        """Renew the recovery fence from the accepted-frame path."""
+
+        conversations = getattr(self.host, 'conversations', None)
+        note_audio_activity = getattr(conversations, 'note_audio_activity', None)
+        if callable(note_audio_activity):
+            note_audio_activity()
+
     def _mark_first_audio(self, now: float) -> None:
         """Record the funnel's first-audio transition once a frame was accepted.
 
@@ -1309,8 +1317,9 @@ class ListenReceiver:
             self.decode_failure_streak = 0
             if not audio:
                 return 0
-        # First audio only counts once the channel prefix resolved and an opus
-        # frame decoded; rejected frames above leave the no-audio funnel intact.
+        # Audio activity only counts once the channel prefix resolved and an
+        # opus frame decoded; rejected frames above cannot renew the lease.
+        self._note_audio_activity()
         self._mark_first_audio(now)
         pcm = resample_pcm(bytes(audio), request.sample_rate, TARGET_SAMPLE_RATE)
         self._capture('capture_client_audio', pcm)
@@ -1498,6 +1507,7 @@ class ListenReceiver:
                     self.decode_failure_streak = 0
                     if not decoded:
                         continue
+                    self._note_audio_activity()
                     self._mark_first_audio(now)
                     decoded_audio_bytes += len(decoded)
                     self._capture('capture_client_audio', decoded)

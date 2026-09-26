@@ -45,6 +45,7 @@ STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS = 3600
 # Per-session recovery bound: spreads a large backlog across sessions instead of
 # fanning dozens of LLM finalizations out of one reconnect.
 STALE_IN_PROGRESS_RECOVERY_BATCH = 10
+RECORDING_SESSION_LEASE_RENEW_INTERVAL = timedelta(minutes=1)
 
 
 def resolve_onboarding_provenance_marker(host: Any) -> Optional[str]:
@@ -67,6 +68,28 @@ class LiveConversationController:
     def __init__(self, host: Any, *, clock: Callable[[], datetime] | None = None) -> None:
         self.host = host
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self._last_recording_session_lease_renewal: datetime | None = None
+
+    def note_audio_activity(self) -> None:
+        """Renew the active recording fence at most once per minute."""
+        conversation_id = self.host.state.current_conversation_id
+        recording_session_id = self.host.recording_session_id
+        if not conversation_id or not recording_session_id:
+            return
+        now = self.clock()
+        last = self._last_recording_session_lease_renewal
+        if last is not None and now - last < RECORDING_SESSION_LEASE_RENEW_INTERVAL:
+            return
+        self._last_recording_session_lease_renewal = now
+        self.host.spawn(
+            self.host.persistence.call(
+                lifecycle_service.renew_live_recording_session_lease,
+                self.host.request.uid,
+                recording_session_id,
+                conversation_id,
+            ),
+            name='recording_session_lease_renewal',
+        )
 
     async def _continuation(self, proposed: dict[str, str] | None = None) -> dict[str, str] | None:
         if not self.host.client_conversation_id or self.host.is_multi_channel:
@@ -404,7 +427,10 @@ class LiveConversationController:
             return
 
         context = self.host.client_device_context
-        external_data = {'conversation_role': request.conversation_role}
+        external_data = {
+            'conversation_role': request.conversation_role,
+            'recording_session_id': self.host.recording_session_id,
+        }
         onboarding_session_id = resolve_onboarding_provenance_marker(self.host)
         if onboarding_session_id:
             # This marker reflects the backend's own onboarding-admission
@@ -542,6 +568,16 @@ class LiveConversationController:
         if binding['requires_rollover']:
             await self.create_new_in_progress_conversation(rollover=True)
             return None
+        if binding.get('conversation_snapshot_known'):
+            current = binding.get('conversation_snapshot')
+            if (
+                not current
+                or current.get('status') != ConversationStatus.in_progress.value
+                or any(current.get(key) for key in ('deleted', 'discarded', 'is_locked'))
+            ):
+                await self.create_new_in_progress_conversation(rollover=True)
+                return None
+            existing = current
         self.host.state.current_conversation_id = existing['id']
         self.host.recording_session_ids_by_conversation[existing['id']] = self.host.recording_session_id
         self._adopt_capture_timeline(existing['id'], existing.get('started_at'))

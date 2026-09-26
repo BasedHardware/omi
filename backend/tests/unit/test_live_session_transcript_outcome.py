@@ -29,6 +29,8 @@ def _runtime(
         first_audio_byte_timestamp=first_audio,
         last_audio_received_time=last_audio,
     )
+    runtime.request = SimpleNamespace(uid='uid-1', source='omi', client_conversation_id='recording-1')
+    runtime.client_device_context = SimpleNamespace(platform='ios')
     if vad_gate == 'managed':
         runtime.receiver = SimpleNamespace(vad_gate=SimpleNamespace(total_speech_ms=total_speech_ms or 0))
     elif vad_gate == 'legacy':
@@ -145,7 +147,97 @@ def test_teardown_seam_calls_the_recorder_after_attempt_terminalization():
     runtime._finish_live_transcription = lambda: None
     with patch('routers.listen.runtime.record_live_session_transcript_outcome') as record:
         ListenSessionRuntime._record_session_transcript_outcome(runtime)
-    record.assert_called_once_with(outcome='transcribed')
+    record.assert_called_once_with(
+        outcome='transcribed',
+        uid='uid-1',
+        source='omi',
+        platform='ios',
+        recording_id='recording-1',
+    )
+
+
+def test_no_transcript_outcome_emits_a_uid_scoped_product_counter():
+    from utils.observability import transcription
+
+    emitted = []
+    with transcription._zero_transcript_events_lock:
+        transcription._zero_transcript_events.clear()
+    before = transcription.OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome='no_transcript')._value.get()
+    with patch.object(transcription, 'emit_product_event', side_effect=lambda **kwargs: emitted.append(kwargs)):
+        transcription.record_live_session_transcript_outcome(
+            outcome='no_transcript',
+            uid='uid-1',
+            source='omi',
+            platform='ios',
+            recording_id='recording-1',
+        )
+
+    after = transcription.OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome='no_transcript')._value.get()
+    assert after == before + 1
+    assert emitted == [
+        {
+            'uid': 'uid-1',
+            'event': 'Listen Socket Zero Transcript',
+            'properties': {
+                'transcription_source': 'omi',
+                'app_platform': 'ios',
+                'recording_correlation_id': 'ede9a6d90439902e',
+                'coalesced_outcome_count': 1,
+            },
+        }
+    ]
+
+
+def test_no_transcript_product_events_coalesce_per_uid_but_aggregate_counts_every_session():
+    from utils.observability import transcription
+
+    emitted = []
+    now = 1000.0
+    with transcription._zero_transcript_events_lock:
+        transcription._zero_transcript_events.clear()
+    before = transcription.OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome='no_transcript')._value.get()
+    with (
+        patch.object(transcription, '_zero_transcript_clock', side_effect=lambda: now),
+        patch.object(transcription, 'emit_product_event', side_effect=lambda **kwargs: emitted.append(kwargs)),
+    ):
+        for recording_id in ('private-recording-a', 'private-recording-b'):
+            transcription.record_live_session_transcript_outcome(
+                outcome='no_transcript',
+                uid='uid-coalesced',
+                source='omi',
+                platform='ios',
+                recording_id=recording_id,
+            )
+        now += transcription._ZERO_TRANSCRIPT_EVENT_WINDOW_SECONDS
+        transcription.record_live_session_transcript_outcome(
+            outcome='no_transcript',
+            uid='uid-coalesced',
+            source='omi',
+            platform='ios',
+            recording_id='private-recording-c',
+        )
+
+    after = transcription.OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome='no_transcript')._value.get()
+    assert after == before + 3, 'Prometheus remains the authoritative outage signal'
+    assert len(emitted) == 2
+    assert emitted[1]['properties']['coalesced_outcome_count'] == 2
+    correlations = [event['properties']['recording_correlation_id'] for event in emitted]
+    assert all(len(value) == 16 for value in correlations)
+    assert not any(value.startswith('private-recording') for value in correlations)
+
+
+def test_transcribed_outcome_does_not_emit_uid_scoped_zero_transcript_event():
+    from utils.observability import transcription
+
+    with patch.object(transcription, 'emit_product_event') as emit:
+        transcription.record_live_session_transcript_outcome(
+            outcome='transcribed',
+            uid='uid-1',
+            source='omi',
+            platform='ios',
+        )
+
+    emit.assert_not_called()
 
 
 def test_outcome_children_are_queryable_from_process_start_without_increments():

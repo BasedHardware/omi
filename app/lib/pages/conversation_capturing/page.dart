@@ -656,5 +656,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       state == WalSyncDisplayState.failed ||
       state == WalSyncDisplayState.corrupted ||
       state == WalSyncDisplayState.outsideRecoveryWindow ||
-      state == WalSyncDisplayState.unsupportedAudio;
+      state == WalSyncDisplayState.unsupportedAudio ||
+      state == WalSyncDisplayState.uploadRejected;
 }

@@ -381,7 +381,13 @@ class ListenSessionRuntime:
         if getattr(self, 'use_custom_stt', False):
             return
         try:
-            record_live_session_transcript_outcome(outcome=self._session_transcript_outcome())
+            record_live_session_transcript_outcome(
+                outcome=self._session_transcript_outcome(),
+                uid=self.request.uid,
+                source=self.request.source,
+                platform=self.client_device_context.platform,
+                recording_id=self.request.client_conversation_id,
+            )
         except Exception as error:
             logger.warning('Listen session transcript outcome metric failed type=%s', type(error).__name__)
 
