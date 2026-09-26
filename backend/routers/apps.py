@@ -953,6 +953,14 @@ async def update_persona(
     uid=Depends(auth.get_current_user_uid),
 ):
     data = parse_form_json(dict, persona_data, 'persona_data')
+    # Released clients serialize an omitted field as null, not absent. For these two, null
+    # must mean "not sent": `'omi' in data.get('connected_accounts', [])` raised TypeError on
+    # null, and writing null over the stored handle both cleared it and made the response
+    # model (username: str) fail with a 500 after the write.
+    for field in ('username', 'connected_accounts'):
+        if data.get(field) is None:
+            data.pop(field, None)
+
     persona = await run_blocking(db_executor, get_available_app_by_id, persona_id, uid)
     if not persona:
         raise HTTPException(status_code=404, detail='Persona not found')
