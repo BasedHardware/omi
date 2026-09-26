@@ -138,3 +138,5 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | speakerTagPromptAnswerSubmitted | Speaker Tag Prompt Answer Submitted | kind, answer, clip_played, first_time, succeeded | active | speaker-tag-prompts-funnel |
 | speakerTagPromptsClosed | Speaker Tag Prompts Closed | answered_count, prompt_count | active | speaker-tag-prompts-funnel |
 | voiceProfileSettingToggled | Voice Profile Setting Toggled | setting, enabled, source, succeeded | active | speaker-tag-prompts-funnel |
+| siriIntentPerformed | Siri Intent Performed | intent, platform, outcome, latency_ms, invoked_via | active | siri-intents |
+| siriIndexRebuilt | Siri Index Rebuilt | platform, entity_counts, duration_ms, outcome | active | siri-index-health |
