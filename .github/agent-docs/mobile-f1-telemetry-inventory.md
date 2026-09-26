@@ -317,7 +317,7 @@ local debug, not analytics.
 |---|---|---|---|
 | `Recording Upload Started` | HTTP attempt after admission | `SyncUploadGate.upload` `:175-187` → manager `:484-501` | `upload_attempt_id` (new uuid per HTTP call), optional `recording_id`, `file_count`, `total_bytes`, `claims_live_capture`, `upload_source=offline_audio_queue` |
 | `Recording Upload Completed` | HTTP 200 or 202 | `:198-209` | + `duration_seconds`, `result=completed\|accepted` |
-| `Recording Upload Failed` | thrown after admission | `:216-236, 248-268` | + `failure_class` = `rate_limited\|timeout\|network\|authentication\|server\|unknown` |
+| `Recording Upload Failed` | thrown after admission, except expected backfill pacing (`backfill_paced` / `backfill_capacity`, including the header-scoped 503) | `:219-240, 253-270` | + `failure_class` = `rate_limited\|timeout\|network\|authentication\|server\|unknown`. Paced backoff keeps the WAL pending and emits no failure event. A job-status 503 while finalization is still retrying is a transient poll, not this event. |
 | (none) | BLE onboard-storage **download** | `storage_sync.dart` / `sdcard_wal_sync.dart` / `ring_storage_sync.dart` `syncAll` | Debug logs only. Those files later upload via the phone WAL gate. |
 | (none) | reconciler `uploaded` → `synced` | `recording_transfer_coordinator.dart` `_tryReconcile` | No PostHog. 202 `accepted` is not task success. |
 | (none) | coordinator `wake` | `WakeTrigger` `:9` | Coalesced; no event per wake. |
