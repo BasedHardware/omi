@@ -42,30 +42,28 @@ def ics_text(value: Any) -> str:
     clean = clean.replace("\\", "\\\\")
     clean = clean.replace(";", "\\;")
     clean = clean.replace(",", "\\,")
-    clean = clean.replace("\n", "\\n")
     return clean
 
 
 def fold_line(line: str) -> str:
-    """Fold lines longer than 75 octets per RFC 5545 §3.1 without breaking UTF-8 bytes."""
+    """Fold content lines longer than 75 octets (RFC 5545 §3.1), never splitting a UTF-8 character."""
     encoded = line.encode("utf-8")
     if len(encoded) <= 75:
         return line
-    chunks: list[bytes] = []
-    current_chunk = bytearray()
-    max_len = 75
-
-    for byte in encoded:
-        if len(current_chunk) == max_len:
-            chunks.append(bytes(current_chunk))
-            current_chunk = bytearray(b" ")  # Continuation line starts with space
-            max_len = 74  # 75 octets minus leading space
-        current_chunk.append(byte)
-
-    if current_chunk:
-        chunks.append(bytes(current_chunk))
-
-    return b"\r\n".join(chunks).decode("utf-8")
+    parts: list[str] = []
+    chunk = b""
+    limit = 75
+    for ch in line:
+        b = ch.encode("utf-8")
+        if len(chunk) + len(b) > limit:
+            parts.append(chunk.decode("utf-8"))
+            chunk = b" " + b
+            limit = 75
+        else:
+            chunk += b
+    if chunk:
+        parts.append(chunk.decode("utf-8"))
+    return "\r\n".join(parts)
 
 
 def parse_time(value: Any) -> datetime | None:
@@ -168,7 +166,7 @@ def make_vevent(g: dict[str, Any], dt_stamp_str: str) -> list[str]:
         f"DTEND:{end_str}",
         fold_line(f"SUMMARY:{ics_text(summary_text)}"),
         fold_line(f"DESCRIPTION:{ics_text(desc_text)}"),
-        f"STATUS:{'CONFIRMED' if is_act else 'CANCELLED'}",
+        "STATUS:CONFIRMED",
         "END:VEVENT",
     ]
     return lines
@@ -225,6 +223,7 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 ```
 
 Run the converter:

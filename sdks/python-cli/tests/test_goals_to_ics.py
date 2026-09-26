@@ -40,6 +40,26 @@ class TestGoalsToIcs(unittest.TestCase):
         for part in folded.split("\r\n"):
             self.assertLessEqual(len(part.encode("utf-8")), 75)
 
+    def test_fold_line_multibyte_utf8(self):
+        # Multi-byte UTF-8 characters crossing 75-octet boundary
+        line = "DESCRIPTION:" + "\u00e9" * 40
+        folded = fold_line(line)
+        self.assertIn("\r\n ", folded)
+        parts = folded.split("\r\n")
+        for part in parts:
+            self.assertLessEqual(len(part.encode("utf-8")), 75)
+        # Verify unfolds losslessly
+        unfolded = folded.replace("\r\n ", "")
+        self.assertEqual(unfolded, line)
+
+    def test_build_ics_non_ascii(self):
+        non_ascii_title = "\u5b8c\u6210\u6bcf\u5929\u9605\u8bfb\u4e00\u5c0f\u65f6\u7684\u76ee\u6807\u5e76\u8bb0\u5f55\u5fc3\u5f97\u4f53\u4f1a"
+        goals = [{"id": "g_cjk", "title": non_ascii_title, "is_active": True}]
+        ics = build_ics(goals)
+        self.assertIn("BEGIN:VCALENDAR", ics)
+        self.assertIn(non_ascii_title, ics)
+        self.assertIn("STATUS:CONFIRMED", ics)
+
     def test_build_ics_structure(self):
         goals = [
             {
