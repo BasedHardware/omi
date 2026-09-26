@@ -1,10 +1,10 @@
-﻿# Convert a memory export to SQLite
+# Convert a memory export to SQLite
 
 Use this recipe to store, query, and search your Omi memories, facts, learnings,
 and personal knowledge in a local SQLite database. It reads saved JSON exports,
 makes no network requests, and normalises timestamps to UTC text so SQLite date
 and time functions work seamlessly. You need Python 3.10+ and an authenticated
-`omi-cli` for the initial export.
+`omi-cli` for the initial export. The `python -m sqlite3` interactive shell examples below require Python 3.12+.
 
 Export up to 200 memories:
 
