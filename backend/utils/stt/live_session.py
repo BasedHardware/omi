@@ -143,8 +143,10 @@ class LiveChainSession:
             passthrough = service == st.STTService.modulate
 
             def callback(segments: list[dict[str, Any]]) -> None:
-                if generation != self.generation:
+                if generation != self.generation and not (epoch is not None and epoch.project_times):
                     return
+                if epoch is not None:
+                    epoch.provider_label = service.value
                 if epoch is not None and epoch.project_times:
                     # Audio-timeline v2: the translator maps provider
                     # times through its accepted send spans onto the capture
@@ -388,6 +390,7 @@ class LiveLegSocket(STTSocket):
             self.finish()
             return False
         if sent_spans and self._send_tracker is not None:
+            self._send_tracker.send_path = 'managed_chain'
             self._send_tracker.note_accepted_spans(sent_spans)
         duration = len(data) / (self.sample_rate * 2)
         self._seconds += duration

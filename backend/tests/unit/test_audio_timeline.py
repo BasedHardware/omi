@@ -159,7 +159,9 @@ class TestSendMap:
     def test_provider_time_out_of_range_rejects(self):
         translator = ProviderEpochTranslator(CaptureTimeline(RATE), RATE)
         translated = translator.translate([{'start': 10.0, 'end': 11.0, 'text': 'late'}])
-        assert translated == []
+        assert [segment['text'] for segment in translated] == ['late']
+        assert translated[0]['audio_alignment'] == 'unplaced'
+        assert translated[0]['start'] == translated[0]['end']
         assert translator.rejected_segments == 1
 
     def test_clock_only_mode_keeps_provider_times_and_unmapped_segments(self):
