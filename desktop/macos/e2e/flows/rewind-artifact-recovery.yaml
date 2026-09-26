@@ -1,7 +1,7 @@
 version: 2
 name: rewind-artifact-recovery
 tier: 2
-description: Hermetic Rewind artifact lifecycle — synthetic frames through encoder, SQLite, finalized video readback, privacy admission, and database reopen
+description: Hermetic Rewind artifact lifecycle — synthetic frames through encoder, SQLite, finalized video readback, privacy admission, database reopen, and repository-backed reads
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
@@ -9,7 +9,9 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindAbandonedVideoChunkRecovery.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindModels.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindRepository.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/StorageFailureDiagnostics.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/TaskChatMessageStorage.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindStorage.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/RewindIndexer.swift
@@ -29,6 +31,8 @@ steps:
       result.detail.readback_colors: "red,green"
       result.detail.database_reopened: "true"
       result.detail.rows_survived_reopen: "true"
+      result.detail.action_items_readable_after_reopen: "true"
+      result.detail.task_chat_readable_after_reopen: "true"
       result.detail.cleanup_removed_rows: "2"
       result.detail.artifact_file_removed: "true"
 

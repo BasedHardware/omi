@@ -19,6 +19,8 @@ enum RewindArtifactGauntlet {
     let readbackColors: [String]
     let databaseReopened: Bool
     let rowsSurvivedReopen: Bool
+    let actionItemsReadableAfterReopen: Bool
+    let taskChatReadableAfterReopen: Bool
     let cleanupRemovedRows: Int
     let artifactFileRemoved: Bool
   }
@@ -118,6 +120,14 @@ enum RewindArtifactGauntlet {
         throw RewindError.storageError("Rewind artifact gauntlet video readback did not preserve frame order")
       }
 
+      // Prime both repositories against the current generation. Their next
+      // read must discover the replacement pool after the database reopens.
+      _ = try await ActionItemStorage.shared.getLocalActionItems(limit: 1)
+      _ = try await TaskChatMessageStorage.shared.legacyMessagePage(
+        fromTaskIds: ["rewind-artifact-gauntlet-\(nonce)"],
+        workstreamId: "rewind-artifact-gauntlet-\(nonce)"
+      )
+
       await RewindDatabase.shared.close()
       guard !(await RewindDatabase.shared.isInitialized) else {
         throw RewindError.storageError("Rewind artifact gauntlet could not close the database for recovery")
@@ -133,6 +143,12 @@ enum RewindArtifactGauntlet {
         throw RewindError.storageError("Rewind artifact gauntlet rows did not survive database reopen")
       }
 
+      _ = try await ActionItemStorage.shared.getLocalActionItems(limit: 1)
+      _ = try await TaskChatMessageStorage.shared.legacyMessagePage(
+        fromTaskIds: ["rewind-artifact-gauntlet-\(nonce)"],
+        workstreamId: "rewind-artifact-gauntlet-\(nonce)"
+      )
+
       let cleanupRemovedRows = try await RewindDatabase.shared.deleteScreenshotsFromVideoChunk(
         videoChunkPath: storedChunkPath)
       try FileManager.default.removeItem(at: artifactURL)
@@ -145,6 +161,8 @@ enum RewindArtifactGauntlet {
         readbackColors: readbackColors,
         databaseReopened: databaseReopened,
         rowsSurvivedReopen: rowsSurvivedReopen,
+        actionItemsReadableAfterReopen: true,
+        taskChatReadableAfterReopen: true,
         cleanupRemovedRows: cleanupRemovedRows,
         artifactFileRemoved: artifactFileRemoved
       )
@@ -254,6 +272,8 @@ extension DesktopAutomationActionRegistry {
         "readback_colors": result.readbackColors.joined(separator: ","),
         "database_reopened": result.databaseReopened ? "true" : "false",
         "rows_survived_reopen": result.rowsSurvivedReopen ? "true" : "false",
+        "action_items_readable_after_reopen": result.actionItemsReadableAfterReopen ? "true" : "false",
+        "task_chat_readable_after_reopen": result.taskChatReadableAfterReopen ? "true" : "false",
         "cleanup_removed_rows": "\(result.cleanupRemovedRows)",
         "artifact_file_removed": result.artifactFileRemoved ? "true" : "false",
       ]

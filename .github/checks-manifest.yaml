@@ -484,6 +484,16 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "desktop Swift sources changed; compare against the pinned macOS formatter before requiring a flow cover"
+  - id: rewind-repository-ownership-guard-tests
+    command: ["python3", "desktop/macos/scripts/check-rewind-repository-ownership.py", "--self-test"]
+    triggers: ["desktop/macos/scripts/check-rewind-repository-ownership.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Issue #9519: the guard must prove it rejects copied private Rewind DatabasePool/generation caches while accepting repository-owned storage"
+  - id: rewind-repository-ownership
+    command: ["python3", "desktop/macos/scripts/check-rewind-repository-ownership.py"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-rewind-repository-ownership.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Issue #9519: all Rewind-backed actors must acquire replaceable pools through RewindRepository so owner switches and recovery cannot leave a private stale pool cache"
   - id: desktop-agent-credential-boundary
     command: ["python3", "desktop/macos/scripts/check-agent-credentials.py"]
     triggers: ["desktop/macos/Desktop/Sources/Chat/**", "desktop/macos/agent/src/**", "desktop/macos/pi-mono-extension/**", "desktop/macos/scripts/check-agent-credentials.py", ".github/checks-manifest.yaml"]
