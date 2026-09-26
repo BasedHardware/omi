@@ -325,6 +325,19 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         )
     )
     payload = with_screen_frame_egress_env(payload)
+    # The final-pass shadow is dark by default on the dev finalization worker.
+    # Its deployed-state fixture must carry every explicit runtime binding.
+    payload = re.sub(
+        r'("backend-sync":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "TRANSCRIPTION_SHADOW_ENABLED", "value": "false"},'
+        r'\n        {"name": "TRANSCRIPTION_SHADOW_KILL_SWITCH", "value": "false"},'
+        r'\n        {"name": "TRANSCRIPTION_SHADOW_UID_ALLOWLIST", "value": ""},'
+        r'\n        {"name": "TRANSCRIPTION_SHADOW_PERCENT", "value": "0"},'
+        r'\n        {"name": "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS", "value": "0"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
     payload = re.sub(
         r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
         r'\1,\n' + GOOGLE_OAUTH_SECRETS.rstrip(','),

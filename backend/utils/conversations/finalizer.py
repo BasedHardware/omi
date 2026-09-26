@@ -27,6 +27,7 @@ from utils.conversations.process_conversation import (
     process_conversation,
 )
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.transcription_shadow import maybe_start_shadow
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.jit_rollout import JITDecisionStage
 from utils.log_sanitizer import sanitize_pii
@@ -136,6 +137,10 @@ async def finalize_persisted_conversation(
         # validated live BYOK keys) while isolating this expensive sync path
         # from WebSocket and Cloud Tasks event loops.
         resolved_language = language or getattr(conversation, 'language', None) or 'en'
+        # Admission only schedules a bounded shadow job. It never awaits audio,
+        # STT or metric persistence and cannot alter this processing input.
+        if conversation.status != ConversationStatus.completed:
+            maybe_start_shadow(uid, conversation)
         persistence: dict[str, bool] = {'owned': True}
         derived_effects: list = []
         derived_disposition: list[DerivedEffectsDisposition] = [DerivedEffectsDisposition.RUN]
