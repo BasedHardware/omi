@@ -3698,5 +3698,6 @@
     "greetingAfternoon": "Καλό απόγευμα",
     "greetingHomeStretch": "Τελική ευθεία",
     "greetingEvening": "Καλησπέρα",
-    "unlimitedBadge": "Απεριόριστο"
+    "unlimitedBadge": "Απεριόριστο",
+    "voiceSetupTaskSubline": "Για να ξέρει το Omi ότι είστε εσείς · περίπου ένα λεπτό"
 }

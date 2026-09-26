@@ -11763,4 +11763,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Neograničeno';
+
+  @override
+  String get voiceSetupTaskSubline => 'Da Omi zna da ste to vi · oko minut';
 }

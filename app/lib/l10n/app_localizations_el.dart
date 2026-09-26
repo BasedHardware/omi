@@ -11816,4 +11816,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Απεριόριστο';
+
+  @override
+  String get voiceSetupTaskSubline => 'Για να ξέρει το Omi ότι είστε εσείς · περίπου ένα λεπτό';
 }

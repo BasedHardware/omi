@@ -11781,4 +11781,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Неограничен';
+
+  @override
+  String get voiceSetupTaskSubline => 'За да знае Omi, че сте вие · около минута';
 }

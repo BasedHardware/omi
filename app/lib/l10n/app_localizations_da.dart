@@ -11726,4 +11726,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Ubegrænset';
+
+  @override
+  String get voiceSetupTaskSubline => 'Så Omi ved, at det er dig · cirka et minut';
 }

@@ -3698,5 +3698,6 @@
     "greetingAfternoon": "Buenas tardes",
     "greetingHomeStretch": "Recta final",
     "greetingEvening": "Buenas noches",
-    "unlimitedBadge": "Ilimitado"
+    "unlimitedBadge": "Ilimitado",
+    "voiceSetupTaskSubline": "Para que Omi sepa que eres tú · un minuto, más o menos"
 }

@@ -11228,5 +11228,6 @@
     "greetingAfternoon": "শুভ অপরাহ্ন",
     "greetingHomeStretch": "দিনের শেষ ভাগ",
     "greetingEvening": "শুভ সন্ধ্যা",
-    "unlimitedBadge": "আনলিমিটেড"
+    "unlimitedBadge": "আনলিমিটেড",
+    "voiceSetupTaskSubline": "যাতে Omi জানে এটা আপনি · প্রায় এক মিনিট"
 }

@@ -11726,4 +11726,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Unlimited';
+
+  @override
+  String get voiceSetupTaskSubline => 'So Omi knows it’s you · about a minute';
 }

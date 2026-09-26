@@ -3794,5 +3794,6 @@
     "greetingAfternoon": "Jó napot",
     "greetingHomeStretch": "Hajrá",
     "greetingEvening": "Jó estét",
-    "unlimitedBadge": "Korlátlan"
+    "unlimitedBadge": "Korlátlan",
+    "voiceSetupTaskSubline": "Hogy az Omi tudja, hogy te vagy az · kb. egy perc"
 }

@@ -11228,5 +11228,6 @@
     "greetingAfternoon": "بعدازظهر بخیر",
     "greetingHomeStretch": "آخر روز",
     "greetingEvening": "عصر بخیر",
-    "unlimitedBadge": "نامحدود"
+    "unlimitedBadge": "نامحدود",
+    "voiceSetupTaskSubline": "تا Omi بداند که شما هستید · حدود یک دقیقه"
 }

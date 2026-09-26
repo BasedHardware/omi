@@ -11839,4 +11839,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Unlimited';
+
+  @override
+  String get voiceSetupTaskSubline => 'Para malaman ng Omi na ikaw ito · mga isang minuto';
 }

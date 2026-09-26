@@ -11748,4 +11748,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'अमर्यादित';
+
+  @override
+  String get voiceSetupTaskSubline => 'हे तुम्हीच आहात हे Omi ला कळावे म्हणून · सुमारे एक मिनिट';
 }

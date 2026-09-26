@@ -11228,5 +11228,6 @@
     "greetingAfternoon": "צהריים טובים",
     "greetingHomeStretch": "הישורת האחרונה",
     "greetingEvening": "ערב טוב",
-    "unlimitedBadge": "בלתי מוגבל"
+    "unlimitedBadge": "בלתי מוגבל",
+    "voiceSetupTaskSubline": "כדי ש-Omi ידע שזה אתם · בערך דקה"
 }

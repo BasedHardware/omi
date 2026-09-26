@@ -14047,5 +14047,9 @@
     "unlimitedBadge": "Unlimited",
     "@unlimitedBadge": {
         "description": "The plan name on the small lock badge over a locked conversation (unlocks with that plan); keep it one short word"
+    },
+    "voiceSetupTaskSubline": "So Omi knows it’s you · about a minute",
+    "@voiceSetupTaskSubline": {
+        "description": "Subline of the To do setup task \"Teach Omi your voice\": why it helps and how long it takes"
     }
 }

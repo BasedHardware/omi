@@ -11750,4 +11750,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Неограничено';
+
+  @override
+  String get voiceSetupTaskSubline => 'Да Omi зна да сте то ви · око минут';
 }

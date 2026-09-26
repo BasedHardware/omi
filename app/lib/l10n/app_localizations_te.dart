@@ -11786,4 +11786,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'అపరిమితం';
+
+  @override
+  String get voiceSetupTaskSubline => 'మీరేనని Omi తెలుసుకునేందుకు · సుమారు ఒక నిమిషం';
 }

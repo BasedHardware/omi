@@ -11755,4 +11755,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Neribojamas';
+
+  @override
+  String get voiceSetupTaskSubline => 'Kad Omi žinotų, kad tai jūs · apie minutę';
 }

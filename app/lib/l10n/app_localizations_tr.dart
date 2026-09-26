@@ -11752,4 +11752,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Sınırsız';
+
+  @override
+  String get voiceSetupTaskSubline => 'Omi sizi tanısın diye · yaklaşık bir dakika';
 }

@@ -11548,4 +11548,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get unlimitedBadge => '무제한';
+
+  @override
+  String get voiceSetupTaskSubline => 'Omi가 내 목소리를 알아보도록 · 약 1분';
 }
