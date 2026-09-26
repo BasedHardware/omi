@@ -1,13 +1,14 @@
 import unittest
 import json
 import os
+import sys
 import subprocess
 import importlib.util
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
 # Dynamically load the action_items_to_opml module
-recipe_path = Path(__file__).resolve().parent.parent / "action_items_to_opml.py"
+recipe_path = Path(__file__).resolve().parent.parent / "examples" / "action_items_to_opml.py"
 spec = importlib.util.spec_from_file_location("action_items_to_opml", recipe_path)
 action_items_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(action_items_module)
@@ -89,7 +90,7 @@ class TestActionItemsToOpml(unittest.TestCase):
         with open("test_input.json", "w", encoding="utf-8") as f:
             json.dump([{"description": "CLI Task"}], f)
         
-        subprocess.run(["python", str(recipe_path), "test_input.json", self.test_output], check=True)
+        subprocess.run([sys.executable, str(recipe_path), "test_input.json", self.test_output], check=True)
         
         self.assertTrue(os.path.exists(self.test_output))
         with open(self.test_output, "r", encoding="utf-8") as f:
