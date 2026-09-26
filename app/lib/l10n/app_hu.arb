@@ -3798,5 +3798,6 @@
     "voiceSetupTaskSubline": "Hogy az Omi tudja, hogy te vagy az · kb. egy perc",
     "audioPartiallySaved": "Mentett hang: {saved} / {total}",
     "voiceIntroTitle": "Mutatkozz be",
-    "memoryLabel": "Emlék"
+    "memoryLabel": "Emlék",
+    "idleReadyHint": "Koppints az Indításra, és amit mondasz, itt jelenik meg."
 }

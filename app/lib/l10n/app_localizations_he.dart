@@ -11657,4 +11657,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get memoryLabel => 'זיכרון';
+
+  @override
+  String get idleReadyHint => 'הקישו על התחלה ומה שתאמרו יופיע כאן.';
 }

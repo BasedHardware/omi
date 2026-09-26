@@ -11748,4 +11748,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get memoryLabel => 'یادداشت';
+
+  @override
+  String get idleReadyHint => 'روی شروع بزنید تا آنچه می‌گویید اینجا نمایش داده شود.';
 }

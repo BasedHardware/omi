@@ -11684,4 +11684,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get memoryLabel => 'ความทรงจำ';
+
+  @override
+  String get idleReadyHint => 'แตะเริ่ม แล้วสิ่งที่คุณพูดจะแสดงที่นี่';
 }

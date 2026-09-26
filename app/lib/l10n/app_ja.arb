@@ -3702,5 +3702,6 @@
     "voiceSetupTaskSubline": "Omiがあなたの声を覚えます · 約1分",
     "audioPartiallySaved": "保存された音声：{saved}（全{total}）",
     "voiceIntroTitle": "自己紹介しましょう",
-    "memoryLabel": "記憶"
+    "memoryLabel": "記憶",
+    "idleReadyHint": "「開始」をタップすると、話した内容がここに表示されます。"
 }

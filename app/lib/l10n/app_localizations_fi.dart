@@ -11753,4 +11753,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Muisto';
+
+  @override
+  String get idleReadyHint => 'Napauta Aloita, niin sanomasi näkyy tässä.';
 }

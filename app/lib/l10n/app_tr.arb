@@ -3737,5 +3737,6 @@
     "voiceSetupTaskSubline": "Omi sizi tanısın diye · yaklaşık bir dakika",
     "audioPartiallySaved": "{saved} ses kaydedildi ({total} içinden)",
     "voiceIntroTitle": "Kendinizi tanıtın",
-    "memoryLabel": "Anı"
+    "memoryLabel": "Anı",
+    "idleReadyHint": "Başlat’a dokunun, söyledikleriniz burada görünsün."
 }

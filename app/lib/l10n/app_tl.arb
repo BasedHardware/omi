@@ -11232,5 +11232,6 @@
     "voiceSetupTaskSubline": "Para malaman ng Omi na ikaw ito · mga isang minuto",
     "audioPartiallySaved": "{saved} sa {total} na audio ang na-save",
     "voiceIntroTitle": "Ipakilala ang sarili",
-    "memoryLabel": "Alaala"
+    "memoryLabel": "Alaala",
+    "idleReadyHint": "I-tap ang Simulan at lalabas dito ang sinasabi mo."
 }

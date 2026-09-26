@@ -3737,5 +3737,6 @@
     "voiceSetupTaskSubline": "Pour qu’Omi sache que c’est vous · environ une minute",
     "audioPartiallySaved": "Audio enregistré : {saved} sur {total}",
     "voiceIntroTitle": "Présentez-vous",
-    "memoryLabel": "Souvenir"
+    "memoryLabel": "Souvenir",
+    "idleReadyHint": "Touchez Démarrer et ce que vous dites s’affichera ici."
 }

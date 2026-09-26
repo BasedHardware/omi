@@ -11771,4 +11771,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Спогад';
+
+  @override
+  String get idleReadyHint => 'Торкніться «Почати», і сказане з’явиться тут.';
 }

@@ -11769,4 +11769,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Prisiminimas';
+
+  @override
+  String get idleReadyHint => 'Palieskite Pradėti, ir tai, ką sakote, pasirodys čia.';
 }

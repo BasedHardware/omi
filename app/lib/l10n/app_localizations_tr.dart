@@ -11766,4 +11766,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Anı';
+
+  @override
+  String get idleReadyHint => 'Başlat’a dokunun, söyledikleriniz burada görünsün.';
 }

@@ -3737,5 +3737,6 @@
     "voiceSetupTaskSubline": "Agar Omi tahu itu Anda · sekitar satu menit",
     "audioPartiallySaved": "{saved} dari {total} audio tersimpan",
     "voiceIntroTitle": "Perkenalkan diri Anda",
-    "memoryLabel": "Kenangan"
+    "memoryLabel": "Kenangan",
+    "idleReadyHint": "Ketuk Mulai dan ucapan Anda akan muncul di sini."
 }

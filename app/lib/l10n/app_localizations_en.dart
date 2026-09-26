@@ -11740,4 +11740,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Memory';
+
+  @override
+  String get idleReadyHint => 'Tap Start and what you say appears here.';
 }

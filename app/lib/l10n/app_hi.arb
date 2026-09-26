@@ -3702,5 +3702,6 @@
     "voiceSetupTaskSubline": "ताकि Omi जाने कि यह आप हैं · लगभग एक मिनट",
     "audioPartiallySaved": "{saved} ऑडियो सहेजा गया ({total} में से)",
     "voiceIntroTitle": "अपना परिचय दें",
-    "memoryLabel": "याद"
+    "memoryLabel": "याद",
+    "idleReadyHint": "शुरू करें पर टैप करें, आप जो कहेंगे वह यहाँ दिखेगा।"
 }

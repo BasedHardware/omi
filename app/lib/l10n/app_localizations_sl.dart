@@ -11780,4 +11780,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Spomin';
+
+  @override
+  String get idleReadyHint => 'Tapnite Začni in to, kar poveste, se bo prikazalo tukaj.';
 }

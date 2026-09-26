@@ -11783,4 +11783,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Recuerdo';
+
+  @override
+  String get idleReadyHint => 'Toca Iniciar y lo que digas aparecerá aquí.';
 }

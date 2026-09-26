@@ -11232,5 +11232,6 @@
     "voiceSetupTaskSubline": "За Omi да знае дека сте вие · околу една минута",
     "audioPartiallySaved": "Зачувано {saved} од {total} аудио",
     "voiceIntroTitle": "Претставете се",
-    "memoryLabel": "Спомен"
+    "memoryLabel": "Спомен",
+    "idleReadyHint": "Допрете Започни и она што го кажувате ќе се појави тука."
 }

@@ -3702,5 +3702,6 @@
     "voiceSetupTaskSubline": "Perquè Omi sàpiga que ets tu · un minut, més o menys",
     "audioPartiallySaved": "Àudio desat: {saved} de {total}",
     "voiceIntroTitle": "Presenta’t",
-    "memoryLabel": "Record"
+    "memoryLabel": "Record",
+    "idleReadyHint": "Toca Inicia i el que diguis apareixerà aquí."
 }

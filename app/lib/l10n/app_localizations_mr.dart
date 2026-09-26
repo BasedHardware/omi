@@ -11762,4 +11762,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get memoryLabel => 'स्मृती';
+
+  @override
+  String get idleReadyHint => 'सुरू करा वर टॅप करा, तुम्ही जे बोलाल ते इथे दिसेल.';
 }

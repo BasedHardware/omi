@@ -11854,4 +11854,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Souvenir';
+
+  @override
+  String get idleReadyHint => 'Touchez Démarrer et ce que vous dites s’affichera ici.';
 }

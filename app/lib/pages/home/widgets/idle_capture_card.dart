@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -74,7 +76,13 @@ class IdleCaptureCard extends StatelessWidget {
           : null,
     );
     final l10n = context.l10n;
-    String readyLine(String source) => '${CaptureSources.label(context, source)} · ${l10n.deviceReady}';
+    // The live card's twin, row for row: the orb and state, the (still) wave, two lines of text
+    // where the live card shows the words, then the two capsules. Same rows, same heights, so
+    // Start and Stop change what the card says, not its size (nothing below it moves).
+    final hint = stoppedSource == null && !paired ? l10n.notListeningSubtitle : l10n.idleReadyHint;
+    final source = stoppedSource == null
+        ? (Platform.isIOS ? l10n.memoryThisIphone : l10n.memoryThisPhone)
+        : CaptureSources.label(context, stoppedSource);
     return Padding(
       key: const ValueKey('idle_capture_card'),
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.lg, OmiSpacing.md, OmiSpacing.sm),
@@ -92,20 +100,34 @@ class IdleCaptureCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(l10n.notListeningTitle, style: OmiType.headline),
-                      const SizedBox(height: 2),
-                      // The same room either way, so the card keeps its height when a device
-                      // connects ("Pendant · Ready") or drops, and the copy wraps evenly.
-                      OmiBalancedText(
-                        stoppedSource == null ? l10n.notListeningSubtitle : readyLine(stoppedSource),
+                      Text(l10n.notListeningTitle,
+                          maxLines: 1, overflow: TextOverflow.ellipsis, style: OmiType.headline),
+                      Text(
+                        '$source · ${l10n.deviceReady}',
                         key: const ValueKey('idle_capture_subtitle'),
-                        reserveFor: [l10n.notListeningSubtitle, readyLine(stoppedSource ?? 'omi')],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
                       ),
                     ],
                   ),
                 ),
               ],
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 14),
+              child: OmiListeningWave(key: Key('idle_capture_wave'), live: false),
+            ),
+            ConstrainedBox(
+              constraints:
+                  BoxConstraints(minHeight: LiveCaptureCard.transcriptRoom(context), minWidth: double.infinity),
+              child: OmiBalancedText(
+                hint,
+                key: const ValueKey('idle_capture_hint'),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: OmiType.callout.copyWith(color: OmiColors.textTertiary),
+              ),
             ),
             const SizedBox(height: OmiSpacing.md),
             Row(

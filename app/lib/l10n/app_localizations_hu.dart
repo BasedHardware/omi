@@ -11798,4 +11798,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Emlék';
+
+  @override
+  String get idleReadyHint => 'Koppints az Indításra, és amit mondasz, itt jelenik meg.';
 }

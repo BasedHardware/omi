@@ -11785,4 +11785,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Kenangan';
+
+  @override
+  String get idleReadyHint => 'Ketik Mula dan apa yang anda katakan akan muncul di sini.';
 }

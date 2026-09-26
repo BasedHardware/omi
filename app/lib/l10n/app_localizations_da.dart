@@ -11740,4 +11740,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Minde';
+
+  @override
+  String get idleReadyHint => 'Tryk på Start, så vises det, du siger, her.';
 }

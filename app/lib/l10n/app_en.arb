@@ -14071,5 +14071,9 @@
     "memoryLabel": "Memory",
     "@memoryLabel": {
         "description": "Label above one remembered fact (singular of Memories), e.g. on the voice introduction review"
+    },
+    "idleReadyHint": "Tap Start and what you say appears here.",
+    "@idleReadyHint": {
+        "description": "Home idle capture card, a device or this phone ready: where the live words will show once listening starts"
     }
 }

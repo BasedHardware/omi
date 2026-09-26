@@ -3702,5 +3702,6 @@
     "voiceSetupTaskSubline": "ให้ Omi รู้ว่าเป็นคุณ · ประมาณหนึ่งนาที",
     "audioPartiallySaved": "บันทึกเสียงแล้ว {saved} จาก {total}",
     "voiceIntroTitle": "แนะนำตัวเอง",
-    "memoryLabel": "ความทรงจำ"
+    "memoryLabel": "ความทรงจำ",
+    "idleReadyHint": "แตะเริ่ม แล้วสิ่งที่คุณพูดจะแสดงที่นี่"
 }

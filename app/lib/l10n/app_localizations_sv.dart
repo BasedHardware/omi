@@ -11759,4 +11759,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Minne';
+
+  @override
+  String get idleReadyHint => 'Tryck på Starta så visas det du säger här.';
 }

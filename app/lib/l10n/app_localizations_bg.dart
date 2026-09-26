@@ -11795,4 +11795,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Спомен';
+
+  @override
+  String get idleReadyHint => 'Докоснете „Старт“ и казаното от вас ще се появи тук.';
 }

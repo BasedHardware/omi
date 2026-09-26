@@ -11777,4 +11777,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Atmiņa';
+
+  @override
+  String get idleReadyHint => 'Pieskarieties Sākt, un tas, ko sakāt, parādīsies šeit.';
 }

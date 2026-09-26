@@ -11232,5 +11232,6 @@
     "voiceSetupTaskSubline": "Da Omi ve, da ste to vi · približno minuta",
     "audioPartiallySaved": "Shranjeno {saved} od {total} zvoka",
     "voiceIntroTitle": "Predstavite se",
-    "memoryLabel": "Spomin"
+    "memoryLabel": "Spomin",
+    "idleReadyHint": "Tapnite Začni in to, kar poveste, se bo prikazalo tukaj."
 }

@@ -3702,5 +3702,6 @@
     "voiceSetupTaskSubline": "Et Omi teaks, et see oled sina · umbes minut",
     "audioPartiallySaved": "Salvestatud heli: {saved} / {total}",
     "voiceIntroTitle": "Tutvusta end",
-    "memoryLabel": "Mälestus"
+    "memoryLabel": "Mälestus",
+    "idleReadyHint": "Puuduta Alusta ja see, mida ütled, ilmub siia."
 }

@@ -11562,4 +11562,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get memoryLabel => '추억';
+
+  @override
+  String get idleReadyHint => '시작을 탭하면 말한 내용이 여기에 표시돼요.';
 }

@@ -3702,5 +3702,6 @@
     "voiceSetupTaskSubline": "Για να ξέρει το Omi ότι είστε εσείς · περίπου ένα λεπτό",
     "audioPartiallySaved": "Αποθηκεύτηκαν {saved} από {total} ήχου",
     "voiceIntroTitle": "Συστηθείτε",
-    "memoryLabel": "Ανάμνηση"
+    "memoryLabel": "Ανάμνηση",
+    "idleReadyHint": "Πατήστε Έναρξη και ό,τι λέτε θα εμφανίζεται εδώ."
 }

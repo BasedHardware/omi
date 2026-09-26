@@ -1,47 +1,20 @@
 // Shared components hold their shape at every phone size and text size (the layout lint's
 // findings, 2026-09-26): a settings title keeps its line beside a long value, a section title keeps
 // its line beside its buttons, and centred state copy breaks evenly.
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/ui/ui.dart';
 
+import '../../support/real_fonts.dart';
 import 'ui_test_app.dart';
 
 void main() {
   const widths = [320.0, 360.0, 375.0, 393.0, 440.0];
 
-  // Real fonts, not the test font's square glyphs, so widths are real: the app's own (FontManifest)
-  // and Roboto, the platform font widget tests render with (as the visual audit does).
-  setUpAll(() async {
-    final manifest = jsonDecode(await rootBundle.loadString('FontManifest.json')) as List;
-    for (final family in manifest) {
-      final loader = FontLoader(family['family'] as String);
-      for (final font in family['fonts'] as List) {
-        loader.addFont(rootBundle.load(font['asset'] as String));
-      }
-      await loader.load();
-    }
-    var dir = File(Platform.resolvedExecutable).parent;
-    for (var i = 0; i < 8; i++) {
-      final fonts = Directory('${dir.path}/material_fonts');
-      if (File('${fonts.path}/Roboto-Regular.ttf').existsSync()) {
-        final roboto = FontLoader('Roboto');
-        for (final weight in ['Regular', 'Medium', 'Bold']) {
-          roboto
-              .addFont(Future.value(ByteData.sublistView(File('${fonts.path}/Roboto-$weight.ttf').readAsBytesSync())));
-        }
-        await roboto.load();
-        break;
-      }
-      dir = dir.parent;
-    }
-  });
+  // Real fonts, not the test font's square glyphs, so widths are real.
+  setUpAll(loadRealFonts);
 
   Future<void> at(WidgetTester tester, double width, Widget child, {double scale = 1}) async {
     tester.view.physicalSize = Size(width, 900);

@@ -3702,5 +3702,6 @@
     "voiceSetupTaskSubline": "Så Omi vet at det er deg · omtrent ett minutt",
     "audioPartiallySaved": "{saved} av {total} lyd lagret",
     "voiceIntroTitle": "Presenter deg",
-    "memoryLabel": "Minne"
+    "memoryLabel": "Minne",
+    "idleReadyHint": "Trykk på Start, så vises det du sier her."
 }
