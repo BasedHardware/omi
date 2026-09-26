@@ -20522,6 +20522,144 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{name} + others'**
   String participantsSummaryUncounted(String name);
+
+  /// No description provided for @deviceOnboardingVoiceReplyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Hear Omi\'s Answers'**
+  String get deviceOnboardingVoiceReplyTitle;
+
+  /// No description provided for @deviceOnboardingVoiceReplySample.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ve got it. Your next meeting starts in twenty minutes.'**
+  String get deviceOnboardingVoiceReplySample;
+
+  /// No description provided for @deviceOnboardingAllSetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re All Set'**
+  String get deviceOnboardingAllSetTitle;
+
+  /// No description provided for @deviceOnboardingAllSetSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap a row to review or change it.'**
+  String get deviceOnboardingAllSetSubtitle;
+
+  /// No description provided for @deviceOnboardingAllSetSinglePressBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'1×'**
+  String get deviceOnboardingAllSetSinglePressBadge;
+
+  /// No description provided for @deviceOnboardingAllSetDoublePressBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'2×'**
+  String get deviceOnboardingAllSetDoublePressBadge;
+
+  /// Teaching subtitle for the voice reply onboarding step
+  ///
+  /// In en, this message translates to:
+  /// **'When you ask with the button, Omi can read its answer out loud.'**
+  String get deviceOnboardingVoiceReplySubtitle;
+
+  /// Title of the idle voice answer preview card
+  ///
+  /// In en, this message translates to:
+  /// **'Hear your last answer'**
+  String get deviceOnboardingVoiceReplyPreviewIdle;
+
+  /// Title of the voice answer preview card while audio is playing
+  ///
+  /// In en, this message translates to:
+  /// **'Playing your last answer...'**
+  String get deviceOnboardingVoiceReplyPreviewPlaying;
+
+  /// Voice preview output route when headphones are connected
+  ///
+  /// In en, this message translates to:
+  /// **'Through {device}'**
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device);
+
+  /// Voice preview output route when using the phone speaker
+  ///
+  /// In en, this message translates to:
+  /// **'Through the phone speaker'**
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker;
+
+  /// Voice preview output route while the system route is not yet known
+  ///
+  /// In en, this message translates to:
+  /// **'Through the current audio output'**
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput;
+
+  /// Description of the Off voice response mode
+  ///
+  /// In en, this message translates to:
+  /// **'Answers stay on screen. Nothing is spoken.'**
+  String get deviceOnboardingVoiceReplyOffDescription;
+
+  /// Description of the Headphones only voice response mode
+  ///
+  /// In en, this message translates to:
+  /// **'Private. Speaks only through AirPods, Bluetooth or wired headphones.'**
+  String get deviceOnboardingVoiceReplyHeadphonesDescription;
+
+  /// Description of the Always voice response mode
+  ///
+  /// In en, this message translates to:
+  /// **'Uses the phone speaker when no headphones are connected.'**
+  String get deviceOnboardingVoiceReplyAlwaysDescription;
+
+  /// Output consequence when voice responses are off
+  ///
+  /// In en, this message translates to:
+  /// **'Omi will stay silent. Answers still appear in the app.'**
+  String get deviceOnboardingVoiceReplyStatusOff;
+
+  /// Output consequence for Headphones only mode with connected headphones
+  ///
+  /// In en, this message translates to:
+  /// **'{device} connected. Omi will speak here.'**
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device);
+
+  /// Output consequence for Headphones only mode without connected headphones
+  ///
+  /// In en, this message translates to:
+  /// **'No headphones connected. Omi stays silent until you connect some.'**
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected;
+
+  /// Output consequence for Always mode with connected headphones
+  ///
+  /// In en, this message translates to:
+  /// **'Plays through {device}.'**
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device);
+
+  /// Output consequence for Always mode without connected headphones
+  ///
+  /// In en, this message translates to:
+  /// **'Plays out loud through the phone speaker.'**
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker;
+
+  /// Footer explaining where to change voice response settings
+  ///
+  /// In en, this message translates to:
+  /// **'You can change this anytime in {settings} › {voiceResponse}'**
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse);
+
+  /// Footer explaining the complete Settings menu path for replaying the device tutorial
+  ///
+  /// In en, this message translates to:
+  /// **'Replay this tour anytime in {settings} › {deviceSettings} › {deviceTutorial}'**
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial);
+
+  /// Generic fallback name for connected headphones when the system does not provide a device name
+  ///
+  /// In en, this message translates to:
+  /// **'Headphones'**
+  String get deviceOnboardingVoiceReplyGenericHeadphones;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

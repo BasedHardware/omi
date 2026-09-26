@@ -11362,4 +11362,88 @@ class AppLocalizationsFr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name et d\'autres';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Écoutez les réponses d’Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'C’est noté. Votre prochaine réunion commence dans vingt minutes.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Tout est prêt';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Touchez une ligne pour la vérifier ou la modifier.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Lorsque vous demandez avec le bouton, Omi peut lire sa réponse à haute voix.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Écoutez votre dernière réponse';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Jouer votre dernière réponse...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Par $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Via le haut-parleur du téléphone';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Via la sortie audio actuelle';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Les réponses restent à l\'écran. Rien n\'est dit.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Privé. Parle uniquement via le AirPods, le Bluetooth ou un casque filaire.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Utilise le haut-parleur du téléphone lorsqu\'aucun casque n\'est connecté.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff =>
+      'Omi restera silencieux. Les réponses apparaissent toujours dans l\'application.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device connecté. Omi parlera ici.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Aucun casque connecté. Omi reste silencieux jusqu\'à ce que vous en connectiez.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Joue via $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Joue à haute voix via le haut-parleur du téléphone.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Vous pouvez modifier cela à tout moment au $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Revivez cette tournée à tout moment au $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Écouteurs';
 }

@@ -147,6 +147,28 @@ void main() {
     expect(playbackEvents(), hasLength(1));
   });
 
+  test('preview plays without telemetry and does not interrupt a real reply lifecycle', () async {
+    SharedPreferencesUtil().voiceResponseMode = 2;
+    await install(synthesize: (_) async => _mp3);
+
+    await service.playPreview('A settings preview answer.');
+    await flush();
+    expect(plays, [_mp3]);
+    expect(playbackEvents(), isEmpty);
+
+    await service.beginResponse(messageId: 'real-reply');
+    await service.playPreview('A second settings preview answer.');
+    await flush();
+    expect(plays, [_mp3]);
+    expect(playbackEvents(), isEmpty);
+
+    await service.interrupt(source: VoiceReplyPlaybackInterruptSource.userTyped);
+    await flush();
+    expect(playbackEvents(), hasLength(1));
+    expect(playbackEvents().single['outcome'], 'interrupted');
+    expect(playbackEvents().single['interrupt_source'], 'user_typed');
+  });
+
   test('no headphones emits skipped and does not synthesize', () async {
     SharedPreferencesUtil().voiceResponseMode = 1;
     var synthesized = false;
