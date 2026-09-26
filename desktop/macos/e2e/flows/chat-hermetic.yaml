@@ -29,6 +29,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/ChatFeedbackReason.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/StableChatCardHeader.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubbleSupport.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatRedoDisplayProjection.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ToolActivityTimelineLayout.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatInputView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift
