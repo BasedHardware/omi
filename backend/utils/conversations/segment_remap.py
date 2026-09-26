@@ -4,6 +4,12 @@ Times are seconds relative to each transcript's own origin.  Callers may supply
 an offset or let matching text estimate live-to-batch clock drift.  No text is
 returned in diagnostics, and no annotation is silently assigned across an
 ambiguous overlap.
+
+Safe annotation mappings require ordered token coverage in both directions:
+at least 65% of source tokens must occur in the mapped targets, and unmatched
+target tokens may occupy at most 10% of each target (rounded down). Fillers
+count as speech. This tolerates limited ASR differences without requiring
+identical transcripts and gives short targets no extra-speech allowance.
 """
 
 from __future__ import annotations
@@ -263,13 +269,23 @@ def _overlaps(node: _IntervalNode | None, start: float, end: float):
         yield from _overlaps(node.right, start, end)
 
 
+def _shared_tokens(source: list[str], target: list[str]) -> int:
+    return sum(block.size for block in SequenceMatcher(None, source, target, autojunk=False).get_matching_blocks())
+
+
 def _targets_explained(source_text: str, choices: list[tuple[int, str, float, float, str]]) -> bool:
-    """Each target must agree with the source, or all targets must partition it."""
+    """Require ordered source coverage and bound extra speech in every target."""
     if not source_text or any(not item[4] for item in choices):
         return False
-    if all(SequenceMatcher(None, source_text, item[4], autojunk=False).ratio() >= 0.65 for item in choices):
-        return True
-    return ' '.join(item[4] for item in sorted(choices, key=lambda item: item[2])) == source_text
+    source_tokens = source_text.split()
+    ordered_targets = sorted(choices, key=lambda item: item[2])
+    target_tokens = [token for item in ordered_targets for token in item[4].split()]
+    if _shared_tokens(source_tokens, target_tokens) / len(source_tokens) < 0.65:
+        return False
+    return all(
+        len(tokens) - _shared_tokens(source_tokens, tokens) <= len(tokens) // 10
+        for tokens in (item[4].split() for item in choices)
+    )
 
 
 def _plan_at_offset(old: Sequence[Mapping[str, Any]], new: Sequence[Mapping[str, Any]], shift: float) -> RemapPlan:

@@ -87,9 +87,12 @@ when the live side has no words.
 
 `segment_remap.py` aligns text in sequence and verifies an inferred clock shift
 with unique, consistently shifted phrases. Time overlap candidates come from a
-bounded interval index. Each mapped target must agree with its source text, or
-the sequential targets must exactly partition the source text; a filler target
-cannot inherit annotations through time overlap or aggregate text agreement.
+bounded interval index. Each annotation mapping needs ordered token coverage
+in both directions: at least 65% of source tokens must occur in its mapped
+targets, and unmatched tokens in each target may be at most 10% of that
+target's tokens, rounded down. Fillers count as speech. This allows limited
+ASR differences without requiring identical transcripts, while short targets
+have no allowance for extra speech (including a trailing `yeah`).
 `remap_safe` requires 100% of live segments mapped,
 no ambiguous overlap, verified inferred offset, and successful annotation
 remapping. The stored first-chunk minus `started_at` scalar lets operators

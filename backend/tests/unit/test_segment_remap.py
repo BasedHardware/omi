@@ -94,6 +94,34 @@ def test_sequential_filler_cannot_inherit_a_matching_sources_annotations(offset)
         remap_source_ids(['source'], plan)
 
 
+@pytest.mark.parametrize('offset', [None, 0])
+def test_extra_speech_inside_matching_target_blocks_annotation_remap(offset):
+    old = [
+        segment('source', 0, 10, 'the distinctly blue harbor crane'),
+        segment('anchor', 20, 25, 'a unique clock anchor phrase'),
+    ]
+    new = [
+        segment('expanded', 0, 10, 'the distinctly blue harbor crane yeah'),
+        segment('fixed', 20, 25, 'a unique clock anchor phrase'),
+    ]
+    plan = plan_segment_remap(old, new, offset_seconds=offset)
+    assert not plan.safe
+    assert plan.unresolved == ('source',)
+    assert 'source' not in plan.ids
+    with pytest.raises(ValueError, match='no safe target'):
+        remap_receipt({'segments': {'source': {'person_id': 'synthetic-person'}}}, old, new, plan)
+    with pytest.raises(ValueError, match='no safe target'):
+        remap_source_ids(['source'], plan)
+
+
+def test_long_target_allows_one_asr_difference_within_ten_percent():
+    old = [segment('source', 0, 10, 'the distinctly blue harbor crane stands beside the old stone bridge today')]
+    new = [segment('target', 0, 10, 'the distinctly blue harbor crane stands beside the old stone bridge now')]
+    plan = plan_segment_remap(old, new, offset_seconds=0)
+    assert plan.safe
+    assert plan.ids == {'source': ('target',)}
+
+
 def test_real_text_partition_can_inherit_both_split_targets():
     old = [segment('source', 0, 10, 'the distinctly blue harbor crane')]
     new = [segment('left', 0, 5, 'the distinctly blue'), segment('right', 5, 10, 'harbor crane')]
