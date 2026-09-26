@@ -96,7 +96,9 @@ struct OmiCreateTaskIntent {
   var section: OmiSectionEntity?
 
   func perform() async throws -> some ReturnsValue<TaskEntity> {
-    guard list == nil || list?.id == "omi" else { throw SiriFailure.unsupported }
+    guard list == nil || list?.id == "omi" else {
+      throw SiriActionFailure(action: "create", failure: .unsupported)
+    }
     let due = dueDate.flatMap { Calendar.current.date(from: $0) }
     let created = try await SiriIntentTelemetry.perform("create_task") {
       try await SiriIntentService.createTask(title: title, dueDate: due)
@@ -127,7 +129,7 @@ struct OmiCompleteTaskIntent {
   func perform() async throws -> some ReturnsValue<TaskEntity> {
     guard isCompleted == true, title == nil, note == nil, tags == nil, urls == nil,
       dueDate == nil, recurrence == nil, isFlagged == nil, list == nil, locationTrigger == nil
-    else { throw SiriFailure.unsupported }
+    else { throw SiriActionFailure(action: "complete", failure: .unsupported) }
     let result = try await SiriIntentTelemetry.perform("complete_task") {
       try await SiriIntentService.completeTask(id: target.id)
     }

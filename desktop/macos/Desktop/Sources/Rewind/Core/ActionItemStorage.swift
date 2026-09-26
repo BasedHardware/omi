@@ -807,7 +807,6 @@ actor ActionItemStorage {
       return
     }
     let db = try await ensureInitialized()
-
     let deletedIds = try await authorization.withCommitLease {
       try await db.write { database -> [String] in
         try authorization.require()

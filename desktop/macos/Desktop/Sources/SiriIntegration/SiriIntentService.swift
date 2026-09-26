@@ -69,6 +69,8 @@ struct SiriActionFailure: LocalizedError, Equatable {
 
 enum SiriIntentService {
   @TaskLocal static var memoryWriter: (@Sendable (String) async throws -> ServerMemory)?
+  @TaskLocal static var taskCompletionWriter: (@Sendable (String) async throws -> TaskActionItem)?
+  @TaskLocal static var taskCreationWriter: (@Sendable (String, Date?) async throws -> TaskActionItem)?
   static func normalizedMemory(_ input: String) -> String {
     var value = input.trimmingCharacters(in: .whitespacesAndNewlines)
     if value.lowercased().hasPrefix("that ") {
@@ -109,7 +111,7 @@ enum SiriIntentService {
   }
 
   static func completeTask(id: String) async throws -> TaskActionItem {
-    try await completeTask(id: id, update: liveCompleteTask)
+    try await completeTask(id: id, update: taskCompletionWriter ?? liveCompleteTask)
   }
 
   static func completeTask(
@@ -139,7 +141,7 @@ enum SiriIntentService {
   }
 
   static func createTask(title: String, dueDate: Date?) async throws -> TaskActionItem {
-    try await createTask(title: title, dueDate: dueDate, create: liveCreateTask)
+    try await createTask(title: title, dueDate: dueDate, create: taskCreationWriter ?? liveCreateTask)
   }
 
   static func createTask(

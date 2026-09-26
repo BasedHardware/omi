@@ -4,6 +4,49 @@ import XCTest
 @testable import Omi_Computer
 
 final class SiriIntentServiceTests: XCTestCase {
+  private enum BackendStub: CaseIterable, Sendable {
+    case auth, network, quota, rateLimited, server
+
+    var failure: SiriFailure {
+      switch self {
+      case .auth: .auth
+      case .network: .network
+      case .quota: .quota
+      case .rateLimited: .rateLimited
+      case .server: .server
+      }
+    }
+
+    var error: Error {
+      switch self {
+      case .auth: APIError.unauthorized
+      case .network: URLError(.notConnectedToInternet)
+      case .quota: APIError.httpError(statusCode: 402)
+      case .rateLimited: APIError.httpError(statusCode: 429)
+      case .server: APIError.httpError(statusCode: 503)
+      }
+    }
+
+    func spokenMessage(for action: String) -> String {
+      switch self {
+      case .auth: "Open Omi and sign in first."
+      case .network:
+        action == "complete"
+          ? "I couldn't reach Omi, so the task wasn't changed."
+          : "I couldn't reach Omi, so nothing was saved."
+      case .quota:
+        action == "complete"
+          ? "Your Omi limit has been reached, so the task wasn't changed."
+          : "Your Omi limit has been reached, so nothing was saved."
+      case .rateLimited: "Omi is receiving too many requests. Try again shortly."
+      case .server:
+        action == "complete"
+          ? "Omi couldn't change the task right now."
+          : "Omi couldn't save that right now."
+      }
+    }
+  }
+
   private actor DeletionProbe {
     var deletedID: String?
     func delete(_ id: String) { deletedID = id }
@@ -94,6 +137,33 @@ final class SiriIntentServiceTests: XCTestCase {
     XCTAssertEqual(entity.id, "memory-synthetic")
     XCTAssertEqual(entity.content, record.content)
     XCTAssertEqual(entity.name, record.content)
+  }
+
+  @available(macOS 27, *)
+  func testConversationAndTaskEntitiesProjectPersistedRows() {
+    let started = Date(timeIntervalSince1970: 2_000_000_000)
+    let conversation = TranscriptionSessionRecord(
+      startedAt: started, source: "desktop", backendId: "conversation-synthetic",
+      backendSynced: true, title: "Synthetic conversation", overview: "A synthetic overview",
+      conversationStatus: .completed)
+    let note = ConversationEntity(conversation)
+    XCTAssertEqual(note.id, "conversation-synthetic")
+    XCTAssertEqual(String(note.name.characters), "Synthetic conversation")
+    XCTAssertEqual(note.content.map { String($0.characters) }, "A synthetic overview")
+    XCTAssertEqual(note.creationDate, started)
+    XCTAssertEqual(note.folder?.id, OmiFolderEntity.conversations.id)
+
+    let completed = started.addingTimeInterval(3_600)
+    let task = ActionItemRecord(
+      backendId: "task-synthetic", backendSynced: true, description: "Synthetic task",
+      completed: true, dueAt: started, completedAt: completed)
+    let reminder = TaskEntity(task)
+    XCTAssertEqual(reminder.id, "task-synthetic")
+    XCTAssertEqual(reminder.title, "Synthetic task")
+    XCTAssertTrue(reminder.isCompleted)
+    XCTAssertEqual(reminder.dueDate?.year, Calendar.current.component(.year, from: started))
+    XCTAssertEqual(reminder.completionDate, completed)
+    XCTAssertEqual(reminder.list.id, OmiListEntity.omi.id)
   }
 
   func testIndexScopeExpiresMemoriesAndBoundsConversationsAndMemories() {
@@ -205,6 +275,43 @@ final class SiriIntentServiceTests: XCTestCase {
       XCTAssertEqual(error.errorDescription, "Your Omi limit has been reached, so nothing was saved.")
     } catch {
       XCTFail("Unexpected failure: \(error)")
+    }
+  }
+
+  @available(macOS 27, *)
+  func testCompleteTaskIntentPerformSpeaksEveryBackendFailure() async {
+    for stub in BackendStub.allCases {
+      let intent = OmiCompleteTaskIntent()
+      intent.target = TaskEntity(donationID: "synthetic-task")
+      intent.isCompleted = true
+      do {
+        _ = try await SiriIntentService.$taskCompletionWriter.withValue({ _ in throw stub.error }) {
+          try await intent.perform()
+        }
+        XCTFail("\(stub) must not complete the task")
+      } catch let error as SiriActionFailure {
+        XCTAssertEqual(error.failure, stub.failure)
+        XCTAssertEqual(error.action, "complete")
+        XCTAssertEqual(error.errorDescription, stub.spokenMessage(for: "complete"))
+      } catch { XCTFail("Unexpected \(stub) failure: \(error)") }
+    }
+  }
+
+  @available(macOS 27, *)
+  func testCreateTaskIntentPerformSpeaksEveryBackendFailure() async {
+    for stub in BackendStub.allCases {
+      let intent = OmiCreateTaskIntent()
+      intent.title = "Synthetic task"
+      do {
+        _ = try await SiriIntentService.$taskCreationWriter.withValue({ _, _ in throw stub.error }) {
+          try await intent.perform()
+        }
+        XCTFail("\(stub) must not create a task")
+      } catch let error as SiriActionFailure {
+        XCTAssertEqual(error.failure, stub.failure)
+        XCTAssertEqual(error.action, "create")
+        XCTAssertEqual(error.errorDescription, stub.spokenMessage(for: "create"))
+      } catch { XCTFail("Unexpected \(stub) failure: \(error)") }
     }
   }
 
