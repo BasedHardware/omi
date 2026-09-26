@@ -1480,6 +1480,11 @@ checks:
     triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#14351: TweetDetector must slice content using offsets from the original transcript, not a stripped copy"
+  - id: twitter-app-error-sanitization-tests
+    command: ["python3", "plugins/omi-twitter-app/test_error_sanitization.py"]
+    triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Twitter OAuth and error handlers must sanitize exceptions and avoid reflecting internal error text"
   - id: linear-search-issues-params-tests
     command: ["python3", "plugins/omi-linear-app/test_search_issues_params.py"]
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
