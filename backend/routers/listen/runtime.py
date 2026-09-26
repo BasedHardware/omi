@@ -323,7 +323,9 @@ class ListenSessionRuntime:
         get_metrics = getattr(gate, 'get_metrics', None)
         if callable(get_metrics):
             try:
-                return float(get_metrics().get('speech_ms_total') or 0) / 1000.0
+                metrics = get_metrics()
+                if isinstance(metrics, dict):
+                    return float(metrics.get('speech_ms_total') or 0) / 1000.0
             except Exception as error:
                 logger.warning('Listen session speech total read failed type=%s', type(error).__name__)
         return None
