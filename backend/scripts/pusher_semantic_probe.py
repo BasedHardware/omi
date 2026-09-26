@@ -55,9 +55,10 @@ TRANSCRIPT_RECEIVE_BOUND_SECONDS = 45
 # CLIENT conversation even when the trailing passes flush after the rollover,
 # so the durable-transcript readback never depends on a single STT pass.
 DISCARD_KEEP_AUDIO_PASSES = 8
+ALIGNMENT_AUDIO_PASSES = 2
 
-# Opt-in audio-timeline alignment scenario. Two distinguishable >8 s speech
-# windows paced in real time with delivered silence and one actual bounded
+# Opt-in audio-timeline alignment scenario. Two sends of the same fixture,
+# paced in real time with delivered silence and one actual bounded
 # inter-arrival gap (above the 2 s anchor threshold) between them; the socket
 # stays open through finalization exactly like the base probe. This scenario
 # must only run on dev with an isolated test identity.
@@ -340,9 +341,9 @@ def _alignment_covered(spans: list[Any], start: float, end: float) -> bool:
     return False
 
 
-def _alignment_word_counts(segments: list[Any], expected_phrase: str) -> tuple[int, int]:
-    """Check that two fixture sends did not become many durable copies."""
-    expected = 2 * len(expected_phrase.split())
+def _alignment_word_counts(segments: list[Any], expected_phrase: str, fixture_passes: int) -> tuple[int, int]:
+    """Count the actual fixture sends for the selected probe scenario."""
+    expected = fixture_passes * len(expected_phrase.split())
     observed = sum(
         len(_normalize(item.get("text")).split()) for item in segments if isinstance(item, dict) and item.get("text")
     )
@@ -350,7 +351,7 @@ def _alignment_word_counts(segments: list[Any], expected_phrase: str) -> tuple[i
 
 
 def _alignment_word_count_ok(observed: int, expected: int) -> bool:
-    return expected > 0 and expected // 2 <= observed <= expected * 3 // 2
+    return expected > 0 and expected * 0.8 <= observed <= expected * 1.2
 
 
 def _http_json_method(url: str, token: str, method: str = "GET") -> tuple[int, dict[str, Any] | None]:
@@ -587,7 +588,7 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
                 raise ProbeError("span_coverage")
             await asyncio.sleep(ALIGNMENT_COVERAGE_POLL_SECONDS)
         live_word_count, expected_word_count = _alignment_word_counts(
-            conversation.get("transcript_segments") or [], fixture.expected_phrase
+            conversation.get("transcript_segments") or [], fixture.expected_phrase, ALIGNMENT_AUDIO_PASSES
         )
         # Exact words remain provider-dependent, but two spoken copies cannot
         # legitimately produce four or eight complete copies. Fail the probe
@@ -730,7 +731,7 @@ def _alignment_receipt(
 
 async def _terminal_readback(
     base_url: str, token: str, conversation_id: str, timeout_seconds: int, *, expected_phrase: str | None = None
-) -> None:
+) -> dict[str, Any]:
     quoted_id = urllib.parse.quote(conversation_id, safe="")
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
@@ -773,6 +774,7 @@ async def _terminal_readback(
         )
         if expected_phrase not in durable_text:
             raise ProbeError("transcript_mismatch")
+    return conversation
 
 
 async def _observe_candidate_pusher(
@@ -901,13 +903,18 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
             )
         )
         try:
-            await _terminal_readback(
+            conversation = await _terminal_readback(
                 args.api_url.rstrip("/"),
                 token,
                 conversation_id,
                 args.finalization_timeout_seconds,
                 expected_phrase=fixture.expected_phrase,
             )
+            live_count, expected_count = _alignment_word_counts(
+                conversation.get("transcript_segments") or [], fixture.expected_phrase, DISCARD_KEEP_AUDIO_PASSES
+            )
+            if not _alignment_word_count_ok(live_count, expected_count):
+                raise ProbeError("transcript_word_count")
         finally:
             probe_socket_hold.set()
         live_window_matched, live_window_transcript = await listen_task

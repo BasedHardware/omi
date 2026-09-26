@@ -11263,4 +11263,85 @@ class AppLocalizationsEt extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ja teised';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Kuula Omi vastuseid';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Selge. Sinu järgmine kohtumine algab kahekümne minuti pärast.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Kõik on valmis';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Puuduta rida, et seda üle vaadata või muuta.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'Kui küsite nupuga, saab Omi oma vastuse valjusti lugeda.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Kuulake oma viimast vastust';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Teie viimase vastuse esitamine...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '$device kaudu';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Läbi telefoni kõlari';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Läbi praeguse heliväljundi';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Vastused jäävad ekraanile. Midagi ei räägita.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Privaatne. Räägib ainult AirPods, Bluetooth või juhtmega kõrvaklappide kaudu.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'Kasutab telefoni kõlarit, kui kõrvaklappe pole ühendatud.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi vaikib. Vastused kuvatakse endiselt rakenduses.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device ühendatud. Siin räägib Omi.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Kõrvaklappe pole ühendatud. Omi vaikib, kuni ühendate mõne.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Mängib läbi numbri $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Mängib valjult läbi telefoni kõlari.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Saate seda igal ajal muuta numbril $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Esitage seda ringkäiku igal ajal uuesti numbril $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Kõrvaklapid';
 }
