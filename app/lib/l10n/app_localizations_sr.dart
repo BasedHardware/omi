@@ -2494,12 +2494,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Детаљне дијагностичке поруке';
 
   @override
-  String get autoCreateSpeakers => 'Аутоматски создај говорнике';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Аутоматски создај када је име откривено';
-
-  @override
   String get followUpQuestions => 'Додатна питања';
 
   @override
@@ -11187,9 +11181,6 @@ class AppLocalizationsSr extends AppLocalizations {
       'Транскрипције нису доступне, снимање се наставља на уређају и биће обрађено касније';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Транскрипција недоступна · чува се на уређају';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Транскрипције на чекању $pending/$total';
   }
@@ -11248,4 +11239,45 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Звук привеска не стиже до апликације — додирните за поправку';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => 'Zaustavite Transcribe Later na privesku pre snimanja telefonom.';
+
+  @override
+  String get captureNotTranscribing => 'Нема транскрипције';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Звук је сачуван, транскрипција касније';
+
+  @override
+  String get captureStillRecording => 'Снимање се наставља';
+
+  @override
+  String get captureMicInUseElsewhere => 'Микрофон користи друга апликација';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Позив или друга апликација преузела је микрофон, па Omi тренутно не чује. Omi ће сам наставити кад микрофон буде слободан. Све снимљено до сада је безбедно.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Ваша прилагођена услуга претварања говора у текст није доступна. Omi чува звук на овом телефону и послаће га кад се услуга врати. Ништа се не губи.';
+
+  @override
+  String get captureStarting => 'Покретање…';
+
+  @override
+  String get capturePhoneStorageFull => 'Меморија телефона је пуна';
+
+  @override
+  String get captureStorageAlmostFull => 'Меморија је скоро пуна';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Привезак је изгубио везу са овим телефоном. Omi ће се сам поново повезати кад је привезак укључен и у близини. Све снимљено до сада је безбедно.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name и други';
+  }
 }

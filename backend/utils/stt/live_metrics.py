@@ -25,5 +25,10 @@ WINDOW_DECODER_LOOPS = Counter(
     'omi_stt_window_decoder_loops_total',
     'Repeated-phrase decoder loops collapsed out of windowed TDT segments',
 )
+WINDOW_EMISSION_DROPS = Counter(
+    'omi_stt_window_emission_drops_total',
+    'Windowed TDT segments dropped instead of emitted at a fabricated position',
+    ['reason'],
+)
 CHAIN_EXHAUSTED = Counter('omi_stt_chain_exhausted_total', 'Configured live chains that could not serve')
 LEG_ATTEMPTS = Counter('omi_stt_leg_attempts_total', 'Configured-chain connection results', ['to_mode', 'outcome'])
