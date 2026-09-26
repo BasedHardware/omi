@@ -2374,6 +2374,104 @@
         "speaker-tag-prompts-funnel"
       ],
       "correlation": null
+    },
+    {
+      "id": "voiceReplyPlayback",
+      "wire_name": "Voice Reply Playback",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "outcome": {
+          "type": "enum",
+          "wire_name": "outcome",
+          "values": [
+            "played",
+            "played_with_fallback",
+            "fallback_only",
+            "skipped",
+            "interrupted",
+            "failed"
+          ]
+        },
+        "skipReason": {
+          "type": "enum",
+          "wire_name": "skip_reason",
+          "values": [
+            "mode_off",
+            "no_headphones",
+            "headphone_check_failed",
+            "none"
+          ]
+        },
+        "mode": {
+          "type": "enum",
+          "wire_name": "mode",
+          "values": [
+            "off",
+            "headphones_only",
+            "always",
+            "unknown"
+          ]
+        },
+        "outputRoute": {
+          "type": "enum",
+          "wire_name": "output_route",
+          "values": [
+            "bluetooth",
+            "wired",
+            "airplay",
+            "usb",
+            "speaker",
+            "unknown"
+          ]
+        },
+        "chunksRequested": {
+          "type": "int",
+          "wire_name": "chunks_requested"
+        },
+        "chunksPlayed": {
+          "type": "int",
+          "wire_name": "chunks_played"
+        },
+        "chunksDropped": {
+          "type": "int",
+          "wire_name": "chunks_dropped"
+        },
+        "fallbackReason": {
+          "type": "enum",
+          "wire_name": "fallback_reason",
+          "values": [
+            "none",
+            "rate_limited_429",
+            "unavailable_503",
+            "no_response"
+          ]
+        },
+        "firstAudioLatencyMs": {
+          "type": "int",
+          "wire_name": "first_audio_latency_ms"
+        },
+        "interruptSource": {
+          "type": "enum",
+          "wire_name": "interrupt_source",
+          "values": [
+            "none",
+            "user_typed",
+            "new_voice_query",
+            "audio_interruption",
+            "headphones_unplugged",
+            "quota_error",
+            "stream_error",
+            "mode_off"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
     }
   ]
 }

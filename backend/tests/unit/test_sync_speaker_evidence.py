@@ -114,12 +114,17 @@ def test_pipeline_pools_and_logs_real_seconds(monkeypatch, caplog):
     ]
     with caplog.at_level(logging.INFO):
         pipeline.identify_speakers_for_segments(
-            segments, wav(), {'p': {'name': 'Synthetic', 'embedding': np.array([[1.0, 0.0]])}}, 'test-user'
+            segments,
+            wav(),
+            {'sensitive-person-id': {'name': 'Sensitive Name', 'embedding': np.array([[1.0, 0.0]])}},
+            'sensitive-uid',
         )
     assert len(queries) == 1
-    assert all(s.person_id == 'p' and s.speaker_match_source == 'sync_embedding' for s in segments)
+    assert all(s.person_id == 'sensitive-person-id' and s.speaker_match_source == 'sync_embedding' for s in segments)
     assert 'evidence_seconds=8.000' in caplog.text
     assert 'segments=4 clips=1' in caplog.text
+    for private_value in ('Sensitive Name', 'sensitive-person-id', 'sensitive-uid'):
+        assert private_value not in caplog.text
 
 
 def test_insufficient_evidence_is_a_counted_decision(monkeypatch, caplog):
