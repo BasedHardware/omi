@@ -89,13 +89,26 @@ def format_record(item: Dict[str, Any], mode: str = "standard") -> Dict[str, Any
     updated_at = parse_datetime(item.get("updated_at"))
 
     if mode == "fine_tune":
-        # Multi-turn messages schema (OpenAI / Anthropic / Gemini instruction format)
+        # Instruction fine-tuning format (OpenAI / Anthropic / Gemini format)
         messages: List[Dict[str, str]] = []
         user_prompt = f"Topic: {title}" if title else "Meeting Conversation"
         if overview:
             user_prompt += f"\nOverview: {overview}"
         messages.append({"role": "user", "content": user_prompt})
-        messages.append({"role": "assistant", "content": transcript if transcript else overview})
+
+        segments = item.get("transcript_segments") or item.get("segments") or []
+        if segments and isinstance(segments, list) and any(isinstance(s, dict) and s.get("text") for s in segments):
+            speaker_map: Dict[str, str] = {}
+            for seg in segments:
+                if isinstance(seg, dict) and seg.get("text"):
+                    spk = str(seg.get("speaker", "SPEAKER_00"))
+                    if spk not in speaker_map:
+                        speaker_map[spk] = "user" if len(speaker_map) % 2 == 1 else "assistant"
+                    role = speaker_map[spk]
+                    messages.append({"role": role, "content": str(seg["text"]).strip()})
+        else:
+            messages.append({"role": "assistant", "content": transcript if transcript else overview})
+
         return {
             "conversation_id": conv_id,
             "messages": messages,

@@ -88,6 +88,30 @@ class TestConversationsToJsonl(unittest.TestCase):
         self.assertEqual(messages[1]["role"], "assistant")
         self.assertIn("Bob: Let us discuss architecture", messages[1]["content"])
 
+    def test_convert_fine_tune_multi_speaker(self):
+        speaker_conv = [
+            {
+                "id": "conv_spk",
+                "structured": {"title": "Interview"},
+                "transcript_segments": [
+                    {"speaker": "SPEAKER_00", "text": "What is your experience?"},
+                    {"speaker": "SPEAKER_01", "text": "I have 5 years with Python."},
+                ],
+            }
+        ]
+        spk_file = self.dir_path / "spk.json"
+        spk_file.write_text(json.dumps(speaker_conv), encoding="utf-8")
+        out_file = self.dir_path / "spk.jsonl"
+        convert([str(spk_file)], str(out_file), mode="fine_tune")
+
+        line = json.loads(out_file.read_text(encoding="utf-8").strip())
+        msgs = line["messages"]
+        self.assertEqual(len(msgs), 3)  # prompt + 2 speaker turns
+        self.assertEqual(msgs[1]["role"], "assistant")
+        self.assertIn("What is your experience?", msgs[1]["content"])
+        self.assertEqual(msgs[2]["role"], "user")
+        self.assertIn("5 years with Python", msgs[2]["content"])
+
     def test_convert_rag_mode(self):
         out_file = self.dir_path / "rag.jsonl"
         count = convert([str(self.input_file)], str(out_file), mode="rag")
