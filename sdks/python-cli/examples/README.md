@@ -22,6 +22,8 @@
   calendar: JSON export to an iCalendar (.ics) file.
 * [`action_items_ics.md`](action_items_ics.md) — put open action items with due
   dates on a calendar: JSON export to an iCalendar (.ics) file.
+* [`action_items_ics.es.md`](action_items_ics.es.md) — colocar tareas pendientes con
+  fechas de vencimiento en un calendario: exportación JSON a un archivo iCalendar (.ics).
 * [`action_items_todotxt.md`](action_items_todotxt.md) — turn an action-item
   export into a todo.txt file with due: tags for todo.txt apps.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
