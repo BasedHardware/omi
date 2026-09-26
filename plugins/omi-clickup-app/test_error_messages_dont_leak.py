@@ -37,9 +37,16 @@ def module(name, **attributes):
     return value
 
 
+class HTTPException(Exception):
+    def __init__(self, status_code=500, detail=None, **kwargs):
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
 stubs = {
     "dotenv": module("dotenv", load_dotenv=lambda: None),
-    "fastapi": module("fastapi", FastAPI=Framework, Request=Framework, Query=Framework, HTTPException=Exception),
+    "fastapi": module("fastapi", FastAPI=Framework, Request=Framework, Query=Framework, HTTPException=HTTPException),
     "fastapi.responses": module(
         "fastapi.responses", HTMLResponse=Response, RedirectResponse=Response, JSONResponse=Response
     ),
@@ -84,9 +91,31 @@ class ErrorMessagesDoNotLeakTests(unittest.TestCase):
     def test_logout_does_not_leak_the_storage_exception(self):
         broken_users = Mock()
         broken_users.__contains__ = Mock(side_effect=RuntimeError(SENSITIVE_DETAIL))
-        with patch.dict(sys.modules, {"simple_storage": module("simple_storage", users=broken_users, sessions={}, save_users=Mock(), save_sessions=Mock())}):
+        with patch.dict(
+            sys.modules,
+            {
+                "simple_storage": module(
+                    "simple_storage", users=broken_users, sessions={}, save_users=Mock(), save_sessions=Mock()
+                )
+            },
+        ):
             res = asyncio.run(main.logout(uid="u1"))
         self.assert_generic_and_silent(res, "Failed to log out.")
+
+    def test_webhook_does_not_leak_json_decode_exception(self):
+        req = Mock()
+
+        async def broken_json():
+            raise RuntimeError(SENSITIVE_DETAIL)
+
+        req.json = broken_json
+        with patch.object(main.SimpleUserStorage, "get_user", return_value={"access_token": "tok"}):
+            with self.assertRaises(main.HTTPException) as ctx:
+                asyncio.run(main.webhook(req, uid="u1"))
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertEqual(ctx.exception.detail, "Invalid JSON payload")
+        self.assertNotIn("10.0.4.12", ctx.exception.detail)
+        self.assertNotIn("password authentication", ctx.exception.detail)
 
 
 if __name__ == "__main__":
