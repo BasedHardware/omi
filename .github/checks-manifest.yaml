@@ -1330,6 +1330,11 @@ checks:
     triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13545: repository labels silently truncated at 100 because fetchers never followed next links; the suite asserts pagination and fail-closed item handling and must run in CI to catch a regression"
+  - id: manual-import-error-handling-tests
+    command: ["python3", "plugins/import/manual-import/test_error_handling.py"]
+    triggers: ["plugins/import/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "manual-import submit-memories endpoint must sanitize internal exception details and mask upstream gateway errors rather than leaking tracebacks or raw response bodies"
   - id: clickup-app-client-tests
     command: ["python3", "plugins/omi-clickup-app/test_clickup_client.py"]
     triggers: ["plugins/omi-clickup-app/**", ".github/checks-manifest.yaml"]

@@ -331,7 +331,7 @@ def submit_memories():
             else:
                 error_count += 1
                 print(f"❌ ERROR: Status code {response.status_code}")
-                result["error"] = response.text
+                result["error"] = f"HTTP {response.status_code}"
 
             results.append(result)
 
@@ -360,10 +360,7 @@ def submit_memories():
 
     except Exception as e:
         print(f"❌ EXCEPTION: {type(e).__name__}")
-        import traceback
-
-        print(traceback.format_exc())
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({"success": False, "error": "Internal error processing memories. Please try again."}), 500
 
 
 if __name__ == '__main__':
