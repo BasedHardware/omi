@@ -373,6 +373,7 @@ def _compare(
         'live_speakers': len({s['speaker_id'] for s in old if s.get('speaker_id') is not None}),
         'pass_speakers': len({s['speaker_id'] for s in new if s.get('speaker_id') is not None}),
         'remap_success_rate': round(plan.success_rate, 4),
+        'remap_ambiguous_count': len(plan.ambiguous),
         'remap_safe': plan.safe and remap_ok,
         'clock_offset_seconds': plan.offset_seconds,
     }

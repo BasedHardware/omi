@@ -50,6 +50,7 @@ def test_scalar_readout_masks_fields_and_discards_unexpected_content(reader):
             'outcome': 'ok',
             'word_distance': 0.125,
             'remap_safe': True,
+            'remap_ambiguous_count': 0,
             'audio_origin_offset_seconds': -14.98,
             'audio_timeline_v2': True,
             'measured_at': datetime(2026, 9, 26, tzinfo=timezone.utc),
@@ -62,6 +63,7 @@ def test_scalar_readout_masks_fields_and_discards_unexpected_content(reader):
     assert result['outcome'] == 'ok'
     assert result['word_distance'] == 0.125
     assert result['remap_safe'] is True
+    assert result['remap_ambiguous_count'] == 0
     assert result['audio_origin_offset_seconds'] == -14.98
     assert result['audio_timeline_v2'] is True
     assert result['measured_at'] == '2026-09-26T00:00:00+00:00'

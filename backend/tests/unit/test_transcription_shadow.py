@@ -211,6 +211,25 @@ def test_comparison_persists_only_bounded_scalars_and_detects_owner_parity():
     assert 'Synthetic private words' not in repr(result)
 
 
+def test_comparison_counts_competing_repeated_phrase_and_blocks_source_ref():
+    phrase = 'the repeated synthetic phrase in this test'
+    live = TranscriptSegment(id='live', text=phrase, start=2, end=6, is_user=False)
+    passed = [
+        TranscriptSegment(id=f'pass-{i}', text=phrase, start=17 + 5 * i, end=21 + 5 * i, is_user=False)
+        for i in range(8)
+    ]
+    conversation = SimpleNamespace(
+        transcript_segments=[live],
+        audio_timeline=SimpleNamespace(version=2),
+        structured=SimpleNamespace(model_dump=lambda: {'source_segment_ids': ['live']}),
+    )
+    result = shadow._compare(conversation, passed, {'coverage': 1.0, 'tail_gap_seconds': 0.0}, {})
+    assert result['remap_ambiguous_count'] == 1
+    assert result['remap_success_rate'] == 0
+    assert result['remap_safe'] is False
+    assert phrase not in repr(result)
+
+
 def test_comparison_prometheus_metrics_use_only_closed_outcome_and_safety_labels(monkeypatch):
     observed = []
 

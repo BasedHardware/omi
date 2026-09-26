@@ -93,23 +93,88 @@ def test_text_anchor_estimates_rebased_clock_without_using_started_at():
     assert plan_segment_remap(old, new).ids == {'a': ('x',), 'b': ('y',)}
 
 
-def test_repeated_identical_text_with_fifteen_second_offset_maps_every_segment_safely():
+def test_repeated_identical_text_with_fifteen_second_offset_maps_by_order_but_cannot_verify_clock():
     phrase = 'he began a confused complaint against the wizard who had vanished behind the curtain on the left'
-    old = [segment(f'live-{i}', 2 + i * 5, 6 + i * 5, phrase) for i in range(4)]
-    new = [segment(f'pass-{i}', 17 + i * 5, 21 + i * 5, phrase) for i in range(4)]
+    old = [segment(f'live-{i}', 2 + i * 5, 6 + i * 5, phrase) for i in range(8)]
+    new = [segment(f'pass-{i}', 17 + i * 5, 21 + i * 5, phrase) for i in range(8)]
     plan = plan_segment_remap(old, new)
     assert plan.offset_seconds == 15
-    assert plan.ids == {f'live-{i}': (f'pass-{i}',) for i in range(4)}
+    assert plan.ids == {f'live-{i}': (f'pass-{i}',) for i in range(8)}
     assert plan.success_rate == 1.0
+    assert not plan.safe
+    assert not plan.offset_verified
+
+
+def test_single_repeated_phrase_has_competing_placements_and_cannot_carry_references():
+    phrase = 'he began a confused complaint against the wizard'
+    old = [segment('live', 2, 6, phrase, translations=[{'lang': 'es', 'text': 'fixture'}])]
+    new = [segment(f'pass-{i}', 17 + i * 5, 21 + i * 5, phrase) for i in range(8)]
+    plan = plan_segment_remap(old, new)
+    assert plan.ids == {}
+    assert plan.ambiguous == ('live',)
+    assert plan.success_rate == 0
+    assert not plan.safe
+    with pytest.raises(ValueError, match='no safe target'):
+        remap_source_ids(['live'], plan)
+    with pytest.raises(ValueError, match='no safe target'):
+        remap_receipt({'segments': {'live': {'person_id': 'person'}}}, old, new, plan)
+    with pytest.raises(ValueError, match='translation segmentation'):
+        remap_translations(old, plan)
+
+
+def test_repeated_short_words_are_ambiguous_without_a_unique_anchor():
+    old = [segment('live', 1, 2, 'yeah')]
+    new = [segment(f'pass-{i}', 10 + 3 * i, 11 + 3 * i, 'yeah') for i in range(4)]
+    plan = plan_segment_remap(old, new)
+    assert plan.ambiguous == ('live',)
+    assert plan.ids == {}
+    assert not plan.safe
+
+
+def test_near_tied_short_phrase_placements_are_ambiguous_within_score_margin():
+    old = [segment('live', 1, 2, 'yeah okay')]
+    new = [segment('first', 10, 11, 'yeah okay'), segment('second', 20, 21, 'yeah okays')]
+    plan = plan_segment_remap(old, new)
+    assert plan.ambiguous == ('live',)
+    assert plan.ids == {}
+    assert not plan.safe
+
+
+def test_unique_anchor_resolves_repeated_words_at_constant_offset():
+    old = [
+        segment('a', 1, 2, 'yeah'),
+        segment('anchor', 3, 5, 'the distinct orange lighthouse'),
+        segment('b', 6, 7, 'yeah'),
+    ]
+    new = [
+        segment('x', 16, 17, 'yeah'),
+        segment('fixed', 18, 20, 'the distinct orange lighthouse'),
+        segment('y', 21, 22, 'yeah'),
+    ]
+    plan = plan_segment_remap(old, new)
+    assert plan.offset_seconds == 15
+    assert plan.ids == {'a': ('x',), 'anchor': ('fixed',), 'b': ('y',)}
     assert plan.safe
-    assert plan.offset_verified
+
+
+def test_distinct_anchors_reject_real_drift_instead_of_treating_it_as_one_offset():
+    phrases = ['the distinct orange lighthouse', 'the bright green harbor crane', 'another unmistakable phrase today']
+    old = [segment(f'live-{i}', 10 * i + 1, 10 * i + 3, phrase) for i, phrase in enumerate(phrases)]
+    constant = [segment(f'pass-{i}', 10 * i + 16, 10 * i + 18, phrase) for i, phrase in enumerate(phrases)]
+    drifting = [
+        segment(f'pass-{i}', 10 * i + 16 + 3 * i, 10 * i + 18 + 3 * i, phrase) for i, phrase in enumerate(phrases)
+    ]
+    assert plan_segment_remap(old, constant).safe
+    assert not plan_segment_remap(old, drifting).offset_verified
+    assert not plan_segment_remap(old, drifting).safe
 
 
 def test_auto_remap_rejects_time_overlap_without_text_agreement():
     old = [segment('live', 1, 4, 'the distinctly blue harbor crane')]
     new = [segment('pass', 1, 4, 'an entirely unrelated sentence about trains')]
     plan = plan_segment_remap(old, new)
-    assert plan.success_rate == 1.0
+    assert plan.success_rate == 0.0
+    assert plan.unresolved == ('live',)
     assert not plan.offset_verified
     assert not plan.safe
 

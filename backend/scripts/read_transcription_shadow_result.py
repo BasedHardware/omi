@@ -34,6 +34,7 @@ SCALAR_FIELDS = (
     'pass_speakers',
     'clock_offset_seconds',
     'remap_success_rate',
+    'remap_ambiguous_count',
     'remap_safe',
 )
 

@@ -9,6 +9,7 @@ ambiguous overlap.
 from __future__ import annotations
 
 import re
+from collections import Counter
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from statistics import median
@@ -26,50 +27,109 @@ def _bounds(segment: Mapping[str, Any]) -> tuple[float, float]:
     return start, end
 
 
-def _offset_candidates(old: Sequence[Mapping[str, Any]], new: Sequence[Mapping[str, Any]]) -> set[float]:
-    """Keep repeated phrases as candidates; their timing resolves the repetition."""
-    buckets: dict[float, list[float]] = {}
-    for source in old:
-        phrase = _tokens(source)
-        if len(phrase) < 12:
-            continue
-        for target in new:
-            other = _tokens(target)
-            if len(other) < 12:
+def _midpoint(segment: Mapping[str, Any]) -> float:
+    start, end = _bounds(segment)
+    return (start + end) / 2
+
+
+def _unique_offset(old: Sequence[Mapping[str, Any]], new: Sequence[Mapping[str, Any]]) -> tuple[float, bool]:
+    """Only phrases occurring once on each side can verify a shared clock."""
+    old_text = [_tokens(item) for item in old]
+    new_text = [_tokens(item) for item in new]
+    old_counts, new_counts = Counter(old_text), Counter(new_text)
+    target_index = {phrase: index for index, phrase in enumerate(new_text) if phrase}
+    anchors = [
+        (index, target_index[phrase])
+        for index, phrase in enumerate(old_text)
+        if len(phrase) >= 12 and old_counts[phrase] == new_counts[phrase] == 1
+    ]
+    if not anchors or any(right[1] <= left[1] for left, right in zip(anchors, anchors[1:])):
+        return 0.0, False
+    shifts = [_midpoint(new[j]) - _midpoint(old[i]) for i, j in anchors]
+    offset = median(shifts)
+    return round(offset, 3), abs(offset) <= 600 and all(abs(shift - offset) <= 1.5 for shift in shifts)
+
+
+def _align(
+    old: Sequence[Mapping[str, Any]], new: Sequence[Mapping[str, Any]], offset: float | None
+) -> tuple[list[tuple[int, int]], set[str]]:
+    """Global monotone alignment; forward/backward scores expose competing placements."""
+    n, m = len(old), len(new)
+    if n * m > 250_000:
+        return [], {str(item['id']) for item in old}
+    source_text = [_tokens(item) for item in old]
+    target_text = [_tokens(item) for item in new]
+    scores: list[list[float | None]] = []
+    for i, phrase in enumerate(source_text):
+        row = []
+        for j, other in enumerate(target_text):
+            similarity = SequenceMatcher(None, phrase, other, autojunk=False).ratio() if phrase and other else 0
+            if similarity < 0.65:
+                row.append(None)
                 continue
-            similarity = SequenceMatcher(None, phrase, other, autojunk=False).ratio()
-            if similarity >= 0.65:
-                a, b = _bounds(source)
-                c, d = _bounds(target)
-                shifts = [(c + d - a - b) / 2]
-                if similarity < 0.82:
-                    # One transcript may split a longer sentence. Its first or
-                    # last edge can still anchor the common text on the clock.
-                    shifts.extend((c - a, d - b))
-                for candidate in shifts:
-                    shift = round(candidate, 3)
-                    if abs(shift) <= 600:
-                        buckets.setdefault(round(shift, 1), []).append(shift)
-    # Repeated speech can produce many placements. Keep the strongest clock
-    # clusters, with a fixed bound on the subsequent whole-transcript scoring.
-    ranked = sorted(buckets.values(), key=lambda values: (-len(values), abs(median(values))))[:64]
-    return {0.0, *(round(median(values), 3) for values in ranked)}
+            duration_a = old[i]['end'] - old[i]['start']
+            duration_b = new[j]['end'] - new[j]['start']
+            score = 2 + 2 * similarity - 0.5 * abs(duration_a - duration_b) / max(duration_a, duration_b)
+            if offset is not None:
+                score -= min(5.0, 2 * abs(_midpoint(new[j]) - _midpoint(old[i]) - offset))
+            row.append(score)
+        scores.append(row)
+
+    gap = -1.0
+    forward = [[0.0] * (m + 1) for _ in range(n + 1)]
+    for i in range(1, n + 1):
+        forward[i][0] = i * gap
+    for j in range(1, m + 1):
+        forward[0][j] = j * gap
+    for i in range(n):
+        for j in range(m):
+            pair_score = scores[i][j]
+            match = forward[i][j] + pair_score if pair_score is not None else float('-inf')
+            forward[i + 1][j + 1] = max(match, forward[i][j + 1] + gap, forward[i + 1][j] + gap)
+
+    backward = [[0.0] * (m + 1) for _ in range(n + 1)]
+    for i in range(n - 1, -1, -1):
+        backward[i][m] = (n - i) * gap
+    for j in range(m - 1, -1, -1):
+        backward[n][j] = (m - j) * gap
+    for i in range(n - 1, -1, -1):
+        for j in range(m - 1, -1, -1):
+            pair_score = scores[i][j]
+            match = pair_score + backward[i + 1][j + 1] if pair_score is not None else float('-inf')
+            backward[i][j] = max(match, backward[i + 1][j] + gap, backward[i][j + 1] + gap)
+
+    matches = []
+    i, j = n, m
+    while i and j:
+        score = scores[i - 1][j - 1]
+        if score is not None and abs(forward[i][j] - forward[i - 1][j - 1] - score) < 1e-6:
+            matches.append((i - 1, j - 1))
+            i -= 1
+            j -= 1
+        elif abs(forward[i][j] - forward[i - 1][j] - gap) < 1e-6:
+            i -= 1
+        else:
+            j -= 1
+    matches.reverse()
+    selected = dict(matches)
+    ambiguous = set()
+    for i, row in enumerate(scores):
+        alternatives = [
+            j
+            for j, score in enumerate(row)
+            if score is not None and forward[i][j] + score + backward[i + 1][j + 1] >= forward[n][m] - 0.5
+        ]
+        if len(alternatives) > 1 or (alternatives and selected.get(i) not in alternatives):
+            ambiguous.add(str(old[i]['id']))
+    return matches, ambiguous
 
 
 def estimate_offset(old: Sequence[Mapping[str, Any]], new: Sequence[Mapping[str, Any]]) -> float:
-    """Choose the text-anchored shift with the most unambiguous time mappings.
-
-    A repeated sentence is not a unique anchor. Score every matching placement
-    against the whole ordered transcript, rather than taking the median of a
-    few locally unique matches.
-    """
-    candidates = _offset_candidates(old, new)
-    scored = []
-    for shift in candidates:
-        plan = _plan_at_offset(old, new, shift)
-        agreement = _text_agreement(old, new, plan)
-        scored.append((len(plan.ids), -len(plan.ambiguous), agreement, -len(plan.unresolved), -abs(shift), shift))
-    return max(scored)[-1] if scored else 0.0
+    offset, verified = _unique_offset(old, new)
+    if verified:
+        return offset
+    matches, _ = _align(old, new, None)
+    return round(median([_midpoint(new[j]) - _midpoint(old[i]) for i, j in matches]), 3) if matches else 0.0
 
 
 def _text_agreement(old: Sequence[Mapping[str, Any]], new: Sequence[Mapping[str, Any]], plan: 'RemapPlan') -> float:
@@ -109,12 +169,46 @@ def plan_segment_remap(
     *,
     offset_seconds: float | None = None,
 ) -> RemapPlan:
-    shift = estimate_offset(old, new) if offset_seconds is None else offset_seconds
+    for label, segments in (('source', old), ('target', new)):
+        if len({str(item['id']) for item in segments}) != len(segments):
+            raise ValueError(f'duplicate {label} segment id')
+        for item in segments:
+            _bounds(item)
+    inferred = offset_seconds is None
+    anchored_shift, anchored = _unique_offset(old, new) if inferred else (0.0, True)
+    matches: list[tuple[int, int]] = []
+    competing: set[str] = set()
+    if inferred:
+        matches, competing = _align(old, new, anchored_shift if anchored else None)
+        shift = (
+            anchored_shift
+            if anchored
+            else round(median([_midpoint(new[j]) - _midpoint(old[i]) for i, j in matches]), 3) if matches else 0.0
+        )
+    else:
+        shift = offset_seconds
     plan = _plan_at_offset(old, new, shift)
     # An inferred shift, including zero, needs independent agreement from
     # the mapped text. Explicit offsets are a caller-supplied clock contract.
-    if offset_seconds is None and old and new and _text_agreement(old, new, plan) < 0.65:
-        return RemapPlan(shift, plan.ids, plan.unresolved, plan.ambiguous, offset_verified=False)
+    if inferred:
+        aligned_ids = {str(old[i]['id']) for i, _ in matches}
+        # An overlap at the inferred clock cannot override the ordered text match.
+        competing.update(
+            str(old[i]['id'])
+            for i, j in matches
+            if str(old[i]['id']) in plan.ids and str(new[j]['id']) not in plan.ids[str(old[i]['id'])]
+        )
+        ambiguous = tuple(
+            dict.fromkeys((*plan.ambiguous, *(str(item['id']) for item in old if str(item['id']) in competing)))
+        )
+        unmatched = {str(item['id']) for item in old if str(item['id']) not in aligned_ids}
+        ids = {sid: targets for sid, targets in plan.ids.items() if sid not in competing | unmatched}
+        unresolved = tuple(
+            dict.fromkeys((*plan.unresolved, *(str(item['id']) for item in old if str(item['id']) in unmatched)))
+        )
+        unresolved = tuple(sid for sid in unresolved if sid not in ambiguous)
+        verified = anchored and (not old or not new or _text_agreement(old, new, plan) >= 0.65)
+        return RemapPlan(shift, ids, unresolved, ambiguous, offset_verified=verified)
     return plan
 
 
