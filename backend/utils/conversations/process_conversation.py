@@ -66,7 +66,10 @@ from models.conversation_enums import (
     ConversationStatus,
     ExternalIntegrationConversationSource,
 )
-from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
+from utils.conversations.deterministic_minimum import (
+    build_deterministic_minimum_structured,
+    deterministic_minimum_title,
+)
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
@@ -97,6 +100,7 @@ from utils.conversations.projection_payload import (
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
 from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
+from utils.conversations.speaker_resolution import resolve_speakers_for_processing
 from utils.memory.memory_service import MemoryService
 from utils.memory.decision_path_telemetry import (
     classify_model_about,
@@ -195,10 +199,7 @@ from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.task_sync import auto_sync_action_items_batch
 from utils.task_intelligence import conversation_capture
-from utils.conversations.calendar_linking import (
-    get_overlapping_calendar_event,
-    write_conversation_link_to_calendar_event,
-)
+from utils.conversations.calendar_linking import get_overlapping_calendar_event
 from utils.conversations.meeting_treatment import (
     MIN_MEETING_DURATION_SECONDS,
     MIN_TRANSCRIBED_SPEECH_SECONDS,
@@ -234,10 +235,6 @@ from utils.other.storage import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _calendar_auto_link_enabled() -> bool:
-    return os.getenv('GOOGLE_CALENDAR_AUTO_LINK_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
 def _flag_enabled(name: str, *, default: bool = False) -> bool:
@@ -709,8 +706,24 @@ def _get_conversation_obj(
     structured: Structured,
     conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
     conversation_id: Optional[str] = None,
+    *,
+    relevance_discarded: Optional[bool] = None,
 ) -> Conversation:
-    discarded = structured.title == '' and not is_release_probe_uid(uid)
+    if relevance_discarded is False and not structured.title.strip():
+        # A kept conversation must never become an empty-title row merely
+        # because structure generation returned a partial object. Use the same
+        # deterministic, model-free title as the minimum-processing path. An
+        # explicit relevance discard keeps its empty title: that remains the
+        # durable discard verdict and is hidden by default at the list boundary.
+        structured.title = deterministic_minimum_title(
+            conversation,
+            tz_name_provider=lambda: notification_db.get_user_time_zone(uid),
+        )
+    discarded = (
+        relevance_discarded
+        if relevance_discarded is not None
+        else structured.title == '' and not is_release_probe_uid(uid)
+    )
     # The empty-title fallback is the discard gate's second verdict and is
     # covered by the same release-probe exemption as the LLM discard above:
     # an LLM mood must not terminalize the probe lane's synthetic capture.
@@ -2867,6 +2880,8 @@ def process_conversation(
         return cast(Conversation, conversation)
 
     _enrich_meeting_context(uid, conversation)
+    # Everything below reads speaker_id as one voice; capture only guarantees that per piece.
+    resolve_speakers_for_processing(uid, conversation)
 
     person_ids = conversation.get_person_ids()
     people: List[Person] = []
@@ -2886,7 +2901,13 @@ def process_conversation(
         user_kept=user_kept,
         relevance_observer=decisions.append,
     )
-    conversation = _get_conversation_obj(uid, structured, conversation, conversation_id=generated_conversation_id)
+    conversation = _get_conversation_obj(
+        uid,
+        structured,
+        conversation,
+        conversation_id=generated_conversation_id,
+        relevance_discarded=discarded,
+    )
     _attach_client_projection(conversation, client_projection)
     if trigger is ProcessingTrigger.SERVER_RECOVERY and not structured_is_rich(structured):
         sys.stdout.write(
@@ -2966,38 +2987,6 @@ def process_conversation(
     explicit_selection_failures: list[ExplicitAppSelectionFailedError] = []
 
     def _emit_derived_effects() -> None:
-        # Calendar auto-linking calls and mutates a user's Google Calendar during generic
-        # conversation processing. Keep it opt-in so normal sync/reprocess jobs do not
-        # fan out provider traffic for every connected user.
-        if (
-            _calendar_auto_link_enabled()
-            and not discarded
-            and conversation.started_at
-            and conversation.finished_at
-            and conversation.calendar_event is None
-        ):
-            try:
-                calendar_event = asyncio.run(
-                    get_overlapping_calendar_event(
-                        uid,
-                        conversation.started_at,
-                        conversation.finished_at,
-                    )
-                )
-                if calendar_event:
-                    conversation.calendar_event = calendar_event
-                    asyncio.run(
-                        write_conversation_link_to_calendar_event(uid, calendar_event.event_id, conversation.id)
-                    )
-                    conversations_db.update_conversation(
-                        uid,
-                        conversation.id,
-                        {'calendar_event': calendar_event.model_dump(mode='json')},
-                    )
-            except Exception as e:
-                logger.error(f"Error during calendar event linking: {e}")
-                pass
-
         # AI-based folder assignment
         assigned_folder_id = None
         if not jit_defer_expensive and not discarded and not is_reprocess and not conversation.folder_id:
