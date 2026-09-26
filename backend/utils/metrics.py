@@ -1187,6 +1187,12 @@ OMI_CONVERSATION_SPEAKER_RESOLUTION_TOTAL = Counter(
     ['outcome'],
 )
 
+OMI_CONVERSATION_NOTE_PRESENTATION_TOTAL = Counter(
+    'omi_conversation_note_presentation_total',
+    'Generated conversation-note presentation contract outcomes',
+    ['outcome', 'reason', 'contract_version'],
+)
+
 OMI_CONVERSATION_SPEAKER_RESOLUTION_VOICES = Histogram(
     'omi_conversation_speaker_resolution_voices',
     'Speaker ids before and after conversation-wide resolution',
