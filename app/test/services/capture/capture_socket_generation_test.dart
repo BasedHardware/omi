@@ -24,6 +24,7 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/enums.dart';
 
 import '../../support/capture/capture_replay_world.dart';
+import '../../support/capture/scripted_device_connection.dart';
 import '../../support/capture/virtual_capture_time.dart';
 import '../../spine/c1_async_boundaries_test.dart' show HeldLocation;
 import '../../spine/c1_location_completion_test.dart' show PhoneSpy, WalSpy;
@@ -40,7 +41,7 @@ CaptureDependencies _deps({
 }) {
   final clock = world?.clock ?? VirtualClock(DateTime.utc(2026));
   return CaptureDependencies(
-    ensureDeviceConnection: (_) async => null,
+    ensureDeviceConnection: (_) async => world?.deviceConnection,
     wal: world?.wal ?? _InertWal(),
     phoneMic: world?.mic ?? _InertMic(),
     batchSupported: false,
@@ -245,11 +246,13 @@ void main() {
     final world = await CaptureReplayWorld.boot(tempDir: dir);
     try {
       world.disposeController();
+      world.deviceConnection = ScriptedDeviceConnection();
       final gate = Completer<BleAudioCodec>();
       var opens = 0;
+      var holdCodec = false;
       final deps = _deps(
         world: world,
-        codec: (_) => gate.future,
+        codec: (_) => holdCodec ? gate.future : Future.value(BleAudioCodec.pcm16),
         open: ({
           required codec,
           required sampleRate,
@@ -266,20 +269,24 @@ void main() {
       );
       final p = composeCaptureProvider(deps);
       final device = BtDevice(id: 'synthetic-device', name: 'fixture', type: DeviceType.omi, rssi: -50);
-      p.updateRecordingDevice(device);
-      p.updateRecordingState(RecordingState.deviceRecord);
+      await p.streamDeviceRecording(device: device);
+      expect(p.liveCaptureSource, 'omi');
+      final initialOpens = opens;
+      holdCodec = true;
       final before = deps.owner.token;
       final pending = p.reconnectActiveCaptureForTesting();
       await pumpEventQueue();
       p.updateRecordingDevice(null);
       p.updateRecordingDevice(device);
-      p.updateRecordingState(RecordingState.deviceRecord);
-      expect(deps.owner.isCurrent(before), isFalse);
+      expect(deps.owner.isCurrent(before), isTrue);
       gate.complete(BleAudioCodec.pcm16);
       await pending;
-      expect(opens, 0);
-      await p.reconnectActiveCaptureForTesting();
-      expect(opens, 1);
+      await p.pendingSourceSwitch;
+      expect(opens, initialOpens);
+      expect(deps.owner.isCurrent(before), isFalse);
+      holdCodec = false;
+      await p.streamDeviceRecording(device: device);
+      expect(opens, initialOpens + 1);
       p.dispose();
     } finally {
       await world.dispose();
@@ -633,16 +640,17 @@ void main() {
       final world = await CaptureReplayWorld.boot(tempDir: dir);
       try {
         world.disposeController();
+        world.deviceConnection = ScriptedDeviceConnection();
         final detected = <Map<String, Object>>[];
         final monitor = installMonitor(detected);
         final transports = <ScriptedPureSocket>[];
         final p = composeCaptureProvider(wedgeDeps(world, transports));
         final device = BtDevice(id: 'omi-1', name: 'Omi', type: DeviceType.omi, rssi: -50);
-        p.updateRecordingDevice(device);
-        p.updateRecordingState(RecordingState.deviceRecord);
+        await p.streamDeviceRecording(device: device);
+        expect(p.liveCaptureSource, 'omi');
 
         for (var i = 0; i < 3; i++) {
-          await p.reconnectActiveCaptureForTesting();
+          if (i != 0) await p.reconnectActiveCaptureForTesting();
           expect(transports, hasLength(i + 1));
           transports.last.emitClose();
           await pumpEventQueue();

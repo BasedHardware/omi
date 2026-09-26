@@ -24,8 +24,8 @@ import Foundation
 /// not an escape hatch from a backend refusal that happens during processing — verified live: while
 /// the backend answered `503 Memory writes are globally paused`, one real session posted as
 /// `"desktop"` got the same 503, because `process_conversation` reaches the same fail-closed
-/// `_extract_memories`. The trial paywall that source also opts into is off by default
-/// (`TRIAL_PAYWALL_ENABLED`) and exempts desktop-entitled plans, so it is not the reason to avoid
+/// `_extract_memories`. The trial paywall that source also opts into is permanently off
+/// and exempts desktop-entitled plans, so it is not the reason to avoid
 /// `"desktop"` — the deferral is.
 ///
 /// Everything else here follows from one rule: **nothing the user said is ever dropped.** Not while
