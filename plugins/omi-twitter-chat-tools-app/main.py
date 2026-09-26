@@ -5,6 +5,7 @@ This app provides Twitter/X integration through OAuth2 authentication
 and chat tools for managing tweets, reading timeline, and more.
 """
 import os
+import html
 import sys
 import secrets
 import hashlib
@@ -1066,7 +1067,7 @@ async def root(uid: str = Query(None)):
                 <div class="success-box">
                     <div class="icon" style="font-size: 48px;">✓</div>
                     <h2>Twitter Connected</h2>
-                    <p>Connected as @{username}</p>
+                    <p>Connected as @{html.escape(username or "", quote=True)}</p>
                 </div>
 
                 <div class="card">
@@ -1130,7 +1131,7 @@ async def twitter_callback(
                 <div class="container">
                     <div class="error-box">
                         <h2>Authorization Failed</h2>
-                        <p>{error}</p>
+                        <p>{html.escape(error or "", quote=True)}</p>
                     </div>
                 </div>
             </body>
@@ -1196,7 +1197,7 @@ async def twitter_callback(
 
         if response.status_code != 200:
             log(f"Token exchange failed: {response.status_code}")
-            return HTMLResponse(content=f"Token exchange failed: {response.text}", status_code=400)
+            return HTMLResponse(content="Token exchange failed", status_code=400)
 
         token_response = response.json()
         access_token = token_response.get("access_token")
@@ -1237,7 +1238,7 @@ async def twitter_callback(
                     <div class="success-box">
                         <div class="icon" style="font-size: 72px;">🎉</div>
                         <h2>Successfully Connected!</h2>
-                        <p>Your Twitter account @{username} is now linked to Omi</p>
+                        <p>Your Twitter account @{html.escape(username or "", quote=True)} is now linked to Omi</p>
                     </div>
 
                     <a href="/?uid={uid}" class="btn btn-primary btn-block">
@@ -1260,7 +1261,7 @@ async def twitter_callback(
         log(f"OAuth error: {e}")
         import traceback
         traceback.print_exc()
-        return HTMLResponse(content=f"Authentication error: {str(e)}", status_code=500)
+        return HTMLResponse(content="Authentication error", status_code=500)
 
 
 @app.get("/setup/twitter")
