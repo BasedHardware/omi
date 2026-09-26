@@ -129,27 +129,6 @@ class _FoundDevicesState extends State<FoundDevices> {
     }
   }
 
-  Future<void> _connectFoundDevice(BtDevice device, OnboardingProvider provider) async {
-    if (device.type == DeviceType.appleWatch) {
-      await _handleAppleWatchOnboarding(device, provider);
-    } else if (device.type == DeviceType.raybanMeta) {
-      await _handleRayBanMetaOnboarding(device, provider);
-    } else {
-      await provider.handleTap(
-        device: device,
-        isFromOnboarding: widget.isFromOnboarding,
-        goNext: widget.goNext,
-      );
-
-      if (!mounted) return;
-
-      if (provider.isConnected) {
-        final connectedDevice = provider.deviceProvider?.connectedDevice ?? device;
-        await _showFirmwareWarningIfNeeded(connectedDevice);
-      }
-    }
-  }
-
   /// Show bottom sheet when Apple Watch is not reachable
   Future<void> _showWatchNotReachableBottomSheet(String deviceId) async {
     final provider = Provider.of<OnboardingProvider>(context, listen: false);
