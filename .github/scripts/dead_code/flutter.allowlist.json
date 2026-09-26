@@ -9,6 +9,10 @@
       "reason": "codegen contract inputs, unimported by design"
     },
     {
+      "path": "app/lib/siri_interface.dart",
+      "reason": "Pigeon codegen contract input for the Siri Dart and Swift bridge, unimported at runtime by design"
+    },
+    {
       "path": "app/lib/services/capture/scenarios/capture_scenario.dart",
       "reason": "SCA-489/C3 replay contracts: consumed by tests now and by the C2/C4 lanes when they integrate; no app-import until then"
     },
