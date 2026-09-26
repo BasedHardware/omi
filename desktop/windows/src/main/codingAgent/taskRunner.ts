@@ -19,6 +19,7 @@ import {
   type ProductionAdapterId,
   type RuntimeAdapter
 } from './interface'
+import { namedAgentFrom, negatedAgentsFrom } from './agentMention'
 import { failureFromError, messageFrom } from './failures'
 import { isRecoverableAcpAuthError } from './acp'
 import { claudeAuthStatus } from './claudeOAuth'
@@ -42,6 +43,34 @@ export function candidateAgents(
   const connected = AGENT_FALLBACK_ORDER.filter((id) => adapterIsActivated(id, overrides, env))
   if (!named) return [...connected]
   return [named, ...connected.filter((id) => id !== named)]
+}
+
+/**
+ * The agents to try for one task, in order.
+ *
+ * An explicit `agentId` (a UI selection) wins outright. Otherwise the prompt
+ * itself gets a say: naming an agent out loud puts it first, and ruling one out
+ * drops it from the list entirely — a fallback must never land on the agent the
+ * user just excluded. Nothing here inspects the prompt when the caller already
+ * named an agent, so an explicit choice is never second-guessed.
+ */
+export function agentsForTask(
+  args: Pick<CodingAgentRunArgs, 'agentId' | 'prompt'>,
+  overrides: AdapterCommandOverrides,
+  env: NodeJS.ProcessEnv = process.env
+): CodingAgentAdapterId[] {
+  if (args.agentId) return candidateAgents(args.agentId, overrides, env)
+
+  const spoken = namedAgentFrom(args.prompt)
+  // `namedAgentFrom` recognises every adapter with a spoken name, including
+  // pi-mono, which is the default-chat engine and never a coding-agent target.
+  const named = spoken && isCodingAgent(spoken) ? spoken : undefined
+  const excluded = new Set<string>(negatedAgentsFrom(args.prompt))
+  return candidateAgents(named, overrides, env).filter((id) => !excluded.has(id))
+}
+
+function isCodingAgent(adapterId: ProductionAdapterId): adapterId is CodingAgentAdapterId {
+  return (PRODUCTION_ADAPTER_IDS as readonly string[]).includes(adapterId)
 }
 
 const CONNECTION_TEST_TIMEOUT_MS = 20_000
@@ -127,7 +156,7 @@ export async function runCodingAgentTask(
   log: (message: string) => void = () => {}
 ): Promise<CodingAgentResult> {
   const overrides = args.commandOverrides ?? {}
-  const candidates = candidateAgents(args.agentId, overrides)
+  const candidates = agentsForTask(args, overrides)
   if (candidates.length === 0) {
     return {
       taskId: args.taskId,
