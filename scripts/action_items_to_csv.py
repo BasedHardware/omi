@@ -11,6 +11,14 @@ Usage
        python action_items_to_csv.py
 
 Output: action_items.csv (UTF-8 with BOM for Excel compatibility)
+
+Note
+----
+Python's ``csv`` module handles CSV structure quoting only.  The
+``sanitize`` function below is what prevents spreadsheet applications
+from executing formula-injection payloads (values starting with
+``=``, ``+``, ``-``, or ``@``).
+See: https://owasp.org/www-community/attacks/CSV_Injection
 """
 
 import csv
