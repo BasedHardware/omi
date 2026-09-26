@@ -11281,4 +11281,16 @@ class AppLocalizationsPt extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name e outros';
   }
+
+  @override
+  String get singleTap => 'Toque único';
+
+  @override
+  String get singleTapAction => 'Ação de toque único';
+
+  @override
+  String get tripleTap => 'Toque triplo';
+
+  @override
+  String get tripleTapAction => 'Ação de toque triplo';
 }

@@ -11318,4 +11318,16 @@ class AppLocalizationsRo extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name și alții';
   }
+
+  @override
+  String get singleTap => 'Apăsare simplă';
+
+  @override
+  String get singleTapAction => 'Acțiune apăsare simplă';
+
+  @override
+  String get tripleTap => 'Triplă apăsare';
+
+  @override
+  String get tripleTapAction => 'Acțiune triplă apăsare';
 }

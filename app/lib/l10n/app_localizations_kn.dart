@@ -11301,4 +11301,16 @@ class AppLocalizationsKn extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ಮತ್ತು ಇತರರು';
   }
+
+  @override
+  String get singleTap => 'ಒಂದು ಟ್ಯಾಪ್';
+
+  @override
+  String get singleTapAction => 'ಒಂದು ಟ್ಯಾಪ್ ಕ್ರಿಯೆ';
+
+  @override
+  String get tripleTap => 'ಮೂರು ಬಾರಿ ಟ್ಯಾಪ್';
+
+  @override
+  String get tripleTapAction => 'ಮೂರು ಬಾರಿ ಟ್ಯಾಪ್ ಕ್ರಿಯೆ';
 }

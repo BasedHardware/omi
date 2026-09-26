@@ -11295,4 +11295,16 @@ class AppLocalizationsMs extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name dan lain-lain';
   }
+
+  @override
+  String get singleTap => 'Ketik Sekali';
+
+  @override
+  String get singleTapAction => 'Tindakan Ketik Sekali';
+
+  @override
+  String get tripleTap => 'Ketik Tiga Kali';
+
+  @override
+  String get tripleTapAction => 'Tindakan Ketik Tiga Kali';
 }

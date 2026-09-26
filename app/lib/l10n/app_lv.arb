@@ -3555,5 +3555,9 @@
     "capturePhoneStorageFull": "Tālruņa krātuve ir pilna",
     "captureStorageAlmostFull": "Krātuve gandrīz pilna",
     "capturePendantDisconnectedDetail": "Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.",
-    "participantsSummaryUncounted": "{name} un citi"
+    "participantsSummaryUncounted": "{name} un citi",
+    "singleTap": "Viens klikšķis",
+    "singleTapAction": "Viena klikšķa darbība",
+    "tripleTap": "Trīskāršs klikšķis",
+    "tripleTapAction": "Trīskārša klikšķa darbība"
 }

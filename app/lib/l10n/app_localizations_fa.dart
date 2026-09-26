@@ -11262,4 +11262,16 @@ class AppLocalizationsFa extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name و دیگران';
   }
+
+  @override
+  String get singleTap => 'تک ضربه';
+
+  @override
+  String get singleTapAction => 'عمل تک ضربه';
+
+  @override
+  String get tripleTap => 'سه ضربه';
+
+  @override
+  String get tripleTapAction => 'عمل سه ضربه';
 }

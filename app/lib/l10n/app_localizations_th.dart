@@ -11201,4 +11201,16 @@ class AppLocalizationsTh extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name และคนอื่นๆ';
   }
+
+  @override
+  String get singleTap => 'แตะครั้งเดียว';
+
+  @override
+  String get singleTapAction => 'การดำเนินการแตะครั้งเดียว';
+
+  @override
+  String get tripleTap => 'แตะสามครั้ง';
+
+  @override
+  String get tripleTapAction => 'การดำเนินการแตะสามครั้ง';
 }

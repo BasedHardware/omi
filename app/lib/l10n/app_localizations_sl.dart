@@ -11297,4 +11297,16 @@ class AppLocalizationsSl extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name in drugi';
   }
+
+  @override
+  String get singleTap => 'Enojni dotik';
+
+  @override
+  String get singleTapAction => 'Dejanje enojnega dotika';
+
+  @override
+  String get tripleTap => 'Trojni dotik';
+
+  @override
+  String get tripleTapAction => 'Dejanje trojnega dotika';
 }

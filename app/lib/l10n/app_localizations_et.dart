@@ -11263,4 +11263,16 @@ class AppLocalizationsEt extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ja teised';
   }
+
+  @override
+  String get singleTap => 'Ühekordne puudutus';
+
+  @override
+  String get singleTapAction => 'Ühekordse puudutuse tegevus';
+
+  @override
+  String get tripleTap => 'Kolmikpuudutus';
+
+  @override
+  String get tripleTapAction => 'Kolmikpuudutuse tegevus';
 }

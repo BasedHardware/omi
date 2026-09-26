@@ -11362,4 +11362,16 @@ class AppLocalizationsFr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name et d\'autres';
   }
+
+  @override
+  String get singleTap => 'Appui simple';
+
+  @override
+  String get singleTapAction => 'Action appui simple';
+
+  @override
+  String get tripleTap => 'Triple appui';
+
+  @override
+  String get tripleTapAction => 'Action triple appui';
 }

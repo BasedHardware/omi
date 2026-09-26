@@ -11327,4 +11327,16 @@ class AppLocalizationsMk extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name и други';
   }
+
+  @override
+  String get singleTap => 'Единечно допирање';
+
+  @override
+  String get singleTapAction => 'Акција при единечно допирање';
+
+  @override
+  String get tripleTap => 'Тројно допирање';
+
+  @override
+  String get tripleTapAction => 'Акција при тројно допирање';
 }

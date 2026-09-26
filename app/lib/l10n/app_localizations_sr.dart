@@ -11280,4 +11280,16 @@ class AppLocalizationsSr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name и други';
   }
+
+  @override
+  String get singleTap => 'Један додир';
+
+  @override
+  String get singleTapAction => 'Акција једног додира';
+
+  @override
+  String get tripleTap => 'Троструки додир';
+
+  @override
+  String get tripleTapAction => 'Акција троструког додира';
 }

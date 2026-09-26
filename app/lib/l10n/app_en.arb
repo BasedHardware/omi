@@ -13385,5 +13385,21 @@
                 "type": "String"
             }
         }
+    },
+    "singleTap": "Single Tap",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Single Tap Action",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Triple Tap",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Triple Tap Action",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
     }
 }

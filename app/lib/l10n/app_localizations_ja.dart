@@ -11080,4 +11080,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$nameほか';
   }
+
+  @override
+  String get singleTap => 'シングルタップ';
+
+  @override
+  String get singleTapAction => 'シングルタップアクション';
+
+  @override
+  String get tripleTap => 'トリプルタップ';
+
+  @override
+  String get tripleTapAction => 'トリプルタップアクション';
 }

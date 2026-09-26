@@ -11263,4 +11263,16 @@ class AppLocalizationsCs extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name a další';
   }
+
+  @override
+  String get singleTap => 'Jednoduché klepnutí';
+
+  @override
+  String get singleTapAction => 'Akce jednoduchého klepnutí';
+
+  @override
+  String get tripleTap => 'Trojité klepnutí';
+
+  @override
+  String get tripleTapAction => 'Akce trojitého klepnutí';
 }

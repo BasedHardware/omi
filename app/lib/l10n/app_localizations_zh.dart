@@ -11058,4 +11058,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name等人';
   }
+
+  @override
+  String get singleTap => '单击';
+
+  @override
+  String get singleTapAction => '单击操作';
+
+  @override
+  String get tripleTap => '三击';
+
+  @override
+  String get tripleTapAction => '三击操作';
 }

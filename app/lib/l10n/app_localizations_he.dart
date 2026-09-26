@@ -11176,4 +11176,16 @@ class AppLocalizationsHe extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ואחרים';
   }
+
+  @override
+  String get singleTap => 'לחץ בודד';
+
+  @override
+  String get singleTapAction => 'פעולת לחיצה בודדת';
+
+  @override
+  String get tripleTap => 'לחץ משולש';
+
+  @override
+  String get tripleTapAction => 'פעולת לחיצה משולשת';
 }

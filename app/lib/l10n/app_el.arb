@@ -3555,5 +3555,9 @@
     "capturePhoneStorageFull": "Ο χώρος του τηλεφώνου γέμισε",
     "captureStorageAlmostFull": "Ο χώρος σχεδόν γέμισε",
     "capturePendantDisconnectedDetail": "Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο. Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.",
-    "participantsSummaryUncounted": "{name} και άλλοι"
+    "participantsSummaryUncounted": "{name} και άλλοι",
+    "singleTap": "Απλό Πάτημα",
+    "singleTapAction": "Ενέργεια Απλού Πατήματος",
+    "tripleTap": "Τριπλό Πάτημα",
+    "tripleTapAction": "Ενέργεια Τριπλού Πατήματος"
 }

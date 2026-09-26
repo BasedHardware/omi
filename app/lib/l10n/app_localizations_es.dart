@@ -11297,4 +11297,16 @@ class AppLocalizationsEs extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name y otros';
   }
+
+  @override
+  String get singleTap => 'Toque simple';
+
+  @override
+  String get singleTapAction => 'Acción de toque simple';
+
+  @override
+  String get tripleTap => 'Triple toque';
+
+  @override
+  String get tripleTapAction => 'Acción de triple toque';
 }

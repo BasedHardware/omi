@@ -11256,4 +11256,16 @@ class AppLocalizationsSk extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name a ďalší';
   }
+
+  @override
+  String get singleTap => 'Jedno ťuknutie';
+
+  @override
+  String get singleTapAction => 'Akcia jedného ťuknutia';
+
+  @override
+  String get tripleTap => 'Trojité ťuknutie';
+
+  @override
+  String get tripleTapAction => 'Akcia trojitého ťuknutia';
 }

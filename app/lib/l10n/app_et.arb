@@ -3555,5 +3555,9 @@
     "capturePhoneStorageFull": "Telefoni mälu on täis",
     "captureStorageAlmostFull": "Mälu on peaaegu täis",
     "capturePendantDisconnectedDetail": "Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.",
-    "participantsSummaryUncounted": "{name} ja teised"
+    "participantsSummaryUncounted": "{name} ja teised",
+    "singleTap": "Ühekordne puudutus",
+    "singleTapAction": "Ühekordse puudutuse tegevus",
+    "tripleTap": "Kolmikpuudutus",
+    "tripleTapAction": "Kolmikpuudutuse tegevus"
 }
