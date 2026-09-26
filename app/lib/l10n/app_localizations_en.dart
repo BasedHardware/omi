@@ -11729,4 +11729,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'So Omi knows it’s you · about a minute';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '$saved of $total audio saved';
+  }
 }

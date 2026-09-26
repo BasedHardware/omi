@@ -21386,6 +21386,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'So Omi knows it’s you · about a minute'**
   String get voiceSetupTaskSubline;
+
+  /// Under a conversation's audio player when the stored audio covers much less than the conversation: saved length and conversation length, e.g. "0:03 of 5:49 audio saved"
+  ///
+  /// In en, this message translates to:
+  /// **'{saved} of {total} audio saved'**
+  String audioPartiallySaved(String saved, String total);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

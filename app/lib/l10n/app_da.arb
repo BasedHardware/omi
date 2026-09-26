@@ -3741,5 +3741,6 @@
     "greetingHomeStretch": "Sidste stræk",
     "greetingEvening": "Godaften",
     "unlimitedBadge": "Ubegrænset",
-    "voiceSetupTaskSubline": "Så Omi ved, at det er dig · cirka et minut"
+    "voiceSetupTaskSubline": "Så Omi ved, at det er dig · cirka et minut",
+    "audioPartiallySaved": "{saved} af {total} lyd gemt"
 }

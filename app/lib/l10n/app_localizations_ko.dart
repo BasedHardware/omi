@@ -11551,4 +11551,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Omi가 내 목소리를 알아보도록 · 약 1분';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '오디오 $saved 저장됨 (전체 $total)';
+  }
 }

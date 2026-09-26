@@ -11776,4 +11776,9 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Da Omi zna da ste to vi · oko minutu';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Spremljeno $saved od $total zvuka';
+  }
 }

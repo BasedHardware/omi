@@ -11787,4 +11787,9 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Hogy az Omi tudja, hogy te vagy az · kb. egy perc';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Mentett hang: $saved / $total';
+  }
 }

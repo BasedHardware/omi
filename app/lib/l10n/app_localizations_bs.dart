@@ -11766,4 +11766,9 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Da Omi zna da ste to vi · oko minut';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Sačuvano $saved od $total zvuka';
+  }
 }

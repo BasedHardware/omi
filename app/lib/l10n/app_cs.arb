@@ -3699,5 +3699,6 @@
     "greetingHomeStretch": "Finiš dne",
     "greetingEvening": "Dobrý večer",
     "unlimitedBadge": "Neomezený",
-    "voiceSetupTaskSubline": "Aby Omi věděl, že jste to vy · asi minuta"
+    "voiceSetupTaskSubline": "Aby Omi věděl, že jste to vy · asi minuta",
+    "audioPartiallySaved": "Uloženo {saved} z {total} zvuku"
 }

@@ -11229,5 +11229,6 @@
     "greetingHomeStretch": "Финиш дана",
     "greetingEvening": "Добро вече",
     "unlimitedBadge": "Неограничено",
-    "voiceSetupTaskSubline": "Да Omi зна да сте то ви · око минут"
+    "voiceSetupTaskSubline": "Да Omi зна да сте то ви · око минут",
+    "audioPartiallySaved": "Сачувано {saved} од {total} звука"
 }

@@ -11229,5 +11229,6 @@
     "greetingHomeStretch": "آخر روز",
     "greetingEvening": "عصر بخیر",
     "unlimitedBadge": "نامحدود",
-    "voiceSetupTaskSubline": "تا Omi بداند که شما هستید · حدود یک دقیقه"
+    "voiceSetupTaskSubline": "تا Omi بداند که شما هستید · حدود یک دقیقه",
+    "audioPartiallySaved": "{saved} از {total} صدا ذخیره شد"
 }

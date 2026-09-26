@@ -11752,4 +11752,9 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'تاکہ Omi جانے کہ یہ آپ ہیں · تقریباً ایک منٹ';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '$saved آڈیو محفوظ ہوا ($total میں سے)';
+  }
 }

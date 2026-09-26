@@ -11738,4 +11738,9 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Để Omi biết đó là bạn · khoảng một phút';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Đã lưu $saved trên $total âm thanh';
+  }
 }

@@ -11779,4 +11779,9 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Чтобы Omi знал, что это вы · около минуты';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Сохранено $saved аудио из $total';
+  }
 }

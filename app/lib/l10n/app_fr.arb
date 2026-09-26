@@ -3734,5 +3734,6 @@
     "greetingHomeStretch": "Dernière ligne droite",
     "greetingEvening": "Bonsoir",
     "unlimitedBadge": "Illimité",
-    "voiceSetupTaskSubline": "Pour qu’Omi sache que c’est vous · environ une minute"
+    "voiceSetupTaskSubline": "Pour qu’Omi sache que c’est vous · environ une minute",
+    "audioPartiallySaved": "Audio enregistré : {saved} sur {total}"
 }

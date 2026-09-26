@@ -3699,5 +3699,6 @@
     "greetingHomeStretch": "Rettilineo finale",
     "greetingEvening": "Buonasera",
     "unlimitedBadge": "Illimitato",
-    "voiceSetupTaskSubline": "Così Omi sa che sei tu · circa un minuto"
+    "voiceSetupTaskSubline": "Così Omi sa che sei tu · circa un minuto",
+    "audioPartiallySaved": "Audio salvato: {saved} su {total}"
 }

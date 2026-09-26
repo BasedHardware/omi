@@ -3699,5 +3699,6 @@
     "greetingHomeStretch": "Recta final",
     "greetingEvening": "Bona nit",
     "unlimitedBadge": "Il·limitat",
-    "voiceSetupTaskSubline": "Perquè Omi sàpiga que ets tu · un minut, més o menys"
+    "voiceSetupTaskSubline": "Perquè Omi sàpiga que ets tu · un minut, més o menys",
+    "audioPartiallySaved": "Àudio desat: {saved} de {total}"
 }

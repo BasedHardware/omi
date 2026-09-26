@@ -11547,4 +11547,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Omiがあなたの声を覚えます · 約1分';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '保存された音声：$saved（全$total）';
+  }
 }

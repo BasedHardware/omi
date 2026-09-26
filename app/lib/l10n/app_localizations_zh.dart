@@ -11525,4 +11525,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => '让 Omi 认出你的声音 · 大约一分钟';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '已保存 $saved／$total 的音频';
+  }
 }

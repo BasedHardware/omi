@@ -11752,4 +11752,9 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Agar Omi tahu itu Anda · sekitar satu menit';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '$saved dari $total audio tersimpan';
+  }
 }

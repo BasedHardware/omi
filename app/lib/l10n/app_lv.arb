@@ -3699,5 +3699,6 @@
     "greetingHomeStretch": "Finiša taisne",
     "greetingEvening": "Labvakar",
     "unlimitedBadge": "Neierobežots",
-    "voiceSetupTaskSubline": "Lai Omi zinātu, ka tas esat jūs · apmēram minūte"
+    "voiceSetupTaskSubline": "Lai Omi zinātu, ka tas esat jūs · apmēram minūte",
+    "audioPartiallySaved": "Saglabāts {saved} no {total} audio"
 }

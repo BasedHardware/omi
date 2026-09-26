@@ -3734,5 +3734,6 @@
     "greetingHomeStretch": "Финишная прямая",
     "greetingEvening": "Добрый вечер",
     "unlimitedBadge": "Безлимит",
-    "voiceSetupTaskSubline": "Чтобы Omi знал, что это вы · около минуты"
+    "voiceSetupTaskSubline": "Чтобы Omi знал, что это вы · около минуты",
+    "audioPartiallySaved": "Сохранено {saved} аудио из {total}"
 }

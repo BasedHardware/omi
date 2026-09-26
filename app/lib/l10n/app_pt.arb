@@ -3734,5 +3734,6 @@
     "greetingHomeStretch": "Reta final",
     "greetingEvening": "Boa noite",
     "unlimitedBadge": "Ilimitado",
-    "voiceSetupTaskSubline": "Para o Omi saber que é você · cerca de um minuto"
+    "voiceSetupTaskSubline": "Para o Omi saber que é você · cerca de um minuto",
+    "audioPartiallySaved": "Áudio salvo: {saved} de {total}"
 }

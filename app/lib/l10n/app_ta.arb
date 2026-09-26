@@ -11229,5 +11229,6 @@
     "greetingHomeStretch": "நாளின் இறுதி",
     "greetingEvening": "மாலை வணக்கம்",
     "unlimitedBadge": "வரம்பற்றது",
-    "voiceSetupTaskSubline": "நீங்கள்தான் என்று Omi அறிய · சுமார் ஒரு நிமிடம்"
+    "voiceSetupTaskSubline": "நீங்கள்தான் என்று Omi அறிய · சுமார் ஒரு நிமிடம்",
+    "audioPartiallySaved": "{saved} ஆடியோ சேமிக்கப்பட்டது ({total} இல்)"
 }

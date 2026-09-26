@@ -11774,4 +11774,9 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Supaya Omi tahu itu anda · kira-kira seminit';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '$saved daripada $total audio disimpan';
+  }
 }

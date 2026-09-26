@@ -11755,4 +11755,9 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Omi sizi tanısın diye · yaklaşık bir dakika';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '$saved ses kaydedildi ($total içinden)';
+  }
 }

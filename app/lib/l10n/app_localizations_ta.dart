@@ -11821,4 +11821,9 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'நீங்கள்தான் என்று Omi அறிய · சுமார் ஒரு நிமிடம்';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '$saved ஆடியோ சேமிக்கப்பட்டது ($total இல்)';
+  }
 }

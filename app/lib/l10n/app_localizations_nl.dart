@@ -11776,4 +11776,9 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Zodat Omi weet dat jij het bent · ongeveer een minuut';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '$saved van $total audio bewaard';
+  }
 }

@@ -11766,4 +11766,9 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Lai Omi zinātu, ka tas esat jūs · apmēram minūte';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Saglabāts $saved no $total audio';
+  }
 }

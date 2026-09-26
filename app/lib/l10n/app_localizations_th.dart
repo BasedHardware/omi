@@ -11673,4 +11673,9 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'ให้ Omi รู้ว่าเป็นคุณ · ประมาณหนึ่งนาที';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'บันทึกเสียงแล้ว $saved จาก $total';
+  }
 }

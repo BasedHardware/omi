@@ -3699,5 +3699,6 @@
     "greetingHomeStretch": "Lõpusirge",
     "greetingEvening": "Tere õhtust",
     "unlimitedBadge": "Piiramatu",
-    "voiceSetupTaskSubline": "Et Omi teaks, et see oled sina · umbes minut"
+    "voiceSetupTaskSubline": "Et Omi teaks, et see oled sina · umbes minut",
+    "audioPartiallySaved": "Salvestatud heli: {saved} / {total}"
 }

@@ -3699,5 +3699,6 @@
     "greetingHomeStretch": "Hampir selesai",
     "greetingEvening": "Selamat malam",
     "unlimitedBadge": "Tanpa Had",
-    "voiceSetupTaskSubline": "Supaya Omi tahu itu anda · kira-kira seminit"
+    "voiceSetupTaskSubline": "Supaya Omi tahu itu anda · kira-kira seminit",
+    "audioPartiallySaved": "{saved} daripada {total} audio disimpan"
 }

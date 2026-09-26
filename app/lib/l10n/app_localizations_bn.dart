@@ -11742,4 +11742,9 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'যাতে Omi জানে এটা আপনি · প্রায় এক মিনিট';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '$saved অডিও সংরক্ষিত ($total এর মধ্যে)';
+  }
 }

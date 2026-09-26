@@ -3699,5 +3699,6 @@
     "greetingHomeStretch": "Endspurt",
     "greetingEvening": "Guten Abend",
     "unlimitedBadge": "Unbegrenzt",
-    "voiceSetupTaskSubline": "Damit Omi weiß, dass du es bist · etwa eine Minute"
+    "voiceSetupTaskSubline": "Damit Omi weiß, dass du es bist · etwa eine Minute",
+    "audioPartiallySaved": "{saved} von {total} Audio gespeichert"
 }

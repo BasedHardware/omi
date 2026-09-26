@@ -11737,4 +11737,9 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'تا Omi بداند که شما هستید · حدود یک دقیقه';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '$saved از $total صدا ذخیره شد';
+  }
 }
