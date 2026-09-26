@@ -22,6 +22,7 @@ import pytest
 
 from routers.listen.contracts import ListenSessionState
 from routers.listen.receiver import ListenReceiver
+from models.transcript_segment import TranscriptSegment
 from utils.metrics import OMI_AUDIO_TIMELINE_REJECTS_TOTAL, OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL
 
 RATE = 16000
@@ -81,9 +82,16 @@ def test_epoch_metrics_expose_bounded_reasons_and_flag_off_denominator(monkeypat
     epoch.note_accepted(0, 2 * RATE)
     mapped = OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode=mode, outcome='mapped')
     rejected = OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode=mode, outcome='rejected')
+    recovered = OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode=mode, outcome='recovered')
     outside = OMI_AUDIO_TIMELINE_REJECTS_TOTAL.labels(mode=mode, reason='outside_accepted_sends')
     zero = OMI_AUDIO_TIMELINE_REJECTS_TOTAL.labels(mode=mode, reason='zero_length')
-    before = (mapped._value.get(), rejected._value.get(), outside._value.get(), zero._value.get())
+    before = (
+        mapped._value.get(),
+        rejected._value.get(),
+        recovered._value.get(),
+        outside._value.get(),
+        zero._value.get(),
+    )
     result = epoch.translate(
         [
             {'start': 0.25, 'end': 0.75, 'text': 'inside'},
@@ -91,11 +99,82 @@ def test_epoch_metrics_expose_bounded_reasons_and_flag_off_denominator(monkeypat
             {'start': 1.0, 'end': 1.0, 'text': 'partial'},
         ]
     )
-    assert [segment['text'] for segment in result] == (['inside'] if v2 else ['inside', 'outside', 'partial'])
-    assert rejected._value.get() == before[1] + 2
-    assert outside._value.get() == before[2] + 1
-    assert zero._value.get() == before[3] + 1
+    assert [segment['text'] for segment in result] == ['inside', 'outside', 'partial']
+    assert rejected._value.get() == before[1] + (1 if v2 else 2)
+    assert recovered._value.get() == before[2] + (1 if v2 else 0)
+    assert outside._value.get() == before[3] + 1
+    assert zero._value.get() == before[4] + (0 if v2 else 1)
     assert mapped._value.get() == before[0] + (0 if v2 else 1)
+
+
+def test_v2_translation_preserves_text_when_provider_interval_cannot_be_placed(monkeypatch):
+    receiver = _receiver(monkeypatch, v2=True)
+    _feed_contiguous(receiver, 2.0)
+    _, _, epoch = receiver._build_stt_callbacks()
+    assert epoch is not None
+    epoch.note_accepted(0, 2 * RATE)
+    result = epoch.translate(
+        [
+            {'start': 0.25, 'end': 0.75, 'text': 'mapped'},
+            {'start': 1.0, 'end': 1.0, 'text': 'point'},
+            {'start': 9.0, 'end': 10.0, 'text': 'late'},
+        ]
+    )
+    assert [segment['text'] for segment in result] == ['mapped', 'point', 'late']
+    assert result[1]['_capture_end_sample'] > result[1]['_capture_start_sample']
+    assert result[2]['audio_alignment'] == 'unplaced'
+    assert result[2]['start'] == result[2]['end']
+
+
+def test_unplaced_marker_survives_serialization_without_changing_v1_segments():
+    legacy = TranscriptSegment(text='before', is_user=False, start=1, end=2)
+    unplaced = TranscriptSegment(text='after', is_user=False, start=2, end=2, audio_alignment='unplaced')
+    assert 'audio_alignment' not in legacy.model_dump()
+    assert 'audio_alignment' not in legacy.model_dump_json()
+    assert unplaced.model_dump()['audio_alignment'] == 'unplaced'
+    combined = TranscriptSegment.combine_segments([legacy], [unplaced])
+    assert [segment.text for segment in combined.segments] == ['before', 'after']
+
+
+def test_v2_keeps_unparseable_and_nonfinite_text_but_legacy_retains_old_policy():
+    from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
+
+    timeline = CaptureTimeline(RATE)
+    timeline.accept(b'\x01\x00' * RATE, T0, T0)
+    cases = [
+        {'start': 'bad', 'end': 1.0, 'text': 'bad number'},
+        {'start': float('nan'), 'end': 1.0, 'text': 'nonfinite'},
+    ]
+    v2 = ProviderEpochTranslator(timeline, RATE, project_times=True)
+    legacy = ProviderEpochTranslator(timeline, RATE, project_times=False)
+    assert [segment['text'] for segment in v2.translate(cases)] == ['bad number', 'nonfinite']
+    assert all(segment['audio_alignment'] == 'unplaced' for segment in v2.translate(cases))
+    assert legacy.translate(cases) == []
+
+
+def test_unplaced_text_with_evicted_owner_reanchors_to_current_generation(monkeypatch):
+    receiver = _receiver(monkeypatch, v2=True, conversation='current')
+    _feed_contiguous(receiver, 2.0)
+    receiver.host.state.conversation_sample_ranges = deque([(RATE, 2 * RATE, 'current')])
+    receiver._enqueue_translated_segments(
+        [
+            {
+                'start': T0 - 60,
+                'end': T0 - 60,
+                'text': 'late final',
+                'audio_alignment': 'unplaced',
+                '_capture_unplaced': True,
+                '_capture_owner_sample': 0,
+            }
+        ]
+    )
+    assert len(receiver.collected) == 1
+    assert receiver.collected[0]['_conversation_id'] == 'current'
+    assert (
+        receiver.collected[0]['start']
+        == receiver.collected[0]['end']
+        == receiver.capture_timeline.wall(receiver.capture_timeline.next_sample)
+    )
 
 
 # ---------------------------------------------------------------------------

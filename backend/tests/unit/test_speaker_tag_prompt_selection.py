@@ -99,6 +99,16 @@ def test_other_voice_between_segments_splits_the_clip():
     assert _select([conversation]) == []
 
 
+def test_unplaced_text_breaks_speaker_clip_run():
+    segments = [
+        _segment('a', 0, 0, 3),
+        _segment('unknown', 0, 3, 3, audio_alignment='unplaced'),
+        _segment('b', 0, 3, 6),
+    ]
+    runs = selection._runs(segments, set())
+    assert [run.segment_ids for run in runs] == [('a',), ('b',)]
+
+
 def test_clip_overlapping_another_diarized_voice_is_not_asked():
     conversation = _conversation(
         segments=[

@@ -122,6 +122,9 @@ def _runs(segments: Sequence[Mapping[str, Any]], decided_segments: set) -> List[
         current.clear()
 
     for segment in segments:
+        if segment.get('audio_alignment') == 'unplaced':
+            flush()
+            continue
         if segment['id'] in decided_segments:
             flush()
             continue

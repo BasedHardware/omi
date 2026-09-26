@@ -296,6 +296,31 @@ class SendMap:
     def span_count(self) -> int:
         return len(self._spans)
 
+    @property
+    def last_capture_sample(self) -> Optional[int]:
+        """Last accepted capture boundary, for text-only fallback placement."""
+        if not self._spans:
+            return None
+        return self._spans[-1][1] + self._spans[-1][2]
+
+    def point_interval(self, provider_sample: int) -> Optional[Tuple[int, int]]:
+        """A one-sample interval for an in-span zero-duration provider point.
+
+        Some adapters emit a final word with equal endpoints. The provider
+        point still identifies an accepted sample; keep its text and a real
+        capture window without extending it into unaccepted audio.
+        """
+        span = self._locate(provider_sample)
+        if span is None:
+            return None
+        provider_first, capture_first, length = span
+        if provider_sample < provider_first or provider_sample > provider_first + length:
+            return None
+        capture = capture_first + provider_sample - provider_first
+        if capture == capture_first + length:
+            return (capture - 1, capture)
+        return (capture, capture + 1)
+
     def add_accepted(self, provider_first_sample: int, capture_first_sample: int, length_samples: int) -> None:
         if length_samples <= 0:
             return
@@ -429,6 +454,7 @@ class ProviderEpochTranslator:
         *,
         on_reject: Optional[Callable[[str], None]] = None,
         on_mapped: Optional[Callable[[], None]] = None,
+        on_recover: Optional[Callable[[str], None]] = None,
         project_times: bool = True,
     ):
         self.timeline = timeline
@@ -437,6 +463,7 @@ class ProviderEpochTranslator:
         self.rejected_segments = 0
         self._on_reject = on_reject
         self._on_mapped = on_mapped
+        self._on_recover = on_recover
         self._project_times = project_times
 
     def note_accepted(self, capture_start_sample: int, length_samples: int) -> None:
@@ -462,21 +489,19 @@ class ProviderEpochTranslator:
         was the dev 2026-09-26 collapse.
 
         Segments whose provider timestamps cannot be proven to fall inside
-        accepted send spans are dropped (fail closed), never clamped onto a
-        neighboring epoch; so are degenerate provider intervals (start >= end)
-        and intervals whose two different provider times would clamp onto one
-        capture sample — mapping those would fabricate a zero-length segment
-        at a span edge (the dev 2026-09-26 v2 collapse). Two exceptions keep
-        intentional provider text: a positive-duration interval that begins
+        accepted send spans keep their text at a zero-duration capture anchor,
+        marked unplaced, never clamped onto a neighboring epoch. The same
+        applies to reversed intervals and intervals whose two different
+        provider times would collapse onto one capture sample. Two bounded
+        recoveries retain a provable audio position: an interval that begins
         exactly at a span end and ends inside the edge tolerance (the
         provider's own tail accounting) keeps a minimal one-sample window,
-        and zero-length points are still rejected here but Modulate's
-        ``_flush_partial`` now emits its tail with the provider clock's
-        smallest positive duration. With ``project_times`` off, persistence
-        must stay byte-identical to the legacy behavior, so a rejected
-        segment keeps its provider-native times and simply carries no
-        capture interval — only its speaker-ID window falls back, never its
-        transcript.
+        and zero-length points inside a send span use one real sample.
+        With ``project_times`` off, persistence
+        must stay byte-identical to the legacy behavior: zero-length and
+        out-of-range segments keep provider-native times with no capture
+        interval; non-numeric and non-finite segments follow the existing
+        drop policy.
         """
         translated: List[Dict] = []
         for original in segments:
@@ -485,20 +510,34 @@ class ProviderEpochTranslator:
                 start, end = float(cast(Any, segment.get('start'))), float(cast(Any, segment.get('end')))
             except (TypeError, ValueError):
                 self._reject(segment, 'non_numeric')
+                if self._project_times:
+                    self._append_unplaced(translated, segment)
                 continue
             if not (math.isfinite(start) and math.isfinite(end)):
                 self._reject(segment, 'non_finite')
+                if self._project_times:
+                    self._append_unplaced(translated, segment)
                 continue
             rate = self.provider_sample_rate
             first_sample, last_sample = int(start * rate), int(end * rate)
+            interval: Optional[Tuple[int, int]] = None
             if last_sample <= first_sample:
-                # A zero-length provider interval (e.g. Modulate partials)
-                # cannot locate audio; v2 must not persist it as a segment.
-                self._reject(segment, 'zero_length')
-                if not self._project_times:
-                    translated.append(segment)
-                continue
-            interval = self.send_map.map_interval(first_sample, last_sample)
+                if self._project_times and last_sample == first_sample:
+                    interval = self.send_map.point_interval(first_sample)
+                if interval is None:
+                    self._reject(segment, 'zero_length')
+                    if self._project_times:
+                        self._append_unplaced(translated, segment)
+                    else:
+                        translated.append(segment)
+                    continue
+                if self._on_recover is not None:
+                    try:
+                        self._on_recover('zero_length')
+                    except Exception:
+                        pass
+            else:
+                interval = self.send_map.map_interval(first_sample, last_sample)
             if interval is None:
                 if self.send_map.map_sample(first_sample) is None or self.send_map.map_sample(last_sample) is None:
                     reason = 'outside_accepted_sends'
@@ -507,7 +546,9 @@ class ProviderEpochTranslator:
                     reason = 'collapsed_interval'
                 if interval is None:
                     self._reject(segment, reason)
-                    if not self._project_times:
+                    if self._project_times:
+                        self._append_unplaced(translated, segment)
+                    else:
                         translated.append(segment)
                     continue
             if self._project_times:
@@ -517,6 +558,7 @@ class ProviderEpochTranslator:
                     # The anchors describing this sample range were compacted
                     # away; projecting would invent a position. Fail closed.
                     self._reject(segment, 'evicted_interval')
+                    self._append_unplaced(translated, segment)
                     continue
                 segment['start'] = start_wall
                 segment['end'] = max(segment['start'], end_wall)
@@ -531,6 +573,21 @@ class ProviderEpochTranslator:
                 except Exception:
                     pass
         return translated
+
+    def _append_unplaced(self, translated: List[Dict], segment: Dict) -> None:
+        """Retain text without claiming audio coverage or a speaker window."""
+        epoch_end = self.send_map.last_capture_sample
+        anchor_sample = epoch_end if epoch_end is not None else self.timeline.next_sample
+        anchor = self.timeline.wall_strict(anchor_sample) if self.timeline.anchors else 0.0
+        if anchor is None:
+            anchor = self.timeline.wall(self.timeline.next_sample)
+        segment['start'] = anchor
+        segment['end'] = anchor
+        segment['_capture_unplaced'] = True
+        if epoch_end is not None:
+            segment['_capture_owner_sample'] = max(0, epoch_end - 1)
+        segment['audio_alignment'] = 'unplaced'
+        translated.append(segment)
 
     def _reject(self, segment: Dict, reason: str) -> None:
         self.rejected_segments += 1

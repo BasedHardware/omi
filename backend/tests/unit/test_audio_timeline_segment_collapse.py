@@ -427,12 +427,14 @@ class TestTranslatorDegenerateIntervals:
         timeline.accept(b'\x01\x00' * RATE, arrival_wall=T0, arrival_monotonic=0.0)
         return timeline
 
-    def test_v2_rejects_zero_length_provider_interval(self):
+    def test_v2_places_zero_length_provider_point_inside_accepted_send(self):
         translator = ProviderEpochTranslator(self._timeline(), RATE, project_times=True)
         translator.note_accepted(0, 2 * RATE)
         translated = translator.translate([{'start': 1.0, 'end': 1.0, 'text': 'partial'}])
-        assert translated == []
-        assert translator.rejected_segments == 1
+        assert [segment['text'] for segment in translated] == ['partial']
+        assert translated[0]['_capture_start_sample'] == RATE
+        assert translated[0]['_capture_end_sample'] == RATE + 1
+        assert translator.rejected_segments == 0
 
     def test_clock_only_keeps_zero_length_provider_segment_without_window(self):
         """Flag-off must stay byte-identical: Modulate partials (start == end)
@@ -451,7 +453,9 @@ class TestTranslatorDegenerateIntervals:
         translator = ProviderEpochTranslator(self._timeline(), RATE, project_times=True, on_reject=reasons.append)
         translator.note_accepted(0, RATE)
         translated = translator.translate([{'start': 1.05, 'end': 1.2, 'text': 'collapsed'}])
-        assert translated == []
+        assert [segment['text'] for segment in translated] == ['collapsed']
+        assert translated[0]['audio_alignment'] == 'unplaced'
+        assert translated[0]['start'] == translated[0]['end']
         assert reasons == ['collapsed_interval']
         assert translator.rejected_segments == 1
 
@@ -655,6 +659,75 @@ class _RecordingSocket(STTSocket):
     @property
     def death_reason(self):
         return None
+
+
+@pytest.mark.parametrize(
+    'first,second', [(st.STTService.modulate, st.STTService.soniox), (st.STTService.soniox, st.STTService.modulate)]
+)
+async def test_managed_prod_order_mints_fresh_epoch_after_failover(monkeypatch, first, second):
+    """Drive the configured live-chain callback/leg rather than a bare translator."""
+    from utils.audio import AudioRingBuffer
+
+    monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox', 'dg-nova-3', 'parakeet'])
+    monkeypatch.setattr(vad_gate, 'VAD_GATE_MODE', 'active')
+    receiver = _receiver(monkeypatch, v2=True, conversation='conv-managed')
+    receiver.host.request.vad_gate_override = 'active'
+    receiver.host.stt_service = first
+    receiver.host.stt_model = 'velma-2' if first == st.STTService.modulate else 'soniox'
+    receiver.host.state.audio_ring_buffer = AudioRingBuffer(30, RATE)
+    sockets = []
+
+    class Raw(_RecordingSocket):
+        def __init__(self, callback):
+            super().__init__()
+            self.callback = callback
+            self.dead = False
+
+        @property
+        def is_connection_dead(self):
+            return self.dead
+
+    async def connect(callback, *args, **kwargs):
+        raw = Raw(callback)
+        sockets.append(raw)
+        return raw
+
+    monkeypatch.setattr(st, 'process_audio_modulate', connect)
+    monkeypatch.setattr(st, 'process_audio_soniox', connect)
+    assert await receiver.initialize_stt()
+    assert receiver.host.stt_service == first
+
+    wall = T0
+    monotonic = 0.0
+
+    async def feed(marker):
+        nonlocal wall, monotonic
+        for _ in range(8):
+            wall += 0.5
+            monotonic += 0.5
+            pcm = bytes([marker, 0]) * (RATE // 2)
+            start, end, _ = receiver.capture_timeline.accept(pcm, wall, monotonic)
+            receiver._note_accepted_frame(start, end)
+            receiver._write_ring_buffer_frame(pcm, wall, start)
+            assert receiver.stt_socket.send(pcm, start_sample=start)
+            await REAL_SLEEP(0)
+
+    await feed(1)
+    sockets[-1].callback([{'start': 0.5, 'end': 3.5, 'text': 'first leg', 'speaker': 'SPEAKER_00'}])
+    sockets[-1].dead = True
+    assert await receiver._failover_stt_socket()
+    assert receiver.host.stt_service == second
+    assert len(sockets) == 2
+    wall += 31 * 60
+    monotonic += 31 * 60
+    await feed(2)
+    sockets[-1].callback([{'start': 0.5, 'end': 3.5, 'text': 'second leg', 'speaker': 'SPEAKER_00'}])
+    sockets[-1].callback([{'start': 30.0, 'end': 31.0, 'text': 'unplaced final', 'speaker': 'SPEAKER_00'}])
+    assert [seg['text'] for seg in receiver.collected] == ['first leg', 'second leg', 'unplaced final']
+    second_seg = receiver.collected[1]
+    clip = receiver.host.state.audio_ring_buffer.extract(second_seg['start'], second_seg['end'])
+    assert clip and clip[:2] == b'\x02\x00'
+    assert receiver.collected[-1]['audio_alignment'] == 'unplaced'
 
 
 def _audit_receiver(monkeypatch, *, gate):
