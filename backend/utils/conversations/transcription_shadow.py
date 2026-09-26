@@ -41,7 +41,7 @@ from utils.speaker_tag_prompts.clips import pcm_to_wav, trim_pcm16
 from utils.stt.conversation_speakers import resolve_conversation_speakers
 from utils.stt.pre_recorded import parakeet_prerecorded_from_bytes, postprocess_words
 from utils.stt.speaker_embedding import extract_embedding_from_bytes, speaker_embedding_configured
-from utils.sync.pipeline import build_person_embeddings_cache, identify_speakers_for_segments
+from utils.sync.speaker_identity import build_person_embeddings_cache, identify_speakers_for_segments
 
 logger = logging.getLogger(__name__)
 _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix='transcription-shadow')

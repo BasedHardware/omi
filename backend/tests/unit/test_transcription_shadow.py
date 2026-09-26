@@ -6,11 +6,10 @@ from unittest.mock import MagicMock
 
 from models.transcript_segment import TranscriptSegment
 from utils.conversations import transcription_shadow as shadow
+from utils.conversations import finalizer
 
 
 def test_finalizer_starts_shadow_only_for_enabled_admission(monkeypatch):
-    from utils.conversations import finalizer
-
     calls = []
     monkeypatch.setattr(shadow, 'maybe_start_shadow', lambda uid, conversation: calls.append((uid, conversation)))
     conversation = SimpleNamespace(id='synthetic')
