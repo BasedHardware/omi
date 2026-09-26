@@ -31,6 +31,7 @@ import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/ui/omi_tokens.dart';
 
 typedef ChatFilesUploader = Future<List<MessageFile>?> Function(List<File> files, {String? appId});
+typedef ChatHistoryLoader = Future<List<ServerMessage>> Function({String? appId, bool dropdownSelected});
 typedef ChatReplyStreamer = Stream<ServerMessageChunk> Function(
   String text, {
   String? appId,
@@ -71,6 +72,10 @@ class MessageProvider extends ChangeNotifier {
   /// Test seam — replaces [sendMessageStreamServer] for typed messages.
   @visibleForTesting
   ChatReplyStreamer? replyStreamOverride;
+
+  /// Test seam — replaces [getMessagesServer] for the history load.
+  @visibleForTesting
+  ChatHistoryLoader? historyLoaderOverride;
   final Map<String, _ChatTelemetryAttempt> _chatTelemetryAttempts = {};
 
   AppProvider? appProvider;
@@ -504,16 +509,44 @@ class MessageProvider extends ChangeNotifier {
       notifyListeners();
     }
     setLoadingMessages(true);
-    var mes = await getMessagesServer(appId: appProvider?.selectedChatAppId, dropdownSelected: dropdownSelected);
+    final loadStarted = DateTime.now();
+    var mes = await (historyLoaderOverride ?? getMessagesServer)(
+        appId: appProvider?.selectedChatAppId, dropdownSelected: dropdownSelected);
     if (!hasCachedMessages) {
       firstTimeLoadingText = l10n?.msgLearningMemories ?? 'Learning from your memories…';
       notifyListeners();
     }
-    messages = List<ServerMessage>.from(mes);
-    messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    messages = _withSentWhileLoading(mes, loadStarted);
     setLoadingMessages(false);
     notifyListeners();
     return messages;
+  }
+
+  /// The loaded history plus what the reader sent while it was on its way, and the reply streaming
+  /// to it: a first message typed during "Reading your memories…" used to vanish when the load
+  /// landed, leaving only Omi's greeting (IMG_1159). A sent message the server already returned
+  /// (same text) is not repeated.
+  List<ServerMessage> _withSentWhileLoading(List<ServerMessage> loaded, DateTime loadStarted) {
+    final ids = loaded.map((m) => m.id).toSet();
+    final loadedHuman = loaded.where((m) => m.sender == MessageSender.human).map((m) => m.text).toSet();
+    final sentSince = messages.where((m) =>
+        !ids.contains(m.id) &&
+        !m.createdAt.isBefore(loadStarted) &&
+        !(m.sender == MessageSender.human && loadedHuman.contains(m.text)));
+    return [...loaded, ...sentSince]..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+  }
+
+  /// Puts a streamed reply where its placeholder is, found by identity: a history load that lands
+  /// meanwhile re-orders the list. A placeholder that is gone (the chat was cleared) stays gone.
+  void _replaceMessage(ServerMessage placeholder, ServerMessage reply) {
+    final index = messages.indexWhere((m) => identical(m, placeholder));
+    if (index >= 0) messages[index] = reply;
+  }
+
+  /// Inserts [message] just before [anchor] (found by identity), or at the end without it.
+  void _insertBefore(ServerMessage anchor, ServerMessage message) {
+    final index = messages.indexWhere((m) => identical(m, anchor));
+    messages.insert(index >= 0 ? index : messages.length, message);
   }
 
   Future<bool> setMessageNps(ServerMessage message, int value, {String? reason}) async {
@@ -633,7 +666,6 @@ class MessageProvider extends ChangeNotifier {
     setShowTypingIndicator(true);
     var message = ServerMessage.empty();
     messages.add(message);
-    var aiIndex = messages.length - 1;
     responseMessageId = message.id;
     _registerChatTelemetryAttempt(responseMessageId, chatAttempt);
     notifyListeners();
@@ -682,8 +714,9 @@ class MessageProvider extends ChangeNotifier {
         }
 
         if (chunk.type == MessageChunkType.done) {
+          final placeholder = message;
           message = chunk.message!;
-          messages[aiIndex] = message;
+          _replaceMessage(placeholder, message);
           _transferChatTelemetryAttempt(responseMessageId, message.id);
           _finishChatTelemetryAttempt(message.id, ProductOutcome.success);
           chatAttemptCompleted = true;
@@ -699,8 +732,7 @@ class MessageProvider extends ChangeNotifier {
         }
 
         if (chunk.type == MessageChunkType.message) {
-          messages.insert(aiIndex, chunk.message!);
-          aiIndex++;
+          _insertBefore(message, chunk.message!);
           notifyListeners();
           continue;
         }
@@ -787,7 +819,6 @@ class MessageProvider extends ChangeNotifier {
 
     var message = ServerMessage.empty(appId: currentAppId);
     messages.add(message);
-    final aiIndex = messages.length - 1;
     responseMessageId = message.id;
     _registerChatTelemetryAttempt(responseMessageId, chatAttempt);
     notifyListeners();
@@ -844,8 +875,9 @@ class MessageProvider extends ChangeNotifier {
         flushBuffer();
 
         if (chunk.type == MessageChunkType.done) {
+          final placeholder = message;
           message = chunk.message!;
-          messages[aiIndex] = message;
+          _replaceMessage(placeholder, message);
           _transferChatTelemetryAttempt(responseMessageId, message.id);
           _finishChatTelemetryAttempt(message.id, ProductOutcome.success);
           chatAttemptCompleted = true;
