@@ -11740,4 +11740,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Spomienka';
+
+  @override
+  String get idleReadyHint => 'Ťuknite na Spustiť a to, čo poviete, sa zobrazí tu.';
 }

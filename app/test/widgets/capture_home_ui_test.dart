@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/real_fonts.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -312,28 +313,39 @@ void main() {
     // IMG_1151/1152: "Start with this phone, or connect a device to listen all / day." was a line
     // taller than "Pendant · Ready", so the card and everything under it jumped when the pendant
     // connected or dropped.
-    testWidgets('the idle card keeps one height whether a device is connected or not, at any size', (tester) async {
+    // IMG_1151/1152 then IMG_1166/1167: the card changed height when a device connected, and again
+    // on Start / Stop, moving everything under it. Idle and live are one card shape now.
+    testWidgets('the capture card is one height idle, ready, listening and hearing, at any size', (tester) async {
+      await tester.runAsync(loadRealFonts);
       addTearDown(tester.view.reset);
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
-      final card = find.descendant(of: find.byKey(const ValueKey('idle_capture_card')), matching: find.byType(OmiCard));
+      final card = find.descendant(of: find.byType(ConversationCaptureWidget), matching: find.byType(OmiCard)).first;
+      Future<double> heightOf(_Capture capture, _Device device) async {
+        // On Today the card sits in a scroll view: it takes its own height.
+        await pump(tester,
+            const SingleChildScrollView(child: ConversationCaptureWidget(showsCall: true, idle: IdleCaptureCard())),
+            capture: capture, device: device);
+        expect(tester.takeException(), isNull);
+        return tester.getSize(card).height;
+      }
+
       for (final width in [320.0, 375.0, 393.0, 430.0]) {
         for (final scale in [1.0, 1.35]) {
-          tester.view.physicalSize = Size(width, 1000);
+          tester.view.physicalSize = Size(width, 1200);
           tester.view.devicePixelRatio = 1;
           tester.platformDispatcher.textScaleFactorTestValue = scale;
-          // On Today the card sits in a scroll view: it takes its own height.
-          await pump(tester,
-              const SingleChildScrollView(child: ConversationCaptureWidget(showsCall: true, idle: IdleCaptureCard())),
-              capture: _Capture(_Live.idle), device: _Device(connected: false, paired: false));
+          final why = 'width $width, text x$scale';
+          final alone = await heightOf(_Capture(_Live.idle), _Device(connected: false, paired: false));
           expect(find.text(en.notListeningSubtitle), findsOneWidget);
-          final alone = tester.getSize(card);
-          await pump(tester,
-              const SingleChildScrollView(child: ConversationCaptureWidget(showsCall: true, idle: IdleCaptureCard())),
-              capture: _Capture(_Live.pendantStopped), device: _Device());
+          final ready = await heightOf(_Capture(_Live.pendantStopped), _Device());
           expect(find.text('${en.captureSourcePendant} · ${en.deviceReady}'), findsOneWidget);
-          final ready = tester.getSize(card);
-          expect(ready.height, alone.height, reason: 'width $width, text x$scale');
-          expect(tester.takeException(), isNull);
+          final listening = await heightOf(_Capture(_Live.pendant)..heard = '', _Device());
+          expect(find.text(en.connectStepTestHint), findsOneWidget, reason: 'never an empty band');
+          final hearing =
+              await heightOf(_Capture(_Live.pendant)..heard = 'Keep the pendant flow as it is. ' * 4, _Device());
+          expect(ready, alone, reason: why);
+          expect(listening, alone, reason: 'Start does not move Today ($why)');
+          expect(hearing, alone, reason: 'words arriving do not move Today ($why)');
         }
       }
     });

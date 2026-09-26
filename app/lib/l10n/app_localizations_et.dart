@@ -11747,4 +11747,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Mälestus';
+
+  @override
+  String get idleReadyHint => 'Puuduta Alusta ja see, mida ütled, ilmub siia.';
 }

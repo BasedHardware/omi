@@ -11832,4 +11832,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get memoryLabel => 'நினைவு';
+
+  @override
+  String get idleReadyHint => 'தொடங்கு என்பதைத் தட்டவும், நீங்கள் சொல்வது இங்கே தோன்றும்.';
 }

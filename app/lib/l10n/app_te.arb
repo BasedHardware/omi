@@ -11232,5 +11232,6 @@
     "voiceSetupTaskSubline": "మీరేనని Omi తెలుసుకునేందుకు · సుమారు ఒక నిమిషం",
     "audioPartiallySaved": "{saved} ఆడియో సేవ్ అయింది ({total}లో)",
     "voiceIntroTitle": "మిమ్మల్ని మీరు పరిచయం చేసుకోండి",
-    "memoryLabel": "జ్ఞాపకం"
+    "memoryLabel": "జ్ఞాపకం",
+    "idleReadyHint": "ప్రారంభించు నొక్కండి, మీరు చెప్పేది ఇక్కడ కనిపిస్తుంది."
 }

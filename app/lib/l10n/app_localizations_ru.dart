@@ -11790,4 +11790,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Воспоминание';
+
+  @override
+  String get idleReadyHint => 'Нажмите «Старт», и сказанное появится здесь.';
 }

@@ -11830,4 +11830,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Ανάμνηση';
+
+  @override
+  String get idleReadyHint => 'Πατήστε Έναρξη και ό,τι λέτε θα εμφανίζεται εδώ.';
 }

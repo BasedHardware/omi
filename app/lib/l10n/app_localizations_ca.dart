@@ -11815,4 +11815,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Record';
+
+  @override
+  String get idleReadyHint => 'Toca Inicia i el que diguis apareixerà aquí.';
 }

@@ -11232,5 +11232,6 @@
     "voiceSetupTaskSubline": "हे तुम्हीच आहात हे Omi ला कळावे म्हणून · सुमारे एक मिनिट",
     "audioPartiallySaved": "{saved} ऑडिओ जतन केला ({total} पैकी)",
     "voiceIntroTitle": "तुमची ओळख करून द्या",
-    "memoryLabel": "स्मृती"
+    "memoryLabel": "स्मृती",
+    "idleReadyHint": "सुरू करा वर टॅप करा, तुम्ही जे बोलाल ते इथे दिसेल."
 }

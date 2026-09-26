@@ -11781,4 +11781,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Успамін';
+
+  @override
+  String get idleReadyHint => 'Націсніце «Пачаць», і тое, што вы кажаце, з’явіцца тут.';
 }

@@ -11768,4 +11768,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Memória';
+
+  @override
+  String get idleReadyHint => 'Toque em Iniciar e o que você disser aparecerá aqui.';
 }

@@ -11232,5 +11232,6 @@
     "voiceSetupTaskSubline": "যাতে Omi জানে এটা আপনি · প্রায় এক মিনিট",
     "audioPartiallySaved": "{saved} অডিও সংরক্ষিত ({total} এর মধ্যে)",
     "voiceIntroTitle": "নিজের পরিচয় দিন",
-    "memoryLabel": "স্মৃতি"
+    "memoryLabel": "স্মৃতি",
+    "idleReadyHint": "শুরু-তে ট্যাপ করুন, আপনি যা বলবেন তা এখানে দেখাবে।"
 }

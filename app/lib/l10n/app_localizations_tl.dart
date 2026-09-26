@@ -11853,4 +11853,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Alaala';
+
+  @override
+  String get idleReadyHint => 'I-tap ang Simulan at lalabas dito ang sinasabi mo.';
 }

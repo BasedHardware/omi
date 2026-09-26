@@ -3737,5 +3737,6 @@
     "voiceSetupTaskSubline": "Para o Omi saber que é você · cerca de um minuto",
     "audioPartiallySaved": "Áudio salvo: {saved} de {total}",
     "voiceIntroTitle": "Apresente-se",
-    "memoryLabel": "Memória"
+    "memoryLabel": "Memória",
+    "idleReadyHint": "Toque em Iniciar e o que você disser aparecerá aqui."
 }

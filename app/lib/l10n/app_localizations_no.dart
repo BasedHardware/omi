@@ -11753,4 +11753,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Minne';
+
+  @override
+  String get idleReadyHint => 'Trykk på Start, så vises det du sier her.';
 }

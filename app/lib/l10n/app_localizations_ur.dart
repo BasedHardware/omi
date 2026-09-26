@@ -11763,4 +11763,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get memoryLabel => 'یاد';
+
+  @override
+  String get idleReadyHint => 'شروع کریں پر ٹیپ کریں، آپ جو کہیں گے وہ یہاں نظر آئے گا۔';
 }

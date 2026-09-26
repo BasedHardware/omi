@@ -11734,4 +11734,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get memoryLabel => 'याद';
+
+  @override
+  String get idleReadyHint => 'शुरू करें पर टैप करें, आप जो कहेंगे वह यहाँ दिखेगा।';
 }

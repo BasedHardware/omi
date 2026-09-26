@@ -3702,5 +3702,6 @@
     "voiceSetupTaskSubline": "Kad Omi žinotų, kad tai jūs · apie minutę",
     "audioPartiallySaved": "Išsaugota {saved} iš {total} garso",
     "voiceIntroTitle": "Prisistatykite",
-    "memoryLabel": "Prisiminimas"
+    "memoryLabel": "Prisiminimas",
+    "idleReadyHint": "Palieskite Pradėti, ir tai, ką sakote, pasirodys čia."
 }

@@ -11753,4 +11753,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get memoryLabel => 'স্মৃতি';
+
+  @override
+  String get idleReadyHint => 'শুরু-তে ট্যাপ করুন, আপনি যা বলবেন তা এখানে দেখাবে।';
 }

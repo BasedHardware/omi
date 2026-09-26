@@ -3702,5 +3702,6 @@
     "voiceSetupTaskSubline": "Lai Omi zinātu, ka tas esat jūs · apmēram minūte",
     "audioPartiallySaved": "Saglabāts {saved} no {total} audio",
     "voiceIntroTitle": "Iepazīstiniet ar sevi",
-    "memoryLabel": "Atmiņa"
+    "memoryLabel": "Atmiņa",
+    "idleReadyHint": "Pieskarieties Sākt, un tas, ko sakāt, parādīsies šeit."
 }

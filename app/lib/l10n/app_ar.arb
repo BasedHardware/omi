@@ -3702,5 +3702,6 @@
     "voiceSetupTaskSubline": "حتى يعرف Omi أنك أنت · دقيقة تقريبًا",
     "audioPartiallySaved": "تم حفظ {saved} من {total} من الصوت",
     "voiceIntroTitle": "عرّف بنفسك",
-    "memoryLabel": "ذكرى"
+    "memoryLabel": "ذكرى",
+    "idleReadyHint": "اضغط «ابدأ» وسيظهر ما تقوله هنا."
 }

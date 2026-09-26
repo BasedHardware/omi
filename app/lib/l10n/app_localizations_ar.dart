@@ -11677,4 +11677,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get memoryLabel => 'ذكرى';
+
+  @override
+  String get idleReadyHint => 'اضغط «ابدأ» وسيظهر ما تقوله هنا.';
 }

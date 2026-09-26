@@ -11536,4 +11536,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get memoryLabel => '回忆';
+
+  @override
+  String get idleReadyHint => '点按“开始”，你说的话会显示在这里。';
 }

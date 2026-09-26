@@ -11787,4 +11787,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Herinnering';
+
+  @override
+  String get idleReadyHint => 'Tik op Start en wat je zegt verschijnt hier.';
 }

@@ -11845,4 +11845,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Erinnerung';
+
+  @override
+  String get idleReadyHint => 'Tippe auf Start und was du sagst, erscheint hier.';
 }

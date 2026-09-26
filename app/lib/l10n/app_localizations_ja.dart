@@ -11558,4 +11558,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get memoryLabel => '記憶';
+
+  @override
+  String get idleReadyHint => '「開始」をタップすると、話した内容がここに表示されます。';
 }

@@ -11800,4 +11800,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get memoryLabel => 'జ్ఞాపకం';
+
+  @override
+  String get idleReadyHint => 'ప్రారంభించు నొక్కండి, మీరు చెప్పేది ఇక్కడ కనిపిస్తుంది.';
 }

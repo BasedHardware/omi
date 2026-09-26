@@ -3702,5 +3702,6 @@
     "voiceSetupTaskSubline": "Jotta Omi tietää, että se olet sinä · noin minuutti",
     "audioPartiallySaved": "Ääntä tallennettu {saved}/{total}",
     "voiceIntroTitle": "Esittele itsesi",
-    "memoryLabel": "Muisto"
+    "memoryLabel": "Muisto",
+    "idleReadyHint": "Napauta Aloita, niin sanomasi näkyy tässä."
 }

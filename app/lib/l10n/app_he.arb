@@ -11232,5 +11232,6 @@
     "voiceSetupTaskSubline": "כדי ש-Omi ידע שזה אתם · בערך דקה",
     "audioPartiallySaved": "נשמרו {saved} מתוך {total} של שמע",
     "voiceIntroTitle": "הציגו את עצמכם",
-    "memoryLabel": "זיכרון"
+    "memoryLabel": "זיכרון",
+    "idleReadyHint": "הקישו על התחלה ומה שתאמרו יופיע כאן."
 }

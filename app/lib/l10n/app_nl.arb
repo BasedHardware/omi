@@ -3702,5 +3702,6 @@
     "voiceSetupTaskSubline": "Zodat Omi weet dat jij het bent · ongeveer een minuut",
     "audioPartiallySaved": "{saved} van {total} audio bewaard",
     "voiceIntroTitle": "Stel jezelf voor",
-    "memoryLabel": "Herinnering"
+    "memoryLabel": "Herinnering",
+    "idleReadyHint": "Tik op Start en wat je zegt verschijnt hier."
 }

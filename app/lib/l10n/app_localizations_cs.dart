@@ -11747,4 +11747,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Vzpomínka';
+
+  @override
+  String get idleReadyHint => 'Klepněte na Spustit a to, co řeknete, se objeví tady.';
 }

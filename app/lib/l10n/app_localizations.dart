@@ -21404,6 +21404,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Memory'**
   String get memoryLabel;
+
+  /// Home idle capture card, a device or this phone ready: where the live words will show once listening starts
+  ///
+  /// In en, this message translates to:
+  /// **'Tap Start and what you say appears here.'**
+  String get idleReadyHint;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

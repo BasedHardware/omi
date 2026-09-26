@@ -3702,5 +3702,6 @@
     "voiceSetupTaskSubline": "Ca Omi să știe că ești tu · cam un minut",
     "audioPartiallySaved": "Audio salvat: {saved} din {total}",
     "voiceIntroTitle": "Prezintă-te",
-    "memoryLabel": "Amintire"
+    "memoryLabel": "Amintire",
+    "idleReadyHint": "Atinge Pornește și ce spui va apărea aici."
 }

@@ -11764,4 +11764,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Успомена';
+
+  @override
+  String get idleReadyHint => 'Додирните Покрени и оно што кажете појавиће се овде.';
 }

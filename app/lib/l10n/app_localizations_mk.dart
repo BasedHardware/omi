@@ -11813,4 +11813,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Спомен';
+
+  @override
+  String get idleReadyHint => 'Допрете Започни и она што го кажувате ќе се појави тука.';
 }

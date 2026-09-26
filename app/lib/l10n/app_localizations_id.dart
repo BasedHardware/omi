@@ -11763,4 +11763,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Kenangan';
+
+  @override
+  String get idleReadyHint => 'Ketuk Mulai dan ucapan Anda akan muncul di sini.';
 }

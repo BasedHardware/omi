@@ -84,8 +84,9 @@ class LiveCaptureCard extends StatelessWidget {
     return (text.substring(0, cut).trimRight(), text.substring(cut));
   }
 
-  /// Two lines of the transcript's type at the reader's text size.
-  static double _transcriptRoom(BuildContext context) {
+  /// Two lines of the transcript's type at the reader's text size: the room the live card keeps
+  /// for the words, and the idle card for its hint, so the two cards are one height.
+  static double transcriptRoom(BuildContext context) {
     final painter = TextPainter(
       text: TextSpan(text: '\n', style: OmiType.callout),
       textDirection: Directionality.of(context),
@@ -215,9 +216,15 @@ class LiveCaptureCard extends StatelessWidget {
       // arrive, so Today does not shift during a recording.
       if (showsTranscript)
         ConstrainedBox(
-          constraints: BoxConstraints(minHeight: _transcriptRoom(context), minWidth: double.infinity),
+          constraints: BoxConstraints(minHeight: transcriptRoom(context), minWidth: double.infinity),
           child: line.isEmpty
-              ? null
+              // Nothing heard yet: say where the words will go, never an empty band.
+              ? Text(
+                  l10n.connectStepTestHint,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: OmiType.callout.copyWith(color: OmiColors.textTertiary),
+                )
               : Text.rich(
                   TextSpan(children: [
                     TextSpan(

@@ -3702,5 +3702,6 @@
     "voiceSetupTaskSubline": "Så att Omi vet att det är du · ungefär en minut",
     "audioPartiallySaved": "{saved} av {total} ljud sparat",
     "voiceIntroTitle": "Presentera dig",
-    "memoryLabel": "Minne"
+    "memoryLabel": "Minne",
+    "idleReadyHint": "Tryck på Starta så visas det du säger här."
 }

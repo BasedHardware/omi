@@ -11786,4 +11786,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Wspomnienie';
+
+  @override
+  String get idleReadyHint => 'Stuknij Start, a to, co mówisz, pojawi się tutaj.';
 }

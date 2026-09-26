@@ -3702,5 +3702,6 @@
     "voiceSetupTaskSubline": "Aby Omi věděl, že jste to vy · asi minuta",
     "audioPartiallySaved": "Uloženo {saved} z {total} zvuku",
     "voiceIntroTitle": "Představte se",
-    "memoryLabel": "Vzpomínka"
+    "memoryLabel": "Vzpomínka",
+    "idleReadyHint": "Klepněte na Spustit a to, co řeknete, se objeví tady."
 }

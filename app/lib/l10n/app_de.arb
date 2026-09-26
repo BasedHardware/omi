@@ -3702,5 +3702,6 @@
     "voiceSetupTaskSubline": "Damit Omi weiß, dass du es bist · etwa eine Minute",
     "audioPartiallySaved": "{saved} von {total} Audio gespeichert",
     "voiceIntroTitle": "Stell dich vor",
-    "memoryLabel": "Erinnerung"
+    "memoryLabel": "Erinnerung",
+    "idleReadyHint": "Tippe auf Start und was du sagst, erscheint hier."
 }

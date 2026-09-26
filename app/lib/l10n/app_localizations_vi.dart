@@ -11749,4 +11749,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Kỷ niệm';
+
+  @override
+  String get idleReadyHint => 'Nhấn Bắt đầu và những gì bạn nói sẽ hiện ở đây.';
 }

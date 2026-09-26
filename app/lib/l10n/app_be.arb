@@ -11232,5 +11232,6 @@
     "voiceSetupTaskSubline": "Каб Omi ведаў, што гэта вы · каля хвіліны",
     "audioPartiallySaved": "Захавана {saved} аўдыя з {total}",
     "voiceIntroTitle": "Прадстаўцеся",
-    "memoryLabel": "Успамін"
+    "memoryLabel": "Успамін",
+    "idleReadyHint": "Націсніце «Пачаць», і тое, што вы кажаце, з’явіцца тут."
 }

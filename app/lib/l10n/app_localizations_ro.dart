@@ -11805,4 +11805,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get memoryLabel => 'Amintire';
+
+  @override
+  String get idleReadyHint => 'Atinge Pornește și ce spui va apărea aici.';
 }

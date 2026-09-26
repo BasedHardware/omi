@@ -3702,5 +3702,6 @@
     "voiceSetupTaskSubline": "Omi가 내 목소리를 알아보도록 · 약 1분",
     "audioPartiallySaved": "오디오 {saved} 저장됨 (전체 {total})",
     "voiceIntroTitle": "자기소개하기",
-    "memoryLabel": "추억"
+    "memoryLabel": "추억",
+    "idleReadyHint": "시작을 탭하면 말한 내용이 여기에 표시돼요."
 }

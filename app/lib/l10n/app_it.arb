@@ -3702,5 +3702,6 @@
     "voiceSetupTaskSubline": "Così Omi sa che sei tu · circa un minuto",
     "audioPartiallySaved": "Audio salvato: {saved} su {total}",
     "voiceIntroTitle": "Presentati",
-    "memoryLabel": "Ricordo"
+    "memoryLabel": "Ricordo",
+    "idleReadyHint": "Tocca Avvia e ciò che dici apparirà qui."
 }

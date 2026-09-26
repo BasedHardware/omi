@@ -11788,4 +11788,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get memoryLabel => 'ಸ್ಮೃತಿ';
+
+  @override
+  String get idleReadyHint => 'ಪ್ರಾರಂಭಿಸಿ ಟ್ಯಾಪ್ ಮಾಡಿ, ನೀವು ಹೇಳುವುದು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.';
 }

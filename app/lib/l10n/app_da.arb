@@ -3744,5 +3744,6 @@
     "voiceSetupTaskSubline": "Så Omi ved, at det er dig · cirka et minut",
     "audioPartiallySaved": "{saved} af {total} lyd gemt",
     "voiceIntroTitle": "Præsentér dig",
-    "memoryLabel": "Minde"
+    "memoryLabel": "Minde",
+    "idleReadyHint": "Tryk på Start, så vises det, du siger, her."
 }
