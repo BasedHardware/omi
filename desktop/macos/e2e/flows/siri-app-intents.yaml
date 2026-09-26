@@ -9,6 +9,7 @@ covers:
   - desktop/macos/Desktop/Sources/SiriIntegration/SiriIndexHooks.swift
   - desktop/macos/Desktop/Sources/SiriIntegration/SiriIndexLifecycle.swift
   - desktop/macos/Desktop/Sources/SiriIntegration/SiriIndexScope.swift
+  - desktop/macos/Desktop/Sources/SiriIntegration/SiriMemoryStorageQueries.swift
   - desktop/macos/Desktop/Sources/SiriIntegration/SiriMemoryExpirySchema.swift
   - desktop/macos/Desktop/Sources/SiriIntegration/SiriIntegrationSettings.swift
   - desktop/macos/Desktop/Sources/SiriIntegration/SiriIntentService.swift

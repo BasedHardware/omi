@@ -15,7 +15,12 @@ enum SiriIntentTelemetry {
       let failure = SiriFailure.classify(error)
       record(name, outcome: failure.outcome, started: started)
       if let scoped = error as? SiriActionFailure { throw scoped }
-      let action = name == "complete_task" ? "complete" : name == "open" ? "open" : "create"
+      let action =
+        name == "complete_task"
+        ? "complete"
+        : name == "open"
+          ? "open"
+          : name == "start_listening" || name == "stop_listening" ? name : "create"
       throw SiriActionFailure(action: action, failure: failure)
     }
   }
@@ -182,6 +187,8 @@ struct StartListeningIntent: AppIntent {
   func perform() async throws -> some IntentResult & ProvidesDialog {
     try await SiriIntentTelemetry.perform("start_listening") {
       guard let app = AppState.current else { throw SiriFailure.server }
+      guard app.audioRecordingMode != .off else { throw SiriFailure.recordingOff }
+      guard app.hasMicrophonePermission else { throw SiriFailure.micDenied }
       app.startTranscription()
       guard app.isTranscribing else { throw SiriFailure.server }
     }
@@ -196,7 +203,7 @@ struct StopListeningIntent: AppIntent {
   @MainActor
   func perform() async throws -> some IntentResult & ProvidesDialog {
     try await SiriIntentTelemetry.perform("stop_listening") {
-      guard let app = AppState.current, app.isTranscribing else { throw SiriFailure.server }
+      guard let app = AppState.current, app.isTranscribing else { throw SiriFailure.nothingToStop }
       let completion = app.stopTranscription()
       await completion?.value
     }

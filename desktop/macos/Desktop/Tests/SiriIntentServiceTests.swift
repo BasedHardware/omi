@@ -251,10 +251,14 @@ final class SiriIntentServiceTests: XCTestCase {
       SiriIndexScope.task(
         backendId: "t", deleted: false, completed: false,
         completedAt: nil, now: now))
-    XCTAssertTrue(
+    XCTAssertFalse(
       SiriIndexScope.task(
         backendId: "t", deleted: false, completed: true,
         completedAt: cutoff, now: now))
+    XCTAssertTrue(
+      SiriIndexScope.task(
+        backendId: "t", deleted: false, completed: true,
+        completedAt: cutoff.addingTimeInterval(1), now: now))
     XCTAssertFalse(
       SiriIndexScope.task(
         backendId: "t", deleted: false, completed: true,
@@ -271,6 +275,102 @@ final class SiriIntentServiceTests: XCTestCase {
       SiriIndexScope.task(
         backendId: "t", deleted: false, completed: false,
         completedAt: nil, taskStatus: "superseded", now: now))
+  }
+
+  func testSiriEligibilityDecisionTable() {
+    let now = Date(timeIntervalSince1970: 2_000_000_000)
+    let baseConversation = TranscriptionSessionRecord(
+      startedAt: now.addingTimeInterval(-100), source: "desktop", backendId: "conversation",
+      backendSynced: true, conversationStatus: .completed)
+    let conversationCases: [(String, (inout TranscriptionSessionRecord) -> Void, Bool)] = [
+      ("eligible", { _ in }, true),
+      ("empty id", { $0.backendId = "" }, false),
+      ("unsynced", { $0.backendSynced = false }, false),
+      ("deleted", { $0.deleted = true }, false),
+      ("discarded", { $0.discarded = true }, false),
+      ("processing", { $0.conversationStatus = .processing }, false),
+      ("locked", { $0.isLocked = true }, false),
+      ("hidden", { $0.visibility = "hidden" }, false),
+      ("unknown visibility", { $0.visibility = nil }, false),
+      ("aged", { $0.startedAt = now.addingTimeInterval(-SiriIndexScope.conversationAge - 1) }, false),
+    ]
+    for (name, change, expected) in conversationCases {
+      var row = baseConversation
+      change(&row)
+      XCTAssertEqual(SiriIndexScope.conversation(row, now: now), expected, name)
+    }
+
+    let baseMemory = MemoryRecord(
+      backendId: "memory", backendSynced: true, content: "Visible", tierIsExplicit: true)
+    let memoryCases: [(String, (inout MemoryRecord) -> Void, Bool)] = [
+      ("eligible", { _ in }, true),
+      ("empty id", { $0.backendId = "" }, false),
+      ("deleted", { $0.deleted = true }, false),
+      ("archived", { $0.tier = MemoryLayer.archive.rawValue }, false),
+      ("unproven tier", { $0.tierIsExplicit = false }, false),
+      ("expired", { $0.expiresAt = now.addingTimeInterval(-1) }, false),
+      ("rejected", { $0.userReview = false }, false),
+      ("dismissed", { $0.isDismissed = true }, false),
+      ("hidden", { $0.visibility = "hidden" }, false),
+      ("locked", { $0.isLocked = true }, false),
+      ("unknown lock state", { $0.isLocked = nil }, false),
+      ("ledger closed", { $0.ledgerMetadataJson = "{\"status\":\"superseded\"}" }, false),
+      ("ledger superseded", { $0.ledgerMetadataJson = "{\"superseded_by\":\"new-memory\"}" }, false),
+      ("ledger invalidated", { $0.ledgerMetadataJson = "{\"invalid_at\":\"2000-01-01T00:00:00Z\"}" }, false),
+    ]
+    for (name, change, expected) in memoryCases {
+      var row = baseMemory
+      change(&row)
+      XCTAssertEqual(SiriIndexScope.memory(row, now: now), expected, name)
+    }
+
+    let baseTask = ActionItemRecord(backendId: "task", backendSynced: true, description: "Visible")
+    let taskCases: [(String, (inout ActionItemRecord) -> Void, Bool)] = [
+      ("eligible", { _ in }, true),
+      ("empty id", { $0.backendId = "" }, false),
+      ("deleted", { $0.deleted = true }, false),
+      ("cancelled", { $0.taskStatus = "cancelled" }, false),
+      ("unknown status", { $0.taskStatus = "processing" }, false),
+      ("superseded", { $0.supersededBy = "replacement" }, false),
+      ("locked", { $0.isLocked = true }, false),
+      ("unknown lock state", { $0.isLocked = nil }, false),
+      (
+        "old completion",
+        {
+          $0.completed = true
+          $0.completedAt = now.addingTimeInterval(-SiriIndexScope.completedTaskAge - 1)
+        }, false
+      ),
+    ]
+    for (name, change, expected) in taskCases {
+      var row = baseTask
+      change(&row)
+      XCTAssertEqual(SiriIndexScope.task(row, now: now), expected, name)
+    }
+  }
+
+  func testSiriTemporalCutoffDecisionTable() {
+    let now = Date(timeIntervalSince1970: 2_000_000_000)
+    let cases: [(String, [Date], Date?)] = [
+      ("conversation", [now.addingTimeInterval(2)], now.addingTimeInterval(2)),
+      ("completed task", [now.addingTimeInterval(3)], now.addingTimeInterval(3)),
+      ("memory", [now.addingTimeInterval(4)], now.addingTimeInterval(4)),
+      (
+        "earliest of all", [now.addingTimeInterval(4), now.addingTimeInterval(2), now.addingTimeInterval(3)],
+        now.addingTimeInterval(2)
+      ),
+    ]
+    for (name, dates, expected) in cases {
+      XCTAssertEqual(SiriIndexScope.nextCutoff(dates), expected, name)
+    }
+  }
+
+  func testListeningFailuresUseListeningDialogs() {
+    XCTAssertEqual(SiriFailure.server.message(for: "start_listening"), "Omi couldn't start listening right now.")
+    XCTAssertEqual(SiriFailure.server.message(for: "stop_listening"), "Omi couldn't stop listening right now.")
+    XCTAssertEqual(SiriFailure.recordingOff.message(for: "start_listening"), "Turn on audio recording in Omi first.")
+    XCTAssertEqual(SiriFailure.micDenied.message(for: "start_listening"), "Allow microphone access in Omi first.")
+    XCTAssertEqual(SiriFailure.nothingToStop.message(for: "stop_listening"), "Omi isn't listening right now.")
   }
 
   func testOwnerTransitionWipesOldIndexBeforeAdoptingNewOwner() async {

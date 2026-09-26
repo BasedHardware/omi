@@ -222,7 +222,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
       && lhs.startedAt == rhs.startedAt
       && lhs.finishedAt == rhs.finishedAt && lhs.structured == rhs.structured
       && lhs.status == rhs.status && lhs.discarded == rhs.discarded && lhs.deleted == rhs.deleted
-      && lhs.isLocked == rhs.isLocked && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId
+      && lhs.isLocked == rhs.isLocked && lhs.visibility == rhs.visibility
+      && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId
       && lhs.source == rhs.source
       && lhs.audioFiles == rhs.audioFiles
       && lhs.conversationAudio == rhs.conversationAudio
@@ -260,6 +261,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   let discarded: Bool
   let deleted: Bool
   let isLocked: Bool
+  let visibility: String
   var starred: Bool
   let folderId: String?
   let inputDeviceName: String?
@@ -287,6 +289,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case discarded
     case deleted
     case isLocked = "is_locked"
+    case visibility
     case starred
     case folderId = "folder_id"
     case inputDeviceName = "input_device_name"
@@ -327,6 +330,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     discarded = wire.discarded ?? false
     deleted = false  // backend REST Conversation schema does not expose deleted
     isLocked = wire.isLocked ?? false
+    visibility = (try? container.decode(String.self, forKey: .visibility)) ?? "unknown"
     starred = wire.starred ?? false
     folderId = wire.folderId
     inputDeviceName = wire.clientDeviceId
@@ -377,6 +381,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     discarded: Bool,
     deleted: Bool,
     isLocked: Bool,
+    visibility: String = "private",
     starred: Bool,
     folderId: String?,
     inputDeviceName: String?,
@@ -404,6 +409,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.discarded = discarded
     self.deleted = deleted
     self.isLocked = isLocked
+    self.visibility = visibility
     self.starred = starred
     self.folderId = folderId
     self.inputDeviceName = inputDeviceName

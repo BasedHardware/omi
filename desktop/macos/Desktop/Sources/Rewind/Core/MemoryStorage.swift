@@ -132,7 +132,7 @@ actor MemoryStorage {
   }
 
   /// Ensure database is initialized before use
-  private func ensureInitialized() async throws -> DatabasePool {
+  func ensureInitialized() async throws -> DatabasePool {
     if let db = _dbQueue, await RewindDatabase.shared.poolGeneration() == _dbGeneration {
       return db
     }
@@ -581,46 +581,11 @@ actor MemoryStorage {
   /// Used when fetching from API to cache locally
   @discardableResult
   func syncServerMemory(_ memory: ServerMemory) async throws -> Int64 {
-    let db = try await ensureInitialized()
-
-    let recordId = try await db.write { database -> Int64 in
-      // Check if memory already exists by backendId
-      if var existingRecord =
-        try MemoryRecord
-        .filter(Column("backendId") == memory.id)
-        .fetchOne(database)
-      {
-        // Update existing record
-        existingRecord.updateFrom(memory)
-        try existingRecord.update(database)
-        guard let recordId = existingRecord.id else {
-          throw MemoryStorageError.syncFailed("Record ID is nil after update")
-        }
-        return recordId
-      } else {
-        // Insert new record, catching UNIQUE constraint from concurrent syncs
-        do {
-          let newRecord = try MemoryRecord.from(memory).inserted(database)
-          guard let recordId = newRecord.id else {
-            throw MemoryStorageError.syncFailed("Record ID is nil after insert")
-          }
-          return recordId
-        } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
-          // Race: another sync path already inserted this backendId — update instead
-          if var record = try MemoryRecord.filter(Column("backendId") == memory.id).fetchOne(database) {
-            record.updateFrom(memory)
-            try record.update(database)
-            return record.id ?? 0
-          }
-          throw dbError
-        }
-      }
+    try await syncServerMemories([memory])
+    guard let id = try await getMemoryByBackendId(memory.id)?.id else {
+      throw MemoryStorageError.syncFailed("Synced memory was not found")
     }
-    if recordId > 0, !memory.content.isEmpty {
-      LocalEmbeddingIndexer.scheduleMemoryIndex(id: recordId, content: memory.content)
-    }
-    SiriIndexHooks.memoryChanged(memory.id)
-    return recordId
+    return id
   }
   /// Sync multiple ServerMemory objects to local storage (batch upsert)
   /// Used for efficient background sync after API fetch
@@ -1366,7 +1331,8 @@ actor MemoryStorage {
         .fetchOne(database)
       {
         if existingRecord.updatedAt > memory.updatedAt {
-          var authoritativeFieldsChanged = existingRecord.mergeAuthoritativeTierFrom(memory)
+          let siriEligibilityChanged = existingRecord.mergeAuthoritativeSiriEligibilityFrom(memory)
+          var authoritativeFieldsChanged = existingRecord.mergeAuthoritativeTierFrom(memory) || siriEligibilityChanged
           if existingRecord.mergeAuthoritativeLedgerMetadataFrom(memory) {
             authoritativeFieldsChanged = true
           }

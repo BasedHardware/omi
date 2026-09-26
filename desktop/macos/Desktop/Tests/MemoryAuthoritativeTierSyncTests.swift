@@ -51,6 +51,49 @@ final class MemoryAuthoritativeTierSyncTests: XCTestCase {
     XCTAssertEqual(record?.updatedAt, localUpdatedAt, "Tier merge must not bump updatedAt")
   }
 
+  func testNewerLocalEditCannotRestoreRejectedOrLockedMemoryToSiri() async throws {
+    let backendId = "siri-eligibility-\(UUID().uuidString)"
+    let serverMemory = makeMemory(
+      id: backendId, tier: .longTerm, tierIsExplicit: true,
+      updatedAt: Date(timeIntervalSince1970: 1_000),
+      userReview: false, isDismissed: true, isLocked: true)
+    try await MemoryStorage.shared.syncServerMemories([serverMemory])
+    let dbQueue = await RewindDatabase.shared.getDatabaseQueue()
+    let db = try XCTUnwrap(dbQueue)
+    try await db.write { database in
+      var row = try XCTUnwrap(MemoryRecord.filter(Column("backendId") == backendId).fetchOne(database))
+      row.userReview = true
+      row.isDismissed = false
+      row.isLocked = false
+      row.updatedAt = Date(timeIntervalSince1970: 2_000)
+      try row.update(database)
+    }
+    let changed = try await MemoryStorage.shared.syncServerMemories([serverMemory])
+    XCTAssertEqual(changed, [backendId])
+    let fetched = try await MemoryStorage.shared.getMemoryByBackendId(backendId)
+    let row = try XCTUnwrap(fetched)
+    XCTAssertEqual(row.userReview, false)
+    XCTAssertTrue(row.isDismissed)
+    XCTAssertEqual(row.isLocked, true)
+    XCTAssertFalse(SiriIndexScope.memory(row, now: Date(timeIntervalSince1970: 2_000)))
+  }
+
+  func testSingleStaleFetchCannotReindexLocallyRejectedMemory() async throws {
+    let backendId = "siri-stale-single-\(UUID().uuidString)"
+    let current = makeMemory(
+      id: backendId, tier: .longTerm, tierIsExplicit: true,
+      updatedAt: Date(timeIntervalSince1970: 2_000), userReview: false)
+    try await MemoryStorage.shared.syncServerMemory(current)
+    let stale = makeMemory(
+      id: backendId, tier: .longTerm, tierIsExplicit: true,
+      updatedAt: Date(timeIntervalSince1970: 1_000), userReview: true)
+    try await MemoryStorage.shared.syncServerMemory(stale)
+    let fetched = try await MemoryStorage.shared.getMemoryByBackendId(backendId)
+    let row = try XCTUnwrap(fetched)
+    XCTAssertEqual(row.userReview, false)
+    XCTAssertFalse(SiriIndexScope.memory(row, now: Date(timeIntervalSince1970: 2_000)))
+  }
+
   func testSyncClearsLegacyUntieredLocalRecordTierState() async throws {
     let backendId = "tier-sync-legacy-\(UUID().uuidString)"
     let serverUpdatedAt = Date(timeIntervalSince1970: 1_000)
@@ -240,7 +283,10 @@ final class MemoryAuthoritativeTierSyncTests: XCTestCase {
     id: String,
     tier: MemoryLayer,
     tierIsExplicit: Bool,
-    updatedAt: Date
+    updatedAt: Date,
+    userReview: Bool? = nil,
+    isDismissed: Bool = false,
+    isLocked: Bool = false
   ) -> ServerMemory {
     ServerMemory(
       id: id,
@@ -252,7 +298,7 @@ final class MemoryAuthoritativeTierSyncTests: XCTestCase {
       updatedAt: updatedAt,
       conversationId: nil,
       reviewed: false,
-      userReview: nil,
+      userReview: userReview,
       visibility: "private",
       manuallyAdded: false,
       scoring: nil,
@@ -261,7 +307,8 @@ final class MemoryAuthoritativeTierSyncTests: XCTestCase {
       sourceApp: nil,
       contextSummary: nil,
       isRead: false,
-      isDismissed: false,
+      isDismissed: isDismissed,
+      isLocked: isLocked,
       tags: [],
       reasoning: nil,
       currentActivity: nil,

@@ -55,6 +55,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
   // Status flags
   var isRead: Bool
   var isDismissed: Bool
+  var isLocked: Bool?
   var deleted: Bool
 
   // Timestamps
@@ -98,6 +99,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     captureDeviceIdsJson: String? = nil,
     isRead: Bool = false,
     isDismissed: Bool = false,
+    isLocked: Bool? = false,
     deleted: Bool = false,
     createdAt: Date = Date(),
     updatedAt: Date = Date()
@@ -134,6 +136,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     self.captureDeviceIdsJson = captureDeviceIdsJson
     self.isRead = isRead
     self.isDismissed = isDismissed
+    self.isLocked = isLocked
     self.deleted = deleted
     self.createdAt = createdAt
     self.updatedAt = updatedAt
@@ -304,6 +307,7 @@ extension MemoryRecord {
       captureDeviceIdsJson: encodeCaptureDeviceIds(memory.captureDeviceIds),
       isRead: memory.isRead,
       isDismissed: memory.isDismissed,
+      isLocked: memory.isLocked,
       deleted: false,
       createdAt: memory.createdAt,
       updatedAt: memory.updatedAt
@@ -390,6 +394,7 @@ extension MemoryRecord {
     // Update status
     self.isRead = memory.isRead
     self.isDismissed = memory.isDismissed
+    self.isLocked = memory.isLocked
 
     // Update timestamp
     self.updatedAt = memory.updatedAt
@@ -414,6 +419,35 @@ extension MemoryRecord {
     if changed {
       tier = authoritativeTier
       tierIsExplicit = true
+    }
+    return changed
+  }
+
+  /// A stale server page may not overwrite a newer local edit, but exclusion
+  /// signals must still close an already indexed memory. A later, newer server
+  /// revision can re-enable it through `updateFrom`.
+  @discardableResult
+  mutating func mergeAuthoritativeSiriEligibilityFrom(_ memory: ServerMemory) -> Bool {
+    var changed = false
+    if memory.userReview == false && userReview != false {
+      userReview = false
+      changed = true
+    }
+    if memory.isDismissed && !isDismissed {
+      isDismissed = true
+      changed = true
+    }
+    if memory.isLocked && isLocked != true {
+      isLocked = true
+      changed = true
+    }
+    if !["private", "shared", "public"].contains(memory.visibility) && visibility != memory.visibility {
+      visibility = memory.visibility
+      changed = true
+    }
+    if let expiry = memory.expiresAt, expiresAt.map({ expiry < $0 }) ?? true {
+      expiresAt = expiry
+      changed = true
     }
     return changed
   }
@@ -517,6 +551,7 @@ extension MemoryRecord {
       contextSummary: contextSummary,
       isRead: isRead,
       isDismissed: isDismissed,
+      isLocked: isLocked ?? true,
       tags: tags,
       reasoning: reasoning,
       currentActivity: currentActivity,
@@ -559,6 +594,9 @@ extension MemoryRecord {
     else { return [:] }
     return metadata
   }
+
+  /// The server lifecycle is kept in the existing bounded metadata mirror.
+  var siriLedgerMetadata: [String: String] { ledgerMetadata }
 
   /// Read-only access to the bounded evidence mirror for audit/UI surfaces.
   /// This never participates in prompt projection or trigger compilation.
@@ -648,6 +686,7 @@ extension ServerMemory {
     contextSummary: String?,
     isRead: Bool,
     isDismissed: Bool,
+    isLocked: Bool = false,
     tags: [String],
     reasoning: String?,
     currentActivity: String?,
@@ -689,6 +728,7 @@ extension ServerMemory {
     self.contextSummary = contextSummary
     self.isRead = isRead
     self.isDismissed = isDismissed
+    self.isLocked = isLocked
     self.tags = tags
     self.reasoning = reasoning
     self.currentActivity = currentActivity

@@ -7,26 +7,67 @@ enum SiriIndexScope {
   static let completedTaskAge: TimeInterval = 30 * 24 * 60 * 60
 
   static func conversation(_ record: TranscriptionSessionRecord, now: Date) -> Bool {
-    record.backendSynced && record.backendId != nil && !record.deleted && !record.discarded
+    record.backendSynced && record.backendId?.isEmpty == false && !record.deleted && !record.discarded
+      && !record.isLocked && ["private", "shared", "public"].contains(record.visibility)
       && record.conversationStatus == .completed
-      && record.startedAt >= now.addingTimeInterval(-conversationAge)
+      && record.startedAt > now.addingTimeInterval(-conversationAge)
+  }
+
+  static func memory(_ record: MemoryRecord, now: Date) -> Bool {
+    let metadata = record.siriLedgerMetadata
+    let status = metadata["status"]
+    let supersededBy = metadata["superseded_by"]
+    let invalidAt = metadata["invalid_at"]
+    let validInvalidAt: Bool
+    if let invalidAt, !invalidAt.isEmpty {
+      let fractional = ISO8601DateFormatter()
+      fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+      let standard = ISO8601DateFormatter()
+      validInvalidAt = (fractional.date(from: invalidAt) ?? standard.date(from: invalidAt)).map { $0 > now } ?? false
+    } else {
+      validInvalidAt = true
+    }
+    return record.backendSynced && record.tierIsExplicit
+      && memory(
+        backendId: record.backendId, deleted: record.deleted, dismissed: record.isDismissed,
+        tier: record.tier, expiresAt: record.expiresAt, userReview: record.userReview,
+        visibility: record.visibility, unlocked: record.isLocked == false,
+        ledgerActive: status == nil || status == "active",
+        unsuperseded: supersededBy == nil || supersededBy?.isEmpty == true,
+        uninvalidated: validInvalidAt, now: now)
   }
 
   static func memory(
-    backendId: String?, deleted: Bool, dismissed: Bool, tier: String, expiresAt: Date?, now: Date
+    backendId: String?, deleted: Bool, dismissed: Bool, tier: String, expiresAt: Date?,
+    userReview: Bool? = nil, visibility: String = "private", unlocked: Bool = true,
+    ledgerActive: Bool = true, unsuperseded: Bool = true, uninvalidated: Bool = true, now: Date
   ) -> Bool {
-    backendId != nil && !deleted && !dismissed
+    backendId?.isEmpty == false && !deleted && !dismissed && userReview != false && unlocked
+      && ["private", "shared", "public"].contains(visibility)
+      && ledgerActive && unsuperseded && uninvalidated
       && (tier == MemoryLayer.shortTerm.rawValue || tier == MemoryLayer.longTerm.rawValue)
       && (expiresAt.map { $0 > now } ?? true)
   }
 
   static func task(
     backendId: String?, deleted: Bool, completed: Bool, completedAt: Date?,
-    taskStatus: String? = nil, now: Date
+    taskStatus: String? = nil, supersededBy: String? = nil, isLocked: Bool = false, now: Date
   ) -> Bool {
-    backendId != nil && !deleted && taskStatus != "cancelled" && taskStatus != "superseded"
-      && (!completed || completedAt.map { $0 >= now.addingTimeInterval(-completedTaskAge) } == true)
+    backendId?.isEmpty == false && !deleted && !isLocked
+      && (taskStatus == nil || taskStatus == "active" || taskStatus == "completed")
+      && (supersededBy == nil || supersededBy?.isEmpty == true)
+      && (!completed || completedAt.map { $0 > now.addingTimeInterval(-completedTaskAge) } == true)
   }
+
+  static func task(_ record: ActionItemRecord, now: Date) -> Bool {
+    record.backendSynced && record.isLocked == false
+      && task(
+        backendId: record.backendId, deleted: record.deleted, completed: record.completed,
+        completedAt: record.completedAt, taskStatus: record.taskStatus,
+        supersededBy: record.supersededBy, now: now)
+  }
+
+  static func nextCutoff(_ deadlines: [Date]) -> Date? { deadlines.min() }
 
   static func capped<T>(_ items: [T], at limit: Int) -> [T] {
     Array(items.prefix(limit))

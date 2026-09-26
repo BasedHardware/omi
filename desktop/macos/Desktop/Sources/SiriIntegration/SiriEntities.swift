@@ -275,10 +275,7 @@ struct ConversationEntityQuery: IndexedEntityQuery {
             SiriIndexScope.conversation(record, now: Date())
           else {
             guard let memory = try await MemoryStorage.shared.getMemoryByBackendId(id),
-              SiriIndexScope.memory(
-                backendId: memory.backendId, deleted: memory.deleted,
-                dismissed: memory.isDismissed, tier: memory.tier,
-                expiresAt: memory.expiresAt, now: Date()),
+              SiriIndexScope.memory(memory, now: Date()),
               let value = memory.toServerMemory()
             else { return nil }
             return ConversationEntity(value)
@@ -307,12 +304,8 @@ struct ConversationEntityQuery: IndexedEntityQuery {
 struct MemoryEntityQuery: IndexedEntityQuery {
   func entities(for identifiers: [String]) async throws -> [MemoryEntity] {
     guard let owner = RuntimeOwnerIdentity.currentOwnerId() else { return [] }
-    let records = try await MemoryStorage.shared.getMemories(backendIds: identifiers)
-    let found = records.filter {
-      SiriIndexScope.memory(
-        backendId: $0.id, deleted: false, dismissed: $0.isDismissed,
-        tier: $0.tier.rawValue, expiresAt: $0.expiresAt, now: Date())
-    }.map(MemoryEntity.init)
+    let records = try await MemoryStorage.shared.getSiriMemoryRecords(backendIds: identifiers)
+    let found = records.filter { SiriIndexScope.memory($0, now: Date()) }.map(MemoryEntity.init)
     return RuntimeOwnerIdentity.currentOwnerId() == owner ? found : []
   }
 
@@ -335,10 +328,7 @@ struct TaskEntityQuery: IndexedEntityQuery {
     var found: [TaskEntity] = []
     for id in identifiers {
       guard let record = try await ActionItemStorage.shared.getActionItemByBackendId(id),
-        SiriIndexScope.task(
-          backendId: record.backendId, deleted: record.deleted,
-          completed: record.completed, completedAt: record.completedAt,
-          taskStatus: record.taskStatus, now: Date())
+        SiriIndexScope.task(record, now: Date())
       else { continue }
       found.append(TaskEntity(record))
     }

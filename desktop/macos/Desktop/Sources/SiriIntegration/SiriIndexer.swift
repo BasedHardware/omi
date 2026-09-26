@@ -20,6 +20,8 @@ actor SiriIndexer {
   private var transitionInProgress = false
   private var transitionWaiters: [CheckedContinuation<Void, Never>] = []
   private var indexedMemoryExpirations: [String: Date] = [:]
+  private var indexedConversationCutoffs: [String: Date] = [:]
+  private var indexedTaskCutoffs: [String: Date] = [:]
   private var memoryExpiryTimer: Task<Void, Never>?
 
   private init() {
@@ -79,11 +81,17 @@ actor SiriIndexer {
     memoryExpiryTimer?.cancel()
     memoryExpiryTimer = nil
     indexedMemoryExpirations.removeAll()
+    indexedConversationCutoffs.removeAll()
+    indexedTaskCutoffs.removeAll()
   }
 
   private func scheduleNextMemoryExpiry(owner: String) {
     memoryExpiryTimer?.cancel()
-    guard let next = SiriMemoryExpirySweep.nextExpiry(indexedMemoryExpirations) else {
+    guard
+      let next = SiriIndexScope.nextCutoff(
+        Array(indexedMemoryExpirations.values) + Array(indexedConversationCutoffs.values)
+          + Array(indexedTaskCutoffs.values))
+    else {
       memoryExpiryTimer = nil
       return
     }
@@ -98,8 +106,24 @@ actor SiriIndexer {
 
   private func expireDueMemories(expectedOwner: String) async {
     let now = Date()
-    guard SiriMemoryExpirySweep.nextExpiry(indexedMemoryExpirations).map({ $0 <= now }) == true else {
+    let next = SiriIndexScope.nextCutoff(
+      Array(indexedMemoryExpirations.values) + Array(indexedConversationCutoffs.values)
+        + Array(indexedTaskCutoffs.values))
+    guard next.map({ $0 <= now }) == true else {
       scheduleNextMemoryExpiry(owner: expectedOwner)
+      return
+    }
+    if indexedConversationCutoffs.values.contains(where: { $0 <= now })
+      || indexedTaskCutoffs.values.contains(where: { $0 <= now })
+    {
+      do { try await rebuild(now: now) } catch {
+        log("Siri age cutoff rebuild pending retry: \(error.localizedDescription)")
+        memoryExpiryTimer = Task { [weak self] in
+          try? await Task.sleep(for: .seconds(5))
+          guard !Task.isCancelled else { return }
+          await self?.expireDueMemories(expectedOwner: expectedOwner)
+        }
+      }
       return
     }
     do {
@@ -183,6 +207,8 @@ actor SiriIndexer {
     guard let index = try await operationIndex(expectedOwner: expectedOwner), #available(macOS 27, *) else { return }
     defer { finishOperation() }
     try await index.deleteAppEntities(identifiedBy: [id], ofType: ConversationEntity.self)
+    indexedConversationCutoffs.removeValue(forKey: id)
+    scheduleNextMemoryExpiry(owner: expectedOwner)
   }
 
   func deleteConversations(ids: [String], expectedOwner: String) async throws {
@@ -192,6 +218,8 @@ actor SiriIndexer {
     for chunk in ids.chunkedSiriIndex(200) {
       try await index.deleteAppEntities(identifiedBy: chunk, ofType: ConversationEntity.self)
     }
+    for id in ids { indexedConversationCutoffs.removeValue(forKey: id) }
+    scheduleNextMemoryExpiry(owner: expectedOwner)
   }
 
   func deleteMemory(id: String, expectedOwner: String) async throws {
@@ -216,6 +244,8 @@ actor SiriIndexer {
     guard let index = try await operationIndex(expectedOwner: expectedOwner), #available(macOS 27, *) else { return }
     defer { finishOperation() }
     try await index.deleteAppEntities(identifiedBy: [id], ofType: TaskEntity.self)
+    indexedTaskCutoffs.removeValue(forKey: id)
+    scheduleNextMemoryExpiry(owner: expectedOwner)
   }
 
   func deleteTasks(ids: [String], expectedOwner: String) async throws {
@@ -225,6 +255,8 @@ actor SiriIndexer {
     for chunk in ids.chunkedSiriIndex(200) {
       try await index.deleteAppEntities(identifiedBy: chunk, ofType: TaskEntity.self)
     }
+    for id in ids { indexedTaskCutoffs.removeValue(forKey: id) }
+    scheduleNextMemoryExpiry(owner: expectedOwner)
   }
 
   @available(macOS 27, *)
@@ -232,6 +264,10 @@ actor SiriIndexer {
     guard let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
     defer { finishOperation() }
     for chunk in entities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
+    for entity in entities {
+      indexedConversationCutoffs[entity.id] = entity.creationDate?.addingTimeInterval(SiriIndexScope.conversationAge)
+    }
+    scheduleNextMemoryExpiry(owner: expectedOwner)
   }
 
   func indexMemories(_ entities: [MemoryEntity], expectedOwner: String) async throws {
@@ -247,6 +283,12 @@ actor SiriIndexer {
     guard let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
     defer { finishOperation() }
     for chunk in entities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
+    for entity in entities {
+      indexedTaskCutoffs[entity.id] =
+        entity.isCompleted
+        ? entity.completionDate?.addingTimeInterval(SiriIndexScope.completedTaskAge) : nil
+    }
+    scheduleNextMemoryExpiry(owner: expectedOwner)
   }
 
   func rebuild(now: Date = Date()) async throws {
@@ -269,16 +311,17 @@ actor SiriIndexer {
           at: SiriIndexScope.conversationLimit
         ).map(ConversationEntity.init)
         for chunk in entities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
+        for entity in entities {
+          indexedConversationCutoffs[entity.id] = entity.creationDate?.addingTimeInterval(
+            SiriIndexScope.conversationAge)
+        }
         count += entities.count
       }
 
-      let memories = try await MemoryStorage.shared.getLocalMemories(
-        limit: SiriIndexScope.memoryLimit, backendOnly: true, expiresAfter: now)
-      let memoryEntities = memories.filter {
-        SiriIndexScope.memory(
-          backendId: $0.id, deleted: false, dismissed: $0.isDismissed,
-          tier: $0.tier.rawValue, expiresAt: $0.expiresAt, now: now)
-      }.map(MemoryEntity.init)
+      let memories = try await MemoryStorage.shared.getSiriMemoryCandidates()
+      let memoryEntities = SiriIndexScope.capped(
+        memories.filter { SiriIndexScope.memory($0, now: now) }, at: SiriIndexScope.memoryLimit
+      ).map(MemoryEntity.init)
       for chunk in memoryEntities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
       for entity in memoryEntities { indexedMemoryExpirations[entity.id] = entity.expiresAt }
       if let indexedOwner { scheduleNextMemoryExpiry(owner: indexedOwner) }
@@ -288,22 +331,21 @@ actor SiriIndexer {
         let tasks = try await ActionItemStorage.shared.getAllLocalActionItems()
         var taskEntities: [TaskEntity] = []
         for task in tasks
-        where !task.id.hasPrefix("local_") && !task.isRetired
-          && SiriIndexScope.task(
-            backendId: task.id, deleted: false, completed: task.completed,
-            completedAt: task.completedAt, taskStatus: task.taskStatus, now: now)
-        {
+        where !task.id.hasPrefix("local_") && !task.isRetired {
           guard let record = try await ActionItemStorage.shared.getActionItemByBackendId(task.id),
-            SiriIndexScope.task(
-              backendId: record.backendId, deleted: record.deleted,
-              completed: record.completed, completedAt: record.completedAt,
-              taskStatus: record.taskStatus, now: now)
+            SiriIndexScope.task(record, now: now)
           else { continue }
           taskEntities.append(TaskEntity(record))
         }
         for chunk in taskEntities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
+        for entity in taskEntities {
+          indexedTaskCutoffs[entity.id] =
+            entity.isCompleted
+            ? entity.completionDate?.addingTimeInterval(SiriIndexScope.completedTaskAge) : nil
+        }
         count += taskEntities.count
       }
+      if let indexedOwner { scheduleNextMemoryExpiry(owner: indexedOwner) }
       await PostHogManager.shared.track(
         "Siri Index Rebuilt",
         properties: [

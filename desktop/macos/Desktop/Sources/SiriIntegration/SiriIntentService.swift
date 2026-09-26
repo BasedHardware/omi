@@ -2,20 +2,36 @@ import Foundation
 
 enum SiriFailure: Error, Equatable {
   case auth, network, quota, rateLimited, server, cancelled, unsupported
+  case recordingOff, micDenied, nothingToStop
 
   var outcome: String {
     switch self {
-    case .auth: "auth"
+    case .auth, .micDenied: "auth"
     case .network: "network"
     case .quota: "quota"
     case .rateLimited: "rate_limited"
-    case .server: "server"
+    case .server, .recordingOff, .nothingToStop: "server"
     case .cancelled: "cancelled"
     case .unsupported: "server"
     }
   }
 
   func message(for action: String) -> String {
+    if action == "start_listening" || action == "stop_listening" {
+      switch self {
+      case .recordingOff: return "Turn on audio recording in Omi first."
+      case .micDenied: return "Allow microphone access in Omi first."
+      case .nothingToStop: return "Omi isn't listening right now."
+      case .auth: return "Open Omi and sign in first."
+      case .network: return "I couldn't reach Omi to control listening."
+      case .quota: return "Your Omi limit has been reached, so listening couldn't start."
+      case .rateLimited: return "Omi is receiving too many requests. Try again shortly."
+      case .server, .unsupported:
+        return action == "start_listening"
+          ? "Omi couldn't start listening right now." : "Omi couldn't stop listening right now."
+      case .cancelled: return "The action was cancelled."
+      }
+    }
     let changed = action == "complete" ? "the task wasn't changed" : "nothing was saved"
     switch self {
     case .auth: return "Open Omi and sign in first."
@@ -28,6 +44,7 @@ enum SiriFailure: Error, Equatable {
         ? "Omi couldn't open that right now."
         : action == "complete" ? "Omi couldn't change the task right now." : "Omi couldn't save that right now."
     case .cancelled: return "The action was cancelled."
+    case .recordingOff, .micDenied, .nothingToStop: return "Omi couldn't complete that action."
     case .unsupported:
       return action == "open"
         ? "That item is no longer available in Omi."
