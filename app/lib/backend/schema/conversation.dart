@@ -7,6 +7,7 @@ import 'package:collection/collection.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/schema/capture_group.dart';
+import 'package:omi/backend/schema/conversation_speakers.dart';
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/utils/audio/audio_timeline_mapper.dart';
@@ -449,6 +450,9 @@ class ServerConversation {
   /// null for a conversation captured by one surface.
   final CaptureGroup? captureGroup;
 
+  /// Whether and which speaker ids are people; null on conversations processed before it existed.
+  final ConversationSpeakers? speakerResolution;
+
   // local label
   bool isNew = false;
 
@@ -478,6 +482,7 @@ class ServerConversation {
     this.visibility = ConversationVisibility.private_,
     this.matchSnippets = const [],
     this.captureGroup,
+    this.speakerResolution,
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -557,6 +562,8 @@ class ServerConversation {
       visibility: ConversationVisibility.fromString(generated.visibility),
       matchSnippets: snippets,
       captureGroup: generated.captureGroup == null ? null : CaptureGroup.fromGenerated(generated.captureGroup!),
+      speakerResolution:
+          generated.speakerResolution == null ? null : ConversationSpeakers.fromGenerated(generated.speakerResolution!),
     );
   }
 
@@ -589,6 +596,7 @@ class ServerConversation {
       'folder_id': folderId,
       'visibility': visibility.value,
       'capture_group': captureGroup?.toJson(),
+      'speaker_resolution': speakerResolution?.toJson(),
     };
   }
 
@@ -619,6 +627,7 @@ class ServerConversation {
       folderId: folderId,
       visibility: visibility.value,
       captureGroup: captureGroup?.toGenerated(),
+      speakerResolution: speakerResolution?.toGenerated(),
     );
   }
 
