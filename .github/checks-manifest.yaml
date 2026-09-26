@@ -1420,6 +1420,11 @@ checks:
     triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#15116: normalize recipient inputs and safely coerce date range parameters"
+  - id: ms365-error-handling-tests
+    command: ["python3", "plugins/omi-ms365-app/test_error_handling.py"]
+    triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "prevent internal exception, credential, and Graph payload leakage across auth guards and tool dispatch boundaries"
   - id: wikipedia-request-boundary-tests
     command: ["python3", "plugins/omi-wikipedia-app/test_request_boundary.py"]
     triggers: ["plugins/omi-wikipedia-app/**", ".github/checks-manifest.yaml"]

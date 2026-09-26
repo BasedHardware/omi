@@ -12,6 +12,7 @@ Exposes:
 - /.well-known/omi-tools.json Tool manifest advertised to OMI
 - /tools/<tool_name>          Tool execution endpoint called by OMI
 """
+
 from __future__ import annotations
 
 import html
@@ -42,6 +43,7 @@ _signer = URLSafeSerializer(get_settings().session_secret, salt="oauth-state")
 # ---------------------------------------------------------------------------
 # Setup + OAuth flow
 # ---------------------------------------------------------------------------
+
 
 @app.get("/", response_class=HTMLResponse)
 async def root() -> str:
@@ -103,14 +105,12 @@ async def auth_callback(
 
     uid: str = payload["uid"]
     await auth.exchange_code_for_token(code, uid)
-    return HTMLResponse(
-        """
+    return HTMLResponse("""
         <html><body style="font-family: system-ui; text-align:center; padding:40px;">
           <h2>✓ Connected</h2>
           <p>You can close this tab and return to OMI.</p>
         </body></html>
-        """
-    )
+        """)
 
 
 @app.get("/status")
@@ -141,6 +141,7 @@ async def disconnect(uid: str = Query(...)) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # OMI memory_creation webhook
 # ---------------------------------------------------------------------------
+
 
 @app.post("/webhook/memory")
 async def memory_webhook(request: Request, uid: str | None = Query(default=None)) -> dict[str, Any]:
@@ -188,11 +189,13 @@ def _load_manifest() -> dict[str, Any]:
 # Tool dispatch
 # ---------------------------------------------------------------------------
 
+
 async def _auth_guard(uid: str) -> None:
     try:
         await auth.get_access_token(uid)
     except auth.AuthError as e:
-        raise HTTPException(401, f"Microsoft not connected — {e}")
+        log.warning("Authentication failed for uid=%s: %s", uid, e)
+        raise HTTPException(401, "Microsoft not connected — please connect in settings.")
 
 
 # Keys the Omi backend adds to every chat tool call next to the tool's own
@@ -232,7 +235,16 @@ async def tool_dispatch(tool_name: str, request: Request) -> Any:
     try:
         return await handler(uid, **args)
     except TypeError as e:
-        raise HTTPException(400, f"Bad arguments for {tool_name}: {e}")
+        log.warning("Bad arguments for %s: %s", tool_name, e)
+        raise HTTPException(400, f"Bad arguments for {tool_name}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error("Error executing %s for uid=%s: %s", tool_name, uid, e, exc_info=True)
+        status_code = getattr(e, "status", None)
+        if isinstance(status_code, int) and 400 <= status_code < 500:
+            raise HTTPException(status_code, f"Request failed for {tool_name}")
+        raise HTTPException(502, f"Failed to execute {tool_name} due to an upstream service error.")
 
 
 # tool_name -> coroutine(uid, **args)
