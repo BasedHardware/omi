@@ -219,7 +219,7 @@ class ListenReceiver:
         # Capture start sample of the STT buffer's first byte; the buffer is
         # one contiguous run of accepted decoded audio.
         self._stt_buffer_start_sample: Optional[int] = None
-        self._initial_conversation_id = getattr(host.state, 'current_conversation_id', None)
+        self._initial_conversation_id = getattr(getattr(host, 'state', None), 'current_conversation_id', None)
 
     def _owner_for_sample(self, sample: int) -> Optional[str]:
         """The conversation that owned a capture sample at acceptance time."""
@@ -563,11 +563,11 @@ class ListenReceiver:
                 send_path=audio_timeline_send_path_label(epoch.send_path),
                 bucket=audio_timeline_past_send_bucket(seconds),
             ).inc(),
-            owner_at_send=lambda: self.host.state.current_conversation_id,
+            owner_at_send=lambda: getattr(self.host.state, 'current_conversation_id', None),
             project_times=self.capture_timeline_v2,
         )
         epoch.provider_label = audio_timeline_provider_label(getattr(self.host.stt_service, 'value', None))
-        epoch.initial_owner = self.host.state.current_conversation_id
+        epoch.initial_owner = getattr(self.host.state, 'current_conversation_id', None)
 
         if self.capture_timeline_v2:
             # v2: the translation projects start/end onto the capture wall
