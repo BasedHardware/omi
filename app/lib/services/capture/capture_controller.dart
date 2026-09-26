@@ -40,6 +40,7 @@ import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/audio_sources/ble_device_source.dart';
@@ -1581,7 +1582,9 @@ class CaptureController extends ChangeNotifier
               // Cut off any in-flight voice playback from a prior reply so the
               // new recording starts clean.
               if (OmiVoicePlaybackService.instance.isSpeaking) {
-                OmiVoicePlaybackService.instance.interrupt();
+                OmiVoicePlaybackService.instance.interrupt(
+                  source: VoiceReplyPlaybackInterruptSource.newVoiceQuery,
+                );
               }
               _voiceCommandSession = DateTime.now();
               _commandBytes = [];
@@ -1702,7 +1705,9 @@ class CaptureController extends ChangeNotifier
         // Cut off any in-flight voice playback from a prior reply so the
         // new recording starts clean.
         if (OmiVoicePlaybackService.instance.isSpeaking) {
-          OmiVoicePlaybackService.instance.interrupt();
+          OmiVoicePlaybackService.instance.interrupt(
+            source: VoiceReplyPlaybackInterruptSource.newVoiceQuery,
+          );
         }
         _voiceCommandSession = DateTime.now();
         _commandBytes = [];
