@@ -6,6 +6,7 @@ import {
   consumeAttachmentIngest,
   type AttachmentIngestMessage,
 } from "./attachments";
+import { desktopAuthRoutes } from "./desktop-auth-routes";
 import {
   authorizeV1,
   publicRoutes,
@@ -65,6 +66,16 @@ app.use("*", async (context, next) => {
 });
 
 for (const route of publicRoutes) {
+  app.on(route.method, route.path, (context) =>
+    route.handle(fromHono(context))
+  );
+}
+
+// Desktop-auth handoff mounts BEFORE the /v1/* authorization middleware and
+// is its own route group: the handoff is how a caller earns Firebase
+// credentials, so its routes cannot require them. Hono runs matched handlers
+// in registration order, so the middleware below never sees these paths.
+for (const route of desktopAuthRoutes) {
   app.on(route.method, route.path, (context) =>
     route.handle(fromHono(context))
   );

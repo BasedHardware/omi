@@ -8,3 +8,8 @@
 - (void)rotateBleRecording;
 - (NSString *)restorableBleDeviceId;
 @end
+
+// The validated OMI_V5_BACKEND_URL origin (https, allowed host, port 443 or
+// loopback, bare path) or nil when unset/invalid. Shared so the auth module's
+// desktop handoff and the backend module route through ONE validation.
+NSURL *OmiValidatedV5BackendURLFromEnvironment(void);

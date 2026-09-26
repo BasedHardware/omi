@@ -38,6 +38,7 @@ jest.mock('../src/omiNative', () => ({
   isBluetoothScanAvailable: (state: string) => state === 'poweredOn',
   browserScanErrorMessage: () => null,
   subscribeOmiBackendSessionInvalidated: () => () => undefined,
+  subscribeOmiAuthDesktopHandoff: () => () => undefined,
   subscribeOmiNativeEvents: () => () => undefined,
 }));
 jest.mock('../src/app/useReduceMotion', () => ({useReduceMotion: () => true}));

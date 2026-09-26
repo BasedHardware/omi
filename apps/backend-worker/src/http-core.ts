@@ -88,6 +88,9 @@ export type CoreEnv = SignedUploadEnv &
     ENVIRONMENT: string;
     API_TOKEN: string;
     FIREBASE_API_KEY?: string;
+    FIREBASE_DESKTOP_API_KEY?: string;
+    FIREBASE_DESKTOP_TOKEN_SA_EMAIL?: string;
+    FIREBASE_DESKTOP_TOKEN_PRIVATE_KEY?: string;
     STAGING_ACCOUNT_ID: string;
     STAGING_DISPLAY_NAME: string;
     STAGING_EMAIL: string;
@@ -296,6 +299,16 @@ async function firebaseAccountId(
   token: string,
   apiKey: string
 ): Promise<string | "invalid" | "unavailable"> {
+  const localId = await firebaseLocalId(token, apiKey);
+  return localId === "invalid" || localId === "unavailable"
+    ? localId
+    : `firebase:${localId}`;
+}
+
+export async function firebaseLocalId(
+  token: string,
+  apiKey: string
+): Promise<string | "invalid" | "unavailable"> {
   if (token.length === 0 || token.length > 16_384 || apiKey.length === 0)
     return "invalid";
   try {
@@ -346,7 +359,7 @@ async function firebaseAccountId(
         return "invalid";
       const localId = (user as Record<string, unknown>)["localId"];
       return typeof localId === "string" && isClientId(localId)
-        ? `firebase:${localId}`
+        ? localId
         : "invalid";
     });
   } catch (error) {
@@ -413,10 +426,28 @@ export async function authorizeV1(
   const firebaseApiKey = context.env.FIREBASE_API_KEY;
   if (typeof firebaseApiKey !== "string" || firebaseApiKey.length === 0)
     return backendError("unauthorized", "reauthenticate", 401);
-  const accountId = await firebaseAccountId(
+  let accountId = await firebaseAccountId(
     authorization.slice("Bearer ".length),
     firebaseApiKey
   );
+  // Staging-only dual-project tolerance: FIREBASE_API_KEY points at the legacy
+  // project while the desktop-auth handoff mints accounts in the dev project.
+  // A token that the legacy lookup rejects is retried once against the dev
+  // browser key before it is refused. Both lookups go through the same
+  // accounts:lookup verification; nothing is trusted from the token itself.
+  if (accountId === "invalid") {
+    const desktopApiKey = context.env.FIREBASE_DESKTOP_API_KEY;
+    if (
+      typeof desktopApiKey === "string" &&
+      desktopApiKey.length > 0 &&
+      desktopApiKey !== firebaseApiKey
+    ) {
+      accountId = await firebaseAccountId(
+        authorization.slice("Bearer ".length),
+        desktopApiKey
+      );
+    }
+  }
   if (accountId === "unavailable")
     return backendError("service_unavailable", "retry", 503, true);
   if (accountId === "invalid")

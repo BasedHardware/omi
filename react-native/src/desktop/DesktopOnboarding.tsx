@@ -110,6 +110,7 @@ export function DesktopOnboarding({
   completingSetup = false,
   onCompleteSetup,
   onSignOut,
+  desktopHandoff,
 }: Props) {
   const [step, setStep] = useState<DesktopOnboardingStep>('welcome');
   const [statuses, setStatuses] = useState<
@@ -456,6 +457,26 @@ export function DesktopOnboarding({
                       Your conversations, memories, and ideas belong together.
                       Sign in to the Omi account you call yours.
                     </Text>
+                    {signingIn && desktopHandoff ? (
+                      <View style={styles.codeCard}>
+                        <Text style={styles.small}>
+                          Finish in your browser, then enter this code on the
+                          Omi sign-in page.
+                        </Text>
+                        <Text
+                          accessibilityLabel={`Desktop sign-in code ${desktopHandoff.code}`}
+                          style={styles.code}>
+                          {desktopHandoff.code}
+                        </Text>
+                        <Button
+                          variant="ghost"
+                          labelStyle={styles.small}
+                          accessibilityRole="link"
+                          onPress={() => link(desktopHandoff.browserUrl)}>
+                          Open the sign-in page again
+                        </Button>
+                      </View>
+                    ) : null}
                     <View style={styles.note}>
                       <ShieldCheck size={22} color={token.color.inkMuted} />
                       <Text style={[styles.small, styles.flex]}>
@@ -755,6 +776,23 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 14,
     backgroundColor: token.color.glassQuiet,
+  },
+  codeCard: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    gap: 10,
+    padding: 20,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: token.color.line,
+    backgroundColor: token.color.glassQuiet,
+  },
+  code: {
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: '600',
+    letterSpacing: 6,
+    color: token.color.ink,
   },
   permissionList: {
     borderRadius: 18,

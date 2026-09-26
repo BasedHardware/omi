@@ -49,6 +49,8 @@ This runbook reverts the Cloudflare Worker to a previously uploaded version usin
 
 `cloudflare_only` means native Workers Observability is the configured sink. `better_stack` requires an operator to provision the external Cloudflare log delivery and verify a matching correlation-safe event in Better Stack before issuing the opaque evidence identifier. This repository never contains the delivery URL or source token, and the release verifier validates the identifier shape only; it does not prove external ingestion.
 
+A Worker version rollback does not revert applied D1 migrations. `0011_desktop_auth.sql` is additive (a new `desktop_auth_sessions` table), so an older Worker version that predates the desktop handoff keeps working with the table in place; rollbacks across the destructive `0010` rebuild require the operator migration sequence instead.
+
 ## First-release no-rollback boundary
 
 Do not roll back a first release. When `wrangler versions list` shows a single version, fix forward or redeploy from the repository instead. The CI `deploy` job also stops and requires operator confirmation because it runs only on `workflow_dispatch`. Preserve the rollback command output, release-gate result, worker version selected, and any Better Stack evidence identifier in the operator change record; none is telemetry proof unless the external sink was verified separately.

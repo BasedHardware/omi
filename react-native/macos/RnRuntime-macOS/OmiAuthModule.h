@@ -1,3 +1,4 @@
+#import <React/RCTEventEmitter.h>
 #import <React/RCTBridgeModule.h>
 
 BOOL OmiAuthEnvironmentCloudTokensIgnored(void);
@@ -15,5 +16,5 @@ NSString *OmiAuthResolvedFirebaseApiKey(void);
 
 NSDictionary *OmiAuthLocalHistoryIdentity(void);
 
-@interface OmiAuthModule : NSObject <RCTBridgeModule>
+@interface OmiAuthModule : RCTEventEmitter <RCTBridgeModule>
 @end

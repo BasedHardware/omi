@@ -99,6 +99,7 @@ jest.mock('../src/omiNative', () => ({
   browserScanErrorMessage: () => null,
   isNativeBackendInstalled: true,
   subscribeOmiBackendSessionInvalidated: () => () => undefined,
+  subscribeOmiAuthDesktopHandoff: () => () => undefined,
   subscribeOmiNativeEvents: () => () => undefined,
 }));
 

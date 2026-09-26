@@ -91,6 +91,10 @@ static NSURL *OmiValidatedV5URL(NSString *value) {
   return url;
 }
 
+NSURL *OmiValidatedV5BackendURLFromEnvironment(void) {
+  return OmiValidatedV5URL(NSProcessInfo.processInfo.environment[@"OMI_V5_BACKEND_URL"]);
+}
+
 static NSURL *OmiRequestBaseURL(OmiBackendPolicy *policy, NSString *path) {
   if (policy.captureOriginRequired && policy.captureURL != nil &&
       OmiIsCaptureBackendPath(path)) {

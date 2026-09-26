@@ -2,8 +2,10 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {
   omiAuth,
   omiBackend,
+  subscribeOmiAuthDesktopHandoff,
   subscribeOmiBackendSessionInvalidated,
 } from '../omiNative';
+import type {OmiAuthDesktopHandoff} from '../omiNativeTypes';
 import {saveOnboardingCompleted} from './onboardingClient';
 import {SESSION_UNREACHABLE_COPY} from './onboardingCopy';
 
@@ -23,6 +25,8 @@ export function useOnboarding(
   const [onboardingRequired, setOnboardingRequired] = useState<boolean | null>(
     null,
   );
+  const [desktopHandoff, setDesktopHandoff] =
+    useState<OmiAuthDesktopHandoff | null>(null);
   const authOperationRef = useRef(0);
 
   useEffect(
@@ -31,6 +35,15 @@ export function useOnboarding(
     },
     [],
   );
+
+  useEffect(() => {
+    // The native module emits the handoff code as soon as the worker accepts
+    // the start; subscribed for the hook's whole lifetime so the event can
+    // never race the first render after sign-in begins.
+    return subscribeOmiAuthDesktopHandoff(event => {
+      setDesktopHandoff(event);
+    });
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -78,6 +91,9 @@ export function useOnboarding(
     const operation = ++authOperationRef.current;
     setAuthError(null);
     setSigningIn(true);
+    // The previous handoff's code is dead the moment a new sign-in starts;
+    // native emits a fresh one for this attempt.
+    setDesktopHandoff(null);
     try {
       const result = await omiAuth.signIn();
       if (operation !== authOperationRef.current) {
@@ -106,6 +122,7 @@ export function useOnboarding(
     } finally {
       if (operation === authOperationRef.current) {
         setSigningIn(false);
+        setDesktopHandoff(null);
       }
     }
   }, [refreshReads]);
@@ -158,6 +175,7 @@ export function useOnboarding(
     ++authOperationRef.current;
     setSigningIn(false);
     setAuthError(null);
+    setDesktopHandoff(null);
     await omiAuth?.cancelSignIn();
   }, []);
 
@@ -233,6 +251,7 @@ export function useOnboarding(
     authError,
     completeSetup,
     completingSetup,
+    desktopHandoff,
     setupRequired,
     cancelSignIn,
     completeFirstRun,

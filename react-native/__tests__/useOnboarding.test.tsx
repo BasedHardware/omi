@@ -10,6 +10,10 @@ const mockAuth = {
   cancelSignIn: jest.fn(async () => undefined),
 };
 let mockBackendSessionInvalidatedListener: (() => void) | undefined;
+let mockHandoffListener:
+  | ((event: {code: string; expiresAt: number; browserUrl: string}) => void)
+  | undefined;
+let mockHandoffUnsubscribed = false;
 
 jest.mock('../src/omiNative', () => ({
   omiAuth: {
@@ -31,6 +35,18 @@ jest.mock('../src/omiNative', () => ({
     mockBackendSessionInvalidatedListener = listener;
     return () => {
       mockBackendSessionInvalidatedListener = undefined;
+    };
+  },
+  subscribeOmiAuthDesktopHandoff: (
+    listener: (event: {
+      code: string;
+      expiresAt: number;
+      browserUrl: string;
+    }) => void,
+  ) => {
+    mockHandoffListener = listener;
+    return () => {
+      mockHandoffUnsubscribed = true;
     };
   },
 }));
@@ -97,6 +113,8 @@ async function renderOnboarding(
 
 beforeEach(() => {
   mockBackendSessionInvalidatedListener = undefined;
+  mockHandoffListener = undefined;
+  mockHandoffUnsubscribed = false;
   mockAuth.hasCloudSession.mockReset();
   mockAuth.hasCompletedOnboarding.mockReset();
   mockAuth.markOnboardingComplete.mockReset();
@@ -402,6 +420,7 @@ test('a Mac without the native auth module stays on Welcome instead of faking re
   jest.doMock('../src/omiNative', () => ({
     omiAuth: null,
     subscribeOmiBackendSessionInvalidated: () => () => undefined,
+    subscribeOmiAuthDesktopHandoff: () => () => undefined,
   }));
   const {useOnboarding: missingAuthHook} = require('../src/app/useOnboarding');
 
@@ -540,4 +559,120 @@ test('sign-out retires delayed setup completion without refreshing', async () =>
   expect(hook.latest().onboardingRequired).toBe(true);
   expect(hook.latest().setupRequired).toBe(false);
   expect(refresh).not.toHaveBeenCalled();
+});
+
+describe('desktop handoff code', () => {
+  test('surfaces the native event and clears it across the sign-in lifecycle', async () => {
+    mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+    mockAuth.hasCloudSession.mockResolvedValue(false);
+    let resolveSignIn!: (value: {signedIn: boolean}) => void;
+    mockAuth.signIn.mockImplementation(
+      () =>
+        new Promise(resolve => {
+          resolveSignIn = resolve;
+        }),
+    );
+    const hook = await renderOnboarding(true);
+    expect(hook.latest().desktopHandoff).toBeNull();
+    expect(mockHandoffListener).toBeDefined();
+
+    const handoff = {
+      code: '772014',
+      expiresAt: Date.now() + 300_000,
+      browserUrl:
+        'https://staging.example.workers.dev/auth/desktop?desktop_auth=x',
+    };
+    await ReactTestRenderer.act(async () => {
+      mockHandoffListener!(handoff);
+    });
+    expect(hook.latest().desktopHandoff).toEqual(handoff);
+
+    // Starting a new sign-in drops the dead code before the attempt begins.
+    let pending!: Promise<void>;
+    await ReactTestRenderer.act(async () => {
+      pending = hook.latest().signInAndRefresh();
+    });
+    expect(hook.latest().desktopHandoff).toBeNull();
+    expect(hook.latest().signingIn).toBe(true);
+
+    // A fresh event for the live attempt is surfaced again.
+    await ReactTestRenderer.act(async () => {
+      mockHandoffListener!({...handoff, code: '990041'});
+    });
+    expect(hook.latest().desktopHandoff?.code).toBe('990041');
+
+    await ReactTestRenderer.act(async () => {
+      resolveSignIn({signedIn: true});
+      await pending;
+    });
+    expect(hook.latest().signingIn).toBe(false);
+    expect(hook.latest().desktopHandoff).toBeNull();
+  });
+
+  test('cancelling sign-in clears a live handoff code', async () => {
+    mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+    mockAuth.hasCloudSession.mockResolvedValue(false);
+    mockAuth.signIn.mockImplementation(() => new Promise(() => undefined));
+    const hook = await renderOnboarding(true);
+    await ReactTestRenderer.act(async () => {
+      mockHandoffListener!({
+        code: '314159',
+        expiresAt: Date.now() + 300_000,
+        browserUrl:
+          'https://staging.example.workers.dev/auth/desktop?desktop_auth=y',
+      });
+    });
+    expect(hook.latest().desktopHandoff?.code).toBe('314159');
+    await ReactTestRenderer.act(async () => {
+      await hook.latest().cancelSignIn();
+    });
+    expect(hook.latest().desktopHandoff).toBeNull();
+    expect(hook.latest().signingIn).toBe(false);
+  });
+
+  test('a failed sign-in attempt does not leave the dead code on Welcome', async () => {
+    mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+    mockAuth.hasCloudSession.mockResolvedValue(false);
+    mockAuth.signIn.mockResolvedValue({signedIn: false});
+    const hook = await renderOnboarding(true);
+    await ReactTestRenderer.act(async () => {
+      const pending = hook.latest().signInAndRefresh();
+      mockHandoffListener!({
+        code: '602214',
+        expiresAt: Date.now() + 300_000,
+        browserUrl:
+          'https://staging.example.workers.dev/auth/desktop?desktop_auth=z',
+      });
+      await pending;
+    });
+    expect(hook.latest().authError).toBe(
+      'Sign in was not completed. Try again.',
+    );
+    expect(hook.latest().desktopHandoff).toBeNull();
+  });
+
+  test('unmount unsubscribes the lifetime handoff listener', async () => {
+    mockAuth.hasCompletedOnboarding.mockResolvedValue(true);
+    mockAuth.hasCloudSession.mockResolvedValue(true);
+    await renderOnboarding(true);
+    expect(mockHandoffListener).toBeDefined();
+    expect(mockHandoffUnsubscribed).toBe(false);
+    // renderOnboarding keeps no unmount handle; prove the wiring with a
+    // dedicated renderer whose effects flush before it unmounts.
+    let renderer!: ReactTestRenderer.ReactTestRenderer;
+    await ReactTestRenderer.act(async () => {
+      renderer = ReactTestRenderer.create(
+        <Harness
+          macDesktop={true}
+          onState={() => undefined}
+          refreshReads={async () => undefined}
+        />,
+      );
+    });
+    expect(mockHandoffUnsubscribed).toBe(false);
+    await ReactTestRenderer.act(async () => {
+      renderer.unmount();
+    });
+    expect(mockHandoffUnsubscribed).toBe(true);
+  });
 });

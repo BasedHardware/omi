@@ -18,7 +18,7 @@ test('keeps a transparent glass window over the desktop', () => {
   expect(source).toContain('window.opaque = NO;');
   expect(source).toContain('window.backgroundColor = NSColor.clearColor;');
   expect(source).toContain(
-    'window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];',
+    'window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];',
   );
   expect(source).toContain('OmiGlassPanelView');
   expect(source).toContain('setGlassCornerRadius:0');
@@ -242,7 +242,7 @@ test('signs out by deleting only this app firebase-rest-session keychain item', 
   const method = auth.slice(methodStart, methodEnd);
 
   expect(header).toContain(
-    '@interface OmiAuthModule : NSObject <RCTBridgeModule>',
+    '@interface OmiAuthModule : RCTEventEmitter <RCTBridgeModule>',
   );
   expect(auth).toContain('#import "OmiAuthModule.h"');
   expect(auth).toContain('RCT_EXPORT_MODULE(OmiAuth)');
@@ -656,8 +656,8 @@ test('static guard: window glass uses a backdrop material, not an empty floating
 
   // Apple WWDC25 310, 18:26: do not place NSGlassEffectView behind content as
   // a sibling. Native behavior is covered in OmiGlassPanelViewTest.mm.
-  expect(source).toContain('static const CGFloat OmiGlassScrimAlpha = 0.46;');
-  expect(source).toContain('NSAppearanceNameAqua');
+  expect(source).toContain('static const CGFloat OmiGlassScrimAlpha = 0.25;');
+  expect(source).toContain('NSAppearanceNameDarkAqua');
   expect(source).not.toContain('NSClassFromString(@"NSGlassEffectView")');
   expect(source).not.toContain('self.liquidGlass');
   expect(source).toContain('self.sheen');
@@ -666,7 +666,7 @@ test('static guard: window glass uses a backdrop material, not an empty floating
     '[NSColor.whiteColor colorWithAlphaComponent:OmiGlassSheenAlpha]',
   );
   expect(source).toContain(
-    'self.fallback.layer.backgroundColor = NSColor.controlBackgroundColor.CGColor;',
+    '[NSColor colorWithCalibratedWhite:0.11 alpha:1.0].CGColor;',
   );
   expect(source).toContain(
     'self.material.material = NSVisualEffectMaterialHUDWindow;',
@@ -680,7 +680,7 @@ test('static guard: window glass uses a backdrop material, not an empty floating
   expect(source).not.toContain('shadowOffset');
   expect(source).not.toContain('shadowPath');
   expect(source).toContain(
-    'self.scrim.backgroundColor = [NSColor.controlBackgroundColor colorWithAlphaComponent:alpha].CGColor;',
+    'self.scrim.backgroundColor = [NSColor.blackColor colorWithAlphaComponent:alpha].CGColor;',
   );
 });
 

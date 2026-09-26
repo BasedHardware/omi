@@ -456,6 +456,7 @@ describe("D1 migration manifest", () => {
       "0008_device_capture_id.sql",
       "0009_device_capture_time.sql",
       "0010_account_scoped_ids.sql",
+      "0011_desktop_auth.sql",
     ];
     expect(D1_MIGRATIONS.map((migration) => migration.fileName)).toEqual(files);
 

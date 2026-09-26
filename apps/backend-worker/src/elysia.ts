@@ -10,12 +10,18 @@ import {
   type CoreEnv,
   type CoreRoute,
 } from "./http-core";
+import { desktopAuthRoutes } from "./desktop-auth-routes";
 import { logRequestCompleted, logRequestFailed } from "./observability";
 import { backendError } from "./wire";
 
 export function createElysiaApp(env: CoreEnv): Elysia {
   const app = new Elysia({ name: "omi-v5-backend" });
   for (const route of publicRoutes) {
+    mount(app, env, route, false);
+  }
+  // Desktop-auth handoff is intentionally unauthenticated: it is the path a
+  // caller takes to EARN Firebase credentials.
+  for (const route of desktopAuthRoutes) {
     mount(app, env, route, false);
   }
   for (const route of v1Routes) {
