@@ -4,14 +4,20 @@
 #import <QuartzCore/QuartzCore.h>
 
 static const CGFloat defaultCornerRadius = 22.0;
-static const CGFloat OmiGlassScrimAlpha = 0.46;
-static const CGFloat OmiGlassEdgeAlpha = 0.06;
-static const CGFloat OmiGlassSheenAlpha = 0.5;
+// The HUD material is a dark, behind-window vibrancy: whatever the window
+// floats over shows through, darkened. A constant light scrim would flatten
+// that; a modest black scrim keeps the dark base consistent even over bright
+// content so the light React ink stays readable no matter what is behind.
+static const CGFloat OmiGlassScrimAlpha = 0.25;
+static const CGFloat OmiGlassEdgeAlpha = 0.10;
+static const CGFloat OmiGlassSheenAlpha = 0.4;
 static const CGFloat OmiGlassSheenHeight = 1.0;
 
 static NSAppearance *OmiInkGlassAppearance(void)
 {
-  return [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+  // Dark chrome: the HUD material must be evaluated in a dark appearance or
+  // Aqua renders it light, which starves the light React ink of contrast.
+  return [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
 }
 
 @interface OmiGlassPanelView ()
@@ -184,12 +190,13 @@ RCT_EXPORT_VIEW_PROPERTY(fadeVisible, BOOL)
   self.fallback.hidden = !reduceTransparency;
   self.appearance = OmiInkGlassAppearance();
   [self.appearance performAsCurrentDrawingAppearance:^{
-    self.fallback.layer.backgroundColor = NSColor.controlBackgroundColor.CGColor;
+    self.fallback.layer.backgroundColor =
+        [NSColor colorWithCalibratedWhite:0.11 alpha:1.0].CGColor;
     CGFloat alpha = reduceTransparency ? 1.0 : OmiGlassScrimAlpha;
-    self.scrim.backgroundColor = [NSColor.controlBackgroundColor colorWithAlphaComponent:alpha].CGColor;
+    self.scrim.backgroundColor = [NSColor.blackColor colorWithAlphaComponent:alpha].CGColor;
     self.sheen.hidden = reduceTransparency;
     self.sheen.backgroundColor = [NSColor.whiteColor colorWithAlphaComponent:OmiGlassSheenAlpha].CGColor;
-    self.layer.borderColor = [NSColor.labelColor colorWithAlphaComponent:OmiGlassEdgeAlpha].CGColor;
+    self.layer.borderColor = [NSColor.whiteColor colorWithAlphaComponent:OmiGlassEdgeAlpha].CGColor;
   }];
 }
 

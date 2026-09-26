@@ -366,9 +366,6 @@ export function DesktopChrome({
           )}
         </FocusPressable>
       </View>
-      {mode === 'Ask' ? (
-        <Text style={styles.submitHint}>Enter to submit</Text>
-      ) : null}
       {chatNotice === null ? null : (
         <Text
           accessibilityLabel="Chat transport notice"
@@ -487,12 +484,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 6,
     textAlignVertical: 'center',
-  },
-  submitHint: {
-    color: token.color.inkMuted,
-    fontSize: 11,
-    paddingHorizontal: 4,
-    alignSelf: 'center',
   },
   notice: {
     color: token.color.inkMuted,

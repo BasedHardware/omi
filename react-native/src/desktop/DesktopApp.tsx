@@ -23,6 +23,7 @@ import {
   type OmnibarMode,
 } from './DesktopTopChrome';
 import {DesktopHome, DesktopReadBanner} from './DesktopHome';
+import {PostSetupOverlay} from './PostSetupOverlay';
 import {AppsPage, LibraryPage, TasksPage} from './DesktopPages';
 import type {TaskMutationProps} from '../ui/TaskEditor';
 import {DesktopSettings} from './DesktopSettings';
@@ -129,6 +130,7 @@ export function DesktopApp({
     setCaptureRevision(value => value + 1),
   );
   const [route, setRoute] = useState<DesktopRoute>('Home');
+  const [proveItSeen, setProveItSeen] = useState(false);
   const [mode, setMode] = useState<OmnibarMode>('Ask');
   const [recallQuery, setRecallQuery] = useState('');
   const [chatSubmission, setChatSubmission] = useState(0);
@@ -251,11 +253,7 @@ export function DesktopApp({
         route={route}
       />
       {route === 'Conversations' || route === 'Tasks' ? (
-        <DesktopReadBanner
-          onRefresh={onRefresh}
-          postSetupHomeCue={postSetupHomeCue}
-          readsPhase={readsPhase}
-        />
+        <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
       ) : null}
       <ShippingStage stageKey={route} variant="page">
         {route === 'Home' ? (
@@ -266,7 +264,6 @@ export function DesktopApp({
             onOpenConversations={() => setRoute('Conversations')}
             onRefresh={onRefresh}
             outcomes={outcomes}
-            postSetupHomeCue={postSetupHomeCue}
             reads={reads}
             readsPhase={readsPhase}
           />
@@ -321,6 +318,11 @@ export function DesktopApp({
           </View>
         )}
       </ShippingStage>
+      {postSetupHomeCue === 'proven' &&
+      readsPhase === 'ready' &&
+      !proveItSeen ? (
+        <PostSetupOverlay onClose={() => setProveItSeen(true)} />
+      ) : null}
     </View>
   );
 }

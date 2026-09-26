@@ -681,7 +681,6 @@ test('Chat has its own selected destination, keeps one omnibar, and closes to th
   expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
     'Ask Omi',
   );
-  expect(renderedText(renderer)).toContain('Enter to submit');
   expect(
     renderer.root.find(node => node.props.accessibilityLabel === 'Chat').props
       .accessibilityState.selected,
@@ -1150,6 +1149,19 @@ test('post-setup prove-it cue shows only after reads settle ready', () => {
     ).length,
   ).toBeGreaterThan(0);
   expect(tree).not.toContain('Claude');
+  act(() => {
+    renderer.root
+      .findAll(node => node.props.accessibilityLabel === 'Continue')[0]
+      .props.onPress();
+  });
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Home prove-it',
+    ),
+  ).toHaveLength(0);
+  expect(renderedText(renderer)).not.toContain(
+    'Home can read conversations, memories, and tasks from your account',
+  );
 });
 
 test('post-setup unavailable path keeps the honest banner without prove-it', () => {

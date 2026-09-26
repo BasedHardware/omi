@@ -12,7 +12,6 @@ import type {
 } from '../desktopReadClient';
 import {matchesSearchQuery} from '../searchText';
 import type {ReadsPhase} from '../app/useDesktopReads';
-import type {PostSetupHomeCue} from '../app/usePostSetupHomeCue';
 import {FocusPressable} from '../ui/Pressable';
 import {ScrollFade} from './ScrollFade';
 import {ReadStatus} from '../ui/ReadStatus';
@@ -37,16 +36,13 @@ type Props = {
   outcomes: DesktopReadOutcomes | null;
   reads: DesktopReadProjection[];
   readsPhase: ReadsPhase;
-  postSetupHomeCue?: PostSetupHomeCue;
 };
 
 export function DesktopReadBanner({
   onRefresh,
-  postSetupHomeCue = null,
   readsPhase,
 }: {
   onRefresh: () => void;
-  postSetupHomeCue?: PostSetupHomeCue;
   readsPhase: ReadsPhase;
 }) {
   if (readsPhase === 'initial-loading' || readsPhase === 'refreshing') {
@@ -74,17 +70,6 @@ export function DesktopReadBanner({
       </FocusPressable>
     );
   }
-  // Post-setup prove-it: only after reads settled ready. Never invents Claude.
-  if (postSetupHomeCue === 'proven' && readsPhase === 'ready') {
-    return (
-      <View accessibilityLabel="Home prove-it" style={styles.banner}>
-        <Text style={styles.bannerText}>
-          You're set. Home can read conversations, memories, and tasks from your
-          account.
-        </Text>
-      </View>
-    );
-  }
   return null;
 }
 
@@ -95,7 +80,6 @@ export function DesktopHome({
   onOpenTasks,
   onOpenConversations,
   outcomes,
-  postSetupHomeCue = null,
   reads,
   readsPhase,
 }: Props) {
@@ -138,11 +122,7 @@ export function DesktopHome({
       : 'Nothing captured yet.';
   return (
     <View style={styles.home}>
-      <DesktopReadBanner
-        onRefresh={onRefresh}
-        postSetupHomeCue={postSetupHomeCue}
-        readsPhase={readsPhase}
-      />
+      <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
       <ScrollFade visible style={styles.scroll}>
         <ScrollView
           scrollEventThrottle={16}

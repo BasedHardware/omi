@@ -410,11 +410,11 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
     return;
   }
 
-  window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+  window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
   window.opaque = NO;
   window.backgroundColor = NSColor.clearColor;
   RCTUIView *rootView = (RCTUIView *)window.contentViewController.view;
-  rootView.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+  rootView.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
   rootView.backgroundColor = NSColor.clearColor;
   window.hasShadow = YES;
   window.styleMask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
