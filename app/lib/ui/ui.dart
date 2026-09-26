@@ -31,6 +31,7 @@
 library;
 
 export 'components/omi_app_bar.dart';
+export 'components/omi_balanced_text.dart';
 export 'components/omi_button.dart';
 export 'components/omi_chip.dart';
 export 'components/omi_dock_lens.dart';

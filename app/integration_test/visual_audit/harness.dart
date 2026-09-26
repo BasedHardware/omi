@@ -97,8 +97,75 @@ class LoopbackOnly extends HttpOverrides {
 
 const _surface = ValueKey('audit-surface');
 
-/// 390x844 logical pixels, captured at 2x.
-const auditViewport = Size(390, 844);
+/// 390x844 logical pixels, captured at 2x. OMI_AUDIT_VIEWPORT=WxH captures at another phone size
+/// (e.g. 375x667 for an iPhone SE, 360x740 for a small Android phone).
+final Size auditViewport = _sizeFrom(Platform.environment['OMI_AUDIT_VIEWPORT']) ?? const Size(390, 844);
+
+/// OMI_AUDIT_TEXT_SCALE: the reader's text size (1.0 by default; 1.3 is "Larger Text").
+final double? _auditTextScale = double.tryParse(Platform.environment['OMI_AUDIT_TEXT_SCALE'] ?? '');
+
+/// OMI_AUDIT_LINT=1: every capture also records layout findings (errors such as overflow, one word
+/// alone on a wrapped line, text cut short) in `layout.json` instead of stopping at the first error.
+/// OMI_AUDIT_NO_PNG=1 skips the images (a lint-only pass).
+final bool _lint = Platform.environment['OMI_AUDIT_LINT'] == '1';
+final bool _noPng = Platform.environment['OMI_AUDIT_NO_PNG'] == '1';
+
+Size? _sizeFrom(String? value) {
+  final parts = (value ?? '').toLowerCase().split('x');
+  if (parts.length != 2) return null;
+  final width = double.tryParse(parts[0]);
+  final height = double.tryParse(parts[1]);
+  return width == null || height == null ? null : Size(width, height);
+}
+
+/// Layout findings of this run, rewritten to `layout.json` after every capture.
+final List<Map<String, Object?>> _layoutFindings = [];
+
+/// The widgets that made [node], nearest first, without the render-only wrappers.
+String _creatorOf(RenderObject node) {
+  final creator = node.debugCreator;
+  if (creator is! DebugCreator) return '';
+  return creator.element.debugGetCreatorChain(10);
+}
+
+/// A paragraph's layout finding: one word alone on its last wrapped line ("orphan"), or text cut
+/// short by maxLines ("truncated"). Null when it reads fine.
+Map<String, Object?>? _paragraphFinding(RenderParagraph paragraph) {
+  final plain = paragraph.text.toPlainText(includeSemanticsLabels: false);
+  if (plain.trim().isEmpty) return null;
+  var placeholder = false;
+  paragraph.text.visitChildren((span) {
+    if (span is PlaceholderSpan) placeholder = true;
+    return !placeholder;
+  });
+  final text = plain.length > 120 ? '${plain.substring(0, 117)}...' : plain;
+  if (paragraph.didExceedMaxLines) {
+    return {'kind': 'truncated', 'text': text, 'maxLines': paragraph.maxLines, 'width': paragraph.size.width};
+  }
+  if (placeholder || !paragraph.softWrap || paragraph.maxLines == 1) return null;
+  final painter = TextPainter(
+    text: paragraph.text,
+    textAlign: paragraph.textAlign,
+    textDirection: paragraph.textDirection,
+    textScaler: paragraph.textScaler,
+    maxLines: paragraph.maxLines,
+    locale: paragraph.locale,
+    strutStyle: paragraph.strutStyle,
+    textWidthBasis: paragraph.textWidthBasis,
+    textHeightBehavior: paragraph.textHeightBehavior,
+  )..layout(maxWidth: paragraph.constraints.maxWidth);
+  try {
+    final lines = painter.computeLineMetrics().length;
+    if (lines < 2) return null;
+    final last = painter.getLineBoundary(TextPosition(offset: plain.length));
+    if (last.start <= 0 || last.end > plain.length || plain[last.start - 1] == '\n') return null;
+    final lastLine = plain.substring(last.start, last.end).trim();
+    if (lastLine.isEmpty || lastLine.contains(RegExp(r'\s'))) return null;
+    return {'kind': 'orphan', 'text': text, 'lastLine': lastLine, 'lines': lines, 'width': paragraph.size.width};
+  } finally {
+    painter.dispose();
+  }
+}
 
 /// Loads the app's fonts (FontManifest) plus Roboto from the pinned Flutter SDK, instead of the
 /// test font's placeholder glyphs, so text metrics and overflow match the app.
@@ -152,6 +219,8 @@ class AuditRun {
   Future<void> pump(Widget page, {List<SingleChildWidget> providers = const [], bool scaffold = true}) async {
     tester.view.physicalSize = auditViewport;
     tester.view.devicePixelRatio = 1;
+    final scale = _auditTextScale;
+    if (scale != null) tester.platformDispatcher.textScaleFactorTestValue = scale;
     await tester.pumpWidget(MultiProvider(
       providers: [..._suite.providers(), ...providers],
       child: RepaintBoundary(
@@ -214,10 +283,14 @@ class AuditRun {
   /// Captures the surface as `<id>.png`, or `<id>-<step>.png` when [step] is given.
   Future<void> shot(String action, {String? step}) async {
     await tester.pump();
-    expect(tester.takeException(), isNull, reason: 'Capture must not hide layout or runtime errors');
     final name = step == null ? scenario.id : '${scenario.id}-$step';
+    if (_lint) {
+      _recordLayout(name, tester.takeException());
+    } else {
+      expect(tester.takeException(), isNull, reason: 'Capture must not hide layout or runtime errors');
+    }
     expect(_shots.any((s) => s['file'] == '$name.png'), isFalse, reason: 'duplicate capture name $name');
-    if (_write) {
+    if (_write && !_noPng) {
       final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(_surface));
       await tester.runAsync(() async {
         final image = await boundary.toImage(pixelRatio: 2);
@@ -232,6 +305,32 @@ class AuditRun {
       'action': action,
       'captured_at': DateTime.now().toUtc().toIso8601String(),
     });
+  }
+
+  /// Lint mode: records [error] and the text findings of what is on screen now for capture [name].
+  void _recordLayout(String name, Object? error) {
+    final base = {
+      'scenario': scenario.id,
+      'shot': name,
+      'viewport': '${auditViewport.width.round()}x${auditViewport.height.round()}',
+      'textScale': _auditTextScale ?? 1.0,
+    };
+    if (error != null) {
+      _layoutFindings.add({...base, 'kind': 'error', 'text': '$error'.split('\n').take(3).join(' ')});
+    }
+    void visit(RenderObject node) {
+      if (node is RenderParagraph && node.attached && node.hasSize) {
+        final finding = _paragraphFinding(node);
+        if (finding != null) _layoutFindings.add({...base, ...finding, 'creator': _creatorOf(node)});
+      }
+      node.visitChildren(visit);
+    }
+
+    visit(tester.renderObject(find.byKey(_surface)));
+    final dir = _outputDir;
+    if (dir != null) {
+      File('${dir.path}/layout.json').writeAsStringSync(const JsonEncoder.withIndent('  ').convert(_layoutFindings));
+    }
   }
 
   /// Captures the whole scroll range: the top, then one frame per [step] logical pixels, then the
