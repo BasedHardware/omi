@@ -332,6 +332,38 @@ async def test_window_beyond_window_phrase_is_reposted_not_lost(monkeypatch):
     assert _window_drops('timestamp_beyond_window') == drops_before + 1
 
 
+@pytest.mark.asyncio
+async def test_already_emitted_re_detection_trims_to_boundary(monkeypatch):
+    """P3-2: a re-detection straddling the emission boundary keeps only the new part.
+
+    The all-or-nothing check re-emitted the whole overlap when the end stuck
+    out past the boundary even by a sample, and dropped the phrase whole when
+    it ended exactly there. Trimming ``abs_start`` to the boundary emits the
+    new tail once; a re-detection wholly inside the emitted range is still
+    dropped and counted.
+    """
+    socket = window.WindowedParakeetSocket(lambda segs: None, 'http://tdt.invalid', RATE, lambda: None)
+    monkeypatch.setattr(socket, '_assign_speaker', AsyncMock(return_value=0))
+    pcm = b'\x01\x00' * int(6 * RATE)
+    socket._last_emitted_end = 5.0
+    drops_before = _window_drops('already_emitted')
+
+    # Window [4.0, 10.0]: rel [0.5, 2.0] -> abs [4.5, 6.0], boundary 5.0.
+    emitted, beyond = await socket._materialize(
+        [window.RawSegment(text='Two again.', start=0.5, end=2.0)], pcm, 4.0, 6.0
+    )
+    assert [seg['text'] for seg in emitted] == ['Two again.']
+    assert emitted[0]['start'] == 5.0
+    assert emitted[0]['end'] == 6.0
+    assert beyond is False
+
+    # Wholly inside the emitted range: dropped whole, still counted.
+    emitted, beyond = await socket._materialize([window.RawSegment(text='Old.', start=0.2, end=0.9)], pcm, 4.0, 6.0)
+    assert emitted == []
+    assert beyond is False
+    assert _window_drops('already_emitted') == drops_before + 1
+
+
 # ---------------------------------------------------------------------------
 # Translator hardening: never clamp two provider times onto one point
 # ---------------------------------------------------------------------------

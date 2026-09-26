@@ -780,9 +780,14 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             if abs_end <= self._last_emitted_end:
                 WINDOW_EMISSION_DROPS.labels(reason='already_emitted').inc()
                 continue
+            if abs_start < self._last_emitted_end:
+                # A re-detection straddling the boundary: the prefix is a
+                # duplicate but the tail is new audio, so trim instead of
+                # re-emitting the whole overlap (or dropping the phrase).
+                abs_start = self._last_emitted_end
             # Buffer is original-level capture. Embeddings slice that PCM, not
             # the posted uniform-gain copy the decoder hears.
-            speaker = await self._assign_speaker(self._slice_pcm(pcm, rel_start, rel_end))
+            speaker = await self._assign_speaker(self._slice_pcm(pcm, abs_start - start, rel_end))
             out.append(
                 {
                     'speaker': f'SPEAKER_{speaker}',
