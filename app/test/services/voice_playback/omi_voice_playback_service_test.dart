@@ -376,4 +376,33 @@ void main() {
     expect(event['first_audio_latency_ms'], greaterThanOrEqualTo(0));
     expect(event['first_audio_latency_ms'], 40);
   });
+
+  test('a superseded in-flight synthesis cannot enter the next lifecycle', () async {
+    SharedPreferencesUtil().voiceResponseMode = 2;
+    final oldSynthesis = Completer<Uint8List?>();
+    var synthesisCalls = 0;
+    await install(synthesize: (_) {
+      synthesisCalls++;
+      if (synthesisCalls == 1) return oldSynthesis.future;
+      return Future.value(_mp3);
+    });
+
+    await service.beginResponse(messageId: 'old');
+    service.updateStreamingResponse(messageId: 'old', fullText: _firstSentence, isFinal: true);
+    await pumpEventQueue();
+
+    await service.beginResponse(messageId: 'new');
+    oldSynthesis.complete(_mp3);
+    await pumpEventQueue();
+    expect(plays, isEmpty);
+    expect(playbackEvents(), hasLength(1));
+    expect(playbackEvents().single['outcome'], 'interrupted');
+
+    service.updateStreamingResponse(messageId: 'new', fullText: _firstSentence, isFinal: true);
+    await finishPlayback();
+
+    expect(plays, [_mp3]);
+    expect(playbackEvents(), hasLength(2));
+    expect(playbackEvents().last['outcome'], 'played');
+  });
 }

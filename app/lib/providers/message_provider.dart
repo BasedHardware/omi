@@ -722,6 +722,11 @@ class MessageProvider extends ChangeNotifier {
           }
           Logger.debug('Voice chat reply failed: ${chunk.text}');
           _markReplyFailed(message, const _FailedReply());
+          if (playResponseAudio) {
+            await OmiVoicePlaybackService.instance.interrupt(
+              source: VoiceReplyPlaybackInterruptSource.streamError,
+            );
+          }
           completeChat(ProductOutcome.failure, failure: ProductFailure.server);
           notifyListeners();
           continue;
@@ -742,6 +747,11 @@ class MessageProvider extends ChangeNotifier {
 
     setShowTypingIndicator(false);
     if (!chatAttemptCompleted) {
+      if (playResponseAudio) {
+        await OmiVoicePlaybackService.instance.interrupt(
+          source: VoiceReplyPlaybackInterruptSource.streamError,
+        );
+      }
       completeChat(ProductOutcome.failure, failure: ProductFailure.incomplete);
     }
   }

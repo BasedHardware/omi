@@ -364,9 +364,10 @@ class OmiVoicePlaybackService {
   Future<void> _drainSynthesis() async {
     if (_synthesizing) return;
     if (_synthesisQueue.isEmpty) return;
+    final token = _lifecycleToken;
     _synthesizing = true;
 
-    while (_synthesisQueue.isNotEmpty) {
+    while (_synthesisQueue.isNotEmpty && token == _lifecycleToken && _lifecycleOpen) {
       if (SharedPreferencesUtil().voiceResponseMode == 0) {
         await interrupt(source: VoiceReplyPlaybackInterruptSource.modeOff);
         break;
@@ -374,37 +375,41 @@ class OmiVoicePlaybackService {
       final pending = _synthesisQueue.removeAt(0);
       debugPrint('OmiVoicePlayback: synthesizing "${pending.text}"');
       _chunksRequested++;
-      final token = _lifecycleToken;
       try {
         final bytes = await _synthesize(pending.text);
+        if (token != _lifecycleToken || !_lifecycleOpen) break;
         debugPrint('OmiVoicePlayback: got ${bytes?.length ?? 0} MP3 bytes');
         if (bytes != null && bytes.isNotEmpty) {
           _audioQueue.add(bytes);
           _tryStartPlayback();
-        } else if (token == _lifecycleToken && _lifecycleOpen) {
+        } else {
           _chunksDropped++;
         }
       } on TtsUnavailableException catch (e) {
+        if (token != _lifecycleToken || !_lifecycleOpen) break;
         Logger.log('TTS unavailable (${e.statusCode}) — falling back to system voice');
-        if (token == _lifecycleToken && _lifecycleOpen) {
-          _fallbackReason = _fallbackReasonFromStatus(e.statusCode);
-        }
+        _fallbackReason = _fallbackReasonFromStatus(e.statusCode);
         // Fallback: speak the remaining sentence and any queued ones on-device.
         await _speakFallback(pending.text);
+        if (token != _lifecycleToken || !_lifecycleOpen) break;
         for (final rest in _synthesisQueue) {
           await _speakFallback(rest.text);
+          if (token != _lifecycleToken || !_lifecycleOpen) break;
         }
         _synthesisQueue.clear();
         break;
       } catch (e) {
+        if (token != _lifecycleToken || !_lifecycleOpen) break;
         Logger.debug('synthesizeSpeech failed: $e');
-        if (token == _lifecycleToken && _lifecycleOpen) _chunksDropped++;
+        _chunksDropped++;
         // Skip this sentence; keep the pipeline moving.
       }
     }
 
-    _synthesizing = false;
-    _maybeFinish();
+    if (token == _lifecycleToken) {
+      _synthesizing = false;
+      _maybeFinish();
+    }
   }
 
   Future<void> _speakFallback(String text) async {
@@ -442,14 +447,15 @@ class OmiVoicePlaybackService {
     }
     _isPlayingQueue = true;
     final bytes = _audioQueue.removeAt(0);
+    final token = _lifecycleToken;
     try {
-      final token = _lifecycleToken;
       await _playCloudChunk(bytes, token: token);
       if (token == _lifecycleToken && _lifecycleOpen) {
         _chunksPlayed++;
       }
     } catch (e) {
       Logger.debug('just_audio play failed: $e');
+      if (token != _lifecycleToken) return;
       _isPlayingQueue = false;
       // Skip this chunk and try the next one.
       _playNextFromQueue();
