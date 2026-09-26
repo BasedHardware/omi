@@ -11,6 +11,26 @@ import pytest
 SCRIPT = Path(__file__).resolve().parents[2] / 'scripts' / 'pusher_semantic_probe.py'
 
 
+def test_alignment_probe_rejects_repeated_live_fixture(probe):
+    fixture = probe.load_fixture()
+    phrase = fixture.expected_phrase
+    observed, expected = probe._alignment_word_counts([{'text': phrase}, {'text': phrase}], phrase)
+    assert (observed, expected) == (34, 34)
+    assert probe._alignment_word_count_ok(observed, expected)
+    for repeats in (4, 8):
+        observed, expected = probe._alignment_word_counts([{'text': phrase}] * repeats, phrase)
+        assert not probe._alignment_word_count_ok(observed, expected)
+    receipt = probe._alignment_receipt(
+        status='FAIL',
+        started_at='2026-09-26T00:00:00Z',
+        failure_stage='transcript_word_count',
+        live_word_count=137,
+        expected_word_count=34,
+    )
+    assert receipt['word_counts'] == {'live': 137, 'expected': 34}
+    assert phrase not in str(receipt)
+
+
 @pytest.fixture
 def probe(monkeypatch):
     spec = importlib.util.spec_from_file_location('pusher_semantic_probe_test_target', SCRIPT)
