@@ -127,7 +127,9 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
     if (resume != null) {
       unawaited(() async {
         await _startTask;
-        await resume();
+        try {
+          await resume();
+        } catch (_) {}
       }());
     }
     super.dispose();

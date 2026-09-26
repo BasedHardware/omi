@@ -325,7 +325,15 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
       }
       return;
     }
-    await captureProvider.streamRecording();
+    try {
+      await captureProvider.streamRecording();
+    } catch (_) {
+      if (context.mounted) {
+        OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      }
+      return;
+    }
+    if (captureProvider.liveCaptureSource != 'phone') return;
     PlatformManager.instance.analytics.phoneMicRecordingStarted();
     // Phone-mic Transcribe Later (batch) has no live transcript — its surface is the
     // conversations-list batch card, so skip the capturing page (same as BLE batch).

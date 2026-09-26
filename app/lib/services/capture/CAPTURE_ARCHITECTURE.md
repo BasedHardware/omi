@@ -56,7 +56,13 @@ suspension converts to a call suspension: `wasPaused`, device identity and
 mode are preserved, but the session identity is cleared — the phone takeover
 already ended that conversation — so the call-end resume mints a fresh
 recording id. A call suspension that was never taken over keeps its session
-identity and resumes without a roll. Repeated call-start or reconnect events
+identity and resumes without a roll. A call that *starts* over a held
+phone-reason debt (`awaitingPhoneResume`) does none of that: it only flags
+`callActive`, the phone debt and its awaiting marker are untouched, the call
+end releases `callActive` without popping them, and a `DeviceStartRequested`
+during the hold refreshes the pendant's identity without resuming audio —
+only an explicit later phone start/stop resolves the debt. Repeated
+call-start or reconnect events
 while a call already holds add no debt, a repeated pendant start under an
 owner only refreshes the suspended entry's device identity, and a suspension
 with no live taker is dropped rather than stranded on idle.
@@ -75,7 +81,10 @@ with no live taker is dropped rather than stranded on idle.
   temporary-stop flow). Serialized and strictly parsed; preserved across
   unrelated settings, call, and device-identity notifications; cleared by the
   next admitted phone start, a normal stop/finish that consumes the debt, a
-  pendant disconnect, fail-closed, or launch sanitization.
+  pendant disconnect, or launch sanitization. A phone start that fails over
+  this held debt fails closed *with the original debt and flag kept* — the
+  retry stays possible — instead of stranding the pendant; failures of
+  unrelated transitions still fail closed fully.
 - `lastFailure` — diagnostics for the fail-closed commit.
 
 ## Events
@@ -114,6 +123,7 @@ awaited, against `CaptureEffectPorts` — one method per primitive:
 | `rollSession(identity)` | `_rollCaptureSession`. |
 | `mintRecordingId(sessionKey, source)` | completes the previous telemetry id (`session_roll`) then `_recordingTelemetry.prepare`; returns the fresh id folded into the session. |
 | `checkPhonePermission()` | OS microphone permission request, run once as the first effect of any phone start; its result is handed to the start stage so the body never prompts a second time. |
+| `clearPhonePermissionGrant()` | Resets the prefetched grant (`_prefetchedMicPermission`). Called in `_run`'s `finally` after every transition — a denied, superseded, or failed start never leaks a grant into the next event. |
 | `readSnapshot` / `persistSnapshot` | shared-preferences snapshot store; persist is the last step of a safe transition, skipped when the encoding is unchanged. |
 | `runStage(stage)` | the staged-migration seam, below. |
 
@@ -154,7 +164,11 @@ socket/BLE open paths (`_reconnectDeviceCaptureBody`,
 native config or BLE subscription, and the `_initiateWebsocket` →
 `_openTranscriptionSocket` → `_publishTranscriptionSocket` chain whenever the
 attempt began pendant-owned). A stale attempt stops only its own socket — never
-the installed one.
+the installed one. The revision fence covers *opens*: inside an
+already-installed BLE bytes subscription the per-frame admission is narrower —
+frames are dropped only when the controller is disposed, the policy revision
+moved, or the recording device *id* actually changed — so a same-id device
+refresh or metadata normalization never starves a stream it cannot invalidate.
 
 One strictly test-only compatibility lane exists on top of that fence:
 `reconnectActiveCaptureForTesting` dispatches `KeepAliveTick(testingProbe: true)`.
@@ -239,7 +253,11 @@ recovery, batch-mode/settings/onboarding tails.
 - A `PolicyWrite` that comes back `superseded` (a newer out-of-band intent won
   the policy revision) abandons the rest of the transition. If no effect had
   run yet the dispatch keeps the pre-transition state and reports `false`
-  (the legacy `stopStreamRecording` supersede contract); if physical effects
+  (the legacy `stopStreamRecording` supersede contract) — with one exception:
+  over a committed `phoneBatchPaused` session the superseding write has
+  already unmuted shared admission while the native batch writer stays open
+  in its file, so that combination fails closed (writer denied, mic stopped)
+  instead of pretending nothing changed. If physical effects
   already ran the transition fails closed, since neither old nor target state
   matches the physical world anymore.
 - Snapshot persistence is required durability: the snapshot of the target
@@ -253,25 +271,35 @@ recovery, batch-mode/settings/onboarding tails.
   ownership) and the write is skipped when they are identical — a redundant
   no-op write can never fail a transition closed.
 - `CheckPhonePermission` is the admission preflight for every phone start
-  (live and batch): it is always the first effect, before any teardown,
+  (live and batch) and for a live-phone batch-mode roll — rolling a running
+  phone session between live and batch re-opens the mic, so the permission
+  check runs before `BatchModeStage`, `MintRecording`, and
+  `StartPhoneSessionStage`; toggles that roll no phone session never prompt.
+  It is always the first effect, before any teardown,
   suspension, policy write, mint, or hardware start. A `false` result abandons
   the transition with the committed state untouched and the outcome `false` —
   deliberately *not* fail-closed, because nothing physical has changed. An
   *effect* failure after the preflight follows the normal fail-closed path,
-  and a pendant already suspended for the takeover is recovered **inside the
+  and a pendant this dispatch itself suspended for the takeover is recovered
+  **inside the
   same pump**: after the physical deny and safe-idle commit, the suspended
-  policy is restored (`writePolicy(wasPaused)`) and a nested
+  policy is restored (`writePolicy(wasPaused)`, re-checked for supersede) and
+  a nested
   `DeviceStartRequested` `_run` is awaited — not queued behind events already
   waiting. The dispatch outcome then reports the post-recovery state plus the
   original error; if recovery itself fails, the committed state stays idle.
-  Recovery only runs for a `PhoneStartRequested` *effect* failure — a
-  superseded policy write (a newer intent already owns what comes next) and a
-  snapshot-persist failure fail closed to idle without recovering, and
-  unrelated event failures never auto-recover.
+  Recovery runs only when the failed `PhoneStartRequested` *newly* suspended
+  the pendant — failing over a pre-existing `awaitingPhoneResume` debt keeps
+  the original suspension and its flag for the next explicit retry instead of
+  auto-restarting the pendant — and unrelated event failures never
+  auto-recover.
 - `failedClosed` clears `active` and the whole suspension stack (plus
   `callActive`/`micInterrupted`/`mutedBeforePhone`) so recovery events can
   start safely; only the monotonic `sessionSeq` and the known
-  `connectedDevice` identity survive.
+  `connectedDevice` identity survive. The one scoped exception is the held
+  phone-reason onboarding debt above: a failed phone start over
+  `awaitingPhoneResume` (outside a call) reinstates that single original
+  suspension entry and the flag rather than clearing them.
 - `dispose()` denies new dispatch (`admitted: false`) and completes what is
   still queued as denied.
 

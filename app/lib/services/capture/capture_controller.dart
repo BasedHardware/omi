@@ -1744,7 +1744,7 @@ class CaptureController extends ChangeNotifier
     final subscription = await _getBleAudioBytesListener(
       deviceId,
       onAudioBytesReceived: (List<int> value) {
-        if (!_admitsCapture(revision) || _deviceIdentityStale(deviceRevision)) return;
+        if (_captureControllerDisposed || !_admitsCapture(revision) || _recordingDevice?.id != deviceId) return;
         final snapshot = List<int>.from(value);
         if (snapshot.isEmpty || snapshot.length < 3) return;
 
@@ -1973,7 +1973,7 @@ class CaptureController extends ChangeNotifier
     if (_deviceIdentityStale(deviceRevision)) return;
     final priorBytesStream = _bleBytesStream;
     final foregroundAudioReady = await streamAudioToWs(deviceId, codec, deviceRevision: deviceRevision);
-    if (_deviceIdentityStale(deviceRevision)) {
+    if (_recordingDevice?.id != deviceId) {
       final installed = _bleBytesStream;
       if (installed != null && !identical(installed, priorBytesStream)) {
         _bleBytesStream = null;
@@ -2357,6 +2357,9 @@ class CaptureController extends ChangeNotifier
   streamRecording({bool resumeCapture = true}) async {
     final outcome = await _capture.dispatch(PhoneStartRequested(resumePolicy: resumeCapture));
     outcome.throwIfFailed();
+    if (outcome.result != true) {
+      throw StateError('phone recording start refused');
+    }
   }
 
   Future<Object?> _startPhoneSessionBody({required CaptureTransport mode}) async {
@@ -3691,6 +3694,7 @@ class CaptureController extends ChangeNotifier
           _prefetchedMicPermission = granted;
           return granted;
         },
+        clearPhonePermissionGrant: () => _prefetchedMicPermission = false,
         readSnapshot: () => _preferences.getString(_captureSnapshotKey),
         persistSnapshot: (encoded) => _preferences.saveString(_captureSnapshotKey, encoded),
         runStage: _runCaptureStage,
