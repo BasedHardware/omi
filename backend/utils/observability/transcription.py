@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+from collections import OrderedDict
+from hashlib import sha256
 import logging
 import os
 import re
 import sys
+import threading
 from time import monotonic
 from typing import Any, Callable, Literal, Mapping
 
@@ -53,6 +56,12 @@ LIVE_SESSION_TRANSCRIPT_OUTCOMES = frozenset({'transcribed', 'no_transcript', 't
 LiveSessionTranscriptOutcome = Literal['transcribed', 'no_transcript', 'too_short']
 LiveSTTTerminalOutcome = Literal['success', 'failure', 'cancelled']
 LiveSTTTerminalPhase = Literal['connection', 'initialization', 'send', 'teardown', 'transcript_delivery']
+
+_ZERO_TRANSCRIPT_EVENT_WINDOW_SECONDS = 5 * 60
+_ZERO_TRANSCRIPT_EVENT_UID_CAP = 10_000
+_zero_transcript_events_lock = threading.Lock()
+_zero_transcript_events: OrderedDict[str, tuple[float, int]] = OrderedDict()
+_zero_transcript_clock: Callable[[], float] = monotonic
 
 
 def _bounded_route(route: str) -> str:
@@ -408,6 +417,21 @@ def record_live_session_transcript_outcome(
     OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome=outcome).inc()
     if outcome != 'no_transcript' or not uid:
         return
+    now = _zero_transcript_clock()
+    with _zero_transcript_events_lock:
+        prior = _zero_transcript_events.get(uid)
+        if prior is not None and now - prior[0] < _ZERO_TRANSCRIPT_EVENT_WINDOW_SECONDS:
+            _zero_transcript_events[uid] = (prior[0], prior[1] + 1)
+            _zero_transcript_events.move_to_end(uid)
+            return
+        coalesced_outcome_count = 1 if prior is None else prior[1] + 1
+        _zero_transcript_events[uid] = (now, 0)
+        _zero_transcript_events.move_to_end(uid)
+        while len(_zero_transcript_events) > _ZERO_TRANSCRIPT_EVENT_UID_CAP:
+            _zero_transcript_events.popitem(last=False)
+    recording_correlation_id = None
+    if recording_id:
+        recording_correlation_id = sha256(recording_id.encode('utf-8')).hexdigest()[:16]
     try:
         emit_product_event(
             uid=uid,
@@ -415,7 +439,8 @@ def record_live_session_transcript_outcome(
             properties={
                 'transcription_source': _bounded_source(source),
                 'app_platform': _bounded_platform(platform),
-                'recording_id': recording_id,
+                'recording_correlation_id': recording_correlation_id,
+                'coalesced_outcome_count': coalesced_outcome_count,
             },
         )
     except Exception:

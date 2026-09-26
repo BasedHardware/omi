@@ -425,6 +425,13 @@ bounded source/platform, terminal phase, and session duration. The user
 ID is used only as PostHog's `distinct_id`; transcript content and raw provider
 errors are never included.
 
+The separate `Listen Socket Zero Transcript` product event is diagnostic, not
+the outage denominator. It is coalesced per UID in a five-minute process-local
+window, carries only a 16-hex SHA-256 recording correlation plus the coalesced
+count, and is bounded to 10,000 recent UIDs. Every socket still increments
+`omi_live_session_transcript_outcome_total{outcome="no_transcript"}` before
+coalescing; that Prometheus series remains the authoritative outage signal.
+
 ### Dev-only parity-pack capture
 
 For local conformance debugging only, the listen runtime may write a restricted
@@ -656,6 +663,15 @@ run reuses normal persistence but is fenced by a pre-persist structured guard:
 output carrying only the deterministic minimum raises before the
 completed-status transaction, leaving the row's content and lifecycle state
 for the existing dead-letter review workflow.
+
+Live listen sessions also hold a five-minute lease on their user-scoped
+`recording_sessions` document. Accepted decoded audio renews it at most once a
+minute, and the conversation stores the bound recording-session ID. A
+`SERVER_RECOVERY` admission reads that session document in the same Firestore
+transaction as the conversation and refuses an `in_progress`, unexpired,
+identity-matching lease. Lease renewal and recovery admission therefore
+conflict atomically; a sweep cannot finalize an audio-bearing conversation
+that a live socket still owns.
 
 Eligible meeting receipts also carry the stable Chat intent ID and, after the
 desktop kernel acknowledges its journal write, the materialization time. With

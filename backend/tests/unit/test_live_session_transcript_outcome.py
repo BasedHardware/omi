@@ -160,6 +160,8 @@ def test_no_transcript_outcome_emits_a_uid_scoped_product_counter():
     from utils.observability import transcription
 
     emitted = []
+    with transcription._zero_transcript_events_lock:
+        transcription._zero_transcript_events.clear()
     before = transcription.OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome='no_transcript')._value.get()
     with patch.object(transcription, 'emit_product_event', side_effect=lambda **kwargs: emitted.append(kwargs)):
         transcription.record_live_session_transcript_outcome(
@@ -179,10 +181,49 @@ def test_no_transcript_outcome_emits_a_uid_scoped_product_counter():
             'properties': {
                 'transcription_source': 'omi',
                 'app_platform': 'ios',
-                'recording_id': 'recording-1',
+                'recording_correlation_id': 'ede9a6d90439902e',
+                'coalesced_outcome_count': 1,
             },
         }
     ]
+
+
+def test_no_transcript_product_events_coalesce_per_uid_but_aggregate_counts_every_session():
+    from utils.observability import transcription
+
+    emitted = []
+    now = 1000.0
+    with transcription._zero_transcript_events_lock:
+        transcription._zero_transcript_events.clear()
+    before = transcription.OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome='no_transcript')._value.get()
+    with (
+        patch.object(transcription, '_zero_transcript_clock', side_effect=lambda: now),
+        patch.object(transcription, 'emit_product_event', side_effect=lambda **kwargs: emitted.append(kwargs)),
+    ):
+        for recording_id in ('private-recording-a', 'private-recording-b'):
+            transcription.record_live_session_transcript_outcome(
+                outcome='no_transcript',
+                uid='uid-coalesced',
+                source='omi',
+                platform='ios',
+                recording_id=recording_id,
+            )
+        now += transcription._ZERO_TRANSCRIPT_EVENT_WINDOW_SECONDS
+        transcription.record_live_session_transcript_outcome(
+            outcome='no_transcript',
+            uid='uid-coalesced',
+            source='omi',
+            platform='ios',
+            recording_id='private-recording-c',
+        )
+
+    after = transcription.OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome='no_transcript')._value.get()
+    assert after == before + 3, 'Prometheus remains the authoritative outage signal'
+    assert len(emitted) == 2
+    assert emitted[1]['properties']['coalesced_outcome_count'] == 2
+    correlations = [event['properties']['recording_correlation_id'] for event in emitted]
+    assert all(len(value) == 16 for value in correlations)
+    assert not any(value.startswith('private-recording') for value in correlations)
 
 
 def test_transcribed_outcome_does_not_emit_uid_scoped_zero_transcript_event():
