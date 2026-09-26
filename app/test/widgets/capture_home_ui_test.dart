@@ -292,6 +292,35 @@ void main() {
       expect(capture.stops, 1);
     });
 
+    // IMG_1151/1152: "Start with this phone, or connect a device to listen all / day." was a line
+    // taller than "Pendant · Ready", so the card and everything under it jumped when the pendant
+    // connected or dropped.
+    testWidgets('the idle card keeps one height whether a device is connected or not, at any size', (tester) async {
+      addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final card = find.descendant(of: find.byKey(const ValueKey('idle_capture_card')), matching: find.byType(OmiCard));
+      for (final width in [320.0, 375.0, 393.0, 430.0]) {
+        for (final scale in [1.0, 1.35]) {
+          tester.view.physicalSize = Size(width, 1000);
+          tester.view.devicePixelRatio = 1;
+          tester.platformDispatcher.textScaleFactorTestValue = scale;
+          // On Today the card sits in a scroll view: it takes its own height.
+          await pump(tester,
+              const SingleChildScrollView(child: ConversationCaptureWidget(showsCall: true, idle: IdleCaptureCard())),
+              capture: _Capture(_Live.idle), device: _Device(connected: false, paired: false));
+          expect(find.text(en.notListeningSubtitle), findsOneWidget);
+          final alone = tester.getSize(card);
+          await pump(tester,
+              const SingleChildScrollView(child: ConversationCaptureWidget(showsCall: true, idle: IdleCaptureCard())),
+              capture: _Capture(_Live.pendantStopped), device: _Device());
+          expect(find.text('${en.captureSourcePendant} · ${en.deviceReady}'), findsOneWidget);
+          final ready = tester.getSize(card);
+          expect(ready.height, alone.height, reason: 'width $width, text x$scale');
+          expect(tester.takeException(), isNull);
+        }
+      }
+    });
+
     testWidgets('a Stop on its way already reads as stopped: Home offers Start, never a second Stop', (tester) async {
       final capture = _Capture(_Live.pendant)..stopGate = Completer<void>();
       await pump(tester, const ConversationCaptureWidget(showsCall: true, idle: IdleCaptureCard()),

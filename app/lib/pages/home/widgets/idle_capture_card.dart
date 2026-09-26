@@ -74,6 +74,7 @@ class IdleCaptureCard extends StatelessWidget {
           : null,
     );
     final l10n = context.l10n;
+    String readyLine(String source) => '${CaptureSources.label(context, source)} · ${l10n.deviceReady}';
     return Padding(
       key: const ValueKey('idle_capture_card'),
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.lg, OmiSpacing.md, OmiSpacing.sm),
@@ -93,10 +94,12 @@ class IdleCaptureCard extends StatelessWidget {
                     children: [
                       Text(l10n.notListeningTitle, style: OmiType.headline),
                       const SizedBox(height: 2),
-                      Text(
-                        stoppedSource == null
-                            ? l10n.notListeningSubtitle
-                            : '${CaptureSources.label(context, stoppedSource)} · ${l10n.deviceReady}',
+                      // The same room either way, so the card keeps its height when a device
+                      // connects ("Pendant · Ready") or drops, and the copy wraps evenly.
+                      OmiBalancedText(
+                        stoppedSource == null ? l10n.notListeningSubtitle : readyLine(stoppedSource),
+                        key: const ValueKey('idle_capture_subtitle'),
+                        reserveFor: [l10n.notListeningSubtitle, readyLine(stoppedSource ?? 'omi')],
                         style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
                       ),
                     ],
