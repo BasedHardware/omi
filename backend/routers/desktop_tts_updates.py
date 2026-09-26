@@ -192,7 +192,7 @@ async def tts_synthesize(request: TtsSynthesizeRequest, uid: str = Depends(get_c
     if not get_byok_key("openai"):
         status, _ = await run_blocking(
             critical_executor,
-            redis_db.check_tts_rate_limit,
+            redis_db.check_tts_rate_limit_for_user,
             uid,
             char_count=len(text),
             burst_limit=_TTS_BURST_PER_MINUTE,
