@@ -29,9 +29,11 @@ class UberDeepLinks:
     app_link: str
 
 
-def _clean_text(value: str | None) -> str | None:
+def _clean_text(value: Any) -> str | None:
     if value is None:
         return None
+    if not isinstance(value, str):
+        value = str(value)
     cleaned = " ".join(value.split())
     return cleaned or None
 
@@ -39,6 +41,8 @@ def _clean_text(value: str | None) -> str | None:
 def _normalize_float(value: float | int | str | None) -> float | None:
     if value in (None, ""):
         return None
+    if isinstance(value, bool):
+        raise ValueError("Coordinates must be a number or a numeric string, got bool.")
     try:
         return float(value)
     except TypeError as exc:
