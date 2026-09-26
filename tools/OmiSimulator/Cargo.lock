@@ -28,9 +28,9 @@ dependencies = [
 
 [[package]]
 name = "accesskit_consumer"
-version = "0.35.0"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53cf47daed85312e763fbf85ceca136e0d7abc68e0a7e12abe11f48172bc3b10"
+checksum = "f950720ce064757a1b629caad3a408e8d2c63bb01f29b8a3ff8daa331053ffeb"
 dependencies = [
  "accesskit",
  "hashbrown 0.16.1",
@@ -80,12 +80,12 @@ dependencies = [
 
 [[package]]
 name = "accesskit_windows"
-version = "0.32.1"
+version = "0.33.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eff7009f1a532e917d66970a1e80c965140c6cfbbabbdde3d64e5431e6c78e21"
+checksum = "36e93ac7bf50b964f1cbb75f741629a4e950571baa1ef1274457ab5a80d9bcc2"
 dependencies = [
  "accesskit",
- "accesskit_consumer 0.35.0",
+ "accesskit_consumer 0.37.0",
  "hashbrown 0.16.1",
  "static_assertions",
  "windows 0.62.2",
@@ -609,9 +609,9 @@ dependencies = [
 
 [[package]]
 name = "base64"
-version = "0.22.1"
+version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "bindgen"
@@ -1322,8 +1322,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be17b688510d934ce13f48a2beba700e11583e281e0fda99c22bb256a14eda73"
 dependencies = [
  "bitflags 2.13.1",
- "fontdb",
- "harfrust",
+ "fontdb 0.23.0",
+ "harfrust 0.5.2",
  "linebender_resource_handle",
  "log",
  "rangemap",
@@ -1392,7 +1392,8 @@ dependencies = [
 [[package]]
 name = "crepuscularity-core"
 version = "0.5.0"
-source = "git+https://github.com/tschk/crepuscularity?rev=afaabfc9306fd66da70071dce091274d310c551e#afaabfc9306fd66da70071dce091274d310c551e"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6c317f7c6a960741197ef073be2836cc32ac94eae410f239546347e0e0efe6f"
 dependencies = [
  "notify",
  "serde_json",
@@ -1404,25 +1405,27 @@ dependencies = [
 
 [[package]]
 name = "crepuscularity-gpui"
-version = "0.5.9"
-source = "git+https://github.com/tschk/crepuscularity?rev=afaabfc9306fd66da70071dce091274d310c551e#afaabfc9306fd66da70071dce091274d310c551e"
+version = "0.5.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4e2ae384050569767d26271be0f6382b21a0f92baadbe7576012b3b7ab29081"
 dependencies = [
  "crepuscularity-core",
  "crepuscularity-runtime",
  "crepuscularity_macros",
- "gpui",
- "gpui_platform",
+ "gpui-ce",
+ "gpui_ce_platform",
  "pollster 0.4.0",
 ]
 
 [[package]]
 name = "crepuscularity-runtime"
-version = "0.4.19"
-source = "git+https://github.com/tschk/crepuscularity?rev=afaabfc9306fd66da70071dce091274d310c551e#afaabfc9306fd66da70071dce091274d310c551e"
+version = "0.4.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd043802886776789565ee56f07a8def83e975016a3c947c5c6bb0c51f67014b"
 dependencies = [
  "crepuscularity-core",
- "gpui",
- "gpui_platform",
+ "gpui-ce",
+ "gpui_ce_platform",
  "notify",
  "serde",
  "serde_json",
@@ -1432,7 +1435,8 @@ dependencies = [
 [[package]]
 name = "crepuscularity_macros"
 version = "0.5.12"
-source = "git+https://github.com/tschk/crepuscularity?rev=afaabfc9306fd66da70071dce091274d310c551e#afaabfc9306fd66da70071dce091274d310c551e"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b1e6123744413c6bf624651c62d51c9760644a6a51102f15538ead305b57002"
 dependencies = [
  "crepuscularity-core",
  "proc-macro2",
@@ -2135,6 +2139,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "fontdb"
+version = "0.24.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2660c5e9157bf76d2db1294e4a9feba604ef610819a3b591088d0d8392a3290f"
+dependencies = [
+ "fontconfig-parser",
+ "log",
+ "memmap2",
+ "slotmap",
+ "tinyvec",
+]
+
+[[package]]
 name = "foreign-types"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2451,9 +2468,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui"
+name = "gpui-ce"
 version = "0.2.2"
-source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0af79c6659e0fea67773cfbd751fc5c8e51be00139827f365d7d1237a468a4d"
 dependencies = [
  "accesskit",
  "anyhow",
@@ -2479,14 +2497,14 @@ dependencies = [
  "futures",
  "futures-concurrency",
  "getrandom 0.3.4",
+ "gpui_ce_collections",
+ "gpui_ce_macros",
+ "gpui_ce_media",
+ "gpui_ce_refineable",
+ "gpui_ce_scheduler",
+ "gpui_ce_shared_string",
+ "gpui_ce_sum_tree",
  "gpui_ce_util",
- "gpui_collections",
- "gpui_macros",
- "gpui_media",
- "gpui_refineable",
- "gpui_scheduler",
- "gpui_shared_string",
- "gpui_sum_tree",
  "heapless",
  "http",
  "image",
@@ -2514,6 +2532,7 @@ dependencies = [
  "seahash",
  "serde",
  "serde_json",
+ "skrifa 0.46.2",
  "slotmap",
  "smallvec",
  "spin 0.10.1",
@@ -2521,32 +2540,22 @@ dependencies = [
  "strum 0.27.2",
  "taffy",
  "thiserror 2.0.20",
- "ttf-parser",
  "unicode-segmentation",
  "url",
  "usvg",
  "uuid",
  "waker-fn",
  "web-time",
- "windows 0.61.3",
+ "windows 0.62.2",
  "zed-font-kit",
  "zed-scap",
 ]
 
 [[package]]
-name = "gpui_ce_util"
+name = "gpui_ce_collections"
 version = "0.2.2"
-source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
-dependencies = [
- "anyhow",
- "log",
- "which",
-]
-
-[[package]]
-name = "gpui_collections"
-version = "0.2.2"
-source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3f707750f990017957611d0909c1a53c6bd7b7c6cfb2fd8095141c99afa2a49"
 dependencies = [
  "gpui_ce_util",
  "indexmap",
@@ -2554,9 +2563,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui_derive_refineable"
+name = "gpui_ce_derive_refineable"
 version = "0.2.2"
-source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a399d81b69ae3cec57ab87c3e2f2a415b443481195dd091256abca771c377d2b"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2564,9 +2574,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui_linux"
+name = "gpui_ce_linux"
 version = "0.1.0"
-source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab947c84c6460f6431c99bd6a8b0954591bfa511c0006515ecc3897e7a903c84"
 dependencies = [
  "accesskit",
  "accesskit_unix",
@@ -2579,10 +2590,10 @@ dependencies = [
  "calloop-wayland-source",
  "filedescriptor",
  "futures",
- "gpui",
+ "gpui-ce",
+ "gpui_ce_collections",
  "gpui_ce_util",
- "gpui_collections",
- "gpui_wgpu",
+ "gpui_ce_wgpu",
  "image",
  "itertools 0.14.0",
  "libc",
@@ -2615,9 +2626,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui_macos"
+name = "gpui_ce_macos"
 version = "0.1.0"
-source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af0fe6b615e579ce0180198417815547c1c9ae654dc1e2382299f0c3f3564f79"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -2638,10 +2650,10 @@ dependencies = [
  "etagere",
  "foreign-types",
  "futures",
- "gpui",
+ "gpui-ce",
+ "gpui_ce_collections",
+ "gpui_ce_media",
  "gpui_ce_util",
- "gpui_collections",
- "gpui_media",
  "image",
  "itertools 0.14.0",
  "libc",
@@ -2661,12 +2673,14 @@ dependencies = [
  "smallvec",
  "strum 0.27.2",
  "uuid",
+ "zed-font-kit",
 ]
 
 [[package]]
-name = "gpui_macros"
+name = "gpui_ce_macros"
 version = "0.1.0"
-source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92b8dc0ee902563235e47809c403e1d59b1beb53a7dc916e66f2f7864ac41483"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -2675,9 +2689,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui_media"
+name = "gpui_ce_media"
 version = "0.2.2"
-source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c67e75d8c59ca24f95df41dd102aa7b4c93d306046ec0f2aa15c7f16022283c"
 dependencies = [
  "anyhow",
  "bindgen 0.71.1",
@@ -2690,30 +2705,33 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui_platform"
+name = "gpui_ce_platform"
 version = "0.1.0"
-source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42fc3ad60af3e375b224e701a3e5db31f4def8e3a1099899882e937a9e9c12e9"
 dependencies = [
  "console_error_panic_hook",
- "gpui",
- "gpui_linux",
- "gpui_macos",
- "gpui_web",
- "gpui_windows",
+ "gpui-ce",
+ "gpui_ce_linux",
+ "gpui_ce_macos",
+ "gpui_ce_web",
+ "gpui_ce_windows",
 ]
 
 [[package]]
-name = "gpui_refineable"
+name = "gpui_ce_refineable"
 version = "0.2.2"
-source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "536a08dd1678cede87b6f91d58fc7dcfcb37c4d46075954d55db0b120b28dc28"
 dependencies = [
- "gpui_derive_refineable",
+ "gpui_ce_derive_refineable",
 ]
 
 [[package]]
-name = "gpui_scheduler"
+name = "gpui_ce_scheduler"
 version = "0.2.2"
-source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ba0e1b5482fa9bc8ee71117c981e4d9afc5511624bedd9454040c95aca26091"
 dependencies = [
  "async-task",
  "backtrace",
@@ -2726,9 +2744,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui_shared_string"
+name = "gpui_ce_shared_string"
 version = "0.1.0"
-source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eadabf028fc7322e74aa5d823defca7441d335cfd3592fb0ba3af1b0532e39da"
 dependencies = [
  "schemars",
  "serde",
@@ -2736,9 +2755,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui_sum_tree"
+name = "gpui_ce_sum_tree"
 version = "0.2.2"
-source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e5462a23e7ff0d4ca09f585b6de33d9ef6c302d57106fac5f6a3cc35bdf9e8f"
 dependencies = [
  "heapless",
  "log",
@@ -2747,15 +2767,27 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui_web"
+name = "gpui_ce_util"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3214d3b3693a92cc8caf5547cedeb2f0bd5498be5475261e48dd0482bf9514a0"
+dependencies = [
+ "anyhow",
+ "log",
+ "which",
+]
+
+[[package]]
+name = "gpui_ce_web"
 version = "0.1.0"
-source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac03c593fc6ee1957a7a55594b506ff6218662ea4a20523407252c2b5d570c01"
 dependencies = [
  "anyhow",
  "console_error_panic_hook",
  "futures",
- "gpui",
- "gpui_wgpu",
+ "gpui-ce",
+ "gpui_ce_wgpu",
  "http",
  "js-sys",
  "log",
@@ -2769,17 +2801,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui_wgpu"
+name = "gpui_ce_wgpu"
 version = "0.1.0"
-source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4d986e05a9106ac0ecf048f9b5a4a6b030d6b538836dc3ad0a0686da01d4a830"
 dependencies = [
  "anyhow",
  "bytemuck",
  "cosmic-text",
  "etagere",
- "gpui",
+ "gpui-ce",
+ "gpui_ce_collections",
  "gpui_ce_util",
- "gpui_collections",
  "itertools 0.14.0",
  "js-sys",
  "log",
@@ -2799,9 +2832,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "gpui_windows"
+name = "gpui_ce_windows"
 version = "0.1.0"
-source = "git+https://github.com/gpui-ce/gpui-ce?rev=c738623ffbcec2aeddc44a645cc6b74646d5cf97#c738623ffbcec2aeddc44a645cc6b74646d5cf97"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "063326fe043ef3f51b0b36877e8d9f9af0e20d6dfe51efcb275a3cd380128e02"
 dependencies = [
  "accesskit",
  "accesskit_windows",
@@ -2809,9 +2843,9 @@ dependencies = [
  "dunce",
  "etagere",
  "futures",
- "gpui",
+ "gpui-ce",
+ "gpui_ce_collections",
  "gpui_ce_util",
- "gpui_collections",
  "image",
  "itertools 0.14.0",
  "log",
@@ -2820,9 +2854,9 @@ dependencies = [
  "raw-window-handle",
  "smallvec",
  "uuid",
- "windows 0.61.3",
- "windows-core 0.61.2",
- "windows-numerics 0.2.0",
+ "windows 0.62.2",
+ "windows-core 0.62.2",
+ "windows-numerics 0.3.1",
  "windows-registry",
 ]
 
@@ -2854,6 +2888,18 @@ dependencies = [
  "bytemuck",
  "core_maths",
  "read-fonts 0.37.0",
+ "smallvec",
+]
+
+[[package]]
+name = "harfrust"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c03d949a14aa089bbb282f7dd76a498a7f684428e4257202efc119ec010376f9"
+dependencies = [
+ "bitflags 2.13.1",
+ "bytemuck",
+ "read-fonts 0.41.0",
  "smallvec",
 ]
 
@@ -3132,7 +3178,7 @@ dependencies = [
  "image-webp",
  "moxcms",
  "num-traits",
- "png 0.18.1",
+ "png",
  "qoi",
  "ravif",
  "rayon",
@@ -3154,9 +3200,9 @@ dependencies = [
 
 [[package]]
 name = "imagesize"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09e54e57b4c48b40f7aec75635392b12b3421fa26fe8b4332e63138ed278459c"
+checksum = "65b27460c2c92b037f3f94c538ed9a3342f3fdf923606781629ccb35f82d042a"
 
 [[package]]
 name = "imgref"
@@ -4423,7 +4469,8 @@ dependencies = [
  "cpal",
  "crepuscularity-gpui",
  "env_logger",
- "gpui",
+ "gpui-ce",
+ "gpui_ce_platform",
  "log",
  "tokio",
  "uuid",
@@ -4709,19 +4756,6 @@ name = "pkg-config"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
-
-[[package]]
-name = "png"
-version = "0.17.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82151a2fc869e011c153adc57cf2789ccb8d9906ce52c0b39a6b5697749d7526"
-dependencies = [
- "bitflags 1.3.2",
- "crc32fast",
- "fdeflate",
- "flate2",
- "miniz_oxide 0.8.9",
-]
 
 [[package]]
 name = "png"
@@ -5155,6 +5189,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "read-fonts"
+version = "0.43.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "005c8acf251756c478b0bf402885bfd88a1476020c4c7e6060edc1aa68da38ea"
+dependencies = [
+ "bytemuck",
+ "font-types 0.12.4",
+ "once_cell",
+]
+
+[[package]]
 name = "reborrow"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5237,10 +5282,11 @@ checksum = "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
 
 [[package]]
 name = "resvg"
-version = "0.46.0"
+version = "0.48.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b563218631706d614e23059436526d005b50ab5f2d506b55a17eb65c5eb83419"
+checksum = "67e3803f97b999e80cbf7c6ecdd07a8102204d92e1633cf48783720c521196bd"
 dependencies = [
+ "bytemuck",
  "gif",
  "image-webp",
  "log",
@@ -5334,24 +5380,6 @@ name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
-
-[[package]]
-name = "rustybuzz"
-version = "0.20.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd3c7c96f8a08ee34eff8857b11b49b07d71d1c3f4e88f8a88d4c9e9f90b1702"
-dependencies = [
- "bitflags 2.13.1",
- "bytemuck",
- "core_maths",
- "log",
- "smallvec",
- "ttf-parser",
- "unicode-bidi-mirroring",
- "unicode-ccc",
- "unicode-properties",
- "unicode-script",
-]
 
 [[package]]
 name = "ryu"
@@ -5658,6 +5686,16 @@ checksum = "819ab7d62b1d3e72d9d9dea5650bac30424f9111364bb94928dbf5ecad1baa68"
 dependencies = [
  "bytemuck",
  "read-fonts 0.41.0",
+]
+
+[[package]]
+name = "skrifa"
+version = "0.46.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4febebda507fb889c545a37a135517769d1391941013561292897961d1887d6"
+dependencies = [
+ "bytemuck",
+ "read-fonts 0.43.3",
 ]
 
 [[package]]
@@ -6164,24 +6202,24 @@ dependencies = [
 
 [[package]]
 name = "tiny-skia"
-version = "0.11.4"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83d13394d44dae3207b52a326c0c85a8bf87f1541f23b0d143811088497b09ab"
+checksum = "47ffee5eaaf5527f630fb0e356b90ebdec84d5d18d937c5e440350f88c5a91ea"
 dependencies = [
  "arrayref",
  "arrayvec",
  "bytemuck",
  "cfg-if",
  "log",
- "png 0.17.16",
+ "png",
  "tiny-skia-path",
 ]
 
 [[package]]
 name = "tiny-skia-path"
-version = "0.11.4"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c9e7fc0c2e86a30b117d0462aa261b72b7a99b7ebd7deb3a14ceda95c5bdc93"
+checksum = "edca365c3faccca67d06593c5980fa6c57687de727a03131735bb85f01fdeeb9"
 dependencies = [
  "arrayref",
  "bytemuck",
@@ -6413,18 +6451,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c1cb5db39152898a79168971543b1cb5020dff7fe43c8dc468b0885f5e29df5"
 
 [[package]]
-name = "unicode-bidi-mirroring"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5dfa6e8c60bb66d49db113e0125ee8711b7647b5579dc7f5f19c42357ed039fe"
-
-[[package]]
-name = "unicode-ccc"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce61d488bcdc9bc8b5d1772c404828b17fc481c0a582b5581e95fb233aef503e"
-
-[[package]]
 name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6435,12 +6461,6 @@ name = "unicode-linebreak"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b09c83c3c29d37506a3e260c08c03743a6bb66a9cd432c6934ab501a190571f"
-
-[[package]]
-name = "unicode-properties"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7df058c713841ad818f1dc5d3fd88063241cc61f49f5fbea4b951e8cf5a8d71d"
 
 [[package]]
 name = "unicode-script"
@@ -6486,22 +6506,22 @@ dependencies = [
 
 [[package]]
 name = "usvg"
-version = "0.46.0"
+version = "0.48.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e419dff010bb12512b0ae9e3d2f318dfbdf0167fde7eb05465134d4e8756076f"
+checksum = "977d0a4abdef933f424a99fe09f95576e089b90aebc6f016a3bc813762493e91"
 dependencies = [
  "base64",
  "data-url",
- "flate2",
- "fontdb",
+ "fontdb 0.24.0",
+ "harfrust 0.12.0",
  "imagesize",
  "kurbo",
  "log",
  "pico-args",
  "roxmltree 0.21.1",
- "rustybuzz",
  "simplecss",
  "siphasher",
+ "skrifa 0.44.0",
  "strict-num",
  "svgtypes",
  "tiny-skia-path",
@@ -7254,13 +7274,13 @@ dependencies = [
 
 [[package]]
 name = "windows-registry"
-version = "0.5.3"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b8a9ed28765efc97bbc954883f4e6796c33a06546ebafacbabee9696967499e"
+checksum = "02752bf7fbdcce7f2a27a742f798510f3e5ad88dbe84871e5168e2120c3d5720"
 dependencies = [
- "windows-link 0.1.3",
- "windows-result 0.3.4",
- "windows-strings 0.4.2",
+ "windows-link 0.2.1",
+ "windows-result 0.4.1",
+ "windows-strings 0.5.1",
 ]
 
 [[package]]
