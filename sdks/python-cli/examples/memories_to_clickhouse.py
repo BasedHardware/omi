@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,7 +20,6 @@ from typing import Any, Iterable, List, Optional
 TABLE_NAME = "omi_memories"
 DEFAULT_CATEGORY = "uncategorized"
 DEFAULT_VISIBILITY = "private"
-DATETIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d{1,3})?$")
 
 
 SCHEMA_SQL = f"""\

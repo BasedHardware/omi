@@ -146,6 +146,8 @@ LIMIT 50;
 
 ## Notes
 
+- Unparseable or missing `created_at` / `updated_at` values become `1970-01-01 00:00:00.000` (Unix epoch) so a bad export row still loads. Check the table if you see a cluster of epoch timestamps.
+
 - String literals and array elements are escaped for ClickHouse SQL. Prefer `--format jsonl` for bulk load; it avoids SQL quoting entirely.
 - The Python script reads local JSON only and writes SQL or JSONEachRow to stdout (or `--output`). Keep exports private.
 - After repeated imports, use `FINAL` (or `OPTIMIZE TABLE omi_memories FINAL`) when you need one row per memory id.
