@@ -1545,6 +1545,11 @@ checks:
     triggers: ["plugins/zapier/omi-zap/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13541: the create-memory action shipped a body that resolved to undefined, so every Zap run POSTed empty and the API 422'd; the jest suite pins the request shape against ZapierActionCreateConversation and must run in CI to catch a regression"
+  - id: pubmed-app-robustness-tests
+    command: ["python3", "plugins/omi-pubmed-app/test_robustness_and_coercion.py"]
+    triggers: ["plugins/omi-pubmed-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PubMed app must guard non-dict JSON bodies, support integer PMIDs, and handle boolean limit bounds without exceptions"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
