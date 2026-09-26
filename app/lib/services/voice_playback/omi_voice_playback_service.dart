@@ -819,7 +819,6 @@ class OmiVoicePlaybackService {
         VoiceReplyPlaybackOutputRoute.unknown => 5,
       };
 
-  // ignore: experimental_member_use
   VoiceReplyPlaybackOutputRoute _routeForType(AudioDeviceType type) {
     switch (type.name) {
       case 'bluetoothA2dp':
