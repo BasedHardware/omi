@@ -102,6 +102,29 @@ def test_accept_shared_tasks_used_token_conflict(mock_redis, mock_db, sample_req
     assert "already accepted" in exc_info.value.detail
 
 
+@patch("routers.action_items._wake_task_changes")
+@patch("routers.action_items.action_items_db")
+@patch("routers.action_items.redis_db")
+def test_accept_shared_tasks_unavailable_claim_returns_503(mock_redis, mock_db, mock_wake, sample_request, share_data):
+    """try_accept_task_share returns None when Redis is unreachable, False when the
+    token was already used. Only the second is the client's fault, so they must not
+    collapse to one status."""
+    mock_redis.get_task_share.return_value = share_data
+    mock_db.get_action_item.side_effect = lambda _uid, task_id: {
+        "id": task_id,
+        "description": "Buy milk",
+        "is_locked": False,
+    }
+    mock_redis.try_accept_task_share.return_value = None
+
+    with pytest.raises(HTTPException) as exc_info:
+        accept_shared_action_items(request=sample_request, uid="recipient-user-456")
+
+    assert exc_info.value.status_code == 503
+    mock_db.create_action_item.assert_not_called()
+    mock_wake.assert_not_called()
+
+
 @patch("routers.action_items.upsert_action_item_vector")
 @patch("routers.action_items._wake_task_changes")
 @patch("routers.action_items.action_items_db")
@@ -121,6 +144,23 @@ def test_accept_shared_tasks_success_creates_and_wakes(
     result = accept_shared_action_items(request=sample_request, uid="recipient-user-456")
 
     assert result == {"created": ["new-1", "new-2"], "count": 2}
+    # Every copy -- not just the first -- lands on the recipient and carries
+    # provenance back to its own original, and every copy is indexed.
+    assert [c.args[0] for c in mock_db.create_action_item.call_args_list] == [
+        "recipient-user-456",
+        "recipient-user-456",
+    ]
+    for original_task_id, copied in zip(
+        share_data["task_ids"], [c.args[1] for c in mock_db.create_action_item.call_args_list]
+    ):
+        assert copied["shared_from"]["sender_uid"] == share_data["uid"]
+        assert copied["shared_from"]["original_task_id"] == original_task_id
+        assert copied["shared_from"]["token"] == sample_request.token
+        assert copied["completed"] is False
+    assert [c.args[:2] for c in mock_vector.call_args_list] == [
+        ("recipient-user-456", "new-1"),
+        ("recipient-user-456", "new-2"),
+    ]
     mock_redis.undo_accept_task_share.assert_not_called()
     mock_wake.assert_called_once()
     assert mock_wake.call_args.args[:2] == ("recipient-user-456", ["new-1", "new-2"])
