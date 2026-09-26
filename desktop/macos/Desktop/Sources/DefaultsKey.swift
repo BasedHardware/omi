@@ -244,6 +244,14 @@ struct ScopedDefaultsKey {
     Self(rawValue: "dailySummary.lastSeenID.v1.\(ownerID)")
   }
 
+  /// Owner-scoped id of the newest daily summary the memory_v1 postcard-first
+  /// landing has already opened on. Separate from the notch-announcement latch
+  /// so neither consumes the other; the arm lands on the postcard exactly once
+  /// per summary.
+  static func dailySummaryPostcardLandedID(ownerID: String) -> Self {
+    Self(rawValue: "dailySummary.postcardLandedID.v1.\(ownerID)")
+  }
+
   /// Owner-scoped id of the daily summary that was on screen when the owner last cleared Chat.
   /// The card is chrome rather than a turn (INV-CHAT-1), so clearing the transcript cannot
   /// delete it — this is what makes Clear take it away anyway, until a newer summary arrives.

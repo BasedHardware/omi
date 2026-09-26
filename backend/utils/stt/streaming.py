@@ -59,6 +59,12 @@ from utils.stt.stream_close import (
     PROVIDER_BUDGET_EXHAUSTED,
     record_stt_stream_close,
 )
+from utils.stt.connect_metrics import (
+    CONNECT_FAILURE,
+    CONNECT_SUCCESS,
+    initialize_stt_provider_connect_children,
+    record_stt_provider_connect,
+)
 from utils.other.backoff import calculate_backoff_with_jitter
 import logging
 
@@ -134,11 +140,13 @@ def deepgram_rejection_status(error: BaseException) -> Optional[int]:
 _parakeet_circuit = ProviderCircuitBreaker(
     failure_threshold=int(os.getenv('PARAKEET_CIRCUIT_FAILURE_THRESHOLD', '3')),
     cooldown_seconds=float(os.getenv('PARAKEET_CIRCUIT_COOLDOWN_SECONDS', '30')),
+    provider_label='parakeet',
 )
 
 _deepgram_circuit = ProviderCircuitBreaker(
     failure_threshold=int(os.getenv('DEEPGRAM_CIRCUIT_FAILURE_THRESHOLD', '3')),
     cooldown_seconds=float(os.getenv('DEEPGRAM_CIRCUIT_COOLDOWN_SECONDS', '30')),
+    provider_label='deepgram',
 )
 
 
@@ -147,8 +155,13 @@ _modulate_circuit = ProviderCircuitBreaker(
     cooldown_seconds=float(os.getenv('MODULATE_CIRCUIT_COOLDOWN_SECONDS', '30')),
     serve_error_cooldown_seconds=float(os.getenv('MODULATE_SERVE_ERROR_CIRCUIT_COOLDOWN_SECONDS', '180')),
     serve_error_successes_to_close=int(os.getenv('MODULATE_SERVE_ERROR_SUCCESSES_TO_CLOSE', '3')),
+    provider_label='modulate',
 )
 _soniox_circuit = soniox_circuit_from_env()
+
+# Pre-create the always-emitted connect series so absence of a provider's
+# failures is queryable (and a dead emitter visible) from process start.
+initialize_stt_provider_connect_children()
 
 
 def _circuit_for_primary(primary_service: STTService) -> ProviderCircuitBreaker:
@@ -300,11 +313,31 @@ async def _connect_serving_fallback(
     connect: Callable[[], Awaitable[Optional[STTSocket]]], service: STTService
 ) -> STTSocket:
     """Connect a fallback provider and prove it is actually serving before adopting it."""
-    socket = await connect()
+
+    def _record_failure(reason: str) -> None:
+        record_stt_provider_connect(provider=service.value, outcome=CONNECT_FAILURE, reason=reason)
+
+    try:
+        socket = await connect()
+    except ProviderAccountRejection:
+        _record_failure('quota')
+        raise
+    except (asyncio.TimeoutError, TimeoutError):
+        _record_failure('timeout')
+        raise
+    except ParakeetConnectionError as error:
+        _record_failure(error.reason)
+        raise
+    except Exception as error:
+        _record_failure(_fallback_failure_reason(error))
+        raise
     if socket is None:
+        _record_failure('config_incomplete')
         raise RuntimeError(f'{service.value} returned no socket')
     if not await fallback_socket_is_serving(socket):
         detail = getattr(socket, 'death_reason', None) or 'stream rejected'
+        typed = getattr(socket, 'typed_death_reason', None)
+        _record_failure(typed if isinstance(typed, str) else _fallback_failure_reason(RuntimeError(detail)))
         close_rejected_socket(socket)
         raise RuntimeError(f'{service.value} rejected the stream: {detail}')
     # A serving leg is positive evidence about the provider: let its own
@@ -313,6 +346,7 @@ async def _connect_serving_fallback(
     # only reaches here after proving the socket actually serves — evidence
     # strong enough to close even a serve-death bench.
     _circuit_for_primary(service).record_success(serving=True)
+    record_stt_provider_connect(provider=service.value, outcome=CONNECT_SUCCESS)
     return socket
 
 
@@ -346,6 +380,7 @@ async def connect_stt_socket_with_fallback(
     circuit = _circuit_for_primary(primary_service)
 
     reason = 'circuit_open'
+    typed_connect_reason: Optional[str] = None
     if circuit.allow_request():
         try:
             socket = await connect_primary()
@@ -366,20 +401,28 @@ async def connect_stt_socket_with_fallback(
                     attach(on_serving, _on_released)
                 if await _primary_is_serving(primary_service, socket):
                     circuit.record_success()
+                    record_stt_provider_connect(provider=primary_service.value, outcome=CONNECT_SUCCESS)
                     return socket, primary_service
                 # The grace observed the probe dying: the same rejected-stream
                 # handling as the healthy path below.
                 detail = getattr(socket, 'death_reason', None) or 'stream rejected'
+                typed_probe_death = getattr(socket, 'typed_death_reason', None)
+                if isinstance(typed_probe_death, str):
+                    typed_connect_reason = typed_probe_death
                 close_rejected_socket(socket)
                 reason = _fallback_failure_reason(RuntimeError(detail))
                 circuit.record_failure()
             elif await _primary_is_serving(primary_service, socket):
                 circuit.record_success()
+                record_stt_provider_connect(provider=primary_service.value, outcome=CONNECT_SUCCESS)
                 return socket, primary_service
             else:
                 # The primary took the session and then refused it. Release the
                 # socket and walk the chain instead of serving a dead stream.
                 detail = getattr(socket, 'death_reason', None) or 'stream rejected'
+                typed_death = getattr(socket, 'typed_death_reason', None)
+                if isinstance(typed_death, str):
+                    typed_connect_reason = typed_death
                 close_rejected_socket(socket)
                 reason = _fallback_failure_reason(RuntimeError(detail))
                 circuit.record_failure()
@@ -414,6 +457,12 @@ async def connect_stt_socket_with_fallback(
         except Exception:
             reason = 'provider_5xx'
             circuit.record_failure()
+        # One attempt, one increment: the not-serving branches left their typed
+        # death reason in typed_connect_reason, everything else lands here with
+        # the bounded `reason` the except chain already computed.
+        record_stt_provider_connect(
+            provider=primary_service.value, outcome=CONNECT_FAILURE, reason=typed_connect_reason or reason
+        )
 
     # Legacy order is retained while the configured chain is dark.
     ordered: List[Tuple[STTService, Optional[Callable[[], Awaitable[Optional[STTSocket]]]]]] = [

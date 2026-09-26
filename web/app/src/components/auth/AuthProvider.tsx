@@ -1,14 +1,22 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState, ReactNode, useRef, useCallback } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+  useRef,
+  useCallback,
+} from 'react';
 import { User } from 'firebase/auth';
 import {
-  auth,
   onAuthStateChange,
   signInWithGoogle,
   signInWithApple,
   signOutUser,
   getIdToken,
+  completeRedirectSignIn,
 } from '@/lib/firebase';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
 
@@ -23,6 +31,12 @@ interface AuthContextType {
   isLoginPanelOpen: boolean;
   openLoginPanel: () => void;
   closeLoginPanel: () => void;
+  /**
+   * Why a redirect sign-in came back without a session. Mobile signs in by
+   * leaving the page, so this is the only place its failures can be reported.
+   */
+  redirectSignInError: unknown;
+  clearRedirectSignInError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,10 +45,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isLoginPanelOpen, setIsLoginPanelOpen] = useState(false);
+  const [redirectSignInError, setRedirectSignInError] = useState<unknown>(null);
   const previousUserRef = useRef<User | null>(null);
 
   const openLoginPanel = useCallback(() => setIsLoginPanelOpen(true), []);
   const closeLoginPanel = useCallback(() => setIsLoginPanelOpen(false), []);
+  const clearRedirectSignInError = useCallback(() => setRedirectSignInError(null), []);
 
   useEffect(() => {
     // Initialize Mixpanel
@@ -55,6 +71,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       previousUserRef.current = user;
     });
+
+    // A sign-in that left the page through `signInWithRedirect` reports its
+    // outcome here, on the way back. It has to run on every route: the provider
+    // returns the user to whichever page started the sign-in, and a failure is
+    // otherwise indistinguishable from a page that simply has no session.
+    void completeRedirectSignIn()
+      .then((redirectedUser) => {
+        if (redirectedUser) {
+          MixpanelManager.track('Sign In Completed', { method: 'redirect' });
+        }
+      })
+      .catch((error) => {
+        console.error('Redirect sign-in failed:', error);
+        setRedirectSignInError(error);
+      });
 
     return () => unsubscribe();
   }, []);
@@ -104,6 +135,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoginPanelOpen,
     openLoginPanel,
     closeLoginPanel,
+    redirectSignInError,
+    clearRedirectSignInError,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
