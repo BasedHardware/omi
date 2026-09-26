@@ -33,6 +33,7 @@ import numpy as np
 import pytest
 
 import utils.stt.parakeet_window as window
+import utils.stt.live_session as live_session_module
 import utils.stt.provider_resilience as provider_resilience
 import utils.stt.streaming as st
 import utils.stt.vad_gate as vad_gate
@@ -41,6 +42,7 @@ from routers.listen.receiver import ListenReceiver
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator, SendMap
 from utils.stt.socket import STTSocket
 from utils.stt.soniox import SafeSonioxSocket
+from utils.stt.live_session import LiveLegSocket
 from utils.stt.vad_gate import GatedSTTSocket
 
 RATE = 16000
@@ -753,6 +755,77 @@ async def test_managed_prod_order_mints_fresh_epoch_after_failover(monkeypatch, 
     clip = receiver.host.state.audio_ring_buffer.extract(second_seg['start'], second_seg['end'])
     assert clip and clip[:2] == b'\x02\x00'
     assert receiver.collected[-1]['audio_alignment'] == 'unplaced'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('gap_seconds', [5, 9, 34])
+async def test_managed_soniox_elapsed_axis_covers_vad_gaps_without_extra_audio(monkeypatch, gap_seconds):
+    """Soniox elapsed offsets map through accepted sends while VAD stays gated.
+
+    Exercise the receiver, managed-chain constructor, real VAD state machine,
+    and Soniox's final-token parser. Only provider IO and Silero are doubles.
+    The main-branch gate sends speech and four seconds of hangover; its
+    300 ms pre-roll budget evicts a 500 ms silent frame. Verify PCM independently of the
+    clock ledger so a billing-changing passthrough cannot satisfy this test.
+    """
+    monkeypatch.setattr(st, 'stt_service_models', ['soniox'])
+    monkeypatch.setattr(live_session_module, 'is_gate_enabled', lambda: True)
+    monkeypatch.setattr(live_session_module, 'vad_gate_mode', lambda **kwargs: 'active')
+    receiver = _receiver(monkeypatch, v2=True)
+    receiver.host.stt_service = st.STTService.soniox
+    receiver.host.stt_model = 'soniox'
+    receiver.host.request.vad_gate_override = 'active'
+    raw_sockets = []
+
+    class Raw(_RecordingSocket):
+        def __init__(self, callback):
+            super().__init__()
+            self.callback = callback
+            self.payloads = []
+            self.finalizations = 0
+
+        def send(self, data):
+            self.payloads.append(data)
+            return super().send(data)
+
+        def finalize(self):
+            self.finalizations += 1
+
+    async def connect(callback, *args, **kwargs):
+        raw = Raw(callback)
+        raw_sockets.append(raw)
+        return raw
+
+    monkeypatch.setattr(st, 'process_audio_soniox', connect)
+    assert await receiver.initialize_stt()
+    assert isinstance(receiver.stt_socket, LiveLegSocket)
+    assert receiver.stt_socket.gate.mode == 'active'
+    assert receiver.stt_socket.passthrough is False
+    await _feed(receiver, receiver.stt_socket, [(2, True), (gap_seconds, False), (1, True)])
+    adapter = object.__new__(SafeSonioxSocket)
+    adapter._stream_transcript = raw_sockets[0].callback
+    adapter._preseconds = 0
+    adapter._pending_segment = None
+    start_ms = int((2 + gap_seconds + 0.2) * 1000)
+    adapter._handle_tokens([{'text': 'after pause ', 'start_ms': start_ms, 'end_ms': start_ms + 500, 'is_final': True}])
+    await REAL_SLEEP(0)
+    assert b''.join(raw_sockets[0].payloads) == (
+        b'\x01\x00' * (2 * RATE) + b'\x00\x00' * (4 * RATE) + b'\x01\x00' * RATE
+    )
+    assert raw_sockets[0].sent_samples == 7 * RATE
+    assert raw_sockets[0].finalizations >= 1
+    assert receiver.stt_socket._send_tracker.send_map.last_provider_sample == (3 + gap_seconds) * RATE
+    assert len(receiver.collected) == 1
+    assert receiver.collected[0].get('audio_alignment') != 'unplaced'
+    assert receiver.collected[0]['start'] == pytest.approx(T0 + 2 + gap_seconds + 0.2)
+    assert receiver.collected[0]['end'] == pytest.approx(T0 + 2 + gap_seconds + 0.7)
+    assert receiver.stt_socket._send_tracker.rejected_segments == 0
+    # A token placed in the withheld interval has no accepted PCM behind it.
+    adapter._handle_tokens([{'text': 'no audio ', 'start_ms': 6200, 'end_ms': 6400, 'is_final': True}])
+    await REAL_SLEEP(0)
+    assert receiver.collected[-1]['text'] == 'no audio'
+    assert receiver.collected[-1]['audio_alignment'] == 'unplaced'
+    assert receiver.stt_socket._send_tracker.rejected_segments == 1
 
 
 def _audit_receiver(monkeypatch, *, gate):

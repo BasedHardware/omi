@@ -222,6 +222,10 @@ class LiveChainSession:
                     )
                 if raw is None:
                     raise RuntimeError('Provider returned no socket')
+                if epoch is not None:
+                    # The selected fallback may differ from the receiver's
+                    # initial service. Set its clock policy before first send.
+                    epoch.provider_label = service.value
                 leg = LiveLegSocket(raw, gate, self, service, sample_rate, is_window, passthrough, send_tracker=epoch)
                 return leg
             except BaseException:

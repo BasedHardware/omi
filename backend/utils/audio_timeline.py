@@ -366,6 +366,10 @@ class SendMap:
         index = low - 1
         if 0 <= index < len(self._spans):
             provider_first, capture_first, length = self._spans[index]
+            # Interior holes represent gated-out audio on an elapsed provider
+            # axis. Edge tolerance applies only after the latest accepted send.
+            if index + 1 < len(self._spans) and provider_sample > provider_first + length:
+                return None
             if provider_sample <= provider_first + length + tolerance:
                 return (provider_first, capture_first, length)
         # Slightly before the first span (provider timing jitter): clamp.
@@ -500,6 +504,7 @@ class ProviderEpochTranslator:
         self._project_times = project_times
         self.provider_label = 'unknown'
         self.send_path = 'unknown'
+        self._last_accepted_wall_end: Optional[float] = None
         self._send_owners: List[Tuple[int, int, Optional[str]]] = []
         self.last_send_owner: Optional[str] = None
         self.initial_owner: Optional[str] = None
@@ -514,10 +519,21 @@ class ProviderEpochTranslator:
         return self._project_times
 
     def note_accepted_spans(self, spans: Sequence[Tuple[int, int]]) -> None:
-        start = self.send_map.last_provider_sample or 0
-        self.send_map.add_accepted_spans(spans)
-        end = self.send_map.last_provider_sample or start
-        if end > start:
+        for capture_start, length in spans:
+            if length <= 0:
+                continue
+            start = self.send_map.last_provider_sample or 0
+            if self.provider_label == 'soniox':
+                wall_start = self.timeline.wall_strict(capture_start)
+                if wall_start is not None and self._last_accepted_wall_end is not None:
+                    # Keepalives/finalize send no PCM, but observed Soniox
+                    # token offsets continue along elapsed stream time. A
+                    # withheld interval gets axis space, never a send span.
+                    elapsed = max(0.0, wall_start - self._last_accepted_wall_end)
+                    start += round(elapsed * self.provider_sample_rate)
+                self._last_accepted_wall_end = self.timeline.wall_strict(capture_start + length)
+            self.send_map.add_accepted(start, capture_start, length)
+            end = start + length
             owner = self._owner_at_send() if self._owner_at_send is not None else None
             self.last_send_owner = owner
             if self._send_owners and self._send_owners[-1][1] == start and self._send_owners[-1][2] == owner:

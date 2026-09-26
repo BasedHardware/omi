@@ -78,6 +78,22 @@ and finalize calls schedule their work on the provider loop. These contracts
 are exercised in `tests/unit/test_soniox_token_boundaries.py`, including the
 downstream transcript merge that inserts spaces between distinct segments.
 
+The managed Soniox leg keeps active VAD gating: after speech it forwards the
+four-second hangover, then withholds silence and sends a keepalive control every
+10 seconds. A VAD boundary also queues `finalize`; the provider emits `<fin>`
+after finalizing already received audio. Neither control carries PCM or adds a
+send span. Soniox's [keepalive](https://soniox.com/docs/stt/rt/connection-keepalive)
+and [manual finalization](https://soniox.com/docs/stt/rt/manual-finalization)
+docs describe this lifecycle, but do not promise an exact timestamp shift across
+a pause. Production final tokens observed 1–30 seconds beyond the cumulative
+sent-PCM axis. For Soniox only, the ledger therefore advances the provider
+position by elapsed capture wall time between accepted sends while recording
+no send span for withheld audio. Text timed inside that hole stays unplaced;
+Modulate and other providers retain their cumulative sent-PCM axis. The
+5/9/34-second managed-chain tests pin the observed model and the exact gated
+PCM payload. A live Soniox timing probe remains necessary to establish whether
+every paused session advances by precisely that duration.
+
 Segments buffered in `realtime_segment_buffers` are sorted by `start` time
 before processing — this corrects non-deterministic WebSocket arrival order
 from providers like Modulate whose internal parallelism can deliver shorter
