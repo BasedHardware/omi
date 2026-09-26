@@ -2492,12 +2492,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Szczegółowe komunikaty diagnostyczne';
 
   @override
-  String get autoCreateSpeakers => 'Automatycznie twórz mówców';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Automatycznie twórz po wykryciu nazwy';
-
-  @override
   String get followUpQuestions => 'Pytania uzupełniające';
 
   @override
@@ -11207,9 +11201,6 @@ class AppLocalizationsPl extends AppLocalizations {
       'Transkrypcje są niedostępne, nagrywanie jest kontynuowane na urządzeniu i zostanie przetworzone później';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transkrypcja niedostępna · zapisywanie na urządzeniu';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Transkrypcje w kolejce $pending/$total';
   }
@@ -11298,4 +11289,46 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Dźwięk z zawieszki nie dociera do aplikacji — dotknij, aby naprawić';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Zatrzymaj Transcribe Later na wisiorku, zanim zaczniesz nagrywać telefonem.';
+
+  @override
+  String get captureNotTranscribing => 'Brak transkrypcji';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Dźwięk zapisany, transkrypcja później';
+
+  @override
+  String get captureStillRecording => 'Nagrywanie trwa';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofon używany przez inną aplikację';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Połączenie lub inna aplikacja zajęła mikrofon, więc Omi teraz nie słyszy. Omi wznowi nagrywanie samo, gdy mikrofon się zwolni. Wszystko nagrane wcześniej jest bezpieczne.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Twoja własna usługa zamiany mowy na tekst jest niedostępna. Omi przechowuje dźwięk na tym telefonie i wyśle go, gdy usługa wróci. Nic nie zostanie utracone.';
+
+  @override
+  String get captureStarting => 'Uruchamianie…';
+
+  @override
+  String get capturePhoneStorageFull => 'Pamięć telefonu pełna';
+
+  @override
+  String get captureStorageAlmostFull => 'Pamięć prawie pełna';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Wisiorek utracił połączenie z tym telefonem. Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu. Wszystko nagrane wcześniej jest bezpieczne.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name i inni';
+  }
 }

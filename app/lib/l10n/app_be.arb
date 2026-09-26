@@ -2712,14 +2712,6 @@
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
     },
-    "autoCreateSpeakers": "Аўтаматычна ствараць дыктарыў",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "Аўтаматычна ствараць пры выяўленні імя",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
-    },
     "followUpQuestions": "Наступныя пытанні",
     "@followUpQuestions": {
         "description": "Experimental feature name"
@@ -11094,7 +11086,6 @@
     "addToClaudeCodeConfig": "Дадайце да ~/.claude.json",
     "claudeDesktopConnectorSetup": "На Claude Desktop → Settings → Connectors дадайце карыстальніцкі каннектар і ўстаўце URL сервера. Калі Claude запытае пашыраны OAuth Client ID, выкарыстайце значэнне ніжэй і пакіньце сакрэт пустым — ніколі не выкарыстоўвайце свой ключ MCP API як сакрэт OAuth.",
     "transcriptionUnavailableRecordingContinues": "Транскрыпцыя недаступная, запіс працягваецца на прыладзе і будзе апрацаваны пазней",
-    "transcriptionUnavailableSavingOnDevice": "Транскрыпцыя недаступная · захоўваецца на прыладзе",
     "transcriptionsPendingFraction": "Транскрыпцый у чаканні {pending}/{total}",
     "transcriptionsPendingCount": "Транскрыпцый у чаканні {count}",
     "captureSourceCall": "Званок",
@@ -11112,6 +11103,19 @@
     "recordWith": "Запісаць праз",
     "moreWaysToRecord": "Іншыя спосабы запісу",
     "openCall": "Адкрыць званок",
+    "captureRecoveryBanner": "Гук кулона не даходзіць да праграмы — націсніце, каб выправіць",
+    "phoneRecordingBlockedByPendantBatch": "Спыніце Transcribe Later на падвесцы перад запісам на тэлефоне.",
+    "captureNotTranscribing": "Няма транскрыпцыі",
+    "captureAudioSavedTranscribesLater": "Аўдыя захавана, транскрыпцыя пазней",
+    "captureStillRecording": "Запіс працягваецца",
+    "captureMicInUseElsewhere": "Мікрафон заняты іншай праграмай",
+    "captureMicInterruptedDetail": "Званок або іншая праграма заняла мікрафон, таму Omi зараз не чуе. Omi адновіць запіс сам, калі мікрафон вызваліцца. Усё, што запісана да гэтага, захавана.",
+    "captureCustomSttUnreachableDetail": "Ваш уласны сэрвіс распазнавання маўлення недаступны. Omi захоўвае аўдыя на гэтым тэлефоне і адправіць яго, калі сэрвіс вернецца. Нічога не страціцца.",
+    "captureStarting": "Запуск…",
+    "capturePhoneStorageFull": "Памяць тэлефона запоўнена",
+    "captureStorageAlmostFull": "Памяць амаль запоўнена",
+    "capturePendantDisconnectedDetail": "Кулон страціў сувязь з гэтым тэлефонам. Omi перападключыцца сам, калі кулон уключаны і побач. Усё, што запісана да гэтага, захавана.",
+    "participantsSummaryUncounted": "{name} і іншыя",
     "renameDevice": "Перайменаваць прыладу",
     "renameDeviceDescription": "Імя захоўваецца на самім Omi, таму яно з'явіцца на любым тэлефоне, з якім вы яго спалучыце.",
     "tapToRename": "Націсніце, каб перайменаваць",
@@ -11119,6 +11123,5 @@
     "deviceNameTooLong": "Імя занадта доўгае (да {maxBytes} сімвалаў; эмодзі і дыякрытыка лічацца за больш)",
     "deviceNameInvalidCharacters": "Імя змяшчае непадтрымоўваныя сімвалы",
     "deviceRenameFailed": "Не ўдалося захаваць імя на Omi. Пераканайцеся, што прылада падключана, і паспрабуйце яшчэ раз.",
-    "deviceRenamed": "Прылада перайменавана ў {name}",
-    "captureRecoveryBanner": "Гук кулона не даходзіць да праграмы — націсніце, каб выправіць"
+    "deviceRenamed": "Прылада перайменавана ў {name}"
 }

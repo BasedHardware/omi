@@ -1,18 +1,59 @@
 import copy
 import datetime as dt
 import json
-from pathlib import Path
 import unittest
 from provision import plan, validate
+
+SPEC = {
+    "key": "synthetic-presentation-test",
+    "version": 1,
+    "owner": "unit-test",
+    "hypothesis": "Synthetic variants exercise inactive draft planning.",
+    "primary_metric": {
+        "event": "Synthetic Outcome",
+        "filters": {"journey": "synthetic", "outcome": "success"},
+    },
+    "guardrails": [
+        {"event": "Synthetic Outcome", "filters": {"journey": "synthetic", "outcome": "failure"}},
+    ],
+    "targeting": {"namespaces": ["mobile-test"], "minimum_build": 0},
+    "variants": [
+        {"key": "control", "rollout_percentage": 50},
+        {"key": "alternate", "rollout_percentage": 50},
+    ],
+    "default_variant": "control",
+    "surfaces": ["synthetic-surface"],
+    "expires_at": "2027-01-01T00:00:00Z",
+    "collision_policy": "independent",
+    "analysis": {
+        "exposure_event": "experiment_exposed",
+        "unit": "distinct_id",
+        "conversion_window_hours": 24,
+    },
+    "status": "draft",
+}
+
+REGISTRY = {
+    "events": [
+        {
+            "wire_name": "Synthetic Outcome",
+            "properties": {
+                "journey": {"wire_name": "journey", "values": ["synthetic"]},
+                "outcome": {"wire_name": "outcome", "values": ["success", "failure"]},
+            },
+        }
+    ],
+    "namespaces": ["mobile-test"],
+}
 
 
 class PlanTests(unittest.TestCase):
     def setUp(self):
-        self.spec = json.loads((Path(__file__).parents[2] / "docs/experiments/summary-feedback-layout.json").read_text())
+        self.spec = copy.deepcopy(SPEC)
         self.now = dt.datetime(2026, 9, 22, tzinfo=dt.timezone.utc)
 
     def test_plan_cannot_launch(self):
-        result = plan(self.spec, 123, self.now)
+        result = plan(self.spec, 123, self.now, registry=REGISTRY)
         self.assertTrue(result["dry_run"])
         self.assertFalse(result["requests"][0]["body"]["active"])
         self.assertEqual(result["requests"][0]["body"]["filters"]["groups"][0]["rollout_percentage"], 0)
@@ -24,15 +65,15 @@ class PlanTests(unittest.TestCase):
             spec = copy.deepcopy(self.spec)
             del spec[field]
             with self.subTest(field=field), self.assertRaises(ValueError):
-                validate(spec, self.now)
+                validate(spec, self.now, registry=REGISTRY)
 
     def test_bad_weights_expiry_status_and_project(self):
         for changes in ({"status": "running"}, {"expires_at": "2020-01-01T00:00:00Z"},
                         {"variants": [{"key": "control", "rollout_percentage": 50}, {"key": "test", "rollout_percentage": 20}]}):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
-                validate({**self.spec, **changes}, self.now)
+                validate({**self.spec, **changes}, self.now, registry=REGISTRY)
         with self.assertRaises(ValueError):
-            plan(self.spec, "../other", self.now)
+            plan(self.spec, "../other", self.now, registry=REGISTRY)
 
 class FakeResponse:
     status = 200
@@ -87,8 +128,8 @@ class MockManagementHttp:
 class ReconcileTests(unittest.TestCase):
     def setUp(self):
         from provision import ManagementApi
-        self.spec = json.loads((Path(__file__).parents[2] / "docs/experiments/summary-feedback-layout.json").read_text())
-        self.draft = plan(self.spec, 123, dt.datetime(2026, 9, 22, tzinfo=dt.timezone.utc))
+        self.spec = copy.deepcopy(SPEC)
+        self.draft = plan(self.spec, 123, dt.datetime(2026, 9, 22, tzinfo=dt.timezone.utc), registry=REGISTRY)
         self.api = ManagementApi("https://us.posthog.com", 123, "mocked-secret")
         self.http = MockManagementHttp()
         self.api.opener = self.http
@@ -104,16 +145,16 @@ class ReconcileTests(unittest.TestCase):
         self.assertEqual(metric["metric_type"], "funnel")
         self.assertEqual(metric["conversion_window"], 24)
         self.assertEqual(metric["conversion_window_unit"], "hour")
-        self.assertEqual(metric["series"][0]["event"], "Product Journey Outcome")
+        self.assertEqual(metric["series"][0]["event"], "Synthetic Outcome")
         self.assertEqual({p["key"]: p["value"] for p in metric["series"][0]["properties"]},
-                         {"journey": "summary_feedback", "outcome": "success", "experiment_context_verified": True,
-                          f"$feature/{self.spec['key']}": ["control", "compact"]})
+                         {"journey": "synthetic", "outcome": "success", "experiment_context_verified": True,
+                          f"$feature/{self.spec['key']}": ["control", "alternate"]})
         self.assertEqual([metric["goal"] for metric in body["metrics_secondary"]], ["decrease"])
         guardrail = body["metrics_secondary"][0]["series"][0]
-        self.assertEqual(guardrail["event"], "Product Journey Outcome")
+        self.assertEqual(guardrail["event"], "Synthetic Outcome")
         self.assertEqual({p["key"]: p["value"] for p in guardrail["properties"]},
-                         {"journey": "summary_feedback", "outcome": "failure", "experiment_context_verified": True,
-                          f"$feature/{self.spec['key']}": ["control", "compact"]})
+                         {"journey": "synthetic", "outcome": "failure", "experiment_context_verified": True,
+                          f"$feature/{self.spec['key']}": ["control", "alternate"]})
         exposure = body["exposure_criteria"]["exposure_config"]
         self.assertEqual(exposure["event"], "experiment_exposed")
         self.assertEqual({p["key"]: p["value"] for p in exposure["properties"]},

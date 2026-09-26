@@ -12,7 +12,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 import utils.other.hume as hume
-from models.audio_file import AudioFile
+from models.audio_file import AudioFile, ChunkSpan
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
@@ -31,6 +31,7 @@ from utils.manual_speaker_assignments import (
     remap_absorbed_receipt,
 )
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
+from .audio_timeline import group_chunks_by_coverage
 from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, transcript_fingerprint
 from .firestore_index_registry import (
     CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
@@ -894,6 +895,24 @@ def get_conversation_raw_snapshot(
     return snapshot.to_dict()
 
 
+def get_manual_speaker_receipt(uid: str, conversation_id: str, *, firestore_client: Any = None) -> dict:
+    """The conversation's manual speaker receipt alone, without reading its transcript."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    snapshot = (
+        client.collection('users')
+        .document(uid)
+        .collection(conversations_collection)
+        .document(conversation_id)
+        .get(field_paths=['manual_speaker_assignments', 'manual_speaker_assignments_compressed'])
+    )
+    data = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+    if not data:
+        return {}
+    return decode_manual_speaker_assignments(
+        uid, data.get('manual_speaker_assignments'), bool(data.get('manual_speaker_assignments_compressed'))
+    )
+
+
 def get_public_shared_conversation_bounded(
     uid: str,
     conversation_id: str,
@@ -1264,30 +1283,11 @@ def create_audio_files_from_chunks(
     if not chunks:
         return []
 
-    # Group chunks based on gap rule (90s threshold accommodates both 5s and 60s chunk durations)
+    # Group chunks based on gap rule (90s threshold accommodates both 5s and 60s
+    # chunk durations). v2 listings split at actual uncovered ends or overlaps.
     audio_files = []
-    current_group = []
-    gap_threshold = 90  # seconds — must exceed max chunk duration (60s) to avoid false splits
-
-    for i, chunk in enumerate(chunks):
-        if not current_group:
-            current_group.append(chunk)
-        else:
-            # Check if there's a gap between chunks exceeding the threshold
-            prev_chunk = current_group[-1]
-            time_gap = chunk['timestamp'] - prev_chunk['timestamp']
-            if time_gap > gap_threshold:
-                # Gap detected, finalize current group
-                audio_file = _finalize_audio_file_group(uid, conversation_id, current_group, audio_files)
-                if audio_file:
-                    audio_files.append(audio_file)
-                current_group = [chunk]
-            else:
-                current_group.append(chunk)
-
-    # Finalize last group
-    if current_group:
-        audio_file = _finalize_audio_file_group(uid, conversation_id, current_group, audio_files)
+    for chunk_group in group_chunks_by_coverage(chunks, gap_threshold=90):
+        audio_file = _finalize_audio_file_group(uid, conversation_id, chunk_group, audio_files)
         if audio_file:
             audio_files.append(audio_file)
 
@@ -1318,13 +1318,47 @@ def _finalize_audio_file_group(
     # Extract timestamps
     timestamps = [chunk['timestamp'] for chunk in chunk_group]
 
+    # v2 groups carry validated contiguous coverage spans from blob metadata;
+    # duration is the authoritative span extent, never an encoded-size guess.
+    spans: List[Tuple[float, float]] = []
+    for chunk in chunk_group:
+        span = chunk.get('span')
+        if not isinstance(span, dict):
+            spans = []
+            break
+        try:
+            start = float(span['start'])
+            samples = float(span['samples'])
+            rate = float(span['sample_rate'])
+        except (KeyError, TypeError, ValueError):
+            spans = []
+            break
+        if samples <= 0 or rate <= 0:
+            spans = []
+            break
+        spans.append((start, start + samples / rate))
+
+    if spans:
+        started_at = datetime.fromtimestamp(spans[0][0], tz=timezone.utc)
+        duration = spans[-1][1] - spans[0][0]
+        return AudioFile(
+            id=file_id,
+            uid=uid,
+            conversation_id=conversation_id,
+            chunk_timestamps=timestamps,
+            provider='gcp',
+            started_at=started_at,
+            duration=duration,
+            chunk_spans=[ChunkSpan(start=round(start, 3), end=round(end, 3)) for start, end in spans],
+        )
+
     # Calculate started_at and duration from timestamps and blob sizes
     started_at = datetime.fromtimestamp(chunk_group[0]['timestamp'], tz=timezone.utc)
     last_chunk_start = datetime.fromtimestamp(chunk_group[-1]['timestamp'], tz=timezone.utc)
     # Estimate last chunk duration from blob size (PCM16 mono at 16kHz = 32000 bytes/sec).
     # Approximate for opus-encoded blobs; conversation_audio.captured_duration (from
     # decoded PCM) is the display source of truth.
-    last_chunk_size = chunk_group[-1].get('size', 0)
+    last_chunk_size = chunk_group[-1].get('size') or 0
     last_chunk_duration = last_chunk_size / 32000.0 if last_chunk_size > 0 else 5.0
     duration = (last_chunk_start - started_at).total_seconds() + last_chunk_duration
 
@@ -2457,6 +2491,7 @@ def update_conversation_segments(
     data_protection_level: str = None,
     *,
     started_at: datetime = None,
+    audio_timeline: Optional[dict] = None,
     firestore_client: Any = None,
     invalidate_client_processing: bool = True,
     return_segments: bool = False,
@@ -2484,6 +2519,12 @@ def update_conversation_segments(
     live-capture write loop). The transaction still clears a projection that
     is actually present on the document, so a finalize overlapping capture cannot
     leave a hash-bound summary of text that then changed.
+
+    Audio-timeline v2: ``audio_timeline`` is the fenced provenance pin. The
+    marker and the projected first-audio ``started_at`` apply atomically only
+    while the document has no marker yet, so a late receiver can never reset an
+    origin already emitted to clients. Once the marker exists, a ``started_at``
+    argument is ignored — the origin is pinned for the recording's life.
     """
     if live_segments is not None and segment_update_fields is not None:
         raise ValueError('Live merge and field-only segment updates are mutually exclusive')
@@ -2569,8 +2610,17 @@ def update_conversation_segments(
             update_payload['manual_speaker_assignments'] = receipt
         if finished_at:
             update_payload['finished_at'] = finished_at
-        if started_at:
+        pinned_timeline = isinstance(current.get('audio_timeline'), dict) and current.get('audio_timeline')
+        if audio_timeline is not None and not pinned_timeline:
+            # Fenced compare-and-set: the marker and the projected first-audio
+            # origin land in the same transaction, exactly once per row.
+            update_payload['audio_timeline'] = audio_timeline
+            if started_at:
+                update_payload['started_at'] = started_at
+        elif started_at and not pinned_timeline:
             update_payload['started_at'] = started_at
+        # With the marker already present, a stale started_at is ignored: the
+        # origin was pinned with the marker and must not move.
         prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
         if invalidate_client_processing:
             _invalidate_client_processing(prepared_payload)

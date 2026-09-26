@@ -2497,12 +2497,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Mesej diagnostik terperinci';
 
   @override
-  String get autoCreateSpeakers => 'Cipta Penceramah Secara Automatik';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Cipta automatik apabila nama dikesan';
-
-  @override
   String get followUpQuestions => 'Soalan Susulan';
 
   @override
@@ -11201,9 +11195,6 @@ class AppLocalizationsMs extends AppLocalizations {
       'Transkripsi tidak tersedia, rakaman diteruskan pada peranti dan akan diproses kemudian';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transkripsi tidak tersedia · disimpan pada peranti';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Transkripsi tertunggak $pending/$total';
   }
@@ -11291,4 +11282,46 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Audio loket tidak sampai ke aplikasi — ketik untuk membaiki';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Hentikan Transcribe Later pada loket anda sebelum merakam dengan telefon.';
+
+  @override
+  String get captureNotTranscribing => 'Tiada transkripsi';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio disimpan, ditranskripsi kemudian';
+
+  @override
+  String get captureStillRecording => 'Masih merakam';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofon digunakan oleh apl lain';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Panggilan atau apl lain sedang menggunakan mikrofon, jadi Omi tidak dapat mendengar sekarang. Omi akan bersambung sendiri apabila mikrofon bebas. Semua yang dirakam sebelum ini selamat.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Perkhidmatan pertuturan-ke-teks tersuai anda tidak dapat dicapai. Omi menyimpan audio pada telefon ini dan menghantarnya apabila perkhidmatan kembali. Tiada apa yang hilang.';
+
+  @override
+  String get captureStarting => 'Memulakan…';
+
+  @override
+  String get capturePhoneStorageFull => 'Storan telefon penuh';
+
+  @override
+  String get captureStorageAlmostFull => 'Storan hampir penuh';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Loket anda terputus sambungan dengan telefon ini. Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan. Semua yang dirakam sebelum ini selamat.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name dan lain-lain';
+  }
 }

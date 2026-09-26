@@ -2503,12 +2503,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Részletes diagnosztikai üzenetek';
 
   @override
-  String get autoCreateSpeakers => 'Beszélők automatikus létrehozása';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Automatikus létrehozás név észlelésekor';
-
-  @override
   String get followUpQuestions => 'Követő kérdések';
 
   @override
@@ -11215,9 +11209,6 @@ class AppLocalizationsHu extends AppLocalizations {
       'Átiratok nem érhetők el, a felvétel folytatódik az eszközön, és később feldolgozásra kerül';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Átirat nem érhető el · mentés az eszközön';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Függő átiratok $pending/$total';
   }
@@ -11306,4 +11297,46 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'A medál hangja nem érkezik meg az alkalmazásba — a javításhoz koppintson';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Állítsa le a Transcribe Later módot a medálján, mielőtt telefonnal rögzítene.';
+
+  @override
+  String get captureNotTranscribing => 'Nincs átírás';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Hang mentve, később lesz átírva';
+
+  @override
+  String get captureStillRecording => 'A felvétel folytatódik';
+
+  @override
+  String get captureMicInUseElsewhere => 'A mikrofont egy másik app használja';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Egy hívás vagy egy másik app lefoglalta a mikrofont, ezért az Omi most nem hall. Az Omi magától folytatja, amint a mikrofon felszabadul. Minden, amit eddig rögzített, biztonságban van.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Az egyéni beszédfelismerő szolgáltatásod nem érhető el. Az Omi ezen a telefonon tárolja a hangot, és elküldi, amint a szolgáltatás újra elérhető. Semmi nem vész el.';
+
+  @override
+  String get captureStarting => 'Indítás…';
+
+  @override
+  String get capturePhoneStorageFull => 'A telefon tárhelye megtelt';
+
+  @override
+  String get captureStorageAlmostFull => 'A tárhely majdnem megtelt';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'A medál elvesztette a kapcsolatot ezzel a telefonnal. Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van. Minden, amit eddig rögzített, biztonságban van.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name és mások';
+  }
 }

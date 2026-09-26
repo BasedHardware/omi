@@ -2492,12 +2492,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Детальні діагностичні повідомлення';
 
   @override
-  String get autoCreateSpeakers => 'Автоматично створювати спікерів';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Автоматично створювати при виявленні імені';
-
-  @override
   String get followUpQuestions => 'Додаткові питання';
 
   @override
@@ -11193,9 +11187,6 @@ class AppLocalizationsUk extends AppLocalizations {
       'Транскрипція недоступна, запис триває на пристрої та буде оброблений пізніше';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Транскрипція недоступна · зберігається на пристрої';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Транскрипцій у черзі $pending/$total';
   }
@@ -11284,4 +11275,45 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Звук кулона не надходить до застосунку — натисніть, щоб виправити';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => 'Зупиніть Transcribe Later на підвісці перед записом на телефоні.';
+
+  @override
+  String get captureNotTranscribing => 'Немає транскрипції';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Аудіо збережено, транскрипція пізніше';
+
+  @override
+  String get captureStillRecording => 'Запис триває';
+
+  @override
+  String get captureMicInUseElsewhere => 'Мікрофон зайнятий іншою програмою';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Дзвінок або інша програма зайняли мікрофон, тому Omi зараз не чує. Omi продовжить сам, коли мікрофон звільниться. Усе, що записано до цього, збережено.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Ваш власний сервіс розпізнавання мовлення недоступний. Omi зберігає аудіо на цьому телефоні й надішле його, коли сервіс запрацює. Нічого не втратиться.';
+
+  @override
+  String get captureStarting => 'Запуск…';
+
+  @override
+  String get capturePhoneStorageFull => 'Пам’ять телефона заповнена';
+
+  @override
+  String get captureStorageAlmostFull => 'Пам’ять майже заповнена';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Кулон втратив зв’язок із цим телефоном. Omi перепідключиться сам, коли кулон буде ввімкнений і поруч. Усе, що записано до цього, збережено.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name та інші';
+  }
 }

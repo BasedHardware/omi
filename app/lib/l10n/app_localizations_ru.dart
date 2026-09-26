@@ -2495,12 +2495,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Подробные диагностические сообщения';
 
   @override
-  String get autoCreateSpeakers => 'Автосоздание спикеров';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Автоматически создавать при обнаружении имени';
-
-  @override
   String get followUpQuestions => 'Дополнительные вопросы';
 
   @override
@@ -3679,7 +3673,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get preparingSystemAudioCapture => 'Подготовка записи системного аудио';
 
   @override
-  String get reconnecting => 'Переподключение…';
+  String get reconnecting => 'Подключение…';
 
   @override
   String get recordingPaused => 'Запись приостановлена';
@@ -11209,9 +11203,6 @@ class AppLocalizationsRu extends AppLocalizations {
       'Транскрипция недоступна, запись продолжается на устройстве и будет обработана позже';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Транскрипция недоступна · сохраняется на устройстве';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Транскрипций в ожидании $pending/$total';
   }
@@ -11300,4 +11291,46 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Звук кулона не доходит до приложения — нажмите, чтобы исправить';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Остановите Transcribe Later на подвеске, прежде чем записывать с телефона.';
+
+  @override
+  String get captureNotTranscribing => 'Нет текста';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Аудио сохранено, расшифруется позже';
+
+  @override
+  String get captureStillRecording => 'Запись продолжается';
+
+  @override
+  String get captureMicInUseElsewhere => 'Микрофон занят другим приложением';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Звонок или другое приложение заняли микрофон, поэтому Omi сейчас не слышит. Omi продолжит сам, когда микрофон освободится. Всё, что записано до этого, сохранено.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Ваш собственный сервис распознавания речи недоступен. Omi хранит аудио на этом телефоне и отправит его, когда сервис заработает. Ничего не потеряется.';
+
+  @override
+  String get captureStarting => 'Запуск…';
+
+  @override
+  String get capturePhoneStorageFull => 'Память телефона заполнена';
+
+  @override
+  String get captureStorageAlmostFull => 'Память почти заполнена';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Кулон потерял связь с этим телефоном. Omi переподключится сам, когда кулон будет включён и рядом. Всё, что записано до этого, сохранено.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name и другие';
+  }
 }

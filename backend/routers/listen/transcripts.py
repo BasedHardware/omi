@@ -8,7 +8,7 @@ import time
 import uuid
 from collections import deque
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence, cast
+from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
 
 from fastapi.websockets import WebSocketDisconnect
 
@@ -22,8 +22,10 @@ from models.message_event import (
     TranslationEvent,
 )
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment, Translation
+from routers.listen.contracts import persisted_started_seconds
 from utils.app_integrations import trigger_realtime_integrations
 from utils.conversations.factory import deserialize_conversation
+from utils.metrics import OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.manual_speaker_assignments import LiveTranscriptMerge
 from utils.speaker_assignment import process_speaker_assigned_segments, should_update_speaker_to_person_map
@@ -194,6 +196,7 @@ class TranscriptProcessor:
         photos: List[ConversationPhoto],
         finished_at: datetime,
         started_at: Optional[datetime],
+        audio_timeline: Optional[Dict[str, Any]] = None,
     ) -> Optional[tuple[Conversation, List[TranscriptSegment], List[str]]]:
         updated: List[TranscriptSegment] = []
         removed: List[str] = []
@@ -215,6 +218,7 @@ class TranscriptProcessor:
                 [segment.model_dump() for segment in targets],
                 live_segments=fresh,
                 started_at=started_at,
+                audio_timeline=audio_timeline,
                 data_protection_level=self.cache.protection_level,
                 invalidate_client_processing=False,
             )
@@ -336,6 +340,40 @@ class TranscriptProcessor:
             logger.warning('Listen segment delivery after close type=%s', type(error).__name__)
         return False
 
+    async def _deliver_live_updates(
+        self,
+        conversation: Conversation,
+        updated: List[TranscriptSegment],
+        removed: List[str],
+        new_segments: List[TranscriptSegment],
+        conversation_id: str,
+    ) -> None:
+        """Deliver one batch's live updates: client WS, pusher/realtime, onboarding, translation.
+
+        Shared by the legacy loop and the v2 batch path so the two persistence
+        modes never drift in what a delivered segment triggers downstream.
+        """
+        client_segments = [segment.model_dump() for segment in updated]
+        delivered = await self._deliver_segments(client_segments)
+        if delivered and client_segments:
+            self.host.complete_live_transcription()
+        if self.host.transcript_send is not None and self.host.user_has_credits:
+            self.host.transcript_send([segment.model_dump() for segment in new_segments])
+        elif not self.host.pusher_enabled and self.host.user_has_credits:
+            try:
+                await trigger_realtime_integrations(
+                    self.host.request.uid,
+                    [segment.model_dump() for segment in new_segments],
+                    conversation_id,
+                    source=self.host.request.source,
+                    client_kind=self.host.client_kind,
+                )
+            except Exception as error:
+                logger.error('Realtime integration trigger failed type=%s', type(error).__name__)
+        if self.host.onboarding_handler and not self.host.onboarding_handler.completed:
+            self.host.onboarding_handler.on_segments_received([segment.model_dump() for segment in new_segments])
+        await self._translate(updated, conversation.id, removed)
+
     async def process_loop(self) -> None:
         diarized_speaker_ids_by_conversation: Dict[str, set[int]] = {}
         while self.host.state.active or self.segment_buffer or self.photo_buffer:
@@ -352,6 +390,25 @@ class TranscriptProcessor:
             self.photo_buffer.clear()
             if not self.host.state.first_audio_byte_timestamp:
                 continue
+            if getattr(self.host.state, 'capture_timeline_v2', False):
+                # Audio-timeline v2 persistence: segments already carry
+                # absolute projected wall times and their owning conversation
+                # from the capture span; offsets are computed against the
+                # pinned origin below.
+                await self._process_v2_batches(raw_segments, photos, diarized_speaker_ids_by_conversation)
+                continue
+            # Legacy persistence (flag off, resumed rows, custom/multi channel).
+            # Segments may still carry a capture-clock window attached by the
+            # receiver: the transcript math below is byte-identical to the
+            # flag-off baseline, and the window only relocates speaker-ID
+            # clips so they survive provider failovers that restart provider
+            # time at zero.
+            capture_windows: Dict[str, Tuple[float, float]] = {}
+            for raw in raw_segments:
+                abs_start = raw.pop('_capture_abs_start', None)
+                abs_end = raw.pop('_capture_abs_end', None)
+                if abs_start is not None and abs_end is not None:
+                    capture_windows[cast(str, raw.get('id'))] = (float(abs_start), float(abs_end))
             data = await self.cache.get(self.host.state.current_conversation_id)
             if not data:
                 continue
@@ -366,10 +423,10 @@ class TranscriptProcessor:
                         self.host.state.first_audio_byte_timestamp + raw_segments[0]['start'], tz=timezone.utc
                     )
                     data['started_at'] = started_at
-                conversation_started = data['started_at']
-                if isinstance(conversation_started, str):
-                    conversation_started = datetime.fromisoformat(conversation_started)
-                offset = self.host.state.first_audio_byte_timestamp - conversation_started.timestamp()
+                started_ts = (
+                    persisted_started_seconds(data.get('started_at')) or self.host.state.first_audio_byte_timestamp
+                )
+                offset = self.host.state.first_audio_byte_timestamp - started_ts
                 self.speaker_id_allocator.hydrate(data.get('transcript_segments', []))
                 for raw in raw_segments:
                     self.speaker_id_allocator.assign(raw)
@@ -415,29 +472,13 @@ class TranscriptProcessor:
                 self.host.send_event(SegmentsDeletedEvent(segment_ids=removed))
             if not transcript_segments:
                 continue
-            client_segments = [segment.model_dump() for segment in updated]
-            delivered = await self._deliver_segments(client_segments)
-            if delivered and client_segments:
-                self.host.complete_live_transcription()
-            if self.host.transcript_send is not None and self.host.user_has_credits:
-                self.host.transcript_send([segment.model_dump() for segment in transcript_segments])
-            elif not self.host.pusher_enabled and self.host.user_has_credits:
-                try:
-                    await trigger_realtime_integrations(
-                        self.host.request.uid,
-                        [segment.model_dump() for segment in transcript_segments],
-                        self.host.state.current_conversation_id,
-                        source=self.host.request.source,
-                        client_kind=self.host.client_kind,
-                    )
-                except Exception as error:
-                    logger.error('Realtime integration trigger failed type=%s', type(error).__name__)
-            if self.host.onboarding_handler and not self.host.onboarding_handler.completed:
-                self.host.onboarding_handler.on_segments_received(
-                    [segment.model_dump() for segment in transcript_segments]
-                )
-            await self._translate(updated, conversation.id, removed)
-            await self._speaker_detection(updated, offset)
+            await self._deliver_live_updates(conversation, updated, removed, transcript_segments, conversation.id)
+            await self._speaker_detection(
+                updated,
+                self.host.state.first_audio_byte_timestamp - offset,
+                capture_windows=capture_windows,
+                queue_from_raw=raw_segments if capture_windows else None,
+            )
         if self.host.speakers.tasks:
             try:
                 await asyncio.wait_for(self.host.state.speaker_id_done.wait(), timeout=15.0)
@@ -459,23 +500,225 @@ class TranscriptProcessor:
                 },
             )
 
+    async def _process_v2_batches(
+        self,
+        raw_segments: List[Dict[str, Any]],
+        photos: List[ConversationPhoto],
+        diarized_by_conversation: Dict[str, set[int]],
+    ) -> None:
+        """Audio-timeline v2 persistence for one drain of the segment buffer.
+
+        Epoch-translated segments carry absolute projected wall start/end plus
+        the owning conversation resolved from their capture span. The current
+        generation gets the full live path (persist, deliver, translate,
+        speaker detection) with offsets projected against the conversation's
+        pinned first-audio origin; a late batch whose owner is still open is
+        written to that owner, while a terminal owner is fenced out and
+        counted instead of being replayed into a newer conversation.
+
+        Late-but-open owners are **persist-only**: their segments are written
+        and speaker-detected on the row that owns them, but WebSocket
+        delivery, realtime integrations, onboarding and translation run for
+        the session's current conversation only — a client watching this
+        socket is watching the current conversation, and the late row's own
+        finalization owns its post-processing.
+
+        Only a conversation admitted as v2 from its first audio (a pinnable
+        origin, or an already-pinned marker) may carry the v2 marker. A
+        resumed row adopts its persisted ``started_at`` as the projection
+        base and stays legacy for its lifetime — no marker, no origin move.
+        """
+        state = self.host.state
+        groups: Dict[str, List[Dict[str, Any]]] = {}
+        order: List[str] = []
+        for raw in raw_segments:
+            owner = raw.pop('_conversation_id', None) or state.current_conversation_id
+            if not owner:
+                OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='late_owner_dropped').inc()
+                continue
+            if owner not in groups:
+                groups[owner] = []
+                order.append(owner)
+            groups[owner].append(raw)
+        if photos and state.current_conversation_id and state.current_conversation_id not in groups:
+            # Photo-only drain, or a batch of late segments for a previous
+            # owner: the current conversation's photos must still be written,
+            # so run its write with an empty segment list.
+            groups[state.current_conversation_id] = []
+            order.append(state.current_conversation_id)
+
+        for owner in order:
+            segments = groups[owner]
+            is_current = owner == state.current_conversation_id
+            data = await self.cache.get(owner) if is_current else await self._load_conversation(owner)
+            if not data:
+                if is_current and segments:
+                    # The conversation row may be a beat behind its binding;
+                    # re-queue rather than drop live speech.
+                    for segment in reversed(segments):
+                        self.segment_buffer.appendleft(segment)
+                else:
+                    OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='late_owner_dropped').inc()
+                continue
+            marker = data.get('audio_timeline')
+            pinned = isinstance(marker, dict) and marker.get('version') == 2
+            origin = state.conversation_capture_origins.get(owner)
+            origin_wall = origin.wall if origin is not None else None
+            if pinned:
+                started_ts = persisted_started_seconds(data.get('started_at'))
+                if started_ts is None:
+                    OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='late_owner_dropped').inc()
+                    continue
+                pin_started_at: Optional[datetime] = None
+                pin_marker: Optional[Dict[str, Any]] = None
+            elif origin_wall is not None:
+                started_ts = origin_wall
+                if origin.pinnable:
+                    # Fresh v2 generation: pin the marker and the first-audio
+                    # origin atomically with this batch's write.
+                    pin_started_at = datetime.fromtimestamp(origin_wall, tz=timezone.utc)
+                    pin_marker = {'version': 2}
+                else:
+                    # Adopted (resumed) row: project against its own persisted
+                    # started_at; never pin the marker or move the origin.
+                    pin_started_at = None
+                    pin_marker = None
+            elif not segments:
+                # Photo-only drain before any audio: photos keep ordinary wall
+                # lifecycle times and pin nothing.
+                started_ts = persisted_started_seconds(data.get('started_at'))
+                if started_ts is None:
+                    continue
+                pin_started_at = None
+                pin_marker = None
+            elif owner in state.conversations_legacy_locked:
+                # Resumed with an unparseable started_at: keep the transcript
+                # on the legacy projection base; never pin v2. The row's own
+                # started_at stays as-is — the shadow datetime below only
+                # makes the in-memory row model parseable, and no write in
+                # this path touches started_at.
+                started_ts = float(state.first_audio_byte_timestamp or 0.0)
+                data['started_at'] = datetime.fromtimestamp(started_ts, tz=timezone.utc)
+                pin_started_at = None
+                pin_marker = None
+            else:
+                if is_current and segments:
+                    # First audio not observed yet; the origin is pinned by the
+                    # receiver at the next accepted frame.
+                    for segment in reversed(segments):
+                        self.segment_buffer.appendleft(segment)
+                    continue
+                OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='late_owner_dropped').inc()
+                continue
+            if not is_current and data.get('status') != 'in_progress':
+                # Terminal or processing generation: a late old-provider
+                # callback must not reopen it.
+                OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='late_owner_dropped').inc()
+                continue
+
+            finished_at = datetime.now(timezone.utc)
+            new_segments: List[TranscriptSegment] = []
+            if segments:
+                state.last_transcript_time = time.time()
+                self.speaker_id_allocator.hydrate(data.get('transcript_segments', []))
+                for raw in segments:
+                    self.speaker_id_allocator.assign(raw)
+                    raw['start'] = float(raw['start']) - started_ts
+                    raw['end'] = float(raw['end']) - started_ts
+                    segment = TranscriptSegment(**raw, speech_profile_processed=True)
+                    if (
+                        self.host.onboarding_handler is not None
+                        and raw.get('speaker_id') != self.host.onboarding_omi_speaker_id
+                    ):
+                        segment.is_user = True
+                        segment.speaker_identity_status = SpeakerIdentityStatus.user
+                    new_segments.append(segment)
+                    self.current_session_segments[cast(str, segment.id)] = segment.speech_profile_processed
+                state.words_transcribed_since_last_record += len(
+                    ' '.join(segment.text for segment in new_segments).split()
+                )
+                diarized_by_conversation.setdefault(owner, set()).update(
+                    segment.speaker_id for segment in new_segments if isinstance(segment.speaker_id, int)
+                )
+            current = deserialize_conversation(data)
+            result = await self._update_live_conversation(
+                current,
+                new_segments,
+                photos if is_current else [],
+                finished_at,
+                pin_started_at,
+                audio_timeline=pin_marker,
+            )
+            if result is None:
+                if not is_current:
+                    OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='late_owner_dropped').inc()
+                    continue
+                await self.host.conversations.create_new_in_progress_conversation(rollover=True)
+                result = await self._write_fresh(
+                    new_segments, [], finished_at, pin_started_at, audio_timeline=pin_marker
+                )
+                record_fallback(
+                    component='other',
+                    from_mode='fenced_generation',
+                    to_mode='fresh_generation',
+                    reason='local_heal',
+                    outcome='recovered' if result else 'exhausted',
+                    log=logger,
+                )
+            if not result or not result[0]:
+                continue
+            conversation, updated, removed = result
+            if removed:
+                self.host.send_event(SegmentsDeletedEvent(segment_ids=removed))
+            if not new_segments:
+                continue
+            if is_current:
+                await self._deliver_live_updates(conversation, updated, removed, new_segments, owner)
+            await self._speaker_detection(updated, started_ts)
+
     async def _write_fresh(
         self,
         segments: List[TranscriptSegment],
         photos: List[ConversationPhoto],
         finished_at: datetime,
         started_at: Optional[datetime],
+        audio_timeline: Optional[Dict[str, Any]] = None,
     ) -> Optional[tuple[Conversation, List[TranscriptSegment], List[str]]]:
         data = await self.cache.get(self.host.state.current_conversation_id, force_refresh=True)
         return (
             await self._update_live_conversation(
-                deserialize_conversation(data), segments, photos, finished_at, started_at
+                deserialize_conversation(data), segments, photos, finished_at, started_at, audio_timeline=audio_timeline
             )
             if data
             else None
         )
 
-    async def _speaker_detection(self, segments: List[TranscriptSegment], offset: float) -> None:
+    async def _speaker_detection(
+        self,
+        segments: List[TranscriptSegment],
+        abs_base: float,
+        capture_windows: Optional[Dict[str, Tuple[float, float]]] = None,
+        queue_from_raw: Optional[List[Dict[str, Any]]] = None,
+    ) -> None:
+        """Queue speaker embedding work at absolute wall seconds.
+
+        abs_base is the wall second of offset 0 for these segments: for v1 it
+        is first_audio_byte_timestamp - offset (== started_at), for v2 the
+        pinned conversation origin. Speaker clips cut from the ring buffer use
+        the same projection as the stored offsets.
+
+        capture_windows override that projection per segment id: when the
+        receiver located the segment's audio on the capture clock (every
+        server-STT session, flag or not), the clip window is that position,
+        which stays correct across provider failovers whose timestamps restart
+        at zero — the legacy first-audio + provider-time formula does not.
+
+        queue_from_raw queues embedding work from the provider's raw segments
+        instead of the post-merge ``segments``: the live merge re-labels a
+        merged turn with the absorbing id, whose window is not in this batch's
+        id-keyed map, while each raw segment keeps its own capture window (the
+        matcher's covered-audio subtraction dedupes overlapping re-sends).
+        """
         speaker = self.host.speakers
         for segment in segments:
             segment_id = cast(str, segment.id)
@@ -496,7 +739,11 @@ class TranscriptProcessor:
                     self.host.emit_speaker_suggestion(segment.speaker_id, person_id, person_name, segment_id)
                 self.suggested_segments.add(segment_id)
                 continue
-            if should_queue_speaker_embedding(
+            # queue_from_raw only re-homes the *embedding* work (the raw
+            # segments keep their own capture windows through the live merge);
+            # introduction detection must run on these merged segments exactly
+            # as it does without capture windows.
+            if queue_from_raw is None and should_queue_speaker_embedding(
                 speaker_id=segment.speaker_id,
                 person_id=segment.person_id,
                 is_user=segment.is_user,
@@ -504,14 +751,20 @@ class TranscriptProcessor:
                 has_person_embeddings=bool(speaker.person_embeddings),
                 speaker_already_mapped=segment.speaker_id in speaker.speaker_to_person,
             ):
+                window = (capture_windows or {}).get(segment_id)
+                if window is not None:
+                    abs_start, abs_end = window
+                else:
+                    abs_start = abs_base + segment.start
+                    abs_end = abs_base + segment.end
                 try:
                     speaker.queue.put_nowait(
                         {
                             'id': segment.id,
                             'conversation_id': self.host.state.current_conversation_id,
                             'speaker_id': segment.speaker_id,
-                            'abs_start': self.host.state.first_audio_byte_timestamp + segment.start - offset,
-                            'abs_end': self.host.state.first_audio_byte_timestamp + segment.end - offset,
+                            'abs_start': abs_start,
+                            'abs_end': abs_end,
                             'duration': segment.end - segment.start,
                         }
                     )
@@ -557,6 +810,52 @@ class TranscriptProcessor:
                 speaker.segment_assignments[segment_id] = person_id
                 self.host.state.speaker_map_dirty = True
                 self.suggested_segments.add(segment_id)
+        if queue_from_raw is not None:
+            self._queue_raw_detections(queue_from_raw, capture_windows, abs_base)
+
+    def _queue_raw_detections(
+        self,
+        raw_segments: List[Dict[str, Any]],
+        capture_windows: Optional[Dict[str, Tuple[float, float]]],
+        abs_base: float,
+    ) -> None:
+        speaker = self.host.speakers
+        for raw in raw_segments:
+            if should_skip_speaker_detection(
+                person_id=raw.get('person_id'),
+                is_user=raw.get('is_user', False),
+                segment_id=cast(str, raw.get('id')),
+                suggested_segments=cast(Sequence[str], self.suggested_segments),
+            ):
+                continue
+            speaker_id = raw.get('speaker_id')
+            if should_queue_speaker_embedding(
+                speaker_id=speaker_id,
+                person_id=raw.get('person_id'),
+                is_user=raw.get('is_user', False),
+                speaker_id_enabled=self.host.state.speaker_id_enabled,
+                has_person_embeddings=bool(speaker.person_embeddings),
+                speaker_already_mapped=speaker_id in speaker.speaker_to_person,
+            ):
+                window = (capture_windows or {}).get(cast(str, raw.get('id')))
+                if window is not None:
+                    abs_start, abs_end = window
+                else:
+                    abs_start = abs_base + float(raw['start'])
+                    abs_end = abs_base + float(raw['end'])
+                try:
+                    speaker.queue.put_nowait(
+                        {
+                            'id': raw.get('id'),
+                            'conversation_id': self.host.state.current_conversation_id,
+                            'speaker_id': speaker_id,
+                            'abs_start': abs_start,
+                            'abs_end': abs_end,
+                            'duration': float(raw['end']) - float(raw['start']),
+                        }
+                    )
+                except asyncio.QueueFull:
+                    pass
 
     async def flush_translations(self) -> None:
         if self.translation_coordinator:

@@ -2490,12 +2490,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Podrobné diagnostické zprávy';
 
   @override
-  String get autoCreateSpeakers => 'Automaticky vytvářet řečníky';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Automaticky vytvořit při detekci jména';
-
-  @override
   String get followUpQuestions => 'Následné otázky';
 
   @override
@@ -11169,9 +11163,6 @@ class AppLocalizationsCs extends AppLocalizations {
       'Přepisy nejsou k dispozici, nahrávání pokračuje v zařízení a později se zpracuje';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Přepis není k dispozici · ukládá se v zařízení';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Čekající přepisy $pending/$total';
   }
@@ -11260,4 +11251,46 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Zvuk přívěsku se do aplikace nedostává — opravte klepnutím';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Před nahráváním telefonem zastavte na přívěsku režim Transcribe Later.';
+
+  @override
+  String get captureNotTranscribing => 'Nepřepisuje se';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Zvuk uložen, přepíše se později';
+
+  @override
+  String get captureStillRecording => 'Stále se nahrává';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofon používá jiná aplikace';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Hovor nebo jiná aplikace převzala mikrofon, takže Omi teď neslyší. Omi bude pokračovat sám, jakmile se mikrofon uvolní. Vše nahrané předtím je v bezpečí.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Vaše vlastní služba převodu řeči na text není dostupná. Omi uchovává zvuk v tomto telefonu a odešle ho, až bude služba opět k dispozici. Nic se neztratí.';
+
+  @override
+  String get captureStarting => 'Spouštění…';
+
+  @override
+  String get capturePhoneStorageFull => 'Úložiště telefonu je plné';
+
+  @override
+  String get captureStorageAlmostFull => 'Úložiště je téměř plné';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Přívěsek ztratil spojení s tímto telefonem. Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž. Vše nahrané předtím je v bezpečí.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name a další';
+  }
 }

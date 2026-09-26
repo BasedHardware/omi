@@ -87,7 +87,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "FAIR_USE_WEEKLY_SPEECH_MS",
             "GCP_LOCATION",
             "GEMINI_API_KEY",
-            "GOOGLE_CALENDAR_AUTO_LINK_ENABLED",
             "GROQ_API_KEY",
             "HOSTED_PUSHER_API_URL",
             "HOSTED_TRANSLATION_API_URL",
