@@ -12,6 +12,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Literal, TypedDict
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 
 from database import conversations as conversations_db
@@ -72,7 +73,7 @@ def _session_ref(client: Any, uid: str, recording_session_id: str) -> Any:
 def _binding(data: dict[str, Any], recording_session_id: str, *, mapping_conflict: bool) -> RecordingSessionBinding:
     return {
         'recording_session_id': recording_session_id,
-        'conversation_id': str(data['conversation_id']),
+        'conversation_id': str(data.get('conversation_id') or ''),
         'lifecycle_version': int(data.get('lifecycle_version') or LIFECYCLE_ENVELOPE_VERSION),
         'lifecycle_phase': str(data.get('lifecycle_phase') or 'in_progress'),
         'lifecycle_sequence': int(data.get('lifecycle_sequence') or 0),
@@ -122,8 +123,21 @@ def create_or_get_recording_session(
     firestore_client: Any = None,
 ) -> RecordingSessionBinding:
     """Atomically bind a session to exactly one canonical conversation ID."""
-    if not uid or not recording_session_id or not proposed_conversation_id:
+    if (
+        not uid
+        or not isinstance(uid, str)
+        or not uid.strip()
+        or not recording_session_id
+        or not isinstance(recording_session_id, str)
+        or not recording_session_id.strip()
+        or not proposed_conversation_id
+        or not isinstance(proposed_conversation_id, str)
+        or not proposed_conversation_id.strip()
+    ):
         raise ValueError('uid, recording_session_id, and proposed_conversation_id are required')
+    uid = uid.strip()
+    recording_session_id = recording_session_id.strip()
+    proposed_conversation_id = proposed_conversation_id.strip()
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_create_or_get_recording_session_txn)
@@ -144,8 +158,17 @@ def get_recording_session(
     firestore_client: Any = None,
 ) -> RecordingSessionBinding | None:
     """Read the canonical binding without proposing or mutating an identity."""
-    if not uid or not recording_session_id:
+    if (
+        not uid
+        or not isinstance(uid, str)
+        or not uid.strip()
+        or not recording_session_id
+        or not isinstance(recording_session_id, str)
+        or not recording_session_id.strip()
+    ):
         raise ValueError('uid and recording_session_id are required')
+    uid = uid.strip()
+    recording_session_id = recording_session_id.strip()
     snapshot = _session_ref(_client(firestore_client), uid, recording_session_id).get()
     if not getattr(snapshot, 'exists', False):
         return None
@@ -176,57 +199,77 @@ def tombstone_and_delete_empty_conversation(
     itself: by the time this returns the row is gone, and a fetch beforehand
     would decide against a snapshot a concurrent write can still invalidate.
     """
-    client = _client(firestore_client)
-    conversation_ref = (
-        client.collection('users').document(uid).collection(CONVERSATIONS_COLLECTION).document(conversation_id)
-    )
-    session_ref = _session_ref(client, uid, recording_session_id) if recording_session_id else None
-    transaction = client.transaction()
+    if (
+        not uid
+        or not isinstance(uid, str)
+        or not uid.strip()
+        or not conversation_id
+        or not isinstance(conversation_id, str)
+        or not conversation_id.strip()
+    ):
+        raise ValueError('uid and conversation_id are required')
+    uid = uid.strip()
+    conversation_id = conversation_id.strip()
+    if recording_session_id is not None:
+        if not isinstance(recording_session_id, str) or not recording_session_id.strip():
+            recording_session_id = None
+        else:
+            recording_session_id = recording_session_id.strip()
 
-    @firestore.transactional
-    def _delete_empty(transaction: Any) -> bool:
-        snapshot = conversation_ref.get(transaction=transaction)
-        if not getattr(snapshot, 'exists', False):
-            return False
-        conversation = snapshot.to_dict() or {}
-        if (
-            conversation.get('status') != 'in_progress'
-            or conversation.get('discarded')
-            or conversation.get('deleted')
-            or conversation.get('is_locked')
-            or conversation.get('sync_content_revision')
-            or conversations_db.raw_conversation_has_content(uid, conversation)
-        ):
-            return False
+    try:
+        client = _client(firestore_client)
+        conversation_ref = (
+            client.collection('users').document(uid).collection(CONVERSATIONS_COLLECTION).document(conversation_id)
+        )
+        session_ref = _session_ref(client, uid, recording_session_id) if recording_session_id else None
+        transaction = client.transaction()
 
-        if session_ref is not None:
-            session_snapshot = session_ref.get(transaction=transaction)
-            if getattr(session_snapshot, 'exists', False):
-                session = session_snapshot.to_dict() or {}
-                if (
-                    session.get('uid') == uid
-                    and session.get('recording_session_id') == recording_session_id
-                    and session.get('conversation_id') == conversation_id
-                ):
-                    phase = str(session.get('lifecycle_phase') or 'in_progress')
-                    if phase not in _TERMINAL_PHASES:
-                        transaction.update(
-                            session_ref,
-                            {
-                                'lifecycle_phase': 'discarded',
-                                'lifecycle_sequence': int(session.get('lifecycle_sequence') or 0) + 1,
-                                'updated_at': _now(),
-                            },
-                        )
-        if deleted_conversation is not None:
-            # A contended transaction re-runs this function, so publish the
-            # snapshot that belongs to the attempt that actually commits.
-            deleted_conversation.clear()
-            deleted_conversation.update(conversation)
-        transaction.delete(conversation_ref)
-        return True
+        @firestore.transactional
+        def _delete_empty(transaction: Any) -> bool:
+            snapshot = conversation_ref.get(transaction=transaction)
+            if not getattr(snapshot, 'exists', False):
+                return False
+            conversation = snapshot.to_dict() or {}
+            if (
+                conversation.get('status') != 'in_progress'
+                or conversation.get('discarded')
+                or conversation.get('deleted')
+                or conversation.get('is_locked')
+                or conversation.get('sync_content_revision')
+                or conversations_db.raw_conversation_has_content(uid, conversation)
+            ):
+                return False
 
-    return _delete_empty(transaction)
+            if session_ref is not None:
+                session_snapshot = session_ref.get(transaction=transaction)
+                if getattr(session_snapshot, 'exists', False):
+                    session = session_snapshot.to_dict() or {}
+                    if (
+                        session.get('uid') == uid
+                        and session.get('recording_session_id') == recording_session_id
+                        and session.get('conversation_id') == conversation_id
+                    ):
+                        phase = str(session.get('lifecycle_phase') or 'in_progress')
+                        if phase not in _TERMINAL_PHASES:
+                            transaction.update(
+                                session_ref,
+                                {
+                                    'lifecycle_phase': 'discarded',
+                                    'lifecycle_sequence': int(session.get('lifecycle_sequence') or 0) + 1,
+                                    'updated_at': _now(),
+                                },
+                            )
+            if deleted_conversation is not None:
+                # A contended transaction re-runs this function, so publish the
+                # snapshot that belongs to the attempt that actually commits.
+                deleted_conversation.clear()
+                deleted_conversation.update(conversation)
+            transaction.delete(conversation_ref)
+            return True
+
+        return _delete_empty(transaction)
+    except NotFound:
+        return False
 
 
 def _record_lifecycle_event_txn(
@@ -321,6 +364,21 @@ def record_lifecycle_event(
     """Append a monotonic lifecycle envelope, rejecting stale or misbound events."""
     if phase not in _PHASE_ORDER:
         raise ValueError(f'unsupported recording lifecycle phase: {phase}')
+    if (
+        not uid
+        or not isinstance(uid, str)
+        or not uid.strip()
+        or not recording_session_id
+        or not isinstance(recording_session_id, str)
+        or not recording_session_id.strip()
+        or not conversation_id
+        or not isinstance(conversation_id, str)
+        or not conversation_id.strip()
+    ):
+        raise ValueError('uid, recording_session_id, and conversation_id are required')
+    uid = uid.strip()
+    recording_session_id = recording_session_id.strip()
+    conversation_id = conversation_id.strip()
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_record_lifecycle_event_txn)
