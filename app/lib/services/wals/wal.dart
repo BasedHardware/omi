@@ -30,7 +30,19 @@ const secondsPerFlashPage = 1.4;
 ///                  The same bytes produce the same verdict every time, so like
 ///                  [outsideRecoveryWindow] this is terminal rather than pending.
 ///                  The local file is kept; only deletion is offered.
-enum WalStatus { inProgress, miss, uploaded, synced, corrupted, outsideRecoveryWindow, unsupportedAudio }
+/// - [uploadRejected] — the upload endpoint definitively refused these bytes
+///                  (HTTP 400/401/403/413). Connectivity restoration cannot
+///                  change that response, so automatic drains must stop.
+enum WalStatus {
+  inProgress,
+  miss,
+  uploaded,
+  synced,
+  corrupted,
+  outsideRecoveryWindow,
+  unsupportedAudio,
+  uploadRejected,
+}
 
 enum WalStorage { mem, disk, sdcard, flashPage }
 
@@ -63,6 +75,7 @@ enum WalSyncDisplayState {
   corrupted,
   outsideRecoveryWindow,
   unsupportedAudio,
+  uploadRejected,
 }
 
 /// Worst user-facing sync outcome across a set of WALs, so an aggregate
@@ -93,6 +106,7 @@ int _syncOutcomeRank(WalSyncDisplayState state) => switch (state) {
       WalSyncDisplayState.corrupted => 4,
       WalSyncDisplayState.outsideRecoveryWindow => 4,
       WalSyncDisplayState.unsupportedAudio => 4,
+      WalSyncDisplayState.uploadRejected => 4,
       WalSyncDisplayState.retrying => 3,
       WalSyncDisplayState.syncing => 2,
       WalSyncDisplayState.uploaded => 1,
@@ -218,6 +232,7 @@ class Wal {
     if (status == WalStatus.corrupted) return WalSyncDisplayState.corrupted;
     if (status == WalStatus.outsideRecoveryWindow) return WalSyncDisplayState.outsideRecoveryWindow;
     if (status == WalStatus.unsupportedAudio) return WalSyncDisplayState.unsupportedAudio;
+    if (status == WalStatus.uploadRejected) return WalSyncDisplayState.uploadRejected;
     if (isSyncing) return WalSyncDisplayState.syncing;
     switch (status) {
       case WalStatus.uploaded:
@@ -230,6 +245,8 @@ class Wal {
         return WalSyncDisplayState.outsideRecoveryWindow;
       case WalStatus.unsupportedAudio:
         return WalSyncDisplayState.unsupportedAudio;
+      case WalStatus.uploadRejected:
+        return WalSyncDisplayState.uploadRejected;
       case WalStatus.miss:
         if (retryCount >= walMaxAutoRetries) return WalSyncDisplayState.failed;
         if (retryCount > 0) return WalSyncDisplayState.retrying;
@@ -265,6 +282,18 @@ class Wal {
   /// sync attempt is terminal; the job id is dropped because it has been resolved.
   void markUnsupportedAudio() {
     status = WalStatus.unsupportedAudio;
+    jobId = null;
+    isSyncing = false;
+    syncStartedAt = null;
+    syncEtaSeconds = null;
+    syncSpeedKBps = null;
+  }
+
+  /// Marks a definitive upload-endpoint refusal. The bytes stay available for
+  /// review/deletion, but connectivity wakes and manual retry do not re-offer
+  /// a request the server has already declared invalid or unauthorized.
+  void markUploadRejected() {
+    status = WalStatus.uploadRejected;
     jobId = null;
     isSyncing = false;
     syncStartedAt = null;

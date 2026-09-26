@@ -97,6 +97,12 @@ String? _walLocationBatchKey(Wal wal) {
 bool isAutoUploadEligible(Wal wal) =>
     wal.status == WalStatus.miss && wal.storage == WalStorage.disk && wal.retryCount < walMaxAutoRetries;
 
+const _kDefinitiveUploadRefusalStatusCodes = {400, 401, 403, 413};
+
+@visibleForTesting
+bool isDefinitiveUploadRefusal(Object error) =>
+    error is SyncUploadHttpException && _kDefinitiveUploadRefusalStatusCodes.contains(error.statusCode);
+
 List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
   final ordered = List<Wal>.from(pending)..sort((a, b) => b.timerStart.compareTo(a.timerStart));
   if (ordered.isEmpty) return const [];
@@ -795,7 +801,8 @@ class LocalWalSyncImpl implements LocalWalSync {
           (w) =>
               w.status == WalStatus.corrupted ||
               w.status == WalStatus.outsideRecoveryWindow ||
-              w.status == WalStatus.unsupportedAudio,
+              w.status == WalStatus.unsupportedAudio ||
+              w.status == WalStatus.uploadRejected,
         )
         .toList();
     for (final wal in corruptedWals) {
@@ -1061,6 +1068,32 @@ class LocalWalSyncImpl implements LocalWalSync {
         await _saveWalsToFile(generation);
         _notifyUpdated(generation);
         continue;
+      } on SyncUploadHttpException catch (e) {
+        batchesFailed++;
+        final definitive = isDefinitiveUploadRefusal(e);
+        if (definitive) {
+          for (final wal in batchWals) {
+            wal.markUploadRejected();
+          }
+          resp.localUploadPermanentFailures += batchWals.length;
+          resp.localUploadPermanentError = e.toString();
+          DebugLogManager.logEvent('local_upload_terminal_http_refusal', {
+            'statusCode': e.statusCode,
+            'walCount': batchWals.length,
+          });
+        } else {
+          for (final wal in batchWals) {
+            wal.isSyncing = false;
+            wal.syncStartedAt = null;
+            wal.syncEtaSeconds = null;
+          }
+        }
+        DebugLogManager.logError(e, null, 'Local upload HTTP failure: ${e.toString()}', {
+          'batchIndex': batchesCompleted + batchesFailed,
+          'filesInBatch': files.length,
+          'statusCode': e.statusCode,
+          'terminal': definitive,
+        });
       } catch (e) {
         print('Local WAL upload batch failed: $e, continuing with remaining files');
         batchesFailed++;
@@ -1112,6 +1145,10 @@ class LocalWalSyncImpl implements LocalWalSync {
       return null;
     }
     final walToSync = matches.first;
+    if (walToSync.status == WalStatus.uploadRejected) {
+      DebugLogManager.logInfo('Single WAL upload skipped — server refusal is terminal', {'walId': wal.id});
+      return null;
+    }
     // A deliberate single-recording retry is a fresh start, so it restores the
     // auto-upload budget a previous failure spent. It costs at most one extra
     // upload for a permanently refused recording: the reconciler spends the
@@ -1242,6 +1279,24 @@ class LocalWalSyncImpl implements LocalWalSync {
       await _saveWalsToFile(generation);
       _notifyUpdated(generation);
       return resp;
+    } on SyncUploadHttpException catch (e) {
+      if (isDefinitiveUploadRefusal(e)) {
+        walToSync.markUploadRejected();
+        resp.localUploadFailures = 1;
+        resp.localUploadPermanentFailures = 1;
+        resp.localUploadPermanentError = e.toString();
+        DebugLogManager.logEvent('single_wal_terminal_http_refusal', {
+          'walId': wal.id,
+          'statusCode': e.statusCode,
+        });
+        await _saveWalsToFile(generation);
+        _notifyUpdated(generation);
+        return resp;
+      }
+      walToSync.isSyncing = false;
+      walToSync.syncStartedAt = null;
+      walToSync.syncEtaSeconds = null;
+      rethrow;
     } catch (e) {
       Logger.debug('Single WAL upload failed: $e');
       DebugLogManager.logError(e, null, 'Single WAL upload failed: ${e.toString()}', {'walId': wal.id});

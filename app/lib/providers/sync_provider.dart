@@ -85,7 +85,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   // terminal: retain it in All and Needs Attention, never present it as work
   // that sync can still complete.
   bool _isPending(Wal w) =>
-      w.status != WalStatus.corrupted && (w.status == WalStatus.miss || w.status == WalStatus.uploaded || w.isSyncing);
+      w.status != WalStatus.corrupted &&
+      w.status != WalStatus.uploadRejected &&
+      (w.status == WalStatus.miss || w.status == WalStatus.uploaded || w.isSyncing);
 
   // Memoized status-filtered partitions of _allWals. Returning a stable
   // List<Wal> reference between rebuilds is load-bearing — downstream the
@@ -121,7 +123,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         synced.add(w);
       } else if (w.status == WalStatus.corrupted ||
           w.status == WalStatus.outsideRecoveryWindow ||
-          w.status == WalStatus.unsupportedAudio) {
+          w.status == WalStatus.unsupportedAudio ||
+          w.status == WalStatus.uploadRejected) {
         corrupted.add(w);
       } else if (_isPending(w)) {
         pending.add(w);
@@ -232,8 +235,15 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
             s == WalSyncDisplayState.failed ||
             s == WalSyncDisplayState.corrupted ||
             s == WalSyncDisplayState.outsideRecoveryWindow ||
-            s == WalSyncDisplayState.unsupportedAudio,
+            s == WalSyncDisplayState.unsupportedAudio ||
+            s == WalSyncDisplayState.uploadRejected,
       );
+
+  /// Durable HTTP refusals that automatic connectivity wakes must never retry.
+  /// The Auto Sync Needs Attention chip renders this count through
+  /// [needsAttentionWalsCount]; this narrower accessor keeps the terminal-HTTP
+  /// incident observable in tests and diagnostics.
+  int get terminallyFailedWalsCount => _allWals.where((w) => w.status == WalStatus.uploadRejected).length;
 
   int get retryingWalsCount => _countWhere((s) => s == WalSyncDisplayState.retrying);
 
@@ -247,6 +257,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
           return w.status != WalStatus.corrupted &&
               w.status != WalStatus.outsideRecoveryWindow &&
               w.status != WalStatus.unsupportedAudio &&
+              w.status != WalStatus.uploadRejected &&
               w.syncDisplayState != WalSyncDisplayState.synced;
         case WalDisplayFilter.synced:
           return w.syncDisplayState == WalSyncDisplayState.synced;

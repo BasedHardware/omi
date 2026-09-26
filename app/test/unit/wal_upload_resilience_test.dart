@@ -483,4 +483,39 @@ void main() {
       );
     });
   });
+
+  group('definitive upload refusals', () {
+    Future<Wal> refusedWal(int statusCode) async {
+      uploadFailure = SyncUploadHttpException(statusCode, 'definitive refusal');
+      final filename = 'refused_$statusCode.bin';
+      await File('${tempDir.path}/$filename').writeAsBytes([0xAA, 0xBB]);
+      final wal = _makeWal(timerStart: 10000 + statusCode, filePath: filename);
+      sync.testWals = [wal];
+      return wal;
+    }
+
+    for (final statusCode in [400, 413]) {
+      test('HTTP $statusCode becomes terminal and repeated wakes do not re-upload', () async {
+        final wal = await refusedWal(statusCode);
+
+        final first = await sync.syncAll();
+        final second = await sync.syncAll();
+
+        expect(first?.localUploadPermanentFailures, 1);
+        expect(second, isNull, reason: 'a connectivity wake must not re-offer a definitive refusal');
+        expect(wal.status, WalStatus.uploadRejected);
+        expect(wal.syncDisplayState, WalSyncDisplayState.uploadRejected);
+        expect(await sync.getMissingWals(), isEmpty);
+        expect(File('${tempDir.path}/${wal.filePath}').existsSync(), isTrue,
+            reason: 'terminal means stop retrying, not silently delete user audio');
+      });
+    }
+
+    test('all required definitive codes share the terminal classifier', () {
+      for (final statusCode in [400, 401, 403, 413]) {
+        expect(isDefinitiveUploadRefusal(SyncUploadHttpException(statusCode, 'refused')), isTrue);
+      }
+      expect(isDefinitiveUploadRefusal(const SyncUploadHttpException(500, 'retryable')), isFalse);
+    });
+  });
 }
