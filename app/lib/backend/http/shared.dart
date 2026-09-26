@@ -897,14 +897,15 @@ dynamic extractContentFromResponse(
     }
     return data['choices'][0]['message']['content'];
   } else {
-    Logger.debug('Error fetching data: ${response?.statusCode}');
-    // TODO: handle error, better specially for script migration
+    var errorBody = response?.body;
+    Logger.debug('Error fetching data: ${response?.statusCode} Body: $errorBody');
     PlatformManager.instance.crashReporter.reportCrash(
       Exception('Error fetching data: ${response?.statusCode}'),
       StackTrace.current,
       userAttributes: {
         'response_null': (response == null).toString(),
         'response_status_code': response?.statusCode.toString() ?? '',
+        'response_body': errorBody ?? '',
         'is_embedding': isEmbedding.toString(),
         'is_function_calling': isFunctionCalling.toString(),
       },
