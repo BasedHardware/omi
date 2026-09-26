@@ -143,3 +143,18 @@ def test_main_cli_end_to_end(tmp_path: Path):
     for line in lines:
         obj = json.loads(line)
         assert "content" in obj
+
+
+# 11. structured: null does not raise AttributeError
+def test_structured_null_does_not_crash():
+    memory = {"id": "x", "content": "", "structured": None}
+    assert m2j.to_chat_record(memory) is None
+    assert m2j.to_knowledge_record(memory) is None
+
+
+# 12. structured: null with title fallback uses content from other field
+def test_structured_null_with_text_fallback():
+    memory = {"id": "y", "content": "", "structured": None, "text": "fallback text"}
+    rec = m2j.to_chat_record(memory)
+    assert rec is not None
+    assert rec["messages"][-1]["content"] == "fallback text"
