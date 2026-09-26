@@ -26,6 +26,7 @@ from utils.speaker_tag_prompts.clips import (
     conversation_clip_pcm,
     pcm_to_wav,
 )
+from utils.speaker_tag_prompts.coverage import prompt_window_covered
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,9 @@ router = APIRouter()
 
 
 @router.get('/v1/speaker-tag-prompts', tags=['speaker-tag-prompts'], response_model=SpeakerTagPromptsResponse)
-def get_speaker_tag_prompts(uid: str = Depends(auth.get_current_user_uid)):
+def get_speaker_tag_prompts(
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'speaker_tag_prompts:list'))
+):
     """Today's small set of voices to confirm, from conversations in the last 48 hours."""
     return service.get_prompts(uid)
 
@@ -90,9 +93,15 @@ def get_speaker_tag_prompt_clip(
         raise HTTPException(status_code=404, detail='Conversation not found')
     if conversation.get('is_locked'):
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.')
+    if not prompt_window_covered(conversation, start, end):
+        raise HTTPException(status_code=404, detail='No audio stored for this part of the conversation')
     pcm = conversation_clip_pcm(uid, conversation, start, end)
     if not pcm:
         raise HTTPException(status_code=404, detail='No audio stored for this part of the conversation')
+    expected = service.clip_expected_text(conversation, start, end)
+    pcm = service.verified_clip_pcm(uid, conversation, start, end, expected, pcm)
+    if not pcm:
+        raise HTTPException(status_code=404, detail='No matching speech stored for this part of the conversation')
     return SpeakerTagPromptClip(
         audio_base64=base64.b64encode(pcm_to_wav(pcm)).decode('ascii'),
         duration_seconds=round(len(pcm) / (2 * CLIP_SAMPLE_RATE), 3),

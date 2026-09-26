@@ -14,6 +14,7 @@ Locks the wiring the round-3 re-review flagged:
 
 import asyncio
 import logging
+import time
 import threading
 from collections import Counter
 from collections import deque
@@ -159,13 +160,46 @@ def test_rejected_text_keeps_owner_at_provider_send_across_rollover(monkeypatch)
     assert past._value.get() == before + 1
 
 
+def test_ambiguous_send_epoch_uses_counted_current_row_fallback(monkeypatch):
+    receiver = _receiver(monkeypatch, v2=True)
+    _feed_contiguous(receiver, 2.0)
+    _, _, epoch = receiver._build_stt_callbacks()
+    epoch.note_accepted(0, 2 * RATE)
+    receiver.host.state.current_conversation_id = 'conv-b'
+    _feed_contiguous(receiver, 2.0, first_wall=T0 + 2)
+    epoch.note_accepted(2 * RATE, 2 * RATE)
+    unavailable = OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='send_owner_unavailable')
+    before = unavailable._value.get()
+    receiver._enqueue_translated_segments(epoch.translate([{'text': 'ambiguous late final', 'start': 30, 'end': 31}]))
+    assert receiver.collected[0]['_conversation_id'] == 'conv-b'
+    assert receiver.collected[0]['audio_alignment'] == 'unplaced'
+    assert unavailable._value.get() == before + 1
+
+
+def test_send_owner_checks_the_entire_capture_span(monkeypatch):
+    receiver = _receiver(monkeypatch, v2=True)
+    receiver.host.state.conversation_sample_ranges = deque(
+        [(0, RATE, 'conv-a'), (RATE, 2 * RATE, 'conv-b'), (2 * RATE, 3 * RATE, 'conv-a')]
+    )
+    assert receiver._proven_send_owner(0, 3 * RATE) is None
+    assert receiver._proven_send_owner(2 * RATE, RATE) == 'conv-a'
+
+
 async def test_v2_persist_exception_requeues_pristine_batch():
     processor = object.__new__(TranscriptProcessor)
     processor.segment_buffer = deque([{'id': 's1', 'text': 'kept', 'start': T0, 'end': T0 + 1}])
     processor.photo_buffer = deque()
+    processor._v2_retry_counts = {}
+    processor._v2_legacy_fallback = deque()
+    processor._v2_legacy_fallback_ids = set()
+    processor._v2_retry_until = 0.0
+    processor._v2_committed_ids = set()
+    processor._v2_photos_committed = False
+    processor._v2_photos_requeued = False
+    processor._v2_photo_failures = 0
     processor.host = SimpleNamespace(
         state=SimpleNamespace(active=False, capture_timeline_v2=True, current_conversation_id='conv-a'),
-        wait=lambda seconds: asyncio.sleep(0, result=False),
+        wait=lambda seconds: asyncio.sleep(min(seconds, 0.01), result=False),
         speakers=SimpleNamespace(tasks=[], drain=lambda **kwargs: asyncio.sleep(0)),
     )
     attempts = []
@@ -211,6 +245,27 @@ def test_every_provider_segment_reaches_owner_or_counted_unplaced_fallback(monke
     for item in receiver.collected:
         if item['text'] in {'straddle', 'outside', 'non numeric', 'non finite', 'missing window'}:
             assert item['audio_alignment'] == 'unplaced'
+
+
+def test_v2_persist_retry_is_bounded_and_backed_off():
+    processor = object.__new__(TranscriptProcessor)
+    processor.segment_buffer = deque()
+    processor._v2_retry_counts = {}
+    processor._v2_legacy_fallback = deque()
+    processor._v2_legacy_fallback_ids = set()
+    processor._v2_retry_until = 0.0
+    processor._v2_committed_ids = set()
+    exhausted = OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='persist_retry_exhausted')
+    before = exhausted._value.get()
+    for attempt in range(1, 7):
+        processor._queue_v2_retry([{'id': 'persistent-failure', 'text': 'kept until bounded exhaustion'}])
+        if attempt <= 5:
+            assert len(processor.segment_buffer) == attempt
+            assert processor._v2_retry_until > time.monotonic()
+    assert len(processor.segment_buffer) == 5
+    assert exhausted._value.get() == before + 1
+    assert 'persistent-failure' not in processor._v2_retry_counts
+    assert [item['text'] for item in processor._v2_legacy_fallback] == ['kept until bounded exhaustion']
 
 
 def test_speaker_work_requires_a_proven_capture_window():

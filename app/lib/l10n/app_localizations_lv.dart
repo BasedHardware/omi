@@ -11292,4 +11292,85 @@ class AppLocalizationsLv extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name un citi';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Klausieties Omi atbildes';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Sapratu. Jūsu nākamā sapulce sāksies pēc divdesmit minūtēm.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Viss ir gatavs';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Pieskarieties rindai, lai to pārskatītu vai mainītu.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'Kad jautā ar pogu, Omi var nolasīt savu atbildi skaļi.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Klausieties savu pēdējo atbildi';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Tiek atskaņota jūsu pēdējā atbilde...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Caur $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Caur tālruņa skaļruni';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Izmantojot pašreizējo audio izvadi';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Atbildes paliek ekrānā. Nekas netiek runāts.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Privāts. Runā tikai pa AirPods, Bluetooth vai vadu austiņām.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'Lieto tālruņa skaļruni, ja nav pievienotas austiņas.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi klusēs. Atbildes joprojām tiek rādītas lietotnē.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device savienots. Šeit runās Omi.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Nav pievienotas austiņas. Omi klusē, līdz pievienojat dažus.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Spēlē pa $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Atskaņo skaļi caur tālruņa skaļruni.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'To jebkurā laikā varat mainīt pa tālruni $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Atkārtojiet šo ceļojumu jebkurā laikā $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Austiņas';
 }

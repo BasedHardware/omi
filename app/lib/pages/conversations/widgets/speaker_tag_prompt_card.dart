@@ -34,7 +34,9 @@ class _SpeakerTagPromptCardState extends State<SpeakerTagPromptCard> {
   Widget build(BuildContext context) {
     return Consumer<SpeakerTagPromptsProvider>(
       builder: (context, provider, _) {
-        if (!provider.visible) return const SizedBox.shrink();
+        if (!provider.visible || (!provider.finished && provider.current == null)) {
+          return const SizedBox.shrink();
+        }
         return VisibilityDetector(
           key: const Key('speaker_tag_prompt_card_visibility'),
           onVisibilityChanged: (info) {

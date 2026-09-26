@@ -11280,4 +11280,86 @@ class AppLocalizationsSr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name и други';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Чујте Omi одговоре';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Разумем. Ваш следећи састанак почиње за двадесет минута.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Све је спремно';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Додирните ред да бисте га прегледали или променили.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Када питате помоћу дугмета, Omi може да прочита свој одговор наглас.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Чуј свој последњи одговор';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Пуштање вашег последњег одговора...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Преко $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Преко звучника телефона';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Преко тренутног аудио излаза';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Одговори остају на екрану. Ништа се не говори.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Приватно. Говори само преко AirPods, Bluetooth или жичаних слушалица.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'Користи звучник телефона када нису повезане слушалице.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi ће ћутати. Одговори се и даље појављују у апликацији.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device повезан. Omi ће говорити овде.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Нису повезане слушалице. Omi ћути док не повежете неке.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Репродуцира преко $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Свира наглас преко звучника телефона.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Ово можете променити било када у $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Поновите овај обилазак било када у $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Слушалице';
 }

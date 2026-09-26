@@ -14,11 +14,15 @@ SCRIPT = Path(__file__).resolve().parents[2] / 'scripts' / 'pusher_semantic_prob
 def test_alignment_probe_rejects_repeated_live_fixture(probe):
     fixture = probe.load_fixture()
     phrase = fixture.expected_phrase
-    observed, expected = probe._alignment_word_counts([{'text': phrase}, {'text': phrase}], phrase)
+    observed, expected = probe._alignment_word_counts(
+        [{'text': phrase}, {'text': phrase}], phrase, probe.ALIGNMENT_AUDIO_PASSES
+    )
     assert (observed, expected) == (34, 34)
     assert probe._alignment_word_count_ok(observed, expected)
     for repeats in (4, 8):
-        observed, expected = probe._alignment_word_counts([{'text': phrase}] * repeats, phrase)
+        observed, expected = probe._alignment_word_counts(
+            [{'text': phrase}] * repeats, phrase, probe.ALIGNMENT_AUDIO_PASSES
+        )
         assert not probe._alignment_word_count_ok(observed, expected)
     receipt = probe._alignment_receipt(
         status='FAIL',
@@ -29,6 +33,15 @@ def test_alignment_probe_rejects_repeated_live_fixture(probe):
     )
     assert receipt['word_counts'] == {'live': 137, 'expected': 34}
     assert phrase not in str(receipt)
+
+
+def test_qualification_probe_counts_eight_fixture_sends(probe):
+    phrase = probe.load_fixture().expected_phrase
+    observed, expected = probe._alignment_word_counts([{'text': phrase}] * 8, phrase, probe.DISCARD_KEEP_AUDIO_PASSES)
+    assert (observed, expected) == (136, 136)
+    assert probe._alignment_word_count_ok(137, expected)
+    assert not probe._alignment_word_count_ok(68, expected)
+    assert not probe._alignment_word_count_ok(34, expected)
 
 
 @pytest.fixture

@@ -228,7 +228,9 @@ class VADStreamingGate:
         self._chunks_silence = 0
         # Raw VAD decisions on capture samples, retained for a bounded window.
         # This measures placement independently of the provider's send ledger.
-        self._speech_frames: Deque[Tuple[int, int, bool]] = deque(maxlen=2048)
+        # None marks a chunk containing both speech and silence VAD windows.
+        self._speech_frames: Deque[Tuple[int, int, Optional[bool]]] = deque(maxlen=2048)
+        self._last_vad_mixed = False
         self._finalize_count = 0
         self._finalize_errors = 0
         self._bytes_received = 0
@@ -339,6 +341,7 @@ class VADStreamingGate:
             del float_data
 
             is_speech = False
+            saw_silence = False
             threshold = self._decision_threshold()
             if len(self._vad_buffer) >= self._vad_window_samples:
                 # Process all complete windows in buffer
@@ -351,11 +354,14 @@ class VADStreamingGate:
                     )
                     if prob > threshold:
                         is_speech = True
+                    else:
+                        saw_silence = True
 
             # Keep buffer bounded (max 1 window of leftover)
             if len(self._vad_buffer) > self._vad_window_samples:
                 self._vad_buffer = self._vad_buffer[-self._vad_window_samples :]
 
+            self._last_vad_mixed = is_speech and saw_silence
             return is_speech
 
     def process_audio(
@@ -393,9 +399,12 @@ class VADStreamingGate:
         vad_pcm = pcm_data
         if score_pcm is not None and len(score_pcm) == len(pcm_data):
             vad_pcm = score_pcm
+        self._last_vad_mixed = False
         is_speech = self._run_vad(vad_pcm)
         if start_sample is not None and n_samples > 0:
-            self._speech_frames.append((start_sample, start_sample + n_samples, is_speech))
+            self._speech_frames.append(
+                (start_sample, start_sample + n_samples, None if self._last_vad_mixed else is_speech)
+            )
 
         if is_speech:
             self._last_speech_ms = self._audio_cursor_ms
@@ -445,13 +454,18 @@ class VADStreamingGate:
         if end_sample <= start_sample:
             return 'unknown'
         covered = speech = 0
+        mixed = False
         for first, last, is_speech in self._speech_frames:
             overlap = max(0, min(end_sample, last) - max(start_sample, first))
             covered += overlap
             if is_speech:
                 speech += overlap
+            elif is_speech is None and overlap:
+                mixed = True
         if covered < end_sample - start_sample:
             return 'unknown'
+        if mixed:
+            return 'partial'
         if speech == covered:
             return 'on_speech'
         if speech == 0:

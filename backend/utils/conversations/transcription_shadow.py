@@ -329,13 +329,19 @@ def _make_pass(
                 participant_speaker_ids=resolution.significant_speaker_ids if resolution.coverage >= 0.9 else [],
             )
     finished = _epoch(conversation.finished_at)
+    started_origin = _epoch(getattr(conversation, 'started_at', None))
     tail = max(0.0, finished - last_end) if finished is not None and last_end is not None else 0.0
     expected = max(covered, (finished - origin) if finished is not None else covered)
-    return segments, {
+    audio_result = {
         'coverage': round(min(1.0, covered / expected), 4) if expected > 0 else 0.0,
         'tail_gap_seconds': round(tail, 3),
         'audio_seconds': round(covered, 3),
     }
+    # Compare with the text-derived remap offset before attributing drift
+    # to the live capture clock. No wall timestamps leave this process.
+    if started_origin is not None:
+        audio_result['audio_origin_offset_seconds'] = round(origin - started_origin, 3)
+    return segments, audio_result
 
 
 def _compare(
@@ -358,6 +364,7 @@ def _compare(
     pass_owner = sum(max(0.0, s['end'] - s['start']) for s in new if s.get('is_user'))
     return {
         **audio,
+        'audio_timeline_v2': getattr(getattr(conversation, 'audio_timeline', None), 'version', None) == 2,
         'word_distance': _word_distance(live_words, pass_words),
         'live_word_count': len(live_words),
         'pass_word_count': len(pass_words),
@@ -366,6 +373,7 @@ def _compare(
         'live_speakers': len({s['speaker_id'] for s in old if s.get('speaker_id') is not None}),
         'pass_speakers': len({s['speaker_id'] for s in new if s.get('speaker_id') is not None}),
         'remap_success_rate': round(plan.success_rate, 4),
+        'remap_ambiguous_count': len(plan.ambiguous),
         'remap_safe': plan.safe and remap_ok,
         'clock_offset_seconds': plan.offset_seconds,
     }

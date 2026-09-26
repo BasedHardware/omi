@@ -11246,4 +11246,86 @@ class AppLocalizationsHi extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name और अन्य';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Omi के जवाब सुनें';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'समझ गया। आपकी अगली मीटिंग बीस मिनट में शुरू होगी।';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'सब तैयार है';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'समीक्षा या बदलाव के लिए किसी पंक्ति पर टैप करें।';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'जब आप बटन से पूछते हैं, तो Omi उसका उत्तर ज़ोर से पढ़ सकता है।';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'अपना अंतिम उत्तर सुनें';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'आपका अंतिम उत्तर चलाया जा रहा है...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '$device के माध्यम से';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'फ़ोन स्पीकर के माध्यम से';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'वर्तमान ऑडियो आउटपुट के माध्यम से';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'उत्तर स्क्रीन पर रहते हैं. कुछ भी नहीं बोला जाता.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'निजी. केवल AirPods, Bluetooth या वायर्ड हेडफ़ोन के माध्यम से बात करता है।';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'जब कोई हेडफ़ोन कनेक्ट न हो तो फ़ोन स्पीकर का उपयोग करता है।';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi चुप रहेगा. उत्तर अभी भी ऐप में दिखाई देते हैं.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device जुड़े। Omi यहां बोलेंगे.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'कोई हेडफ़ोन कनेक्ट नहीं है. जब तक आप कुछ कनेक्ट नहीं करते तब तक Omi चुप रहता है।';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return '$device के माध्यम से चलता है।';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'फ़ोन स्पीकर के माध्यम से ज़ोर से बजता है।';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'आप इसे $settings › $voiceResponse पर कभी भी बदल सकते हैं';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'इस दौरे को किसी भी समय $settings › $deviceSettings › $deviceTutorial पर दोबारा चलाएं';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'हेडफोन';
 }

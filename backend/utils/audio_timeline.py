@@ -319,15 +319,17 @@ class SendMap:
         point still identifies an accepted sample; keep its text and a real
         capture window without extending it into unaccepted audio.
         """
+        if any(first + length == provider_sample for first, _, length in self._spans):
+            return None
         span = self._locate(provider_sample)
         if span is None:
             return None
         provider_first, capture_first, length = span
-        if provider_sample < provider_first or provider_sample > provider_first + length:
+        # The exact end may precede a later send that has not been recorded.
+        # Never borrow the preceding sample for an ambiguous point.
+        if provider_sample < provider_first or provider_sample >= provider_first + length:
             return None
         capture = capture_first + provider_sample - provider_first
-        if capture == capture_first + length:
-            return (capture - 1, capture)
         return (capture, capture + 1)
 
     def add_accepted(self, provider_first_sample: int, capture_first_sample: int, length_samples: int) -> None:
@@ -490,7 +492,7 @@ class ProviderEpochTranslator:
         on_recover: Optional[Callable[[str], None]] = None,
         on_past_send: Optional[Callable[[Optional[float]], None]] = None,
         on_validation: Optional[Callable[[str, Optional[Tuple[int, int]]], None]] = None,
-        owner_at_send: Optional[Callable[[], Optional[str]]] = None,
+        owner_at_send: Optional[Callable[[int, int], Optional[str]]] = None,
         project_times: bool = True,
     ):
         self.timeline = timeline
@@ -513,10 +515,9 @@ class ProviderEpochTranslator:
 
         self.soniox_elapsed_mode = soniox_elapsed_axis_mode()
         self._elapsed_send_map = SendMap(provider_sample_rate)
-        self._first_elapsed_gap_sample: Optional[int] = None
         self._send_owners: List[Tuple[int, int, Optional[str]]] = []
-        self.last_send_owner: Optional[str] = None
-        self.initial_owner: Optional[str] = None
+        self._only_send_owner: Optional[str] = None
+        self._send_owner_ambiguous = False
 
     def set_validation_callback(self, callback: Callable[[str, Optional[Tuple[int, int]]], None]) -> None:
         self._on_validation = callback
@@ -543,8 +544,6 @@ class ProviderEpochTranslator:
                     # token offsets continue along elapsed stream time. A
                     # withheld interval gets axis space, never a send span.
                     elapsed = max(0.0, wall_start - self._last_accepted_wall_end)
-                    if elapsed > 0 and self._first_elapsed_gap_sample is None:
-                        self._first_elapsed_gap_sample = start
                     elapsed_start += round(elapsed * self.provider_sample_rate)
                 self._last_accepted_wall_end = self.timeline.wall_strict(capture_start + length)
                 self._elapsed_send_map.add_accepted(elapsed_start, capture_start, length)
@@ -552,16 +551,18 @@ class ProviderEpochTranslator:
                     start = elapsed_start
             self.send_map.add_accepted(start, capture_start, length)
             end = start + length
-            owner = self._owner_at_send() if self._owner_at_send is not None else None
-            self.last_send_owner = owner
+            owner = self._owner_at_send(capture_start, length) if self._owner_at_send is not None else None
+            if self._only_send_owner is None and not self._send_owner_ambiguous:
+                self._only_send_owner = owner
+            if owner is None or owner != self._only_send_owner:
+                self._send_owner_ambiguous = True
             if self._send_owners and self._send_owners[-1][1] == start and self._send_owners[-1][2] == owner:
                 first, _, _ = self._send_owners[-1]
                 self._send_owners[-1] = (first, end, owner)
             else:
                 self._send_owners.append((start, end, owner))
             # Keep owner history bounded even if a session switches recording
-            # generations pathologically often. Older timestamps use the
-            # epoch's last SEND owner and remain explicitly unplaced.
+            # generations pathologically often. Evicted ownership is unknown.
             if len(self._send_owners) > MAX_SEND_SPANS:
                 self._send_owners.pop(0)
 
@@ -569,7 +570,9 @@ class ProviderEpochTranslator:
         for first, end, owner in reversed(self._send_owners):
             if first <= sample < end:
                 return owner
-        return self.last_send_owner or self.initial_owner
+        # A final beyond recorded sends can be attributed only when this
+        # provider epoch sent audio for one and only one proven owner.
+        return None if self._send_owner_ambiguous else self._only_send_owner
 
     def translate(self, segments: List[Dict]) -> List[Dict]:
         """Map provider-relative segment times onto absolute wall seconds.
@@ -629,21 +632,6 @@ class ProviderEpochTranslator:
                         self._on_validation(self.provider_label, candidate)
                     except Exception:
                         pass
-            if (
-                self.provider_label == 'soniox'
-                and self.soniox_elapsed_mode == 'shadow'
-                and self._first_elapsed_gap_sample is not None
-                and first_sample >= self._first_elapsed_gap_sample
-            ):
-                # Compact timestamps can accidentally land in later sent PCM.
-                # After a pause neither Soniox axis has been proved, so leave
-                # its speaker and playback position unclaimed in shadow mode.
-                self._reject(segment, 'unverified_elapsed_gap')
-                if self._project_times:
-                    self._append_unplaced(translated, segment)
-                else:
-                    translated.append(segment)
-                continue
             if self._project_times:
                 segment['_provider_send_owner'] = self.owner_for_provider_sample(first_sample)
             interval: Optional[Tuple[int, int]] = None
@@ -723,9 +711,7 @@ class ProviderEpochTranslator:
         segment['start'] = anchor
         segment['end'] = anchor
         segment['_capture_unplaced'] = True
-        segment['_provider_send_owner'] = (
-            segment.get('_provider_send_owner') or self.last_send_owner or self.initial_owner
-        )
+        segment['_provider_send_owner'] = segment.get('_provider_send_owner')
         segment['audio_alignment'] = 'unplaced'
         translated.append(segment)
 

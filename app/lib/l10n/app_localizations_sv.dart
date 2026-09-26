@@ -11275,4 +11275,86 @@ class AppLocalizationsSv extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name och andra';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Lyssna på Omis svar';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Uppfattat. Ditt nästa möte börjar om tjugo minuter.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Allt är klart';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Tryck på en rad för att granska eller ändra den.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'När du frågar med knappen kan Omi läsa sitt svar högt.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Hör ditt sista svar';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Spelar upp ditt senaste svar...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Via $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Genom telefonens högtalare';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Genom den aktuella ljudutgången';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Svaren stannar på skärmen. Ingenting talas.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Privat. Talar endast via AirPods, Bluetooth eller trådbundna hörlurar.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Använder telefonens högtalare när inga hörlurar är anslutna.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi kommer att vara tyst. Svaren visas fortfarande i appen.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device ansluten. Omi kommer att tala här.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Inga hörlurar anslutna. Omi förblir tyst tills du ansluter några.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Spelas upp till $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Spelas högt genom telefonens högtalare.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Du kan ändra detta när som helst i $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Spela om den här turnén när som helst i $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Hörlurar';
 }

@@ -1,4 +1,5 @@
 import base64
+from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -75,17 +76,25 @@ def test_clip_rejects_long_windows_and_missing_audio(monkeypatch):
         client.get('/v1/speaker-tag-prompts/clip', params={'conversation_id': 'c1', 'start': 0, 'end': 30}).status_code
         == 400
     )
-    monkeypatch.setattr(router_module.conversations_db, 'get_conversation', lambda uid, cid: {'id': cid})
+    started = datetime(2026, 9, 26, tzinfo=timezone.utc)
+    row = {
+        'id': 'c1',
+        'started_at': started,
+        'audio_files': [{'chunk_timestamps': [started.timestamp()], 'duration': 10.0}],
+        'transcript_segments': [{'start': 0, 'end': 5, 'speaker_id': 0, 'text': 'one two three four five'}],
+    }
+    monkeypatch.setattr(router_module.conversations_db, 'get_conversation', lambda uid, cid: row)
     monkeypatch.setattr(router_module, 'conversation_clip_pcm', lambda *a: None)
     assert (
         client.get('/v1/speaker-tag-prompts/clip', params={'conversation_id': 'c1', 'start': 0, 'end': 5}).status_code
         == 404
     )
-    monkeypatch.setattr(router_module, 'conversation_clip_pcm', lambda *a: b'\x00\x00' * 160)
+    monkeypatch.setattr(router_module, 'conversation_clip_pcm', lambda *a: b'\x00\x00' * (5 * 16000))
+    monkeypatch.setattr(router_module.service, 'verified_clip_pcm', lambda uid, row, start, end, text, pcm: pcm)
     response = client.get('/v1/speaker-tag-prompts/clip', params={'conversation_id': 'c1', 'start': 0, 'end': 5})
     assert response.status_code == 200
     body = response.json()
-    assert body['content_type'] == 'audio/wav' and body['duration_seconds'] == 0.01
+    assert body['content_type'] == 'audio/wav' and body['duration_seconds'] == 5.0
     assert base64.b64decode(body['audio_base64'])[:4] == b'RIFF'
 
 
@@ -114,6 +123,42 @@ def test_clip_rejects_deleted_and_locked_before_storage(monkeypatch):
     )
     assert seen == [('u', 'deleted-c'), ('u', 'locked-c')]
     assert clips == []
+
+
+def test_clip_endpoint_rejects_uncovered_legacy_window_without_download(monkeypatch):
+    started = datetime(2026, 9, 25, 7, 33, 17, tzinfo=timezone.utc)
+    row = {
+        'id': 'c1',
+        'started_at': started,
+        'audio_files': [{'chunk_timestamps': [started.timestamp() + 2692], 'duration': 60.0}],
+    }
+    monkeypatch.setattr(router_module.conversations_db, 'get_conversation', lambda uid, cid: row)
+    downloads = []
+    monkeypatch.setattr(router_module, 'conversation_clip_pcm', lambda *args: downloads.append(1) or b'pcm')
+    response = _client(monkeypatch).get(
+        '/v1/speaker-tag-prompts/clip', params={'conversation_id': 'c1', 'start': 45.61, 'end': 55.61}
+    )
+    assert response.status_code == 404 and downloads == []
+
+
+def test_clip_endpoint_rejects_unmatched_audio(monkeypatch):
+    started = datetime(2026, 9, 26, tzinfo=timezone.utc)
+    row = {
+        'id': 'c1',
+        'started_at': started,
+        'audio_files': [{'chunk_timestamps': [started.timestamp()], 'duration': 92.3}],
+        'transcript_segments': [
+            {'start': 10.28, 'end': 20.28, 'speaker_id': 0, 'text': 'The expected conversation words'}
+        ],
+        'sync_merged_from': ['donor'],
+    }
+    monkeypatch.setattr(router_module.conversations_db, 'get_conversation', lambda uid, cid: row)
+    monkeypatch.setattr(router_module, 'conversation_clip_pcm', lambda *args: b'\x00\x00' * 160000)
+    monkeypatch.setattr(router_module.service, 'verified_clip_pcm', lambda *args: None)
+    response = _client(monkeypatch).get(
+        '/v1/speaker-tag-prompts/clip', params={'conversation_id': 'c1', 'start': 10.28, 'end': 20.28}
+    )
+    assert response.status_code == 404
 
 
 def test_settings_patch_passes_source_and_drops_it_from_updates(monkeypatch):

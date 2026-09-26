@@ -433,41 +433,54 @@ class TestTranslatorDegenerateIntervals:
         assert translated[0]['_capture_end_sample'] == RATE + 1
         assert translator.rejected_segments == 0
 
-    def test_point_at_previous_span_end_before_elapsed_gap_is_unplaced(self, monkeypatch):
+    @pytest.mark.parametrize('record_later_send', [False, True])
+    def test_point_at_previous_span_end_before_elapsed_gap_is_unplaced(self, monkeypatch, record_later_send):
         monkeypatch.setenv('SONIOX_ELAPSED_AXIS', 'on')
         timeline = CaptureTimeline(sample_rate=RATE)
         timeline.accept(b'\x01\x00' * RATE, arrival_wall=T0, arrival_monotonic=0.0)
         translator = ProviderEpochTranslator(timeline, RATE, project_times=True)
         translator.provider_label = 'soniox'
         translator.note_accepted(0, RATE)
-        timeline.accept(b'\x01\x00' * RATE, arrival_wall=T0 + 10, arrival_monotonic=10.0)
-        translator.note_accepted(RATE, RATE)
+        if record_later_send:
+            timeline.accept(b'\x01\x00' * RATE, arrival_wall=T0 + 10, arrival_monotonic=10.0)
+            translator.note_accepted(RATE, RATE)
         result = translator.translate([{'start': 1.0, 'end': 1.0, 'text': 'resume'}])
         assert result[0]['audio_alignment'] == 'unplaced'
         assert '_capture_start_sample' not in result[0]
 
-    def test_shadow_measures_elapsed_candidate_but_keeps_gap_text_unplaced(self, monkeypatch):
-        monkeypatch.delenv('SONIOX_ELAPSED_AXIS', raising=False)
+    @pytest.mark.parametrize('project_times', [False, True])
+    def test_shadow_measures_elapsed_candidate_with_off_identical_windows(self, monkeypatch, project_times):
         timeline = CaptureTimeline(sample_rate=RATE)
         timeline.accept(b'\x01\x00' * RATE, arrival_wall=T0, arrival_monotonic=0.0)
         gate = vad_gate.VADStreamingGate(sample_rate=RATE, mode='active')
         gate.process_audio(b'\x01\x00' * RATE, T0, start_sample=0)
         seen = []
-        translator = ProviderEpochTranslator(timeline, RATE, project_times=True)
+        monkeypatch.setenv('SONIOX_ELAPSED_AXIS', 'shadow')
+        translator = ProviderEpochTranslator(timeline, RATE, project_times=project_times)
+        monkeypatch.setenv('SONIOX_ELAPSED_AXIS', 'off')
+        baseline = ProviderEpochTranslator(timeline, RATE, project_times=project_times)
         translator.provider_label = 'soniox'
+        baseline.provider_label = 'soniox'
         translator.set_validation_callback(
             lambda provider, interval: seen.append(
                 (provider, gate.classify_capture_speech(*interval) if interval else 'unknown')
             )
         )
         translator.note_accepted(0, RATE)
+        baseline.note_accepted(0, RATE)
         timeline.accept(b'\x01\x00' * RATE, arrival_wall=T0 + 10, arrival_monotonic=10.0)
         gate.process_audio(b'\x01\x00' * RATE, T0 + 10, start_sample=RATE)
         translator.note_accepted(RATE, RATE)
-        result = translator.translate([{'start': 10.2, 'end': 10.5, 'text': 'later'}])
-        assert result[0]['audio_alignment'] == 'unplaced'
-        assert '_capture_start_sample' not in result[0]
-        assert seen == [('soniox', 'on_speech')]
+        baseline.note_accepted(RATE, RATE)
+        original = [{'start': 1.2, 'end': 1.5, 'text': 'later'}]
+        result = translator.translate(original)
+        assert result == baseline.translate(original)
+        assert result[0]['_capture_start_sample'] == int(1.2 * RATE)
+        assert result[0]['_capture_end_sample'] == int(1.5 * RATE)
+        assert result[0]['text'] == 'later'
+        assert seen == [('soniox', 'unknown')]
+        translator.translate([{'start': 10.2, 'end': 10.5, 'text': 'elapsed candidate'}])
+        assert seen[-1] == ('soniox', 'on_speech')
 
     def test_vad_validation_outcomes_and_modulate_control(self):
         gate = vad_gate.VADStreamingGate(sample_rate=RATE, mode='shadow')
@@ -490,6 +503,21 @@ class TestTranslatorDegenerateIntervals:
         translator.note_accepted(0, 2 * RATE)
         translator.translate([{'start': 1.1, 'end': 1.4, 'text': 'control'}])
         assert seen == [('modulate', 'on_speech')]
+
+    def test_send_owner_callback_receives_each_capture_span(self, monkeypatch):
+        monkeypatch.setenv('SONIOX_ELAPSED_AXIS', 'shadow')
+        timeline = self._timeline()
+        calls = []
+        translator = ProviderEpochTranslator(
+            timeline,
+            RATE,
+            project_times=True,
+            owner_at_send=lambda first, length: calls.append((first, length)) or 'owner',
+        )
+        translator.provider_label = 'soniox'
+        translator.note_accepted_spans([(0, RATE), (RATE, RATE)])
+        assert calls == [(0, RATE), (RATE, RATE)]
+        assert translator.translate([{'start': 0.2, 'end': 0.4, 'text': 'owned'}])[0]['_provider_send_owner'] == 'owner'
 
     def test_clock_only_keeps_zero_length_provider_segment_without_window(self):
         """Flag-off must stay byte-identical: Modulate partials (start == end)
