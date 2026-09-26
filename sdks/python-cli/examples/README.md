@@ -32,6 +32,7 @@
   JSON export to CSV for spreadsheets.
 * [`conversations_digest.md`](conversations_digest.md) — summarise conversation-list
   exports into a digest: per-day totals, categories and longest sessions.
+* [`memories_surrealdb.md`](memories_surrealdb.md) — export memories to a SurrealDB SurrealQL ingestion script with typed timestamps and tags array.
 * [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
   JSON export to an Excel workbook with datetime cells, duration and filters.
 * [`conversations_sqlite.md`](conversations_sqlite.md) — import conversation-list
