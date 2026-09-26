@@ -28,10 +28,11 @@ const _kBackendBusyErrorHint = 'background worker likely died';
 const _liveCaptureMaxAgeSeconds = 6 * 60 * 60;
 
 /// Phone-local safety copies are minute-sized capture chunks. Retaining 720
-/// unsynced chunks bounds the backlog at roughly twelve hours while leaving a
-/// useful recovery window during a backend outage. At the cap we evict the
-/// oldest retained chunk before admitting newer audio; the loss is surfaced
-/// through [WalRetentionRisk] and capture-recovery telemetry/UI.
+/// unsynced chunks across every account bucket bounds the backlog at roughly
+/// twelve hours while leaving a useful recovery window during a backend
+/// outage. At the cap we evict the oldest retained chunk before admitting
+/// newer audio; the loss is surfaced through [WalRetentionRisk] and
+/// capture-recovery telemetry/UI.
 const int maxRetainedCaptureWalCount = 720;
 
 class WalRetentionRisk {
@@ -555,13 +556,16 @@ class LocalWalSyncImpl implements LocalWalSync {
     await _saveWalsToFile(generation);
   }
 
-  /// Applies the oldest-first phone-local safety-copy cap.
+  /// Applies the oldest-first phone-local safety-copy cap across every durable
+  /// account bucket.
   ///
   /// Synced WALs are excluded because their lifecycle is governed by the
   /// user's local-storage preference; this policy specifically bounds audio
   /// retained because the backend has not acknowledged it.
   Future<int> _enforceRetentionPolicy() async {
-    final retained = _wals.where((wal) => wal.storage == WalStorage.disk && wal.status != WalStatus.synced).toList()
+    final retained = [..._retiredWals, ..._foreignWals, ..._wals]
+        .where((wal) => wal.storage == WalStorage.disk && wal.status != WalStatus.synced)
+        .toList()
       ..sort((a, b) => a.timerStart.compareTo(b.timerStart));
     final excess = retained.length - maxRetainedCaptureWalCount;
     if (excess <= 0) return 0;
@@ -622,6 +626,7 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     _wals.removeWhere((w) => w.id == wal.id);
     _retiredWals.removeWhere((w) => w.id == wal.id);
+    _foreignWals.removeWhere((w) => w.id == wal.id);
     return true;
   }
 
