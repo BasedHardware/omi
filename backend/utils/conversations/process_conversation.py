@@ -91,7 +91,6 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
     client_processing_mutation,
     omit_null_processing_state,
-    sanitize_untrusted_provenance_field,
     strip_client_processing,
 )
 from utils.conversations import lifecycle as lifecycle_service
@@ -576,7 +575,7 @@ def _get_structured(
         if conversation_relevance_jev_enabled() and not has_described_photos and not has_wake_word_marker:
             jev_transcript = relevance_transcript(segments)
             if jev_tier_applies(jev_transcript):
-                jev_discard = lambda: jev_discard_probability(jev_transcript)
+                def jev_discard(): return jev_discard_probability(jev_transcript)
 
         decision = decide_relevance(
             trigger=trigger,

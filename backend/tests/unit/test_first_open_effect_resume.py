@@ -1,4 +1,5 @@
 from __future__ import annotations
+import database.first_open_obligations as first_open_obligations_db
 
 from types import SimpleNamespace
 
@@ -24,14 +25,14 @@ def _conversation(*, folder_id: str | None = None):
 def _install_common(monkeypatch, conversation, completed: list[str]) -> None:
     monkeypatch.setattr(processing, "deserialize_conversation", lambda _row: conversation)
     monkeypatch.setattr(
-        processing.conversations_db,
+        first_open_obligations_db,
         "complete_first_open_effect",
         lambda _uid, _cid, _token, effect, **_kwargs: completed.append(effect) or True,
     )
-    monkeypatch.setattr(processing.conversations_db, "first_open_effect_is_authorized", lambda *_args: True)
-    monkeypatch.setattr(processing.conversations_db, "commit_first_open_folder_count", lambda *_args: True)
-    monkeypatch.setattr(processing.conversations_db, "commit_first_open_app_result", lambda *_args: True)
-    monkeypatch.setattr(processing.conversations_db, "commit_first_open_app_usage", lambda *_args: True)
+    monkeypatch.setattr(first_open_obligations_db, "first_open_effect_is_authorized", lambda *_args: True)
+    monkeypatch.setattr(first_open_obligations_db, "commit_first_open_folder_count", lambda *_args: True)
+    monkeypatch.setattr(first_open_obligations_db, "commit_first_open_app_result", lambda *_args: True)
+    monkeypatch.setattr(first_open_obligations_db, "commit_first_open_app_usage", lambda *_args: True)
     monkeypatch.setattr(
         processing,
         "resolve_authorized_first_open_plan",
@@ -83,7 +84,7 @@ def test_retry_repairs_folder_count_after_folder_id_persisted(monkeypatch) -> No
     counts: list[str] = []
     _install_common(monkeypatch, conversation, completed)
     monkeypatch.setattr(
-        processing.conversations_db,
+        first_open_obligations_db,
         "commit_first_open_folder_count",
         lambda _uid, _cid, _token, folder_id: counts.append(folder_id) or True,
     )
@@ -162,7 +163,7 @@ def test_first_open_initializes_empty_folders_then_assigns(monkeypatch) -> None:
         lambda **_kwargs: assigned.append("work") or ("work", 1.0, "category"),
     )
     monkeypatch.setattr(
-        processing.conversations_db, "commit_first_open_conversation_patch", lambda *_args, **_kwargs: True
+        first_open_obligations_db, "commit_first_open_conversation_patch", lambda *_args, **_kwargs: True
     )
 
     processing.run_first_open_derived_work("owner", {"id": "conversation", "jit_first_open": {"effects": {}}}, "lease")
@@ -251,7 +252,7 @@ def test_kill_flip_after_app_result_blocks_usage_and_completion(monkeypatch) -> 
         lambda **_kwargs: SimpleNamespace(defer_derived_work=next(decisions)),
     )
     monkeypatch.setattr(
-        processing.conversations_db,
+        first_open_obligations_db,
         "commit_first_open_app_result",
         lambda _uid, _cid, _token, app_id, _patch: result_commits.append(app_id) or True,
     )
@@ -287,12 +288,12 @@ def test_retry_repairs_usage_after_crash_without_replaying_app(monkeypatch) -> N
     calls: list[str] = []
     _install_common(monkeypatch, conversation, completed)
     monkeypatch.setattr(
-        processing.conversations_db,
+        first_open_obligations_db,
         "commit_first_open_app_result",
         lambda _uid, _cid, _token, app_id, _patch: calls.append(f"result:{app_id}") or True,
     )
     monkeypatch.setattr(
-        processing.conversations_db,
+        first_open_obligations_db,
         "commit_first_open_app_usage",
         lambda _uid, _cid, _token, app_id, _usage: calls.append(f"usage:{app_id}") or True,
     )

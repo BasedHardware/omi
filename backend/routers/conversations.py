@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 import database.conversations as conversations_db
+import database.first_open_obligations as first_open_obligations_db
 import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
@@ -257,7 +258,9 @@ def _dispatch_first_open_work(uid: str, conversation: dict) -> None:
     if not conversation_id or not conversation.get('jit_first_open'):
         return
     try:
-        token = conversations_db.claim_authorized_first_open_work(uid, conversation_id, conversation.get('source'))
+        token = first_open_obligations_db.claim_authorized_first_open_work(
+            uid, conversation_id, conversation.get("source")
+        )
     except Exception as error:
         logger.warning('JIT first-open claim failed uid=%s conv=%s: %s', uid, conversation_id, error)
         return
@@ -276,7 +279,7 @@ def _dispatch_first_open_work(uid: str, conversation: dict) -> None:
             logger.exception('JIT first-open worker failed uid=%s conv=%s: %s', uid, conversation_id, error)
         finally:
             try:
-                conversations_db.finish_first_open_work(uid, conversation_id, token, succeeded=succeeded)
+                first_open_obligations_db.finish_first_open_work(uid, conversation_id, token, succeeded=succeeded)
             except Exception as error:
                 logger.exception(
                     'JIT first-open lease finalization failed uid=%s conv=%s: %s', uid, conversation_id, error
