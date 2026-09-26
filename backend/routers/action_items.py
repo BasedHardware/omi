@@ -579,7 +579,7 @@ def get_action_items(
 
     for item in action_items:
         if item.get('is_locked', False):
-            description = item.get('description', '')
+            description = item.get('description') or ''
             item['description'] = (description[:70] + '...') if len(description) > 70 else description
 
     response_items = _safe_action_item_responses(action_items, uid=uid)
@@ -797,7 +797,7 @@ def toggle_action_item_completion(
         sender_uid = shared_from.get('sender_uid')
         if sender_uid:
             recipient_name = get_user_display_name(uid)
-            desc = existing_item.get('description', '')
+            desc = existing_item.get('description') or ''
             description = (desc[:57] + '...') if len(desc) > 60 else desc
             send_notification(
                 sender_uid,
