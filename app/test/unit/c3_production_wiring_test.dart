@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/conversation_api_contract.dart';
 import 'package:omi/env/env.dart';
@@ -68,6 +69,8 @@ void main() {
     expect(provider.apiViewState.phase, ApiViewPhase.empty);
     expect(find.descendant(of: page, matching: find.byKey(const ValueKey('omi.conversations.error'))), findsNothing);
     expect(find.descendant(of: page, matching: find.byKey(const ValueKey('omi.conversations.empty'))), findsOneWidget);
+    // IMG_1157: the new-account hero (icon, title and what to do), not a bare status line.
+    expect(find.descendant(of: page, matching: find.byType(OmiEmptyState)), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));
   });

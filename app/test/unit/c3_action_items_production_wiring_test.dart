@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:omi/ui/ui.dart';
+import 'package:omi/pages/action_items/widgets/tasks_page_chrome.dart';
 import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/preferences.dart';
@@ -77,6 +79,10 @@ void main() {
     expect(provider.apiViewState.phase, ApiViewPhase.empty);
     expect(find.descendant(of: page, matching: find.byKey(const ValueKey('omi.action_items.error'))), findsNothing);
     expect(find.descendant(of: page, matching: find.byKey(const ValueKey('omi.action_items.empty'))), findsOneWidget);
+    // IMG_1158: an empty To do is still To do — its title and the designed empty state with Create,
+    // not a bare status line on a blank page.
+    expect(find.descendant(of: page, matching: find.byType(TasksPageTitle)), findsOneWidget);
+    expect(find.descendant(of: page, matching: find.byType(OmiEmptyState)), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));
   });

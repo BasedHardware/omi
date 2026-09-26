@@ -476,6 +476,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   Widget _buildNoConversationsHero(BuildContext context) {
     return Padding(
+      key: const ValueKey('omi.conversations.empty'),
       padding: const EdgeInsets.only(bottom: 120),
       child: OmiEmptyState(
         icon: Icons.forum_rounded,
@@ -537,11 +538,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         final bool hasRecordings = recordingsByDate.isNotEmpty;
         final bool hasProcessingConversations = snapshot.processingConversations.isNotEmpty;
         final apiPhase = snapshot.apiViewPhase;
+        // An empty list is the new-account hero (keyed omi.conversations.empty), not a status line;
+        // the typed status is for what went wrong.
         final bool showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
             apiPhase == ApiViewPhase.terminal ||
-            apiPhase == ApiViewPhase.authenticationRequired ||
-            apiPhase == ApiViewPhase.empty;
+            apiPhase == ApiViewPhase.authenticationRequired;
         final bool isWaitingForInitialData = _isBootstrapping && snapshot.conversations.isEmpty && !hasRecordings;
         final bool isShowingConversationSkeleton = isWaitingForInitialData ||
             convoProvider.isLoadingConversations ||
