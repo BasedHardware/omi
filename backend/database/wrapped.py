@@ -3,9 +3,14 @@ Database operations for Wrapped (yearly recap) stored in users/{uid}/wrapped/{ye
 """
 
 from datetime import datetime, timezone
+import logging
 from typing import Any, Dict, Optional, cast
 
+from google.api_core.exceptions import GoogleAPIError
+
 from ._client import db
+
+logger = logging.getLogger(__name__)
 
 # Collection name under user document
 WRAPPED_COLLECTION = 'wrapped'
@@ -44,6 +49,11 @@ def get_wrapped(uid: str, year: int) -> Optional[Dict[str, Any]]:
     Returns:
         Wrapped document data or None if not found
     """
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return None
+    if not isinstance(year, int) or year <= 0:
+        return None
+
     user_ref = db.collection('users').document(uid)
     wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
     doc = wrapped_ref.get()
@@ -74,6 +84,11 @@ def create_wrapped(uid: str, year: int) -> Dict[str, Any]:
     Returns:
         The created wrapped document data
     """
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    if not isinstance(year, int) or year <= 0:
+        raise ValueError("year must be a positive integer")
+
     now = datetime.now(timezone.utc)
     wrapped_data: Dict[str, Any] = {
         'year': year,
@@ -88,7 +103,7 @@ def create_wrapped(uid: str, year: int) -> Dict[str, Any]:
 
     user_ref = db.collection('users').document(uid)
     wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
-    wrapped_ref.set(wrapped_data)
+    wrapped_ref.set(wrapped_data, merge=True)
 
     return wrapped_data
 
@@ -113,10 +128,16 @@ def update_wrapped_status(
     Returns:
         True if updated successfully
     """
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return False
+    if not isinstance(year, int) or year <= 0:
+        return False
+
     user_ref = db.collection('users').document(uid)
     wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
 
-    if not getattr(wrapped_ref.get(), "exists", False):
+    doc = wrapped_ref.get()
+    if not getattr(doc, "exists", False):
         return False
 
     now = datetime.now(timezone.utc)
@@ -133,8 +154,12 @@ def update_wrapped_status(
         update_data['error'] = error
         update_data['result'] = None
 
-    wrapped_ref.update(update_data)
-    return True
+    try:
+        wrapped_ref.update(update_data)
+        return True
+    except GoogleAPIError as e:
+        logger.warning(f"Failed to update wrapped status for {uid}/{year}: {e}")
+        return False
 
 
 def update_wrapped_progress(uid: str, year: int, progress: Dict[str, Any]) -> bool:
@@ -149,19 +174,29 @@ def update_wrapped_progress(uid: str, year: int, progress: Dict[str, Any]) -> bo
     Returns:
         True if updated successfully
     """
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return False
+    if not isinstance(year, int) or year <= 0:
+        return False
+
     user_ref = db.collection('users').document(uid)
     wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
 
-    if not getattr(wrapped_ref.get(), "exists", False):
+    doc = wrapped_ref.get()
+    if not getattr(doc, "exists", False):
         return False
 
-    wrapped_ref.update(
-        {
-            'progress': progress,
-            'updated_at': datetime.now(timezone.utc),
-        }
-    )
-    return True
+    try:
+        wrapped_ref.update(
+            {
+                'progress': progress,
+                'updated_at': datetime.now(timezone.utc),
+            }
+        )
+        return True
+    except GoogleAPIError as e:
+        logger.warning(f"Failed to update wrapped progress for {uid}/{year}: {e}")
+        return False
 
 
 def reset_wrapped_for_regeneration(uid: str, year: int) -> Dict[str, Any]:
@@ -175,6 +210,11 @@ def reset_wrapped_for_regeneration(uid: str, year: int) -> Dict[str, Any]:
     Returns:
         The updated wrapped document data
     """
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        raise ValueError("uid must be a non-empty string")
+    if not isinstance(year, int) or year <= 0:
+        raise ValueError("year must be a positive integer")
+
     now = datetime.now(timezone.utc)
     wrapped_data: Dict[str, Any] = {
         'year': year,
@@ -190,7 +230,7 @@ def reset_wrapped_for_regeneration(uid: str, year: int) -> Dict[str, Any]:
 
     user_ref = db.collection('users').document(uid)
     wrapped_ref = user_ref.collection(WRAPPED_COLLECTION).document(str(year))
-    wrapped_ref.set(wrapped_data)
+    wrapped_ref.set(wrapped_data, merge=True)
 
     return wrapped_data
 
@@ -206,6 +246,9 @@ def is_wrapped_stuck(wrapped_data: Dict[str, Any], stale_minutes: int = 15) -> b
     Returns:
         True if the job appears stuck
     """
+    if not isinstance(wrapped_data, dict):
+        return False
+
     if wrapped_data.get('status') != WrappedStatus.PROCESSING:
         return False
 
