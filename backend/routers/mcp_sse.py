@@ -13,7 +13,7 @@ import logging
 from typing import Optional
 
 import firebase_admin.auth
-from fastapi import APIRouter, Form, Header, Request, Response
+from fastapi import APIRouter, Form, Header, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 
 import database.action_items as action_items_db
@@ -188,6 +188,8 @@ def oauth_authorization_server_metadata_head():
 
 @router.get("/.well-known/openai-apps-challenge", tags=["mcp"])
 def openai_apps_challenge():
+    if not OPENAI_APPS_CHALLENGE_TOKEN:
+        raise HTTPException(status_code=404, detail="Challenge token not configured")
     return Response(content=OPENAI_APPS_CHALLENGE_TOKEN, media_type="text/plain")
 
 
