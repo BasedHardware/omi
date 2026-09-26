@@ -17,6 +17,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 
+import 'action_item_completion.dart';
 import 'task_categorization.dart';
 import 'task_delete_undo.dart';
 import 'widgets/action_item_form_sheet.dart';
@@ -1131,7 +1132,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     // left deletes with Undo. Indenting lives in the long-press menu and in drag.
     return Dismissible(
       key: Key('dismiss_${item.id}'),
-      direction: DismissDirection.horizontal,
+      direction: provider.isUpdatingActionItemState(item.id) ? DismissDirection.none : DismissDirection.horizontal,
       dismissThresholds: const {DismissDirection.startToEnd: 0.3, DismissDirection.endToStart: 0.3},
       confirmDismiss: (direction) async {
         if (direction == DismissDirection.startToEnd) {
@@ -1166,8 +1167,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   Future<void> _toggleCompleted(ActionItemsProvider provider, ActionItemWithMetadata item) async {
     OmiHaptics.light();
-    await provider.updateActionItemState(item, !item.completed);
-    if (!item.completed) _onActionItemCompleted();
+    await setActionItemCompleted(context, provider, item, !item.completed, onCompleted: _onActionItemCompleted);
   }
 
   /// Long-press menu: the same shape as memories and conversations, with Select for multi-select
@@ -1269,8 +1269,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 checked: item.completed,
                 label: item.completed ? context.l10n.markIncomplete : context.l10n.markComplete,
                 child: GestureDetector(
+                  key: Key('action-item-${item.id}-toggle'),
                   behavior: HitTestBehavior.opaque,
-                  onTap: provider.isSelectionMode ? null : () => _toggleCompleted(provider, item),
+                  onTap: provider.isSelectionMode || provider.isUpdatingActionItemState(item.id)
+                      ? null
+                      : () => _toggleCompleted(provider, item),
                   child: SizedBox(
                       width: 44, height: 48, child: Center(child: TaskCompletionMark(completed: item.completed))),
                 ),

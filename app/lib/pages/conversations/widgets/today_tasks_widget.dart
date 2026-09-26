@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/pages/action_items/action_item_completion.dart';
 import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
 import 'package:omi/pages/action_items/widgets/task_row_parts.dart';
 import 'package:omi/providers/action_items_provider.dart';
@@ -73,7 +74,9 @@ class _TodayTasksWidgetState extends State<TodayTasksWidget> {
                   decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   child: Column(
-                    children: displayTasks.map((task) => _TaskItem(task: task, provider: provider)).toList(),
+                    children: displayTasks
+                        .map((task) => _TaskItem(task: task, provider: provider, feedbackContext: context))
+                        .toList(),
                   ),
                 ),
               ),
@@ -88,8 +91,9 @@ class _TodayTasksWidgetState extends State<TodayTasksWidget> {
 class _TaskItem extends StatelessWidget {
   final ActionItemWithMetadata task;
   final ActionItemsProvider provider;
+  final BuildContext feedbackContext;
 
-  const _TaskItem({required this.task, required this.provider});
+  const _TaskItem({required this.task, required this.provider, required this.feedbackContext});
 
   @override
   Widget build(BuildContext context) {
@@ -105,11 +109,14 @@ class _TaskItem extends StatelessWidget {
             checked: task.completed,
             label: task.completed ? context.l10n.markIncomplete : context.l10n.markComplete,
             child: GestureDetector(
+              key: Key('today-task-${task.id}-toggle'),
               behavior: HitTestBehavior.opaque,
-              onTap: () async {
-                OmiHaptics.light();
-                await provider.updateActionItemState(task, !task.completed);
-              },
+              onTap: provider.isUpdatingActionItemState(task.id)
+                  ? null
+                  : () async {
+                      OmiHaptics.light();
+                      await setActionItemCompleted(feedbackContext, provider, task, !task.completed);
+                    },
               child: SizedBox(
                 width: kOmiMinTapTarget,
                 height: kOmiMinTapTarget,
