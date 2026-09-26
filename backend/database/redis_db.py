@@ -282,27 +282,62 @@ def set_app_money_made_cache(app_id: str, money: Dict[str, Any]) -> None:
 
 # Two reviewers of the same app race on this one key: a plain GET-modify-SET lets
 # a write that lands between another writer's GET and SET vanish, silently
-# dropping that reviewer from everything the product reads. Do the read-modify-
-# write as a single atomic script instead, mirroring the rate-limit scripts
-# below. A legacy (pre-JSON) value that cjson can't parse is treated as empty
-# rather than raising, matching the fail-open behavior of the Python reader.
+# dropping that reviewer from everything the product reads. Merge inside one script
+# so concurrent writers serialize on it. A legacy (pre-JSON) blob cannot be decoded
+# by cjson -- seeding the merge from an empty table silently deleted every review
+# already in the cache -- so for an undecodable blob the caller's merge over the
+# reader's own parse (``_merge_app_review_cache``) is written, guarded by a
+# compare-and-set on the exact blob it was computed from.
 _SET_APP_REVIEW_CACHE_LUA = r.register_script("""
-local raw = redis.call('GET', KEYS[1])
-local reviews = {}
-if raw then
-    local ok, decoded = pcall(cjson.decode, raw)
+local current = redis.call('GET', KEYS[1])
+local incoming = cjson.decode(ARGV[2])
+if current then
+    local ok, decoded = pcall(cjson.decode, current)
     if ok and type(decoded) == 'table' then
-        reviews = decoded
+        decoded[ARGV[4]] = incoming
+        redis.call('SET', KEYS[1], cjson.encode(decoded))
+        return 1
     end
+    if current ~= ARGV[1] then
+        return 0
+    end
+    redis.call('SET', KEYS[1], ARGV[3])
+    return 1
 end
-reviews[ARGV[1]] = cjson.decode(ARGV[2])
-redis.call('SET', KEYS[1], cjson.encode(reviews))
+if ARGV[1] ~= '' then
+    return 0
+end
+redis.call('SET', KEYS[1], ARGV[3])
 return 1
 """)
 
+_APP_REVIEW_CACHE_MERGE_ATTEMPTS = 5
+
+
+def _merge_app_review_cache(raw: Union[bytes, str, None], uid: str, data: Dict[str, Any]) -> str:
+    """The blob a review-cache write must store: the reviews the reader sees, plus this one.
+
+    ``_deserialize_cache_value`` is the reader's own parser (JSON, then the safe
+    legacy-literal fallback), so the merge preserves exactly what the read path
+    serves today, and an unreadable blob degrades to empty just as the reader does.
+    """
+    reviews = _deserialize_cache_value(raw)
+    if not isinstance(reviews, dict):
+        reviews = {}
+    reviews[uid] = data
+    return _serialize_cache_value(reviews)
+
 
 def set_app_review_cache(app_id: str, uid: str, data: Dict[str, Any]) -> None:
-    _SET_APP_REVIEW_CACHE_LUA(keys=[f'plugins:{app_id}:reviews'], args=[uid, _serialize_cache_value(data)])
+    key = f'plugins:{app_id}:reviews'
+    payload = _serialize_cache_value(data)
+    for _ in range(_APP_REVIEW_CACHE_MERGE_ATTEMPTS):
+        raw = r.get(key)
+        expected = raw if raw is not None else ''
+        merged = _merge_app_review_cache(raw, uid, data)
+        if _SET_APP_REVIEW_CACHE_LUA(keys=[key], args=[expected, payload, merged, uid]):
+            return
+    logger.error(f'App review cache write kept losing the race app_id={app_id} uid={uid}')
 
 
 def get_specific_user_review(app_id: str, uid: str) -> Dict[str, Any]:
