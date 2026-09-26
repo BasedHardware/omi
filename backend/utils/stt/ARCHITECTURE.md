@@ -52,7 +52,11 @@ mean so a capped speaker cannot drag another speaker's centroid away.
 `speaker_identity.py` scopes provider labels before persistence. It maps
 `(speaker_id_scope, speaker)` to a small conversation-local integer after
 hydrating IDs already stored on the conversation, so reconnects and provider
-changes cannot reuse another numbering space.
+changes cannot reuse another numbering space. The cost is that one voice gets a
+new id per scope; `conversation_speakers.py` (pure) re-diarizes the finished
+conversation from per-segment embeddings so each id is one voice again, and
+`utils/conversations/speaker_resolution.py` runs it before processing.
+`voiceprints.py` owns which stored person embeddings are trusted.
 
 ## Other modules
 

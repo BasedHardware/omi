@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-09-25 (Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
+> Last updated: 2026-09-26 (conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -71,6 +71,39 @@ new for every client reconnect. A conversation-local allocator hydrates the
 persisted IDs, then maps `(speaker_id_scope, speaker label)` to the next small
 integer `speaker_id`. Therefore Deepgram `SPEAKER_0`, Modulate `SPEAKER_00`, and
 a reconnect that restarts either provider's numbering cannot share an identity.
+
+The same boundaries also split one person into many ids: every reconnect,
+failover, and uploaded sync chunk (`sync:{segment_id}`) restarts numbering, so a
+3.6h pendant dinner measured 1874 ids for about five voices. Processing
+therefore resolves speakers for the whole conversation before it summarizes
+(`utils/conversations/speaker_resolution.py`, called from `process_conversation`
+on every trigger). When every capture scope is a sync chunk, it embeds each
+segment of at least 1s from the stored private cloud sync audio (each chunk blob
+decoded on its own; merging chunks drifts where they overlap). Live scopes are not
+resolved yet: live `started_at` can drift minutes from the arrival-stamped chunks
+until the capture-position clock lands, and misplaced audio would merge the wrong
+voices. It caches the embeddings, encrypted, at
+`audio/{uid}/{conversation_id}/speaker-embeddings.v1.enc`, so sync updates embed
+only new segments and conversation/account deletion purges the cache with the
+audio. `utils/stt/conversation_speakers.py` then clusters the embeddings
+(average-linkage AHC at cosine 0.70, then fragments within 0.60 of a voice with at
+least 30s of speech are absorbed into it; calibrated on real pendant audio against
+the owner's voiceprint), matches each voice's pooled centroid against enrolled
+voiceprints at 0.50 + 0.10 margin (pooled owner voices measured 0.24-0.33, other
+voices 0.63+, so the per-clip 0.65 would name a companion the owner), and merges
+voices that match the same identity. Manual receipts constrain it: a
+labeled `speaker_id` keeps its id and is one voice with every other id labeled as
+the same person; two different labeled identities never merge. Every covered
+segment gets `speaker_id_scope = conversation:{id}`, `speaker = SPEAKER_{id}`, and,
+for a voiceprint match, `speaker_match_source = conversation_voice`. The result
+rides the normal processing write (fenced by `sync_content_revision`), and the
+conversation's `speaker_resolution` tells clients whether ids are people:
+`resolved` (above), `capture` (one scope, no audio: capture's ids stand), or
+`unavailable` (restarted numbering and no audio: count no ids). Its
+`participant_speaker_ids` are voices with at least 10s of speech. The stage fails
+open onto capture's ids; `CONVERSATION_SPEAKER_RESOLUTION_ENABLED=false` disables
+it, and `CONVERSATION_SPEAKER_RESOLUTION_BUDGET_SECONDS` (45) and
+`..._MAX_EMBEDDINGS` (1500) bound one run, which resumes from the cache next time.
 
 Pre-recorded STT results from providers such as Modulate and Parakeet are
 normalized before they are written as transcript segments. Consecutive entries
@@ -908,6 +941,193 @@ sequenceDiagram
 At conversation completion (`process_conversation`, and `_finalize_sync_audio_files` for offline sync), an `audio-merge` Cloud Task (schema_version 2, name `amc-{conversation_id}-{fingerprint}`) builds **one dense per-conversation MP3** — `playback/{uid}/{conversation_id}/conversation.mp3` — containing only captured audio: intra-part gaps (&lt;90s) stay silence-filled, inter-part gaps (&gt;90s) are collapsed. The handler stamps the conversation doc with `conversation_audio`: a spans manifest (`{file_id, wall_offset, artifact_offset, len}` per part, wall offsets relative to `started_at` — the `TranscriptSegment.start` basis), both durations (`duration` = wall clock, `captured_duration` = audio only), and the `audio_files_fingerprint` it was built from.
 
 Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher batch flush after completion, offline sync, conversation merge), the stamped fingerprint no longer matches and both the call sites and the `/v1/sync/audio/{id}/urls` poll re-enqueue a rebuild under a new task name (defeating the named-task tombstone). `/urls` returns the artifact as a top-level `conversation_audio` object alongside the per-part `audio_files` list, which remains for older app versions.
+
+### Audio timeline v2 (AUDIO_TIMELINE_V2, dev-only until promoted)
+
+`AUDIO_TIMELINE_V2` admits **new eligible recordings only**: single-channel,
+server-STT live capture on a fresh conversation. Existing sockets, resumed v1
+conversations, multi-channel mixes, custom/BYOK STT, offline WAL sync and
+manually merged rows always stay v1. The flag is read at the call boundary
+(`config/audio_timeline.py`); flag off means the v1 wire, storage and
+persistence behavior is byte-for-byte unchanged.
+
+One coordinate. A per-listen-socket integer capture sample cursor
+(`utils/audio_timeline.CaptureTimeline`) owns the order of decoded PCM16 mono.
+The first anchor is the first accepted decoded frame; a later anchor is set
+only at a measured inter-arrival hiatus (both wall estimate and monotonic gap
+beyond 2 s — a wall-clock step can never mint an hour of recorded audio).
+`conversation.started_at` is pinned once, transactionally with the typed
+`audio_timeline: {version: 2}` marker, to the wall projection of the first
+accepted audio sample of that conversation (fenced in
+`update_conversation_segments`: once pinned, stale `started_at` writes are
+ignored). Only a conversation admitted as v2 from its first audio may pin:
+a resumed row adopts its persisted `started_at` (datetime, number, or ISO
+string) as a non-pinnable projection origin and never gains the marker; a
+row whose `started_at` cannot be parsed is locked to legacy projection for
+its lifetime. The first segment of a v2 conversation may therefore start
+after 0.
+
+Provider times. Every selected provider socket — initial fallback and
+send-path failover — gets its own epoch translator created at callback
+creation. Sockets record only sends the provider accepted (pre-roll spans
+included through the VAD gate; SafeDeepgram keepalives are never audio);
+provider timestamps map through those spans to capture samples, then to the
+wall axis, before `_enqueue_stt_segments`. Out-of-range, evicted,
+straddling-generation, degenerate (`start >= end`, e.g. Modulate partials)
+and collapsed intervals are dropped and counted — with bounded reasons
+(`outside_accepted_sends`, `evicted_interval`, `zero_length`,
+`collapsed_interval`) — never clamped onto a neighboring epoch or replayed
+into a newer conversation. Two *different* provider times never clamp onto
+one capture sample: the send map's edge tolerance accepts a single endpoint
+overshoot past a span end (the provider's tail buffering), but an interval
+that would collapse to one point fails closed instead of fabricating a
+zero-length segment at a span edge (the 2026-09-26 dev collapse). The
+windowed TDT leg enforces the same rule at the source
+(`WindowedParakeetSocket._materialize`): emitted positions are the honest
+window-relative mapping, its emission boundary is snapshotted in the
+socket's own stream seconds *before* the callback rewrites `start`/`end`
+onto other clocks, and TDT timestamps at/beyond the posted window duration
+or re-detections of already-emitted audio are dropped and counted in
+`omi_stt_window_emission_drops_total` rather than emitted at a fabricated
+position. Ownership of recent
+capture ranges is retained as coalesced same-conversation *runs* for 120 s of
+capture time (a hard run cap is a pathological bound, not the working limit),
+so a provider final trailing its audio by tens of seconds still resolves its
+owner; a sample older than the oldest retained run fails closed (retention
+may have trimmed the run and every boundary that contradicts the surviving
+conversation), and the single-conversation fail-open applies only between
+retained runs inside that horizon. A late batch whose owning conversation is
+still `in_progress` is
+persisted to that row (persist-only: no client delivery, realtime
+integrations, onboarding or translation — the session's current conversation
+owns the live socket, and the late row's finalization owns its
+post-processing); a terminal or processing owner is fenced out and counted.
+Diarization accounting (`Diarization Completed`) covers both persistence
+modes. Deepgram's SDK delivers transcripts on its own thread; the receiver's
+callbacks hop onto the listen event loop before touching timeline or send-map
+state (`_run_on_listen_loop`), so all capture-clock mutation stays
+single-threaded. The deferred callback runs on its own copy of the segment
+list; a failure inside it is counted in `omi_audio_timeline_segments_total`
+as `rejected` (with one bounded log line — exception type and segment count
+only) instead of dying as a bare asyncio callback error.
+
+Wire. The listen→pusher opt-in is the bounded `audio_timeline=2` WebSocket
+query parameter on `/v1/trigger/listen`; a capable pusher answers with the
+pusher→listen acknowledgment opcode **202** (`{"type":"audio_timeline_ack",
+"version":2}`) before any v2 audio. An old pusher ignores the unknown query
+key and stays silent: the listen session's bounded 4 s ack timeout then means
+v1 for that new session. The ack is required again on every reconnect; if it
+is missing mid-recording, the recording continues, transcripts and
+finalization keep flowing, but audio is withheld (a coverage gap) and
+audio-linked features are withheld for the gap — the recording is never
+terminated and never silently downgraded. Opcode 101 keeps its 12-byte header
+(`opcode | float64 timestamp | PCM`): the timestamp is the projected start of
+the run's first sample, retained per buffered run (with its conversation
+binding) from acceptance through replays and reconnects. Buffered runs are
+flushed as one 101 frame per contiguous same-conversation group; a projected
+gap larger than 1 ms between runs (a client stall that minted a capture
+anchor, or withheld-then-resumed audio) splits the group so the stored bytes
+never erase the gap while the header claims the first run's position. Opcode
+103 is emitted ahead of each conversation boundary so the pusher flushes
+rather than concatenating across rollovers.
+
+Storage. v2 audio runs compare against the last accepted run's end with 1 ms
+tolerance: a positive discontinuity flushes the partial 60 s chunk and closes
+the pending per-conversation batch (never concatenating across a gap or
+inside a batch), exact replays are ignored, partial overlaps are trimmed
+after verifying the retained bytes, and conflicting bytes for an accepted
+range fail closed. An overlap reaching past the live buffer is verified
+against a bounded digest ledger of uploaded runs (`(start, end, sha256)` per
+contiguous batch, recorded only after the batch's GCS upload succeeds — a
+chunk evicted by the bounded queue or a batch dropped after exhausting its
+retries leaves no entry); a range that can be neither byte-compared nor
+digest-matched is a conflict — counted in
+`omi_audio_timeline_replay_conflicts_total`, the unverified overlap is never
+stored, and the frame's bytes past the accepted end continue the run from
+that end so no new tail is lost. A failed upload retries on a later
+process-interval tick (never in the same loop turn), keeping its batch
+order in the ready lane; during shutdown the retry gate is skipped so the
+drain stays bounded. Chunk
+queues carry the authoritative PCM sample count; uploads stamp span metadata
+(`v2_start`, `v2_samples`, `v2_sample_rate`) on the blob and refuse to
+overwrite a colliding 3-decimal filename: identity is a SHA-256 of the
+plaintext payload compared against the existing blob (decrypted first for
+enhanced protection, whose ciphertext length can never prove or disprove a
+retry), so an identical retry is an idempotent no-op and equal-size
+conflicting content — or an existence probe or download that errors — fails
+closed. Listing rehydrates spans; grouping splits
+at actual uncovered ends or overlaps; `AudioFile.chunk_spans` exposes
+validated contiguous coverage (absent on legacy files) and joins the artifact
+fingerprint.
+
+Consumers. `segment_wall_window` / `covered_window` / `coverage_outcome`
+(`utils/audio_timeline.py`) are the one coordinate conversion and the
+metadata-backed coverage check with the outcome vocabulary
+`covered|missing|pending_upload|no_audio|unsupported` (counted in
+`omi_audio_timeline_*` counters at bounded reconciliation points; labels
+never carry UID, conversation id or content). Clips, speaker-tag prompt
+selection and speaker-sample extraction serve v2 conversations only from
+validated span coverage; a v1-only chunk list is a candidate, never proof.
+Playback parts stay one contiguous span per part (grouping splits at every
+real gap), preserving the released clients' strict-seek arithmetic.
+
+#### Live speaker ID runs on the capture clock for every server-STT session
+
+The clock itself is **not** flag-gated. Every single-channel server-STT
+listen session runs the capture sample cursor, the per-provider-epoch
+translators (rebuilt by `_rebuild_stt_socket_locked` on every mid-session
+failover, including streams whose timestamps restart at zero) and the
+capture-positioned `AudioRingBuffer`; `state.capture_timeline_v2` alone
+admits the v2 persistence described above. With the flag off the translator
+runs in clock-only mode: the non-passthrough callback still applies the
+active VAD gate's `remap_segments` to provider timestamps exactly as
+`make_stream_callback` did on main — the epoch translation only *attaches*
+the private capture window without rewriting `start`/`end` — so
+provider-native segment times, conversation ownership and the pusher wire
+stay byte-identical to the flag-off baseline. Only the speaker-ID clip window
+relocates onto the capture clock, which is what keeps live recognition
+working after a Modulate→Soniox-style failover (the 2026-09-25 incident: the
+legacy `first_audio + raw_start` window landed minutes before the 60 s ring
+buffer and matching returned silently for the rest of the recording). With
+the flag on, the send-map translation replaces the gate mapper; both never
+apply. Introduction detection ("My name is …") runs on the merged segments in
+clock-only mode exactly as without windows; only the duplicate embedding
+enqueue is re-homed to the provider's raw segments, each carrying its capture
+window — the live merge relabels merged turns with the absorbing segment id,
+and the matcher's covered-audio subtraction already dedupes overlapping
+re-sends. The capture-positioned `AudioRingBuffer` walks its per-write span
+ledger on `extract`, so a clip window crossing a client stall returns the
+audio on both sides of the gap, never the gap itself as audio. Multi-channel
+and custom-STT sessions keep no capture clock.
+
+`LIVE_SPEAKER_CAPTURE_CLOCK` (default on, read at the call boundary in
+`config/audio_timeline.py`) is the runtime kill switch for this always-on
+speaker path: a falsy value reverts both halves of the pair together — the
+ring buffer returns to arrival-timestamped writes and clock-only segments
+attach no capture window, so the matcher uses the legacy
+`first_audio + provider-time` formula — without a deploy and without touching
+the v2 persistence or the wire. It only applies to legacy (clock-only)
+sessions: while a session's v2 persistence is on, its speaker queries and
+persisted offsets project capture samples onto the wall axis, so the ring
+buffer stays capture-positioned even with the switch off (arrival spans under
+capture-clock queries would mismatch every speaker window for the whole
+recording, not just one buffer length). Flipping it mid-session can mismatch
+the retained ring-buffer spans for up to the buffer's duration; it is an
+emergency lever, not a toggle.
+
+Every early return before a live speaker-ID match decision — in
+`speakers._match_unmapped` and in the callers that drop a queued detection —
+emits exactly one bounded reason as the `omi_speaker_id_match_exits_total`
+counter (label = reason only) plus one log line:
+`window_outside_buffer` (the post-failover signature), `too_short`, `no_pcm`,
+`stale_generation`, `already_mapped`. Pending evidence accumulation is not a
+drop (it logs and decides on the next clip). `speaker_id_evidence` /
+`speaker_id_decision` / the exit line carry `session=<recording session id>`
+— never uid, never transcript content — so one user's report is attributable
+without replaying the saved conversation. "That's me" outcomes are likewise
+attributable: `store_owner_voice_sample` logs one
+`owner sample outcome=… conversation=<id>` line per outcome next to the
+existing counter.
 
 ## 6. Event Wire Protocol
 

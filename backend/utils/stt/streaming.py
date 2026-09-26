@@ -1539,11 +1539,17 @@ class SafeModulateSocket(STTSocket):
         start = start_ms / 1000.0
         if self._preseconds and start < self._preseconds:
             return
+        # This dict is the only copy of the unfinalized tail (done/error with
+        # no utterance): the provider gives it no duration, but a zero-length
+        # interval is dropped by v2 translation. Give it the provider clock's
+        # smallest positive duration — 1 ms, a minimal capture window at any
+        # rate — so the text survives both persistence modes.
+        end = (start_ms + 1) / 1000.0
         segments = [
             {
                 'speaker': 'SPEAKER_00',
                 'start': start,
-                'end': start,
+                'end': end,
                 'text': text,
                 'is_user': False,
                 'person_id': None,
