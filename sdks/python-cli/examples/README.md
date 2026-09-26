@@ -43,6 +43,7 @@
 * [`action_items_markdown.md`](action_items_markdown.md) — export action items and tasks to Obsidian/Notion Markdown checklists.
 * [`action_items_org.md`](action_items_org.md) — turn an action-item export
   into an Org-mode file with TODO/DONE headings and agenda DEADLINEs.
+* [`action_items_html.md`](action_items_html.md) — export action items to a self-contained HTML file.
 * [`memories_markdown.pt.md`](memories_markdown.pt.md) — exportar memórias e conhecimento do Omi para Markdown (Portuguese recipe).
 * [`quickstart.th.md`](quickstart.th.md) — คู่มือเริ่มต้นใช้งาน omi-cli
   ฉบับภาษาไทย (Thai Quickstart).
@@ -182,3 +183,9 @@
 * [`quickstart.an.md`](quickstart.an.md) — os primers pasos con omi-cli (Aragonese Quickstart).
 * [`quickstart.rn.md`](quickstart.rn.md) — intambwe ya mbere na omi-cli (Kirundi Quickstart).
 * [`quickstart.bn.md`](quickstart.bn.md) — omi-cli দিয়ে শুরু করা (Bengali Quickstart).
+* [`quickstart.nl.md`](quickstart.nl.md) — Snelstartgids (Nederlands).
+* [`quickstart.pl.md`](quickstart.pl.md) — Przewodnik szybkiego startu (Polski).
+* [`quickstart.sv.md`](quickstart.sv.md) — Snabbstartsguide (Svenska).
+* [`quickstart.uk.md`](quickstart.uk.md) — Посібник швидкого старту (Українська).
+* [`quickstart.zh.md`](quickstart.zh.md) — 快速入门指南 (中文).
+* [`quickstart.ko.md`](quickstart.ko.md) — 빠른 시작 가이드 (한국어).
