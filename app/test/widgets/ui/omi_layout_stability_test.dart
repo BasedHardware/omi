@@ -82,7 +82,7 @@ void main() {
       await at(
         tester,
         width,
-        OmiSectionHeader(
+        const OmiSectionHeader(
           'Developer API',
           trailing: Wrap(spacing: 8, runSpacing: 8, children: [
             OmiButton.secondary(label: 'Docs', size: OmiButtonSize.compact, onPressed: _noop),

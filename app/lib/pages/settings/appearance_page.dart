@@ -146,7 +146,8 @@ class _ModeOption extends StatelessWidget {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(18), // omi-ux-allow: radius-literal -- a miniature screen
-                child: phone,
+                // Scales down with the frame when three options share a narrow phone (360 pt).
+                child: FittedBox(fit: BoxFit.scaleDown, child: phone),
               ),
             ),
             const SizedBox(height: 10),

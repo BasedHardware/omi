@@ -121,6 +121,16 @@ Size? _sizeFrom(String? value) {
 /// Layout findings of this run, rewritten to `layout.json` after every capture.
 final List<Map<String, Object?>> _layoutFindings = [];
 
+/// Lint mode: the reports of the errors the current scenario raised, so a finding can say where
+/// (the error-causing widget's file and line), not just what.
+final List<FlutterErrorDetails> _errorReports = [];
+
+/// The first app source location in [details] ("lib/…dart:166:22"), or ''.
+String _whereOf(FlutterErrorDetails details) {
+  final match = RegExp(r'file://\S*?/(lib/[^\s:]+\.dart:\d+:\d+)').firstMatch(details.toString());
+  return match?.group(1) ?? '';
+}
+
 /// The widgets that made [node], nearest first, without the render-only wrappers.
 String _creatorOf(RenderObject node) {
   final creator = node.debugCreator;
@@ -325,7 +335,9 @@ class AuditRun {
       'textScale': _auditTextScale ?? 1.0,
     };
     if (error != null) {
-      _layoutFindings.add({...base, 'kind': 'error', 'text': '$error'.split('\n').take(3).join(' ')});
+      final where = _errorReports.map(_whereOf).firstWhere((w) => w.isNotEmpty, orElse: () => '');
+      _layoutFindings.add({...base, 'kind': 'error', 'text': '$error'.split('\n').take(3).join(' '), 'creator': where});
+      _errorReports.clear();
     }
     void visit(RenderObject node) {
       if (node is RenderParagraph && node.attached && node.hasSize) {
@@ -402,7 +414,20 @@ void runAuditScenarios(AuditSuite suite, {List<AuditScenario>? only, Directory? 
       final server = await tester.runAsync(() => JourneyHermeticBoot.start(extraPrefs: scenario.prefs));
       addTearDown(() => server!.stop());
       final shots = <Map<String, Object?>>[];
-      await scenario.run(AuditRun._(tester, scenario, server!, suite, shots, output != null));
+      // Lint mode keeps each error's report (where it came from) before the test binding takes it.
+      final binding = FlutterError.onError;
+      if (_lint) {
+        _errorReports.clear();
+        FlutterError.onError = (details) {
+          _errorReports.add(details);
+          binding?.call(details);
+        };
+      }
+      try {
+        await scenario.run(AuditRun._(tester, scenario, server!, suite, shots, output != null));
+      } finally {
+        if (_lint) FlutterError.onError = binding;
+      }
       // Unwind the page's animations and timers in the test body: flutter_test checks for pending
       // timers before tearDowns run, and 16 s of fake time outlasts the pooled HTTP client's 15 s
       // idle timer. A live binding would wait in real time and does not check timers.
