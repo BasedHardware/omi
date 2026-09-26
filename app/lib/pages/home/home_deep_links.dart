@@ -4,8 +4,12 @@ import 'package:flutter/widgets.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
@@ -72,6 +76,8 @@ Future<void> openHomeDeepLink(
   BuildContext context,
   HomeDeepLink link, {
   required Future<void> Function() openSettings,
+  Future<ActionItemWithMetadata?> Function(String)? taskById,
+  void Function(ActionItemWithMetadata)? onTaskOpened,
 }) async {
   final id = link.id;
   switch (link.alias) {
@@ -96,13 +102,29 @@ Future<void> openHomeDeepLink(
     case 'task':
       if (id == null) return;
       final provider = context.read<ActionItemsProvider>();
-      var matches = provider.actionItems.where((item) => item.id == id);
-      if (matches.isEmpty) {
-        await provider.fetchActionItems();
-        matches = provider.actionItems.where((item) => item.id == id);
+      ActionItemWithMetadata? task;
+      for (final item in provider.actionItems) {
+        if (item.id == id) {
+          task = item;
+          break;
+        }
+      }
+      if (task == null) {
+        if (taskById != null) {
+          task = await taskById(id);
+        } else {
+          final result = await action_items_api.ActionItemsApi(baseUrl: Env.apiBaseUrl ?? '').getById(id);
+          if (result case ApiSuccess<ActionItemWithMetadata>(:final data)) task = data;
+        }
       }
       if (!context.mounted) return;
-      if (matches.isNotEmpty) unawaited(showActionItemFormSheet(context, actionItem: matches.first));
+      if (task == null) {
+        OmiFeedback.info(context, context.l10n.somethingWentWrong);
+      } else if (onTaskOpened != null) {
+        onTaskOpened(task);
+      } else {
+        unawaited(showActionItemFormSheet(context, actionItem: task));
+      }
     case 'search':
       final query = link.query['q']?.trim() ?? '';
       final home = context.read<HomeProvider>();

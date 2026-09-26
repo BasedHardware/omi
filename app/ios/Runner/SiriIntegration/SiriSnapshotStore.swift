@@ -42,6 +42,15 @@ final class SiriSnapshotStore {
     }
     var enabled: Bool { defaults.object(forKey: enabledKey) as? Bool ?? true }
     var owner: String? { defaults.string(forKey: ownerKey) }
+    func generationForOwner(_ uid: String) -> Int64? {
+        lock.lock(); defer { lock.unlock() }
+        let sessionOwner = SiriSession.shared.currentConfig()?.uid
+        guard !uid.isEmpty, owner == uid, snapshot.ownerUid == uid,
+              transitionGeneration == nil,
+              (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty,
+              (sessionOwner == nil || sessionOwner == uid) else { return nil }
+        return defaults.object(forKey: generationKey) as? Int64 ?? 0
+    }
     var indexName: String? {
         guard let owner else { return nil }
         return indexName(for: owner)
@@ -302,6 +311,10 @@ final class SiriSnapshotStore {
         return route
     }
     func setPendingRoute(_ route: String) { defaults.set(route, forKey: routeKey) }
+    func clearPendingRoute(ifMatching route: String) {
+        lock.lock(); defer { lock.unlock() }
+        if defaults.string(forKey: routeKey) == route { defaults.removeObject(forKey: routeKey) }
+    }
     func allowsDonation(uid: String) -> Bool {
         lock.lock(); defer { lock.unlock() }
         return validOwnerLocked() && snapshot.ownerUid == uid

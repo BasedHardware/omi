@@ -4,6 +4,8 @@ import FirebaseAuth
 import FirebaseCore
 import AppIntents
 import CoreSpotlight
+import app_links
+import ObjectiveC.runtime
 
 /// Simulator-only, opt-in probe for a Runner launch that has no Dart engine.
 /// It accepts only loopback, and uses a fake token against a local stub.
@@ -14,6 +16,31 @@ enum SiriDebugProbe {
         Task {
             if FirebaseApp.app() == nil { FirebaseApp.configure() }
             NSLog("[SiriProbe] engine=absent firebaseUser=%@", Auth.auth().currentUser?.uid ?? "nil")
+            let backgroundModes = Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String] ?? []
+            NSLog("[SiriProbe] backgroundAudioBLEModes=%@",
+                  backgroundModes.contains("audio") && backgroundModes.contains("bluetooth-central") ? "PASS" : "FAIL")
+            let quickActionsClass = NSClassFromString("quick_actions_ios.QuickActionsPlugin")
+            let sceneProtocol = NSProtocolFromString("FlutterSceneLifeCycleDelegate")
+            NSLog("[SiriProbe] quickActionScenePlugin=%@",
+                  quickActionsClass != nil && sceneProtocol != nil &&
+                  class_conformsToProtocol(quickActionsClass!, sceneProtocol!) ? "PASS" : "FAIL")
+            for (label, rawURL) in [
+                ("scheme", "omi-dev://conversation/scene-probe"),
+                ("universal", "https://h.omi.me/conversation/scene-probe"),
+                ("oauth", "com.googleusercontent.apps.probe:/oauth-callback"),
+            ] {
+                let url = URL(string: rawURL)!
+                if label == "universal" {
+                    let activity = NSUserActivity(activityType: NSUserActivityTypeBrowsingWeb)
+                    activity.webpageURL = url
+                    OmiSceneLinkRouter.forward(urls: [], activities: [activity])
+                } else {
+                    OmiSceneLinkRouter.forward(urls: [url], activities: [])
+                }
+                let latest = Mirror(reflecting: AppLinks.shared).children
+                    .first(where: { $0.label == "latestLink" })?.value as? String
+                NSLog("[SiriProbe] sceneLink_%@=%@", label, latest == rawURL ? "PASS" : "FAIL")
+            }
             SiriSession.shared.clear()
             do { _ = try await SiriSession.shared.token(); NSLog("[SiriProbe] signedOut=unexpected-token") }
             catch { NSLog("[SiriProbe] signedOut=auth") }
@@ -30,6 +57,10 @@ enum SiriDebugProbe {
             do {
                 try await SiriSnapshotStore.shared.bind(uid: config.uid)
                 try SiriSession.shared.publish(config)
+                let resumedGeneration = SiriSnapshotStore.shared.generationForOwner(config.uid)
+                NSLog("[SiriProbe] sameOwnerGeneration=%@ changedOwnerGeneration=%@",
+                      resumedGeneration != nil ? "PASS" : "FAIL",
+                      SiriSnapshotStore.shared.generationForOwner("another-uid") == nil ? "PASS" : "FAIL")
                 var intent = RememberIntent()
                 intent.content = "probe memory"
                 let result = try await intent.perform()
@@ -41,6 +72,15 @@ enum SiriDebugProbe {
                     _ = try await open.perform()
                     NSLog("[SiriProbe] memoryNoteOpenRoute=%@",
                           SiriSnapshotStore.shared.pendingRoute() ?? "nil")
+                    SiriBridge.shared.routeDeliveryProbe = { _, completion in completion(true) }
+                    SiriBridge.shared.navigate("/task/live-delivery")
+                    NSLog("[SiriProbe] liveRouteCleared=%@",
+                          SiriSnapshotStore.shared.pendingRoute() == nil ? "PASS" : "FAIL")
+                    SiriBridge.shared.routeDeliveryProbe = { _, completion in completion(false) }
+                    SiriBridge.shared.navigate("/task/cold-fallback")
+                    NSLog("[SiriProbe] failedRoutePreserved=%@",
+                          SiriSnapshotStore.shared.pendingRoute() == "/task/cold-fallback" ? "PASS" : "FAIL")
+                    SiriBridge.shared.routeDeliveryProbe = nil
                     let row = SiriMemory(id: "probe-memory", content: "probe-memory-native-index-2026", createdAtMs:
                         Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
                     try await SiriSnapshotStore.shared.upsert([row], uid: config.uid)

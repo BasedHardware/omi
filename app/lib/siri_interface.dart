@@ -84,6 +84,10 @@ abstract class SiriIndexApi {
   void deleteEntities(String uid, String type, List<String> ids);
   @async
   int wipe();
+
+  /// Reuse the persisted index generation only when its snapshot still belongs to this UID.
+  @async
+  int? generationForOwner(String uid);
   @async
   void setEnabled(bool enabled);
   void setCurrentScreen(String route, String? entityId);
@@ -100,7 +104,8 @@ abstract class SiriIndexApi {
 abstract class SiriEventsApi {
   void memoryCreated(String id);
   void taskChanged(String id);
-  void openRoute(String route);
+  @async
+  bool openRoute(String route);
   @async
   void setListening(bool enabled);
 }

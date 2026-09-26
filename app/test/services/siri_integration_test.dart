@@ -85,9 +85,79 @@ class _RaceHost extends SiriIndexApi {
   Future<List<SiriTelemetryRecord>> takeTelemetry() async => [];
 }
 
+class _ColdOwnerHost extends SiriIndexApi {
+  _ColdOwnerHost(this.owner);
+  String? owner;
+  int generation = 7;
+  int wipes = 0;
+  int publications = 0;
+
+  @override
+  Future<int?> generationForOwner(String uid) async => owner == uid ? generation : null;
+
+  @override
+  Future<int> wipe() async {
+    wipes++;
+    owner = null;
+    return ++generation;
+  }
+
+  @override
+  Future<void> publishSessionConfig(SiriSessionConfig config) async {
+    expect(config.generation, generation);
+    owner = config.uid;
+    publications++;
+  }
+
+  @override
+  Future<List<SiriTelemetryRecord>> takeTelemetry() async => [];
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final now = DateTime.now();
+
+  test('cold launch with the same owner retains the native index and generation', () async {
+    final host = _ColdOwnerHost('owner-race');
+    final siri = SiriIntegration.forTest(host, 'owner-race',
+        coldStart: true,
+        sessionConfig: (user, token, generation) => SiriSessionConfig(
+            uid: user.uid,
+            generation: generation,
+            baseUrl: 'http://127.0.0.1:8977',
+            profile: 'local_dev',
+            appVersion: 'test',
+            appBuild: '0',
+            deviceIdHash: 'test',
+            token: token.token,
+            tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch));
+
+    await siri.accountChanged(_RaceUser());
+    expect(host.wipes, 0);
+    expect(host.owner, 'owner-race');
+    expect(host.publications, 1);
+  });
+
+  test('cold launch with a changed owner wipes the prior index before binding', () async {
+    final host = _ColdOwnerHost('old-owner');
+    final siri = SiriIntegration.forTest(host, 'owner-race',
+        coldStart: true,
+        sessionConfig: (user, token, generation) => SiriSessionConfig(
+            uid: user.uid,
+            generation: generation,
+            baseUrl: 'http://127.0.0.1:8977',
+            profile: 'local_dev',
+            appVersion: 'test',
+            appBuild: '0',
+            deviceIdHash: 'test',
+            token: token.token,
+            tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch));
+
+    await siri.accountChanged(_RaceUser());
+    expect(host.wipes, 1);
+    expect(host.owner, 'owner-race');
+    expect(host.publications, 1);
+  });
 
   test('Siri Start and Stop use conversation capture and finalize the phone session', () async {
     final calls = <String>[];

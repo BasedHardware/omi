@@ -523,6 +523,8 @@ protocol SiriIndexApi {
   func reconcileTasks(uid: String, tasks: [SiriTask], includeCompleted: Bool, completion: @escaping (Result<Void, Error>) -> Void)
   func deleteEntities(uid: String, type: String, ids: [String], completion: @escaping (Result<Void, Error>) -> Void)
   func wipe(completion: @escaping (Result<Int64, Error>) -> Void)
+  /// Reuse the persisted index generation only when its snapshot still belongs to this UID.
+  func generationForOwner(uid: String, completion: @escaping (Result<Int64?, Error>) -> Void)
   func setEnabled(enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void)
   func setCurrentScreen(route: String, entityId: String?) throws
   func publishSessionConfig(config: SiriSessionConfig, completion: @escaping (Result<Void, Error>) -> Void)
@@ -685,6 +687,24 @@ class SiriIndexApiSetup {
     } else {
       wipeChannel.setMessageHandler(nil)
     }
+    /// Reuse the persisted index generation only when its snapshot still belongs to this UID.
+    let generationForOwnerChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_siri.SiriIndexApi.generationForOwner\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      generationForOwnerChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let uidArg = args[0] as! String
+        api.generationForOwner(uid: uidArg) { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      generationForOwnerChannel.setMessageHandler(nil)
+    }
     let setEnabledChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_siri.SiriIndexApi.setEnabled\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       setEnabledChannel.setMessageHandler { message, reply in
@@ -799,7 +819,7 @@ class SiriIndexApiSetup {
 protocol SiriEventsApiProtocol {
   func memoryCreated(id idArg: String, completion: @escaping (Result<Void, SiriPigeonError>) -> Void)
   func taskChanged(id idArg: String, completion: @escaping (Result<Void, SiriPigeonError>) -> Void)
-  func openRoute(route routeArg: String, completion: @escaping (Result<Void, SiriPigeonError>) -> Void)
+  func openRoute(route routeArg: String, completion: @escaping (Result<Bool, SiriPigeonError>) -> Void)
   func setListening(enabled enabledArg: Bool, completion: @escaping (Result<Void, SiriPigeonError>) -> Void)
 }
 class SiriEventsApi: SiriEventsApiProtocol {
@@ -848,7 +868,7 @@ class SiriEventsApi: SiriEventsApiProtocol {
       }
     }
   }
-  func openRoute(route routeArg: String, completion: @escaping (Result<Void, SiriPigeonError>) -> Void) {
+  func openRoute(route routeArg: String, completion: @escaping (Result<Bool, SiriPigeonError>) -> Void) {
     let channelName: String = "dev.flutter.pigeon.omi_siri.SiriEventsApi.openRoute\(messageChannelSuffix)"
     let channel = FlutterBasicMessageChannel(name: channelName, binaryMessenger: binaryMessenger, codec: codec)
     channel.sendMessage([routeArg] as [Any?]) { response in
@@ -861,8 +881,11 @@ class SiriEventsApi: SiriEventsApiProtocol {
         let message: String? = nilOrValue(listResponse[1])
         let details: String? = nilOrValue(listResponse[2])
         completion(.failure(SiriPigeonError(code: code, message: message, details: details)))
+      } else if listResponse[0] == nil {
+        completion(.failure(SiriPigeonError(code: "null-error", message: "Flutter api returned null value for non-null return value.", details: "")))
       } else {
-        completion(.success(()))
+        let result = listResponse[0] as! Bool
+        completion(.success(result))
       }
     }
   }

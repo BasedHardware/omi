@@ -53,14 +53,15 @@ class SiriIntegration extends SiriEventsApi {
   SiriIntegration.forTest(SiriIndexApi host, String uid,
       {SiriSessionConfig Function(User, IdTokenResult, int)? sessionConfig,
       SiriListeningCapture? listeningCapture,
-      SiriMemoryPageFetcher? memoryPageFetcher})
+      SiriMemoryPageFetcher? memoryPageFetcher,
+      bool coldStart = false})
       : _host = host,
         _isIOS = true,
         _testSessionConfig = sessionConfig,
         _testListeningCapture = listeningCapture,
         _testMemoryPageFetcher = memoryPageFetcher,
-        _uid = uid,
-        _nativeGeneration = 0;
+        _uid = coldStart ? null : uid,
+        _nativeGeneration = coldStart ? null : 0;
   static final instance = SiriIntegration._();
   @visibleForTesting
   static SiriIntegration? testInstance;
@@ -89,6 +90,19 @@ class SiriIntegration extends SiriEventsApi {
     if (!_isIOS) return;
     final generation = ++_accountGeneration;
     final uid = user?.uid;
+    if (uid != null && _nativeGeneration == null) {
+      try {
+        final savedGeneration = await _nativeOperation(() => _host.generationForOwner(uid));
+        if (generation != _accountGeneration) return;
+        if (savedGeneration != null) {
+          _uid = uid;
+          _nativeGeneration = savedGeneration;
+        }
+      } catch (error) {
+        Logger.debug('Siri owner resume failed: $error');
+        return; // An uncertain owner must not trigger a destructive startup wipe.
+      }
+    }
     if (uid == null || uid != _uid || _nativeGeneration == null) {
       _uid = null;
       _nativeGeneration = null;
@@ -352,9 +366,7 @@ class SiriIntegration extends SiriEventsApi {
   }
 
   @override
-  void openRoute(String route) {
-    unawaited(HomeNavigation.openRoute(route));
-  }
+  Future<bool> openRoute(String route) => HomeNavigation.openRoute(route);
 
   @override
   Future<void> setListening(bool enabled) async {

@@ -635,6 +635,26 @@ class SiriIndexApi {
     return pigeonVar_replyValue! as int;
   }
 
+  /// Reuse the persisted index generation only when its snapshot still belongs to this UID.
+  Future<int?> generationForOwner(String uid) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.generationForOwner$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[uid]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+    return pigeonVar_replyValue as int?;
+  }
+
   Future<void> setEnabled(bool enabled) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.setEnabled$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -772,7 +792,7 @@ abstract class SiriEventsApi {
 
   void taskChanged(String id);
 
-  void openRoute(String route);
+  Future<bool> openRoute(String route);
 
   Future<void> setListening(bool enabled);
 
@@ -831,8 +851,8 @@ abstract class SiriEventsApi {
           final List<Object?> args = message! as List<Object?>;
           final String arg_route = args[0]! as String;
           try {
-            api.openRoute(arg_route);
-            return wrapResponse(empty: true);
+            final bool output = await api.openRoute(arg_route);
+            return wrapResponse(result: output);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
           }          catch (e) {

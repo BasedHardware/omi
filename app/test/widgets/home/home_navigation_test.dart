@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
+import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/pages/home/home_deep_links.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/home/home_prompt_gate.dart';
+import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/enums.dart';
 
 /// Home shell navigation: links open inside the one Home (nav #3, #18), prompts wait while the
@@ -110,6 +113,41 @@ void main() {
         expect(opened, isFalse);
       });
     });
+  });
+
+  testWidgets('indexed task opens by backend id outside the visible filtered page', (tester) async {
+    const task = ActionItemWithMetadata(id: 'task-150', description: 'Older indexed task', completed: false);
+    final provider = ActionItemsProvider(
+      getActionItems: (
+              {limit = 100,
+              offset = 0,
+              completed,
+              conversationId,
+              startDate,
+              endDate,
+              dueStartDate,
+              dueEndDate}) async =>
+          const ActionItemsResponse(actionItems: [], hasMore: false),
+    );
+    addTearDown(provider.dispose);
+    final opened = <String>[];
+    final requested = <String>[];
+    await tester.pumpWidget(ChangeNotifierProvider<ActionItemsProvider>.value(
+      value: provider,
+      child: const MaterialApp(home: SizedBox(key: Key('task-link-home'))),
+    ));
+    final context = tester.element(find.byKey(const Key('task-link-home')));
+
+    await openHomeDeepLink(context, const HomeDeepLink('task', id: 'task-150'),
+        openSettings: () async {},
+        taskById: (id) async {
+          requested.add(id);
+          return task;
+        },
+        onTaskOpened: (item) => opened.add(item.id));
+
+    expect(requested, ['task-150']);
+    expect(opened, ['task-150']);
   });
 }
 

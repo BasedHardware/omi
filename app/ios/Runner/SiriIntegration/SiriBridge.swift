@@ -23,6 +23,9 @@ final class SiriBridge: SiriIndexApi {
     static let shared = SiriBridge()
     private var events: SiriEventsApi?
     private var currentActivity: NSUserActivity?
+    #if OMI_SIRI_PROBE
+    var routeDeliveryProbe: ((String, @escaping (Bool) -> Void) -> Void)?
+    #endif
 
     func retryPendingWipeOnLaunch() {
         Task {
@@ -78,6 +81,9 @@ final class SiriBridge: SiriIndexApi {
             catch { completion(.failure(error)) }
         }
     }
+    func generationForOwner(uid: String, completion: @escaping (Result<Int64?, Error>) -> Void) {
+        completion(.success(SiriSnapshotStore.shared.generationForOwner(uid)))
+    }
     func setEnabled(enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
         complete({ try await SiriSnapshotStore.shared.setEnabled(enabled) }, completion: completion)
     }
@@ -124,7 +130,18 @@ final class SiriBridge: SiriIndexApi {
     func navigate(_ route: String) {
         let appRoute = route.hasPrefix("omi://") ? "/" + String(route.dropFirst(6)) : route
         SiriSnapshotStore.shared.setPendingRoute(appRoute)
-        events?.openRoute(route: appRoute) { _ in }
+        let acknowledged: (Bool) -> Void = { delivered in
+            if delivered { SiriSnapshotStore.shared.clearPendingRoute(ifMatching: appRoute) }
+        }
+        #if OMI_SIRI_PROBE
+        if let routeDeliveryProbe {
+            routeDeliveryProbe(appRoute, acknowledged)
+            return
+        }
+        #endif
+        events?.openRoute(route: appRoute) { result in
+            if case .success(let delivered) = result { acknowledged(delivered) }
+        }
     }
     func setListening(_ enabled: Bool) async throws {
         guard let events else { throw SiriSession.Failure.server }
