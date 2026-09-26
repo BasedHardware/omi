@@ -1681,12 +1681,12 @@ class MemoriesViewModel: ObservableObject {
       logError("Failed to load more memories", error: error)
     }
   }
-
   func createMemory() async {
     guard !newMemoryText.isEmpty else { return }
-
     do {
-      _ = try await APIClient.shared.createMemory(content: newMemoryText, category: .manual)
+      let saved = try await APIClient.shared.createMemory(content: newMemoryText, category: .manual)
+      let cached = (try? await MemoryStorage.shared.syncServerMemory(saved)) != nil
+      if cached, #available(macOS 27, *) { SiriDonations.memoryCreated(saved.id) }
       showingAddMemory = false
       newMemoryText = ""
       await loadMemories()
@@ -1694,7 +1694,6 @@ class MemoriesViewModel: ObservableObject {
       logError("Failed to create memory", error: error)
     }
   }
-
   /// Records the owner's keep/reject verdict for a memory.
   ///
   /// Rejecting hides the memory from default reads server-side and drops it from the
@@ -3355,6 +3354,7 @@ struct MemoryDetailPanel: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .accessibilityIdentifier("memory_detail_panel_body")
+    .siriMemoryIdentifier(memory.id)
   }
 
   // MARK: Header

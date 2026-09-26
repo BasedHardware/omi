@@ -160,7 +160,7 @@ struct OMIApp: App {
         .withFontScaling()
         .overlay(alignment: .bottomTrailing) { WhatsNewToastOverlay() }
         .onAppear {
-          log("OmiApp: Main window content appeared (mode: \(Self.launchMode.rawValue))")
+          SiriIndexLifecycle.shared.start(launchMode: Self.launchMode.rawValue)
         }
     }
     .windowStyle(.hiddenTitleBar)  // fullSizeContentView: the top bar occupies the title-bar band.

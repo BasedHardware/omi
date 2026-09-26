@@ -480,6 +480,7 @@ struct ConversationRowView: View {
           onToggleSelection?()
         } else {
           onTap()
+          if #available(macOS 27, *) { SiriDonations.conversationOpened(conversation.id) }
         }
       }) {
         Group {
@@ -516,6 +517,7 @@ struct ConversationRowView: View {
     .contextMenu {
       actionMenuItems
     }
+    .siriConversationIdentifier(conversation.id)
   }
 }
 

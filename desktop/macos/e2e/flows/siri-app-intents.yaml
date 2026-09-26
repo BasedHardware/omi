@@ -1,0 +1,35 @@
+version: 2
+name: siri-app-intents
+tier: 1
+description: Verify the Siri preference and App Intents registration on a named development bundle.
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/SiriIntegration/SiriEntities.swift
+  - desktop/macos/Desktop/Sources/SiriIntegration/SiriIndexer.swift
+  - desktop/macos/Desktop/Sources/SiriIntegration/SiriIndexHooks.swift
+  - desktop/macos/Desktop/Sources/SiriIntegration/SiriIndexLifecycle.swift
+  - desktop/macos/Desktop/Sources/SiriIntegration/SiriIndexScope.swift
+  - desktop/macos/Desktop/Sources/SiriIntegration/SiriMemoryExpirySchema.swift
+  - desktop/macos/Desktop/Sources/SiriIntegration/SiriIntegrationSettings.swift
+  - desktop/macos/Desktop/Sources/SiriIntegration/SiriIntentService.swift
+  - desktop/macos/Desktop/Sources/SiriIntegration/SiriIntents.swift
+  - desktop/macos/Desktop/Sources/SiriIntegration/SiriDonations.swift
+  - desktop/macos/Desktop/Sources/SiriIntegration/SiriDevProbe.swift
+  - desktop/macos/Desktop/Sources/SiriIntegration/SiriNavigation.swift
+  - desktop/macos/Desktop/Sources/SiriIntegration/SiriViewAnnotations.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+NotificationsPrivacy.swift
+preconditions:
+  - auth_ready
+steps:
+  - id: S1
+    name: Open Privacy settings
+    do: "Open Settings > Privacy in the named development bundle."
+    expect:
+      visible_text:
+        - "Use Omi with Siri & Apple Intelligence"
+  - id: S2
+    name: Turn Siri indexing off and on
+    do: "Turn the Siri switch off, then on. Verify the preference persists after reopening Settings."
+    expect:
+      visible_text:
+        - "Use Omi with Siri & Apple Intelligence"

@@ -5249,8 +5249,8 @@ struct TaskRow: View {
       isHovering = hovering
       onHover?(hovering ? task.id : nil)
     }
+    .siriTaskIdentifier(task.id)
   }
-
   // MARK: - Swipeable Content
 
   private var swipeableContent: some View {
