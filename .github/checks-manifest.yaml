@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: omi-gutendex-tests
+    command: ["python3", "plugins/omi-gutendex-app/test_main.py"]
+    triggers: ["plugins/omi-gutendex-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Project Gutenberg classic books app must safely handle network disconnects, author lifespans, and book format extractions without 500s"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
