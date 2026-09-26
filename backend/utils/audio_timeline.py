@@ -428,6 +428,7 @@ class ProviderEpochTranslator:
         provider_sample_rate: int,
         *,
         on_reject: Optional[Callable[[str], None]] = None,
+        on_mapped: Optional[Callable[[], None]] = None,
         project_times: bool = True,
     ):
         self.timeline = timeline
@@ -435,6 +436,7 @@ class ProviderEpochTranslator:
         self.send_map = SendMap(provider_sample_rate)
         self.rejected_segments = 0
         self._on_reject = on_reject
+        self._on_mapped = on_mapped
         self._project_times = project_times
 
     def note_accepted(self, capture_start_sample: int, length_samples: int) -> None:
@@ -523,6 +525,11 @@ class ProviderEpochTranslator:
             segment['_capture_start_sample'] = interval[0]
             segment['_capture_end_sample'] = interval[1]
             translated.append(segment)
+            if self._on_mapped is not None:
+                try:
+                    self._on_mapped()
+                except Exception:
+                    pass
         return translated
 
     def _reject(self, segment: Dict, reason: str) -> None:
