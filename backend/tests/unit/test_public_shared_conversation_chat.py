@@ -940,7 +940,7 @@ def test_gateway_config_inventory_and_promotion_contract():
         ) as handle:
             gateway_values = yaml.safe_load(handle)
         gateway_env = {entry['name']: entry.get('value') for entry in gateway_values['env']}
-        assert gateway_env['OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS'] == 'public_shared_conversation_chat'
+        assert 'OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS' not in gateway_env
 
 
 def test_public_shared_chat_route_policy_and_openapi_contract_are_explicit():

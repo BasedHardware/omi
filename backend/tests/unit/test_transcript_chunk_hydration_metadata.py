@@ -66,3 +66,64 @@ def test_vanished_conversation_rows_still_drop(conversations_by_id):
         ],
     )
     assert [r['conversation_id'] for r in rows] == ['conv-a']
+
+
+def test_build_transcript_chunks_handles_iso_string_and_numeric_timestamps():
+    segs = [{'text': 'the beta shipped', 'is_user': True}]
+    # ISO string with UTC 'Z'
+    chunks_iso = transcript_chunks.build_transcript_chunks(segs, '2026-08-14T21:30:00Z')
+    assert len(chunks_iso) == 1
+    assert '[Conversation on 14 Aug 2026, 21:30]' in chunks_iso[0]['text']
+    assert chunks_iso[0]['created_at'] == int(STARTED_AT.timestamp())
+
+    # Numeric integer epoch timestamp
+    chunks_int = transcript_chunks.build_transcript_chunks(segs, int(STARTED_AT.timestamp()))
+    assert len(chunks_int) == 1
+    assert '[Conversation on 14 Aug 2026, 21:30]' in chunks_int[0]['text']
+    assert chunks_int[0]['created_at'] == int(STARTED_AT.timestamp())
+
+    # Numeric float epoch timestamp
+    chunks_float = transcript_chunks.build_transcript_chunks(segs, STARTED_AT.timestamp() + 0.75)
+    assert len(chunks_float) == 1
+    assert chunks_float[0]['created_at'] == int(STARTED_AT.timestamp())
+
+    # Naive datetime is treated as UTC
+    naive_dt = datetime(2026, 8, 14, 21, 30, 0)
+    chunks_naive = transcript_chunks.build_transcript_chunks(segs, naive_dt)
+    assert chunks_naive[0]['created_at'] == int(STARTED_AT.timestamp())
+
+    # Fallbacks on None, boolean, or malformed string
+    for invalid in [None, False, True, 'not-a-date']:
+        chunks_invalid = transcript_chunks.build_transcript_chunks(segs, invalid)
+        assert len(chunks_invalid) == 1
+        assert chunks_invalid[0]['created_at'] == 0
+        assert not chunks_invalid[0]['text'].startswith('[Conversation on')
+
+
+def test_hydrate_chunk_texts_handles_iso_string_and_timestamp_in_conversation(conversations_by_id):
+    conv_str = {
+        'id': 'conv-str',
+        'structured': {'title': 'ISO Chat'},
+        'started_at': '2026-08-14T21:30:00Z',
+        'transcript_segments': [{'text': 'shipped today', 'is_user': True}],
+    }
+    conv_int = {
+        'id': 'conv-int',
+        'structured': {'title': 'Timestamp Chat'},
+        'created_at': int(STARTED_AT.timestamp()),
+        'transcript_segments': [{'text': 'shipped yesterday', 'is_user': False}],
+    }
+    conversations_by_id['conversations'] = [conv_str, conv_int]
+
+    rows = transcript_chunks.hydrate_chunk_texts(
+        'uid-1',
+        [
+            {'conversation_id': 'conv-str', 'chunk_index': 0},
+            {'conversation_id': 'conv-int', 'chunk_index': 0},
+        ],
+    )
+    assert len(rows) == 2
+    assert '[Conversation on 14 Aug 2026, 21:30]' in rows[0]['text']
+    assert rows[0]['conversation_title'] == 'ISO Chat'
+    assert '[Conversation on 14 Aug 2026, 21:30]' in rows[1]['text']
+    assert rows[1]['conversation_title'] == 'Timestamp Chat'

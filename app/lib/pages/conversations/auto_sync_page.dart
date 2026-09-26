@@ -683,7 +683,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   static bool _isUnsyncableState(WalSyncDisplayState state) =>
       state == WalSyncDisplayState.corrupted ||
       state == WalSyncDisplayState.outsideRecoveryWindow ||
-      state == WalSyncDisplayState.unsupportedAudio;
+      state == WalSyncDisplayState.unsupportedAudio ||
+      state == WalSyncDisplayState.uploadRejected;
 
   Future<void> _confirmDeleteWal(Wal wal) async {
     final syncProvider = context.read<SyncProvider>();
@@ -720,6 +721,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         return (Colors.redAccent, FontAwesomeIcons.clockRotateLeft, context.l10n.syncStatusTooOld);
       case WalSyncDisplayState.unsupportedAudio:
         return (Colors.redAccent, FontAwesomeIcons.fileCircleExclamation, context.l10n.syncStatusUnsupportedAudio);
+      case WalSyncDisplayState.uploadRejected:
+        return (Colors.redAccent, FontAwesomeIcons.circleExclamation, context.l10n.failedStatus);
     }
   }
 

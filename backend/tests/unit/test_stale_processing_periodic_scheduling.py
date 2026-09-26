@@ -20,6 +20,7 @@ class _StopLoop(Exception):
 
 def test_periodic_reconcile_invokes_the_stale_processing_sweep(monkeypatch):
     stale_calls: list[bool] = []
+    in_progress_calls: list[bool] = []
     receipt_calls: list[bool] = []
 
     def fake_stale(**kwargs):
@@ -27,6 +28,11 @@ def test_periodic_reconcile_invokes_the_stale_processing_sweep(monkeypatch):
         return {'completed': 0, 'migrated': 0, 'skipped': 0, 'error': 0}
 
     monkeypatch.setattr(main, 'reconcile_stale_processing_conversations', fake_stale)
+    monkeypatch.setattr(
+        main,
+        'reconcile_stale_in_progress_conversations',
+        lambda **kwargs: in_progress_calls.append(True) or {'enqueued': 0, 'verified': 0},
+    )
     monkeypatch.setattr(main, 'reconcile_listen_finalization_jobs', lambda **kwargs: {'requeued': 0})
     monkeypatch.setattr(main, 'reconcile_abandoned_byok_finalization_jobs', lambda **kwargs: {'abandoned': 0})
     monkeypatch.setattr(
@@ -53,5 +59,6 @@ def test_periodic_reconcile_invokes_the_stale_processing_sweep(monkeypatch):
 
     # Exactly one full periodic cycle ran before the loop was stopped: the sweep ran once.
     assert stale_calls == [True]
+    assert in_progress_calls == [True]
     assert receipt_calls == [True]
     assert publish_calls == [True]

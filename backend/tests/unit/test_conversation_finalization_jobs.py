@@ -184,6 +184,8 @@ def test_create_or_get_intent_retries_read_contention_with_a_fresh_transaction(m
         def collection(self, name: str):
             if name == jobs.FINALIZATION_JOBS_COLLECTION:
                 return jobs_collection
+            if name == 'users':
+                return SimpleNamespace(document=lambda _uid: SimpleNamespace(collection=lambda _collection_name: None))
             assert name == jobs.FINALIZATION_PROJECTION_COLLECTION
             return projection_collection
 

@@ -12,6 +12,7 @@ from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.message_event import ConversationEvent, ConversationSessionEvent, LastConversationEvent
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]
+from routers.listen.contracts import ConversationCaptureOrigin, persisted_started_seconds
 from utils.byok import get_byok_keys
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.observability.transcription import record_listen_audio_outcome
@@ -44,6 +45,7 @@ STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS = 3600
 # Per-session recovery bound: spreads a large backlog across sessions instead of
 # fanning dozens of LLM finalizations out of one reconnect.
 STALE_IN_PROGRESS_RECOVERY_BATCH = 10
+RECORDING_SESSION_LEASE_RENEW_INTERVAL = timedelta(minutes=1)
 
 
 def resolve_onboarding_provenance_marker(host: Any) -> Optional[str]:
@@ -66,6 +68,28 @@ class LiveConversationController:
     def __init__(self, host: Any, *, clock: Callable[[], datetime] | None = None) -> None:
         self.host = host
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self._last_recording_session_lease_renewal: datetime | None = None
+
+    def note_audio_activity(self) -> None:
+        """Renew the active recording fence at most once per minute."""
+        conversation_id = self.host.state.current_conversation_id
+        recording_session_id = self.host.recording_session_id
+        if not conversation_id or not recording_session_id:
+            return
+        now = self.clock()
+        last = self._last_recording_session_lease_renewal
+        if last is not None and now - last < RECORDING_SESSION_LEASE_RENEW_INTERVAL:
+            return
+        self._last_recording_session_lease_renewal = now
+        self.host.spawn(
+            self.host.persistence.call(
+                lifecycle_service.renew_live_recording_session_lease,
+                self.host.request.uid,
+                recording_session_id,
+                conversation_id,
+            ),
+            name='recording_session_lease_renewal',
+        )
 
     async def _continuation(self, proposed: dict[str, str] | None = None) -> dict[str, str] | None:
         if not self.host.client_conversation_id or self.host.is_multi_channel:
@@ -109,6 +133,7 @@ class LiveConversationController:
         self.host.recording_session_id = pointer['recording_session_id']
         self.host.state.current_conversation_id = binding['conversation_id']
         self.host.recording_session_ids_by_conversation[binding['conversation_id']] = self.host.recording_session_id
+        self._adopt_capture_timeline(binding['conversation_id'], (existing or {}).get('started_at'))
         if self.host.use_custom_stt and not existing.get('uses_custom_stt', False):
             await self.host.persistence.call(
                 conversations_db.update_conversation,
@@ -190,6 +215,30 @@ class LiveConversationController:
         self.host.spawn(
             self.emit_recording_lifecycle_event(conversation_id, 'completed'), name='recording_session_completed'
         )
+
+    def _adopt_capture_timeline(self, conversation_id: str, started_at: Any) -> None:
+        """Track the audio-timeline v2 origin for a conversation this session owns.
+
+        A resumed conversation reuses its persisted ``started_at`` as the
+        projection origin; that row is never admitted as v2 — the adopted
+        origin carries ``pinnable=False`` so no later batch pins the v2 marker
+        or rewrites ``started_at`` on it. A conversation created fresh by this
+        session waits for its first accepted audio frame, which the receiver
+        pins as the (pinnable) origin. A ``started_at`` that cannot be parsed
+        (datetime, number, or ISO string) locks the row to legacy projection:
+        it never falls through to a fresh pin.
+        """
+        state = getattr(self.host, 'state', None)
+        if state is None or getattr(state, 'capture_timeline', None) is None:
+            return
+        if started_at is None:
+            state.conversations_awaiting_capture_origin.add(conversation_id)
+            return
+        timestamp = persisted_started_seconds(started_at)
+        if timestamp is None:
+            state.conversations_legacy_locked.add(conversation_id)
+            return
+        state.conversation_capture_origins[conversation_id] = ConversationCaptureOrigin(timestamp, pinnable=False)
 
     def on_conversation_processing_started(self, conversation_id: str) -> None:
         self.host.spawn(
@@ -352,6 +401,7 @@ class LiveConversationController:
                     await self.create_new_in_progress_conversation(rollover=True)
                     return
                 self.host.state.current_conversation_id = conversation_id
+                self._adopt_capture_timeline(conversation_id, existing.get('started_at'))
                 # Persist the custom-STT marker on resume so a conversation that
                 # started under normal STT but continues under custom STT keeps
                 # accurate provenance: once any session was custom-STT, the
@@ -377,7 +427,10 @@ class LiveConversationController:
             return
 
         context = self.host.client_device_context
-        external_data = {'conversation_role': request.conversation_role}
+        external_data = {
+            'conversation_role': request.conversation_role,
+            'recording_session_id': self.host.recording_session_id,
+        }
         onboarding_session_id = resolve_onboarding_provenance_marker(self.host)
         if onboarding_session_id:
             # This marker reflects the backend's own onboarding-admission
@@ -435,9 +488,20 @@ class LiveConversationController:
                 now + timedelta(minutes=2),
             )
             if meetings:
-                closest = min(meetings, key=lambda meeting: abs((meeting['start_time'] - now).total_seconds()))
-                await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, closest['id'])
+                now_ts = now.timestamp()
+                candidates = []
+                for meeting in meetings:
+                    meeting_id = meeting.get('id')
+                    started_seconds = persisted_started_seconds(meeting.get('start_time'))
+                    if meeting_id and started_seconds is not None:
+                        candidates.append((meeting_id, started_seconds))
+                if candidates:
+                    closest_id, _ = min(candidates, key=lambda candidate: abs(candidate[1] - now_ts))
+                    await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, closest_id)
         self.host.state.current_conversation_id = conversation_id
+        # Fresh v2 generation: the origin is pinned by the receiver at the
+        # first accepted audio frame associated with this conversation.
+        self._adopt_capture_timeline(conversation_id, None)
         await self.host.speakers.refresh_for_conversation(conversation_id)
         self.send_conversation_session(binding, self.host.recording_session_id)
 
@@ -504,8 +568,19 @@ class LiveConversationController:
         if binding['requires_rollover']:
             await self.create_new_in_progress_conversation(rollover=True)
             return None
+        if binding.get('conversation_snapshot_known'):
+            current = binding.get('conversation_snapshot')
+            if (
+                not current
+                or current.get('status') != ConversationStatus.in_progress.value
+                or any(current.get(key) for key in ('deleted', 'discarded', 'is_locked'))
+            ):
+                await self.create_new_in_progress_conversation(rollover=True)
+                return None
+            existing = current
         self.host.state.current_conversation_id = existing['id']
         self.host.recording_session_ids_by_conversation[existing['id']] = self.host.recording_session_id
+        self._adopt_capture_timeline(existing['id'], existing.get('started_at'))
         self.send_conversation_session(binding, self.host.recording_session_id)
         return None
 
