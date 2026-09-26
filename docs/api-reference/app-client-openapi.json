@@ -7476,6 +7476,7 @@
                 "type": "null"
               }
             ],
+            "default": "en",
             "title": "Language"
           },
           "meeting_dedup_speech_s": {
@@ -8627,6 +8628,7 @@
                 "type": "null"
               }
             ],
+            "default": "en",
             "title": "Language"
           },
           "match_snippets": {
@@ -24423,6 +24425,7 @@
                 "type": "null"
               }
             ],
+            "default": "en",
             "title": "Language"
           },
           "people": {
