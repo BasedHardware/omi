@@ -1514,13 +1514,7 @@ checks:
     command: ["python3", "scripts/test_resolve_registry_conflict.py"]
     triggers: ["scripts/resolve-registry-conflict", "scripts/test_resolve_registry_conflict.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
-    reason: "a merge-forward helper that claims to union keyed registry entries must not land new checks inside 
-  - id: task-integrations-ops-sanitization-tests
-    path: backend/tests/unit/test_task_integrations_ops_sanitization.py
-    lanes: ["local", "ci"]
-    reason: >
-      Verifies that unexpected errors in refresh_oauth_token do not leak socket or internal details in HTTP responses.
-exempt: or revert main's edit to a shared id"
+    reason: "a merge-forward helper that claims to union keyed registry entries must not land new checks inside exempt: or revert main's edit to a shared id"
   - id: mobile-event-registry
     command: ["python3", "scripts/check_event_registry.py", "--base", "{base}"]
     triggers: ["app/lib/**/*.dart", "contracts/analytics/**", "scripts/check_event_registry.py", ".github/checks-manifest.yaml"]
@@ -1551,12 +1545,6 @@ exempt: or revert main's edit to a shared id"
     triggers: ["plugins/zapier/omi-zap/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13541: the create-memory action shipped a body that resolved to undefined, so every Zap run POSTed empty and the API 422'd; the jest suite pins the request shape against ZapierActionCreateConversation and must run in CI to catch a regression"
-
-  - id: task-integrations-ops-sanitization-tests
-    path: backend/tests/unit/test_task_integrations_ops_sanitization.py
-    lanes: ["local", "ci"]
-    reason: >
-      Verifies that unexpected errors in refresh_oauth_token do not leak socket or internal details in HTTP responses.
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
