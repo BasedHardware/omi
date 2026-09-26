@@ -266,7 +266,8 @@ def perform_merge_async(
         # into None.
         created_at = sorted_convs[0].get("created_at") or datetime.now(timezone.utc)
         started_at = sorted_convs[0].get("started_at")
-        finished_at = max((c.get("finished_at") or _UTC_MIN) for c in sorted_convs)
+        fin_cand = max((c.get("finished_at") or _UTC_MIN) for c in sorted_convs)
+        finished_at = fin_cand if fin_cand != _UTC_MIN else None
         language = sorted_convs[0].get("language", "en")
         source = sorted_convs[0].get("source", "omi")
 
@@ -432,39 +433,35 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
     cumulative_offset = 0.0
 
     for i, conv in enumerate(conversations):
-        segments = conv.get("transcript_segments", [])
+        segments = [s for s in (conv.get("transcript_segments") or []) if isinstance(s, dict)]
+        max_end = max((float(s.get("end") or 0.0) for s in segments), default=0.0)
 
         if i == 0:
-            # First conversation - use segments as-is
-            merged.extend([copy.deepcopy(s) for s in segments])
+            for s in segments:
+                seg_copy = copy.deepcopy(s)
+                seg_copy["start"] = float(seg_copy.get("start") or 0.0)
+                seg_copy["end"] = float(seg_copy.get("end") or 0.0)
+                merged.append(seg_copy)
             if segments:
-                cumulative_offset = max(s.get("end", 0) for s in segments)
+                cumulative_offset = max_end
             elif conv.get("finished_at") and conv.get("started_at"):
                 cumulative_offset = (conv["finished_at"] - conv["started_at"]).total_seconds()
         else:
-            # Calculate gap from previous conversation
             prev_finished = conversations[i - 1].get("finished_at")
             curr_started = conv.get("started_at")
-
-            gap = 0.0
-            if prev_finished and curr_started:
-                gap = max(0, (curr_started - prev_finished).total_seconds())
-
+            gap = max(0.0, (curr_started - prev_finished).total_seconds()) if prev_finished and curr_started else 0.0
             offset = cumulative_offset + gap
 
-            # Adjust timestamps for this conversation's segments
             for seg in segments:
                 seg_copy = copy.deepcopy(seg)
-                seg_copy["start"] = seg.get("start", 0) + offset
-                seg_copy["end"] = seg.get("end", 0) + offset
+                seg_copy["start"] = float(seg.get("start") or 0.0) + offset
+                seg_copy["end"] = float(seg.get("end") or 0.0) + offset
                 merged.append(seg_copy)
 
-            # Update cumulative offset for next conversation
             if segments:
-                cumulative_offset = offset + max(s.get("end", 0) for s in segments)
+                cumulative_offset = offset + max_end
             elif conv.get("finished_at") and conv.get("started_at"):
-                duration = (conv["finished_at"] - conv["started_at"]).total_seconds()
-                cumulative_offset = offset + duration
+                cumulative_offset = offset + (conv["finished_at"] - conv["started_at"]).total_seconds()
 
     return merged
 

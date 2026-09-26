@@ -593,3 +593,51 @@ class TestMergeTranscriptSegments:
         merge._merge_transcript_segments(raw)
         assert seg["start"] == 0.0
         assert seg["end"] == 5.0
+
+    def test_merge_transcript_segments_explicit_none_and_non_dict_items(self, merge):
+        raw = [
+            {
+                "started_at": datetime(2026, 5, 30, 10, 0, tzinfo=timezone.utc),
+                "finished_at": datetime(2026, 5, 30, 10, 0, 5, tzinfo=timezone.utc),
+                "transcript_segments": None,
+            },
+            {
+                "started_at": datetime(2026, 5, 30, 10, 0, 10, tzinfo=timezone.utc),
+                "finished_at": datetime(2026, 5, 30, 10, 0, 15, tzinfo=timezone.utc),
+                "transcript_segments": [None, "invalid_str", _seg(0.0, 5.0, "valid")],
+            },
+        ]
+        merged = merge._merge_transcript_segments(raw)
+        assert len(merged) == 1
+        assert merged[0]["text"] == "valid"
+        assert merged[0]["start"] == 10.0
+        assert merged[0]["end"] == 15.0
+
+    def test_merge_transcript_segments_null_timestamps_do_not_crash(self, merge):
+        raw = [
+            {
+                "started_at": datetime(2026, 5, 30, 10, 0, tzinfo=timezone.utc),
+                "finished_at": datetime(2026, 5, 30, 10, 0, 5, tzinfo=timezone.utc),
+                "transcript_segments": [{"text": "first", "start": None, "end": None}],
+            },
+            {
+                "started_at": datetime(2026, 5, 30, 10, 0, 10, tzinfo=timezone.utc),
+                "finished_at": datetime(2026, 5, 30, 10, 0, 15, tzinfo=timezone.utc),
+                "transcript_segments": [
+                    {"text": "second_a", "start": 0.0, "end": 4.0},
+                    {"text": "second_b", "start": 4.0, "end": None},
+                ],
+            },
+        ]
+        merged = merge._merge_transcript_segments(raw)
+        assert len(merged) == 3
+        assert merged[0]["start"] == 0.0
+        assert merged[0]["end"] == 0.0
+        # cumulative_offset = 0.0, gap = 5.0 -> offset = 5.0
+        assert merged[1]["start"] == 5.0
+        assert merged[1]["end"] == 9.0
+        assert merged[2]["start"] == 9.0
+        assert merged[2]["end"] == 5.0
+
+    def test_merge_transcript_segments_empty_conversations_list(self, merge):
+        assert merge._merge_transcript_segments([]) == []
