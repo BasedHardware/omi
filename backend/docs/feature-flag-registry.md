@@ -106,7 +106,6 @@ and an explicit empty literal renders as `''`.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `DAY3_REENGAGEMENT_EMAIL_ENABLED` | Send randomized day-three re-engagement email | backend | env | closed | false | false | true | — | pending | 2026-10-28 | dazheng |
 | `OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS` | Select gateway output-budget experiments | llm-gateway | env | closed | — | — | — | — | kill | 2026-10-15 | dazheng |
-| `mobile-experiments-enabled` | Master gate for mobile experiment enrollment | mobile | posthog | closed | — | — | — | absent (enable) | kill | 2026-10-15 | dazheng |
 
 ### rollout
 
@@ -171,7 +170,6 @@ and an explicit empty literal renders as `''`.
 | `desktop_interject_kill` | Beta floating-card interject stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
 | `free-tier-cohort-v1` | Free-tier exposure cohort, never direct admission | backend | posthog | closed | — | — | — | absent (exposure) | pending | 2026-10-15 | unowned |
 | `isProactiveCandidatesEnabled` | Dogfood-only prewritten proactive candidates | macos | hardcoded | closed | — | — | — | — | kill | 2026-10-15 | dazheng |
-| `isWorkstreamPoolingEnabled` | Dogfood-only context-bucket workstream pooling | macos | hardcoded | closed | — | — | — | — | kill | 2026-10-15 | dazheng |
 | `jit-processing-v1` | JIT processing admission cohort | backend | posthog | closed | — | — | — | expected (enable) | graduate | 2026-10-23 | dazheng |
 | `negative_feedback_remediation` | Enable negative-feedback remediation on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-23 | unowned |
 | `negative_feedback_remediation_kill` | Beta negative-feedback remediation stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
@@ -355,5 +353,7 @@ admission.
 | `daily-memory-sweep-v1` | 2026-09-24 | Decoy name never authorizes JIT or sweep admission |
 | `desktop-onboarding-rerun` | 2026-09-26 | Onboarding rerun policy removed; onboarding resumes via persisted state |
 | `desktop_persistent_capture_stream` | 2026-09-26 | Persistent capture stream removed; capture uses the one-shot path |
+| `isWorkstreamPoolingEnabled` | 2026-09-26 | Workstream pooling gate and its delivery path removed |
+| `mobile-experiments-enabled` | 2026-09-26 | Empty mobile experiment framework removed |
 | `jit-processing-ledger-migration-v1` | 2026-09-24 | Old ledger migration name never authorizes JIT processing |
 | `mobile-summary-feedback-layout-v1` | 2026-09-26 | Experiment removed; summary feedback uses the standard layout |
