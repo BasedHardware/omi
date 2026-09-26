@@ -445,6 +445,10 @@ class ProviderCircuitBreaker:
 _CIRCUIT_GAUGE_REFRESH_SECONDS: Final[float] = float(os.getenv('STT_CIRCUIT_GAUGE_REFRESH_SECONDS', '15'))
 _published_breakers: 'weakref.WeakSet[ProviderCircuitBreaker]' = weakref.WeakSet()
 _gauge_refresh_thread_started = False
+# Rate limit for refresh-failure logs: one warning per window, debug between,
+# so a persistently failing refresh cannot emit a line every 15 seconds.
+_GAUGE_REFRESH_FAILURE_LOG_SECONDS: Final[float] = 600.0
+_last_gauge_refresh_failure_log = 0.0
 
 
 def _register_published_breaker(breaker: 'ProviderCircuitBreaker') -> None:
@@ -459,7 +463,28 @@ def _register_published_breaker(breaker: 'ProviderCircuitBreaker') -> None:
 def _circuit_gauge_refresh_loop() -> None:
     while True:
         time.sleep(_CIRCUIT_GAUGE_REFRESH_SECONDS)
+        _gauge_refresh_iteration()
+
+
+def _gauge_refresh_iteration() -> None:
+    """One loop turn; never raises.
+
+    The loop thread is started once (_gauge_refresh_thread_started stays true),
+    so an iteration that escapes kills the refresh for the life of the process
+    and kind=account sticks at 1. list(_published_breakers) itself can raise —
+    a WeakSet mutated mid-iteration surfaces as RuntimeError — so the guard
+    wraps the whole iteration, not just the per-breaker publishes.
+    """
+    global _last_gauge_refresh_failure_log
+    try:
         refresh_published_circuit_gauges()
+    except Exception:
+        now = time.monotonic()
+        if now - _last_gauge_refresh_failure_log >= _GAUGE_REFRESH_FAILURE_LOG_SECONDS:
+            _last_gauge_refresh_failure_log = now
+            logger.warning('Published circuit gauge refresh failed; retrying next interval', exc_info=True)
+        else:
+            logger.debug('Published circuit gauge refresh failed; retrying next interval', exc_info=True)
 
 
 def refresh_published_circuit_gauges() -> None:

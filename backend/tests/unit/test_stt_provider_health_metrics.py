@@ -86,6 +86,31 @@ def test_unexpired_account_cooldown_keeps_the_gauge_up_through_a_refresh():
     assert _gauge_value('modulate', 'selection') == 0
 
 
+def test_raising_refresh_iteration_does_not_stop_the_loop():
+    # list(_published_breakers) itself can raise (a WeakSet mutated mid-iteration
+    # surfaces as RuntimeError). The refresh thread is started once and never
+    # restarted, so an iteration that escapes would leave kind=account stuck at 1
+    # for the life of the process — the exact stuck page the refresh clears.
+    def mutated_mid_iteration():
+        raise RuntimeError('Set changed size during iteration')
+        yield  # pragma: no cover
+
+    clock = [0.0]
+    circuit = _breaker('deepgram', clock=lambda: clock[0])
+    circuit.record_account_failure(60)
+    assert _gauge_value('deepgram', 'account') == 1
+    clock[0] = 60.0
+
+    with patch.object(provider_resilience, '_published_breakers', mutated_mid_iteration()):
+        provider_resilience._gauge_refresh_iteration()  # must not raise
+
+    # The loop keeps iterating: the next (healthy) turn still refreshes.
+    provider_resilience._gauge_refresh_iteration()
+    assert _gauge_value('deepgram', 'account') == 0
+    assert _gauge_value('deepgram', 'selection') == 0
+    assert circuit.state == 'open'  # the refresh stays read-only
+
+
 def test_unlabeled_breaker_does_not_touch_the_gauge():
     with patch.object(OMI_STT_PROVIDER_CIRCUIT_OPEN, 'labels', side_effect=AssertionError('must not publish')):
         circuit = _breaker(None)

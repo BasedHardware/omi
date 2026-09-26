@@ -1284,23 +1284,50 @@ def _promql_syntax_errors(expr: str) -> list[str]:
     return errors
 
 
-def _dashboard_prometheus_exprs() -> list[tuple[str, str]]:
+def _prometheus_exprs_from_node(node: object, where: str) -> list[tuple[str, str]]:
+    """Every Prometheus expr in one dashboard JSON tree.
+
+    Grafana's usual panel shape carries the datasource on the panel and leaves
+    each target as a bare ``{expr, legendFormat, refId}``; those targets inherit
+    the panel's Prometheus datasource and are live queries. Loki panels share
+    that shape, so inheritance only follows an explicit panel-level prometheus
+    datasource. Stackdriver targets expose ``promQLQuery.expr`` (a different
+    dialect) instead of ``expr`` and never match.
+    """
     found: list[tuple[str, str]] = []
 
-    def walk(node: object, where: str) -> None:
+    def walk(node: object) -> None:
         if isinstance(node, dict):
             datasource = node.get("datasource")
             if isinstance(node.get("expr"), str) and isinstance(datasource, dict):
                 if datasource.get("type") == "prometheus":
                     found.append((where, node["expr"]))
+            if isinstance(datasource, dict) and datasource.get("type") == "prometheus":
+                targets = node.get("targets")
+                if isinstance(targets, list):
+                    for target in targets:
+                        if (
+                            isinstance(target, dict)
+                            and target.get("datasource") is None
+                            and isinstance(target.get("expr"), str)
+                        ):
+                            found.append((where, target["expr"]))
             for value in node.values():
-                walk(value, where)
+                walk(value)
         elif isinstance(node, list):
             for value in node:
-                walk(value, where)
+                walk(value)
 
+    walk(node)
+    return found
+
+
+def _dashboard_prometheus_exprs() -> list[tuple[str, str]]:
+    found: list[tuple[str, str]] = []
     for path in sorted((MONITORING / "dashboards").rglob("*.json")):
-        walk(json.loads(path.read_text(encoding="utf-8")), str(path.relative_to(REPO)))
+        found.extend(
+            _prometheus_exprs_from_node(json.loads(path.read_text(encoding="utf-8")), str(path.relative_to(REPO)))
+        )
     return found
 
 
@@ -1334,3 +1361,37 @@ def test_every_prometheus_expression_in_alerts_and_dashboards_is_well_formed():
     assert not offenders, "PromQL syntax errors in alert/dashboard expressions: " + "; ".join(
         f"{error} <- {sorted(places)}" for error, places in sorted(offenders.items())
     )
+
+
+def test_inherited_datasource_targets_join_the_promql_gate():
+    """A target without its own datasource inherits the panel's, so a bare
+    ``{expr, refId}`` under a prometheus panel is a live Prometheus query.
+    Round 3 of the 2026-09-26 review: 82 such targets (omi-translation,
+    parakeet-asr-monitoring, deepgram-self-hosted, omi-services-overview) were
+    skipped, so the extra ``}`` that broke two shipped panels passed this gate
+    everywhere the datasource lived on the panel.
+    """
+    panel = {
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "targets": [
+            {"expr": 'sum(rate(omi_x_total{outcome="failure"}}[$__rate_interval]))', "refId": "A"},
+        ],
+    }
+    exprs = [expr for _, expr in _prometheus_exprs_from_node(panel, "synthetic.json")]
+    assert exprs == [panel["targets"][0]["expr"]]
+    assert _promql_syntax_errors(exprs[0]), "an unbalanced brace in an inherited target must fail the gate"
+
+    # Non-prometheus panels keep the same shape and must not contribute, and a
+    # target that names its own datasource is judged by that datasource alone.
+    loki_panel = {
+        "datasource": {"type": "loki", "uid": "loki"},
+        "targets": [{"expr": 'sum(count_over_time({job="omi"}[5m]))}', "refId": "A"}],
+    }
+    mixed_panel = {
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "targets": [
+            {"expr": "invalid loki } syntax", "refId": "A", "datasource": {"type": "loki", "uid": "loki"}},
+        ],
+    }
+    assert _prometheus_exprs_from_node(loki_panel, "synthetic.json") == []
+    assert _prometheus_exprs_from_node(mixed_panel, "synthetic.json") == []
