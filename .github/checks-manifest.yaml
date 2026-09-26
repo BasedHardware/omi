@@ -59,6 +59,11 @@ checks:
     triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "optional tool parameters sent as JSON null must take defaults and validation errors must return ChatToolResponse HTTP 200"
+  - id: launch-library-app-tests
+    command: ["python3", "plugins/omi-launch-library-app/test_main.py"]
+    triggers: ["plugins/omi-launch-library-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Launch Library 2 app must validate chat-tool input, ignore Omi uid, cap provider payloads, handle the 15-request hourly limit safely, and format public launch data with source attribution"
   - id: linear-exact-issue-lookup-tests
     command: ["python3", "plugins/omi-linear-app/test_issue_lookup.py"]
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
