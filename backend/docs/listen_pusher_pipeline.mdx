@@ -386,6 +386,20 @@ user IDs, model revisions, or other high-cardinality request data. Custom-STT
 sessions are excluded because the backend does not own their provider socket or
 provider attempt lifecycle.
 
+Session-level headline SLI (2026-09-26): teardown also emits exactly one
+`omi_live_session_transcript_outcome_total{outcome}` per backend-STT session —
+`transcribed` once any nonempty transcript batch reached the client,
+`no_transcript` otherwise (STT-terminal sessions never get the short-session
+excuse), and `too_short` for clean teardowns of sessions with under ~10 s of
+audio or zero VAD speech. The unit is one accepted WebSocket, so a client
+reconnect counts once per socket. Per-provider traffic lights complement it at
+the connect seam: `omi_stt_provider_connect_total{provider,outcome,
+error_class}` (recorded on both the legacy order and the configured chain),
+`omi_stt_provider_circuit_open{provider,kind}` mirroring the process-local
+breakers, and `omi_stt_provider_retired{provider}` exporting the deployment's
+`STT_RETIRED_PROVIDERS` (default `deepgram`). See
+`backend/docs/operational/windowed-live-stt.md` for the alerts.
+
 The same authoritative attempt emits fail-open PostHog product events:
 `Transcript Started` at first nontrivial audio and exactly one of `Transcript
 Completed`, `Transcript Failed`, or `Transcript Cancelled`. Those events carry

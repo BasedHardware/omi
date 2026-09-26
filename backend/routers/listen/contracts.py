@@ -121,6 +121,10 @@ class ListenSessionState:
     live_transcription_attempt: Any = None
     client_live_transcription_attempt: Any = None
     live_transcription_failed: bool = False
+    # Headline SLI latch: flipped once when the first nonempty transcript batch
+    # was delivered to the client (runtime.complete_live_transcription). Read at
+    # teardown by _record_session_transcript_outcome.
+    live_transcript_delivered: bool = False
     last_usage_record_timestamp: Optional[float] = None
     words_transcribed_since_last_record: int = 0
     last_transcript_time: Optional[float] = None
