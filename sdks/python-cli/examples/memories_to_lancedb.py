@@ -15,7 +15,7 @@ import json
 import math
 from pathlib import Path
 import sys
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence
 
 
 def generate_deterministic_vector(text: str, dim: int = 384) -> List[float]:
@@ -75,114 +75,105 @@ def normalize_iso_timestamp(ts_raw: Any) -> str:
     return str(ts_raw)
 
 
-def normalize_memory_record(
-    record: Dict[str, Any], vector_dim: int = 384
-) -> Dict[str, Any]:
+def normalize_memory_record(record: Dict[str, Any], vector_dim: int = 384) -> Dict[str, Any]:
     """Convert an OMI memory object to a LanceDB-compliant schema record."""
-    memory_id = str(
-        record.get("id")
-        or record.get("memory_id")
-        or hashlib.md5(str(record).encode()).hexdigest()[:16]
-    )
+    memory_id = str(record.get("id") or record.get("memory_id") or hashlib.md5(str(record).encode()).hexdigest()[:16])
     content = extract_text_content(record)
 
     # Vector embedding extraction or deterministic generation
     vector: List[float] = []
-    if (
-        "vector" in record
-        and isinstance(record["vector"], list)
-        and len(record["vector"]) > 0
-    ):
+    if "vector" in record and isinstance(record["vector"], list) and len(record["vector"]) > 0:
         vector = [float(x) for x in record["vector"]]
-    elif (
-        "embedding" in record
-        and isinstance(record["embedding"], list)
-        and len(record["embedding"]) > 0
-    ):
+    elif "embedding" in record and isinstance(record["embedding"], list) and len(record["embedding"]) > 0:
         vector = [float(x) for x in record["embedding"]]
     else:
         vector = generate_deterministic_vector(content, dim=vector_dim)
 
-    # Extract metadata attributes
-    category = "general"
-    if record.get("category"):
-        category = str(record["category"])
-    elif isinstance(record.get("structured"), dict) and record["structured"].get(
-        "category"
-    ):
-        category = str(record["structured"]["category"])
-
-    metadata: Dict[str, Any] = {
-        "user_id": str(record.get("user_id") or record.get("uid") or ""),
-        "source": str(record.get("source") or "omi"),
-        "discarded": bool(record.get("discarded", False)),
-        "manually_added": bool(record.get("manually_added", False)),
+    # Metadata dictionary preservation
+    metadata: Dict[str, Any] = {}
+    standard_keys = {
+        "id",
+        "memory_id",
+        "content",
+        "title",
+        "created_at",
+        "updated_at",
+        "category",
+        "structured",
+        "vector",
+        "embedding",
     }
-    if "tags" in record and isinstance(record["tags"], list):
-        metadata["tags"] = [str(t) for t in record["tags"]]
-
-    created_at = normalize_iso_timestamp(record.get("created_at"))
+    for k, v in record.items():
+        if k not in standard_keys and v is not None:
+            metadata[k] = v
 
     return {
         "id": memory_id,
         "content": content,
-        "category": category,
+        "category": str(
+            record.get("category")
+            or (
+                record.get("structured", {}).get("category")
+                if isinstance(record.get("structured"), dict)
+                else "general"
+            )
+            or "general"
+        ),
+        "created_at": normalize_iso_timestamp(record.get("created_at") or record.get("created")),
         "vector": vector,
-        "created_at": created_at,
         "metadata": json.dumps(metadata, ensure_ascii=False),
     }
 
 
-def parse_omi_memories(input_data: Any) -> List[Dict[str, Any]]:
-    """Parse OMI memory items from either a list, dict envelope, or string."""
-    if isinstance(input_data, list):
-        return [r for r in input_data if isinstance(r, dict)]
-    if isinstance(input_data, dict):
-        if "memories" in input_data and isinstance(input_data["memories"], list):
-            return [r for r in input_data["memories"] if isinstance(r, dict)]
-        if "items" in input_data and isinstance(input_data["items"], list):
-            return [r for r in input_data["items"] if isinstance(r, dict)]
-        if "data" in input_data and isinstance(input_data["data"], list):
-            return [r for r in input_data["data"] if isinstance(r, dict)]
-        # Single memory item
-        return [input_data]
+def parse_omi_memories(data: Any) -> List[Dict[str, Any]]:
+    """Parse raw JSON data into a list of memory dicts."""
+    if isinstance(data, list):
+        return [item for item in data if isinstance(item, dict)]
+    if isinstance(data, dict):
+        if "memories" in data and isinstance(data["memories"], list):
+            return [item for item in data["memories"] if isinstance(item, dict)]
+        if "items" in data and isinstance(data["items"], list):
+            return [item for item in data["items"] if isinstance(item, dict)]
+        if "data" in data and isinstance(data["data"], list):
+            return [item for item in data["data"] if isinstance(item, dict)]
+        # Single record
+        return [data]
     return []
 
 
 def export_to_lancedb_payload(
-    raw_records: Sequence[Dict[str, Any]],
+    records: Sequence[Dict[str, Any]],
     vector_dim: int = 384,
     deduplicate: bool = True,
 ) -> List[Dict[str, Any]]:
-    """Transform raw OMI memory records into LanceDB table records."""
-    normalized_list: List[Dict[str, Any]] = []
+    """Process a sequence of memory records into LanceDB schema rows."""
     seen_ids = set()
+    output: List[Dict[str, Any]] = []
 
-    for item in raw_records:
-        norm = normalize_memory_record(item, vector_dim=vector_dim)
-        mid = norm["id"]
-        if deduplicate and mid in seen_ids:
-            continue
-        seen_ids.add(mid)
-        normalized_list.append(norm)
+    for raw in records:
+        normalized = normalize_memory_record(raw, vector_dim=vector_dim)
+        mem_id = normalized["id"]
+        if deduplicate:
+            if mem_id in seen_ids:
+                continue
+            seen_ids.add(mem_id)
+        output.append(normalized)
 
-    return normalized_list
+    return output
 
 
-def write_lancedb_jsonl(
-    records: Sequence[Dict[str, Any]], output_path: Path, overwrite: bool = False
-) -> None:
-    """Write records to a JSON Lines (.jsonl) file ready for LanceDB table ingestion."""
+def write_lancedb_jsonl(records: Sequence[Dict[str, Any]], output_path: Path, overwrite: bool = False) -> int:
+    """Write records to a JSONL file atomically."""
     if output_path.exists() and not overwrite:
-        raise FileExistsError(
-            f"Destination '{output_path}' already exists. Use --overwrite to replace it."
-        )
+        raise FileExistsError(f"Output file '{output_path}' already exists. Use --overwrite to replace.")
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = output_path.with_suffix(f"{output_path.suffix}.tmp")
+    temp_path = output_path.with_suffix(".tmp")
     with temp_path.open("w", encoding="utf-8") as f:
         for rec in records:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
     temp_path.replace(output_path)
+    return len(records)
 
 
 def write_direct_lancedb(
@@ -201,12 +192,12 @@ def write_direct_lancedb(
     mode = "overwrite" if overwrite else "create"
     if table_name in db.table_names():
         if overwrite:
-            table = db.create_table(table_name, data=list(records), mode="overwrite")
+            db.create_table(table_name, data=list(records), mode=mode)
         else:
             table = db.open_table(table_name)
             table.add(list(records))
     else:
-        db.create_table(table_name, data=list(records), mode="create")
+        db.create_table(table_name, data=list(records), mode=mode)
     return True
 
 
@@ -281,15 +272,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # 2. Parse JSON or JSONL
     raw_records: List[Dict[str, Any]] = []
     stripped = raw_text.strip()
+    parsed_successfully = False
+
     if stripped.startswith("[") or stripped.startswith("{"):
         try:
             parsed = json.loads(stripped)
             raw_records = parse_omi_memories(parsed)
-        except json.JSONDecodeError as err:
-            print(f"Error parsing JSON input: {err}", file=sys.stderr)
-            return 1
-    else:
-        # Try JSONL
+            parsed_successfully = True
+        except json.JSONDecodeError:
+            pass
+
+    if not parsed_successfully:
+        # Try JSONL line-by-line
+        jsonl_records: List[Dict[str, Any]] = []
+        jsonl_has_valid = False
         for line_no, line in enumerate(stripped.splitlines(), start=1):
             line_str = line.strip()
             if not line_str:
@@ -297,12 +293,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             try:
                 rec = json.loads(line_str)
                 if isinstance(rec, dict):
-                    raw_records.append(rec)
+                    jsonl_records.append(rec)
+                    jsonl_has_valid = True
             except json.JSONDecodeError as err:
                 print(
                     f"Warning: skipped invalid JSON line {line_no}: {err}",
                     file=sys.stderr,
                 )
+        if jsonl_has_valid:
+            raw_records = jsonl_records
+            parsed_successfully = True
+        else:
+            print("Error: could not parse input as JSON or JSONL.", file=sys.stderr)
+            return 1
 
     if not raw_records:
         print("Warning: no memory records found in input.", file=sys.stderr)
@@ -316,6 +319,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     # 4. Ingestion / Export
     out_target = Path(args.output)
+    fallback = False
     if args.mode == "direct":
         success = write_direct_lancedb(
             lancedb_records,
@@ -324,19 +328,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             overwrite=args.overwrite,
         )
         if not success:
+            fallback = True
             print(
                 "Notice: 'lancedb' package not installed in current environment. "
                 "Falling back to exporting PyArrow-compatible JSONL payload.",
                 file=sys.stderr,
             )
-            jsonl_fallback = (
-                out_target
-                if out_target.suffix
-                else out_target / f"{args.table_name}.jsonl"
-            )
-            write_lancedb_jsonl(
-                lancedb_records, jsonl_fallback, overwrite=args.overwrite
-            )
+            jsonl_fallback = out_target if out_target.suffix else out_target / f"{args.table_name}.jsonl"
+            write_lancedb_jsonl(lancedb_records, jsonl_fallback, overwrite=args.overwrite)
             out_target = jsonl_fallback
     else:
         write_lancedb_jsonl(lancedb_records, out_target, overwrite=args.overwrite)
@@ -348,6 +347,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "records_exported": len(lancedb_records),
         "vector_dim": args.dim,
         "table_name": args.table_name,
+        "mode": args.mode,
+        "fallback": fallback,
         "output": str(out_target),
     }
     indent = 2 if args.pretty else None

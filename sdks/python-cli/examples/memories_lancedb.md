@@ -4,6 +4,8 @@ This recipe exports OMI memories, facts, and learnings into a **LanceDB** server
 
 LanceDB is an open-source, embedded vector database built on Apache Arrow with zero server infrastructure overhead, making it ideal for local-first AI agents, desktop assistants, and offline semantic memory retrieval.
 
+> **Note on Embeddings**: The recipe provides a built-in deterministic hash-based pseudo-vector generator (`generate_deterministic_vector`) for schema compliance, offline testing, and zero-dependency development. For production semantic search and RAG retrieval, pass existing embeddings from your extraction pipeline or substitute your preferred embedding model (such as SentenceTransformers, OpenAI `text-embedding-3`, or Ollama).
+
 ---
 
 ## Features
@@ -20,9 +22,11 @@ LanceDB is an open-source, embedded vector database built on Apache Arrow with z
 ### 1. Export Memories from OMI CLI
 
 ```bash
-# Export all memories to JSON
-omi memory list --limit 1000 --json > memories.json
+# Export memories to JSON (CLI limits --limit to max 200 per page)
+omi --json memory list --limit 200 > memories.json
 ```
+
+> **Note on Pagination**: The `--limit` parameter is capped at `200` by `omi_cli/commands/memory.py`. For libraries with more than 200 memories, paginate with `--offset` (e.g., `omi --json memory list --limit 200 --offset 200 >> memories.json`) or concatenate paginated JSON exports before running conversion.
 
 ### 2. Convert to LanceDB Ingestion Payload (Zero Dependencies)
 
@@ -88,8 +92,8 @@ for idx, row in results.iterrows():
 
 ## Running the Recipe Tests
 
-To execute the unit test suite:
+To execute the unit test suite under the repository's test runner:
 
 ```bash
-pytest examples/test_memories_to_lancedb.py
+python -m pytest sdks/python-cli/tests/test_memories_to_lancedb.py
 ```
