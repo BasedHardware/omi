@@ -45,7 +45,10 @@ and background processing.
   A passive memory may be attributed to the account owner only when the
   transcript identifies exactly one owner speaker cluster, keyed by
   `(speaker_id_scope, speaker_id)` so merged conversations cannot collapse
-  distinct sources. Segment `is_user` labels and model-authored `about=user`
+  distinct sources. Speaker resolution (`speaker_resolution.py`, run by
+  `process_conversation` before summarization) rewrites resolved segments to
+  one `conversation:{id}` scope with one id per voice, so the owner is one
+  cluster instead of one per capture chunk. Segment `is_user` labels and model-authored `about=user`
   cannot override that evidence, including for quote promotion. Legacy
   transcripts without cluster IDs fail closed: a `TranscriptSegment` that
   only materialized `speaker_id` from the SPEAKER_00 default is not
