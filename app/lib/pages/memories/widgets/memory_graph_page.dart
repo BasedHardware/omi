@@ -383,7 +383,8 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     final edges = data['edges'] as List<dynamic>? ?? [];
 
     final userName = SharedPreferencesUtil().givenName;
-    final userLabel = userName.isNotEmpty ? userName : 'Me';
+    // The reader's own node: their first name, else "You" in their language.
+    final userLabel = userName.isNotEmpty ? userName : context.l10n.you;
     final knownUserLabels = <String>{'me', 'the user', userLabel.trim().toLowerCase()};
     bool isUserLikeNode(Map<dynamic, dynamic> nodeData) {
       final label = (nodeData['label'] as String? ?? '').trim().toLowerCase();
