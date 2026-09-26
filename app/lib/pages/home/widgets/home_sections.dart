@@ -461,7 +461,8 @@ class HomeThisWeek extends StatelessWidget {
                   ),
                   const SizedBox(height: 14),
                   SizedBox(
-                    height: 74,
+                    // The tallest bar (52) and the day letter under it, at the reader's text size.
+                    height: 52 + 6 + _DayBar.letterHeight(context),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
@@ -505,6 +506,20 @@ class _DayBar extends StatelessWidget {
   final bool isFuture;
   final int index;
 
+  static TextStyle get _letterStyle => OmiType.caption1.copyWith(fontWeight: FontWeight.w600);
+
+  /// The day letter's height at the reader's text size (a fixed 74 pt row cut it at 1.3x).
+  static double letterHeight(BuildContext context) {
+    final painter = TextPainter(
+      text: TextSpan(text: 'M', style: _letterStyle),
+      textScaler: MediaQuery.textScalerOf(context),
+      textDirection: Directionality.of(context),
+    )..layout();
+    final height = painter.height;
+    painter.dispose();
+    return height.ceilToDouble();
+  }
+
   @override
   Widget build(BuildContext context) {
     final height = isFuture ? 4.0 : math.max(4.0, 52 * fraction);
@@ -536,10 +551,7 @@ class _DayBar extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           letter,
-          style: OmiType.caption1.copyWith(
-            fontWeight: FontWeight.w600,
-            color: isToday ? OmiColors.textPrimary : OmiColors.textTertiary,
-          ),
+          style: _letterStyle.copyWith(color: isToday ? OmiColors.textPrimary : OmiColors.textTertiary),
         ),
       ],
     );

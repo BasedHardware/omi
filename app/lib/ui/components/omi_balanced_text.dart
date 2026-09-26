@@ -117,29 +117,51 @@ class _RenderBalancedWidth extends RenderShiftedBox {
     markNeedsLayout();
   }
 
-  /// The narrowest width, at most [maxWidth], at which the child is as tall as at [maxWidth]. Text
-  /// that fits one line, breaks lines itself, or reaches [_maxLines] (it may be cut short) keeps
-  /// the full width.
+  /// The width to lay the text out at: the narrowest, at most [maxWidth], that keeps the lines it
+  /// takes at [maxWidth], so the lines come out even. Text that fits one line, breaks lines itself,
+  /// or is cut short keeps the full width. Measured with a painter on the paragraph's own settings,
+  /// so dry layout and layout agree.
   double _balancedWidth(RenderBox child, double maxWidth) {
-    if (!_balance || !maxWidth.isFinite || maxWidth <= 0) return maxWidth;
-    final oneLine = child.getMaxIntrinsicHeight(double.infinity);
-    final full = child.getMaxIntrinsicHeight(maxWidth);
-    if (oneLine <= 0) return maxWidth;
-    final lines = (full / oneLine).round();
-    if (lines < 2) return maxWidth;
-    final cap = _maxLines;
-    if (cap != null && lines >= cap) return maxWidth;
-    var fits = maxWidth;
-    var tooNarrow = 0.0;
-    while (fits - tooNarrow > 1) {
-      final width = (fits + tooNarrow) / 2;
-      if (child.getMaxIntrinsicHeight(width) > full + 0.5) {
-        tooNarrow = width;
-      } else {
-        fits = width;
+    if (!_balance || !maxWidth.isFinite || maxWidth <= 0 || child is! RenderParagraph) return maxWidth;
+    var placeholder = false;
+    child.text.visitChildren((span) {
+      if (span is PlaceholderSpan) placeholder = true;
+      return !placeholder;
+    });
+    if (placeholder) return maxWidth;
+    final painter = TextPainter(
+      text: child.text,
+      textAlign: child.textAlign,
+      textDirection: child.textDirection,
+      textScaler: child.textScaler,
+      maxLines: child.maxLines,
+      locale: child.locale,
+      strutStyle: child.strutStyle,
+      textWidthBasis: child.textWidthBasis,
+      textHeightBehavior: child.textHeightBehavior,
+    );
+    try {
+      int linesAt(double width) {
+        painter.layout(maxWidth: width);
+        return painter.didExceedMaxLines ? -1 : painter.computeLineMetrics().length;
       }
+
+      final lines = linesAt(maxWidth);
+      if (lines < 2) return maxWidth;
+      var fits = maxWidth;
+      var tooNarrow = 0.0;
+      while (fits - tooNarrow > 1) {
+        final width = (fits + tooNarrow) / 2;
+        if (linesAt(width) != lines) {
+          tooNarrow = width;
+        } else {
+          fits = width;
+        }
+      }
+      return fits.ceilToDouble().clamp(0.0, maxWidth);
+    } finally {
+      painter.dispose();
     }
-    return fits.ceilToDouble().clamp(0.0, maxWidth);
   }
 
   @override

@@ -24,10 +24,10 @@ void main() {
     addTearDown(home.dispose);
     await tester.pumpWidget(ChangeNotifierProvider<HomeProvider>.value(
       value: home,
-      child: MaterialApp(
+      child: const MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: const [Locale('en')],
-        home: const Scaffold(body: VoiceSetupTask()),
+        supportedLocales: [Locale('en')],
+        home: Scaffold(body: VoiceSetupTask()),
       ),
     ));
     return home;
