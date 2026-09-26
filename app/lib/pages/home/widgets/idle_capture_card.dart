@@ -29,8 +29,8 @@ class IdleCaptureCard extends StatelessWidget {
 
   /// Whether [ConversationCaptureWidget] shows something now (the same test it uses).
   static bool isCapturing(CaptureProvider capture) {
-    // Stopped is not capturing: the pendant waits here for Start.
-    if (capture.isCaptureStopped && !_phoneLive(capture)) return false;
+    // Stopped is not capturing: the pendant waits here for Start. So is a Stop on its way.
+    if (capture.isStopping || (capture.isCaptureStopped && !_phoneLive(capture))) return false;
     final batch =
         capture.isPhoneMicBatchRecording || (SharedPreferencesUtil().batchModeEnabled && capture.havingRecordingDevice);
     return capture.liveCaptureSource != null || _phoneLive(capture) || batch;
@@ -66,9 +66,12 @@ class IdleCaptureCard extends StatelessWidget {
     final capturing = context.select<CaptureProvider, bool>(isCapturing);
     if (onCall || capturing) return const SizedBox.shrink();
     final paired = context.select<DeviceProvider, bool>((d) => (d.pairedDevice?.id ?? '').isNotEmpty);
-    // A connected wearable the reader stopped: Start wakes it rather than the phone.
+    // A connected wearable the reader stopped (or is stopping): Start wakes it rather than the phone.
     final stoppedSource = context.select<CaptureProvider, String?>(
-      (c) => c.isCaptureStopped && c.havingRecordingDevice ? (c.liveCaptureSource ?? 'omi') : null,
+      (c) => (c.isCaptureStopped || (c.isStopping && (c.liveCaptureSource ?? 'phone') != 'phone')) &&
+              c.havingRecordingDevice
+          ? (c.liveCaptureSource ?? 'omi')
+          : null,
     );
     final l10n = context.l10n;
     return Padding(

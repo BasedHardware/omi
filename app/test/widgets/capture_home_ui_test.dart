@@ -1,5 +1,7 @@
 // The Home capture surfaces (David, 2026-09-25; Rev 3): the live card is what's recording now, its
 // idle twin starts listening with this phone, and the header chip opens Recording from.
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -83,6 +85,9 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   bool get isPaused => live == _Live.pendantPaused || live == _Live.pendantStopped || readerPaused;
   @override
   bool get isCaptureStopped => live == _Live.pendantStopped;
+  bool stopping = false;
+  @override
+  bool get isStopping => stopping;
   @override
   bool get canMuteLiveSource => true;
   @override
@@ -150,9 +155,19 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
     if (failure != null) throw failure;
   }
 
+  /// Holds Stop on its way until completed (behind a transcription reconnect).
+  Completer<void>? stopGate;
+
   @override
   Future<bool> stopCapture() async {
     stops++;
+    final gate = stopGate;
+    if (gate == null) return segments.isNotEmpty;
+    stopping = true;
+    notifyListeners();
+    await gate.future;
+    stopping = false;
+    notifyListeners();
     return segments.isNotEmpty;
   }
 
@@ -275,6 +290,23 @@ void main() {
       await tester.tap(find.byKey(const Key('live_capture_stop')));
       await tester.pump();
       expect(capture.stops, 1);
+    });
+
+    testWidgets('a Stop on its way already reads as stopped: Home offers Start, never a second Stop', (tester) async {
+      final capture = _Capture(_Live.pendant)..stopGate = Completer<void>();
+      await pump(tester, const ConversationCaptureWidget(showsCall: true, idle: IdleCaptureCard()),
+          capture: capture, device: _Device());
+      await tester.tap(find.byKey(const Key('live_capture_stop')));
+      await tester.pump();
+      expect(capture.stops, 1);
+      expect(find.byType(LiveCaptureCard), findsNothing, reason: 'no Stop left to tap twice');
+      expect(find.text('${en.captureSourcePendant} · ${en.deviceReady}'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('idle_capture_start')));
+      await tester.pump();
+      expect(capture.starts, 1, reason: 'Start wakes the pendant (after the Stop lands)');
+      expect(capture.phoneStarts, 0);
+      capture.stopGate!.complete();
+      await tester.pump();
     });
 
     testWidgets('a muted pendant reads Muted and offers Unmute', (tester) async {
