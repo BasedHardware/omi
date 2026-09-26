@@ -11,13 +11,13 @@ This recipe uses only Python standard library modules (`json`, `pathlib`, `argpa
 Export conversations including transcript segments using `omi-cli`:
 
 ```sh
-omi conversation list --include-transcript --limit 100 --json > conversations.json
+omi --json conversation list --include-transcript --limit 100 > conversations.json
 ```
 
 Or convert directly via pipeline from `stdin`:
 
 ```sh
-omi conversation list --include-transcript --limit 50 --json | python sdks/python-cli/examples/conversations_to_jsonl.py - -o conversations.jsonl
+omi --json conversation list --include-transcript --limit 50 | python sdks/python-cli/examples/conversations_to_jsonl.py - -o conversations.jsonl
 ```
 
 ---

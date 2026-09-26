@@ -1,19 +1,20 @@
+import importlib.util
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
-import sys
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# Load conversations_to_jsonl example script dynamically
+script_path = Path(__file__).resolve().parent.parent / "examples" / "conversations_to_jsonl.py"
+spec = importlib.util.spec_from_file_location("conversations_to_jsonl", script_path)
+c2j = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(c2j)
 
-from conversations_to_jsonl import (
-    convert_conversations,
-    format_chat_entry,
-    format_transcript_entry,
-    normalize_conversation,
-    DEFAULT_SYSTEM_PROMPT,
-)
+convert_conversations = c2j.convert_conversations
+format_chat_entry = c2j.format_chat_entry
+format_transcript_entry = c2j.format_transcript_entry
+normalize_conversation = c2j.normalize_conversation
+DEFAULT_SYSTEM_PROMPT = c2j.DEFAULT_SYSTEM_PROMPT
 
 
 class TestConversationsToJsonl(unittest.TestCase):
