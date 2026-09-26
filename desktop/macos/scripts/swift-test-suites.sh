@@ -612,6 +612,8 @@ esac
 # parallelism/skip wiring, and the real suite job already runs the ratchet.
 if [ -z "${OMI_SWIFT_TEST_DISCOVERY_ROOT:-}" ]; then
   python3 "$SCRIPT_DIR/tests/test_check_desktop_test_quality.py"
+  # The call-app release catalog is generated into Swift; its data file must agree.
+  python3 "$SCRIPT_DIR/tests/test_call_app_catalog.py"
   python3 "$SCRIPT_DIR/check_desktop_test_quality.py"
   python3 "$MAIN_ACTOR_XCTEST_HOOK_GUARD"
   "$SKIP_RATCHET" --slow-check --slow-file "$SLOW_SUITES_FILE"
