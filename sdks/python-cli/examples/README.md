@@ -38,6 +38,7 @@
 * [`conversations_atom.md`](conversations_atom.md) — publish conversation-list
   exports as an Atom 1.0 feed for any feed reader.
 * [`action_items_sqlite.md`](action_items_sqlite.md) — convert an action-item JSON export to SQLite for structured SQL queries.
+* [`action_items_to_parquet.md`](action_items_to_parquet.md) — export action items to Apache Parquet columnar datasets for task analytics, SLA tracking, and DuckDB.
 * [`action_items_markdown.md`](action_items_markdown.md) — export action items and tasks to Obsidian/Notion Markdown checklists.
 * [`action_items_org.md`](action_items_org.md) — turn an action-item export
   into an Org-mode file with TODO/DONE headings and agenda DEADLINEs.
