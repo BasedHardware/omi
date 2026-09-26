@@ -341,29 +341,42 @@ class SendMap:
                 return (provider_first, capture_first, length)
         return None
 
+    def map_sample(self, provider_sample: int) -> Optional[int]:
+        """Translate one provider sample onto the capture timeline.
+
+        An endpoint inside a span maps linearly into it; one within the edge
+        tolerance past a span end clamps onto that end (the provider's own
+        tail buffering). ``None`` when the sample is outside every accepted
+        span: it belongs to audio we cannot prove was accepted.
+        """
+        span = self._locate(provider_sample)
+        if span is None:
+            return None
+        provider_from, capture_from, length = span
+        return capture_from + min(max(provider_sample - provider_from, 0), length)
+
     def map_interval(self, provider_first_sample: int, provider_last_sample: int) -> Optional[Tuple[int, int]]:
         """Translate a provider interval to capture samples.
 
         Each endpoint maps independently through its containing span, so a
         segment is never mapped *through* an unrepresented gap as if it were
         audio. Endpoints outside every accepted span (beyond edge tolerance)
-        reject with None rather than landing on another epoch.
+        reject with None rather than landing on another epoch — and so does an
+        interval whose two different provider times would clamp onto one
+        capture sample: that collapse fabricates a zero-length segment at a
+        span edge instead of mapping the speech, so it fails closed too.
         """
         if provider_last_sample < provider_first_sample:
             provider_first_sample, provider_last_sample = provider_last_sample, provider_first_sample
-        first = self._locate(provider_first_sample)
-        if first is None:
+        start_capture = self.map_sample(provider_first_sample)
+        if start_capture is None:
             return None
-        last = self._locate(provider_last_sample)
-        if last is None:
+        end_capture = self.map_sample(provider_last_sample)
+        if end_capture is None:
             return None
-
-        def capture_at(span: Tuple[int, int, int], provider_sample: int) -> int:
-            provider_from, capture_from, length = span
-            return capture_from + min(max(provider_sample - provider_from, 0), length)
-
-        start_capture = capture_at(first, provider_first_sample)
-        return (start_capture, max(start_capture, capture_at(last, provider_last_sample)))
+        if provider_last_sample > provider_first_sample and end_capture <= start_capture:
+            return None
+        return (start_capture, end_capture)
 
 
 class ProviderEpochTranslator:
@@ -414,10 +427,14 @@ class ProviderEpochTranslator:
 
         Segments whose provider timestamps cannot be proven to fall inside
         accepted send spans are dropped (fail closed), never clamped onto a
-        neighboring epoch — unless ``project_times`` is off, where persistence
-        must stay byte-identical to the legacy behavior: such a segment keeps
-        its provider-native times and simply carries no capture interval, so
-        only its speaker-ID window falls back, never its transcript.
+        neighboring epoch; so are degenerate provider intervals (start >= end)
+        and intervals whose two different provider times would clamp onto one
+        capture sample — mapping those would fabricate a zero-length segment
+        at a span edge (the dev 2026-09-26 v2 collapse). Exception: with
+        ``project_times`` off, persistence must stay byte-identical to the
+        legacy behavior, so a rejected segment keeps its provider-native times
+        and simply carries no capture interval — only its speaker-ID window
+        falls back, never its transcript.
         """
         translated: List[Dict] = []
         for segment in segments:
@@ -430,9 +447,21 @@ class ProviderEpochTranslator:
                 self._reject(segment, 'non_finite')
                 continue
             rate = self.provider_sample_rate
-            interval = self.send_map.map_interval(int(start * rate), int(end * rate))
+            first_sample, last_sample = int(start * rate), int(end * rate)
+            if last_sample <= first_sample:
+                # A zero-length provider interval (e.g. Modulate partials)
+                # cannot locate audio; v2 must not persist it as a segment.
+                self._reject(segment, 'zero_length')
+                if not self._project_times:
+                    translated.append(segment)
+                continue
+            interval = self.send_map.map_interval(first_sample, last_sample)
             if interval is None:
-                self._reject(segment, 'outside_accepted_sends')
+                if self.send_map.map_sample(first_sample) is None or self.send_map.map_sample(last_sample) is None:
+                    reason = 'outside_accepted_sends'
+                else:
+                    reason = 'collapsed_interval'
+                self._reject(segment, reason)
                 if not self._project_times:
                     translated.append(segment)
                 continue

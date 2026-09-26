@@ -23,6 +23,7 @@ from utils.stt.live_metrics import (
     WINDOW_CAP,
     WINDOW_CONTEXT,
     WINDOW_DECODER_LOOPS,
+    WINDOW_EMISSION_DROPS,
     WINDOW_FORCED_CUTS,
     WINDOW_HEAD_RECOVERIES,
     WINDOW_LATENCY,
@@ -459,8 +460,14 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             WINDOW_FORCED_CUTS.inc()
         emitted = await self._materialize(decision.emit, job.pcm, job.start, job.duration)
         if emitted and not self._dead:
-            self._stream_transcript(emitted)
+            # Snapshot the emission boundary in this socket's stream seconds
+            # BEFORE the callback: downstream rewrites start/end in place onto
+            # other clocks (the epoch translator projects wall-epoch seconds,
+            # the legacy chain rebases by its own offset), and comparing
+            # those against stream seconds made every later window clamp onto
+            # its own edge as zero-length segments (dev 2026-09-26 v2 collapse).
             self._last_emitted_end = max(self._last_emitted_end, max(float(item['end']) for item in emitted))
+            self._stream_transcript(emitted)
         self._now_bytes = job.end_bytes
         self._last_post_anchor = job.start_bytes
         self._last_post_end = job.end_bytes
@@ -710,20 +717,39 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
     async def _materialize(
         self, segments: tuple[RawSegment, ...] | list[RawSegment], pcm: bytes, start: float, dur: float
     ) -> list[dict[str, Any]]:
+        """Convert window-relative TDT segments to stream positions, honestly.
+
+        Every emitted position is ``start + rel``: an endpoint never moves to
+        satisfy monotonicity or the window bounds. TDT timestamps that fall at
+        or beyond the posted window duration cannot be located in the posted
+        audio at all (timestamp drift on re-posted windows), and a returned
+        segment whose interval ends at or before the last emission is a
+        re-detection of already-emitted audio; both are dropped and counted
+        instead of being collapsed onto the window/anchor edge as a
+        zero-length segment (dev 2026-09-26 v2 collapse).
+        """
         self._embedded_this_window = False
-        now = start + dur
         out: list[dict[str, Any]] = []
         for segment in segments:
             if not math.isfinite(segment.start) or not math.isfinite(segment.end):
                 self.fail('provider_5xx')
                 raise ValueError('Invalid TDT timestamps')
-            rel_start = min(dur, max(0.0, segment.start))
-            rel_end = min(dur, max(rel_start, segment.end))
+            if segment.start >= dur:
+                WINDOW_EMISSION_DROPS.labels(reason='timestamp_beyond_window').inc()
+                continue
+            rel_start = max(0.0, segment.start)
+            rel_end = min(dur, max(segment.start, segment.end))
+            abs_start = start + rel_start
+            abs_end = start + rel_end
+            if abs_end <= abs_start:
+                WINDOW_EMISSION_DROPS.labels(reason='degenerate_timestamps').inc()
+                continue
+            if abs_end <= self._last_emitted_end:
+                WINDOW_EMISSION_DROPS.labels(reason='already_emitted').inc()
+                continue
             # Buffer is original-level capture. Embeddings slice that PCM, not
             # the posted uniform-gain copy the decoder hears.
             speaker = await self._assign_speaker(self._slice_pcm(pcm, rel_start, rel_end))
-            abs_start = min(now, max(start, self._last_emitted_end, start + rel_start))
-            abs_end = min(now, max(abs_start, start + rel_end))
             out.append(
                 {
                     'speaker': f'SPEAKER_{speaker}',

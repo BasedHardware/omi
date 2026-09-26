@@ -972,9 +972,24 @@ send-path failover — gets its own epoch translator created at callback
 creation. Sockets record only sends the provider accepted (pre-roll spans
 included through the VAD gate; SafeDeepgram keepalives are never audio);
 provider timestamps map through those spans to capture samples, then to the
-wall axis, before `_enqueue_stt_segments`. Out-of-range, evicted or
-straddling-generation segments are dropped and counted, never clamped onto a
-neighboring epoch or replayed into a newer conversation. Ownership of recent
+wall axis, before `_enqueue_stt_segments`. Out-of-range, evicted,
+straddling-generation, degenerate (`start >= end`, e.g. Modulate partials)
+and collapsed intervals are dropped and counted — with bounded reasons
+(`outside_accepted_sends`, `evicted_interval`, `zero_length`,
+`collapsed_interval`) — never clamped onto a neighboring epoch or replayed
+into a newer conversation. Two *different* provider times never clamp onto
+one capture sample: the send map's edge tolerance accepts a single endpoint
+overshoot past a span end (the provider's tail buffering), but an interval
+that would collapse to one point fails closed instead of fabricating a
+zero-length segment at a span edge (the 2026-09-26 dev collapse). The
+windowed TDT leg enforces the same rule at the source
+(`WindowedParakeetSocket._materialize`): emitted positions are the honest
+window-relative mapping, its emission boundary is snapshotted in the
+socket's own stream seconds *before* the callback rewrites `start`/`end`
+onto other clocks, and TDT timestamps at/beyond the posted window duration
+or re-detections of already-emitted audio are dropped and counted in
+`omi_stt_window_emission_drops_total` rather than emitted at a fabricated
+position. Ownership of recent
 capture ranges is retained as coalesced same-conversation *runs* for 120 s of
 capture time (a hard run cap is a pathological bound, not the working limit),
 so a provider final trailing its audio by tens of seconds still resolves its
@@ -1084,6 +1099,16 @@ re-sends. The capture-positioned `AudioRingBuffer` walks its per-write span
 ledger on `extract`, so a clip window crossing a client stall returns the
 audio on both sides of the gap, never the gap itself as audio. Multi-channel
 and custom-STT sessions keep no capture clock.
+
+`LIVE_SPEAKER_CAPTURE_CLOCK` (default on, read at the call boundary in
+`config/audio_timeline.py`) is the runtime kill switch for this always-on
+speaker path: a falsy value reverts both halves of the pair together — the
+ring buffer returns to arrival-timestamped writes and clock-only segments
+attach no capture window, so the matcher uses the legacy
+`first_audio + provider-time` formula — without a deploy and without touching
+the v2 persistence or the wire. Flipping it mid-session can mismatch the
+retained ring-buffer spans for up to the buffer's duration; it is an
+emergency lever, not a toggle.
 
 Every early return before a live speaker-ID match decision — in
 `speakers._match_unmapped` and in the callers that drop a queued detection —

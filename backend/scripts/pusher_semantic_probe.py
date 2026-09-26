@@ -511,6 +511,11 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
             for item in conversation.get("transcript_segments") or []
             if isinstance(item, dict) and item.get("start") is not None and item.get("end") is not None
         )
+        # A zero-length segment is a distinct bug signal (a provider interval
+        # collapsed onto one point instead of being mapped or rejected), not a
+        # coverage question: name it so the receipt points at the real defect.
+        if any(end <= start for start, end in windows):
+            raise ProbeError("zero_length_segment")
         spans: list[Any] = []
         for audio_file in conversation.get("audio_files") or []:
             spans.extend(audio_file.get("chunk_spans") or [])

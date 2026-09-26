@@ -13,7 +13,7 @@ from utils.manual_speaker_assignments import acknowledged_teaching
 from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
-from config.audio_timeline import audio_timeline_v2_enabled
+from config.audio_timeline import audio_timeline_v2_enabled, live_speaker_capture_clock_enabled
 from routers.listen.contracts import ConversationCaptureOrigin
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 
@@ -302,7 +302,18 @@ class ListenReceiver:
         output stay byte-identical to the flag-off baseline. The only addition
         is the private absolute window the ring buffer can actually locate,
         which survives provider failovers whose timestamps restart at zero.
+
+        LIVE_SPEAKER_CAPTURE_CLOCK is the runtime kill switch for that
+        addition (read here, at the call boundary): falsy reverts speaker-ID
+        windows to the legacy first-audio + provider-time formula without a
+        deploy. It never touches the transcript itself.
         """
+        if not live_speaker_capture_clock_enabled():
+            for segment in segments:
+                segment.pop('_capture_start_sample', None)
+                segment.pop('_capture_end_sample', None)
+            self._enqueue_stt_segments(segments)
+            return
         for segment in segments:
             start_sample = segment.pop('_capture_start_sample', None)
             end_sample = segment.pop('_capture_end_sample', None)
@@ -1332,9 +1343,14 @@ class ListenReceiver:
                         start_sample, end_sample, _ = self.capture_timeline.accept(decoded, now, time.monotonic())
                         self._note_accepted_frame(start_sample, end_sample)
                         if self.host.state.audio_ring_buffer is not None:
-                            self.host.state.audio_ring_buffer.write_positioned(
-                                decoded, self.capture_timeline.wall(start_sample)
-                            )
+                            if live_speaker_capture_clock_enabled():
+                                # Speaker-ID clips locate audio on the capture
+                                # clock (kill switch: LIVE_SPEAKER_CAPTURE_CLOCK).
+                                self.host.state.audio_ring_buffer.write_positioned(
+                                    decoded, self.capture_timeline.wall(start_sample)
+                                )
+                            else:
+                                self.host.state.audio_ring_buffer.write(decoded, now)
                         if not self.host.use_custom_stt:
                             if not buffer:
                                 self._stt_buffer_start_sample = start_sample
