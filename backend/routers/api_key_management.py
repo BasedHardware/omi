@@ -7,12 +7,19 @@ from fastapi import APIRouter, Depends, HTTPException
 
 import database.dev_api_key as dev_api_key_db
 import database.mcp_api_key as mcp_api_key_db
-from database.api_key_metadata import ApiKeyRevocationUnavailableError, ApiKeyValidationError
+from database.api_key_metadata import (
+    ApiKeyRevocationUnavailableError,
+    ApiKeyValidationError,
+)
 from dependencies import get_current_user_id
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
 from utils.dev_cache import invalidate_developer_cache
-from utils.observability.api_keys import record_api_key_repairs, record_api_key_revocation_exhausted
+from utils.log_sanitizer import sanitize
+from utils.observability.api_keys import (
+    record_api_key_repairs,
+    record_api_key_revocation_exhausted,
+)
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 
 logger = logging.getLogger(__name__)
@@ -48,7 +55,8 @@ def create_mcp_key(key_data: McpApiKeyCreate, uid: str = Depends(get_current_use
     try:
         raw_key, api_key_data = mcp_api_key_db.create_mcp_key(uid, key_data.name.strip())
     except ApiKeyValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        logger.warning(f"MCP API key validation failed for user {uid}: {sanitize(str(exc))}")
+        raise HTTPException(status_code=422, detail=sanitize(str(exc))) from exc
     return McpApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
 
 
@@ -113,7 +121,8 @@ def create_developer_key(key_data: DevApiKeyCreate, uid: str = Depends(get_curre
     try:
         raw_key, api_key_data = dev_api_key_db.create_dev_key(uid, key_data.name.strip(), scopes=key_data.scopes)
     except ApiKeyValidationError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
+        logger.warning(f"Developer API key validation failed for user {uid}: {sanitize(str(exc))}")
+        raise HTTPException(status_code=422, detail=sanitize(str(exc))) from exc
     # Developer status changes affect proactive-notification limits immediately.
     invalidate_developer_cache(uid)
     return DevApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
