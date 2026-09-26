@@ -1,84 +1,58 @@
-#!/usr/bin/env python3
-"""Convert an omi action-items JSON export to a UTF-8-BOM CSV file.
+"""Convert an Omi action-items JSON export to a CSV file.
 
 Usage
 -----
-    omi --json action-item list > action_items.json
-    python scripts/action_items_to_csv.py action_items.json [output.csv]
+1. Export action items to JSON::
 
-The output defaults to ``action_items.csv`` in the current directory.
-UTF-8 BOM (utf-8-sig) is used so Excel opens the file without a manual
-import wizard.
+       omi --json action-item list > action_items.json
+
+2. Run this script::
+
+       python action_items_to_csv.py
+
+Output: action_items.csv (UTF-8 with BOM for Excel compatibility)
 """
 
 import csv
 import json
-import sys
-from pathlib import Path
 
-# Columns written to the CSV, in order.
+INPUT_FILE = "action_items.json"
+OUTPUT_FILE = "action_items.csv"
+
 FIELDS = ["id", "description", "completed", "due_at", "created_at"]
 
-# Characters that spreadsheet applications treat as formula starters.
-_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
+def sanitize(value):
+    """Prevent formula injection in spreadsheet applications.
 
-def _safe(value: str) -> str:
-    """Prefix spreadsheet formula starters with a single quote.
-
-    This follows the OWASP CSV Injection guidance and the pattern used in
-    other examples in this repository.
+    Fields that start with =, +, -, or @ are prefixed with a single quote
+    so spreadsheet applications treat them as plain text.
+    See: https://owasp.org/www-community/attacks/CSV_Injection
     """
-    if isinstance(value, str) and value.startswith(_FORMULA_PREFIXES):
-        return "'" + value
-    return value
+    s = str(value)
+    if s.startswith(("=", "+", "-", "@")):
+        return "'" + s
+    return s
 
 
-def convert(src: Path, dst: Path) -> int:
-    """Read *src* JSON, write *dst* CSV.  Returns the number of rows written."""
-    with src.open(encoding="utf-8") as fh:
-        data = json.load(fh)
+def main():
+    with open(INPUT_FILE, encoding="utf-8") as f:
+        items = json.load(f)
 
-    # The JSON export is either a bare list or {"items": [...]}
-    if isinstance(data, dict):
-        items = data.get("items", [])
-    else:
-        items = data
-
-    with dst.open("w", newline="", encoding="utf-8-sig") as fh:
-        writer = csv.DictWriter(
-            fh,
-            fieldnames=FIELDS,
-            extrasaction="ignore",
-            quoting=csv.QUOTE_ALL,
-        )
-        writer.writeheader()
+    # utf-8-sig writes the BOM Excel needs to detect UTF-8 automatically
+    with open(OUTPUT_FILE, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.writer(f)
+        writer.writerow(FIELDS)
         for item in items:
-            row = {
-                "id": _safe(str(item.get("id", ""))),
-                "description": _safe(str(item.get("description", ""))),
-                "completed": item.get("completed", False),
-                "due_at": _safe(str(item.get("due_at") or "")),
-                "created_at": _safe(str(item.get("created_at", ""))),
-            }
-            writer.writerow(row)
+            writer.writerow([
+                sanitize(item.get("id", "")),
+                sanitize(item.get("description", "")),
+                item.get("completed", False),
+                item.get("due_at") or "",
+                item.get("created_at") or "",
+            ])
 
-    return len(items)
-
-
-def main() -> None:
-    args = sys.argv[1:]
-    if not args:
-        sys.exit("Usage: action_items_to_csv.py <action_items.json> [output.csv]")
-
-    src = Path(args[0])
-    dst = Path(args[1]) if len(args) > 1 else Path("action_items.csv")
-
-    if not src.exists():
-        sys.exit(f"Input file not found: {src}")
-
-    count = convert(src, dst)
-    print(f"Wrote {count} action item(s) to {dst}")
+    print(f"Wrote {len(items)} action item(s) to {OUTPUT_FILE}")
 
 
 if __name__ == "__main__":
