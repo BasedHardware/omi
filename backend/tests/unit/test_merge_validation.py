@@ -46,6 +46,7 @@ def merge():
 
     vector_db_stub = ModuleType("database.vector_db")
     vector_db_stub.delete_vector = MagicMock()
+    vector_db_stub.delete_action_item_vectors_batch = MagicMock()
 
     redis_db_stub = ModuleType("database.redis_db")
     users_stub = ModuleType("database.users")
