@@ -39,6 +39,7 @@
   exports as an Atom 1.0 feed for any feed reader.
 * [`action_items_sqlite.md`](action_items_sqlite.md) — convert an action-item JSON export to SQLite for structured SQL queries.
 * [`action_items_markdown.md`](action_items_markdown.md) — export action items and tasks to Obsidian/Notion Markdown checklists.
+* [`goals_markdown.md`](goals_markdown.md) — export goals and habit milestones to Obsidian/Notion Markdown checklists.
 * [`action_items_org.md`](action_items_org.md) — turn an action-item export
   into an Org-mode file with TODO/DONE headings and agenda DEADLINEs.
 * [`memories_markdown.pt.md`](memories_markdown.pt.md) — exportar memórias e conhecimento do Omi para Markdown (Portuguese recipe).
