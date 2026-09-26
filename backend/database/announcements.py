@@ -7,14 +7,28 @@ from ._client import db
 from models.announcement import Announcement, AnnouncementType, TriggerType
 
 
+def _ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    if dt is None:
+        return None
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
+def _doc_to_announcement(doc: Any) -> Optional[Announcement]:
+    raw: object = doc.to_dict()
+    if not isinstance(raw, dict):
+        return None
+    data = dict(cast(Dict[str, Any], raw))
+    if not data.get("id") and getattr(doc, "id", None):
+        data["id"] = str(doc.id)
+    return Announcement.from_dict(data)
+
+
 def get_announcement_by_id(announcement_id: str) -> Optional[Announcement]:
     """Get a single announcement by ID."""
     doc_ref = db.collection("announcements").document(announcement_id)
     doc = doc_ref.get()
     if getattr(doc, "exists", False):
-        raw: object = doc.to_dict()
-        if isinstance(raw, dict):
-            return Announcement.from_dict(cast(Dict[str, Any], raw))
+        return _doc_to_announcement(doc)
     return None
 
 
@@ -33,18 +47,17 @@ def get_app_changelogs(from_version: str, to_version: str) -> List[Announcement]
     changelogs: List[Announcement] = []
 
     for doc in docs:
-        raw: object = doc.to_dict()
-        if not isinstance(raw, dict):
+        announcement = _doc_to_announcement(doc)
+        if not announcement:
             continue
-        data = cast(Dict[str, Any], raw)
-        app_version = data.get("app_version")
+        app_version = announcement.app_version
         # Skip entries without app_version, then filter by version range
         if (
             app_version
             and compare_versions(from_version, str(app_version)) < 0
             and compare_versions(str(app_version), to_version) <= 0
         ):
-            changelogs.append(Announcement.from_dict(data))
+            changelogs.append(announcement)
 
     # Sort by version descending (newest first)
     changelogs.sort(key=lambda x: _version_tuple(x.app_version or "0"), reverse=True)
@@ -66,17 +79,16 @@ def get_recent_changelogs(limit: int = 5, max_version: Optional[str] = None) -> 
     changelogs: List[Announcement] = []
 
     for doc in docs:
-        raw: object = doc.to_dict()
-        if not isinstance(raw, dict):
+        announcement = _doc_to_announcement(doc)
+        if not announcement:
             continue
-        data = cast(Dict[str, Any], raw)
-        app_version = data.get("app_version")
+        app_version = announcement.app_version
         if app_version:
             app_version_str = str(app_version)
             # Filter out versions newer than max_version if specified
             if max_version and compare_versions(app_version_str, max_version) > 0:
                 continue
-            changelogs.append(Announcement.from_dict(data))
+            changelogs.append(announcement)
 
     # Sort by version descending
     changelogs.sort(key=lambda x: _version_tuple(x.app_version or "0"), reverse=True)
@@ -101,11 +113,9 @@ def get_firmware_features(firmware_version: str, device_model: Optional[str] = N
     features: List[Announcement] = []
 
     for doc in docs:
-        raw: object = doc.to_dict()
-        if not isinstance(raw, dict):
+        announcement = _doc_to_announcement(doc)
+        if not announcement:
             continue
-        data = cast(Dict[str, Any], raw)
-        announcement = Announcement.from_dict(data)
 
         # Filter by device model if specified
         if device_model and announcement.device_models:
@@ -131,9 +141,9 @@ def get_app_features(app_version: str) -> List[Announcement]:
     docs = query.stream()
     out: List[Announcement] = []
     for doc in docs:
-        raw: object = doc.to_dict()
-        if isinstance(raw, dict):
-            out.append(Announcement.from_dict(cast(Dict[str, Any], raw)))
+        announcement = _doc_to_announcement(doc)
+        if announcement:
+            out.append(announcement)
     return out
 
 
@@ -143,6 +153,7 @@ def get_general_announcements(last_checked_at: Optional[datetime] = None) -> Lis
     If last_checked_at is provided, only returns announcements created after that time.
     """
     now = datetime.now(timezone.utc)
+    checked_at = _ensure_utc(last_checked_at)
     announcements_ref = db.collection("announcements")
     query = announcements_ref.where(filter=FieldFilter("type", "==", AnnouncementType.ANNOUNCEMENT.value)).where(
         filter=FieldFilter("active", "==", True)
@@ -152,24 +163,28 @@ def get_general_announcements(last_checked_at: Optional[datetime] = None) -> Lis
     announcements: List[Announcement] = []
 
     for doc in docs:
-        raw: object = doc.to_dict()
-        if not isinstance(raw, dict):
+        announcement = _doc_to_announcement(doc)
+        if not announcement:
             continue
-        data = cast(Dict[str, Any], raw)
-        announcement = Announcement.from_dict(data)
+
+        created_at = _ensure_utc(announcement.created_at) or datetime.fromtimestamp(0, tz=timezone.utc)
+        expires_at = _ensure_utc(announcement.expires_at)
 
         # Skip if created before last check
-        if last_checked_at and announcement.created_at <= last_checked_at:
+        if checked_at and created_at <= checked_at:
             continue
 
         # Skip if expired
-        if announcement.expires_at and announcement.expires_at < now:
+        if expires_at and expires_at < now:
             continue
 
         announcements.append(announcement)
 
     # Sort by created_at descending
-    announcements.sort(key=lambda x: x.created_at, reverse=True)
+    announcements.sort(
+        key=lambda x: _ensure_utc(x.created_at) or datetime.fromtimestamp(0, tz=timezone.utc),
+        reverse=True,
+    )
     return announcements
 
 
@@ -196,12 +211,15 @@ def get_all_announcements(
     docs = query.stream()
     announcements: List[Announcement] = []
     for doc in docs:
-        raw: object = doc.to_dict()
-        if isinstance(raw, dict):
-            announcements.append(Announcement.from_dict(cast(Dict[str, Any], raw)))
+        announcement = _doc_to_announcement(doc)
+        if announcement:
+            announcements.append(announcement)
 
     # Sort by created_at descending
-    announcements.sort(key=lambda x: x.created_at, reverse=True)
+    announcements.sort(
+        key=lambda x: _ensure_utc(x.created_at) or datetime.fromtimestamp(0, tz=timezone.utc),
+        reverse=True,
+    )
     return announcements
 
 
@@ -380,28 +398,7 @@ def get_pending_announcements(
     firmware_version: Optional[str] = None,
     device_model: Optional[str] = None,
 ) -> List[Announcement]:
-    """
-    Get all announcements that should be shown to a user.
-
-    Filtering logic:
-    1. active == True
-    2. Not in user's dismissed_announcements (if show_once == True)
-    3. Within time window (start_at <= now <= expires_at)
-    4. Matches targeting rules (version range, device, platform)
-    5. Matches trigger type
-    6. Sorted by priority (descending)
-
-    Args:
-        uid: User ID for dismissal tracking
-        app_version: Current app version (e.g., "1.0.522+240")
-        platform: "ios" or "android"
-        trigger: "app_launch", "version_upgrade", or "firmware_upgrade"
-        firmware_version: Current firmware version (optional)
-        device_model: Device model name (optional)
-
-    Returns:
-        List of announcements to show, sorted by priority (highest first)
-    """
+    """Get all active, non-dismissed announcements matching the user's version, platform, and trigger, sorted by priority descending."""
     now = datetime.now(timezone.utc)
 
     # Map trigger string to enum
@@ -423,23 +420,18 @@ def get_pending_announcements(
     pending: List[Announcement] = []
 
     for doc in docs:
-        raw: object = doc.to_dict()
-        if not isinstance(raw, dict):
+        announcement = _doc_to_announcement(doc)
+        if not announcement:
             continue
-        data = cast(Dict[str, Any], raw)
-        announcement = Announcement.from_dict(data)
 
-        # Get effective targeting and display configs
         targeting = announcement.get_effective_targeting()
         display = announcement.get_effective_display()
 
-        # 1. Check if already dismissed (and show_once is true)
         if display.show_once and announcement.id in dismissed_ids:
             continue
 
-        # 2. Check time window
-        effective_start = display.start_at
-        effective_expires = display.expires_at or announcement.expires_at  # Fallback to legacy field
+        effective_start = _ensure_utc(display.start_at)
+        effective_expires = _ensure_utc(display.expires_at or announcement.expires_at)
 
         if effective_start and now < effective_start:
             continue

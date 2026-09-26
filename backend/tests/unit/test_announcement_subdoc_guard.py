@@ -41,3 +41,45 @@ def test_missing_targeting_and_display_are_none():
     ann = Announcement.from_dict({"id": "a4"})
     assert ann.targeting is None
     assert ann.display is None
+
+
+def test_general_and_pending_announcements_handle_naive_datetimes_and_doc_id_fallback():
+    from datetime import datetime, timezone
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock, patch
+    import database.announcements as ann_db
+    import routers.announcements as ann_router
+
+    docs = [
+        SimpleNamespace(
+            id="doc-without-body-id",
+            to_dict=lambda: {
+                "type": "announcement",
+                "created_at": datetime(2026, 9, 24, 12, 0, 0),  # naive
+                "expires_at": datetime(2099, 1, 1, 0, 0, 0),  # naive
+                "targeting": {"trigger": "immediate"},
+                "display": {"show_once": True, "start_at": datetime(2020, 1, 1, 0, 0, 0)},
+                "content": {"title": "Hello", "body": "World"},
+            },
+        )
+    ]
+
+    fake_db = MagicMock()
+    fake_query = MagicMock()
+    fake_query.where.return_value = fake_query
+    fake_query.stream.return_value = iter(docs)
+    fake_db.collection.return_value = fake_query
+
+    with patch.object(ann_db, "db", fake_db):
+        # Naive last_checked_at string via router should be normalized to UTC and not raise TypeError
+        res = ann_router.get_announcements(last_checked_at="2026-09-24T10:00:00")
+        assert len(res) == 1
+        assert res[0].id == "doc-without-body-id"
+
+    # When doc.id is in dismissed_ids, get_pending_announcements must suppress it even if body omitted 'id'
+    fake_query.stream.return_value = iter(docs)
+    with patch.object(ann_db, "db", fake_db), patch.object(
+        ann_db, "get_dismissed_announcement_ids", return_value={"doc-without-body-id"}
+    ):
+        pending = ann_db.get_pending_announcements(uid="u1", app_version="1.0.0", platform="ios", trigger="app_launch")
+        assert pending == []
