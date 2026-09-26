@@ -142,7 +142,7 @@ export function RewindTab(): React.JSX.Element {
       <SettingRow
         icon={Trash2}
         title="Auto-cleanup"
-        subtitle="Remove empty conversations and junk memories. Preview logs what it would delete; switch to Delete to apply."
+        subtitle="Remove empty local recordings and junk memories. Preview logs what it would delete; switch to Delete to apply."
         keywords="retention cleanup delete conversations memories sweep"
       >
         <div className="flex gap-1">

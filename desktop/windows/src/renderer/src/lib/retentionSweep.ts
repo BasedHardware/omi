@@ -1,15 +1,15 @@
-import { omiApi } from './apiClient'
 import { fetchAllMemories, deleteMemoriesPaced } from './memoriesBulk'
 import { planRetention, memoryJunkBreakdown, type SweepConvo } from './retentionRules'
 import { invalidateConversationsCache } from './pageCache'
 import { getPreferences } from './preferences'
-import type { CloudConversation } from './conversationTypes'
 
 const SWEEP_INTERVAL_MS = 30 * 60 * 1000
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
-// Normalize local + cloud conversations into SweepConvo for the planner.
-async function loadConvos(): Promise<SweepConvo[]> {
+// Only local recordings have a transcript we can use to decide whether they are empty.
+// The cloud list can omit/redact segments for non-empty conversations (including locked
+// ones), so it must never drive automatic conversation deletion.
+async function loadLocalConvos(): Promise<SweepConvo[]> {
   const out: SweepConvo[] = []
   try {
     const locals = await window.omi.listLocalConversations()
@@ -19,26 +19,11 @@ async function loadConvos(): Promise<SweepConvo[]> {
   } catch (e) {
     console.warn('[retention] local conversations read failed:', (e as Error).message)
   }
-  try {
-    const r = await omiApi.get<CloudConversation[]>('/v1/conversations', {
-      params: { limit: 200, offset: 0 }
-    })
-    const list = Array.isArray(r.data) ? r.data : []
-    for (const c of list) {
-      // Only completed conversations are eligible — never feed a still-`processing`
-      // one to the planner (its transcript_segments may not be filled in yet).
-      if (c.status !== 'completed') continue
-      const text = (c.transcript_segments ?? []).map((s) => s.text).join(' ')
-      out.push({ id: c.id, source: 'cloud', text })
-    }
-  } catch (e) {
-    console.warn('[retention] cloud conversations read failed:', (e as Error).message)
-  }
   return out
 }
 
-// Delete conversations paced under the rate cap (live mode only).
-async function deleteConvosPaced(localIds: string[], cloudIds: string[]): Promise<number> {
+// Delete local recordings paced under the rate cap (live mode only).
+async function deleteConvosPaced(localIds: string[]): Promise<number> {
   let n = 0
   for (const id of localIds) {
     try {
@@ -48,15 +33,6 @@ async function deleteConvosPaced(localIds: string[], cloudIds: string[]): Promis
       console.warn('[retention] local convo delete failed:', id, (e as Error).message)
     }
     await sleep(200)
-  }
-  for (const id of cloudIds) {
-    try {
-      await omiApi.delete(`/v1/conversations/${id}`)
-      n++
-    } catch (e) {
-      console.warn('[retention] cloud convo delete failed:', id, (e as Error).message)
-    }
-    await sleep(1100) // stay under the per-hour cap
   }
   return n
 }
@@ -72,18 +48,18 @@ export async function runRetentionSweep(trigger: SweepTrigger = 'manual'): Promi
   const mode = getPreferences().retentionMode ?? 'dry-run'
   if (mode === 'off' || running) return
   // A scheduled pass only earns its cost in 'live' mode, where it actually deletes
-  // something. In 'dry-run' the entire pass — a full `/v3/memories` page-through plus
-  // 200 conversations — ends at a console.log, and `retentionMode` is optional, so
+  // something. In 'dry-run' the entire pass — a full `/v3/memories` page-through —
+  // ends at a console.log, and `retentionMode` is optional, so
   // EVERY default install was paying that 48x/day to write a line into a DevTools
   // console that is not open. Dry-run is a preview the user asks for (RewindTab's
   // Preview button passes 'manual'), not a background job.
   if (trigger === 'scheduled' && mode !== 'live') return
   running = true
   try {
-    const [convos, memories] = await Promise.all([loadConvos(), fetchAllMemories()])
+    const [convos, memories] = await Promise.all([loadLocalConvos(), fetchAllMemories()])
     const plan = planRetention(convos, memories)
     const counts = {
-      convos: plan.localConvoIds.length + plan.cloudConvoIds.length,
+      convos: plan.localConvoIds.length,
       memories: plan.memoryIds.length
     }
     if (counts.convos === 0 && counts.memories === 0) return
@@ -97,11 +73,13 @@ export async function runRetentionSweep(trigger: SweepTrigger = 'manual'): Promi
       const sampleLines = memories
         .filter((m) => junkSet.has(m.id))
         .slice(0, 25)
-        .map((m, i) => `  ${i + 1}. ${(m.content ?? '(no content)').replace(/\s+/g, ' ').slice(0, 200)}`)
+        .map(
+          (m, i) =>
+            `  ${i + 1}. ${(m.content ?? '(no content)').replace(/\s+/g, ' ').slice(0, 200)}`
+        )
         .join('\n')
       console.log(
-        `[retention] DRY-RUN would remove ${counts.convos} convos ` +
-          `(${plan.localConvoIds.length} local, ${plan.cloudConvoIds.length} cloud), ` +
+        `[retention] DRY-RUN would remove ${counts.convos} local convos, ` +
           `${counts.memories} memories — ` +
           `${memBreakdown.screenSynth} screen-synth, ${memBreakdown.appIndex} app-index, ` +
           `${memBreakdown.meta} meta, ${memBreakdown.duplicate} duplicate\n` +
@@ -111,9 +89,11 @@ export async function runRetentionSweep(trigger: SweepTrigger = 'manual'): Promi
     }
 
     // mode === 'live'
-    const convoN = await deleteConvosPaced(plan.localConvoIds, plan.cloudConvoIds)
+    const convoN = await deleteConvosPaced(plan.localConvoIds)
     const memRes = await deleteMemoriesPaced(plan.memoryIds, () => {})
-    console.log(`[retention] removed ${convoN} convos, ${memRes.deleted} memories (${memRes.failed} failed)`)
+    console.log(
+      `[retention] removed ${convoN} convos, ${memRes.deleted} memories (${memRes.failed} failed)`
+    )
     invalidateConversationsCache()
   } catch (e) {
     console.warn('[retention] sweep failed:', (e as Error).message)

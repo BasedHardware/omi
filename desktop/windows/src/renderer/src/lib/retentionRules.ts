@@ -3,7 +3,7 @@ import { isAppIndexMemory } from './memoryCleanup'
 import { SCREEN_TAG } from './screenTag'
 
 // A conversation normalized for the sweep: its id, where it lives, its kind (local
-// only), and the plain transcript text.
+// only), and the plain transcript text. Cloud entries are never eligible for deletion.
 export type SweepConvo = {
   id: string
   source: 'local' | 'cloud'
@@ -70,7 +70,13 @@ export type RetentionMemoryBreakdown = {
 }
 
 export function memoryJunkBreakdown(memories: Memory[]): RetentionMemoryBreakdown {
-  const b: RetentionMemoryBreakdown = { total: 0, screenSynth: 0, appIndex: 0, meta: 0, duplicate: 0 }
+  const b: RetentionMemoryBreakdown = {
+    total: 0,
+    screenSynth: 0,
+    appIndex: 0,
+    meta: 0,
+    duplicate: 0
+  }
   const seen = new Set<string>()
   for (const m of memories) {
     const content = (m.content ?? '').trim()
@@ -100,27 +106,19 @@ export function memoryJunkBreakdown(memories: Memory[]): RetentionMemoryBreakdow
 
 export type RetentionPlan = {
   localConvoIds: string[]
-  cloudConvoIds: string[]
   memoryIds: string[]
 }
 
 // Decide what to prune. Conservative and source-aware:
 // - LOCAL recordings are THIS app's silence-split fragments, so prune the short
 //   (<5-word) empties; never touch saved chats.
-// - CLOUD conversations are account-wide (could be real short notes from the
-//   user's phone/macOS), so prune only the TRULY empty ones (no transcript at
-//   all) — never merely-short ones. The sweep also only feeds COMPLETED cloud
-//   conversations here (it filters out still-`processing` ones), so an empty one
-//   is genuinely empty, not mid-flight.
+// - CLOUD list transcripts may be hidden or unavailable even when the original
+//   has content. No list response can prove a cloud conversation is safe to delete.
 export function planRetention(convos: SweepConvo[], memories: Memory[]): RetentionPlan {
   const localConvoIds: string[] = []
-  const cloudConvoIds: string[] = []
   for (const c of convos) {
-    if (c.source === 'local') {
-      if (c.kind !== 'chat' && isEmptyConversation(c.text)) localConvoIds.push(c.id)
-    } else if (transcriptWordCount(c.text) === 0) {
-      cloudConvoIds.push(c.id)
-    }
+    if (c.source === 'local' && c.kind !== 'chat' && isEmptyConversation(c.text))
+      localConvoIds.push(c.id)
   }
-  return { localConvoIds, cloudConvoIds, memoryIds: junkMemoryIds(memories) }
+  return { localConvoIds, memoryIds: junkMemoryIds(memories) }
 }
