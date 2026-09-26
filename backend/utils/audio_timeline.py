@@ -485,7 +485,7 @@ class ProviderEpochTranslator:
         on_mapped: Optional[Callable[[], None]] = None,
         on_recover: Optional[Callable[[str], None]] = None,
         on_past_send: Optional[Callable[[Optional[float]], None]] = None,
-        owner_at_send: Optional[Callable[[], Optional[str]]] = None,
+        owner_at_send: Optional[Callable[[int, int], Optional[str]]] = None,
         project_times: bool = True,
     ):
         self.timeline = timeline
@@ -501,8 +501,8 @@ class ProviderEpochTranslator:
         self.provider_label = 'unknown'
         self.send_path = 'unknown'
         self._send_owners: List[Tuple[int, int, Optional[str]]] = []
-        self.last_send_owner: Optional[str] = None
-        self.initial_owner: Optional[str] = None
+        self._only_send_owner: Optional[str] = None
+        self._send_owner_ambiguous = False
 
     def note_accepted(self, capture_start_sample: int, length_samples: int) -> None:
         """Record one accepted send of contiguous capture audio."""
@@ -514,20 +514,24 @@ class ProviderEpochTranslator:
         return self._project_times
 
     def note_accepted_spans(self, spans: Sequence[Tuple[int, int]]) -> None:
-        start = self.send_map.last_provider_sample or 0
-        self.send_map.add_accepted_spans(spans)
-        end = self.send_map.last_provider_sample or start
-        if end > start:
-            owner = self._owner_at_send() if self._owner_at_send is not None else None
-            self.last_send_owner = owner
+        for capture_start, length in spans:
+            if length <= 0:
+                continue
+            start = self.send_map.last_provider_sample or 0
+            self.send_map.add_accepted_spans([(capture_start, length)])
+            end = self.send_map.last_provider_sample or start
+            owner = self._owner_at_send(capture_start, length) if self._owner_at_send is not None else None
+            if self._only_send_owner is None and not self._send_owner_ambiguous:
+                self._only_send_owner = owner
+            if owner is None or owner != self._only_send_owner:
+                self._send_owner_ambiguous = True
             if self._send_owners and self._send_owners[-1][1] == start and self._send_owners[-1][2] == owner:
                 first, _, _ = self._send_owners[-1]
                 self._send_owners[-1] = (first, end, owner)
             else:
                 self._send_owners.append((start, end, owner))
             # Keep owner history bounded even if a session switches recording
-            # generations pathologically often. Older timestamps use the
-            # epoch's last SEND owner and remain explicitly unplaced.
+            # generations pathologically often. Evicted ownership is unknown.
             if len(self._send_owners) > MAX_SEND_SPANS:
                 self._send_owners.pop(0)
 
@@ -535,7 +539,9 @@ class ProviderEpochTranslator:
         for first, end, owner in reversed(self._send_owners):
             if first <= sample < end:
                 return owner
-        return self.last_send_owner or self.initial_owner
+        # A final beyond recorded sends can be attributed only when this
+        # provider epoch sent audio for one and only one proven owner.
+        return None if self._send_owner_ambiguous else self._only_send_owner
 
     def translate(self, segments: List[Dict]) -> List[Dict]:
         """Map provider-relative segment times onto absolute wall seconds.
@@ -658,9 +664,7 @@ class ProviderEpochTranslator:
         segment['start'] = anchor
         segment['end'] = anchor
         segment['_capture_unplaced'] = True
-        segment['_provider_send_owner'] = (
-            segment.get('_provider_send_owner') or self.last_send_owner or self.initial_owner
-        )
+        segment['_provider_send_owner'] = segment.get('_provider_send_owner')
         segment['audio_alignment'] = 'unplaced'
         translated.append(segment)
 
