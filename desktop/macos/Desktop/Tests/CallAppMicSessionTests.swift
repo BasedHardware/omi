@@ -26,6 +26,36 @@ final class CallAudioSessionTrackerTests: XCTestCase {
       browserWindowTitles: titles)
   }
 
+  func testHelperProcessesAreCountedUnderTheirApp() {
+    XCTAssertEqual(CallAudioSessionTracker.appKey("com.hnc.Discord.helper.Renderer"), "com.hnc.discord")
+    XCTAssertEqual(CallAudioSessionTracker.appKey("com.hnc.Discord.helper"), "com.hnc.discord")
+    XCTAssertEqual(CallAudioSessionTracker.appKey("com.example.Around.helper.Renderer"), "com.example.around")
+    XCTAssertEqual(CallAudioSessionTracker.appKey("us.zoom.xos"), "us.zoom.xos")
+    XCTAssertEqual(CallAudioSessionTracker.appKey("com.apple.CoreSpeech"), "com.apple.corespeech")
+
+    // Discord's measured shape: the renderer helper holds mic and speaker, a second helper plays
+    // the leave sound. Both fold into one two-way session under the app.
+    var tracker = CallAudioSessionTracker()
+    func discord(_ rendererIn: Bool, _ rendererOut: Bool, _ helperOut: Bool) -> CallAudioSnapshot {
+      CallAudioSnapshot(
+        processes: [
+          CallAudioProcessSnapshot(
+            bundleID: "com.hnc.Discord.helper.Renderer", pid: 1, isRunningInput: rendererIn,
+            isRunningOutput: rendererOut),
+          CallAudioProcessSnapshot(
+            bundleID: "com.hnc.Discord.helper", pid: 2, isRunningInput: false, isRunningOutput: helperOut),
+        ],
+        defaultInputDeviceID: 1,
+        browserWindowTitles: [])
+    }
+    tracker.ingest(discord(true, true, false), at: at(0))
+    tracker.ingest(discord(true, true, false), at: at(90))
+    tracker.ingest(discord(false, false, true), at: at(91))
+    tracker.ingest(discord(false, false, false), at: at(95))
+    XCTAssertEqual(Set(tracker.counters.keys), ["com.hnc.discord"])
+    XCTAssertEqual(tracker.counters["com.hnc.discord"]?.callLikeSessions, 1)
+  }
+
   private func counters(
     after steps: [(TimeInterval, CallAudioSnapshot)]
   ) -> CallAudioBundleCounters {
@@ -33,7 +63,7 @@ final class CallAudioSessionTrackerTests: XCTestCase {
     for step in steps {
       tracker.ingest(step.1, at: at(step.0))
     }
-    let bundle = steps.compactMap { $0.1.processes.first?.bundleID }.last ?? ""
+    let bundle = steps.compactMap { $0.1.processes.first?.bundleID }.last.map(CallAudioSessionTracker.appKey) ?? ""
     return tracker.counters[bundle] ?? CallAudioBundleCounters()
   }
 

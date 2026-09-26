@@ -1405,6 +1405,36 @@ class AnalyticsManager {
     ));
   }
 
+  /// One terminal outcome for a spoken-reply attempt.
+  ///
+  /// [firstAudioLatencyMs] is the time from `beginResponse` to the first cloud
+  /// or fallback audio start. Registry ints cannot be omitted, so a lifecycle
+  /// that never started audio reports -1.
+  void voiceReplyPlayback({
+    required VoiceReplyPlaybackOutcome outcome,
+    required VoiceReplyPlaybackSkipReason skipReason,
+    required VoiceReplyPlaybackMode mode,
+    required VoiceReplyPlaybackOutputRoute outputRoute,
+    required int chunksRequested,
+    required int chunksPlayed,
+    required int chunksDropped,
+    required VoiceReplyPlaybackFallbackReason fallbackReason,
+    required int firstAudioLatencyMs,
+    required VoiceReplyPlaybackInterruptSource interruptSource,
+  }) =>
+      const TypedEvents().emit(VoiceReplyPlayback(
+        outcome: outcome,
+        skipReason: skipReason,
+        mode: mode,
+        outputRoute: outputRoute,
+        chunksRequested: chunksRequested,
+        chunksPlayed: chunksPlayed,
+        chunksDropped: chunksDropped,
+        fallbackReason: fallbackReason,
+        firstAudioLatencyMs: firstAudioLatencyMs,
+        interruptSource: interruptSource,
+      ));
+
   // Conversation Merge Events
   void conversationMergeSelectionModeEntered() =>
       const TypedEvents().emit(const ConversationMergeSelectionModeEntered());

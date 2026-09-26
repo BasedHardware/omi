@@ -972,6 +972,53 @@ async def test_transcript_delivery_does_not_read_a_boolean_started_at_as_a_1970_
 
 
 @pytest.mark.anyio
+async def test_process_loop_dispatches_v2_batches_before_the_first_audio_guard():
+    """Pre-audio segments/photos must reach `_process_v2_batches`, which has its own
+    re-queue and photo-only-drain handling, instead of being silently dropped by the
+    legacy `first_audio_byte_timestamp` guard running first."""
+    calls = []
+
+    async def fake_process_v2_batches(segments, photos, _diarized):
+        calls.append((list(segments), list(photos)))
+
+    call_count = 0
+
+    async def wait(_seconds):
+        nonlocal call_count
+        call_count += 1
+        if call_count >= 2:
+            state.active = False
+        return False
+
+    async def no_op(*_args, **_kwargs):
+        return None
+
+    state = SimpleNamespace(
+        active=True,
+        capture_timeline_v2=True,
+        first_audio_byte_timestamp=None,
+        speaker_map_dirty=False,
+        current_conversation_id='conversation-1',
+    )
+    host = SimpleNamespace(
+        state=state,
+        wait=wait,
+        request=SimpleNamespace(uid='user-1'),
+        speakers=SimpleNamespace(tasks=set(), drain=no_op),
+    )
+    processor = object.__new__(TranscriptProcessor)
+    processor.host = host
+    processor.segment_buffer = deque([{'id': 'segment-1', 'text': 'Hello', 'start': 0.0, 'end': 0.5}])
+    processor.photo_buffer = deque(['photo-1'])
+    processor._process_v2_batches = fake_process_v2_batches
+    processor.flush_speaker_assignments = AsyncMock()
+
+    await asyncio.wait_for(processor.process_loop(), timeout=1.0)
+
+    assert calls == [([{'id': 'segment-1', 'text': 'Hello', 'start': 0.0, 'end': 0.5}], ['photo-1'])]
+
+
+@pytest.mark.anyio
 async def test_transcript_loop_still_flushes_speaker_assignments_when_the_client_socket_is_closed(monkeypatch):
     """A send after close must not kill the loop before its final speaker flush.
 

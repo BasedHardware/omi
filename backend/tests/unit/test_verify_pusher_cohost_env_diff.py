@@ -53,6 +53,18 @@ def test_preflight_passes_on_good_fixture(gate: SimpleNamespace, chart_fixture: 
     assert gate.validate_preflight(chart_fixture) == []
 
 
+def test_dev_shadow_scope_rejects_a_different_uid(gate: SimpleNamespace, chart_fixture: Path) -> None:
+    values = chart_fixture / "backend/charts/pusher/dev_omi_pusher_values.yaml"
+    replace_once(
+        values,
+        '  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST\n    value: "omi-release-probe"\n',
+        '  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST\n    value: "other-user"\n',
+    )
+    assert any(
+        'shadow scope TRANSCRIPTION_SHADOW_UID_ALLOWLIST' in error for error in gate.validate_preflight(chart_fixture)
+    )
+
+
 def test_cli_passes_on_repo_root(gate: SimpleNamespace) -> None:
     assert gate.main(["--root", str(REPO_ROOT)]) == 0
 

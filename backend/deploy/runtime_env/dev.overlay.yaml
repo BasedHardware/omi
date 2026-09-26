@@ -8,6 +8,21 @@ overlay:
   gke:
     backend-listen:
       env:
+        TRANSCRIPTION_SHADOW_ENABLED:
+          value: 'false'
+          category: rollout
+        TRANSCRIPTION_SHADOW_KILL_SWITCH:
+          value: 'false'
+          category: rollout
+        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+          value: ''
+          category: rollout
+        TRANSCRIPTION_SHADOW_PERCENT:
+          value: '0'
+          category: rollout
+        TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+          value: '0'
+          category: rollout
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
         FREE_TIER_LOCAL_PROCESSING:
@@ -74,6 +89,21 @@ overlay:
           category: rollout
     pusher:
       env:
+        TRANSCRIPTION_SHADOW_ENABLED:
+          value: 'true'
+          category: rollout
+        TRANSCRIPTION_SHADOW_KILL_SWITCH:
+          value: 'false'
+          category: rollout
+        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+          value: omi-release-probe
+          category: rollout
+        TRANSCRIPTION_SHADOW_PERCENT:
+          value: '0'
+          category: rollout
+        TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+          value: '1'
+          category: rollout
         FREE_TIER_LOCAL_PROCESSING:
           value: 'true'
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -398,6 +428,21 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          TRANSCRIPTION_SHADOW_ENABLED:
+            value: 'false'
+            category: rollout
+          TRANSCRIPTION_SHADOW_KILL_SWITCH:
+            value: 'false'
+            category: rollout
+          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+            value: ''
+            category: rollout
+          TRANSCRIPTION_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+            value: '0'
+            category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:

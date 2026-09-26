@@ -266,7 +266,7 @@ def perform_merge_async(
         # into None.
         created_at = sorted_convs[0].get("created_at") or datetime.now(timezone.utc)
         started_at = sorted_convs[0].get("started_at")
-        finished_at = max((c.get("finished_at") or _UTC_MIN) for c in sorted_convs)
+        finished_at = _resolve_merged_finished_at(sorted_convs)
         language = sorted_convs[0].get("language", "en")
         source = sorted_convs[0].get("source", "omi")
 
@@ -432,13 +432,17 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
     cumulative_offset = 0.0
 
     for i, conv in enumerate(conversations):
-        segments = conv.get("transcript_segments", [])
+        # `.get(key, [])`/`.get(key, 0)` only fall back when the key is absent.
+        # A doc persisted with an explicit `transcript_segments: None` (or a
+        # segment with an explicit `start`/`end: None`) still returns None here,
+        # which crashes the list comprehension / arithmetic below.
+        segments = conv.get("transcript_segments") or []
 
         if i == 0:
             # First conversation - use segments as-is
             merged.extend([copy.deepcopy(s) for s in segments])
             if segments:
-                cumulative_offset = max(s.get("end", 0) for s in segments)
+                cumulative_offset = max((s.get("end") or 0) for s in segments)
             elif conv.get("finished_at") and conv.get("started_at"):
                 cumulative_offset = (conv["finished_at"] - conv["started_at"]).total_seconds()
         else:
@@ -455,18 +459,30 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
             # Adjust timestamps for this conversation's segments
             for seg in segments:
                 seg_copy = copy.deepcopy(seg)
-                seg_copy["start"] = seg.get("start", 0) + offset
-                seg_copy["end"] = seg.get("end", 0) + offset
+                seg_copy["start"] = (seg.get("start") or 0) + offset
+                seg_copy["end"] = (seg.get("end") or 0) + offset
                 merged.append(seg_copy)
 
             # Update cumulative offset for next conversation
             if segments:
-                cumulative_offset = offset + max(s.get("end", 0) for s in segments)
+                cumulative_offset = offset + max((s.get("end") or 0) for s in segments)
             elif conv.get("finished_at") and conv.get("started_at"):
                 duration = (conv["finished_at"] - conv["started_at"]).total_seconds()
                 cumulative_offset = offset + duration
 
     return merged
+
+
+def _resolve_merged_finished_at(sorted_convs: List[Dict]) -> Optional[datetime]:
+    """Return the latest real ``finished_at`` among sources, or None if none has one.
+
+    ``max(c.get("finished_at") or _UTC_MIN for c in sorted_convs)`` used to leak
+    the ``_UTC_MIN`` (year 0001) sentinel straight into the merged conversation's
+    ``finished_at`` field whenever every source had ``finished_at: None`` — the
+    sentinel exists to keep comparisons total, not to become persisted data.
+    """
+    candidates = [c.get("finished_at") for c in sorted_convs if c.get("finished_at")]
+    return max(candidates) if candidates else None
 
 
 def _collect_all_photos(uid: str, conversations: List[Dict]) -> List[Dict]:
