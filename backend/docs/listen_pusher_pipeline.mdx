@@ -959,10 +959,26 @@ Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher b
 ### Audio timeline v2 (AUDIO_TIMELINE_V2, dev-only until promoted)
 
 The flag-off capture clock exposes `omi_audio_timeline_segments_total{mode="legacy",outcome="mapped|rejected"}`
-for the accepted-send denominator and `omi_audio_timeline_rejects_total{mode="legacy|v2",reason="..."}`
-for bounded reject reasons. These counts contain no user or session labels. A
-mapped legacy segment retains its provider-native persisted timestamps; the
-mapping only attaches a private capture window for live speaker identification.
+for the accepted-send denominator and `omi_audio_timeline_rejects_total{mode="legacy|v2",reason="...",provider="..."}`
+for bounded reject reasons. `omi_audio_timeline_mapped_total{mode="legacy|v2",provider="..."}`
+attributes successful mappings to the same closed provider set (Modulate,
+Soniox, Deepgram, Parakeet, unknown). Callback failures are separate batch
+events in `omi_audio_timeline_callback_errors_total`; they do not inflate the
+segment reject denominator. These counts contain no user or session labels.
+A mapped legacy segment follows the existing v1 timestamp path, including the
+active gate's remap for non-passthrough providers; the mapping only attaches a
+private capture window for live speaker identification.
+
+V2 keeps every emitted provider segment as text. Intervals crossing a VAD
+discontinuity, missing their owner, or arriving after owner closure are retained
+as `audio_alignment=unplaced` on the active conversation. Their persisted
+`start=end=-1` cannot resolve to a v2 audio span in released clients, which
+seek by `start` alone. They are excluded from clip and speaker embedding work.
+Mapped rows retain their accepted capture-run start for live merging; rows
+across a skipped VAD gap stay separate so merging cannot invent a wider window.
+The expected remaining speaker-recognition gap is the fraction of segments
+without a proven capture window; production per-reason and per-provider counts
+are still needed to size that gap before any v2 production flag change.
 
 `AUDIO_TIMELINE_V2` admits **new eligible recordings only**: single-channel,
 server-STT live capture on a fresh conversation. Existing sockets, resumed v1
@@ -992,12 +1008,16 @@ send-path failover — gets its own epoch translator created at callback
 creation. Sockets record only sends the provider accepted (pre-roll spans
 included through the VAD gate; SafeDeepgram keepalives are never audio);
 provider timestamps map through those spans to capture samples, then to the
-wall axis, before `_enqueue_stt_segments`. Out-of-range, evicted,
-straddling-generation, degenerate (`start >= end`, e.g. Modulate partials)
-and collapsed intervals are dropped and counted — with bounded reasons
-(`outside_accepted_sends`, `evicted_interval`, `zero_length`,
-`collapsed_interval`) — never clamped onto a neighboring epoch or replayed
-into a newer conversation. Two *different* provider times never clamp onto
+wall axis, before `_enqueue_stt_segments`. A zero-duration provider point
+inside an accepted send gets a one-sample capture window and a `recovered`
+counter. Out-of-range, evicted, reversed and collapsed intervals retain
+their transcript text at a zero-duration capture anchor with persisted
+`audio_alignment: unplaced`; they carry no speaker-ID window and cannot
+qualify for an audio-backed speaker prompt. `rejected` and `unplaced` count
+these cases, with bounded reasons (`outside_accepted_sends`,
+`evicted_interval`, `zero_length`, `collapsed_interval`). The clock never
+clamps them onto a neighboring epoch. Straddling-generation segments still
+follow the owner fence. Two *different* provider times never clamp onto
 one capture sample: the send map's edge tolerance accepts a single endpoint
 overshoot past a span end (the provider's tail buffering), but an interval
 that would collapse to one point fails closed instead of fabricating a

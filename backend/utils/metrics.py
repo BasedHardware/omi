@@ -103,7 +103,7 @@ OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL = Counter(
 
 # Audio-timeline v2 observability. Labels are bounded and never carry UID,
 # conversation id, or any transcript/audio content. mode=legacy|v2;
-# segments outcome=mapped|rejected|straddled|late_owner_dropped;
+# segments outcome=mapped|rejected|recovered|unplaced|straddled|late_owner_dropped;
 # coverage outcome is the 3.4 vocabulary covered|missing|pending_upload|no_audio|unsupported.
 OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL = Counter(
     'omi_audio_timeline_segments_total',
@@ -119,6 +119,7 @@ AUDIO_TIMELINE_REJECT_REASONS = (
     'zero_length',
     'outside_accepted_sends',
     'collapsed_interval',
+    'discontinuous_interval',
     'evicted_interval',
     'callback_error',
     'other',
@@ -126,8 +127,25 @@ AUDIO_TIMELINE_REJECT_REASONS = (
 OMI_AUDIO_TIMELINE_REJECTS_TOTAL = Counter(
     'omi_audio_timeline_rejects_total',
     'Provider epoch translation rejects by bounded reason',
-    ['mode', 'reason'],
+    ['mode', 'reason', 'provider'],
 )
+OMI_AUDIO_TIMELINE_MAPPED_TOTAL = Counter(
+    'omi_audio_timeline_mapped_total',
+    'Mapped provider intervals by bounded adapter',
+    ['mode', 'provider'],
+)
+OMI_AUDIO_TIMELINE_CALLBACK_ERRORS_TOTAL = Counter(
+    'omi_audio_timeline_callback_errors_total',
+    'Deferred provider callback failures by bounded adapter',
+    ['mode', 'provider'],
+)
+AUDIO_TIMELINE_PROVIDERS = ('modulate', 'soniox', 'deepgram', 'parakeet', 'unknown')
+
+
+def audio_timeline_provider_label(provider: str | None) -> str:
+    return provider if provider in AUDIO_TIMELINE_PROVIDERS else 'unknown'
+
+
 OMI_AUDIO_TIMELINE_COVERAGE_TOTAL = Counter(
     'omi_audio_timeline_coverage_total',
     'Audio-linked coverage checks observed at bounded reconciliation points',
@@ -141,9 +159,12 @@ OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL = Counter(
     'v2 audio frames dropped because an already-accepted range holds different bytes',
 )
 for _mode in ('legacy', 'v2'):
-    for _reason in AUDIO_TIMELINE_REJECT_REASONS:
-        OMI_AUDIO_TIMELINE_REJECTS_TOTAL.labels(mode=_mode, reason=_reason)
-    for _outcome in ('mapped', 'rejected', 'straddled', 'late_owner_dropped'):
+    for _provider in AUDIO_TIMELINE_PROVIDERS:
+        OMI_AUDIO_TIMELINE_MAPPED_TOTAL.labels(mode=_mode, provider=_provider)
+        OMI_AUDIO_TIMELINE_CALLBACK_ERRORS_TOTAL.labels(mode=_mode, provider=_provider)
+        for _reason in AUDIO_TIMELINE_REJECT_REASONS:
+            OMI_AUDIO_TIMELINE_REJECTS_TOTAL.labels(mode=_mode, reason=_reason, provider=_provider)
+    for _outcome in ('mapped', 'rejected', 'recovered', 'unplaced', 'straddled', 'late_owner_dropped'):
         OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode=_mode, outcome=_outcome)
     for _outcome in ('covered', 'missing', 'pending_upload', 'no_audio', 'unsupported'):
         OMI_AUDIO_TIMELINE_COVERAGE_TOTAL.labels(mode=_mode, outcome=_outcome)

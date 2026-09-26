@@ -24,6 +24,7 @@ from models.message_event import (
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment, Translation
 from routers.listen.contracts import persisted_started_seconds
 from utils.app_integrations import trigger_realtime_integrations
+from utils.audio_timeline import UNPLACED_SEGMENT_OFFSET
 from utils.conversations.factory import deserialize_conversation
 from utils.metrics import OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL
 from utils.observability.fallback import record_fallback
@@ -122,6 +123,10 @@ class TranscriptProcessor:
         return data
 
     def enqueue(self, segments: List[Dict[str, Any]]) -> None:
+        if getattr(self.host.state, 'capture_timeline_v2', False) and self.segment_buffer.maxlen is not None:
+            # deque(maxlen=...) silently discards old provider text on
+            # overflow. V2 retains it and lets the persistence loop drain.
+            self.segment_buffer = deque(self.segment_buffer)
         self.segment_buffer.extend(segments)
 
     async def _on_translation_ready(
@@ -417,6 +422,7 @@ class TranscriptProcessor:
                 abs_end = raw.pop('_capture_abs_end', None)
                 if abs_start is not None and abs_end is not None:
                     capture_windows[cast(str, raw.get('id'))] = (float(abs_start), float(abs_end))
+            missing_capture_windows = any(raw.get('_capture_window_unavailable') for raw in raw_segments)
             data = await self.cache.get(self.host.state.current_conversation_id)
             if not data:
                 continue
@@ -485,7 +491,7 @@ class TranscriptProcessor:
                 updated,
                 self.host.state.first_audio_byte_timestamp - offset,
                 capture_windows=capture_windows,
-                queue_from_raw=raw_segments if capture_windows else None,
+                queue_from_raw=raw_segments if capture_windows or missing_capture_windows else None,
             )
         if self.host.speakers.tasks:
             try:
@@ -508,6 +514,17 @@ class TranscriptProcessor:
                 },
             )
 
+    def _reroute_unplaced(self, segments: List[Dict[str, Any]], *, base: float = 0.0) -> None:
+        """Retain late text on the current generation without claiming audio."""
+        for raw in segments:
+            raw['start'] = float(raw['start']) + base
+            raw['end'] = raw['start']
+            raw['audio_alignment'] = 'unplaced'
+            raw.pop('audio_capture_run', None)
+            raw['_conversation_id'] = self.host.state.current_conversation_id
+            self.segment_buffer.append(raw)
+            OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='unplaced').inc()
+
     async def _process_v2_batches(
         self,
         raw_segments: List[Dict[str, Any]],
@@ -521,8 +538,8 @@ class TranscriptProcessor:
         generation gets the full live path (persist, deliver, translate,
         speaker detection) with offsets projected against the conversation's
         pinned first-audio origin; a late batch whose owner is still open is
-        written to that owner, while a terminal owner is fenced out and
-        counted instead of being replayed into a newer conversation.
+        written to that owner, while a terminal owner is fenced out and its
+        text is explicitly unplaced on the active conversation.
 
         Late-but-open owners are **persist-only**: their segments are written
         and speaker-detected on the row that owns them, but WebSocket
@@ -542,7 +559,7 @@ class TranscriptProcessor:
         for raw in raw_segments:
             owner = raw.pop('_conversation_id', None) or state.current_conversation_id
             if not owner:
-                OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='late_owner_dropped').inc()
+                self.segment_buffer.append(raw)
                 continue
             if owner not in groups:
                 groups[owner] = []
@@ -566,7 +583,7 @@ class TranscriptProcessor:
                     for segment in reversed(segments):
                         self.segment_buffer.appendleft(segment)
                 else:
-                    OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='late_owner_dropped').inc()
+                    self._reroute_unplaced(segments)
                 continue
             marker = data.get('audio_timeline')
             pinned = isinstance(marker, dict) and marker.get('version') == 2
@@ -575,7 +592,7 @@ class TranscriptProcessor:
             if pinned:
                 started_ts = persisted_started_seconds(data.get('started_at'))
                 if started_ts is None:
-                    OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='late_owner_dropped').inc()
+                    self._reroute_unplaced(segments)
                     continue
                 pin_started_at: Optional[datetime] = None
                 pin_marker: Optional[Dict[str, Any]] = None
@@ -616,12 +633,12 @@ class TranscriptProcessor:
                     for segment in reversed(segments):
                         self.segment_buffer.appendleft(segment)
                     continue
-                OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='late_owner_dropped').inc()
+                self._reroute_unplaced(segments)
                 continue
             if not is_current and data.get('status') != 'in_progress':
                 # Terminal or processing generation: a late old-provider
                 # callback must not reopen it.
-                OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='late_owner_dropped').inc()
+                self._reroute_unplaced(segments)
                 continue
 
             finished_at = datetime.now(timezone.utc)
@@ -633,6 +650,11 @@ class TranscriptProcessor:
                     self.speaker_id_allocator.assign(raw)
                     raw['start'] = float(raw['start']) - started_ts
                     raw['end'] = float(raw['end']) - started_ts
+                    if raw.get('audio_alignment') == 'unplaced':
+                        # Released Flutter/macOS clients seek by start alone.
+                        # V2 capture spans begin at >=0, so this offset cannot
+                        # resolve to audio even when the marker is invisible.
+                        raw['start'] = raw['end'] = UNPLACED_SEGMENT_OFFSET
                     segment = TranscriptSegment(**raw, speech_profile_processed=True)
                     if (
                         self.host.onboarding_handler is not None
@@ -659,7 +681,7 @@ class TranscriptProcessor:
             )
             if result is None:
                 if not is_current:
-                    OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='late_owner_dropped').inc()
+                    self._reroute_unplaced(segments, base=started_ts)
                     continue
                 await self.host.conversations.create_new_in_progress_conversation(rollover=True)
                 result = await self._write_fresh(
@@ -674,6 +696,7 @@ class TranscriptProcessor:
                     log=logger,
                 )
             if not result or not result[0]:
+                self._reroute_unplaced(segments, base=started_ts)
                 continue
             conversation, updated, removed = result
             if removed:
@@ -682,7 +705,11 @@ class TranscriptProcessor:
                 continue
             if is_current:
                 await self._deliver_live_updates(conversation, updated, removed, new_segments, owner)
-            await self._speaker_detection(updated, started_ts)
+            await self._speaker_detection(
+                updated,
+                started_ts,
+                queue_from_raw=segments,
+            )
 
     async def _write_fresh(
         self,
@@ -759,6 +786,8 @@ class TranscriptProcessor:
                 has_person_embeddings=bool(speaker.person_embeddings),
                 speaker_already_mapped=segment.speaker_id in speaker.speaker_to_person,
             ):
+                if segment.audio_alignment == 'unplaced':
+                    continue
                 window = (capture_windows or {}).get(segment_id)
                 if window is not None:
                     abs_start, abs_end = window
@@ -829,6 +858,8 @@ class TranscriptProcessor:
     ) -> None:
         speaker = self.host.speakers
         for raw in raw_segments:
+            if raw.get('audio_alignment') == 'unplaced' or raw.get('_capture_window_unavailable'):
+                continue
             if should_skip_speaker_detection(
                 person_id=raw.get('person_id'),
                 is_user=raw.get('is_user', False),

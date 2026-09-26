@@ -35,6 +35,7 @@ import pytest
 import routers.listen.receiver as receiver_module
 from database import conversations as conversations_db
 from routers.listen.contracts import ListenSessionState
+from routers.listen.conversations import LiveConversationController
 from routers.listen.receiver import ListenReceiver
 from routers.listen.transcripts import ConversationCache, TranscriptProcessor
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -231,7 +232,7 @@ async def test_late_final_resolves_owner_after_thirty_seconds(monkeypatch):
     assert len(receiver.collected) == 1
     assert receiver.collected[0]['_conversation_id'] == 'conv-r3'
 
-    # A segment straddling the A→B boundary is still dropped (fail closed).
+    # A segment straddling A→B keeps its text on B without an audio claim.
     receiver.collected.clear()
     receiver._enqueue_translated_segments(
         [
@@ -247,7 +248,9 @@ async def test_late_final_resolves_owner_after_thirty_seconds(monkeypatch):
             }
         ]
     )
-    assert receiver.collected == []
+    assert [segment['text'] for segment in receiver.collected] == ['straddle']
+    assert receiver.collected[0]['_conversation_id'] == 'conv-b'
+    assert receiver.collected[0]['audio_alignment'] == 'unplaced'
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +292,9 @@ def test_translator_rejects_evicted_interval_segments():
     assert timeline.compacted_below_sample is not None and timeline.compacted_below_sample > old_start
 
     out = translator.translate([{'id': 'old', 'start': 0.0, 'end': 1.0, 'text': 'x'}])
-    assert out == []
+    assert [segment['text'] for segment in out] == ['x']
+    assert out[0]['audio_alignment'] == 'unplaced'
+    assert out[0]['start'] == out[0]['end'] == timeline.wall(timeline.next_sample)
     assert translator.rejected_segments == 1
 
 
@@ -428,7 +433,6 @@ async def test_resumed_v1_row_is_never_marked_v2(monkeypatch):
 
 async def test_resumed_row_with_string_started_at_adopts_it(monkeypatch):
     from routers.listen.contracts import ConversationCaptureOrigin
-    from routers.listen.conversations import LiveConversationController
 
     # The controller's adopt path parses the ISO string instead of falling
     # through to a fresh pin.
@@ -540,3 +544,29 @@ async def test_fresh_v2_row_still_pins_marker(monkeypatch):
     row = store.rows[('users', UID, 'conversations', 'conv-fresh')]
     assert row.get('audio_timeline') == {'version': 2}
     assert row['started_at'].timestamp() == pytest.approx(T0 + 1.0)
+
+
+async def test_terminal_owner_final_is_persisted_as_unplaced_current_text(monkeypatch):
+    from routers.listen.contracts import ConversationCaptureOrigin
+
+    store = StrictFirestore()
+    old = _seed_row(store, 'conv-old', started_at=datetime.fromtimestamp(T0 - 60, tz=timezone.utc), status='completed')
+    old['audio_timeline'] = {'version': 2}
+    _seed_row(store, 'conv-current', started_at=datetime.fromtimestamp(T0 - 5, tz=timezone.utc))
+    processor, _ = _processor(monkeypatch, store, current='conv-current')
+    processor.host.state.conversation_capture_origins['conv-current'] = ConversationCaptureOrigin(T0, pinnable=True)
+
+    await processor._process_v2_batches([_v2_segment('late', T0 - 59, T0 - 58, 'conv-old', text='late final')], [], {})
+    pending = list(processor.segment_buffer)
+    processor.segment_buffer.clear()
+    assert [segment['text'] for segment in pending] == ['late final']
+    assert pending[0]['audio_alignment'] == 'unplaced'
+    await processor._process_v2_batches(pending, [], {})
+
+    current = store.rows[('users', UID, 'conversations', 'conv-current')]
+    stored = conversations_db._decode_transcript_segments_strict(
+        UID, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
+    )
+    assert [(segment['text'], segment['start'], segment['end'], segment['audio_alignment']) for segment in stored] == [
+        ('late final', -1.0, -1.0, 'unplaced')
+    ]
