@@ -103,6 +103,9 @@ def _stub_modules_for(app_main: Path):
     fastapi.Request = object
     fastapi.Query = lambda default=None, **kw: default
     fastapi.Form = lambda default=None, **kw: default
+    # ms365 gates /tools/{tool_name} with dependencies=[Depends(...)]; the stub
+    # decorators ignore keyword arguments, so Depends only has to exist.
+    fastapi.Depends = lambda dependency=None, **kw: dependency
     fastapi.HTTPException = type('HTTPException', (Exception,), {'status_code': 500, 'detail': ''})
     responses = types.ModuleType('fastapi.responses')
     responses.HTMLResponse = lambda content=None, **kw: content

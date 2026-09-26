@@ -1410,6 +1410,11 @@ checks:
     triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "twitter_api_request returns None on a failed token refresh or request exception; the chat tools called .get on it, so users saw \"'NoneType' object has no attribute 'get'\", and unlike/delete guarded with `if result and` so a failed call still reported the tweet as unliked or deleted"
+  - id: ms365-tools-auth-tests
+    command: ["python3", "plugins/omi-ms365-app/test_ms365_tools_auth.py"]
+    triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "POST /tools/{tool_name} in omi-ms365-app reads uid from the request body and acts on that user's stored Microsoft Graph token - reading and sending their mail, their Teams chats and their OneDrive files - so the shared-secret guard must fail closed when unconfigured, reject missing, wrong and non-Bearer tokens, and stay wired to the chat-tool route"
   - id: ms365-tool-dispatch-tests
     command: ["python3", "plugins/omi-ms365-app/test_tool_dispatch.py"]
     triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
