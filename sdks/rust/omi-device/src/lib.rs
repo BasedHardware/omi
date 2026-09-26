@@ -382,7 +382,14 @@ impl<E: fmt::Display> fmt::Display for OmiError<E> {
     }
 }
 
-impl<E: Error + 'static> Error for OmiError<E> {}
+impl<E: Error + 'static> Error for OmiError<E> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Transport(error) => Some(error),
+            Self::Protocol(error) => Some(error),
+        }
+    }
+}
 
 impl<E> From<ProtocolError> for OmiError<E> {
     fn from(error: ProtocolError) -> Self {
@@ -589,5 +596,22 @@ mod tests {
         payload[RING_AUDIO_PAYLOAD_SIZE - 3] = 2;
         payload[RING_AUDIO_PAYLOAD_SIZE - 2..].copy_from_slice(&[7, 8]);
         assert!(audio_frames(&payload).is_empty());
+    }
+
+    #[test]
+    fn exposes_underlying_causes_through_error_source() {
+        let transport_err: OmiError<TestError> = OmiError::Transport(TestError);
+        let dyn_err: &dyn Error = &transport_err;
+        assert!(dyn_err.source().is_some());
+        assert!(dyn_err.source().unwrap().is::<TestError>());
+
+        let protocol_err: OmiError<TestError> = OmiError::Protocol(ProtocolError::Truncated {
+            message: "test",
+            expected: 4,
+            actual: 2,
+        });
+        let dyn_err: &dyn Error = &protocol_err;
+        assert!(dyn_err.source().is_some());
+        assert!(dyn_err.source().unwrap().is::<ProtocolError>());
     }
 }
