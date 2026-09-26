@@ -423,11 +423,7 @@ def _invoke_tool(conversation_tools_module, tool, arguments: dict, *, config: di
         conversation_tools_module.agent_config_context.reset(token)
 
 
-def test_feature_gate_requires_uid_scoped_request_opt_in(
-    conversation_tools_module, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv(_jit_module().JIT_CONVERSATION_RETRIEVAL_ENV, "true")
-
+def test_feature_gate_requires_uid_scoped_request_opt_in(conversation_tools_module) -> None:
     assert conversation_tools_module.is_jit_conversation_retrieval_enabled({}) is False
     assert conversation_tools_module.is_jit_conversation_retrieval_enabled({"user_id": "jit-user-001"}) is False
     assert (
@@ -459,18 +455,9 @@ def test_feature_gate_requires_uid_scoped_request_opt_in(
     )
 
 
-def test_feature_gate_never_activates_from_process_environment_alone(
-    conversation_tools_module, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv(_jit_module().JIT_CONVERSATION_RETRIEVAL_ENV, "true")
-
-    assert conversation_tools_module.is_jit_conversation_retrieval_enabled({"user_id": "jit-user-001"}) is False
-
-
-def test_gate_off_preserves_legacy_get_tool_path(conversation_tools_module, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gate_off_preserves_legacy_get_tool_path(conversation_tools_module) -> None:
     """Without an explicit opt-in, the released formatter and deserializer remain authoritative."""
 
-    monkeypatch.delenv(_jit_module().JIT_CONVERSATION_RETRIEVAL_ENV, raising=False)
     raw = _conversation_fixture()
     conversation_tools_module.conversations_db.get_conversations = MagicMock(return_value=[raw])
     legacy_conversation = types.SimpleNamespace(transcript_segments=[], model_dump=lambda: {"id": raw["id"]})

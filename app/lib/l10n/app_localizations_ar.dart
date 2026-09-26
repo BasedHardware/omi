@@ -2447,12 +2447,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get detailedDiagnosticMessages => 'رسائل تشخيصية مفصلة';
 
   @override
-  String get autoCreateSpeakers => 'إنشاء المتحدثين تلقائيًا';
-
-  @override
-  String get autoCreateWhenNameDetected => 'إنشاء تلقائي عند اكتشاف الاسم';
-
-  @override
   String get followUpQuestions => 'أسئلة المتابعة';
 
   @override
@@ -11066,9 +11060,6 @@ class AppLocalizationsAr extends AppLocalizations {
       'النسخ غير متوفر حاليًا، يستمر التسجيل على الجهاز وستتم المعالجة لاحقًا';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'النسخ غير متوفر · يتم الحفظ على الجهاز';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'نسخ معلّق $pending/$total';
   }
@@ -11121,6 +11112,44 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'صوت القلادة لا يصل إلى التطبيق — انقر للإصلاح';
+
+  @override
+  String get captureNotTranscribing => 'لا يتم النسخ';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'تم حفظ الصوت، وسيُنسخ لاحقًا';
+
+  @override
+  String get captureStillRecording => 'لا يزال التسجيل جاريًا';
+
+  @override
+  String get captureMicInUseElsewhere => 'الميكروفون قيد الاستخدام في تطبيق آخر';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'أخذت مكالمة أو تطبيق آخر الميكروفون، لذلك لا يستطيع Omi السماع الآن. سيستأنف Omi تلقائيًا عندما يصبح الميكروفون متاحًا. كل ما سُجّل قبل ذلك محفوظ.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'تعذّر الوصول إلى خدمة تحويل الكلام إلى نص المخصصة. يحتفظ Omi بالصوت على هذا الهاتف ويرسله عند عودة الخدمة. لن يضيع شيء.';
+
+  @override
+  String get captureStarting => 'جارٍ البدء…';
+
+  @override
+  String get capturePhoneStorageFull => 'مساحة الهاتف ممتلئة';
+
+  @override
+  String get captureStorageAlmostFull => 'المساحة ممتلئة تقريبًا';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'فقد القلادة اتصالها بهذا الهاتف. سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة. كل ما سُجّل قبل ذلك محفوظ.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name وآخرون';
+  }
 
   @override
   String get goodMorning => 'صباح الخير';

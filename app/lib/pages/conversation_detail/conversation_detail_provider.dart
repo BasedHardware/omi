@@ -741,6 +741,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         folderId: _cachedConversation!.folderId,
         visibility: _cachedConversation!.visibility,
         captureGroup: _cachedConversation!.captureGroup,
+        speakerResolution: _cachedConversation!.speakerResolution,
       );
       _cachedConversation = updatedConversation;
       conversationProvider?.updateConversation(updatedConversation);

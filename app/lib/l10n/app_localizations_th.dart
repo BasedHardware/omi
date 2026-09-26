@@ -2451,12 +2451,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get detailedDiagnosticMessages => 'ข้อความวินิจฉัยโดยละเอียด';
 
   @override
-  String get autoCreateSpeakers => 'สร้างผู้พูดอัตโนมัติ';
-
-  @override
-  String get autoCreateWhenNameDetected => 'สร้างอัตโนมัติเมื่อตรวจพบชื่อ';
-
-  @override
   String get followUpQuestions => 'คำถามติดตาม';
 
   @override
@@ -11071,9 +11065,6 @@ class AppLocalizationsTh extends AppLocalizations {
       'การถอดเสียงไม่พร้อมใช้งาน การบันทึกยังดำเนินต่อในอุปกรณ์และจะประมวลผลในภายหลัง';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'การถอดเสียงไม่พร้อมใช้งาน · กำลังบันทึกในอุปกรณ์';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'การถอดเสียงที่รออยู่ $pending/$total';
   }
@@ -11126,6 +11117,44 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'เสียงจากจี้ไม่ถึงแอป — แตะเพื่อซ่อมแซม';
+
+  @override
+  String get captureNotTranscribing => 'ไม่ได้ถอดความ';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'บันทึกเสียงแล้ว จะถอดความภายหลัง';
+
+  @override
+  String get captureStillRecording => 'ยังบันทึกอยู่';
+
+  @override
+  String get captureMicInUseElsewhere => 'แอปอื่นกำลังใช้ไมค์';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'มีสายโทรเข้าหรือแอปอื่นใช้ไมโครโฟนอยู่ Omi จึงยังไม่ได้ยินในตอนนี้ Omi จะกลับมาทำงานเองเมื่อไมโครโฟนว่าง ทุกอย่างที่บันทึกไว้ก่อนหน้านี้ปลอดภัย';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'ไม่สามารถเชื่อมต่อบริการแปลงเสียงเป็นข้อความที่คุณกำหนดเองได้ Omi จะเก็บเสียงไว้ในโทรศัพท์เครื่องนี้และส่งเมื่อบริการกลับมา ไม่มีอะไรสูญหาย';
+
+  @override
+  String get captureStarting => 'กำลังเริ่ม…';
+
+  @override
+  String get capturePhoneStorageFull => 'พื้นที่โทรศัพท์เต็ม';
+
+  @override
+  String get captureStorageAlmostFull => 'พื้นที่ใกล้เต็ม';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'จี้ของคุณขาดการเชื่อมต่อกับโทรศัพท์เครื่องนี้ Omi จะเชื่อมต่อใหม่เองเมื่อจี้เปิดอยู่และอยู่ใกล้ ทุกอย่างที่บันทึกไว้ก่อนหน้านี้ปลอดภัย';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name และคนอื่นๆ';
+  }
 
   @override
   String get goodMorning => 'สวัสดีตอนเช้า';

@@ -115,12 +115,19 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     Navigator.of(context).pop();
   }
 
-  /// The live page's state, resolved exactly as the conversation list's capture card resolves it
-  /// (`liveCaptureDisplayState`): an audio interruption, a mute or a call is Paused, a terminal
-  /// transcription failure or offline buffering is named as such, otherwise Listening.
+  /// The live page's state, resolved exactly as the Home capture card resolves it
+  /// (`captureInterruption` + `liveCaptureDisplayState`): the OS holding the mic, a mute or a call
+  /// is Paused, capture recovering on its own (a dropped socket, a mic stall) is Reconnecting, a
+  /// terminal transcription failure or offline buffering is named as such, otherwise Listening.
   CaptureDisplayState _displayState(CaptureProvider provider, {required bool capturingPhotos}) {
+    final interruption = captureInterruption(
+      interrupted: provider.recordingState == RecordingState.interrupted,
+      readerPaused: provider.isPaused,
+      osHoldsMic: provider.isCallActive,
+    );
     return liveCaptureDisplayState(
-      audioInterrupted: provider.recordingState == RecordingState.interrupted,
+      audioInterrupted: interruption == CaptureInterruption.micTaken,
+      reconnecting: interruption == CaptureInterruption.recovering,
       paused: provider.isPaused || provider.isCallActive,
       transcriptionUnavailable: provider.terminalTranscriptionFailure != null,
       bufferingFor: provider.customSttBufferingDuration,

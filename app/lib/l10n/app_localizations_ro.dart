@@ -2479,12 +2479,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Mesaje de diagnostic detaliate';
 
   @override
-  String get autoCreateSpeakers => 'Creați automat vorbitori';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Creare automată când se detectează un nume';
-
-  @override
   String get followUpQuestions => 'Întrebări de urmărire';
 
   @override
@@ -11187,9 +11181,6 @@ class AppLocalizationsRo extends AppLocalizations {
       'Transcrierile nu sunt disponibile, înregistrarea continuă pe dispozitiv și va fi procesată mai târziu';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transcriere indisponibilă · se salvează pe dispozitiv';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Transcrieri în așteptare $pending/$total';
   }
@@ -11242,6 +11233,44 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara';
+
+  @override
+  String get captureNotTranscribing => 'Fără transcriere';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio salvat, transcris mai târziu';
+
+  @override
+  String get captureStillRecording => 'Înregistrarea continuă';
+
+  @override
+  String get captureMicInUseElsewhere => 'Microfonul e folosit de altă aplicație';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Un apel sau altă aplicație a preluat microfonul, așa că Omi nu poate asculta acum. Omi va relua singur când microfonul devine liber. Tot ce s-a înregistrat înainte este în siguranță.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Serviciul tău personalizat de transformare a vorbirii în text nu poate fi accesat. Omi păstrează sunetul pe acest telefon și îl trimite când serviciul revine. Nu se pierde nimic.';
+
+  @override
+  String get captureStarting => 'Se pornește…';
+
+  @override
+  String get capturePhoneStorageFull => 'Spațiul telefonului e plin';
+
+  @override
+  String get captureStorageAlmostFull => 'Spațiul e aproape plin';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name și alții';
+  }
 
   @override
   String get goodMorning => 'Bună dimineața';

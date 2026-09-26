@@ -282,13 +282,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           onChanged: provider.onTranscriptionDiagnosticChanged,
         ),
         OmiSettingsRow.toggle(
-          leading: const FaIcon(FontAwesomeIcons.userPlus),
-          title: l10n.autoCreateSpeakers,
-          subtitle: l10n.autoCreateWhenNameDetected,
-          value: provider.autoCreateSpeakersEnabled,
-          onChanged: provider.onAutoCreateSpeakersChanged,
-        ),
-        OmiSettingsRow.toggle(
           leading: const FaIcon(FontAwesomeIcons.microphoneSlash),
           title: l10n.vadGate,
           subtitle: l10n.vadGateDescription,

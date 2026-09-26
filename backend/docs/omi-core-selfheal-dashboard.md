@@ -82,8 +82,10 @@ later pages are unexplored.
   failures write `sync_dead_letters/{job_id}` (pending → dead_letter) before
   and after the Redis terminal publish. The app still sees only the existing
   `failed`/`partial_failure` statuses — no new `dead_letter` client status —
-  and only ACKs `completed`, so a poll without a ledger record 503s instead of
-  draining the WAL. A terminal failed/partial backfill task also leaves its
+  and only ACKs `completed`. A terminal backfill poll whose job predates the
+  ledger (no record, and no publisher left to write one) records it as
+  `pending` on read — no confirmed event, no replay — and 503s only when that
+  ledger read or write fails or the record belongs to another job/uid. A terminal failed/partial backfill task also leaves its
   staged blobs untouched: this is **not** durable server-side audio retention
   — the existing object-lifecycle expiry still applies — the client WAL stays
   the primary retry material.

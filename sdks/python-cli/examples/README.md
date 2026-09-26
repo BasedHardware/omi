@@ -12,12 +12,16 @@
   agents (French agent guide).
 * [`agent_quickstart.pt.md`](agent_quickstart.pt.md) — omi-cli para agentes
   (Portuguese agent guide).
+* [`agent_quickstart.ms.md`](agent_quickstart.ms.md) — omi-cli untuk ejen
+  (Malay agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_ics.md`](conversations_ics.md) — put conversation history on a
   calendar: JSON export to an iCalendar (.ics) file.
 * [`action_items_ics.md`](action_items_ics.md) — put open action items with due
   dates on a calendar: JSON export to an iCalendar (.ics) file.
+* [`action_items_todotxt.md`](action_items_todotxt.md) — turn an action-item
+  export into a todo.txt file with due: tags for todo.txt apps.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
 * [`conversations_html.md`](conversations_html.md) — build a self-contained HTML
   report of conversations: one section per day, printable, no scripts.
@@ -35,6 +39,8 @@
   exports as an Atom 1.0 feed for any feed reader.
 * [`action_items_sqlite.md`](action_items_sqlite.md) — convert an action-item JSON export to SQLite for structured SQL queries.
 * [`action_items_markdown.md`](action_items_markdown.md) — export action items and tasks to Obsidian/Notion Markdown checklists.
+* [`action_items_org.md`](action_items_org.md) — turn an action-item export
+  into an Org-mode file with TODO/DONE headings and agenda DEADLINEs.
 * [`memories_markdown.pt.md`](memories_markdown.pt.md) — exportar memórias e conhecimento do Omi para Markdown (Portuguese recipe).
 * [`quickstart.th.md`](quickstart.th.md) — คู่มือเริ่มต้นใช้งาน omi-cli
   ฉบับภาษาไทย (Thai Quickstart).

@@ -2477,12 +2477,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Дэтальныя дыягностычныя паведамленні';
 
   @override
-  String get autoCreateSpeakers => 'Аўтаматычна ствараць дыктарыў';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Аўтаматычна ствараць пры выяўленні імя';
-
-  @override
   String get followUpQuestions => 'Наступныя пытанні';
 
   @override
@@ -11165,9 +11159,6 @@ class AppLocalizationsBe extends AppLocalizations {
       'Транскрыпцыя недаступная, запіс працягваецца на прыладзе і будзе апрацаваны пазней';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Транскрыпцыя недаступная · захоўваецца на прыладзе';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Транскрыпцый у чаканні $pending/$total';
   }
@@ -11220,6 +11211,44 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Гук кулона не даходзіць да праграмы — націсніце, каб выправіць';
+
+  @override
+  String get captureNotTranscribing => 'Няма транскрыпцыі';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Аўдыя захавана, транскрыпцыя пазней';
+
+  @override
+  String get captureStillRecording => 'Запіс працягваецца';
+
+  @override
+  String get captureMicInUseElsewhere => 'Мікрафон заняты іншай праграмай';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Званок або іншая праграма заняла мікрафон, таму Omi зараз не чуе. Omi адновіць запіс сам, калі мікрафон вызваліцца. Усё, што запісана да гэтага, захавана.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Ваш уласны сэрвіс распазнавання маўлення недаступны. Omi захоўвае аўдыя на гэтым тэлефоне і адправіць яго, калі сэрвіс вернецца. Нічога не страціцца.';
+
+  @override
+  String get captureStarting => 'Запуск…';
+
+  @override
+  String get capturePhoneStorageFull => 'Памяць тэлефона запоўнена';
+
+  @override
+  String get captureStorageAlmostFull => 'Памяць амаль запоўнена';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Кулон страціў сувязь з гэтым тэлефонам. Omi перападключыцца сам, калі кулон уключаны і побач. Усё, што запісана да гэтага, захавана.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name і іншыя';
+  }
 
   @override
   String get goodMorning => 'Добрай раніцы';

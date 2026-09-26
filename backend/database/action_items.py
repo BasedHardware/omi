@@ -309,13 +309,13 @@ def create_action_item(
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
 
-    if 'created_at' not in action_item_data:
+    if not action_item_data.get('created_at'):
         action_item_data['created_at'] = datetime.now(timezone.utc)
-    if 'updated_at' not in action_item_data:
+    if not action_item_data.get('updated_at'):
         action_item_data['updated_at'] = datetime.now(timezone.utc)
 
     # Set completed_at if the item is being created as completed
-    if action_item_data.get('completed', False) and 'completed_at' not in action_item_data:
+    if action_item_data.get('completed', False) and not action_item_data.get('completed_at'):
         action_item_data['completed_at'] = datetime.now(timezone.utc)
 
     if idempotency_key:
@@ -415,13 +415,12 @@ def create_action_items_batch(
     for index, action_item_data in enumerate(action_items_data):
         action_item_data = _prepare_action_item_for_write(action_item_data)
 
-        if 'created_at' not in action_item_data:
+        if not action_item_data.get('created_at'):
             action_item_data['created_at'] = datetime.now(timezone.utc)
-        if 'updated_at' not in action_item_data:
+        if not action_item_data.get('updated_at'):
             action_item_data['updated_at'] = datetime.now(timezone.utc)
-
         # Set completed_at if the item is being created as completed
-        if action_item_data.get('completed', False) and 'completed_at' not in action_item_data:
+        if action_item_data.get('completed', False) and not action_item_data.get('completed_at'):
             action_item_data['completed_at'] = datetime.now(timezone.utc)
 
         doc_ref = (
@@ -548,7 +547,7 @@ def _action_item_list_sort_key(item: Dict[str, Any]) -> tuple:
         bool(item.get('completed')),
         item.get('due_at') is None,
         item.get('due_at') or datetime.max.replace(tzinfo=timezone.utc),
-        -(item.get('created_at', datetime.min.replace(tzinfo=timezone.utc)).timestamp()),
+        -((item.get('created_at') or datetime.min.replace(tzinfo=timezone.utc)).timestamp()),
     )
 
 

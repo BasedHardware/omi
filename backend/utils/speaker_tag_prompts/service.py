@@ -82,8 +82,8 @@ def named_speaker_prompts_allowed(uid: str) -> bool:
 
 
 def _cooldown_until(state: Dict[str, Any]) -> Optional[datetime]:
-    last_shown = state.get('last_shown_at')
-    if not isinstance(last_shown, datetime):
+    last_shown = voice_profiles_db.as_utc(state.get('last_shown_at'))
+    if last_shown is None:
         return None
     streak = int(state.get('consecutive_dismissals') or 0)
     wait = DISMISSED_COOLDOWN if streak >= DISMISSALS_BEFORE_BACKOFF else SHOW_COOLDOWN
@@ -91,7 +91,7 @@ def _cooldown_until(state: Dict[str, Any]) -> Optional[datetime]:
 
 
 def get_prompts(uid: str, now: Optional[datetime] = None) -> SpeakerTagPromptsResponse:
-    now = now or datetime.now(timezone.utc)
+    now = voice_profiles_db.as_utc(now) or datetime.now(timezone.utc)
     settings, owner_has_voice = voice_profiles_db.get_voice_profile_context(uid)
     save_others = settings['save_other_voice_profiles']
     if not settings['speaker_tag_prompts_enabled']:
@@ -109,8 +109,8 @@ def get_prompts(uid: str, now: Optional[datetime] = None) -> SpeakerTagPromptsRe
             save_other_voice_profiles=save_others,
             next_eligible_at=cooldown_until,
         )
-    last_empty = state.get('last_empty_check_at')
-    if isinstance(last_empty, datetime) and last_empty + EMPTY_RECHECK > now:
+    last_empty = voice_profiles_db.as_utc(state.get('last_empty_check_at'))
+    if last_empty is not None and last_empty + EMPTY_RECHECK > now:
         SPEAKER_TAG_PROMPT_REQUESTS.labels(status='recently_checked').inc()
         return SpeakerTagPromptsResponse(
             status='no_candidates',
@@ -422,7 +422,15 @@ def owner_clip_window(conversation: Dict[str, Any], segment_ids: List[str]) -> O
 
 
 async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: List[str]) -> str:
-    """Verify a "That's me" clip and pool it into the owner's voiceprint. Returns the outcome label."""
+    """Verify a "That's me" clip and pool it into the owner's voiceprint. Returns the outcome label.
+
+    The outcome is attributable: beyond the Prometheus counter, one log line
+    names the outcome with the conversation id (never the uid). The
+    2026-09-25 incident left a client-side "succeeded=true" answer with no
+    owner_voice_confirmation and no trace beyond an unlabeled counter; the
+    recording session id is not on this path (prompts are answered after the
+    socket closed), so the conversation id is the join key.
+    """
     outcome = 'error'
     try:
         conversation = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
@@ -465,3 +473,8 @@ async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: 
         return outcome
     finally:
         SPEAKER_TAG_PROMPT_VOICE_SAMPLES.labels(target='owner', outcome=outcome).inc()
+        logger.info(
+            'speaker tag prompt owner sample outcome=%s conversation=%s',
+            outcome,
+            conversation_id,
+        )

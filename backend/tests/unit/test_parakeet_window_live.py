@@ -362,7 +362,9 @@ async def test_receiver_dispatches_all_primary_branches_through_managed_chain(mo
     connect = AsyncMock(return_value=sentinel)
     monkeypatch.setattr(LiveChainSession, 'connect', connect)
     assert await ListenReceiver._create_stt_socket(recv, lambda _: None, 16000) is sentinel
-    connect.assert_awaited_once_with(16000)
+    # Audio-timeline v2: the managed chain connect carries the receiver's
+    # provider epoch translator (None on legacy sessions).
+    connect.assert_awaited_once_with(16000, epoch=None)
 
 
 @pytest.mark.asyncio
@@ -530,7 +532,10 @@ async def test_rebuilt_window_recovers_only_on_text_not_empty_post(monkeypatch, 
     host.transcripts = SimpleNamespace(enqueue=base.emitted.extend)
     actual = ListenReceiver(host, [], {})
     actual.stt_socket = SimpleNamespace(is_connection_dead=True, typed_death_reason=None, finish=lambda: None)
-    actual._stt_rebuild = (lambda _: None, lambda _: None, 16000)
+    # Audio-timeline v2: _stt_rebuild holds a callback factory plus the
+    # sample rate; the factory returns fresh callbacks bound to a new
+    # provider epoch's translator on each rebuild.
+    actual._stt_rebuild = (lambda: (lambda _: None, lambda _: None, None), 16000)
     now = [0.0]
     cb = provider_resilience.ProviderCircuitBreaker(failure_threshold=1, cooldown_seconds=1, clock=lambda: now[0])
     cb.record_failure()

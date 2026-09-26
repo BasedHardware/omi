@@ -258,9 +258,6 @@ environments:
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: '1.0'
             category: rollout
-          GOOGLE_CALENDAR_AUTO_LINK_ENABLED:
-            value: 'true'
-            category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
             category: rollout
@@ -1284,9 +1281,6 @@ environments:
             OMI_BACKGROUND_FLEX_CAPABLE:
               value: 'true'
               category: memory_rollout
-            DAILY_SUMMARY_SELECTION_MODE:
-              value: indexed
-              category: rollout
             PINECONE_INDEX_NAME:
               category: integrations
               value: memories-backend-dev
@@ -2758,9 +2752,6 @@ environments:
             OMI_BACKGROUND_FLEX_CAPABLE:
               value: 'true'
               category: memory_rollout
-            DAILY_SUMMARY_SELECTION_MODE:
-              value: indexed
-              category: rollout
             PINECONE_INDEX_NAME:
               category: integrations
               value: memories-backend

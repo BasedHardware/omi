@@ -14,7 +14,7 @@ import 'package:omi/l10n/app_localizations.dart';
 /// | [muted]                      | Muted                        | the device's mic is muted                      |
 /// | [reconnecting]               | Reconnecting…                | the transcription connection dropped and is being restored |
 /// | [bufferingOffline]           | Offline, buffering (· 3m)    | a custom speech endpoint is unreachable; audio is kept locally |
-/// | [transcriptionUnavailable]   | Transcriptions are unavailable, recording continues on device and will process later (compact: Transcription unavailable · saving on device) | the server said live transcription cannot run; the WAL keeps recording regardless |
+/// | [transcriptionUnavailable]   | Transcriptions are unavailable, recording continues on device and will process later | the server said live transcription cannot run; the WAL keeps recording regardless |
 /// | [processing]                 | Processing                   | capture ended; the conversation is being made  |
 ///
 /// An audio-session interruption is **Paused**, not Reconnecting: nothing is reconnecting, the OS
@@ -32,14 +32,12 @@ enum CaptureDisplayState {
 }
 
 /// The one label for [state]. [bufferingFor] adds the elapsed minutes to [CaptureDisplayState.bufferingOffline].
-/// [compact] picks the short transcription-outage variant for space-constrained surfaces (the
-/// conversations list's in-progress card); the capturing page keeps the full sentence so the
-/// reader learns recording still continues and will be processed later.
+/// The capturing page uses the full transcription-outage sentence so the reader learns recording
+/// still continues and will be processed later; the Home card uses [captureCardCopy].
 String captureStateLabel(
   AppLocalizations l10n,
   CaptureDisplayState state, {
   Duration? bufferingFor,
-  bool compact = false,
 }) {
   switch (state) {
     case CaptureDisplayState.listening:
@@ -58,9 +56,69 @@ String captureStateLabel(
       final minutes = bufferingFor?.inMinutes ?? 0;
       return minutes < 1 ? l10n.captureOfflineBuffering : l10n.captureOfflineBufferingFor(minutes);
     case CaptureDisplayState.transcriptionUnavailable:
-      return compact ? l10n.transcriptionUnavailableSavingOnDevice : l10n.transcriptionUnavailableRecordingContinues;
+      return l10n.transcriptionUnavailableRecordingContinues;
     case CaptureDisplayState.processing:
       return l10n.processing;
+  }
+}
+
+/// What the Home live card says for a state: a short [status] (line 1, must fit one line at 320pt
+/// and 1.3x text in English), an optional [detail] (line 2, after the timer), and for a problem
+/// the [explanation] its details sheet shows. [warning] marks a problem (amber glyph, tappable).
+class CaptureCardCopy {
+  const CaptureCardCopy(this.status, {this.detail, this.explanation});
+
+  final String status;
+  final String? detail;
+  final String? explanation;
+
+  bool get warning => explanation != null;
+}
+
+/// Why phone capture reads `RecordingState.interrupted`. The controller sets it for an OS audio
+/// interruption (a call, Siri, another app: `isCallActive`), for a silent-mic stall and its
+/// restart, and when the transcription socket closes. Only the first is the microphone being
+/// taken; the others are capture recovering on its own. A pause the reader chose wins over all of
+/// them, so Resume stays offered if an interruption lands on a paused recording.
+enum CaptureInterruption { none, micTaken, recovering }
+
+CaptureInterruption captureInterruption({
+  required bool interrupted,
+  required bool readerPaused,
+  required bool osHoldsMic,
+}) {
+  if (!interrupted || readerPaused) return CaptureInterruption.none;
+  return osHoldsMic ? CaptureInterruption.micTaken : CaptureInterruption.recovering;
+}
+
+/// The Home card's copy for [state]. [micTaken] marks a pause the OS or another app caused (not
+/// the reader), which is a problem with an explanation rather than a plain Paused. For
+/// [CaptureDisplayState.reconnecting], [socketDown] says the transcription connection is what is
+/// being restored while the microphone keeps recording; otherwise the microphone itself is
+/// restarting (a stall), so the card claims neither.
+CaptureCardCopy captureCardCopy(
+  AppLocalizations l10n,
+  CaptureDisplayState state, {
+  bool micTaken = false,
+  bool socketDown = true,
+}) {
+  switch (state) {
+    case CaptureDisplayState.paused when micTaken:
+      return CaptureCardCopy(l10n.paused,
+          detail: l10n.captureMicInUseElsewhere, explanation: l10n.captureMicInterruptedDetail);
+    case CaptureDisplayState.reconnecting when !socketDown:
+      return CaptureCardCopy(l10n.reconnecting);
+    case CaptureDisplayState.reconnecting:
+      return CaptureCardCopy(l10n.reconnecting,
+          detail: l10n.captureStillRecording, explanation: l10n.transcriptionPausedReconnecting);
+    case CaptureDisplayState.bufferingOffline:
+      return CaptureCardCopy(l10n.offline,
+          detail: l10n.captureAudioSavedTranscribesLater, explanation: l10n.captureCustomSttUnreachableDetail);
+    case CaptureDisplayState.transcriptionUnavailable:
+      return CaptureCardCopy(l10n.captureNotTranscribing,
+          detail: l10n.captureAudioSavedTranscribesLater, explanation: l10n.transcriptionUnavailableRecordingContinues);
+    default:
+      return CaptureCardCopy(captureStateLabel(l10n, state));
   }
 }
 
