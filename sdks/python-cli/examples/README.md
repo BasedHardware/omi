@@ -20,6 +20,8 @@
   the most common verbs.
 * [`conversations_ics.md`](conversations_ics.md) — put conversation history on a
   calendar: JSON export to an iCalendar (.ics) file.
+* [`conversations_ics.es.md`](conversations_ics.es.md) — colocar el historial de
+  conversaciones en un calendario: exportación JSON a un archivo iCalendar (.ics).
 * [`action_items_ics.md`](action_items_ics.md) — put open action items with due
   dates on a calendar: JSON export to an iCalendar (.ics) file.
 * [`action_items_todotxt.md`](action_items_todotxt.md) — turn an action-item
