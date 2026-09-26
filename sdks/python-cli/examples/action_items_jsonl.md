@@ -132,7 +132,18 @@ def load(sources):
             item_id = item.get("id")
             if not isinstance(item_id, str) or not item_id.strip():
                 raise ValueError(f"{source}: action item missing valid string id")
-            items_by_id[item_id.strip()] = item
+            clean_id = item_id.strip()
+            existing = items_by_id.get(clean_id)
+            if existing is not None:
+                new_updated = parse_time(item.get("updated_at") or item.get("created_at"))
+                existing_updated = parse_time(existing.get("updated_at") or existing.get("created_at"))
+                if new_updated and existing_updated:
+                    if new_updated > existing_updated:
+                        items_by_id[clean_id] = item
+                elif new_updated and not existing_updated:
+                    items_by_id[clean_id] = item
+            else:
+                items_by_id[clean_id] = item
     return list(items_by_id.values())
 
 
