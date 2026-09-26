@@ -11138,5 +11138,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "ফোন স্পিকারের মাধ্যমে জোরে বাজে।",
     "deviceOnboardingVoiceReplySettingsHint": "আপনি {settings} › {voiceResponse} এ যেকোনো সময় এটি পরিবর্তন করতে পারেন",
     "deviceOnboardingAllSetReplayHint": "{settings} › {deviceSettings} › {deviceTutorial} এ যেকোনও সময় এই সফরটি পুনরায় চালান",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "হেডফোন"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "হেডফোন",
+    "singleTap": "একক ট্যাপ",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "একক ট্যাপ ক্রিয়া",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "তিনবার ট্যাপ",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "তিনবার ট্যাপ ক্রিয়া",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

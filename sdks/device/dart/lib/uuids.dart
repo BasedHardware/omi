@@ -9,6 +9,7 @@ const String imageCaptureControlCharacteristicUuid = '19b10006-e8f2-537e-4f6c-d1
 
 const String buttonServiceUuid = '23ba7924-0000-1000-7450-346eac492e92';
 const String buttonTriggerCharacteristicUuid = '23ba7925-0000-1000-7450-346eac492e92';
+const String buttonTapsCharacteristicUuid = '23ba7926-0000-1000-7450-346eac492e92';
 
 const String storageDataStreamServiceUuid = '30295780-4301-eabd-2904-2849adfeae43';
 const String storageDataStreamCharacteristicUuid = '30295781-4301-eabd-2904-2849adfeae43';

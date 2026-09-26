@@ -11138,5 +11138,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "ಫೋನ್ ಸ್ಪೀಕರ್ ಮೂಲಕ ಜೋರಾಗಿ ನುಡಿಸುತ್ತದೆ.",
     "deviceOnboardingVoiceReplySettingsHint": "ನೀವು ಇದನ್ನು ಯಾವಾಗ ಬೇಕಾದರೂ {settings} › {voiceResponse} ರಲ್ಲಿ ಬದಲಾಯಿಸಬಹುದು",
     "deviceOnboardingAllSetReplayHint": "{settings} › {deviceSettings} › {deviceTutorial} ರಲ್ಲಿ ಈ ಪ್ರವಾಸವನ್ನು ಯಾವಾಗ ಬೇಕಾದರೂ ರಿಪ್ಲೇ ಮಾಡಿ",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "ಹೆಡ್‌ಫೋನ್‌ಗಳು"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "ಹೆಡ್‌ಫೋನ್‌ಗಳು",
+    "singleTap": "ಒಂದು ಟ್ಯಾಪ್",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "ಒಂದು ಟ್ಯಾಪ್ ಕ್ರಿಯೆ",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "ಮೂರು ಬಾರಿ ಟ್ಯಾಪ್",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "ಮೂರು ಬಾರಿ ಟ್ಯಾಪ್ ಕ್ರಿಯೆ",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

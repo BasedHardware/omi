@@ -3578,5 +3578,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "通过手机扬声器大声播放。",
     "deviceOnboardingVoiceReplySettingsHint": "您可以随时在 {settings} › {voiceResponse} 中更改此设置",
     "deviceOnboardingAllSetReplayHint": "随时重播此导览 {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "耳机"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "耳机",
+    "singleTap": "单击",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "单击操作",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "三击",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "三击操作",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

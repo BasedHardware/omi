@@ -11351,4 +11351,16 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Kuulokkeet';
+
+  @override
+  String get singleTap => 'Kertanapautus';
+
+  @override
+  String get singleTapAction => 'Kertanapautustoiminto';
+
+  @override
+  String get tripleTap => 'Kolmoisnapautus';
+
+  @override
+  String get tripleTapAction => 'Kolmoisnapautustoiminto';
 }

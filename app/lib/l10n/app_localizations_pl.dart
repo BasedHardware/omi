@@ -11384,4 +11384,16 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Słuchawki';
+
+  @override
+  String get singleTap => 'Pojedyncze dotknięcie';
+
+  @override
+  String get singleTapAction => 'Akcja pojedynczego dotknięcia';
+
+  @override
+  String get tripleTap => 'Potrójne dotknięcie';
+
+  @override
+  String get tripleTapAction => 'Akcja potrójnego dotknięcia';
 }

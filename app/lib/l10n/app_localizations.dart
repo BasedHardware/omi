@@ -20660,6 +20660,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Headphones'**
   String get deviceOnboardingVoiceReplyGenericHeadphones;
+
+  /// Device button gesture: one short press
+  ///
+  /// In en, this message translates to:
+  /// **'Single Tap'**
+  String get singleTap;
+
+  /// Single tap action setting
+  ///
+  /// In en, this message translates to:
+  /// **'Single Tap Action'**
+  String get singleTapAction;
+
+  /// Device button gesture: three quick presses
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Tap'**
+  String get tripleTap;
+
+  /// Triple tap action setting
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Tap Action'**
+  String get tripleTapAction;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

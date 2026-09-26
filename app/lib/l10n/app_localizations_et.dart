@@ -11344,4 +11344,16 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Kõrvaklapid';
+
+  @override
+  String get singleTap => 'Ühekordne puudutus';
+
+  @override
+  String get singleTapAction => 'Ühekordse puudutuse tegevus';
+
+  @override
+  String get tripleTap => 'Kolmikpuudutus';
+
+  @override
+  String get tripleTapAction => 'Kolmikpuudutuse tegevus';
 }

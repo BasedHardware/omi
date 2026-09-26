@@ -11138,5 +11138,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "فون اسپیکر کے ذریعے اونچی آواز میں چلاتا ہے۔",
     "deviceOnboardingVoiceReplySettingsHint": "آپ اسے کسی بھی وقت {settings} › {voiceResponse} میں تبدیل کر سکتے ہیں۔",
     "deviceOnboardingAllSetReplayHint": "اس ٹور کو کسی بھی وقت {settings} › {deviceSettings} › {deviceTutorial} میں دوبارہ چلائیں۔",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "ہیڈ فون"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "ہیڈ فون",
+    "singleTap": "ایک بار تھپتھپائیں",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "ایک بار تھپتھپانے کا عمل",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "تین بار تھپتھپائیں",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "تین بار تھپتھپانے کا عمل",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

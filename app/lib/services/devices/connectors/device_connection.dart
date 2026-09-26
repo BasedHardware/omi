@@ -310,6 +310,14 @@ abstract class DeviceConnection {
     return null;
   }
 
+  /// Progressive tap sequence notifications (`23ba7926`). Null when unsupported.
+  Future<StreamSubscription?> getBleButtonTapsListener({required void Function(List<int>) onTapsReceived}) async {
+    if (await isConnected()) {
+      return await performGetBleButtonTapsListener(onTapsReceived: onTapsReceived);
+    }
+    return null;
+  }
+
   Future<StreamSubscription?> performGetBleAudioBytesListener({
     required void Function(List<int>) onAudioBytesReceived,
   }) async {
@@ -320,6 +328,12 @@ abstract class DeviceConnection {
   Future<StreamSubscription?> performGetBleButtonListener({required void Function(List<int>) onButtonReceived}) async {
     final stream = transport.getCharacteristicStream(buttonServiceUuid, buttonTriggerCharacteristicUuid);
     return stream.listen(onButtonReceived);
+  }
+
+  Future<StreamSubscription?> performGetBleButtonTapsListener({
+    required void Function(List<int>) onTapsReceived,
+  }) async {
+    return null;
   }
 
   Future<BleAudioCodec> getAudioCodec() async {

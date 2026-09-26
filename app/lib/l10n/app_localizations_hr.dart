@@ -11384,4 +11384,16 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Slušalice';
+
+  @override
+  String get singleTap => 'Jednostruki dodir';
+
+  @override
+  String get singleTapAction => 'Radnja jednostrukog dodira';
+
+  @override
+  String get tripleTap => 'Trostruki dodir';
+
+  @override
+  String get tripleTapAction => 'Radnja trostrukog dodira';
 }

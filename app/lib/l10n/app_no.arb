@@ -3578,5 +3578,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Spiller høyt gjennom telefonens høyttaler.",
     "deviceOnboardingVoiceReplySettingsHint": "Du kan endre dette når som helst i {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Spill denne turen på nytt når som helst i {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Hodetelefoner"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Hodetelefoner",
+    "singleTap": "Enkelttrykk",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Enkelttrykk-handling",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Trippeltrykk",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Trippeltrykk-handling",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

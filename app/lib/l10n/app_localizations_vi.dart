@@ -11343,4 +11343,16 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Tai nghe';
+
+  @override
+  String get singleTap => 'Nhấn đơn';
+
+  @override
+  String get singleTapAction => 'Hành động nhấn đơn';
+
+  @override
+  String get tripleTap => 'Nhấn ba lần';
+
+  @override
+  String get tripleTapAction => 'Hành động nhấn ba lần';
 }

@@ -11378,4 +11378,16 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Slušalke';
+
+  @override
+  String get singleTap => 'Enojni dotik';
+
+  @override
+  String get singleTapAction => 'Dejanje enojnega dotika';
+
+  @override
+  String get tripleTap => 'Trojni dotik';
+
+  @override
+  String get tripleTapAction => 'Dejanje trojnega dotika';
 }

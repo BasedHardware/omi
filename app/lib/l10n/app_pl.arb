@@ -3613,5 +3613,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Odtwarza głośno przez głośnik telefonu.",
     "deviceOnboardingVoiceReplySettingsHint": "Możesz to zmienić w dowolnym momencie w {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Odtwórz ponownie tę wycieczkę w dowolnym momencie w {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Słuchawki"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Słuchawki",
+    "singleTap": "Pojedyncze dotknięcie",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Akcja pojedynczego dotknięcia",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Potrójne dotknięcie",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Akcja potrójnego dotknięcia",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

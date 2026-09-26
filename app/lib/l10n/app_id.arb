@@ -3613,5 +3613,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Dimainkan dengan suara keras melalui speaker telepon.",
     "deviceOnboardingVoiceReplySettingsHint": "Anda dapat mengubahnya kapan saja di {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Putar ulang tur ini kapan saja di {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Headphone"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Headphone",
+    "singleTap": "Ketuk Tunggal",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Aksi Ketuk Tunggal",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Ketuk Tiga Kali",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Aksi Ketuk Tiga Kali",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

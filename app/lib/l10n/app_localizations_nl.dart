@@ -11384,4 +11384,16 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Koptelefoon';
+
+  @override
+  String get singleTap => 'Enkel tikken';
+
+  @override
+  String get singleTapAction => 'Enkel tikken actie';
+
+  @override
+  String get tripleTap => 'Drie keer tikken';
+
+  @override
+  String get tripleTapAction => 'Drie keer tikken actie';
 }

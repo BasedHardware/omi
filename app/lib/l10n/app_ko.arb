@@ -3578,5 +3578,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "전화 스피커를 통해 큰 소리로 재생됩니다.",
     "deviceOnboardingVoiceReplySettingsHint": "{settings} › {voiceResponse}에서 언제든지 변경할 수 있습니다.",
     "deviceOnboardingAllSetReplayHint": "{settings} › {deviceSettings} › {deviceTutorial}에서 언제든지 이 둘러보기를 다시 재생하세요.",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "헤드폰"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "헤드폰",
+    "singleTap": "싱글 탭",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "싱글 탭 동작",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "트리플 탭",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "트리플 탭 동작",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

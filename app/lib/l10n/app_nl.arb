@@ -3578,5 +3578,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Wordt hardop afgespeeld via de luidspreker van de telefoon.",
     "deviceOnboardingVoiceReplySettingsHint": "Je kunt dit op elk moment wijzigen via {settings} ›{voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Speel deze tour op elk gewenst moment opnieuw af in {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Koptelefoon"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Koptelefoon",
+    "singleTap": "Enkel tikken",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Enkel tikken actie",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Drie keer tikken",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Drie keer tikken actie",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

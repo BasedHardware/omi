@@ -3578,5 +3578,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Se reproduce en voz alta a través del altavoz del teléfono.",
     "deviceOnboardingVoiceReplySettingsHint": "Puedes cambiar esto en cualquier momento en {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Reproduce este recorrido en cualquier momento en {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "auriculares"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "auriculares",
+    "singleTap": "Toque simple",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Acción de toque simple",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Triple toque",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Acción de triple toque",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

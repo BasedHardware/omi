@@ -3613,5 +3613,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Joue à haute voix via le haut-parleur du téléphone.",
     "deviceOnboardingVoiceReplySettingsHint": "Vous pouvez modifier cela à tout moment au {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Revivez cette tournée à tout moment au {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Écouteurs"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Écouteurs",
+    "singleTap": "Appui simple",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Action appui simple",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Triple appui",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Action triple appui",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

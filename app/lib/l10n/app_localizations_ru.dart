@@ -11387,4 +11387,16 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Наушники';
+
+  @override
+  String get singleTap => 'Одиночное нажатие';
+
+  @override
+  String get singleTapAction => 'Действие при одиночном нажатии';
+
+  @override
+  String get tripleTap => 'Тройное нажатие';
+
+  @override
+  String get tripleTapAction => 'Действие при тройном нажатии';
 }

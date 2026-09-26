@@ -11415,4 +11415,16 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Auriculars';
+
+  @override
+  String get singleTap => 'Toc simple';
+
+  @override
+  String get singleTapAction => 'Acció de toc simple';
+
+  @override
+  String get tripleTap => 'Triple toc';
+
+  @override
+  String get tripleTapAction => 'Acció de triple toc';
 }

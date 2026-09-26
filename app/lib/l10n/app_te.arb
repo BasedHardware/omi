@@ -11138,5 +11138,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "ఫోన్ స్పీకర్ ద్వారా బిగ్గరగా ప్లే చేస్తుంది.",
     "deviceOnboardingVoiceReplySettingsHint": "మీరు దీన్ని ఎప్పుడైనా {settings} › {voiceResponse}లో మార్చవచ్చు",
     "deviceOnboardingAllSetReplayHint": "ఈ పర్యటనను ఎప్పుడైనా {settings} › {deviceSettings} › {deviceTutorial}లో మళ్లీ ప్లే చేయండి",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "హెడ్‌ఫోన్‌లు"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "హెడ్‌ఫోన్‌లు",
+    "singleTap": "సింగిల్ ట్యాప్",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "సింగిల్ ట్యాప్ చర్య",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "ట్రిపుల్ ట్యాప్",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "ట్రిపుల్ ట్యాప్ చర్య",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

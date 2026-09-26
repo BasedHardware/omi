@@ -3578,5 +3578,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "फ़ोन स्पीकर के माध्यम से ज़ोर से बजता है।",
     "deviceOnboardingVoiceReplySettingsHint": "आप इसे {settings} › {voiceResponse} पर कभी भी बदल सकते हैं",
     "deviceOnboardingAllSetReplayHint": "इस दौरे को किसी भी समय {settings} › {deviceSettings} › {deviceTutorial} पर दोबारा चलाएं",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "हेडफोन"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "हेडफोन",
+    "singleTap": "सिंगल टैप",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "सिंगल टैप क्रिया",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "ट्रिपल टैप",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "ट्रिपल टैप क्रिया",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

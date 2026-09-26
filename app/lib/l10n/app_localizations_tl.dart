@@ -11449,4 +11449,16 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Mga headphone';
+
+  @override
+  String get singleTap => 'Single Tap';
+
+  @override
+  String get singleTapAction => 'Single Tap Action';
+
+  @override
+  String get tripleTap => 'Triple Tap';
+
+  @override
+  String get tripleTapAction => 'Triple Tap Action';
 }

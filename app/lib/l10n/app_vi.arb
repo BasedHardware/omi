@@ -3578,5 +3578,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Phát to qua loa điện thoại.",
     "deviceOnboardingVoiceReplySettingsHint": "Bạn có thể thay đổi điều này bất cứ lúc nào trong {settings} > {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Phát lại chuyến tham quan này bất cứ lúc nào trong {settings} > {deviceSettings} > {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Tai nghe"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Tai nghe",
+    "singleTap": "Nhấn đơn",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Hành động nhấn đơn",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Nhấn ba lần",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Hành động nhấn ba lần",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

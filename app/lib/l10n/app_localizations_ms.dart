@@ -11379,4 +11379,16 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Fon kepala';
+
+  @override
+  String get singleTap => 'Ketik Sekali';
+
+  @override
+  String get singleTapAction => 'Tindakan Ketik Sekali';
+
+  @override
+  String get tripleTap => 'Ketik Tiga Kali';
+
+  @override
+  String get tripleTapAction => 'Tindakan Ketik Tiga Kali';
 }

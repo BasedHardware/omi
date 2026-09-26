@@ -11282,4 +11282,16 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'หูฟัง';
+
+  @override
+  String get singleTap => 'แตะครั้งเดียว';
+
+  @override
+  String get singleTapAction => 'การดำเนินการแตะครั้งเดียว';
+
+  @override
+  String get tripleTap => 'แตะสามครั้ง';
+
+  @override
+  String get tripleTapAction => 'การดำเนินการแตะสามครั้ง';
 }

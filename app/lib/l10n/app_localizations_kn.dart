@@ -11384,4 +11384,16 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'ಹೆಡ್‌ಫೋನ್‌ಗಳು';
+
+  @override
+  String get singleTap => 'ಒಂದು ಟ್ಯಾಪ್';
+
+  @override
+  String get singleTapAction => 'ಒಂದು ಟ್ಯಾಪ್ ಕ್ರಿಯೆ';
+
+  @override
+  String get tripleTap => 'ಮೂರು ಬಾರಿ ಟ್ಯಾಪ್';
+
+  @override
+  String get tripleTapAction => 'ಮೂರು ಬಾರಿ ಟ್ಯಾಪ್ ಕ್ರಿಯೆ';
 }

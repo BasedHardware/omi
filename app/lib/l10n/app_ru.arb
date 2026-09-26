@@ -3613,5 +3613,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Воспроизводится громко через динамик телефона.",
     "deviceOnboardingVoiceReplySettingsHint": "Вы можете изменить это в любое время по телефону {settings} › {voiceResponse}.",
     "deviceOnboardingAllSetReplayHint": "Воспроизведите этот тур в любое время по номеру {settings} › {deviceSettings} › {deviceTutorial}.",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Наушники"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Наушники",
+    "singleTap": "Одиночное нажатие",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Действие при одиночном нажатии",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Тройное нажатие",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Действие при тройном нажатии",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

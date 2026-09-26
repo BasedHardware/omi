@@ -3578,5 +3578,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Atskaņo skaļi caur tālruņa skaļruni.",
     "deviceOnboardingVoiceReplySettingsHint": "To jebkurā laikā varat mainīt pa tālruni {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Atkārtojiet šo ceļojumu jebkurā laikā {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Austiņas"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Austiņas",
+    "singleTap": "Viens klikšķis",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Viena klikšķa darbība",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Trīskāršs klikšķis",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Trīskārša klikšķa darbība",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

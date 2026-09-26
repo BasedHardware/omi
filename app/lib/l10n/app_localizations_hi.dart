@@ -11328,4 +11328,16 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'हेडफोन';
+
+  @override
+  String get singleTap => 'सिंगल टैप';
+
+  @override
+  String get singleTapAction => 'सिंगल टैप क्रिया';
+
+  @override
+  String get tripleTap => 'ट्रिपल टैप';
+
+  @override
+  String get tripleTapAction => 'ट्रिपल टैप क्रिया';
 }

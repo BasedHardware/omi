@@ -11410,4 +11410,16 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Слушалки';
+
+  @override
+  String get singleTap => 'Единечно допирање';
+
+  @override
+  String get singleTapAction => 'Акција при единечно допирање';
+
+  @override
+  String get tripleTap => 'Тројно допирање';
+
+  @override
+  String get tripleTapAction => 'Акција при тројно допирање';
 }

@@ -11373,4 +11373,16 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Austiņas';
+
+  @override
+  String get singleTap => 'Viens klikšķis';
+
+  @override
+  String get singleTapAction => 'Viena klikšķa darbība';
+
+  @override
+  String get tripleTap => 'Trīskāršs klikšķis';
+
+  @override
+  String get tripleTapAction => 'Trīskārša klikšķa darbība';
 }

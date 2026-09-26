@@ -11138,5 +11138,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Свира наглас преко звучника телефона.",
     "deviceOnboardingVoiceReplySettingsHint": "Ово можете променити било када у {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Поновите овај обилазак било када у {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Слушалице"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Слушалице",
+    "singleTap": "Један додир",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Акција једног додира",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Троструки додир",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Акција троструког додира",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

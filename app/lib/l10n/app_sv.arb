@@ -3578,5 +3578,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Spelas högt genom telefonens högtalare.",
     "deviceOnboardingVoiceReplySettingsHint": "Du kan ändra detta när som helst i {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Spela om den här turnén när som helst i {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Hörlurar"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Hörlurar",
+    "singleTap": "Enkeltryck",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Enkeltrycksåtgärd",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Trippeltryck",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Trippeltrycksåtgärd",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

@@ -3578,5 +3578,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Prehráva sa nahlas cez reproduktor telefónu.",
     "deviceOnboardingVoiceReplySettingsHint": "Toto môžete kedykoľvek zmeniť na čísle {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Prehrajte si túto prehliadku kedykoľvek na čísle {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Slúchadlá"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Slúchadlá",
+    "singleTap": "Jedno ťuknutie",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Akcia jedného ťuknutia",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Trojité ťuknutie",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Akcia trojitého ťuknutia",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

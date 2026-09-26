@@ -3578,5 +3578,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Groja garsiai per telefono garsiakalbį.",
     "deviceOnboardingVoiceReplySettingsHint": "Tai galite bet kada pakeisti numeriu {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Pakartokite šią kelionę bet kuriuo metu {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Ausinės"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Ausinės",
+    "singleTap": "Vienas bakstelėjimas",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Vieno bakstelėjimo veiksmas",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Trigubas bakstelėjimas",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Trigubo bakstelėjimo veiksmas",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

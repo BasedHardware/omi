@@ -3578,5 +3578,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Viene riprodotto ad alta voce attraverso l'altoparlante del telefono.",
     "deviceOnboardingVoiceReplySettingsHint": "Puoi modificarlo in qualsiasi momento al numero {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Riproduci questo tour in qualsiasi momento al numero {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Cuffie"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Cuffie",
+    "singleTap": "Tocco Singolo",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Azione Tocco Singolo",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Triplo Tocco",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Azione Triplo Tocco",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

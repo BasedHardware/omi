@@ -3578,5 +3578,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "يتم تشغيله بصوت عالٍ من خلال مكبر صوت الهاتف.",
     "deviceOnboardingVoiceReplySettingsHint": "يمكنك تغيير هذا في أي وقت في {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "أعد تشغيل هذه الجولة في أي وقت على {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "سماعات الرأس"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "سماعات الرأس",
+    "singleTap": "نقرة مفردة",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "إجراء النقر المفرد",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "نقرة ثلاثية",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "إجراء النقر الثلاثي",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

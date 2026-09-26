@@ -11138,5 +11138,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "מתנגן בקול רם דרך רמקול הטלפון.",
     "deviceOnboardingVoiceReplySettingsHint": "אתה יכול לשנות זאת בכל עת בטלפון {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "הפעל מחדש את הסיור הזה בכל עת ב-{settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "אוזניות"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "אוזניות",
+    "singleTap": "לחץ בודד",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "פעולת לחיצה בודדת",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "לחץ משולש",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "פעולת לחיצה משולשת",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

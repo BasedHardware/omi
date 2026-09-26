@@ -11360,4 +11360,16 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Kulaklıklar';
+
+  @override
+  String get singleTap => 'Tek Dokunma';
+
+  @override
+  String get singleTapAction => 'Tek Dokunma İşlemi';
+
+  @override
+  String get tripleTap => 'Üçlü Dokunma';
+
+  @override
+  String get tripleTapAction => 'Üçlü Dokunma İşlemi';
 }

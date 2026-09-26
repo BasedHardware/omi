@@ -11359,4 +11359,16 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'ہیڈ فون';
+
+  @override
+  String get singleTap => 'ایک بار تھپتھپائیں';
+
+  @override
+  String get singleTapAction => 'ایک بار تھپتھپانے کا عمل';
+
+  @override
+  String get tripleTap => 'تین بار تھپتھپائیں';
+
+  @override
+  String get tripleTapAction => 'تین بار تھپتھپانے کا عمل';
 }

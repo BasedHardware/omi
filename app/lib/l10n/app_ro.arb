@@ -3578,5 +3578,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Redă cu voce tare prin difuzorul telefonului.",
     "deviceOnboardingVoiceReplySettingsHint": "Puteți schimba oricând acest lucru în {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Reluați acest tur oricând în {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Căști"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Căști",
+    "singleTap": "Apăsare simplă",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Acțiune apăsare simplă",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Triplă apăsare",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Acțiune triplă apăsare",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

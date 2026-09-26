@@ -3578,5 +3578,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Toistaa ääneen puhelimen kaiuttimesta.",
     "deviceOnboardingVoiceReplySettingsHint": "Voit muuttaa tätä milloin tahansa numerossa {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Toista tämä kiertue milloin tahansa numerossa {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Kuulokkeet"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Kuulokkeet",
+    "singleTap": "Kertanapautus",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Kertanapautustoiminto",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Kolmoisnapautus",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Kolmoisnapautustoiminto",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

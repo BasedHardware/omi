@@ -11366,4 +11366,16 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Ausinės';
+
+  @override
+  String get singleTap => 'Vienas bakstelėjimas';
+
+  @override
+  String get singleTapAction => 'Vieno bakstelėjimo veiksmas';
+
+  @override
+  String get tripleTap => 'Trigubas bakstelėjimas';
+
+  @override
+  String get tripleTapAction => 'Trigubo bakstelėjimo veiksmas';
 }

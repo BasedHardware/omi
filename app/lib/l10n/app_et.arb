@@ -3578,5 +3578,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Mängib valjult läbi telefoni kõlari.",
     "deviceOnboardingVoiceReplySettingsHint": "Saate seda igal ajal muuta numbril {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Esitage seda ringkäiku igal ajal uuesti numbril {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Kõrvaklapid"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Kõrvaklapid",
+    "singleTap": "Ühekordne puudutus",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Ühekordse puudutuse tegevus",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Kolmikpuudutus",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Kolmikpuudutuse tegevus",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

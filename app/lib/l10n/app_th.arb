@@ -3578,5 +3578,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "เล่นเสียงดังผ่านลำโพงโทรศัพท์",
     "deviceOnboardingVoiceReplySettingsHint": "คุณสามารถเปลี่ยนได้ตลอดเวลาใน {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "เล่นทัวร์นี้ซ้ำได้ทุกเมื่อใน {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "หูฟัง"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "หูฟัง",
+    "singleTap": "แตะครั้งเดียว",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "การดำเนินการแตะครั้งเดียว",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "แตะสามครั้ง",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "การดำเนินการแตะสามครั้ง",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

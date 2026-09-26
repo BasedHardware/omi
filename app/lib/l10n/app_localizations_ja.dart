@@ -11159,4 +11159,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'ヘッドフォン';
+
+  @override
+  String get singleTap => 'シングルタップ';
+
+  @override
+  String get singleTapAction => 'シングルタップアクション';
+
+  @override
+  String get tripleTap => 'トリプルタップ';
+
+  @override
+  String get tripleTapAction => 'トリプルタップアクション';
 }

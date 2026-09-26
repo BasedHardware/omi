@@ -3674,5 +3674,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Hangosan játszik le a telefon hangszóróján keresztül.",
     "deviceOnboardingVoiceReplySettingsHint": "Ezt bármikor módosíthatja a {settings} › {voiceResponse} számon",
     "deviceOnboardingAllSetReplayHint": "A körutat bármikor újra lejátszhatja a következő számon: {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Fejhallgató"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Fejhallgató",
+    "singleTap": "Egyszeres érintés",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Egyszeres érintés művelet",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Tripla érintés",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Tripla érintés művelet",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

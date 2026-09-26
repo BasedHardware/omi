@@ -11339,4 +11339,16 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Slúchadlá';
+
+  @override
+  String get singleTap => 'Jedno ťuknutie';
+
+  @override
+  String get singleTapAction => 'Akcia jedného ťuknutia';
+
+  @override
+  String get tripleTap => 'Trojité ťuknutie';
+
+  @override
+  String get tripleTapAction => 'Akcia trojitého ťuknutia';
 }

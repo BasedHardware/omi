@@ -11138,5 +11138,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Прайграванне ўслых праз дынамік тэлефона.",
     "deviceOnboardingVoiceReplySettingsHint": "Вы можаце змяніць гэта ў любы час у {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Паўтарыце гэты тур у любы час у {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Навушнікі"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Навушнікі",
+    "singleTap": "Адзінарны дотык",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Дзеянне адзінарнага дотыку",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Трайны дотык",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Дзеянне трайнага дотыку",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }

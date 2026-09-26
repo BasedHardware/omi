@@ -11356,4 +11356,16 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'हेडफोन्स';
+
+  @override
+  String get singleTap => 'एकेरी टॅप';
+
+  @override
+  String get singleTapAction => 'एकेरी टॅप क्रिया';
+
+  @override
+  String get tripleTap => 'तिहेरी टॅप';
+
+  @override
+  String get tripleTapAction => 'तिहेरी टॅप क्रिया';
 }

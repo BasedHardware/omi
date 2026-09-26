@@ -3613,5 +3613,21 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Telefonun hoparlöründen yüksek sesle çalar.",
     "deviceOnboardingVoiceReplySettingsHint": "Bunu istediğiniz zaman {settings} › {voiceResponse} numaralı telefondan değiştirebilirsiniz.",
     "deviceOnboardingAllSetReplayHint": "Bu turu istediğiniz zaman {settings} › {deviceSettings} › {deviceTutorial}'da tekrar oynatın",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Kulaklıklar"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Kulaklıklar",
+    "singleTap": "Tek Dokunma",
+    "@singleTap": {
+        "description": "Device button gesture: one short press"
+    },
+    "singleTapAction": "Tek Dokunma İşlemi",
+    "@singleTapAction": {
+        "description": "Single tap action setting"
+    },
+    "tripleTap": "Üçlü Dokunma",
+    "@tripleTap": {
+        "description": "Device button gesture: three quick presses"
+    },
+    "tripleTapAction": "Üçlü Dokunma İşlemi",
+    "@tripleTapAction": {
+        "description": "Triple tap action setting"
+    }
 }
