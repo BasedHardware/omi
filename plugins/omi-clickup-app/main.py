@@ -25,9 +25,7 @@ clickup_client = ClickUpClient()
 task_detector = TaskDetector()
 
 app = FastAPI(
-    title="OMI ClickUp Integration",
-    description="Voice-activated ClickUp task creation via OMI",
-    version="1.0.0"
+    title="OMI ClickUp Integration", description="Voice-activated ClickUp task creation via OMI", version="1.0.0"
 )
 
 # Store OAuth states temporarily (in production, use Redis or similar)
@@ -63,7 +61,10 @@ async def monitor_session_timeouts():
                     segments_count = session.get("segments_count", 0)
                     accumulated = session.get("accumulated_text", "")
 
-                    print(f"⏰ TIMEOUT MONITOR: Processing session {session_id} after {idle_time:.1f}s idle ({segments_count} segment(s))", flush=True)
+                    print(
+                        f"⏰ TIMEOUT MONITOR: Processing session {session_id} after {idle_time:.1f}s idle ({segments_count} segment(s))",
+                        flush=True,
+                    )
 
                     # Get user
                     uid = session.get("uid")
@@ -71,10 +72,7 @@ async def monitor_session_timeouts():
 
                     if user:
                         # Mark as processing
-                        SimpleSessionStorage.update_session(
-                            session_id,
-                            task_mode="processing"
-                        )
+                        SimpleSessionStorage.update_session(session_id, task_mode="processing")
 
                         # Process the task
                         try:
@@ -84,18 +82,15 @@ async def monitor_session_timeouts():
 
                             # AI extracts task details
                             user_timezone = user.get("timezone", "UTC")
-                            list_id, list_name, task_name, description, priority, due_date, assignee_ids = await task_detector.ai_extract_task_details(
-                                accumulated,
-                                lists,
-                                members,
-                                user_timezone
+                            list_id, list_name, task_name, description, priority, due_date, assignee_ids = (
+                                await task_detector.ai_extract_task_details(accumulated, lists, members, user_timezone)
                             )
 
                             # If no list, use default
                             if not list_id:
                                 list_id = user.get("selected_list")
                                 if list_id:
-                                    for lst in (lists or []):
+                                    for lst in lists or []:
                                         if isinstance(lst, dict) and lst.get("id") == list_id:
                                             list_name = lst.get("name")
                                             break
@@ -111,7 +106,7 @@ async def monitor_session_timeouts():
                                     priority=priority,
                                     due_date=due_date,
                                     timezone=user_timezone,
-                                    assignees=assignee_ids
+                                    assignees=assignee_ids,
                                 )
 
                                 if result and result.get("success"):
@@ -166,8 +161,8 @@ async def root(uid: str = Query(None)):
             "endpoints": {
                 "auth": "/auth?uid=<user_id>",
                 "webhook": "/webhook?session_id=<session>&uid=<user_id>",
-                "setup_check": "/setup-completed?uid=<user_id>"
-            }
+                "setup_check": "/setup-completed?uid=<user_id>",
+            },
         }
 
     # Get user info
@@ -177,7 +172,8 @@ async def root(uid: str = Query(None)):
         # Not authenticated - show auth page
         auth_url = f"/auth?uid={quote(uid, safe='')}"
         safe_auth_url = html.escape(auth_url, quote=True)
-        return HTMLResponse(content=f"""
+        return HTMLResponse(
+            content=f"""
         <html>
             <head>
                 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -245,7 +241,8 @@ async def root(uid: str = Query(None)):
                 </div>
             </body>
         </html>
-        """)
+        """
+        )
 
     # Authenticated - show list selection page
     lists = user.get("available_lists", [])
@@ -267,9 +264,12 @@ async def root(uid: str = Query(None)):
         display_name = f"{folder_name} / {lst['name']}" if folder_name else f"{lst['name']}"
         display_name += f" ({space_name})" if space_name else ""
         # Names come straight from ClickUp; escape at the HTML boundary.
-        list_options += f'<option value="{html.escape(str(lst["id"]))}" {selected_attr}>{html.escape(display_name)}</option>'
+        list_options += (
+            f'<option value="{html.escape(str(lst["id"]))}" {selected_attr}>{html.escape(display_name)}</option>'
+        )
 
-    return HTMLResponse(content=f"""
+    return HTMLResponse(
+        content=f"""
     <html>
         <head>
             <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -480,7 +480,8 @@ async def root(uid: str = Query(None)):
             </script>
         </body>
     </html>
-    """)
+    """
+    )
 
 
 @app.get("/auth")
@@ -503,11 +504,7 @@ async def auth_start(uid: str = Query(..., description="User ID from OMI")):
 
 
 @app.get("/auth/callback")
-async def auth_callback(
-    request: Request,
-    code: str = Query(None),
-    state: str = Query(None)
-):
+async def auth_callback(request: Request, code: str = Query(None), state: str = Query(None)):
     """Handle OAuth callback from ClickUp."""
     if not code or not state:
         return HTMLResponse(
@@ -527,7 +524,7 @@ async def auth_callback(
                 </body>
             </html>
             """,
-            status_code=400
+            status_code=400,
         )
 
     # Verify state and get uid
@@ -550,7 +547,7 @@ async def auth_callback(
                 </body>
             </html>
             """,
-            status_code=400
+            status_code=400,
         )
 
     try:
@@ -586,7 +583,7 @@ async def auth_callback(
             available_workspaces=workspaces,
             available_lists=lists,
             available_members=members,
-            timezone="America/Los_Angeles"  # Default timezone
+            timezone="America/Los_Angeles",  # Default timezone
         )
 
         # Clean up state
@@ -659,7 +656,7 @@ async def auth_callback(
                 </body>
             </html>
             """,
-            status_code=500
+            status_code=500,
         )
 
 
@@ -668,16 +665,11 @@ async def check_setup(uid: str = Query(..., description="User ID from OMI")):
     """Check if user has completed setup (authenticated with ClickUp)."""
     is_authenticated = SimpleUserStorage.is_authenticated(uid)
 
-    return {
-        "is_setup_completed": is_authenticated
-    }
+    return {"is_setup_completed": is_authenticated}
 
 
 @app.post("/update-list")
-async def update_list(
-    uid: str = Query(...),
-    list: str = Query(...)
-):
+async def update_list(uid: str = Query(...), list: str = Query(...)):
     """Update user's selected default list."""
     try:
         success = SimpleUserStorage.update_list_selection(uid, list)
@@ -691,10 +683,7 @@ async def update_list(
 
 
 @app.post("/update-timezone")
-async def update_timezone(
-    uid: str = Query(...),
-    timezone: str = Query(...)
-):
+async def update_timezone(uid: str = Query(...), timezone: str = Query(...)):
     """Update user's timezone preference."""
     try:
         success = SimpleUserStorage.update_timezone(uid, timezone)
@@ -734,7 +723,7 @@ async def refresh_lists(uid: str = Query(...)):
             selected_list=user.get("selected_list"),
             available_workspaces=workspaces,
             available_lists=lists,
-            available_members=members
+            available_members=members,
         )
 
         return {"success": True, "lists_count": len(lists)}
@@ -773,7 +762,7 @@ async def logout(uid: str = Query(...)):
 async def webhook(
     request: Request,
     uid: str = Query(..., description="User ID from OMI"),
-    session_id: str = Query(None, description="Session ID from OMI (optional)")
+    session_id: str = Query(None, description="Session ID from OMI (optional)"),
 ):
     """
     Real-time transcript webhook endpoint.
@@ -788,18 +777,16 @@ async def webhook(
 
     if not user or not user.get("access_token"):
         return JSONResponse(
-            content={
-                "message": "User not authenticated. Please complete setup first.",
-                "setup_required": True
-            },
-            status_code=401
+            content={"message": "User not authenticated. Please complete setup first.", "setup_required": True},
+            status_code=401,
         )
 
     # Parse payload from OMI
     try:
         payload = await request.json()
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid JSON payload: {str(e)}")
+        print(f"❌ webhook JSON parse error: {type(e).__name__}", flush=True)
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
     # Handle both formats
     segments = []
@@ -832,11 +819,7 @@ async def webhook(
     # Only send notifications for final task creation
     if response_message and ("✅ Task created" in response_message or "❌" in response_message):
         print("✉️  USER NOTIFICATION sent (task result)", flush=True)
-        return {
-            "message": response_message,
-            "session_id": session_id,
-            "processed_segments": len(segments)
-        }
+        return {"message": response_message, "session_id": session_id, "processed_segments": len(segments)}
 
     # Silent response during collection
     response_len = len(response_message or "")
@@ -859,11 +842,7 @@ def _extract_segment_texts(segments: Any) -> List[str]:
     return texts
 
 
-async def process_segments(
-    session: dict,
-    segments: List[Dict[str, Any]],
-    user: dict
-) -> str:
+async def process_segments(session: dict, segments: List[Dict[str, Any]], user: dict) -> str:
     """
     Collect up to 5 segments after trigger, or timeout after 5s gap.
     AI extracts task name, description, list, and priority.
@@ -881,7 +860,10 @@ async def process_segments(
     if task_detector.detect_trigger(full_text) and session["task_mode"] == "idle":
         task_content = task_detector.extract_task_content(full_text)
 
-        print(f"🎤 TRIGGER! {'[TEST MODE] Processing immediately...' if is_test_session else 'Starting segment collection...'}", flush=True)
+        print(
+            f"🎤 TRIGGER! {'[TEST MODE] Processing immediately...' if is_test_session else 'Starting segment collection...'}",
+            flush=True,
+        )
         print(f"   Content extracted: {'yes' if task_content else 'no'}", flush=True)
 
         # TEST MODE: Process entire text immediately
@@ -894,11 +876,8 @@ async def process_segments(
 
             # AI extracts task details
             user_timezone = user.get("timezone", "UTC")
-            list_id, list_name, task_name, description, priority, due_date, assignee_ids = await task_detector.ai_extract_task_details(
-                task_content,
-                lists,
-                members,
-                user_timezone
+            list_id, list_name, task_name, description, priority, due_date, assignee_ids = (
+                await task_detector.ai_extract_task_details(task_content, lists, members, user_timezone)
             )
 
             # If no list identified, use default
@@ -906,7 +885,7 @@ async def process_segments(
                 list_id = user.get("selected_list")
                 if list_id:
                     # Find list name
-                    for lst in (lists or []):
+                    for lst in lists or []:
                         if isinstance(lst, dict) and lst.get("id") == list_id:
                             list_name = lst.get("name")
                             break
@@ -916,8 +895,8 @@ async def process_segments(
                     return "❌ No list specified and no default list set"
 
             if not task_name or len(task_name.strip()) < 3:
-                    SimpleSessionStorage.reset_session(session_id)
-                    return "❌ No task name found"
+                SimpleSessionStorage.reset_session(session_id)
+                return "❌ No task name found"
 
             print(f"📤 Creating task '{task_name}' in {list_name}", flush=True)
 
@@ -929,7 +908,7 @@ async def process_segments(
                 priority=priority,
                 due_date=due_date,
                 timezone=user_timezone,
-                assignees=assignee_ids
+                assignees=assignee_ids,
             )
 
             if result and result.get("success"):
@@ -952,10 +931,7 @@ async def process_segments(
 
         # REAL MODE: Start collecting segments
         SimpleSessionStorage.update_session(
-            session_id,
-            task_mode="recording",
-            accumulated_text=task_content or full_text,
-            segments_count=1
+            session_id, task_mode="recording", accumulated_text=task_content or full_text, segments_count=1
         )
 
         return "collecting_1"
@@ -972,21 +948,14 @@ async def process_segments(
         print(f"📝 Segment {segments_count}/5 received", flush=True)
 
         # Update session with new segment
-        SimpleSessionStorage.update_session(
-            session_id,
-            accumulated_text=accumulated,
-            segments_count=segments_count
-        )
+        SimpleSessionStorage.update_session(session_id, accumulated_text=accumulated, segments_count=segments_count)
 
         # Process ONLY if we hit max 5 segments (background task handles timeout)
         if segments_count >= 5:
             print(f"✅ Max segments reached ({segments_count})! Processing...", flush=True)
 
             # Mark as processing to prevent duplicates
-            SimpleSessionStorage.update_session(
-                session_id,
-                task_mode="processing"
-            )
+            SimpleSessionStorage.update_session(session_id, task_mode="processing")
 
             # Fetch fresh lists and members
             lists = user.get("available_lists", [])
@@ -994,18 +963,15 @@ async def process_segments(
 
             # AI extracts task details
             user_timezone = user.get("timezone", "UTC")
-            list_id, list_name, task_name, description, priority, due_date, assignee_ids = await task_detector.ai_extract_task_details(
-                accumulated,
-                lists,
-                members,
-                user_timezone
+            list_id, list_name, task_name, description, priority, due_date, assignee_ids = (
+                await task_detector.ai_extract_task_details(accumulated, lists, members, user_timezone)
             )
 
             # If no list identified, use default
             if not list_id:
                 list_id = user.get("selected_list")
                 if list_id:
-                    for lst in (lists or []):
+                    for lst in lists or []:
                         if isinstance(lst, dict) and lst.get("id") == list_id:
                             list_name = lst.get("name")
                             break
@@ -1029,7 +995,7 @@ async def process_segments(
                 priority=priority,
                 due_date=due_date,
                 timezone=user_timezone,
-                assignees=assignee_ids
+                assignees=assignee_ids,
             )
 
             if result and result.get("success"):
@@ -1051,7 +1017,10 @@ async def process_segments(
                 return f"❌ Failed: {error}"
         else:
             # Still collecting (not at max yet)
-            print(f"⏳ Collecting more segments ({segments_count}/5)... [Background monitor will handle timeout]", flush=True)
+            print(
+                f"⏳ Collecting more segments ({segments_count}/5)... [Background monitor will handle timeout]",
+                flush=True,
+            )
             return f"collecting_{segments_count}"
 
     # If already processing, ignore
@@ -1067,7 +1036,8 @@ async def process_segments(
 async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(None)):
     """Development testing interface."""
     if not dev or dev != "true":
-        return HTMLResponse(content=f"""
+        return HTMLResponse(
+            content=f"""
         <html>
             <head>
                 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1085,10 +1055,13 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
                 </div>
             </body>
         </html>
-        """, status_code=404)
+        """,
+            status_code=404,
+        )
 
     safe_uid = html.escape(uid, quote=True)
-    return HTMLResponse(content=f"""
+    return HTMLResponse(
+        content=f"""
     <html>
         <head>
             <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1288,7 +1261,8 @@ async def test_interface(uid: str = Query("test_user_123"), dev: str = Query(Non
             </script>
         </body>
     </html>
-    """)
+    """
+    )
 
 
 @app.get("/health")
@@ -1712,6 +1686,7 @@ def get_mobile_css() -> str:
 
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.getenv("APP_PORT", 8000))
     host = os.getenv("APP_HOST", "0.0.0.0")
 
@@ -1721,10 +1696,4 @@ if __name__ == "__main__":
     print(f"🚀 Starting on {host}:{port}", flush=True)
     print("=" * 50, flush=True)
 
-    uvicorn.run(
-        "main:app",
-        host=host,
-        port=port,
-        reload=True
-    )
-
+    uvicorn.run("main:app", host=host, port=port, reload=True)
