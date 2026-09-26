@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   GanttChartSquare,
+  Loader2,
   Mic,
   Search,
   CheckSquare,
@@ -40,6 +41,13 @@ import {
   NO_DATE_RANGE
 } from '../lib/conversations/filtering'
 import { fetchFolders, loadCachedFolders } from '../lib/conversations/folders'
+import {
+  SEARCH_DEBOUNCE_MS,
+  composeSearchRows,
+  isSearchActive,
+  normalizeSearchQuery,
+  searchConversations
+} from '../lib/conversations/search'
 import { isConversationsPanelActive } from '../lib/conversations/conversationsPanelActivity'
 import {
   removeRows,
@@ -66,8 +74,10 @@ import type { Conversation as CloudConversation } from '../lib/omiApi.generated'
 
 // The "default view" = all folders + no date range. Only this view is written to
 // the shared conversationsCache (filtered fetches keep it clean) and it's the only
-// one whose warm cache lets the first mount skip a fetch. Type + search stay
-// client-side so they don't affect this.
+// one whose warm cache lets the first mount skip a fetch. Type stays client-side
+// so it doesn't affect this; a text search runs against the backend search
+// endpoint into its own state (lib/conversations/search.ts) and never touches
+// the cache either.
 function isDefaultView(folder: FolderFilter, dateRange: DateRange): boolean {
   return folder.kind === 'all' && dateRange.start == null && dateRange.end == null
 }
@@ -153,14 +163,34 @@ export function Conversations(): React.JSX.Element {
   const [folderFilter, setFolderFilter] = useState<FolderFilter>({ kind: 'all' })
   const [dateRange, setDateRange] = useState<DateRange>(NO_DATE_RANGE)
   const [folders, setFolders] = useState<ConversationFolder[]>([])
+  // Server-side search (mobile/macOS parity). The response is stored together
+  // with the KEY of the request it answered (query + date window + retry nonce);
+  // everything the UI needs is derived by comparing that key with the current
+  // one, so a slow response for an older query can never be mistaken for the
+  // current one and clearing the field needs no state reset at all.
+  const [search, setSearch] = useState<{
+    key: string
+    results: ConversationRow[] | null
+    error: string | null
+  }>({ key: '', results: null, error: null })
+  // Bumped by "Try again" after a failed search to re-run the same query.
+  const [searchNonce, setSearchNonce] = useState(0)
+  // Bumped when search goes inactive → active so re-entering the same text cannot
+  // treat a prior session's hits/errors as the current answer.
+  const [searchActivation, setSearchActivation] = useState(0)
+  // Bumped each time search goes inactive → active so re-entering the same query
+  // still shows in-flight state and cannot reuse a stale answer/error as current.
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<{
     ids: string[]
     timeout: number
-    // The full rows removed optimistically, so Undo can restore them exactly.
+    // The full rows removed optimistically, so Undo can restore them exactly —
+    // and where each one came from (list page and/or active search hits).
     removed: ConversationRow[]
+    inList: Set<string>
+    inSearch: Set<string>
   } | null>(null)
   const pendingTimeoutRef = useRef<number | null>(null)
   // Ids optimistically hidden from the list while a cloud mutation is in flight
@@ -396,11 +426,73 @@ export function Conversations(): React.JSX.Element {
   // local set actually changes.
   const unsyncedPast = useMemo(() => backfillCandidates(locals).length, [locals])
 
+  const updateSearchQuery = (value: string): void => {
+    const wasInactive = !isSearchActive(query)
+    if (!isSearchActive(value)) {
+      setSearch({ key: '', results: null, error: null })
+    } else if (wasInactive) {
+      setSearchActivation((n) => n + 1)
+    }
+    setQuery(value)
+  }
+
+  // Debounced remote search (Mac: DebouncedSearchCoordinator, 250ms). Re-runs when
+  // the query or the date window changes (both travel to the backend); folder and
+  // type refinements are client-side over the returned rows, so changing them
+  // never issues a second request. An empty/whitespace query tears the search
+  // down synchronously — no trailing request, no stale results.
+  const searchActive = isSearchActive(query)
+  const normalizedQuery = normalizeSearchQuery(query)
+  const searchStart = dateRange.start
+  const searchEnd = dateRange.end
+  const searchKey = searchActive
+    ? `${normalizedQuery}\u0000${searchStart ?? ''}\u0000${searchEnd ?? ''}\u0000${searchNonce}\u0000${searchActivation}`
+    : ''
+  useEffect(() => {
+    if (!panelIsActive || !searchActive) return
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      // The account this search belongs to — a response that lands after an
+      // account switch must not publish A's hits under B.
+      const originUid = getCacheUid()
+      searchConversations(normalizedQuery, { start: searchStart, end: searchEnd })
+        .then((hits) => {
+          if (cancelled || getCacheUid() !== originUid) return
+          setSearch({
+            key: searchKey,
+            results: removeRows(hits, suppressedIdsRef.current),
+            error: null
+          })
+        })
+        .catch((e: unknown) => {
+          if (cancelled || getCacheUid() !== originUid) return
+          setSearch({ key: searchKey, results: [], error: (e as Error).message || 'Search failed' })
+        })
+    }, SEARCH_DEBOUNCE_MS)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [searchKey, searchActive, normalizedQuery, searchStart, searchEnd, panelIsActive])
+  // Derived view of the search state for the CURRENT key only.
+  const searchResults = searchActive ? search.results : null
+  const searchError = searchActive && search.key === searchKey ? search.error : null
+  // Debounce + in-flight window: the current key has no answer yet.
+  const searching = searchActive && search.key !== searchKey
+
   const filters: ConversationFilters = useMemo(
     () => ({ folder: folderFilter, type, query, dateRange }),
     [folderFilter, type, query, dateRange]
   )
-  const visible = useMemo(() => applyFilters(rows, filters), [rows, filters])
+  // While a search is active the list shows the server's hits (plus client-matched
+  // local rows); otherwise the merged cloud+local rows under the local predicates.
+  const visible = useMemo(
+    () =>
+      searchActive
+        ? composeSearchRows(searchResults ?? [], rows, filters)
+        : applyFilters(rows, filters),
+    [searchActive, searchResults, rows, filters]
+  )
   const sections = useMemo(() => groupConversationsByDate(visible), [visible])
   const anyFilter = hasActiveFilters(filters)
 
@@ -436,8 +528,43 @@ export function Conversations(): React.JSX.Element {
 
   // --- Row mutations (optimistic; revert on error) ---
 
+  // A row can be on screen from the list OR from an active search's hits (a hit is
+  // usually also in `rows`, but a deep hit from months back is not) — mutate both.
   const patchRow = (id: string, patch: Partial<ConversationRow>): void => {
-    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
+    const apply = (prev: ConversationRow[]): ConversationRow[] =>
+      prev.map((r) => (r.id === id ? { ...r, ...patch } : r))
+    setRows(apply)
+    setSearch((prev) => (prev.results ? { ...prev, results: apply(prev.results) } : prev))
+  }
+  const removeEverywhere = (ids: string[]): void => {
+    setRows((prev) => removeRows(prev, ids))
+    setSearch((prev) => (prev.results ? { ...prev, results: removeRows(prev.results, ids) } : prev))
+  }
+  // `inList`/`inSearch` name where each row was taken from, so undo puts a row back
+  // only where it was — a list-only row must not be injected into a search it never
+  // matched, and a deep search hit must not be injected into the first list page.
+  const restoreEverywhere = (
+    removed: ConversationRow[],
+    inList: Set<string>,
+    inSearch: Set<string>
+  ): void => {
+    setRows((prev) =>
+      restoreRows(
+        prev,
+        removed.filter((r) => inList.has(r.id))
+      )
+    )
+    setSearch((prev) =>
+      prev.results && prev.key === searchKey
+        ? {
+            ...prev,
+            results: restoreRows(
+              prev.results,
+              removed.filter((r) => inSearch.has(r.id))
+            )
+          }
+        : prev
+    )
   }
 
   const handleStar = (row: ConversationRow, next: boolean): void => {
@@ -505,17 +632,28 @@ export function Conversations(): React.JSX.Element {
     const idSet = new Set(ids)
     // Snapshot the real rows (source + full data) now — needed to delete against the
     // right store later and to restore exactly on Undo. Pending rows aren't deletable.
-    const targets = rows.filter((r) => idSet.has(r.id) && !r.pending)
+    // Rows are looked up in the list AND the active search hits: a deep hit from an
+    // older page exists only in the latter.
+    const seen = new Set<string>()
+    const targets: ConversationRow[] = []
+    for (const r of [...rows, ...(searchResults ?? [])]) {
+      if (idSet.has(r.id) && !r.pending && !seen.has(r.id)) {
+        seen.add(r.id)
+        targets.push(r)
+      }
+    }
     if (targets.length === 0) return
     const targetIds = targets.map((r) => r.id)
+    const inList = new Set(rows.filter((r) => idSet.has(r.id)).map((r) => r.id))
+    const inSearch = new Set((searchResults ?? []).filter((r) => idSet.has(r.id)).map((r) => r.id))
     for (const id of targetIds) suppressedIdsRef.current.add(id)
-    setRows((prev) => removeRows(prev, targetIds)) // optimistic removal (M1)
+    removeEverywhere(targetIds) // optimistic removal (M1)
     const timeout = window.setTimeout(() => {
       setPendingDelete(null)
       void executeDeletion(targets)
     }, 5000)
     pendingTimeoutRef.current = timeout
-    setPendingDelete({ ids: targetIds, timeout, removed: targets })
+    setPendingDelete({ ids: targetIds, timeout, removed: targets, inList, inSearch })
     setSelected(new Set())
     setSelectMode(false)
   }
@@ -527,7 +665,7 @@ export function Conversations(): React.JSX.Element {
     }
     if (pendingDelete) {
       for (const r of pendingDelete.removed) suppressedIdsRef.current.delete(r.id)
-      setRows((prev) => restoreRows(prev, pendingDelete.removed))
+      restoreEverywhere(pendingDelete.removed, pendingDelete.inList, pendingDelete.inSearch)
     }
     setPendingDelete(null)
   }
@@ -554,15 +692,19 @@ export function Conversations(): React.JSX.Element {
     const gen = ++mergePollGenRef.current
     // Optimistically remove ALL originals — the backend merges them into a new
     // conversation and deletes every one of them (no new id in the response).
+    const inList = new Set(rows.filter((r) => ids.includes(r.id)).map((r) => r.id))
+    const inSearch = new Set(
+      (searchResults ?? []).filter((r) => ids.includes(r.id)).map((r) => r.id)
+    )
     for (const id of ids) suppressedIdsRef.current.add(id)
-    setRows((prev) => removeRows(prev, ids))
+    removeEverywhere(ids)
     try {
       await mergeConversations(ids)
     } catch (e) {
       // The merge request itself failed — un-suppress and restore the originals.
       console.error('Merge failed:', e)
       for (const id of ids) suppressedIdsRef.current.delete(id)
-      setRows((prev) => restoreRows(prev, targets))
+      restoreEverywhere(targets, inList, inSearch)
       return
     }
     // Merge is async (returns status:merging, deletes originals later). Poll a bounded
@@ -607,18 +749,36 @@ export function Conversations(): React.JSX.Element {
   const clearAllFilters = (): void => {
     setFolderFilter({ kind: 'all' })
     setType('all')
-    setQuery('')
+    updateSearchQuery('')
     setDateRange(NO_DATE_RANGE)
   }
 
   const allVisibleSelected = visible.length > 0 && selected.size === visible.length
+
+  // Body view state. While a search is active the remote hits ARE the list, so the
+  // skeleton stays up until the first response for this query lands — painting
+  // "No results" from not-yet-arrived hits would flash on every keystroke. A
+  // query refinement over existing hits keeps the previous hits on screen (with
+  // the header/field spinner) rather than blanking the list.
+  const awaitingFirstHits = searchActive && searching && searchResults === null
+  const showSkeleton = loading || awaitingFirstHits
+  const showSearchError = !loading && searchActive && !searching && searchError !== null
+  const showEmpty = !showSkeleton && !showSearchError && visible.length === 0
+  const showList = !showSkeleton && !showSearchError && visible.length > 0
+  const searchRefined = folderFilter.kind !== 'all' || type !== 'all' || dateRange.start != null
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="Conversations"
         subtitle={
-          loading ? 'Loading…' : `${visible.length} conversation${visible.length === 1 ? '' : 's'}`
+          loading
+            ? 'Loading…'
+            : searchActive && searching
+              ? 'Searching…'
+              : searchActive
+                ? `${visible.length} result${visible.length === 1 ? '' : 's'}`
+                : `${visible.length} conversation${visible.length === 1 ? '' : 's'}`
         }
         actions={
           <button
@@ -635,15 +795,23 @@ export function Conversations(): React.JSX.Element {
       {/* Search + type filter + date + select */}
       <div className="flex items-center gap-2 px-6 pb-3 lg:px-10">
         <div className="surface-panel flex flex-1 items-center gap-2 px-4 py-2.5">
-          <Search className="h-4 w-4 text-white/45" />
+          {searchActive && searching ? (
+            <Loader2 className="h-4 w-4 animate-spin text-white/45" aria-hidden />
+          ) : (
+            <Search className="h-4 w-4 text-white/45" />
+          )}
           <input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search conversations…"
+            onChange={(e) => updateSearchQuery(e.target.value)}
+            placeholder="Search titles, summaries and transcripts…"
+            aria-label="Search conversations"
             className="flex-1 border-0 bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-0"
           />
           {query && (
-            <button onClick={() => setQuery('')} className="text-xs text-white/45 hover:text-white">
+            <button
+              onClick={() => updateSearchQuery('')}
+              className="text-xs text-white/45 hover:text-white"
+            >
               Clear
             </button>
           )}
@@ -721,21 +889,43 @@ export function Conversations(): React.JSX.Element {
             )}
           </div>
         )}
-        {loading && (
+        {showSkeleton && (
           <ul className="mx-auto max-w-5xl space-y-2.5">
             {Array.from({ length: 6 }).map((_, i) => (
               <ConversationSkeleton key={i} />
             ))}
           </ul>
         )}
-        {!loading && visible.length === 0 && (
+        {showSearchError && (
           <EmptyState
-            icon={GanttChartSquare}
-            title={anyFilter ? 'No matching conversations' : 'No conversations yet'}
+            icon={Search}
+            title="Couldn’t search conversations"
+            description="Check your connection and try again."
+            action={
+              <button onClick={() => setSearchNonce((n) => n + 1)} className="btn-ghost">
+                Try again
+              </button>
+            }
+          />
+        )}
+        {showEmpty && (
+          <EmptyState
+            icon={searchActive ? Search : GanttChartSquare}
+            title={
+              searchActive
+                ? 'No search results'
+                : anyFilter
+                  ? 'No matching conversations'
+                  : 'No conversations yet'
+            }
             description={
-              anyFilter
-                ? 'Try a different search or filter.'
-                : 'Start a recording to capture audio and screen context. Your conversations will appear here.'
+              searchActive
+                ? searchRefined
+                  ? `Nothing matches “${normalizedQuery}” with your active filters.`
+                  : `Nothing matches “${normalizedQuery}”. Try a different term.`
+                : anyFilter
+                  ? 'Try a different filter.'
+                  : 'Start a recording to capture audio and screen context. Your conversations will appear here.'
             }
             action={
               anyFilter ? (
@@ -751,7 +941,7 @@ export function Conversations(): React.JSX.Element {
             }
           />
         )}
-        {!loading && visible.length > 0 && (
+        {showList && (
           <div className="mx-auto max-w-5xl space-y-6">
             {sections.map((section) => (
               <section key={section.key}>

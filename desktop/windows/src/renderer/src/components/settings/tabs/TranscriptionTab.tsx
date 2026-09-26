@@ -2,8 +2,9 @@
 //
 // Composition mirrors Mac: a "Language Mode" card with two radio options
 // (auto-detect vs single language, the dropdown living inside the single card),
-// then a "Local VAD gate" card — rendered in the Windows dark settings idiom
-// (SettingRow chrome, white/neutral selection, no purple).
+// a "Custom Vocabulary" card, then a "Local VAD gate" card — rendered in the
+// Windows dark settings idiom (SettingRow chrome, white/neutral selection, no
+// purple).
 //
 // Machinery: the single `language` preference feeds the /v4/listen and PTT
 // transcribe sockets (read at session start), with the 'multi' sentinel meaning
@@ -11,22 +12,23 @@
 // shared syncLanguage helper (PATCH /v1/users/language) — the same contract the
 // old AccountTab profile row used, relocated here to match Mac. The VAD gate
 // toggles the on-device silence gate on the ambient capture lanes
-// (AudioSessionHost reads `vadGateEnabled` at session start).
+// (AudioSessionHost reads `vadGateEnabled` at session start). Custom vocabulary
+// is account state (lib/transcriptionVocabulary.ts): the backend forwards it to
+// the ambient listen socket as keyterms, and ptt/userVocabulary.ts feeds it into
+// push-to-talk keyword boosting.
 //
-// Deliberately NOT built — no Windows machinery for either of these:
-//  - Custom vocabulary (PATCH /v1/users/transcription-preferences carries
-//    vocabulary + single_language_mode, but nothing plumbs keywords into the
-//    listen/PTT params — a dead control until that lands).
+// Deliberately NOT built — no Windows machinery for it:
 //  - A separate voice-assistant languages multi-select (Windows uses the single
 //    `language` for PTT too; there is no per-turn LID / voiceLanguages backend).
 import { useState } from 'react'
-import { Languages, Waves } from 'lucide-react'
+import { BookOpen, Languages, Waves } from 'lucide-react'
 import { LANGUAGES, DEFAULT_LANGUAGE } from '../../../lib/languages'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import { syncLanguage } from '../../../lib/userProfile'
 import { toast } from '../../../lib/toast'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
+import { VocabularyEditor } from '../controls/VocabularyEditor'
 
 const AUTO_DETECT = 'multi'
 // Single-language choices exclude the 'multi' auto-detect sentinel.
@@ -97,6 +99,15 @@ export function TranscriptionTab(): React.JSX.Element {
             )}
           </RadioCard>
         </div>
+      </SettingRow>
+
+      <SettingRow
+        icon={BookOpen}
+        title="Custom vocabulary"
+        subtitle="Improve recognition of names, brands, and technical terms. Synced to your account and used by recordings and push-to-talk."
+        keywords="vocabulary keywords keyterms names brands jargon spelling boost dictionary"
+      >
+        <VocabularyEditor />
       </SettingRow>
 
       <SettingRow

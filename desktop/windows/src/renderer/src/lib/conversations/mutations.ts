@@ -50,6 +50,25 @@ export async function reprocessConversation(id: string, appId?: string): Promise
   })
 }
 
+/** Correct one transcript segment's text (mobile's edit-segment sheet). Backend
+ *  contract: JSON BODY `{segment_id, text}` on
+ *  PATCH /v1/conversations/{id}/segments/text (UpdateSegmentTextRequest: text is
+ *  1–10000 chars). Requires a real backend segment id — segments without one
+ *  (older conversations) can't be edited; the drawer hides the affordance rather
+ *  than fabricating an id (same rule as speaker naming, see speakers.ts). */
+export const SEGMENT_TEXT_MAX_CHARS = 10_000
+
+export async function setConversationSegmentText(
+  conversationId: string,
+  segmentId: string,
+  text: string
+): Promise<void> {
+  await omiApi.patch(`/v1/conversations/${conversationId}/segments/text`, {
+    segment_id: segmentId,
+    text
+  })
+}
+
 /** Merge ≥2 conversations into one. FIRE-AND-FORGET: the backend returns
  *  {status:'merging', conversation_ids} and does NOT return the new conversation's
  *  id — the caller must refetch the list to see the result. */
