@@ -7062,9 +7062,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Peringatan Omi';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName terputus';
   }
@@ -11253,15 +11250,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'Selamat pagi';
-
-  @override
-  String get goodAfternoon => 'Selamat petang';
-
-  @override
-  String get goodEvening => 'Selamat malam';
-
-  @override
   String get alreadyHaveAccount => 'Sudah ada akaun?';
 
   @override
@@ -11722,4 +11710,65 @@ class AppLocalizationsMs extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done daripada $total';
   }
+
+  @override
+  String get noFailedRecordings => 'Tiada rakaman yang gagal';
+
+  @override
+  String get mapNoPlacesTitle => 'Belum ada tempat';
+
+  @override
+  String get mapNoPlacesMessage => 'Perbualan muncul di sini apabila Omi tahu di mana ia berlaku.';
+
+  @override
+  String get mergeWithEllipsis => 'Gabungkan dengan…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Selesaikan persediaan $appName untuk menghidupkannya';
+  }
+
+  @override
+  String get greetingUpLate => 'Berjaga lewat';
+
+  @override
+  String get greetingLunchtime => 'Waktu makan';
+
+  @override
+  String get greetingWindingDown => 'Masa berehat';
+
+  @override
+  String get greetingGoodNight => 'Selamat tidur';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Masih berjaga';
+
+  @override
+  String get greetingEarlyStart => 'Mula awal';
+
+  @override
+  String get greetingNewDay => 'Hari baharu';
+
+  @override
+  String get greetingMorning => 'Selamat pagi';
+
+  @override
+  String get greetingBusyMorning => 'Pagi yang sibuk';
+
+  @override
+  String get greetingAfternoon => 'Selamat petang';
+
+  @override
+  String get greetingHomeStretch => 'Hampir selesai';
+
+  @override
+  String get greetingEvening => 'Selamat malam';
+
+  @override
+  String get unlimitedBadge => 'Tanpa Had';
 }

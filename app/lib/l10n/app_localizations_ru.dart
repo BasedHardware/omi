@@ -7058,9 +7058,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Напоминание Omi';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName отключено';
   }
@@ -11262,15 +11259,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'Доброе утро';
-
-  @override
-  String get goodAfternoon => 'Добрый день';
-
-  @override
-  String get goodEvening => 'Добрый вечер';
-
-  @override
   String get alreadyHaveAccount => 'Уже есть аккаунт?';
 
   @override
@@ -11727,4 +11715,65 @@ class AppLocalizationsRu extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done из $total';
   }
+
+  @override
+  String get noFailedRecordings => 'Нет неудачных записей';
+
+  @override
+  String get mapNoPlacesTitle => 'Пока нет мест';
+
+  @override
+  String get mapNoPlacesMessage => 'Разговоры появляются здесь, когда Omi знает, где они проходили.';
+
+  @override
+  String get mergeWithEllipsis => 'Объединить с…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Завершите настройку $appName, чтобы включить приложение';
+  }
+
+  @override
+  String get greetingUpLate => 'Поздний час';
+
+  @override
+  String get greetingLunchtime => 'Время обеда';
+
+  @override
+  String get greetingWindingDown => 'Время отдохнуть';
+
+  @override
+  String get greetingGoodNight => 'Доброй ночи';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Ещё не спите';
+
+  @override
+  String get greetingEarlyStart => 'Ранний старт';
+
+  @override
+  String get greetingNewDay => 'Новый день';
+
+  @override
+  String get greetingMorning => 'Доброе утро';
+
+  @override
+  String get greetingBusyMorning => 'Насыщенное утро';
+
+  @override
+  String get greetingAfternoon => 'Добрый день';
+
+  @override
+  String get greetingHomeStretch => 'Финишная прямая';
+
+  @override
+  String get greetingEvening => 'Добрый вечер';
+
+  @override
+  String get unlimitedBadge => 'Безлимит';
 }

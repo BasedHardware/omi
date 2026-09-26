@@ -7079,9 +7079,6 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi రిమైండర్';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName డిస్‌కనెక్ట్ చేయబడింది';
   }
@@ -11271,15 +11268,6 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'శుభోదయం';
-
-  @override
-  String get goodAfternoon => 'శుభ మధ్యాహ్నం';
-
-  @override
-  String get goodEvening => 'శుభ సాయంత్రం';
-
-  @override
   String get alreadyHaveAccount => 'ఇప్పటికే ఖాతా ఉందా?';
 
   @override
@@ -11737,4 +11725,65 @@ class AppLocalizationsTe extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done/$total';
   }
+
+  @override
+  String get noFailedRecordings => 'విఫలమైన రికార్డింగ్‌లు లేవు';
+
+  @override
+  String get mapNoPlacesTitle => 'ఇంకా స్థలాలు లేవు';
+
+  @override
+  String get mapNoPlacesMessage => 'సంభాషణలు ఎక్కడ జరిగాయో Omi కి తెలిసినప్పుడు అవి ఇక్కడ కనిపిస్తాయి.';
+
+  @override
+  String get mergeWithEllipsis => 'దీనితో విలీనం చేయండి…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return '$appName ను ఆన్ చేయడానికి దాని సెటప్ పూర్తి చేయండి';
+  }
+
+  @override
+  String get greetingUpLate => 'అర్ధరాత్రి';
+
+  @override
+  String get greetingLunchtime => 'భోజన సమయం';
+
+  @override
+  String get greetingWindingDown => 'విశ్రాంతి సమయం';
+
+  @override
+  String get greetingGoodNight => 'శుభ రాత్రి';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'తెల్లవారుజాము';
+
+  @override
+  String get greetingEarlyStart => 'వేకువజాము';
+
+  @override
+  String get greetingNewDay => 'కొత్త రోజు';
+
+  @override
+  String get greetingMorning => 'శుభోదయం';
+
+  @override
+  String get greetingBusyMorning => 'బిజీ ఉదయం';
+
+  @override
+  String get greetingAfternoon => 'శుభ మధ్యాహ్నం';
+
+  @override
+  String get greetingHomeStretch => 'రోజు ముగింపు';
+
+  @override
+  String get greetingEvening => 'శుభ సాయంత్రం';
+
+  @override
+  String get unlimitedBadge => 'అపరిమితం';
 }

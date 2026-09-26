@@ -122,7 +122,9 @@ void main() {
       ),
     );
 
-    expect(find.text('Unknown location'), findsOneWidget);
+    // Says what fills the map, not "Unknown location".
+    expect(find.text('No places yet'), findsOneWidget);
+    expect(find.text('Conversations appear here when Omi knows where they happened.'), findsOneWidget);
     expect(find.text('No conversations yet'), findsNothing);
   });
 

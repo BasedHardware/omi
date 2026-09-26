@@ -7060,9 +7060,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi-herinnering';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName losgekoppeld';
   }
@@ -11258,15 +11255,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'Goedemorgen';
-
-  @override
-  String get goodAfternoon => 'Goedemiddag';
-
-  @override
-  String get goodEvening => 'Goedenavond';
-
-  @override
   String get alreadyHaveAccount => 'Heb je al een account?';
 
   @override
@@ -11724,4 +11712,65 @@ class AppLocalizationsNl extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done van $total';
   }
+
+  @override
+  String get noFailedRecordings => 'Geen mislukte opnames';
+
+  @override
+  String get mapNoPlacesTitle => 'Nog geen plaatsen';
+
+  @override
+  String get mapNoPlacesMessage => 'Gesprekken verschijnen hier wanneer Omi weet waar ze plaatsvonden.';
+
+  @override
+  String get mergeWithEllipsis => 'Samenvoegen met…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Rond het instellen van $appName af om de app aan te zetten';
+  }
+
+  @override
+  String get greetingUpLate => 'Laat op';
+
+  @override
+  String get greetingLunchtime => 'Lunchtijd';
+
+  @override
+  String get greetingWindingDown => 'Tijd om te ontspannen';
+
+  @override
+  String get greetingGoodNight => 'Welterusten';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Nog wakker';
+
+  @override
+  String get greetingEarlyStart => 'Vroeg begonnen';
+
+  @override
+  String get greetingNewDay => 'Nieuwe dag';
+
+  @override
+  String get greetingMorning => 'Goedemorgen';
+
+  @override
+  String get greetingBusyMorning => 'Drukke ochtend';
+
+  @override
+  String get greetingAfternoon => 'Goedemiddag';
+
+  @override
+  String get greetingHomeStretch => 'Laatste loodjes';
+
+  @override
+  String get greetingEvening => 'Goedenavond';
+
+  @override
+  String get unlimitedBadge => 'Onbeperkt';
 }

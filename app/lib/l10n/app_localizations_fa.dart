@@ -7043,9 +7043,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'یادآور Omi';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName قطع شد';
   }
@@ -11221,15 +11218,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'صبح بخیر';
-
-  @override
-  String get goodAfternoon => 'بعدازظهر بخیر';
-
-  @override
-  String get goodEvening => 'عصر بخیر';
-
-  @override
   String get alreadyHaveAccount => 'از قبل حساب داری؟';
 
   @override
@@ -11685,4 +11673,65 @@ class AppLocalizationsFa extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done از $total';
   }
+
+  @override
+  String get noFailedRecordings => 'هیچ ضبط ناموفقی وجود ندارد';
+
+  @override
+  String get mapNoPlacesTitle => 'هنوز مکانی نیست';
+
+  @override
+  String get mapNoPlacesMessage => 'گفتگوها وقتی Omi بداند کجا انجام شده‌اند اینجا نمایش داده می‌شوند.';
+
+  @override
+  String get mergeWithEllipsis => 'ادغام با…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'برای روشن کردن $appName، راه‌اندازی آن را تمام کنید';
+  }
+
+  @override
+  String get greetingUpLate => 'شب‌بیداری';
+
+  @override
+  String get greetingLunchtime => 'وقت ناهار';
+
+  @override
+  String get greetingWindingDown => 'وقت استراحت';
+
+  @override
+  String get greetingGoodNight => 'شب بخیر';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting، $name';
+  }
+
+  @override
+  String get greetingStillUp => 'هنوز بیدار';
+
+  @override
+  String get greetingEarlyStart => 'سحرخیز';
+
+  @override
+  String get greetingNewDay => 'روز نو';
+
+  @override
+  String get greetingMorning => 'صبح بخیر';
+
+  @override
+  String get greetingBusyMorning => 'صبح پرکار';
+
+  @override
+  String get greetingAfternoon => 'بعدازظهر بخیر';
+
+  @override
+  String get greetingHomeStretch => 'آخر روز';
+
+  @override
+  String get greetingEvening => 'عصر بخیر';
+
+  @override
+  String get unlimitedBadge => 'نامحدود';
 }

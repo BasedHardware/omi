@@ -8653,10 +8653,6 @@
             }
         }
     },
-    "actionItemReminderTitle": "Omi podsjetnik",
-    "@actionItemReminderTitle": {
-        "description": "Title for action item reminder notifications"
-    },
     "deviceDisconnectedTitle": "{deviceName} je odvojen",
     "@deviceDisconnectedTitle": {
         "description": "Notification title when a device disconnects",
@@ -11075,9 +11071,6 @@
     "captureStorageAlmostFull": "Memorija je skoro puna",
     "capturePendantDisconnectedDetail": "Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovo povezati kad je privjesak uključen i u blizini. Sve snimljeno do sada je sačuvano.",
     "participantsSummaryUncounted": "{name} i drugi",
-    "goodMorning": "Dobro jutro",
-    "goodAfternoon": "Dobar dan",
-    "goodEvening": "Dobro veče",
     "alreadyHaveAccount": "Već imaš račun?",
     "signInToOmi": "Prijavi se u Omi",
     "signInSubtitle": "Tvoji razgovori i sjećanja prate tvoj račun na telefonu, Macu i webu.",
@@ -11216,5 +11209,24 @@
     "tipStarBody": "Razgovore sa zvjezdicom lako je kasnije pronaći.",
     "tipPrivateTitle": "Privatno po zadanom",
     "tipPrivateBody": "Tvoji razgovori ostaju privatni osim ako ih ne podijeliš.",
-    "homeGettingStartedProgress": "{done} od {total}"
+    "homeGettingStartedProgress": "{done} od {total}",
+    "noFailedRecordings": "Nema neuspjelih snimaka",
+    "mapNoPlacesTitle": "Još nema mjesta",
+    "mapNoPlacesMessage": "Razgovori se ovdje prikazuju kada Omi zna gdje su se odvili.",
+    "mergeWithEllipsis": "Spoji sa…",
+    "finishSetupToEnable": "Završite postavljanje aplikacije {appName} da je uključite",
+    "greetingUpLate": "Kasno je",
+    "greetingLunchtime": "Vrijeme ručka",
+    "greetingWindingDown": "Vrijeme za odmor",
+    "greetingGoodNight": "Laku noć",
+    "greetingWithName": "{greeting}, {name}",
+    "greetingStillUp": "Još budni",
+    "greetingEarlyStart": "Rani početak",
+    "greetingNewDay": "Novi dan",
+    "greetingMorning": "Dobro jutro",
+    "greetingBusyMorning": "Užurbano jutro",
+    "greetingAfternoon": "Dobar dan",
+    "greetingHomeStretch": "Završnica dana",
+    "greetingEvening": "Dobro veče",
+    "unlimitedBadge": "Neograničeno"
 }

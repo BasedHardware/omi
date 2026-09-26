@@ -7029,9 +7029,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Připomínka Omi';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName odpojeno';
   }
@@ -11221,15 +11218,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'Dobré ráno';
-
-  @override
-  String get goodAfternoon => 'Dobré odpoledne';
-
-  @override
-  String get goodEvening => 'Dobrý večer';
-
-  @override
   String get alreadyHaveAccount => 'Už máte účet?';
 
   @override
@@ -11684,4 +11672,65 @@ class AppLocalizationsCs extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done z $total';
   }
+
+  @override
+  String get noFailedRecordings => 'Žádné neúspěšné nahrávky';
+
+  @override
+  String get mapNoPlacesTitle => 'Zatím žádná místa';
+
+  @override
+  String get mapNoPlacesMessage => 'Konverzace se zde zobrazí, když Omi ví, kde proběhly.';
+
+  @override
+  String get mergeWithEllipsis => 'Sloučit s…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Dokončete nastavení aplikace $appName, abyste ji mohli zapnout';
+  }
+
+  @override
+  String get greetingUpLate => 'Pozdní hodina';
+
+  @override
+  String get greetingLunchtime => 'Čas na oběd';
+
+  @override
+  String get greetingWindingDown => 'Čas se uvolnit';
+
+  @override
+  String get greetingGoodNight => 'Dobrou noc';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Ještě vzhůru';
+
+  @override
+  String get greetingEarlyStart => 'Časný start';
+
+  @override
+  String get greetingNewDay => 'Nový den';
+
+  @override
+  String get greetingMorning => 'Dobré ráno';
+
+  @override
+  String get greetingBusyMorning => 'Rušné dopoledne';
+
+  @override
+  String get greetingAfternoon => 'Dobré odpoledne';
+
+  @override
+  String get greetingHomeStretch => 'Finiš dne';
+
+  @override
+  String get greetingEvening => 'Dobrý večer';
+
+  @override
+  String get unlimitedBadge => 'Neomezený';
 }

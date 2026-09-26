@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:ui' as ui;
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -246,36 +248,39 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   static ConversationActionAction _rowActionAnalytics(ConversationRowAction action, bool starred) => switch (action) {
-        ConversationRowAction.open => ConversationActionAction.open,
         ConversationRowAction.star => starred ? ConversationActionAction.unstar : ConversationActionAction.star,
         ConversationRowAction.move => ConversationActionAction.moveFolder,
         ConversationRowAction.share => ConversationActionAction.share,
+        ConversationRowAction.copySummary => ConversationActionAction.copySummary,
         ConversationRowAction.recordings => ConversationActionAction.recordingsOpen,
         ConversationRowAction.separate => ConversationActionAction.separate,
         ConversationRowAction.select => ConversationActionAction.select,
         ConversationRowAction.delete => ConversationActionAction.delete,
       };
 
-  /// Long-press: the row's one context menu (hub audit #7). Multi-select is one of its entries.
+  /// Long-press: the row's one context menu (hub audit #7, v2 ContextMenu), opening under the row.
+  /// Merging (multi-select) is one of its entries.
   Future<void> _showActions(BuildContext context, ConversationProvider provider) async {
-    OmiHaptics.medium();
     final conversation = widget.conversation;
-    final action = await showConversationActionsSheet(
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) return;
+    final action = await showConversationRowMenu(
       context,
       conversation,
+      anchor: box.localToGlobal(Offset.zero) & box.size,
       canSelect: widget.allowSelection && provider.isConversationEligibleForMerge(conversation.id),
     );
     if (action == null || !context.mounted) return;
     trackConversationAction(_rowActionAnalytics(action, conversation.starred), ConversationActionSurface.rowLongPress);
     switch (action) {
-      case ConversationRowAction.open:
-        await _open(context, provider);
       case ConversationRowAction.star:
         await toggleConversationStarred(context, conversation);
       case ConversationRowAction.move:
         await moveConversationToFolder(context, conversation);
       case ConversationRowAction.share:
         await shareConversation(context, conversation);
+      case ConversationRowAction.copySummary:
+        await copyConversationSummary(context, conversation);
       case ConversationRowAction.recordings:
         await showConversationRowRecordings(context, conversation);
       case ConversationRowAction.separate:
@@ -543,12 +548,16 @@ class _ConversationListItemState extends State<ConversationListItem> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          ExcludeSemantics(
-                            child: Icon(Icons.chevron_right, size: 18, color: OmiColors.textTertiary),
-                          ),
+                          if (!widget.conversation.isLocked)
+                            ExcludeSemantics(
+                              child: Icon(Icons.chevron_right, size: 18, color: OmiColors.textTertiary),
+                            ),
                         ],
                       ),
-                      if (!discarded && widget.conversation.structured.overview.trim().isNotEmpty) ...[
+                      if (widget.conversation.isLocked) ...[
+                        const SizedBox(height: 4),
+                        _LockedSummary(overview: widget.conversation.structured.overview),
+                      ] else if (!discarded && widget.conversation.structured.overview.trim().isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(
                           OmiPlainText.fromMarkdown(widget.conversation.structured.overview),
@@ -604,7 +613,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
             ),
           ],
         ),
-        if (widget.conversation.isLocked) _buildLockedOverlay(),
       ],
     );
   }
@@ -625,27 +633,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
       alignment: Alignment.center,
       decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: _cardRadius),
       child: const MergingIndicator(),
-    );
-  }
-
-  Widget _buildLockedOverlay() {
-    return Positioned.fill(
-      child: ClipRRect(
-        child: Container(
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            // Avoid a live backdrop blur for every locked card. The opaque overlay
-            // preserves the locked affordance without making the scroll/route paint
-            // path sample and blur the entire card behind it.
-            color: Colors.black.withValues(alpha: 0.62),
-            borderRadius: OmiRadius.smAll,
-          ),
-          child: Text(
-            context.l10n.upgradeToUnlimited,
-            style: OmiType.callout.copyWith(fontWeight: FontWeight.bold),
-          ),
-        ),
-      ),
     );
   }
 
@@ -764,6 +751,89 @@ class _TimeColumn extends StatelessWidget {
           if (period.isNotEmpty)
             Text(period, style: OmiType.caption.copyWith(color: OmiColors.textTertiary), maxLines: 1),
         ],
+      ),
+    );
+  }
+}
+
+/// A locked conversation's summary (over the plan's minutes): its words blurred, never readable,
+/// under a small lock badge naming the plan that opens it. The title, time and length stay as they
+/// are, so the row still says what it was. The blur is the text's own layer (no backdrop sampling),
+/// so a list full of locked rows scrolls as smoothly as any other.
+class _LockedSummary extends StatelessWidget {
+  const _LockedSummary({required this.overview});
+
+  final String overview;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = OmiPlainText.fromMarkdown(overview).trim();
+    final Widget words = text.isEmpty
+        // Nothing sent for a locked row: two lines' worth of shape to blur instead.
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final width in const [1.0, 0.62])
+                FractionallySizedBox(
+                  widthFactor: width,
+                  child: Container(
+                    height: 10,
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    decoration: BoxDecoration(
+                        color: OmiColors.textTertiary.withValues(alpha: 0.45), borderRadius: OmiRadius.pillAll),
+                  ),
+                ),
+            ],
+          )
+        : Text(
+            text,
+            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.3),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          );
+    return Semantics(
+      label: context.l10n.upgradeToUnlimited,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          ExcludeSemantics(
+            child: ImageFiltered(
+              imageFilter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5, tileMode: TileMode.decal),
+              child: Opacity(opacity: 0.8, child: words),
+            ),
+          ),
+          const _UnlimitedBadge(),
+        ],
+      ),
+    );
+  }
+}
+
+/// The small lock badge on a locked summary: a frosted capsule with the plan's name.
+class _UnlimitedBadge extends StatelessWidget {
+  const _UnlimitedBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return ExcludeSemantics(
+      child: Container(
+        key: const Key('conversation_locked_badge'),
+        height: 26,
+        padding: const EdgeInsets.fromLTRB(8, 0, 10, 0),
+        decoration: BoxDecoration(
+          color: OmiColors.surface1.withValues(alpha: 0.92),
+          borderRadius: OmiRadius.pillAll,
+          border: Border.all(color: OmiColors.border, width: 0.5),
+          boxShadow: [BoxShadow(color: OmiColors.shadowSoft, blurRadius: 8, offset: const Offset(0, 2))],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.lock_outline_rounded, size: 13, color: OmiColors.textPrimary),
+            const SizedBox(width: 5),
+            Text(context.l10n.unlimitedBadge, style: OmiType.caption1.copyWith(fontWeight: FontWeight.w700)),
+          ],
+        ),
       ),
     );
   }

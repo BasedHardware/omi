@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/capture_sources.dart';
@@ -10,14 +9,13 @@ const String kLiveOrbHeroTag = 'omi-live-orb';
 
 /// The one capture status and control surface on Home: what is recording now (v2 `Main`).
 ///
-/// Row 1 is the short [status] ("Listening", "Paused", "Reconnecting…") over the source's name and
+/// Row 1 is the short [status] ("Listening", "Muted", "Reconnecting…") over the source's name and
 /// the consequence of the state ([detail]: "Audio saved, transcribes later"), and the elapsed time.
 /// A problem ([explanation] set) carries an amber warning glyph, and tapping the text opens a sheet
-/// that explains it. Then the listening wave, the latest transcript, and two equal capsules: Pause
-/// (Resume only when the reader paused, [paused]) and Finish, which ends and processes this
-/// conversation (the device keeps listening for the next). The orb's LED and the wave move only
-/// while audio is really being captured ([live]). A call shows a chevron instead of controls: the
-/// call page owns them.
+/// that explains it. Then the listening wave, the latest transcript, and at most two equal capsules:
+/// Mute (Unmute once the reader muted, [paused]) and Stop, which saves this conversation and stops
+/// listening until Start. The orb's LED and the wave move only while audio is really being captured
+/// ([live]). A call shows a chevron instead of controls: the call page owns them.
 class LiveCaptureCard extends StatelessWidget {
   const LiveCaptureCard({
     super.key,
@@ -46,7 +44,7 @@ class LiveCaptureCard extends StatelessWidget {
   /// For a problem state: what the details sheet says. Marks the card with a warning glyph.
   final String? explanation;
 
-  /// The reader (or the pendant) paused capture: the Pause capsule resumes.
+  /// The reader (or the pendant's double tap) muted capture: the Mute capsule unmutes.
   final bool paused;
 
   /// Audio is being captured right now (the orb's LED, the moving wave). Defaults to not [paused].
@@ -55,21 +53,13 @@ class LiveCaptureCard extends StatelessWidget {
   final String? lastLine;
   final String? note;
 
-  /// Null hides the Pause/Resume control.
+  /// Null hides Mute/Unmute (glasses cannot mute).
   final VoidCallback? onPauseToggle;
 
-  /// Null hides Finish.
+  /// Null hides Stop.
   final VoidCallback? onFinish;
 
   static const String callSource = 'call';
-
-  /// Pausing means nothing to a photo-capture device (OmiGlass, Ray-Ban Meta): it keeps taking
-  /// photos. The live card and the live page use this one rule.
-  static bool canPause(BtDevice? device, {required String? source}) {
-    if (source == null || source == 'phone') return true;
-    final type = device?.type;
-    return type != DeviceType.openglass && type != DeviceType.raybanMeta;
-  }
 
   static String formatElapsed(Duration d) {
     final h = d.inHours, m = d.inMinutes % 60, s = (d.inSeconds % 60).toString().padLeft(2, '0');
@@ -231,9 +221,9 @@ class LiveCaptureCard extends StatelessWidget {
           if (onPauseToggle != null)
             Expanded(
               child: LiveCaptureAction(
-                key: const Key('live_capture_pause'),
-                label: paused ? l10n.resume : l10n.pause,
-                icon: paused ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                key: const Key('live_capture_mute'),
+                label: paused ? l10n.unmute : l10n.mute,
+                icon: paused ? Icons.mic_rounded : Icons.mic_off_rounded,
                 primary: false,
                 onPressed: onPauseToggle!,
               ),
@@ -242,8 +232,8 @@ class LiveCaptureCard extends StatelessWidget {
           if (onFinish != null)
             Expanded(
               child: LiveCaptureAction(
-                key: const Key('live_capture_finish'),
-                label: l10n.endCapture,
+                key: const Key('live_capture_stop'),
+                label: l10n.stop,
                 icon: Icons.stop_rounded,
                 primary: true,
                 onPressed: onFinish!,
@@ -256,7 +246,7 @@ class LiveCaptureCard extends StatelessWidget {
 }
 
 /// One of the live card's two 48 pt capsules (Liquid Dock `.cap`, 17 pt semibold): [primary] is the
-/// accent (End, Start listening) with a soft shadow, the other the quiet fill (Pause, Add a device).
+/// accent (Stop, Start) with a soft shadow, the other the quiet fill (Mute, Manage devices).
 /// Dips when pressed.
 class LiveCaptureAction extends StatelessWidget {
   const LiveCaptureAction({

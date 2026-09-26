@@ -6984,9 +6984,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'تذكير Omi';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName غير متصل';
   }
@@ -11155,15 +11152,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'صباح الخير';
-
-  @override
-  String get goodAfternoon => 'مساء الخير';
-
-  @override
-  String get goodEvening => 'مساء الخير';
-
-  @override
   String get alreadyHaveAccount => 'لديك حساب بالفعل؟';
 
   @override
@@ -11614,4 +11602,65 @@ class AppLocalizationsAr extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done من $total';
   }
+
+  @override
+  String get noFailedRecordings => 'لا توجد تسجيلات فاشلة';
+
+  @override
+  String get mapNoPlacesTitle => 'لا توجد أماكن بعد';
+
+  @override
+  String get mapNoPlacesMessage => 'تظهر المحادثات هنا عندما يعرف Omi مكان حدوثها.';
+
+  @override
+  String get mergeWithEllipsis => 'دمج مع…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'أكمل إعداد $appName لتشغيله';
+  }
+
+  @override
+  String get greetingUpLate => 'وقت متأخر';
+
+  @override
+  String get greetingLunchtime => 'وقت الغداء';
+
+  @override
+  String get greetingWindingDown => 'وقت الاسترخاء';
+
+  @override
+  String get greetingGoodNight => 'ليلة سعيدة';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting، $name';
+  }
+
+  @override
+  String get greetingStillUp => 'ساعات الفجر';
+
+  @override
+  String get greetingEarlyStart => 'صباح باكر';
+
+  @override
+  String get greetingNewDay => 'يوم جديد';
+
+  @override
+  String get greetingMorning => 'صباح الخير';
+
+  @override
+  String get greetingBusyMorning => 'صباح مزدحم';
+
+  @override
+  String get greetingAfternoon => 'نهارك سعيد';
+
+  @override
+  String get greetingHomeStretch => 'آخر النهار';
+
+  @override
+  String get greetingEvening => 'مساء الخير';
+
+  @override
+  String get unlimitedBadge => 'غير محدود';
 }

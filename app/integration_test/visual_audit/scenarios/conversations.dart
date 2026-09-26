@@ -48,6 +48,38 @@ const _twoSourceGroup = CaptureGroup(id: 'group-1', primaryId: 'grouped-a', memb
 
 final conversationsScenarios = <AuditScenario>[
   AuditScenario(
+    id: 'conversations-locked',
+    title: 'Out of free minutes: locked rows',
+    page: _page,
+    state: 'The plan ran out: two locked conversations (one with no summary sent) above an unlocked one',
+    prefs: {'showGoalTrackerEnabled': false},
+    run: (a) async {
+      final items = [
+        ServerConversation(
+          id: 'l1',
+          createdAt: DateTime(2026, 9, 26, 9, 40),
+          startedAt: DateTime(2026, 9, 26, 9, 40),
+          finishedAt: DateTime(2026, 9, 26, 9, 49),
+          structured: Structured('Standup with the hardware team',
+              'Firmware 2.3 ships Friday; the LED brightness fix is in and QA signs off tomorrow.',
+              category: 'work'),
+          isLocked: true,
+        ),
+        ServerConversation(
+          id: 'l2',
+          createdAt: DateTime(2026, 9, 26, 8, 15),
+          startedAt: DateTime(2026, 9, 26, 8, 15),
+          finishedAt: DateTime(2026, 9, 26, 8, 39),
+          structured: Structured('Coffee with Priya', '', category: 'personal'),
+          isLocked: true,
+        ),
+        auditConversation('u1', title: 'Design catch-up with Alex'),
+      ];
+      await a.pump(const ConversationsPage(requestInitialLoad: false), providers: _listProviders(items));
+      await a.shot('Locked rows keep title, time and length; the summary blurs under an Unlimited badge');
+    },
+  ),
+  AuditScenario(
     id: 'conversations-list',
     title: 'Conversations list, row menu and swipe to delete',
     page: _page,

@@ -33,8 +33,10 @@ class PendingTranscriptionsBanner extends StatelessWidget {
     if (syncProvider == null) return const SizedBox.shrink();
     final pendingCount = syncProvider.pendingLocalTranscriptionWals.length;
     if (pendingCount == 0) return const SizedBox.shrink();
+    // Its own row above the search bar, with the same gap below as above (it used to sit flush
+    // against the search field).
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, OmiSpacing.sm),
       child: Semantics(
         button: true,
         child: GestureDetector(
@@ -48,12 +50,10 @@ class PendingTranscriptionsBanner extends StatelessWidget {
           },
           child: Container(
             key: const Key('pending_transcriptions_banner'),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: OmiColors.surface1,
-              borderRadius: const BorderRadius.all(Radius.circular(OmiRadius.md)),
-              border: Border.all(color: OmiColors.border, width: 0.5),
-            ),
+            constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 10),
+            // A filled v2 row (like the cards below it), not a hairline box.
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
             child: Row(
               children: [
                 Icon(Icons.cloud_upload_outlined, size: 16, color: OmiColors.textSecondary),

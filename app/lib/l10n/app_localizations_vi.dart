@@ -7045,9 +7045,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Nhắc nhở Omi';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName đã ngắt kết nối';
   }
@@ -11220,15 +11217,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'Chào buổi sáng';
-
-  @override
-  String get goodAfternoon => 'Chào buổi chiều';
-
-  @override
-  String get goodEvening => 'Chào buổi tối';
-
-  @override
   String get alreadyHaveAccount => 'Đã có tài khoản?';
 
   @override
@@ -11686,4 +11674,65 @@ class AppLocalizationsVi extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done/$total';
   }
+
+  @override
+  String get noFailedRecordings => 'Không có bản ghi nào bị lỗi';
+
+  @override
+  String get mapNoPlacesTitle => 'Chưa có địa điểm nào';
+
+  @override
+  String get mapNoPlacesMessage => 'Các cuộc trò chuyện xuất hiện ở đây khi Omi biết chúng diễn ra ở đâu.';
+
+  @override
+  String get mergeWithEllipsis => 'Hợp nhất với…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Hoàn tất thiết lập $appName để bật ứng dụng';
+  }
+
+  @override
+  String get greetingUpLate => 'Thức khuya';
+
+  @override
+  String get greetingLunchtime => 'Giờ ăn trưa';
+
+  @override
+  String get greetingWindingDown => 'Giờ thư giãn';
+
+  @override
+  String get greetingGoodNight => 'Chúc ngủ ngon';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Vẫn còn thức';
+
+  @override
+  String get greetingEarlyStart => 'Dậy sớm thế';
+
+  @override
+  String get greetingNewDay => 'Ngày mới';
+
+  @override
+  String get greetingMorning => 'Chào buổi sáng';
+
+  @override
+  String get greetingBusyMorning => 'Sáng bận rộn';
+
+  @override
+  String get greetingAfternoon => 'Chào buổi chiều';
+
+  @override
+  String get greetingHomeStretch => 'Chặng cuối';
+
+  @override
+  String get greetingEvening => 'Chào buổi tối';
+
+  @override
+  String get unlimitedBadge => 'Không giới hạn';
 }

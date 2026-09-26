@@ -7001,9 +7001,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'การแจ้งเตือน Omi';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName ตัดการเชื่อมต่อ';
   }
@@ -11160,15 +11157,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'สวัสดีตอนเช้า';
-
-  @override
-  String get goodAfternoon => 'สวัสดีตอนบ่าย';
-
-  @override
-  String get goodEvening => 'สวัสดีตอนเย็น';
-
-  @override
   String get alreadyHaveAccount => 'มีบัญชีอยู่แล้ว?';
 
   @override
@@ -11621,4 +11609,65 @@ class AppLocalizationsTh extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done จาก $total';
   }
+
+  @override
+  String get noFailedRecordings => 'ไม่มีการบันทึกที่ล้มเหลว';
+
+  @override
+  String get mapNoPlacesTitle => 'ยังไม่มีสถานที่';
+
+  @override
+  String get mapNoPlacesMessage => 'บทสนทนาจะแสดงที่นี่เมื่อ Omi รู้ว่าเกิดขึ้นที่ไหน';
+
+  @override
+  String get mergeWithEllipsis => 'รวมกับ…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'ตั้งค่า $appName ให้เสร็จเพื่อเปิดใช้งาน';
+  }
+
+  @override
+  String get greetingUpLate => 'ดึกแล้วนะ';
+
+  @override
+  String get greetingLunchtime => 'พักเที่ยง';
+
+  @override
+  String get greetingWindingDown => 'เวลาพักผ่อน';
+
+  @override
+  String get greetingGoodNight => 'ราตรีสวัสดิ์';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting คุณ$name';
+  }
+
+  @override
+  String get greetingStillUp => 'ยังไม่นอน';
+
+  @override
+  String get greetingEarlyStart => 'ตื่นเช้าจัง';
+
+  @override
+  String get greetingNewDay => 'วันใหม่';
+
+  @override
+  String get greetingMorning => 'สวัสดีตอนเช้า';
+
+  @override
+  String get greetingBusyMorning => 'เช้าที่วุ่นวาย';
+
+  @override
+  String get greetingAfternoon => 'สวัสดีตอนบ่าย';
+
+  @override
+  String get greetingHomeStretch => 'ช่วงท้ายวัน';
+
+  @override
+  String get greetingEvening => 'สวัสดีตอนเย็น';
+
+  @override
+  String get unlimitedBadge => 'ไม่จำกัด';
 }

@@ -15,8 +15,6 @@ enum CapturePalette {
     static let ink = Color(red: 0x0A / 255, green: 0x0B / 255, blue: 0x0F / 255)
     static let led = Color(red: 0x4C / 255, green: 0x9B / 255, blue: 0xFF / 255)
     static let ledOff = Color(red: 0x33 / 255, green: 0x38 / 255, blue: 0x42 / 255)
-    /// "Needs the user" amber, as the app's starred star.
-    static let attention = Color(red: 0xFF / 255, green: 0xB5 / 255, blue: 0x47 / 255)
     /// The dock's glass: rgba(20,22,27,.94).
     static let card = Color(red: 20 / 255, green: 22 / 255, blue: 27 / 255).opacity(0.94)
 }
@@ -61,6 +59,17 @@ struct CaptureSnapshot {
 
     var isReceivingAudio: Bool {
         !isStale && !state.paused && (state.status == "listening" || state.status == "recording")
+    }
+
+    /// While the mic is on, the second this update carries: the orb breathes on it (the app's orb
+    /// breathes too). Nil when nothing is captured, so everything holds still.
+    var breath: Int? { isReceivingAudio ? state.elapsed : nil }
+
+    /// Where the ripple is: measured audio moves it by its own bins; otherwise, while the mic is
+    /// on, it moves eight bins a second like the app's wave.
+    var rippleTick: Int {
+        if !state.levels.isEmpty { return state.levelsEnd }
+        return isReceivingAudio ? state.elapsed * 8 : 0
     }
 
     /// A live timer's ideal width is unbounded, so the clock always gets a
@@ -114,18 +123,24 @@ struct OmiCaptureLiveActivity: Widget {
                     // into a 160 pt island, which leaves exactly 22 + 10 + 38.
                     VStack(spacing: 10) {
                         CaptureWaveform(snapshot: snapshot, height: 22)
-                        CaptureActions(snapshot: snapshot, height: 38, secondaryFill: 0.14, showStar: false)
+                        CaptureActions(snapshot: snapshot, height: 38, secondaryFill: 0.14)
                     }
                 }
             } compactLeading: {
-                // Island.dc.html compact: the orb, its dot the pendant's LED (lit while audio flows).
-                CapturePendant(active: snapshot.isReceivingAudio, size: 24)
-                    .padding(.leading, 2)
+                // Island.dc.html compact: the orb, its dot the pendant's LED (breathing while the mic
+                // is on), and beside it the app's listening wave in miniature.
+                HStack(spacing: 5) {
+                    CapturePendant(active: snapshot.isReceivingAudio, size: 24, breath: snapshot.breath)
+                    if snapshot.isReceivingAudio {
+                        CaptureMiniWave(tick: snapshot.rippleTick, height: 14)
+                    }
+                }
+                .padding(.leading, 2)
             } compactTrailing: {
                 CaptureCompactClock(snapshot: snapshot)
             } minimal: {
-                // Minimal (another Live Activity is showing): the orb alone.
-                CapturePendant(active: snapshot.isReceivingAudio, size: 22)
+                // Minimal (another Live Activity is showing): the orb alone, still breathing.
+                CapturePendant(active: snapshot.isReceivingAudio, size: 22, breath: snapshot.breath)
             }
             .widgetURL(captureURL(context.attributes.recordingId))
             .keylineTint(CapturePalette.led)
@@ -159,14 +174,14 @@ struct CaptureLockScreenView: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack(spacing: 12) {
-                CapturePendant(active: snapshot.isReceivingAudio, size: 36 * CaptureLayout.heroScale)
+                CapturePendant(active: snapshot.isReceivingAudio, size: 36 * CaptureLayout.heroScale, breath: snapshot.breath)
                 CaptureStatus(snapshot: snapshot, showSource: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 CaptureClock(snapshot: snapshot, size: 30)
             }
             .frame(minHeight: 48)
             CaptureWaveform(snapshot: snapshot, height: 26)
-            CaptureActions(snapshot: snapshot, height: 40, secondaryFill: 0.12, showStar: true)
+            CaptureActions(snapshot: snapshot, height: 40, secondaryFill: 0.12)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
@@ -191,16 +206,16 @@ private struct CaptureIslandLeading: View {
         // subtitle or then the title does not fit (~111 pt on most iPhones) it is dropped, never shrunk.
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 8) {
-                CapturePendant(active: snapshot.isReceivingAudio, size: 32)
+                CapturePendant(active: snapshot.isReceivingAudio, size: 32, breath: snapshot.breath)
                 CaptureStatus(snapshot: snapshot, showSource: false)
                     .fixedSize()
             }
             HStack(spacing: 6) {
-                CapturePendant(active: snapshot.isReceivingAudio, size: 32)
+                CapturePendant(active: snapshot.isReceivingAudio, size: 32, breath: snapshot.breath)
                 CaptureStatus(snapshot: snapshot, showSource: false, titleOnly: true)
                     .fixedSize()
             }
-            CapturePendant(active: snapshot.isReceivingAudio, size: 32)
+            CapturePendant(active: snapshot.isReceivingAudio, size: 32, breath: snapshot.breath)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         // Clear of the island's ~44 pt top corner curve.
@@ -224,7 +239,9 @@ private struct CaptureStatus: View {
         if state.actionFailed { return "Open Omi to continue" }
         switch state.status {
         case "ended": return "Finished"
-        case "paused", "interrupted": return "Paused"
+        // The reader's Mute; the OS holding the microphone is a pause that resumes by itself.
+        case "paused": return "Muted"
+        case "interrupted": return "Paused"
         case "connecting": return "Connecting…"
         case "recording": return "Recording"
         case "reconnecting": return "Reconnecting…"
@@ -337,9 +354,13 @@ private struct CaptureClockText: View {
 struct CapturePendant: View {
     let active: Bool
     let size: CGFloat
+    /// While the mic is on, the second of the latest update: the LED breathes between bright and
+    /// soft on alternate seconds, eased across each (the app's orb: 1 → .55 → 1 over 2.4 s).
+    var breath: Int? = nil
 
     var body: some View {
         let led = max(4, size * 0.13)
+        let soft = active && (breath ?? 0) % 2 == 1
         ZStack {
             Circle()
                 .fill(RadialGradient(stops: [
@@ -354,7 +375,8 @@ struct CapturePendant: View {
                 if active {
                     Circle()
                         .fill(CapturePalette.led)
-                        .shadow(color: CapturePalette.led.opacity(0.6), radius: 4)
+                        .opacity(soft ? 0.55 : 1)
+                        .shadow(color: CapturePalette.led.opacity(soft ? 0.3 : 0.7), radius: soft ? 2 : 5)
                 } else {
                     Circle().fill(CapturePalette.ledOff)
                 }
@@ -363,6 +385,29 @@ struct CapturePendant: View {
             .offset(y: -size * 0.18)
         }
         .frame(width: size, height: size)
+        .animation(.easeInOut(duration: 1.0), value: breath)
+        .accessibilityHidden(true)
+    }
+}
+
+/// The app's listening wave in miniature for the compact island: five bars easing along each
+/// update while the mic is on, as the Home card's wave ripples.
+@available(iOS 16.1, *)
+private struct CaptureMiniWave: View {
+    let tick: Int
+    let height: CGFloat
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 2) {
+            ForEach(0..<5, id: \.self) { index in
+                let base = CaptureRipple.levels[(index * 7 + 3) % CaptureRipple.levels.count]
+                Capsule()
+                    .fill(CapturePalette.label.opacity(0.9))
+                    .frame(width: 2.5, height: max(3, height * CGFloat(base * CaptureRipple.pulse(index * 3, tick: tick))))
+            }
+        }
+        .frame(height: height)
+        .animation(.easeInOut(duration: 1.0), value: tick)
         .accessibilityHidden(true)
     }
 }
@@ -370,7 +415,8 @@ struct CapturePendant: View {
 /// The listening wave on the Lock Screen and in the expanded island: the app's ripple (bars
 /// 2 pt wide, 2.2 pt apart, heights from the prototype). While audio flows each update eases the
 /// ripple on across the second; heard voice lifts it to full height, a quiet room keeps it softer.
-/// Paused, it settles to a hairline; a source that cannot be metered shows the still wave.
+/// Paused, it settles to a hairline; a source that cannot be metered ripples at the same pace while
+/// the mic is on.
 @available(iOS 16.1, *)
 private struct CaptureWaveform: View {
     let snapshot: CaptureSnapshot
@@ -405,14 +451,17 @@ private struct CaptureWaveform: View {
                     .frame(width: width, height: 1.5)
                     .frame(width: width, height: height)
             } else {
+                // Audio that cannot be measured still ripples while the mic is on (the app's wave does),
+                // one step a second; with the mic off it holds still and dim.
                 HStack(alignment: .center, spacing: Self.gap) {
                     ForEach(0..<count, id: \.self) { index in
                         Capsule()
-                            .fill(CapturePalette.label.opacity(snapshot.isReceivingAudio ? 0.55 : 0.2))
-                            .frame(width: Self.barWidth, height: barHeight(index, amplitude: 0.8, tick: 0))
+                            .fill(CapturePalette.label.opacity(snapshot.isReceivingAudio ? 0.8 : 0.2))
+                            .frame(width: Self.barWidth, height: barHeight(index, amplitude: 0.8, tick: snapshot.rippleTick))
                     }
                 }
                 .frame(width: width, height: height, alignment: .leading)
+                .animation(.easeInOut(duration: 1.0), value: snapshot.rippleTick)
             }
         }
         .frame(height: height)
@@ -428,50 +477,29 @@ private struct CaptureWaveform: View {
 }
 
 /// Equal capsules 8 pt apart: secondary rgba(255,255,255,.12/.14), primary
-/// #ECEEF2 with ink text, 15 pt / 600. The island has Pause and Finish; the Lock Screen adds Star.
+/// #ECEEF2 with ink text, 15 pt / 600: Mute (or Unmute) and Stop.
 @available(iOS 16.1, *)
 private struct CaptureActions: View {
     let snapshot: CaptureSnapshot
     let height: CGFloat
     let secondaryFill: Double
-    let showStar: Bool
 
     private var state: OmiCaptureAttributes.ContentState { snapshot.state }
 
     var body: some View {
         if #available(iOS 17.0, *), !snapshot.isStale, state.status != "ended" {
             HStack(spacing: 8) {
-                // Resume is offered only after the user paused; recovery states keep Pause.
+                // Unmute is offered only after the reader muted; recovery states keep Mute.
                 if state.canPause {
-                    let resume = state.status == "paused"
-                    action(resume ? "Resume" : "Pause", value: resume ? "resume" : "pause", enabled: true)
+                    let muted = state.status == "paused"
+                    action(muted ? "Unmute" : "Mute", value: muted ? "resume" : "pause", enabled: true)
                 }
-                if showStar && state.canStar {
-                    starAction
-                }
-                // Finish ends this conversation and stops capture (a pendant pauses), so the
-                // activity closes until capture runs again.
-                action("Finish", value: "finish", enabled: state.canFinish, primary: true)
+                // Stop saves this conversation and stops listening until Start in Omi, so the
+                // activity closes.
+                action("Stop", value: "finish", enabled: state.canFinish, primary: true)
             }
             .dynamicTypeSize(...DynamicTypeSize.xLarge)
         }
-    }
-
-    /// Star, as the app's star: an outline to mark the conversation, filled amber once marked.
-    @available(iOS 17.0, *)
-    private var starAction: some View {
-        let available = !state.busy
-        return Button(intent: OmiCaptureIntent(recordingId: snapshot.recordingId,
-                                               revision: state.conversationRevision, action: "star")) {
-            Image(systemName: state.starred ? "star.fill" : "star")
-                .font(.subheadline.weight(.semibold))
-                .frame(maxWidth: .infinity, minHeight: height)
-                .foregroundStyle(state.starred ? CapturePalette.attention : CapturePalette.label.opacity(available ? 1 : 0.5))
-                .background(Color.white.opacity(secondaryFill), in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .disabled(!available)
-        .accessibilityLabel(state.starred ? Text("Starred") : Text("Star Conversation"))
     }
 
     @available(iOS 17.0, *)

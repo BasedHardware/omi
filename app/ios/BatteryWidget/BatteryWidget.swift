@@ -6,6 +6,9 @@ import SwiftUI
 struct BatteryEntry: TimelineEntry {
     let date: Date
     let info: DeviceBatteryInfo
+    /// The wearables the Home Screen widget pages through (never the phone), and the one shown.
+    var devices: [WidgetDevice] = []
+    var selected: Int = 0
 }
 
 // MARK: - Timeline Provider
@@ -21,17 +24,23 @@ struct BatteryTimelineProvider: TimelineProvider {
                 isConnected: true,
                 lastUpdated: Date(),
                 isMuted: false
-            )
+            ),
+            devices: [WidgetDevice(id: "omi", name: "Omi", image: "pendant", connected: true, battery: 85, charging: false)]
         )
     }
 
+    private func current() -> BatteryEntry {
+        let devices = SharedWidgetStore.devices()
+        return BatteryEntry(date: Date(), info: DeviceBatteryInfo.fromSharedDefaults(), devices: devices,
+                            selected: SharedWidgetStore.selectedDevice(in: devices))
+    }
+
     func getSnapshot(in context: Context, completion: @escaping (BatteryEntry) -> Void) {
-        completion(BatteryEntry(date: Date(), info: DeviceBatteryInfo.fromSharedDefaults()))
+        completion(current())
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<BatteryEntry>) -> Void) {
-        let info = DeviceBatteryInfo.fromSharedDefaults()
-        let entry = BatteryEntry(date: Date(), info: info)
+        let entry = current()
         // 5-minute fallback refresh; the app pushes instant updates via
         // WidgetCenter.shared.reloadAllTimelines on battery or mute state changes.
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: 5, to: Date())!
@@ -48,8 +57,8 @@ struct OmiBatteryWidget: Widget {
         StaticConfiguration(kind: kind, provider: BatteryTimelineProvider()) { entry in
             BatteryWidgetEntryView(entry: entry)
         }
-        .configurationDisplayName("Omi Battery")
-        .description("Shows your Omi device's charge, and on the Lock Screen its mic state.")
+        .configurationDisplayName("Battery")
+        .description("Your devices' charge; tap the dots to switch devices. On the Lock Screen, the mic state.")
         .supportedFamilies([.systemSmall, .accessoryRectangular, .accessoryCircular])
     }
 }
@@ -63,7 +72,9 @@ struct BatteryWidgetEntryView: View {
     var body: some View {
         switch family {
         case .systemSmall:
-            SmallBatteryView(info: entry.info).widgetBackground(SmallBatteryView.background)
+            SmallBatteryView(devices: entry.devices, selected: entry.selected)
+                .widgetURL(omiWidgetURL("/settings/device"))
+                .widgetBackground(SmallBatteryView.background)
         case .accessoryCircular:
             AccessoryCircularView(info: entry.info).widgetBackground(.clear, accessory: true)
         default:
@@ -93,10 +104,13 @@ extension View {
 
 // MARK: - Home Screen: Small (v2 HomeScreen "Battery")
 
-/// The Omi's charge at a glance (v2 HomeScreen): the orb, "Battery", the level large, and the
-/// device's state ("Omi · charging"). The orb's light is on while the device is connected.
+/// Each wearable's charge at a glance (v2 HomeScreen): its picture (the orb for an Omi pendant,
+/// its light on while connected), "Battery", the level large, and its state ("Omi · charging").
+/// With more than one device, page dots show which it is; tapping them shows the next (iOS 17).
+/// The phone is never a device here.
 struct SmallBatteryView: View {
-    let info: DeviceBatteryInfo
+    let devices: [WidgetDevice]
+    let selected: Int
 
     /// Liquid Dock card graphite in dark appearance, white in light.
     static let background = Color(UIColor { traits in
@@ -105,47 +119,96 @@ struct SmallBatteryView: View {
             : UIColor.white
     })
 
+    private var device: WidgetDevice? { devices.indices.contains(selected) ? devices[selected] : devices.first }
+
     private var levelText: String {
-        info.isConnected && info.batteryLevel >= 0 ? "\(info.batteryLevel)%" : "--%"
+        guard let device, device.connected, device.battery >= 0 else { return "--%" }
+        return "\(device.battery)%"
     }
 
-    private var stateText: String {
-        let name = info.deviceName.isEmpty ? "Omi" : info.deviceName
-        if !info.isConnected { return "\(name) · not connected" }
-        return info.isCharging ? "\(name) · charging" : name
+    private var stateText: Text {
+        guard let device else { return Text("Open Omi to continue") }
+        let name = Text(verbatim: device.name.isEmpty ? "Omi" : device.name)
+        if !device.connected { return name + Text(" · ") + Text("disconnected") }
+        return device.charging ? name + Text(" · ") + Text("charging") : name
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 4) {
-                CapturePendant(active: info.isConnected, size: 40)
+                DevicePicture(device: device, size: 44)
                 Spacer(minLength: 0)
-                Text("Battery")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .trailing, spacing: 8) {
+                    Text("Battery")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(OmiWidgetPalette.secondary)
+                    if devices.count > 1 { pageDots }
+                }
             }
             Spacer(minLength: 0)
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(levelText)
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                    .foregroundStyle(info.isConnected ? .primary : .secondary)
+                    .font(.system(size: 30, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(device?.connected == true ? OmiWidgetPalette.label : OmiWidgetPalette.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
-                if info.isConnected && info.isCharging {
+                if device?.connected == true && device?.charging == true {
                     Image(systemName: "bolt.fill")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(OmiWidgetPalette.secondary)
                 }
             }
-            Text(stateText)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
+            stateText
+                .font(.system(size: 13))
+                .foregroundStyle(OmiWidgetPalette.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("Omi battery \(levelText), \(stateText)"))
+    }
+
+    /// One dot per device, the shown one lit. A tap shows the next device.
+    @ViewBuilder
+    private var pageDots: some View {
+        let dots = HStack(spacing: 5) {
+            ForEach(devices.indices, id: \.self) { index in
+                Circle()
+                    .fill(index == selected ? OmiWidgetPalette.label : OmiWidgetPalette.tertiary.opacity(0.45))
+                    .frame(width: 6, height: 6)
+            }
+        }
+        if #available(iOS 17.0, *) {
+            Button(intent: NextDeviceIntent()) {
+                dots.padding(.vertical, 8).padding(.leading, 12).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(verbatim: devices[(selected + 1) % devices.count].name))
+        } else {
+            dots.accessibilityHidden(true)
+        }
+    }
+}
+
+/// A wearable's own picture: the orb for an Omi pendant (its light on while connected), the
+/// product photo for the rest; dimmed while not connected.
+struct DevicePicture: View {
+    let device: WidgetDevice?
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let device, device.image != "pendant" {
+                Image(device.image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: size, height: size)
+                    .opacity(device.connected ? 1 : 0.55)
+            } else {
+                CapturePendant(active: device?.connected == true, size: size)
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 

@@ -28,14 +28,14 @@ import 'package:omi/widgets/header_circle_button.dart';
 import '../fakes.dart';
 import '../harness.dart';
 
-enum AuditLive { idle, pendant, pendantPaused, phone, phonePaused, phoneAfterPendant }
+enum AuditLive { idle, pendant, pendantPaused, pendantStopped, phone, phonePaused, phoneAfterPendant }
 
 /// A capture provider reporting one fixed live state, with a short transcript.
 class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   AuditCaptureProvider(this.live);
   final AuditLive live;
 
-  bool get _pendant => live == AuditLive.pendant || live == AuditLive.pendantPaused;
+  bool get _pendant => live == AuditLive.pendant || live == AuditLive.pendantPaused || live == AuditLive.pendantStopped;
   bool get _phone => !_pendant && live != AuditLive.idle;
 
   @override
@@ -44,7 +44,7 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   RecordingState get recordingState => switch (live) {
         AuditLive.idle => RecordingState.stop,
         AuditLive.pendant => RecordingState.deviceRecord,
-        AuditLive.pendantPaused || AuditLive.phonePaused => RecordingState.pause,
+        AuditLive.pendantPaused || AuditLive.pendantStopped || AuditLive.phonePaused => RecordingState.pause,
         _ => RecordingState.record,
       };
   @override
@@ -52,7 +52,15 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   @override
   BtDevice? get recordingDevice => havingRecordingDevice ? auditPendant : null;
   @override
-  bool get isPaused => live == AuditLive.pendantPaused || live == AuditLive.phonePaused;
+  bool get isPaused =>
+      live == AuditLive.pendantPaused || live == AuditLive.pendantStopped || live == AuditLive.phonePaused;
+  @override
+  bool get isCaptureStopped => live == AuditLive.pendantStopped;
+  @override
+  bool get canMuteLiveSource => true;
+  @override
+  Duration? get captureElapsed =>
+      live == AuditLive.idle || live == AuditLive.pendantStopped ? null : Duration(seconds: _phone ? 134 : 724);
   @override
   bool get isPhoneMicPaused => live == AuditLive.phonePaused;
   @override
@@ -130,6 +138,10 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   @override
   Future<void> resumeCapture() async {}
   @override
+  Future<bool> stopCapture() async => segments.isNotEmpty;
+  @override
+  Future<void> startCapture() async {}
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
@@ -159,9 +171,12 @@ final auditPendant = BtDevice(id: 'd1', name: 'Omi Device', type: DeviceType.omi
 /// Home as HomePage lays it out (Rev 3): header (device chip; Search and Settings), content, and the
 /// dock with the round Ask button.
 class _HomeFrame extends StatelessWidget {
-  const _HomeFrame({this.fetchSummaries});
+  const _HomeFrame({this.fetchSummaries, this.askable = false});
 
   final DailySummariesFetcher? fetchSummaries;
+
+  /// The dock's Ask opens its field (HomePage passes onAskSubmit) instead of going to Chat.
+  final bool askable;
 
   @override
   Widget build(BuildContext context) {
@@ -170,6 +185,7 @@ class _HomeFrame extends StatelessWidget {
       appBar: AppBar(
         automaticallyImplyLeading: false,
         backgroundColor: Theme.of(context).colorScheme.surface,
+        clipBehavior: Clip.none,
         titleSpacing: NavigationToolbar.kMiddleSpacing - (kMinTapTarget - kHeaderCircleDiameter) / 2,
         title: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           const Padding(
@@ -193,7 +209,7 @@ class _HomeFrame extends StatelessWidget {
       ),
       body: Stack(children: [
         HomeContentPage(fetchSummaries: fetchSummaries),
-        BottomNavBar(onTabTap: (_, __) {}, onAskTap: () {}),
+        BottomNavBar(onTabTap: (_, __) {}, onAskTap: () {}, onAskSubmit: askable ? (_) {} : null),
       ]),
     );
   }
@@ -209,8 +225,10 @@ Future<void> _runHome(
   String action = 'Home',
   bool withData = false,
   bool scroll = false,
+  bool askable = false,
 }) async {
-  await a.pump(_HomeFrame(fetchSummaries: withData ? _seededRecap : null), scaffold: false, providers: [
+  await a
+      .pump(_HomeFrame(fetchSummaries: withData ? _seededRecap : null, askable: askable), scaffold: false, providers: [
     if (withData) ...await _seededHomeData(a),
     ChangeNotifierProvider<DeviceProvider>.value(
         value: pendantConnected
@@ -233,7 +251,7 @@ Future<void> _runHome(
 Future<void> _runLivePage(AuditRun a, AuditLive live) async {
   await a.pump(const ConversationCapturingPage(), scaffold: false, providers: [
     ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(live)),
-    if (live == AuditLive.pendant || live == AuditLive.pendantPaused)
+    if (live == AuditLive.pendant || live == AuditLive.pendantPaused || live == AuditLive.pendantStopped)
       ChangeNotifierProvider<DeviceProvider>.value(
           value: AuditDeviceProvider(connected: true, battery: 72, device: auditPendant)),
   ]);
@@ -333,6 +351,20 @@ final captureScenarios = <AuditScenario>[
     run: (a) => _runHome(a, withData: true, AuditLive.idle, pendantConnected: true),
   ),
   AuditScenario(
+    id: 'home-ask-open',
+    title: 'Ask open over Home',
+    page: _home,
+    state: 'The Omi mark was tapped: everything but the question blurs and dims, the header included',
+    run: (a) => _runHome(
+        a,
+        withData: true,
+        AuditLive.pendant,
+        pendantConnected: true,
+        askable: true,
+        tap: find.byKey(const Key('bottom_nav_ask')),
+        action: 'Tap the Omi mark'),
+  ),
+  AuditScenario(
     id: 'home-first-day',
     title: 'Home on the first day: Welcome, Not listening, Getting started, Good to know',
     page: _home,
@@ -383,10 +415,17 @@ final captureScenarios = <AuditScenario>[
   ),
   AuditScenario(
     id: 'home-capture-pendant-paused',
-    title: 'Pendant paused',
+    title: 'Pendant muted',
     page: _home,
-    state: 'The user paused the pendant',
+    state: 'The user muted the pendant mid-conversation: Unmute and Stop',
     run: (a) => _runHome(a, withData: true, AuditLive.pendantPaused, pendantConnected: true),
+  ),
+  AuditScenario(
+    id: 'home-capture-pendant-stopped',
+    title: 'Pendant stopped',
+    page: _home,
+    state: 'The user pressed Stop: not listening, one Start that wakes the pendant',
+    run: (a) => _runHome(a, withData: true, AuditLive.pendantStopped, pendantConnected: true),
   ),
   AuditScenario(
     id: 'home-capture-pendant-tap',

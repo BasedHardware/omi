@@ -7042,9 +7042,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi-muistutus';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName yhteys katkaistu';
   }
@@ -11227,15 +11224,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'Hyvää huomenta';
-
-  @override
-  String get goodAfternoon => 'Hyvää iltapäivää';
-
-  @override
-  String get goodEvening => 'Hyvää iltaa';
-
-  @override
   String get alreadyHaveAccount => 'Onko sinulla jo tili?';
 
   @override
@@ -11690,4 +11678,65 @@ class AppLocalizationsFi extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done/$total';
   }
+
+  @override
+  String get noFailedRecordings => 'Ei epäonnistuneita tallenteita';
+
+  @override
+  String get mapNoPlacesTitle => 'Ei vielä paikkoja';
+
+  @override
+  String get mapNoPlacesMessage => 'Keskustelut näkyvät täällä, kun Omi tietää, missä ne käytiin.';
+
+  @override
+  String get mergeWithEllipsis => 'Yhdistä…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Viimeistele sovelluksen $appName käyttöönotto, niin voit ottaa sen käyttöön';
+  }
+
+  @override
+  String get greetingUpLate => 'Myöhään valveilla';
+
+  @override
+  String get greetingLunchtime => 'Lounasaika';
+
+  @override
+  String get greetingWindingDown => 'Aika rentoutua';
+
+  @override
+  String get greetingGoodNight => 'Hyvää yötä';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Vielä hereillä';
+
+  @override
+  String get greetingEarlyStart => 'Aikainen aloitus';
+
+  @override
+  String get greetingNewDay => 'Uusi päivä';
+
+  @override
+  String get greetingMorning => 'Hyvää huomenta';
+
+  @override
+  String get greetingBusyMorning => 'Kiireinen aamupäivä';
+
+  @override
+  String get greetingAfternoon => 'Hyvää iltapäivää';
+
+  @override
+  String get greetingHomeStretch => 'Loppukiri';
+
+  @override
+  String get greetingEvening => 'Hyvää iltaa';
+
+  @override
+  String get unlimitedBadge => 'Rajoittamaton';
 }

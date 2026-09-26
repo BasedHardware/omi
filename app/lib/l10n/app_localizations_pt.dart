@@ -7039,9 +7039,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Lembrete do Omi';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName desconectado';
   }
@@ -11240,15 +11237,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'Bom dia';
-
-  @override
-  String get goodAfternoon => 'Boa tarde';
-
-  @override
-  String get goodEvening => 'Boa noite';
-
-  @override
   String get alreadyHaveAccount => 'Já tem uma conta?';
 
   @override
@@ -11705,4 +11693,65 @@ class AppLocalizationsPt extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done de $total';
   }
+
+  @override
+  String get noFailedRecordings => 'Nenhuma gravação com falha';
+
+  @override
+  String get mapNoPlacesTitle => 'Ainda não há locais';
+
+  @override
+  String get mapNoPlacesMessage => 'As conversas aparecem aqui quando o Omi sabe onde aconteceram.';
+
+  @override
+  String get mergeWithEllipsis => 'Juntar com…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Termine de configurar $appName para ativá-lo';
+  }
+
+  @override
+  String get greetingUpLate => 'Noite longa';
+
+  @override
+  String get greetingLunchtime => 'Hora do almoço';
+
+  @override
+  String get greetingWindingDown => 'Hora de relaxar';
+
+  @override
+  String get greetingGoodNight => 'Durma bem';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Madrugada';
+
+  @override
+  String get greetingEarlyStart => 'Bem cedinho';
+
+  @override
+  String get greetingNewDay => 'Novo dia';
+
+  @override
+  String get greetingMorning => 'Bom dia';
+
+  @override
+  String get greetingBusyMorning => 'Manhã agitada';
+
+  @override
+  String get greetingAfternoon => 'Boa tarde';
+
+  @override
+  String get greetingHomeStretch => 'Reta final';
+
+  @override
+  String get greetingEvening => 'Boa noite';
+
+  @override
+  String get unlimitedBadge => 'Ilimitado';
 }

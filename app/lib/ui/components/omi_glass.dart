@@ -13,10 +13,15 @@ import 'package:omi/ui/omi_tokens.dart';
 /// used only on Apple platforms without the high-contrast setting; everywhere else the surface is
 /// solid [OmiColors.surface1]. Both look the same at rest.
 class OmiGlass extends StatelessWidget {
-  const OmiGlass({super.key, required this.borderRadius, required this.child});
+  const OmiGlass({super.key, required this.borderRadius, required this.child, this.inHeader = false});
 
   final BorderRadius borderRadius;
   final Widget child;
+
+  /// In a page header (the device chip, Search, the toolbar capsules): a tight shadow that stays
+  /// inside the bar. The floating shadow is for the dock; in a header the bar cut it off into a
+  /// grey block behind the chip in daylight.
+  final bool inHeader;
 
   static bool _blurs(BuildContext context) {
     final platform = Theme.of(context).platform;
@@ -35,6 +40,13 @@ class OmiGlass extends StatelessWidget {
   static const List<OmiShadow> _shadowsLight = [
     OmiShadow(color: Color(0x2414171E), offset: Offset(0, 18), blur: 44),
     OmiShadow(color: Color(0x1414171E), offset: Offset(0, 1), blur: 3),
+  ];
+
+  // In a header: only the contact shadow, so the glass reads as sitting on the page.
+  static const List<OmiShadow> _headerShadows = [OmiShadow(color: Color(0x59000000), offset: Offset(0, 1), blur: 3)];
+  static const List<OmiShadow> _headerShadowsLight = [
+    OmiShadow(color: Color(0x1A14171E), offset: Offset(0, 1), blur: 3),
+    OmiShadow(color: Color(0x0D14171E), offset: Offset(0, 3), blur: 8),
   ];
 
   /// CSS `saturate(1.7)` as a colour matrix.
@@ -68,7 +80,9 @@ class OmiGlass extends StatelessWidget {
     );
     return OmiSurfaceLight(
       borderRadius: borderRadius,
-      shadows: palette.isLight ? _shadowsLight : _shadows,
+      shadows: inHeader
+          ? (palette.isLight ? _headerShadowsLight : _headerShadows)
+          : (palette.isLight ? _shadowsLight : _shadows),
       topLight: palette.glassRim,
       ring: palette.glassRing,
       child: ClipRRect(

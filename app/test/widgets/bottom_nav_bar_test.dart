@@ -72,8 +72,8 @@ void main() {
 
     await _pumpBar(tester, provider, BottomNavBar(onTabTap: (_, __) {}));
 
-    // Rev 3 tabs: Today · Conversations · To do · Devices.
-    for (final label in ['Today', 'Conversations', 'To do', 'Devices']) {
+    // The design's app map: Today · Conversations · To do · Apps (devices live in Settings).
+    for (final label in ['Today', 'Conversations', 'To do', 'Apps']) {
       expect(find.bySemanticsLabel(label), findsOneWidget, reason: 'the $label tab is announced exactly once');
     }
     final home = tester.getSemantics(find.bySemanticsLabel('Today')).getSemanticsData();
@@ -102,6 +102,131 @@ void main() {
     await tester.tap(find.byKey(const Key('bottom_nav_ask')));
     expect(asked, 1);
     semantics.dispose();
+  });
+
+  testWidgets('holding the Omi mark for two seconds opens Memories; a tap still asks', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final provider = HomeProvider();
+    addTearDown(provider.dispose);
+    var asked = 0;
+    var held = 0;
+    await _pumpBar(
+      tester,
+      provider,
+      BottomNavBar(onTabTap: (_, __) {}, onAskTap: () => asked++, onAskHold: () => held++),
+    );
+    final mark = find.byKey(const Key('bottom_nav_ask'));
+
+    // A short press is still Ask, however long it takes to lift under two seconds.
+    await tester.longPressAt(tester.getCenter(mark)); // the default long press is ~0.5 s
+    await tester.pump();
+    expect(held, 0, reason: 'half a second is not the hidden gesture');
+    expect(asked, 1, reason: 'a press released before two seconds is a tap: Ask');
+
+    final gesture = await tester.startGesture(tester.getCenter(mark));
+    await tester.pump(kAskHoldDuration + const Duration(milliseconds: 50));
+    await gesture.up();
+    await tester.pump();
+    expect(held, 1);
+
+    // Screen readers cannot discover a hidden hold, so Memories is a named action on the mark.
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('Ask Omi')),
+      isSemantics(customActions: const [CustomSemanticsAction(label: 'Memories')]),
+    );
+    expect(asked, 1, reason: 'the hold did not also ask');
+    semantics.dispose();
+  });
+
+  testWidgets('open Ask covers the whole screen: the header and floating buttons sit under the blur', (tester) async {
+    final provider = HomeProvider();
+    addTearDown(provider.dispose);
+    var header = 0;
+    var newTask = 0;
+    final asked = <String>[];
+    await tester.pumpWidget(
+      ChangeNotifierProvider<HomeProvider>.value(
+        value: provider,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            appBar: AppBar(actions: [
+              IconButton(key: const Key('header_button'), onPressed: () => header++, icon: const Icon(Icons.search)),
+            ]),
+            body: Stack(children: [
+              const SizedBox.expand(), // the page under the dock, as Home's tabs are
+              BottomNavBar(onTabTap: (_, __) {}, onAskTap: () {}, onAskSubmit: asked.add),
+              // A floating action placed above the dock, as To do's New Task is.
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 140,
+                child: TextButton(
+                  key: const Key('new_task_button'),
+                  onPressed: () => newTask++,
+                  child: const Text('New Task'),
+                ),
+              ),
+            ]),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('bottom_nav_ask')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('bottom_nav_ask_field')), findsOneWidget);
+    expect(find.byKey(const Key('bottom_nav_ask_scrim')), findsOneWidget);
+    expect(find.byType(BackdropFilter), findsWidgets, reason: 'everything behind the question blurs');
+
+    // Taps meant for the header or the floating button land on the scrim, which closes Ask.
+    await tester.tap(find.byKey(const Key('new_task_button')), warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(newTask, 0);
+    expect(find.byKey(const Key('bottom_nav_ask_field')), findsNothing, reason: 'the scrim closed Ask');
+
+    await tester.tap(find.byKey(const Key('bottom_nav_ask')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('header_button')), warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(header, 0);
+
+    // Closed again, the page is reachable as before and the dock is back in place.
+    await tester.tap(find.byKey(const Key('header_button')));
+    expect(header, 1);
+    expect(find.byKey(const Key('bottom_nav_ask')), findsOneWidget);
+  });
+
+  testWidgets('a thumb that drifts a little still holds; one that slides away does nothing', (tester) async {
+    final provider = HomeProvider();
+    addTearDown(provider.dispose);
+    var asked = 0;
+    var held = 0;
+    await _pumpBar(
+      tester,
+      provider,
+      BottomNavBar(onTabTap: (_, __) {}, onAskTap: () => asked++, onAskHold: () => held++),
+    );
+    final center = tester.getCenter(find.byKey(const Key('bottom_nav_ask')));
+
+    final drifting = await tester.startGesture(center);
+    await tester.pump(const Duration(milliseconds: 600));
+    await drifting.moveBy(const Offset(0, -20)); // past the arena's 18 pt slop
+    await tester.pump(kAskHoldDuration);
+    await drifting.up();
+    await tester.pump();
+    expect(held, 1, reason: 'a hold survives a small drift');
+    expect(asked, 0);
+
+    final sliding = await tester.startGesture(center);
+    await tester.pump(const Duration(milliseconds: 300));
+    await sliding.moveBy(const Offset(-60, 0));
+    await tester.pump(kAskHoldDuration);
+    await sliding.up();
+    await tester.pump();
+    expect(held, 1, reason: 'sliding off is not a hold');
+    expect(asked, 0, reason: 'nor a tap');
   });
 
   testWidgets('floats in the home-indicator area but never behind an opaque system bar', (tester) async {
@@ -214,7 +339,7 @@ Future<({double screenBottom, Rect capsule, Map<String, Rect> tapTargets})> _lay
     screenBottom: tester.getRect(find.byType(Scaffold)).bottom,
     capsule: tester.getRect(find.byType(OmiGlass).first),
     tapTargets: {
-      for (final (index, label) in const [(0, 'Today'), (1, 'Conversations'), (2, 'To do'), (3, 'Devices')])
+      for (final (index, label) in const [(0, 'Today'), (1, 'Conversations'), (2, 'To do'), (3, 'Apps')])
         label: tester.getRect(find.byKey(Key('bottom_nav_tab_$index'))),
     },
   );

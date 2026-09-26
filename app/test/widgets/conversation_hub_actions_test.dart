@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -122,6 +123,36 @@ void main() {
       await tester.pumpAndSettle();
       expect(provider.conversations.map((c) => c.id).toSet(), {'a', 'b'});
     });
+  });
+
+  testWidgets('the menu reads as the design: Merge With…, Copy Summary, and Delete last in red', (tester) async {
+    final a = _conversation('a');
+    provider.conversations = [a];
+    await pump(tester, ConversationListItem(conversation: a, date: DateTime(2026, 9, 20), conversationIdx: 0));
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') copied = (call.arguments as Map)['text'] as String?;
+      if (call.method == 'Clipboard.hasStrings') return {'value': true};
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+
+    await tester.longPress(find.byType(ConversationListItem));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('omi_context_menu')), findsOneWidget);
+    expect(find.text('Merge With…'), findsOneWidget);
+    expect(find.text('Open'), findsNothing, reason: 'a tap on the row opens it');
+    final labels = tester
+        .widgetList<Text>(
+            find.descendant(of: find.byKey(const ValueKey('omi_context_menu')), matching: find.byType(Text)))
+        .map((t) => t.data)
+        .toList();
+    expect(labels.last, 'Delete');
+
+    await tester.tap(find.byKey(const ValueKey('conversation_action_copySummary')));
+    await tester.pumpAndSettle();
+    expect(copied, isNotNull);
+    expect(copied, contains('Overview'));
   });
 
   testWidgets('long-press opens one context menu with multi-select as an entry', (tester) async {

@@ -7,10 +7,11 @@ import 'package:omi/pages/devices/devices_page.dart';
 import 'package:omi/pages/home/device.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:omi/providers/device_provider.dart';
-import 'package:omi/providers/home_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/pages/settings/settings_destinations.dart';
+import 'package:omi/pages/settings/settings_search_index.dart';
 
 /// Recording from (Rev 3 "WSource"), opened from the device chip on Today: every source that can
 /// listen, with its state, one live at a time. Tapping this phone switches to it (a listening
@@ -71,7 +72,8 @@ class _RecordingSourceBody extends StatelessWidget {
           key: const ValueKey('recording_source_manage'),
           label: l10n.manageDevices,
           expand: true,
-          onPressed: () => _closeThen(context, (host) => host.read<HomeProvider>().setIndex(3)),
+          onPressed: () =>
+              _closeThen(context, (host) => openSettingsDestination(host, SettingsDestination.deviceGroup)),
         ),
         const SizedBox(height: OmiSpacing.md),
       ],

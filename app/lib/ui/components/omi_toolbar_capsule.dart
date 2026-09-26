@@ -15,6 +15,7 @@ class OmiToolbarCapsule extends StatelessWidget {
   Widget build(BuildContext context) {
     if (children.isEmpty) return const SizedBox.shrink();
     return OmiGlass(
+      inHeader: true,
       borderRadius: OmiRadius.pillAll,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
@@ -43,6 +44,7 @@ class OmiToolbarTextButton extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onPressed,
         child: OmiGlass(
+          inHeader: true,
           borderRadius: OmiRadius.pillAll,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: OmiSize.minTap),

@@ -84,7 +84,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       final phone = provider.liveCaptureSource == 'phone';
       if (provider.isPaused) {
         await provider.resumeCapture();
-        if (phone && !provider.isPaused) PlatformManager.instance.analytics.phoneMicRecordingStarted();
+        // Still muted: say so rather than leave a button that seems to do nothing.
+        if (provider.isPaused) throw StateError('capture stayed muted');
+        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStarted();
       } else {
         await provider.pauseCapture();
         if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
@@ -106,19 +108,33 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   @visibleForTesting
   Future<void> debugStopConversation(CaptureProvider provider) => _stopConversation(provider);
 
-  /// Finish: the one stop. No confirmation: Finish is explicit, and it processes the conversation
-  /// (a phone recording stops first; a pendant it paused resumes afterwards).
+  /// Stop: the one stop, with no confirmation. It saves the conversation and stops listening until
+  /// Start ([CaptureController.stopCapture]); a pendant that a phone recording had paused still
+  /// resumes when that recording ends, as its card note says. What was heard is waiting in
+  /// Conversations; with nothing heard there is nothing to show, so it is back to Today.
   Future<void> _stopConversation(CaptureProvider provider) async {
-    await provider.finishCapture();
+    final bool heard;
+    try {
+      heard = await provider.stopCapture();
+    } catch (_) {
+      // Nothing was stopped: stay here and say so, rather than a tap that does nothing.
+      if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      return;
+    }
     if (!mounted) return;
-    switchHomeToConversationsTab(context);
+    if (heard) {
+      switchHomeToConversationsTab(context);
+    } else {
+      context.read<HomeProvider>().setIndex(0);
+    }
     Navigator.of(context).pop();
   }
 
   /// The live page's state, resolved exactly as the Home capture card resolves it
-  /// (`captureInterruption` + `liveCaptureDisplayState`): the OS holding the mic, a mute or a call
-  /// is Paused, capture recovering on its own (a dropped socket, a mic stall) is Reconnecting, a
-  /// terminal transcription failure or offline buffering is named as such, otherwise Listening.
+  /// (`captureInterruption` + `liveCaptureDisplayState`): the reader's Mute is Muted, the OS or a
+  /// call holding the mic is Paused, capture recovering on its own (a dropped socket, a mic stall)
+  /// is Reconnecting, a terminal transcription failure or offline buffering is named as such,
+  /// otherwise Listening.
   CaptureDisplayState _displayState(CaptureProvider provider, {required bool capturingPhotos}) {
     final interruption = captureInterruption(
       interrupted: provider.recordingState == RecordingState.interrupted,
@@ -126,9 +142,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       osHoldsMic: provider.isCallActive,
     );
     return liveCaptureDisplayState(
-      audioInterrupted: interruption == CaptureInterruption.micTaken,
+      audioInterrupted: interruption == CaptureInterruption.micTaken || (provider.isCallActive && !provider.isPaused),
       reconnecting: interruption == CaptureInterruption.recovering,
-      paused: provider.isPaused || provider.isCallActive,
+      paused: provider.isPaused,
       transcriptionUnavailable: provider.terminalTranscriptionFailure != null,
       bufferingFor: provider.customSttBufferingDuration,
       capturingPhotos: capturingPhotos,
@@ -153,9 +169,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
           appBar: ConversationStateAppBar(
             state: _displayState(provider, capturingPhotos: provider.photos.isNotEmpty),
             bufferingFor: provider.customSttBufferingDuration,
-            elapsed: provider.liveCaptureStartedAt == null
-                ? null
-                : DateTime.now().difference(provider.liveCaptureStartedAt!),
+            // The one capture clock: the Home card and the Lock Screen show the same time.
+            elapsed: provider.captureElapsed,
             sourceLabel: switch (provider.liveCaptureSource) {
               null => null,
               'phone' => context.l10n.captureSourcePhoneMic,
@@ -206,49 +221,46 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
             ],
           ),
           floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-          // Rev 3 Live: two equal capsules, Pause/Resume (a pause glyph: mics belong to Ask Omi) and
-          // End, the one stop (the device keeps listening for the next conversation). The same
-          // capsules as the Today live card.
-          floatingActionButton: (provider.liveCaptureSource != null ||
-                  provider.segments.isNotEmpty ||
-                  provider.photos.isNotEmpty)
-              ? Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: OmiSize.screenMargin),
-                  child: Row(
-                    children: [
-                      if (provider.liveCaptureSource != null &&
-                          LiveCaptureCard.canPause(provider.recordingDevice, source: provider.liveCaptureSource)) ...[
-                        Expanded(
-                          child: IgnorePointer(
-                            ignoring: _mutePending || provider.isCallActive,
-                            child: AnimatedOpacity(
-                              duration: OmiMotion.of(context).quick,
-                              opacity: _mutePending || provider.isCallActive ? 0.5 : 1,
-                              child: LiveCaptureAction(
-                                key: const Key('capture_pause_button'),
-                                label: effectivelyMuted ? context.l10n.resume : context.l10n.pause,
-                                icon: effectivelyMuted ? Icons.play_arrow_rounded : Icons.pause_rounded,
-                                primary: false,
-                                onPressed: () => _toggleMute(provider),
+          // Two equal capsules, as on the Today live card: Mute/Unmute (the conversation stays open)
+          // and Stop, which saves it and stops listening until Start.
+          floatingActionButton:
+              (provider.liveCaptureSource != null || provider.segments.isNotEmpty || provider.photos.isNotEmpty)
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: OmiSize.screenMargin),
+                      child: Row(
+                        children: [
+                          if (provider.liveCaptureSource != null && provider.canMuteLiveSource) ...[
+                            Expanded(
+                              child: IgnorePointer(
+                                ignoring: _mutePending || provider.isCallActive,
+                                child: AnimatedOpacity(
+                                  duration: OmiMotion.of(context).quick,
+                                  opacity: _mutePending || provider.isCallActive ? 0.5 : 1,
+                                  child: LiveCaptureAction(
+                                    key: const Key('capture_mute_button'),
+                                    label: effectivelyMuted ? context.l10n.unmute : context.l10n.mute,
+                                    icon: effectivelyMuted ? Icons.mic_rounded : Icons.mic_off_rounded,
+                                    primary: false,
+                                    onPressed: () => _toggleMute(provider),
+                                  ),
+                                ),
                               ),
                             ),
+                            const SizedBox(width: 10),
+                          ],
+                          Expanded(
+                            child: LiveCaptureAction(
+                              key: const Key('capture_stop_button'),
+                              label: context.l10n.stop,
+                              icon: Icons.stop_rounded,
+                              primary: true,
+                              onPressed: () => _stopConversation(provider),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                      ],
-                      Expanded(
-                        child: LiveCaptureAction(
-                          key: const Key('process_now_button'),
-                          label: context.l10n.endCapture,
-                          icon: Icons.stop_rounded,
-                          primary: true,
-                          onPressed: () => _stopConversation(provider),
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
-                )
-              : null,
+                    )
+                  : null,
         );
       },
     );

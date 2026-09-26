@@ -738,7 +738,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get rememberingSubtitle => 'आपल्यासाठी लक्षात ठेवलेले तथ्य आणि तपशील.';
 
   @override
-  String get unlimitedPlan => 'मर्यादित योजना';
+  String get unlimitedPlan => 'अमर्यादित योजना';
 
   @override
   String get managePlan => 'योजना व्यवस्थापित करा';
@@ -760,7 +760,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get upgrade => 'अपग्रेड करा';
 
   @override
-  String get upgradeToUnlimited => 'मर्यादित अपग्रेड करा';
+  String get upgradeToUnlimited => 'अमर्यादित वर अपग्रेड करा';
 
   @override
   String basicPlanDesc(int limit) {
@@ -7050,9 +7050,6 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi स्मरणपत्र';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName डिस्कनेक्ट झाली';
   }
@@ -11234,15 +11231,6 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'सुप्रभात';
-
-  @override
-  String get goodAfternoon => 'शुभ दुपार';
-
-  @override
-  String get goodEvening => 'शुभ संध्याकाळ';
-
-  @override
   String get alreadyHaveAccount => 'आधीपासून खाते आहे?';
 
   @override
@@ -11699,4 +11687,65 @@ class AppLocalizationsMr extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done/$total';
   }
+
+  @override
+  String get noFailedRecordings => 'कोणतीही अयशस्वी रेकॉर्डिंग नाही';
+
+  @override
+  String get mapNoPlacesTitle => 'अजून कोणतीही ठिकाणे नाहीत';
+
+  @override
+  String get mapNoPlacesMessage => 'संभाषणे कुठे झाली हे Omi ला कळल्यावर ती इथे दिसतात.';
+
+  @override
+  String get mergeWithEllipsis => 'यासोबत विलीन करा…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return '$appName सुरू करण्यासाठी त्याचे सेटअप पूर्ण करा';
+  }
+
+  @override
+  String get greetingUpLate => 'रात्री उशिरा';
+
+  @override
+  String get greetingLunchtime => 'जेवणाची वेळ';
+
+  @override
+  String get greetingWindingDown => 'आरामाची वेळ';
+
+  @override
+  String get greetingGoodNight => 'शुभ रात्री';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'अजून जागे';
+
+  @override
+  String get greetingEarlyStart => 'भल्या पहाटे';
+
+  @override
+  String get greetingNewDay => 'नवा दिवस';
+
+  @override
+  String get greetingMorning => 'सुप्रभात';
+
+  @override
+  String get greetingBusyMorning => 'धावपळीची सकाळ';
+
+  @override
+  String get greetingAfternoon => 'शुभ दुपार';
+
+  @override
+  String get greetingHomeStretch => 'दिवस संपत आला';
+
+  @override
+  String get greetingEvening => 'शुभ संध्याकाळ';
+
+  @override
+  String get unlimitedBadge => 'अमर्यादित';
 }

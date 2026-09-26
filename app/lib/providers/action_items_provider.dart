@@ -114,6 +114,9 @@ class ActionItemsProvider extends ChangeNotifier {
   bool get usesTypedActionItemsApi => _actionItemsApi != null;
   bool get isLoading => _isLoading;
   bool get isFetching => _isFetching;
+
+  /// The task list has loaded at least once (an empty list then really means none are open).
+  bool get hasLoaded => _initialLoadCompleted;
   bool get hasMore => _hasMore;
   bool get includeCompleted => _includeCompleted;
   bool get showCompletedView => _showCompletedView;

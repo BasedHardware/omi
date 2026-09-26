@@ -9,16 +9,19 @@ import 'package:omi/pages/devices/add_device_page.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
-import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/widgets/capture_sources.dart';
+import 'package:omi/pages/settings/settings_destinations.dart';
+import 'package:omi/pages/settings/settings_search_index.dart';
 
 /// Today while nothing is listening (Rev 3, device-agnostic): the live card's quiet twin. The orb
-/// sits grey; Start listening records with this phone (a listening wearable asks first, as the
-/// record button did); the second capsule adds a device, or opens Devices when one is paired.
+/// sits grey and Start is the one primary action: a connected wearable the reader stopped listens
+/// again; otherwise this phone records (a listening wearable asks first, as the record button did).
+/// The second capsule adds a device, or opens Devices when one is paired.
 ///
 /// It takes the live card's place: hidden whenever the live card (or a call) is showing.
 class IdleCaptureCard extends StatelessWidget {
@@ -26,14 +29,32 @@ class IdleCaptureCard extends StatelessWidget {
 
   /// Whether [ConversationCaptureWidget] shows something now (the same test it uses).
   static bool isCapturing(CaptureProvider capture) {
+    // Stopped is not capturing: the pendant waits here for Start.
+    if (capture.isCaptureStopped && !_phoneLive(capture)) return false;
     final batch =
         capture.isPhoneMicBatchRecording || (SharedPreferencesUtil().batchModeEnabled && capture.havingRecordingDevice);
-    final phoneLive = capture.recordingState == RecordingState.record ||
-        capture.recordingState == RecordingState.initialising ||
-        capture.recordingState == RecordingState.interrupted ||
-        capture.recordingState == RecordingState.systemAudioRecord ||
-        capture.isPhoneMicPaused;
-    return capture.liveCaptureSource != null || phoneLive || batch;
+    return capture.liveCaptureSource != null || _phoneLive(capture) || batch;
+  }
+
+  static bool _phoneLive(CaptureProvider capture) =>
+      capture.recordingState == RecordingState.record ||
+      capture.recordingState == RecordingState.initialising ||
+      capture.recordingState == RecordingState.interrupted ||
+      capture.recordingState == RecordingState.systemAudioRecord ||
+      capture.isPhoneMicPaused;
+
+  /// Start for a wearable the reader stopped: it listens again, as a new conversation. Says so when
+  /// it does not, rather than leaving the button looking dead.
+  static Future<void> _startWearable(BuildContext context) async {
+    final capture = context.read<CaptureProvider>();
+    OmiHaptics.medium();
+    try {
+      await capture.startCapture();
+    } catch (_) {
+      if (context.mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      return;
+    }
+    if (capture.isCaptureStopped && context.mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
   }
 
   @override
@@ -45,6 +66,10 @@ class IdleCaptureCard extends StatelessWidget {
     final capturing = context.select<CaptureProvider, bool>(isCapturing);
     if (onCall || capturing) return const SizedBox.shrink();
     final paired = context.select<DeviceProvider, bool>((d) => (d.pairedDevice?.id ?? '').isNotEmpty);
+    // A connected wearable the reader stopped: Start wakes it rather than the phone.
+    final stoppedSource = context.select<CaptureProvider, String?>(
+      (c) => c.isCaptureStopped && c.havingRecordingDevice ? (c.liveCaptureSource ?? 'omi') : null,
+    );
     final l10n = context.l10n;
     return Padding(
       key: const ValueKey('idle_capture_card'),
@@ -66,7 +91,9 @@ class IdleCaptureCard extends StatelessWidget {
                       Text(l10n.notListeningTitle, style: OmiType.headline),
                       const SizedBox(height: 2),
                       Text(
-                        l10n.notListeningSubtitle,
+                        stoppedSource == null
+                            ? l10n.notListeningSubtitle
+                            : '${CaptureSources.label(context, stoppedSource)} · ${l10n.deviceReady}',
                         style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
                       ),
                     ],
@@ -80,10 +107,10 @@ class IdleCaptureCard extends StatelessWidget {
                 Expanded(
                   child: LiveCaptureAction(
                     key: const ValueKey('idle_capture_start'),
-                    label: l10n.startListening,
-                    icon: Icons.mic_rounded,
+                    label: l10n.start,
+                    icon: Icons.fiber_manual_record_rounded,
                     primary: true,
-                    onPressed: () => PhoneCapture.start(context),
+                    onPressed: () => stoppedSource != null ? _startWearable(context) : PhoneCapture.start(context),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -96,7 +123,8 @@ class IdleCaptureCard extends StatelessWidget {
                     onPressed: () {
                       OmiHaptics.selection();
                       if (paired) {
-                        context.read<HomeProvider>().setIndex(3);
+                        // Devices live in Settings now that Apps has the tab.
+                        openSettingsDestination(context, SettingsDestination.deviceGroup);
                       } else {
                         routeToPage(context, const AddDevicePage());
                       }

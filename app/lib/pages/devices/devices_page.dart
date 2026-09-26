@@ -3,9 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/pages/devices/add_device_page.dart';
 import 'package:omi/pages/home/device.dart';
-import 'package:omi/pages/settings/import_history_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -15,101 +13,9 @@ import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
-import 'package:omi/widgets/bottom_nav_bar.dart';
-
-/// The Devices tab (Rev 3): everything that listens for you, one live at a time.
-///
-/// The paired wearable (any of the nine device types) and this phone's microphone, each with its
-/// real state — Live while it is the source being recorded, Ready when it could be, or its
-/// connection state — then imports from other recorders and "Add a device".
-class DevicesPage extends StatefulWidget {
-  const DevicesPage({super.key});
-
-  @override
-  State<DevicesPage> createState() => DevicesPageState();
-}
-
-class DevicesPageState extends State<DevicesPage> with AutomaticKeepAliveClientMixin {
-  final ScrollController _scrollController = ScrollController();
-
-  @override
-  bool get wantKeepAlive => true;
-
-  void scrollToTop() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(0, duration: OmiMotion.of(context).navigation, curve: OmiMotion.springCurve);
-    }
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-    final l10n = context.l10n;
-    return CustomScrollView(
-      controller: _scrollController,
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-            OmiSize.screenMargin + OmiSpacing.xxs,
-            OmiSpacing.xxs,
-            OmiSize.screenMargin,
-            0,
-          ),
-          sliver: SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Semantics(header: true, child: Text(l10n.devices, style: OmiType.largeTitle)),
-                const SizedBox(height: 2),
-                Text(l10n.devicesSubtitle, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
-              ],
-            ),
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(OmiSize.screenMargin, 22, OmiSize.screenMargin, 0),
-          sliver: SliverList.list(
-            children: [
-              const DeviceSourcesGroup(),
-              const SizedBox(height: 22),
-              OmiSettingsGroup(
-                children: [
-                  OmiSettingsRow(
-                    key: const Key('devices_import'),
-                    leading: const OmiGlyph(OmiGlyphs.tray),
-                    title: l10n.importFromOtherApps,
-                    onTap: () => routeToPage(context, const ImportHistoryPage()),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 22),
-              OmiButton.secondary(
-                key: const Key('devices_add'),
-                label: l10n.addADevice,
-                icon: Icons.add_rounded,
-                expand: true,
-                onPressed: () {
-                  OmiHaptics.selection();
-                  routeToPage(context, const AddDevicePage());
-                },
-              ),
-              SizedBox(height: bottomNavBarClearance(context)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 /// The sources that can listen right now: the paired wearable (when there is one) and this
-/// phone's microphone, each with its real state. Shared by the Devices tab and Settings → Devices.
+/// phone's microphone, each with its real state. Settings → Devices (Home's Manage devices).
 class DeviceSourcesGroup extends StatelessWidget {
   const DeviceSourcesGroup({super.key, this.onDeviceTap, this.onUsePhone});
 

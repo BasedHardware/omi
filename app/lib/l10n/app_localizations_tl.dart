@@ -7103,9 +7103,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi Reminder';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName Nadiskonekta';
   }
@@ -11321,15 +11318,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'Magandang umaga';
-
-  @override
-  String get goodAfternoon => 'Magandang hapon';
-
-  @override
-  String get goodEvening => 'Magandang gabi';
-
-  @override
   String get alreadyHaveAccount => 'May account ka na?';
 
   @override
@@ -11790,4 +11778,65 @@ class AppLocalizationsTl extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done sa $total';
   }
+
+  @override
+  String get noFailedRecordings => 'Walang nabigong recording';
+
+  @override
+  String get mapNoPlacesTitle => 'Wala pang mga lugar';
+
+  @override
+  String get mapNoPlacesMessage => 'Lumalabas dito ang mga usapan kapag alam ng Omi kung saan ito nangyari.';
+
+  @override
+  String get mergeWithEllipsis => 'Pagsamahin sa…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Tapusin ang pag-set up ng $appName para i-on ito';
+  }
+
+  @override
+  String get greetingUpLate => 'Hatinggabi na';
+
+  @override
+  String get greetingLunchtime => 'Tanghalian na';
+
+  @override
+  String get greetingWindingDown => 'Oras ng pahinga';
+
+  @override
+  String get greetingGoodNight => 'Mahimbing na tulog';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Gising pa rin';
+
+  @override
+  String get greetingEarlyStart => 'Maagang simula';
+
+  @override
+  String get greetingNewDay => 'Bagong araw';
+
+  @override
+  String get greetingMorning => 'Magandang umaga';
+
+  @override
+  String get greetingBusyMorning => 'Abalang umaga';
+
+  @override
+  String get greetingAfternoon => 'Magandang hapon';
+
+  @override
+  String get greetingHomeStretch => 'Huling bahagi';
+
+  @override
+  String get greetingEvening => 'Magandang gabi';
+
+  @override
+  String get unlimitedBadge => 'Unlimited';
 }

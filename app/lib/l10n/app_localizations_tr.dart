@@ -7050,9 +7050,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi Hatırlatıcı';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName bağlantısı kesildi';
   }
@@ -11236,15 +11233,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'Günaydın';
-
-  @override
-  String get goodAfternoon => 'İyi öğleden sonralar';
-
-  @override
-  String get goodEvening => 'İyi akşamlar';
-
-  @override
   String get alreadyHaveAccount => 'Zaten hesabın var mı?';
 
   @override
@@ -11703,4 +11691,65 @@ class AppLocalizationsTr extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done/$total';
   }
+
+  @override
+  String get noFailedRecordings => 'Başarısız kayıt yok';
+
+  @override
+  String get mapNoPlacesTitle => 'Henüz yer yok';
+
+  @override
+  String get mapNoPlacesMessage => 'Sohbetler, Omi nerede gerçekleştiklerini bildiğinde burada görünür.';
+
+  @override
+  String get mergeWithEllipsis => 'Şununla birleştir…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return '$appName uygulamasını açmak için kurulumunu tamamlayın';
+  }
+
+  @override
+  String get greetingUpLate => 'Gece yarısı';
+
+  @override
+  String get greetingLunchtime => 'Öğle arası';
+
+  @override
+  String get greetingWindingDown => 'Dinlenme vakti';
+
+  @override
+  String get greetingGoodNight => 'İyi geceler';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Hâlâ uyanık';
+
+  @override
+  String get greetingEarlyStart => 'Erken başlangıç';
+
+  @override
+  String get greetingNewDay => 'Yeni gün';
+
+  @override
+  String get greetingMorning => 'Günaydın';
+
+  @override
+  String get greetingBusyMorning => 'Yoğun sabah';
+
+  @override
+  String get greetingAfternoon => 'İyi öğleden sonralar';
+
+  @override
+  String get greetingHomeStretch => 'Son düzlük';
+
+  @override
+  String get greetingEvening => 'İyi akşamlar';
+
+  @override
+  String get unlimitedBadge => 'Sınırsız';
 }

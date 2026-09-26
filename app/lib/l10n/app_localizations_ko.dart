@@ -6922,9 +6922,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi 알림';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName 연결 해제됨';
   }
@@ -11043,15 +11040,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => '좋은 아침이에요';
-
-  @override
-  String get goodAfternoon => '좋은 오후예요';
-
-  @override
-  String get goodEvening => '좋은 저녁이에요';
-
-  @override
   String get alreadyHaveAccount => '이미 계정이 있나요?';
 
   @override
@@ -11499,4 +11487,65 @@ class AppLocalizationsKo extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done/$total';
   }
+
+  @override
+  String get noFailedRecordings => '실패한 녹음이 없습니다';
+
+  @override
+  String get mapNoPlacesTitle => '아직 장소가 없습니다';
+
+  @override
+  String get mapNoPlacesMessage => 'Omi가 대화 장소를 알면 여기에 표시됩니다.';
+
+  @override
+  String get mergeWithEllipsis => '병합…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return '$appName을(를) 켜려면 설정을 완료하세요';
+  }
+
+  @override
+  String get greetingUpLate => '늦은 밤';
+
+  @override
+  String get greetingLunchtime => '점심시간';
+
+  @override
+  String get greetingWindingDown => '쉬어가는 시간';
+
+  @override
+  String get greetingGoodNight => '좋은 밤 되세요';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name님';
+  }
+
+  @override
+  String get greetingStillUp => '아직 깨어 있네요';
+
+  @override
+  String get greetingEarlyStart => '이른 시작';
+
+  @override
+  String get greetingNewDay => '새로운 하루';
+
+  @override
+  String get greetingMorning => '좋은 아침이에요';
+
+  @override
+  String get greetingBusyMorning => '바쁜 오전';
+
+  @override
+  String get greetingAfternoon => '좋은 오후예요';
+
+  @override
+  String get greetingHomeStretch => '마무리 시간';
+
+  @override
+  String get greetingEvening => '좋은 저녁이에요';
+
+  @override
+  String get unlimitedBadge => '무제한';
 }

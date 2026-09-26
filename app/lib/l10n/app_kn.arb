@@ -8653,10 +8653,6 @@
             }
         }
     },
-    "actionItemReminderTitle": "Omi ಜ್ಞಾಪಕ",
-    "@actionItemReminderTitle": {
-        "description": "Title for action item reminder notifications"
-    },
     "deviceDisconnectedTitle": "{deviceName} ಸಂಪರ್ಕ ಸ್ವಲ್ಪ",
     "@deviceDisconnectedTitle": {
         "description": "Notification title when a device disconnects",
@@ -11075,9 +11071,6 @@
     "captureStorageAlmostFull": "ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ತುಂಬಿದೆ",
     "capturePendantDisconnectedDetail": "ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಈ ಫೋನ್‌ನೊಂದಿಗೆ ಸಂಪರ್ಕ ಕಳೆದುಕೊಂಡಿದೆ. ಪೆಂಡೆಂಟ್ ಆನ್ ಆಗಿದ್ದು ಹತ್ತಿರದಲ್ಲಿದ್ದಾಗ Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ. ಇದಕ್ಕೂ ಮೊದಲು ರೆಕಾರ್ಡ್ ಆದದ್ದೆಲ್ಲ ಸುರಕ್ಷಿತವಾಗಿದೆ.",
     "participantsSummaryUncounted": "{name} ಮತ್ತು ಇತರರು",
-    "goodMorning": "ಶುಭೋದಯ",
-    "goodAfternoon": "ಶುಭ ಮಧ್ಯಾಹ್ನ",
-    "goodEvening": "ಶುಭ ಸಂಜೆ",
     "alreadyHaveAccount": "ಈಗಾಗಲೇ ಖಾತೆ ಇದೆಯೇ?",
     "signInToOmi": "Omi ಗೆ ಸೈನ್ ಇನ್ ಮಾಡಿ",
     "signInSubtitle": "ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳು ಮತ್ತು ನೆನಪುಗಳು ನಿಮ್ಮ ಖಾತೆಯೊಂದಿಗೆ ಫೋನ್, Mac ಮತ್ತು ವೆಬ್‌ನಲ್ಲಿ ಇರುತ್ತವೆ.",
@@ -11216,5 +11209,24 @@
     "tipStarBody": "ಸ್ಟಾರ್ ನೀಡಿದ ಸಂಭಾಷಣೆಗಳನ್ನು ನಂತರ ಸುಲಭವಾಗಿ ಹುಡುಕಬಹುದು.",
     "tipPrivateTitle": "ಡೀಫಾಲ್ಟ್ ಆಗಿ ಖಾಸಗಿ",
     "tipPrivateBody": "ನೀವು ಹಂಚಿಕೊಳ್ಳದ ಹೊರತು ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳು ಖಾಸಗಿಯಾಗಿರುತ್ತವೆ.",
-    "homeGettingStartedProgress": "{done}/{total}"
+    "homeGettingStartedProgress": "{done}/{total}",
+    "noFailedRecordings": "ವಿಫಲವಾದ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳಿಲ್ಲ",
+    "mapNoPlacesTitle": "ಇನ್ನೂ ಯಾವುದೇ ಸ್ಥಳಗಳಿಲ್ಲ",
+    "mapNoPlacesMessage": "ಸಂಭಾಷಣೆಗಳು ಎಲ್ಲಿ ನಡೆದವು ಎಂದು Omi ಗೆ ತಿಳಿದಾಗ ಅವು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.",
+    "mergeWithEllipsis": "ಇದರೊಂದಿಗೆ ವಿಲೀನಗೊಳಿಸಿ…",
+    "finishSetupToEnable": "{appName} ಆನ್ ಮಾಡಲು ಅದರ ಸೆಟಪ್ ಪೂರ್ಣಗೊಳಿಸಿ",
+    "greetingUpLate": "ತಡರಾತ್ರಿ",
+    "greetingLunchtime": "ಊಟದ ಸಮಯ",
+    "greetingWindingDown": "ವಿಶ್ರಾಂತಿಯ ಸಮಯ",
+    "greetingGoodNight": "ಶುಭ ರಾತ್ರಿ",
+    "greetingWithName": "{greeting}, {name}",
+    "greetingStillUp": "ಇನ್ನೂ ಎಚ್ಚರ",
+    "greetingEarlyStart": "ಬೆಳಗಿನ ಜಾವ",
+    "greetingNewDay": "ಹೊಸ ದಿನ",
+    "greetingMorning": "ಶುಭೋದಯ",
+    "greetingBusyMorning": "ಬ್ಯುಸಿ ಬೆಳಗು",
+    "greetingAfternoon": "ಶುಭ ಮಧ್ಯಾಹ್ನ",
+    "greetingHomeStretch": "ದಿನದ ಕೊನೆ",
+    "greetingEvening": "ಶುಭ ಸಂಜೆ",
+    "unlimitedBadge": "ಸೀಮಾ ರಹಿತ"
 }

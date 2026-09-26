@@ -24,7 +24,21 @@ class _CounterState extends State<_Counter> {
           children: [
             TextButton(onPressed: () => setState(() => taps++), child: Text('taps $taps')),
             TextButton(
-              onPressed: () => showOmiSheet<void>(context: context, builder: (_) => const Text('sheet body')),
+              onPressed: () => showOmiSheet<void>(
+                context: context,
+                builder: (sheetContext) => Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('sheet body'),
+                    // A settings row: its page opens on top of the sheet.
+                    TextButton(
+                      onPressed: () => Navigator.of(sheetContext)
+                          .push(omiPageRoute<void>(builder: (_) => const Scaffold(body: Text('section page')))),
+                      child: const Text('open section'),
+                    ),
+                  ],
+                ),
+              ),
               child: const Text('open'),
             ),
           ],
@@ -80,6 +94,38 @@ void main() {
     expect(OmiSheetDepth.value.value, 0);
     // Same page, same state: the recede never rebuilt it.
     expect(find.text('taps 1'), findsOneWidget);
+  });
+
+  testWidgets('a page opened from a sheet sits in front of it at full size (Settings → a section)', (tester) async {
+    await tester.pumpWidget(app());
+    await tester.tap(find.text('push'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('open section'));
+    await tester.pumpAndSettle();
+    expect(find.text('section page'), findsOneWidget);
+    double scaleOf(String text) => tester
+        .widget<Transform>(find
+            .ancestor(
+                of: find.text(text, skipOffstage: false),
+                matching: find.descendant(
+                    of: find.byType(OmiSheetRecede, skipOffstage: false),
+                    matching: find.byType(Transform, skipOffstage: false)))
+            .first)
+        .transform
+        .storage[0];
+    expect(scaleOf('section page'), 1, reason: 'no black frame around a section');
+    expect(scaleOf('taps 0'), closeTo(0.92, 0.001), reason: 'the page under the sheet stays back');
+
+    // Back to the sheet, then closing it brings the page under it forward again.
+    Navigator.of(tester.element(find.text('section page'))).pop();
+    await tester.pumpAndSettle();
+    expect(scaleOf('taps 0'), closeTo(0.92, 0.001));
+    Navigator.of(tester.element(find.text('sheet body'))).pop();
+    await tester.pumpAndSettle();
+    expect(scaleOf('taps 0'), 1);
   });
 
   testWidgets('Reduce Motion leaves the page where it is', (tester) async {

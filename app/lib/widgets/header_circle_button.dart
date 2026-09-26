@@ -33,6 +33,11 @@ class HeaderCircleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Daylight: liquid glass, like the device chip beside it (a flat white disc on the pale page read
+    // as a sticker). Dark keeps the graphite circle.
+    if (color == null && OmiColors.isLight) {
+      return OmiIconButton.glass(icon: icon, label: semanticLabel, onPressed: onTap, diameter: diameter);
+    }
     return OmiIconButton.filled(
       icon: icon,
       label: semanticLabel,

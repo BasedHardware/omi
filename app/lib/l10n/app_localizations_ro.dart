@@ -7072,9 +7072,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Memento Omi';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName deconectat';
   }
@@ -11277,15 +11274,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get goodMorning => 'Bună dimineața';
-
-  @override
-  String get goodAfternoon => 'Bună ziua';
-
-  @override
-  String get goodEvening => 'Bună seara';
-
-  @override
   String get alreadyHaveAccount => 'Ai deja un cont?';
 
   @override
@@ -11742,4 +11730,65 @@ class AppLocalizationsRo extends AppLocalizations {
   String homeGettingStartedProgress(int done, int total) {
     return '$done din $total';
   }
+
+  @override
+  String get noFailedRecordings => 'Nicio înregistrare eșuată';
+
+  @override
+  String get mapNoPlacesTitle => 'Încă nu există locuri';
+
+  @override
+  String get mapNoPlacesMessage => 'Conversațiile apar aici când Omi știe unde au avut loc.';
+
+  @override
+  String get mergeWithEllipsis => 'Îmbină cu…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Finalizează configurarea $appName pentru a o activa';
+  }
+
+  @override
+  String get greetingUpLate => 'Târziu în noapte';
+
+  @override
+  String get greetingLunchtime => 'Ora prânzului';
+
+  @override
+  String get greetingWindingDown => 'Timp de relaxare';
+
+  @override
+  String get greetingGoodNight => 'Noapte bună';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Încă treji';
+
+  @override
+  String get greetingEarlyStart => 'Început devreme';
+
+  @override
+  String get greetingNewDay => 'Zi nouă';
+
+  @override
+  String get greetingMorning => 'Bună dimineața';
+
+  @override
+  String get greetingBusyMorning => 'Dimineață plină';
+
+  @override
+  String get greetingAfternoon => 'Bună ziua';
+
+  @override
+  String get greetingHomeStretch => 'Final de zi';
+
+  @override
+  String get greetingEvening => 'Bună seara';
+
+  @override
+  String get unlimitedBadge => 'Nelimitat';
 }

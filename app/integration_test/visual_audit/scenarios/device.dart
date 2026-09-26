@@ -8,7 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/devices/add_device_page.dart';
-import 'package:omi/pages/devices/devices_page.dart';
+import 'package:omi/pages/settings/settings_groups.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -18,17 +18,17 @@ import '../harness.dart';
 
 final deviceScenarios = <AuditScenario>[
   AuditScenario(
-    id: 'devices-tab',
-    title: 'Devices tab: a paired Omi and this phone, Add a device',
-    page: 'lib/pages/devices/devices_page.dart (DevicesPage)',
+    id: 'devices-settings',
+    title: 'Settings → Devices: a paired Omi and this phone, Add a device',
+    page: 'lib/pages/settings/settings_groups.dart (DeviceGroupPage)',
     state: 'An Omi pendant paired and connected at 72% battery; nothing recording',
     run: (a) async {
       final device = BtDevice(id: 'd1', name: 'Omi Device', type: DeviceType.omi, rssi: -40);
-      await a.pump(const DevicesPage(), providers: [
+      await a.pump(const DeviceGroupPage(), providers: [
         ChangeNotifierProvider<DeviceProvider>.value(
             value: AuditDeviceProvider(connected: true, battery: 72, device: device)),
       ]);
-      await a.shot('Open the Devices tab');
+      await a.shot('Open Settings → Devices');
     },
   ),
   AuditScenario(
