@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from services import conversation_selfheal as sweep
+from services import conversation_finalization as finalization_service
 from utils.conversations.lifecycle import FinalizationDispatchUnavailable
 from utils.conversations.processing_trigger import ProcessingTrigger
 
@@ -22,6 +23,41 @@ NOW = datetime(2026, 7, 20, tzinfo=timezone.utc)
 STALE = NOW - timedelta(hours=3)
 FRESH = NOW - timedelta(hours=1)
 ANCIENT = NOW - timedelta(hours=20)
+
+
+def test_api_reconciler_runs_the_fenced_selfheal_primitive_in_heal_mode(monkeypatch):
+    calls = []
+    monkeypatch.setattr(finalization_service, 'is_listen_finalization_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(
+        finalization_service,
+        'run_selfheal_tick',
+        lambda **kwargs: calls.append(kwargs) or {'enqueued': 1, 'verified': 0, 'errors': 0},
+    )
+
+    result = finalization_service.reconcile_stale_in_progress_conversations(firestore_client='db')
+
+    assert result['enqueued'] == 1
+    assert calls == [
+        {
+            'firestore_client': 'db',
+            'mode': 'heal',
+            'dry_run': False,
+            'use_configured_uid_allowlist': False,
+            'wedge_runner': finalization_service._skip_capture_wedge,
+        }
+    ]
+
+
+def test_api_reconciler_is_inert_without_durable_dispatch(monkeypatch):
+    monkeypatch.setattr(finalization_service, 'is_listen_finalization_dispatch_enabled', lambda: False)
+    called = []
+    monkeypatch.setattr(finalization_service, 'run_selfheal_tick', lambda **kwargs: called.append(kwargs))
+
+    result = finalization_service.reconcile_stale_in_progress_conversations()
+
+    assert result['mode'] == 'off'
+    assert result['enqueued'] == 0
+    assert called == []
 
 
 def _row(uid: str, conversation_id: str, data: dict) -> dict:
@@ -211,6 +247,17 @@ def test_heal_respects_uid_allowlist(capsys):
         e for e in _stdout_events(capsys) if e.get('outcome') == 'skipped' and e['reason'] == 'allowlist'
     ]
     assert [e['uid'] for e in allowlist_skips] == ['u2']
+
+
+def test_always_on_gc_ignores_the_optional_rollout_allowlist(monkeypatch):
+    monkeypatch.setenv('SELFHEAL_UID_ALLOWLIST', 'some-other-user')
+    rows = [_row('u1', 'c1', _eligible_data())]
+    state, kwargs = _harness(rows, mode='heal', use_configured_uid_allowlist=False)
+
+    counters = sweep.run_selfheal_tick(**kwargs)
+
+    assert counters['enqueued'] == 1
+    assert [call['uid'] for call in state['finalization_calls']] == ['u1']
 
 
 def test_detect_ignores_uid_allowlist_for_stats():
