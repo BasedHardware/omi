@@ -170,7 +170,9 @@ void main() {
     await world.settle();
     expect(world.hostApi.nativeRecording, false);
     expect(presentation.snapshot['active'], false);
-    expect(world.processCalls, 0);
+    // The card's Finish is the live page's finishCapture: it always asks for
+    // processing, and an empty result only clears the processing skeleton.
+    expect(world.processCalls, 1);
   });
 
   test('Finish in phone batch mode stops without requesting live processing', () async {
