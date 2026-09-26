@@ -3555,5 +3555,13 @@
     "capturePhoneStorageFull": "Telefonens lagring är full",
     "captureStorageAlmostFull": "Lagringen är nästan full",
     "capturePendantDisconnectedDetail": "Hängsmycket tappade anslutningen till den här telefonen. Omi ansluter igen av sig själv när hängsmycket är på och i närheten. Allt som spelats in innan är säkert.",
-    "participantsSummaryUncounted": "{name} och andra"
+    "participantsSummaryUncounted": "{name} och andra",
+    "renameDevice": "Byt namn på enheten",
+    "renameDeviceDescription": "Namnet sparas på själva Omi-enheten, så det visas på alla telefoner du parkopplar den med.",
+    "tapToRename": "Tryck för att byta namn",
+    "deviceNameCannotBeEmpty": "Enhetsnamnet får inte vara tomt",
+    "deviceNameTooLong": "Namnet är för långt (upp till {maxBytes} tecken; emoji och accenter räknas extra)",
+    "deviceNameInvalidCharacters": "Namnet innehåller tecken som inte stöds",
+    "deviceRenameFailed": "Namnet kunde inte sparas på din Omi. Kontrollera att den är ansluten och försök igen.",
+    "deviceRenamed": "Enheten har fått namnet {name}"
 }

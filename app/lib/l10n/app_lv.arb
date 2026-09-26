@@ -3555,5 +3555,13 @@
     "capturePhoneStorageFull": "Tālruņa krātuve ir pilna",
     "captureStorageAlmostFull": "Krātuve gandrīz pilna",
     "capturePendantDisconnectedDetail": "Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.",
-    "participantsSummaryUncounted": "{name} un citi"
+    "participantsSummaryUncounted": "{name} un citi",
+    "renameDevice": "Pārdēvēt ierīci",
+    "renameDeviceDescription": "Nosaukums tiek saglabāts pašā Omi, tāpēc tas parādās jebkurā tālrunī, ar kuru to savienosiet pārī.",
+    "tapToRename": "Pieskarieties, lai pārdēvētu",
+    "deviceNameCannotBeEmpty": "Ierīces nosaukums nevar būt tukšs",
+    "deviceNameTooLong": "Nosaukums ir pārāk garš (līdz {maxBytes} rakstzīmēm; emocijzīmes un diakritiskās zīmes aizņem vairāk)",
+    "deviceNameInvalidCharacters": "Nosaukumā ir neatbalstītas rakstzīmes",
+    "deviceRenameFailed": "Nosaukumu neizdevās saglabāt Omi ierīcē. Pārbaudiet, vai tā ir pievienota, un mēģiniet vēlreiz.",
+    "deviceRenamed": "Ierīce pārdēvēta uz {name}"
 }

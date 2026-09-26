@@ -11115,5 +11115,13 @@
     "capturePhoneStorageFull": "Pomnilnik telefona je poln",
     "captureStorageAlmostFull": "Pomnilnik je skoraj poln",
     "capturePendantDisconnectedDetail": "Obesek je izgubil povezavo s tem telefonom. Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini. Vse, kar je bilo posneto prej, je varno.",
-    "participantsSummaryUncounted": "{name} in drugi"
+    "participantsSummaryUncounted": "{name} in drugi",
+    "renameDevice": "Preimenuj napravo",
+    "renameDeviceDescription": "Ime se shrani v sam Omi, zato se prikaže na vsakem telefonu, s katerim ga povežete.",
+    "tapToRename": "Tapnite za preimenovanje",
+    "deviceNameCannotBeEmpty": "Ime naprave ne sme biti prazno",
+    "deviceNameTooLong": "Ime je predolgo (do {maxBytes} znakov; emojiji in šumniki štejejo več)",
+    "deviceNameInvalidCharacters": "Ime vsebuje nepodprte znake",
+    "deviceRenameFailed": "Imena ni bilo mogoče shraniti v Omi. Preverite, ali je povezan, in poskusite znova.",
+    "deviceRenamed": "Naprava je preimenovana v {name}"
 }

@@ -3555,5 +3555,13 @@
     "capturePhoneStorageFull": "Пам’ять телефона заповнена",
     "captureStorageAlmostFull": "Пам’ять майже заповнена",
     "capturePendantDisconnectedDetail": "Кулон втратив зв’язок із цим телефоном. Omi перепідключиться сам, коли кулон буде ввімкнений і поруч. Усе, що записано до цього, збережено.",
-    "participantsSummaryUncounted": "{name} та інші"
+    "participantsSummaryUncounted": "{name} та інші",
+    "renameDevice": "Перейменувати пристрій",
+    "renameDeviceDescription": "Ім'я зберігається на самому Omi, тому воно з'явиться на будь-якому телефоні, з яким ви його з'єднаєте.",
+    "tapToRename": "Торкніться, щоб перейменувати",
+    "deviceNameCannotBeEmpty": "Ім'я пристрою не може бути порожнім",
+    "deviceNameTooLong": "Ім'я надто довге (до {maxBytes} символів; емодзі та кирилиця займають більше)",
+    "deviceNameInvalidCharacters": "Ім'я містить непідтримувані символи",
+    "deviceRenameFailed": "Не вдалося зберегти ім'я на Omi. Перевірте, чи пристрій підключено, і спробуйте ще раз.",
+    "deviceRenamed": "Пристрій перейменовано на {name}"
 }

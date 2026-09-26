@@ -3555,5 +3555,13 @@
     "capturePhoneStorageFull": "Telefonspeicher voll",
     "captureStorageAlmostFull": "Speicher fast voll",
     "capturePendantDisconnectedDetail": "Dein Anhänger hat die Verbindung zu diesem Telefon verloren. Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist. Alles bisher Aufgenommene ist sicher.",
-    "participantsSummaryUncounted": "{name} und weitere"
+    "participantsSummaryUncounted": "{name} und weitere",
+    "renameDevice": "Gerät umbenennen",
+    "renameDeviceDescription": "Der Name wird auf deinem Omi gespeichert und erscheint daher auf jedem Telefon, mit dem du es koppelst.",
+    "tapToRename": "Zum Umbenennen tippen",
+    "deviceNameCannotBeEmpty": "Der Gerätename darf nicht leer sein",
+    "deviceNameTooLong": "Name ist zu lang (bis zu {maxBytes} Zeichen; Emojis und Akzente zählen mehr)",
+    "deviceNameInvalidCharacters": "Der Name enthält nicht unterstützte Zeichen",
+    "deviceRenameFailed": "Der Name konnte nicht auf deinem Omi gespeichert werden. Prüfe, ob es verbunden ist, und versuche es erneut.",
+    "deviceRenamed": "Gerät umbenannt in {name}"
 }

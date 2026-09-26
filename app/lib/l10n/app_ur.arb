@@ -11115,5 +11115,13 @@
     "capturePhoneStorageFull": "فون اسٹوریج بھر گئی",
     "captureStorageAlmostFull": "اسٹوریج تقریباً بھر گئی",
     "capturePendantDisconnectedDetail": "آپ کے پینڈنٹ کا اس فون سے رابطہ ٹوٹ گیا۔ پینڈنٹ آن اور قریب ہونے پر Omi خود دوبارہ جڑ جائے گا۔ اس سے پہلے ریکارڈ ہونے والی ہر چیز محفوظ ہے۔",
-    "participantsSummaryUncounted": "{name} اور دیگر"
+    "participantsSummaryUncounted": "{name} اور دیگر",
+    "renameDevice": "ڈیوائس کا نام بدلیں",
+    "renameDeviceDescription": "نام آپ کے Omi پر ہی محفوظ ہوتا ہے، اس لیے یہ ہر اس فون پر نظر آتا ہے جس کے ساتھ آپ اسے جوڑتے ہیں۔",
+    "tapToRename": "نام بدلنے کے لیے ٹیپ کریں",
+    "deviceNameCannotBeEmpty": "ڈیوائس کا نام خالی نہیں ہو سکتا",
+    "deviceNameTooLong": "نام بہت لمبا ہے (زیادہ سے زیادہ {maxBytes} حروف؛ ایموجی اور اعراب زیادہ شمار ہوتے ہیں)",
+    "deviceNameInvalidCharacters": "نام میں غیر معاون حروف شامل ہیں",
+    "deviceRenameFailed": "آپ کے Omi پر نام محفوظ نہیں ہو سکا۔ یقینی بنائیں کہ یہ منسلک ہے اور دوبارہ کوشش کریں۔",
+    "deviceRenamed": "ڈیوائس کا نام بدل کر {name} کر دیا گیا"
 }

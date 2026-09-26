@@ -3590,5 +3590,13 @@
     "capturePhoneStorageFull": "Pamięć telefonu pełna",
     "captureStorageAlmostFull": "Pamięć prawie pełna",
     "capturePendantDisconnectedDetail": "Wisiorek utracił połączenie z tym telefonem. Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu. Wszystko nagrane wcześniej jest bezpieczne.",
-    "participantsSummaryUncounted": "{name} i inni"
+    "participantsSummaryUncounted": "{name} i inni",
+    "renameDevice": "Zmień nazwę urządzenia",
+    "renameDeviceDescription": "Nazwa jest zapisywana w samym Omi, więc pojawia się na każdym telefonie, z którym je sparujesz.",
+    "tapToRename": "Dotknij, aby zmienić nazwę",
+    "deviceNameCannotBeEmpty": "Nazwa urządzenia nie może być pusta",
+    "deviceNameTooLong": "Nazwa jest za długa (maks. {maxBytes} znaków; emoji i znaki diakrytyczne liczą się więcej)",
+    "deviceNameInvalidCharacters": "Nazwa zawiera nieobsługiwane znaki",
+    "deviceRenameFailed": "Nie udało się zapisać nazwy w Omi. Sprawdź, czy jest połączone, i spróbuj ponownie.",
+    "deviceRenamed": "Zmieniono nazwę urządzenia na {name}"
 }

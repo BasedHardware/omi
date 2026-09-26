@@ -3555,5 +3555,13 @@
     "capturePhoneStorageFull": "Memoria del telefono piena",
     "captureStorageAlmostFull": "Memoria quasi piena",
     "capturePendantDisconnectedDetail": "Il ciondolo ha perso la connessione con questo telefono. Omi si riconnetterà da solo quando il ciondolo sarà acceso e vicino. Tutto ciò che è stato registrato prima è al sicuro.",
-    "participantsSummaryUncounted": "{name} e altri"
+    "participantsSummaryUncounted": "{name} e altri",
+    "renameDevice": "Rinomina dispositivo",
+    "renameDeviceDescription": "Il nome viene salvato sul tuo Omi, quindi compare su qualsiasi telefono a cui lo associ.",
+    "tapToRename": "Tocca per rinominare",
+    "deviceNameCannotBeEmpty": "Il nome del dispositivo non può essere vuoto",
+    "deviceNameTooLong": "Il nome è troppo lungo (fino a {maxBytes} caratteri; emoji e accenti contano di più)",
+    "deviceNameInvalidCharacters": "Il nome contiene caratteri non supportati",
+    "deviceRenameFailed": "Impossibile salvare il nome sul tuo Omi. Verifica che sia connesso e riprova.",
+    "deviceRenamed": "Dispositivo rinominato in {name}"
 }

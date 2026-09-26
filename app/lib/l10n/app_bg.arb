@@ -3555,5 +3555,13 @@
     "capturePhoneStorageFull": "Паметта на телефона е пълна",
     "captureStorageAlmostFull": "Паметта е почти пълна",
     "capturePendantDisconnectedDetail": "Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.",
-    "participantsSummaryUncounted": "{name} и други"
+    "participantsSummaryUncounted": "{name} и други",
+    "renameDevice": "Преименуване на устройството",
+    "renameDeviceDescription": "Името се записва в самото Omi, така че се показва на всеки телефон, с който го сдвоите.",
+    "tapToRename": "Докоснете за преименуване",
+    "deviceNameCannotBeEmpty": "Името на устройството не може да е празно",
+    "deviceNameTooLong": "Името е твърде дълго (до {maxBytes} знака; емоджи и ударения се броят за повече)",
+    "deviceNameInvalidCharacters": "Името съдържа неподдържани знаци",
+    "deviceRenameFailed": "Името не можа да бъде записано в Omi. Проверете дали е свързано и опитайте отново.",
+    "deviceRenamed": "Устройството е преименувано на {name}"
 }

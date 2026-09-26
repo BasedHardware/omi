@@ -3555,5 +3555,13 @@
     "capturePhoneStorageFull": "Puhelimen tallennustila täynnä",
     "captureStorageAlmostFull": "Tallennustila melkein täynnä",
     "capturePendantDisconnectedDetail": "Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa.",
-    "participantsSummaryUncounted": "{name} ja muut"
+    "participantsSummaryUncounted": "{name} ja muut",
+    "renameDevice": "Nimeä laite uudelleen",
+    "renameDeviceDescription": "Nimi tallennetaan itse Omiin, joten se näkyy jokaisessa puhelimessa, johon sen yhdistät.",
+    "tapToRename": "Napauta nimetäksesi uudelleen",
+    "deviceNameCannotBeEmpty": "Laitteen nimi ei voi olla tyhjä",
+    "deviceNameTooLong": "Nimi on liian pitkä (enintään {maxBytes} merkkiä; emojit ja ääkköset vievät enemmän)",
+    "deviceNameInvalidCharacters": "Nimi sisältää merkkejä, joita ei tueta",
+    "deviceRenameFailed": "Nimeä ei voitu tallentaa Omiin. Tarkista, että se on yhdistetty, ja yritä uudelleen.",
+    "deviceRenamed": "Laite nimettiin uudelleen: {name}"
 }

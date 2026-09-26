@@ -11233,6 +11233,36 @@ class AppLocalizationsUr extends AppLocalizations {
   String get openCall => 'کال کھولیں';
 
   @override
+  String get renameDevice => 'ڈیوائس کا نام بدلیں';
+
+  @override
+  String get renameDeviceDescription =>
+      'نام آپ کے Omi پر ہی محفوظ ہوتا ہے، اس لیے یہ ہر اس فون پر نظر آتا ہے جس کے ساتھ آپ اسے جوڑتے ہیں۔';
+
+  @override
+  String get tapToRename => 'نام بدلنے کے لیے ٹیپ کریں';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'ڈیوائس کا نام خالی نہیں ہو سکتا';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'نام بہت لمبا ہے (زیادہ سے زیادہ $maxBytes حروف؛ ایموجی اور اعراب زیادہ شمار ہوتے ہیں)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'نام میں غیر معاون حروف شامل ہیں';
+
+  @override
+  String get deviceRenameFailed =>
+      'آپ کے Omi پر نام محفوظ نہیں ہو سکا۔ یقینی بنائیں کہ یہ منسلک ہے اور دوبارہ کوشش کریں۔';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'ڈیوائس کا نام بدل کر $name کر دیا گیا';
+  }
+
+  @override
   String get captureRecoveryBanner => 'پینڈنٹ کی آواز ایپ تک نہیں پہنچ رہی — درست کرنے کے لیے ٹیپ کریں';
 
   @override

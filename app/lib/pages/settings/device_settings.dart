@@ -18,6 +18,7 @@ import 'package:omi/pages/settings/device/device_control_sheets.dart';
 import 'package:omi/pages/settings/device/device_info_groups.dart';
 import 'package:omi/pages/settings/device/device_page_header.dart';
 import 'package:omi/pages/settings/device_diagnostics.dart';
+import 'package:omi/pages/settings/rename_device_widget.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
@@ -60,6 +61,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   static const Duration _findDeviceRequestTimeout = Duration(seconds: 30);
 
   CaptureProvider? _captureProvider;
+  DeviceProvider? _deviceProvider;
 
   double _dimRatio = 100.0;
   bool _isDimRatioLoaded = false;
@@ -68,6 +70,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   double _micGain = 5.0;
   bool _isMicGainLoaded = false;
   bool? _hasMicGainFeature;
+
+  // Firmware that stores a user-chosen name (OmiFeatures.deviceName). Null
+  // until the features characteristic has been read.
+  bool? _hasDeviceNameFeature;
+  String? _featuresLoadedForDeviceId;
 
   Timer? _debounce;
   Timer? _micGainDebounce;
@@ -88,7 +95,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       // async device-info fetch below and leak the listener.
       _captureProvider = _maybeProvider<CaptureProvider>(context, listen: false);
       _captureProvider?.addMetricsListener();
-      await context.read<DeviceProvider>().getDeviceInfo();
+      _deviceProvider = context.read<DeviceProvider>();
+      _deviceProvider!.addListener(_onDeviceProviderChanged);
+      await _deviceProvider!.getDeviceInfo();
       if (!mounted) return;
       _loadDeviceFeatures();
     });
@@ -97,13 +106,33 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   @override
   void dispose() {
     _captureProvider?.removeMetricsListener();
+    _deviceProvider?.removeListener(_onDeviceProviderChanged);
     _debounce?.cancel();
     _micGainDebounce?.cancel();
     super.dispose();
   }
 
-  // Device features: LED dimming and mic gain.
+  void _onDeviceProviderChanged() {
+    if (!mounted) return;
+    final provider = context.read<DeviceProvider>();
+    final pairedId = provider.pairedDevice?.id;
+    if (!provider.isConnected || pairedId == null || pairedId.isEmpty) {
+      if (_featuresLoadedForDeviceId != null) {
+        setState(() {
+          _featuresLoadedForDeviceId = null;
+          _hasDeviceNameFeature = null;
+          _hasDimmingFeature = null;
+          _hasMicGainFeature = null;
+        });
+      }
+      return;
+    }
+    if (pairedId != _featuresLoadedForDeviceId) {
+      _loadDeviceFeatures();
+    }
+  }
 
+  // Device features: LED dimming, mic gain, and on-device rename.
   Future<void> _loadDeviceFeatures() async {
     final deviceProvider = context.read<DeviceProvider>();
     if (deviceProvider.pairedDevice == null) return;
@@ -112,10 +141,13 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final features = await connection.getFeatures();
     final hasDimming = (features & OmiFeatures.ledDimming) != 0;
     final hasMicGain = (features & OmiFeatures.micGain) != 0;
+    final hasDeviceName = (features & OmiFeatures.deviceName) != 0;
     if (!mounted) return;
     setState(() {
+      _featuresLoadedForDeviceId = deviceProvider.pairedDevice?.id;
       _hasDimmingFeature = hasDimming;
       _hasMicGainFeature = hasMicGain;
+      _hasDeviceNameFeature = hasDeviceName;
     });
 
     final ratio = hasDimming ? await connection.getLedDimRatio() : null;
@@ -145,6 +177,17 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     if (deviceProvider.pairedDevice == null) return;
     final connection = await ServiceManager.instance().device.ensureConnection(deviceProvider.pairedDevice!.id);
     await connection?.setMicGain(value.toInt());
+  }
+
+  Future<void> _showRenameDeviceDialog(String currentName) async {
+    final provider = context.read<DeviceProvider>();
+    final renamed = await showDialog<bool>(
+      context: context,
+      builder: (_) => RenameDeviceWidget(initialName: currentName, onRename: provider.renameConnectedDevice),
+    );
+    if (renamed == true && mounted) {
+      OmiFeedback.confirm(context, context.l10n.deviceRenamed(provider.pairedDevice?.name ?? ''));
+    }
   }
 
   void _showBrightnessSheet() {
@@ -592,6 +635,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             pairedDevice: paired,
             isDeviceConnected: connected != null,
             rayBanCameraStatus: paired?.type == DeviceType.raybanMeta ? _rayBanMetaCameraStatus(provider) : null,
+            canRename: _hasDeviceNameFeature == true && provider.isConnected,
+            onRename: () => _showRenameDeviceDialog(paired?.name ?? connected?.name ?? ''),
           ),
           gap,
           _forgetGroup(provider),

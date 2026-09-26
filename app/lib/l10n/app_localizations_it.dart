@@ -11286,6 +11286,35 @@ class AppLocalizationsIt extends AppLocalizations {
   String get openCall => 'Apri chiamata';
 
   @override
+  String get renameDevice => 'Rinomina dispositivo';
+
+  @override
+  String get renameDeviceDescription =>
+      'Il nome viene salvato sul tuo Omi, quindi compare su qualsiasi telefono a cui lo associ.';
+
+  @override
+  String get tapToRename => 'Tocca per rinominare';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Il nome del dispositivo non può essere vuoto';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Il nome è troppo lungo (fino a $maxBytes caratteri; emoji e accenti contano di più)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Il nome contiene caratteri non supportati';
+
+  @override
+  String get deviceRenameFailed => 'Impossibile salvare il nome sul tuo Omi. Verifica che sia connesso e riprova.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Dispositivo rinominato in $name';
+  }
+
+  @override
   String get captureRecoveryBanner => 'L\'audio del ciondolo non arriva all\'app — tocca per riparare';
 
   @override

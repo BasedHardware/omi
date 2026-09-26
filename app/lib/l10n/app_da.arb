@@ -3597,5 +3597,13 @@
     "capturePhoneStorageFull": "Telefonens lager er fuldt",
     "captureStorageAlmostFull": "Lageret er næsten fuldt",
     "capturePendantDisconnectedDetail": "Dit vedhæng mistede forbindelsen til denne telefon. Omi genopretter forbindelsen af sig selv, når vedhænget er tændt og i nærheden. Alt optaget før dette er i sikkerhed.",
-    "participantsSummaryUncounted": "{name} og andre"
+    "participantsSummaryUncounted": "{name} og andre",
+    "renameDevice": "Omdøb enhed",
+    "renameDeviceDescription": "Navnet gemmes på selve din Omi, så det vises på enhver telefon, du parrer den med.",
+    "tapToRename": "Tryk for at omdøbe",
+    "deviceNameCannotBeEmpty": "Enhedsnavnet må ikke være tomt",
+    "deviceNameTooLong": "Navnet er for langt (op til {maxBytes} tegn; emoji og accenter tæller ekstra)",
+    "deviceNameInvalidCharacters": "Navnet indeholder tegn, der ikke understøttes",
+    "deviceRenameFailed": "Navnet kunne ikke gemmes på din Omi. Tjek, at den er forbundet, og prøv igen.",
+    "deviceRenamed": "Enheden er omdøbt til {name}"
 }

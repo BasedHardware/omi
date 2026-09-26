@@ -3590,5 +3590,13 @@
     "capturePhoneStorageFull": "Penyimpanan ponsel penuh",
     "captureStorageAlmostFull": "Penyimpanan hampir penuh",
     "capturePendantDisconnectedDetail": "Liontin kehilangan koneksi dengan ponsel ini. Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda. Semua yang direkam sebelumnya aman.",
-    "participantsSummaryUncounted": "{name} dan lainnya"
+    "participantsSummaryUncounted": "{name} dan lainnya",
+    "renameDevice": "Ubah Nama Perangkat",
+    "renameDeviceDescription": "Nama disimpan di Omi itu sendiri, sehingga muncul di ponsel mana pun yang Anda pasangkan.",
+    "tapToRename": "Ketuk untuk mengubah nama",
+    "deviceNameCannotBeEmpty": "Nama perangkat tidak boleh kosong",
+    "deviceNameTooLong": "Nama terlalu panjang (maksimal {maxBytes} karakter; emoji dan aksen dihitung lebih)",
+    "deviceNameInvalidCharacters": "Nama mengandung karakter yang tidak didukung",
+    "deviceRenameFailed": "Nama tidak dapat disimpan ke Omi Anda. Pastikan perangkat terhubung, lalu coba lagi.",
+    "deviceRenamed": "Nama perangkat diubah menjadi {name}"
 }

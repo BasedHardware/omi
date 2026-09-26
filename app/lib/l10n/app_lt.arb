@@ -3555,5 +3555,13 @@
     "capturePhoneStorageFull": "Telefono atmintis pilna",
     "captureStorageAlmostFull": "Atmintis beveik pilna",
     "capturePendantDisconnectedDetail": "Pakabukas prarado ryšį su šiuo telefonu. Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese. Viskas, kas įrašyta iki šiol, išsaugota.",
-    "participantsSummaryUncounted": "{name} ir kiti"
+    "participantsSummaryUncounted": "{name} ir kiti",
+    "renameDevice": "Pervadinti įrenginį",
+    "renameDeviceDescription": "Pavadinimas išsaugomas pačiame Omi, todėl jis rodomas visuose telefonuose, su kuriais jį susiesite.",
+    "tapToRename": "Palieskite, kad pervadintumėte",
+    "deviceNameCannotBeEmpty": "Įrenginio pavadinimas negali būti tuščias",
+    "deviceNameTooLong": "Pavadinimas per ilgas (iki {maxBytes} simbolių; jaustukai ir diakritiniai ženklai užima daugiau)",
+    "deviceNameInvalidCharacters": "Pavadinime yra nepalaikomų simbolių",
+    "deviceRenameFailed": "Nepavyko išsaugoti pavadinimo Omi įrenginyje. Patikrinkite, ar jis prijungtas, ir bandykite dar kartą.",
+    "deviceRenamed": "Įrenginys pervadintas į {name}"
 }

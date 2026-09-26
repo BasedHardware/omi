@@ -11115,5 +11115,13 @@
     "capturePhoneStorageFull": "ఫోన్ స్టోరేజ్ నిండింది",
     "captureStorageAlmostFull": "స్టోరేజ్ దాదాపు నిండింది",
     "capturePendantDisconnectedDetail": "మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.",
-    "participantsSummaryUncounted": "{name} మరియు ఇతరులు"
+    "participantsSummaryUncounted": "{name} మరియు ఇతరులు",
+    "renameDevice": "పరికరం పేరు మార్చండి",
+    "renameDeviceDescription": "పేరు మీ Omi లోనే సేవ్ అవుతుంది, అందువల్ల మీరు జోడించే ఏ ఫోన్‌లోనైనా అది కనిపిస్తుంది.",
+    "tapToRename": "పేరు మార్చడానికి నొక్కండి",
+    "deviceNameCannotBeEmpty": "పరికరం పేరు ఖాళీగా ఉండకూడదు",
+    "deviceNameTooLong": "పేరు చాలా పొడవుగా ఉంది (గరిష్ఠంగా {maxBytes} అక్షరాలు; ఎమోజీలు మరియు గుణింతాలు ఎక్కువగా లెక్కించబడతాయి)",
+    "deviceNameInvalidCharacters": "పేరులో మద్దతు లేని అక్షరాలు ఉన్నాయి",
+    "deviceRenameFailed": "మీ Omi లో పేరును సేవ్ చేయలేకపోయాము. అది కనెక్ట్ అయి ఉందో లేదో తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
+    "deviceRenamed": "పరికరం పేరు {name} గా మార్చబడింది"
 }

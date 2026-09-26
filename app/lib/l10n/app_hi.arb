@@ -3555,5 +3555,13 @@
     "capturePhoneStorageFull": "फ़ोन स्टोरेज भर गया",
     "captureStorageAlmostFull": "स्टोरेज लगभग भर गया",
     "capturePendantDisconnectedDetail": "आपके पेंडेंट का इस फ़ोन से कनेक्शन टूट गया। पेंडेंट चालू और पास होने पर Omi अपने आप फिर से कनेक्ट हो जाएगा। इससे पहले रिकॉर्ड की गई हर चीज़ सुरक्षित है।",
-    "participantsSummaryUncounted": "{name} और अन्य"
+    "participantsSummaryUncounted": "{name} और अन्य",
+    "renameDevice": "डिवाइस का नाम बदलें",
+    "renameDeviceDescription": "नाम आपके Omi पर ही सहेजा जाता है, इसलिए यह हर उस फ़ोन पर दिखेगा जिससे आप इसे जोड़ेंगे।",
+    "tapToRename": "नाम बदलने के लिए टैप करें",
+    "deviceNameCannotBeEmpty": "डिवाइस का नाम खाली नहीं हो सकता",
+    "deviceNameTooLong": "नाम बहुत लंबा है (अधिकतम {maxBytes} वर्ण; इमोजी और मात्राएँ ज़्यादा गिनी जाती हैं)",
+    "deviceNameInvalidCharacters": "नाम में असमर्थित वर्ण हैं",
+    "deviceRenameFailed": "आपके Omi पर नाम सहेजा नहीं जा सका। जाँचें कि यह कनेक्ट है और फिर से कोशिश करें।",
+    "deviceRenamed": "डिवाइस का नाम बदलकर {name} कर दिया गया"
 }

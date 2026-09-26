@@ -144,6 +144,12 @@ checks:
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13920: tool_list_my_issues and tool_list_recent_issues interpolated limit and team into GraphQL text, so null/string/over-cap limits produced malformed queries and crafted team keys could inject GraphQL; limits must be coerced and inputs bound as variables"
+  - id: firmware-device-name-policy-tests
+    command: ["bash", "omi/firmware/omi/tests/run_device_name_test.sh"]
+    triggers: ["omi/firmware/omi/src/lib/core/device_name.h", "omi/firmware/omi/src/lib/core/transport.c", "omi/firmware/omi/src/lib/core/settings.h", "omi/firmware/omi/src/settings.c", "omi/firmware/omi/omi.conf", "omi/firmware/omi/tests/test_device_name.c", "omi/firmware/omi/tests/run_device_name_test.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["linux", "macos"]
+    reason: "the BLE rename characteristic (19B10014) and the NVS loader share one UTF-8/length policy; the advertised name must stay inside the 31-byte scan-response budget and never split a multi-byte character when shortened for the primary advertisement, which no Zephyr build on CI can execute"
   - id: ms365-calendar-pagination-tests
     command: ["python3", "plugins/omi-ms365-app/test_calendar_pagination.py"]
     triggers: ["plugins/omi-ms365-app/**"]

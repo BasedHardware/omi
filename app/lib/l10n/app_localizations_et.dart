@@ -11220,6 +11220,36 @@ class AppLocalizationsEt extends AppLocalizations {
   String get openCall => 'Ava kõne';
 
   @override
+  String get renameDevice => 'Nimeta seade ümber';
+
+  @override
+  String get renameDeviceDescription =>
+      'Nimi salvestatakse Omi seadmesse, seega kuvatakse seda igas telefonis, millega selle seod.';
+
+  @override
+  String get tapToRename => 'Puuduta ümbernimetamiseks';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Seadme nimi ei saa olla tühi';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Nimi on liiga pikk (kuni $maxBytes märki; emojid ja täpitähed loevad rohkem)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Nimi sisaldab toetamata märke';
+
+  @override
+  String get deviceRenameFailed =>
+      'Nime ei õnnestunud Omi seadmesse salvestada. Kontrolli, et see on ühendatud, ja proovi uuesti.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Seade nimetati ümber: $name';
+  }
+
+  @override
   String get captureRecoveryBanner => 'Ripatsi heli ei jõua rakendusse — parandamiseks puudutage';
 
   @override

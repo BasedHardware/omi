@@ -3555,5 +3555,13 @@
     "capturePhoneStorageFull": "Almacenamiento del teléfono lleno",
     "captureStorageAlmostFull": "Almacenamiento casi lleno",
     "capturePendantDisconnectedDetail": "Tu colgante perdió la conexión con este teléfono. Omi se volverá a conectar solo cuando el colgante esté encendido y cerca. Todo lo grabado antes está a salvo.",
-    "participantsSummaryUncounted": "{name} y otros"
+    "participantsSummaryUncounted": "{name} y otros",
+    "renameDevice": "Renombrar dispositivo",
+    "renameDeviceDescription": "El nombre se guarda en tu Omi, así que aparece en cualquier teléfono con el que lo emparejes.",
+    "tapToRename": "Toca para renombrar",
+    "deviceNameCannotBeEmpty": "El nombre del dispositivo no puede estar vacío",
+    "deviceNameTooLong": "El nombre es demasiado largo (hasta {maxBytes} caracteres; los emojis y acentos cuentan más)",
+    "deviceNameInvalidCharacters": "El nombre contiene caracteres no compatibles",
+    "deviceRenameFailed": "No se pudo guardar el nombre en tu Omi. Comprueba que esté conectado e inténtalo de nuevo.",
+    "deviceRenamed": "Dispositivo renombrado a {name}"
 }

@@ -11275,6 +11275,35 @@ class AppLocalizationsRo extends AppLocalizations {
   String get openCall => 'Deschide apelul';
 
   @override
+  String get renameDevice => 'Redenumește dispozitivul';
+
+  @override
+  String get renameDeviceDescription => 'Numele este salvat pe Omi, așa că apare pe orice telefon cu care îl asociezi.';
+
+  @override
+  String get tapToRename => 'Atinge pentru a redenumi';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Numele dispozitivului nu poate fi gol';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Numele este prea lung (până la $maxBytes caractere; emoji-urile și diacriticele contează mai mult)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Numele conține caractere neacceptate';
+
+  @override
+  String get deviceRenameFailed =>
+      'Numele nu a putut fi salvat pe Omi. Verifică dacă este conectat și încearcă din nou.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Dispozitivul a fost redenumit în $name';
+  }
+
+  @override
   String get captureRecoveryBanner => 'Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara';
 
   @override

@@ -3555,5 +3555,13 @@
     "capturePhoneStorageFull": "Spațiul telefonului e plin",
     "captureStorageAlmostFull": "Spațiul e aproape plin",
     "capturePendantDisconnectedDetail": "Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță.",
-    "participantsSummaryUncounted": "{name} și alții"
+    "participantsSummaryUncounted": "{name} și alții",
+    "renameDevice": "Redenumește dispozitivul",
+    "renameDeviceDescription": "Numele este salvat pe Omi, așa că apare pe orice telefon cu care îl asociezi.",
+    "tapToRename": "Atinge pentru a redenumi",
+    "deviceNameCannotBeEmpty": "Numele dispozitivului nu poate fi gol",
+    "deviceNameTooLong": "Numele este prea lung (până la {maxBytes} caractere; emoji-urile și diacriticele contează mai mult)",
+    "deviceNameInvalidCharacters": "Numele conține caractere neacceptate",
+    "deviceRenameFailed": "Numele nu a putut fi salvat pe Omi. Verifică dacă este conectat și încearcă din nou.",
+    "deviceRenamed": "Dispozitivul a fost redenumit în {name}"
 }

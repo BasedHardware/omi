@@ -11250,6 +11250,36 @@ class AppLocalizationsLv extends AppLocalizations {
   String get openCall => 'Atvērt zvanu';
 
   @override
+  String get renameDevice => 'Pārdēvēt ierīci';
+
+  @override
+  String get renameDeviceDescription =>
+      'Nosaukums tiek saglabāts pašā Omi, tāpēc tas parādās jebkurā tālrunī, ar kuru to savienosiet pārī.';
+
+  @override
+  String get tapToRename => 'Pieskarieties, lai pārdēvētu';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Ierīces nosaukums nevar būt tukšs';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Nosaukums ir pārāk garš (līdz $maxBytes rakstzīmēm; emocijzīmes un diakritiskās zīmes aizņem vairāk)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Nosaukumā ir neatbalstītas rakstzīmes';
+
+  @override
+  String get deviceRenameFailed =>
+      'Nosaukumu neizdevās saglabāt Omi ierīcē. Pārbaudiet, vai tā ir pievienota, un mēģiniet vēlreiz.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Ierīce pārdēvēta uz $name';
+  }
+
+  @override
   String get captureRecoveryBanner => 'Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu';
 
   @override

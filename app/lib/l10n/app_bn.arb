@@ -11115,5 +11115,13 @@
     "capturePhoneStorageFull": "ফোনের স্টোরেজ পূর্ণ",
     "captureStorageAlmostFull": "স্টোরেজ প্রায় পূর্ণ",
     "capturePendantDisconnectedDetail": "আপনার পেনড্যান্ট এই ফোনের সাথে সংযোগ হারিয়েছে। পেনড্যান্ট চালু ও কাছে থাকলে Omi নিজে থেকেই আবার সংযোগ করবে। এর আগে যা রেকর্ড হয়েছে তা নিরাপদ।",
-    "participantsSummaryUncounted": "{name} ও অন্যরা"
+    "participantsSummaryUncounted": "{name} ও অন্যরা",
+    "renameDevice": "ডিভাইসের নাম পরিবর্তন",
+    "renameDeviceDescription": "নামটি আপনার Omi-তেই সংরক্ষিত থাকে, তাই আপনি যে ফোনের সাথেই যুক্ত করুন, সেখানে এটি দেখা যাবে।",
+    "tapToRename": "নাম পরিবর্তন করতে ট্যাপ করুন",
+    "deviceNameCannotBeEmpty": "ডিভাইসের নাম খালি রাখা যাবে না",
+    "deviceNameTooLong": "নামটি খুব দীর্ঘ (সর্বোচ্চ {maxBytes} অক্ষর; ইমোজি ও স্বরচিহ্ন অতিরিক্ত গণনা হয়)",
+    "deviceNameInvalidCharacters": "নামে অসমর্থিত অক্ষর রয়েছে",
+    "deviceRenameFailed": "আপনার Omi-তে নাম সংরক্ষণ করা যায়নি। এটি সংযুক্ত আছে কি না দেখে আবার চেষ্টা করুন।",
+    "deviceRenamed": "ডিভাইসের নাম পরিবর্তন করে {name} রাখা হয়েছে"
 }

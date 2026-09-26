@@ -3651,5 +3651,13 @@
     "capturePhoneStorageFull": "A telefon tárhelye megtelt",
     "captureStorageAlmostFull": "A tárhely majdnem megtelt",
     "capturePendantDisconnectedDetail": "A medál elvesztette a kapcsolatot ezzel a telefonnal. Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van. Minden, amit eddig rögzített, biztonságban van.",
-    "participantsSummaryUncounted": "{name} és mások"
+    "participantsSummaryUncounted": "{name} és mások",
+    "renameDevice": "Eszköz átnevezése",
+    "renameDeviceDescription": "A név magán az Omin tárolódik, így minden telefonon megjelenik, amellyel párosítod.",
+    "tapToRename": "Koppints az átnevezéshez",
+    "deviceNameCannotBeEmpty": "Az eszköz neve nem lehet üres",
+    "deviceNameTooLong": "A név túl hosszú (legfeljebb {maxBytes} karakter; az emodzsik és ékezetek többet számítanak)",
+    "deviceNameInvalidCharacters": "A név nem támogatott karaktereket tartalmaz",
+    "deviceRenameFailed": "A nevet nem sikerült elmenteni az Omira. Ellenőrizd, hogy csatlakoztatva van, majd próbáld újra.",
+    "deviceRenamed": "Az eszköz új neve: {name}"
 }

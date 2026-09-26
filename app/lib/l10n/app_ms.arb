@@ -3555,5 +3555,13 @@
     "capturePhoneStorageFull": "Storan telefon penuh",
     "captureStorageAlmostFull": "Storan hampir penuh",
     "capturePendantDisconnectedDetail": "Loket anda terputus sambungan dengan telefon ini. Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan. Semua yang dirakam sebelum ini selamat.",
-    "participantsSummaryUncounted": "{name} dan lain-lain"
+    "participantsSummaryUncounted": "{name} dan lain-lain",
+    "renameDevice": "Namakan Semula Peranti",
+    "renameDeviceDescription": "Nama disimpan pada Omi itu sendiri, jadi ia dipaparkan pada mana-mana telefon yang anda pasangkan.",
+    "tapToRename": "Ketik untuk menamakan semula",
+    "deviceNameCannotBeEmpty": "Nama peranti tidak boleh kosong",
+    "deviceNameTooLong": "Nama terlalu panjang (maksimum {maxBytes} aksara; emoji dan aksen dikira lebih)",
+    "deviceNameInvalidCharacters": "Nama mengandungi aksara yang tidak disokong",
+    "deviceRenameFailed": "Nama tidak dapat disimpan ke Omi anda. Pastikan ia disambungkan dan cuba lagi.",
+    "deviceRenamed": "Peranti dinamakan semula kepada {name}"
 }

@@ -3555,5 +3555,13 @@
     "capturePhoneStorageFull": "Emmagatzematge del telèfon ple",
     "captureStorageAlmostFull": "Emmagatzematge gairebé ple",
     "capturePendantDisconnectedDetail": "El penjoll ha perdut la connexió amb aquest telèfon. Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop. Tot el que s'ha gravat abans és segur.",
-    "participantsSummaryUncounted": "{name} i altres"
+    "participantsSummaryUncounted": "{name} i altres",
+    "renameDevice": "Canvia el nom del dispositiu",
+    "renameDeviceDescription": "El nom es desa al mateix Omi, així que apareix a qualsevol telèfon amb què l'emparellis.",
+    "tapToRename": "Toca per canviar el nom",
+    "deviceNameCannotBeEmpty": "El nom del dispositiu no pot estar buit",
+    "deviceNameTooLong": "El nom és massa llarg (fins a {maxBytes} caràcters; els emojis i els accents compten més)",
+    "deviceNameInvalidCharacters": "El nom conté caràcters no compatibles",
+    "deviceRenameFailed": "No s'ha pogut desar el nom a l'Omi. Comprova que estigui connectat i torna-ho a provar.",
+    "deviceRenamed": "Dispositiu reanomenat a {name}"
 }

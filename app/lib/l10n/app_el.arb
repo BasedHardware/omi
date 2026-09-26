@@ -3555,5 +3555,13 @@
     "capturePhoneStorageFull": "Ο χώρος του τηλεφώνου γέμισε",
     "captureStorageAlmostFull": "Ο χώρος σχεδόν γέμισε",
     "capturePendantDisconnectedDetail": "Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο. Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.",
-    "participantsSummaryUncounted": "{name} και άλλοι"
+    "participantsSummaryUncounted": "{name} και άλλοι",
+    "renameDevice": "Μετονομασία συσκευής",
+    "renameDeviceDescription": "Το όνομα αποθηκεύεται στο ίδιο το Omi, ώστε να εμφανίζεται σε κάθε τηλέφωνο με το οποίο το συζευγνύετε.",
+    "tapToRename": "Πατήστε για μετονομασία",
+    "deviceNameCannotBeEmpty": "Το όνομα της συσκευής δεν μπορεί να είναι κενό",
+    "deviceNameTooLong": "Το όνομα είναι πολύ μεγάλο (έως {maxBytes} χαρακτήρες· τα emoji και οι τόνοι μετρούν περισσότερο)",
+    "deviceNameInvalidCharacters": "Το όνομα περιέχει μη υποστηριζόμενους χαρακτήρες",
+    "deviceRenameFailed": "Δεν ήταν δυνατή η αποθήκευση του ονόματος στο Omi. Ελέγξτε ότι είναι συνδεδεμένο και δοκιμάστε ξανά.",
+    "deviceRenamed": "Η συσκευή μετονομάστηκε σε {name}"
 }

@@ -3590,5 +3590,13 @@
     "capturePhoneStorageFull": "Armazenamento do telefone cheio",
     "captureStorageAlmostFull": "Armazenamento quase cheio",
     "capturePendantDisconnectedDetail": "Seu pendente perdeu a conexão com este telefone. O Omi se reconecta sozinho quando o pendente estiver ligado e por perto. Tudo o que foi gravado antes está seguro.",
-    "participantsSummaryUncounted": "{name} e outros"
+    "participantsSummaryUncounted": "{name} e outros",
+    "renameDevice": "Renomear dispositivo",
+    "renameDeviceDescription": "O nome fica salvo no próprio Omi, então aparece em qualquer celular com que você o emparelhar.",
+    "tapToRename": "Toque para renomear",
+    "deviceNameCannotBeEmpty": "O nome do dispositivo não pode estar vazio",
+    "deviceNameTooLong": "O nome é muito longo (até {maxBytes} caracteres; emojis e acentos contam mais)",
+    "deviceNameInvalidCharacters": "O nome contém caracteres não suportados",
+    "deviceRenameFailed": "Não foi possível guardar o nome no seu Omi. Verifique se está ligado e tente novamente.",
+    "deviceRenamed": "Dispositivo renomeado para {name}"
 }

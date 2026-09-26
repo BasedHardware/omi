@@ -11242,6 +11242,36 @@ class AppLocalizationsLt extends AppLocalizations {
   String get openCall => 'Atidaryti skambutį';
 
   @override
+  String get renameDevice => 'Pervadinti įrenginį';
+
+  @override
+  String get renameDeviceDescription =>
+      'Pavadinimas išsaugomas pačiame Omi, todėl jis rodomas visuose telefonuose, su kuriais jį susiesite.';
+
+  @override
+  String get tapToRename => 'Palieskite, kad pervadintumėte';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'Įrenginio pavadinimas negali būti tuščias';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'Pavadinimas per ilgas (iki $maxBytes simbolių; jaustukai ir diakritiniai ženklai užima daugiau)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'Pavadinime yra nepalaikomų simbolių';
+
+  @override
+  String get deviceRenameFailed =>
+      'Nepavyko išsaugoti pavadinimo Omi įrenginyje. Patikrinkite, ar jis prijungtas, ir bandykite dar kartą.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Įrenginys pervadintas į $name';
+  }
+
+  @override
   String get captureRecoveryBanner => 'Pakabuko garsas nepasiekia programėlės — palieskite, kad ištaisytumėte';
 
   @override

@@ -11287,6 +11287,36 @@ class AppLocalizationsCa extends AppLocalizations {
   String get openCall => 'Obre la trucada';
 
   @override
+  String get renameDevice => 'Canvia el nom del dispositiu';
+
+  @override
+  String get renameDeviceDescription =>
+      'El nom es desa al mateix Omi, així que apareix a qualsevol telèfon amb què l\'emparellis.';
+
+  @override
+  String get tapToRename => 'Toca per canviar el nom';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'El nom del dispositiu no pot estar buit';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return 'El nom és massa llarg (fins a $maxBytes caràcters; els emojis i els accents compten més)';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => 'El nom conté caràcters no compatibles';
+
+  @override
+  String get deviceRenameFailed =>
+      'No s\'ha pogut desar el nom a l\'Omi. Comprova que estigui connectat i torna-ho a provar.';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'Dispositiu reanomenat a $name';
+  }
+
+  @override
   String get captureRecoveryBanner => 'L\'àudio del penjoll no arriba a l\'aplicació — toca\'l per reparar';
 
   @override

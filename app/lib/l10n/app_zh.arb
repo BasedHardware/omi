@@ -3555,5 +3555,13 @@
     "capturePhoneStorageFull": "手机存储空间已满",
     "captureStorageAlmostFull": "存储空间即将用完",
     "capturePendantDisconnectedDetail": "吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。",
-    "participantsSummaryUncounted": "{name}等人"
+    "participantsSummaryUncounted": "{name}等人",
+    "renameDevice": "重命名设备",
+    "renameDeviceDescription": "名称保存在 Omi 设备本身，因此在你配对的任何手机上都会显示。",
+    "tapToRename": "点按以重命名",
+    "deviceNameCannotBeEmpty": "设备名称不能为空",
+    "deviceNameTooLong": "名称过长（最多 {maxBytes} 个字符；表情符号和汉字按多个字符计算）",
+    "deviceNameInvalidCharacters": "名称包含不支持的字符",
+    "deviceRenameFailed": "无法将名称保存到 Omi。请确认设备已连接，然后重试。",
+    "deviceRenamed": "设备已重命名为 {name}"
 }

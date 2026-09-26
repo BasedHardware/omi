@@ -11019,6 +11019,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openCall => '打开通话';
 
   @override
+  String get renameDevice => '重命名设备';
+
+  @override
+  String get renameDeviceDescription => '名称保存在 Omi 设备本身，因此在你配对的任何手机上都会显示。';
+
+  @override
+  String get tapToRename => '点按以重命名';
+
+  @override
+  String get deviceNameCannotBeEmpty => '设备名称不能为空';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return '名称过长（最多 $maxBytes 个字符；表情符号和汉字按多个字符计算）';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => '名称包含不支持的字符';
+
+  @override
+  String get deviceRenameFailed => '无法将名称保存到 Omi。请确认设备已连接，然后重试。';
+
+  @override
+  String deviceRenamed(String name) {
+    return '设备已重命名为 $name';
+  }
+
+  @override
   String get captureRecoveryBanner => '吊坠音频未送达应用 — 轻点以修复';
 
   @override

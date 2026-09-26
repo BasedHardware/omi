@@ -11038,6 +11038,34 @@ class AppLocalizationsJa extends AppLocalizations {
   String get openCall => '通話を開く';
 
   @override
+  String get renameDevice => 'デバイス名を変更';
+
+  @override
+  String get renameDeviceDescription => '名前はOmi本体に保存されるため、ペアリングしたどのスマートフォンでも表示されます。';
+
+  @override
+  String get tapToRename => 'タップして名前を変更';
+
+  @override
+  String get deviceNameCannotBeEmpty => 'デバイス名を空にすることはできません';
+
+  @override
+  String deviceNameTooLong(int maxBytes) {
+    return '名前が長すぎます（最大$maxBytes文字。絵文字や日本語などは複数文字分としてカウントされます）';
+  }
+
+  @override
+  String get deviceNameInvalidCharacters => '名前にサポートされていない文字が含まれています';
+
+  @override
+  String get deviceRenameFailed => 'Omiに名前を保存できませんでした。接続されていることを確認して、もう一度お試しください。';
+
+  @override
+  String deviceRenamed(String name) {
+    return 'デバイス名を$nameに変更しました';
+  }
+
+  @override
   String get captureRecoveryBanner => 'ペンダントの音声がアプリに届いていません — タップして修復';
 
   @override
