@@ -3442,7 +3442,6 @@ public enum OmiAPI {
     public let ledgerSchemaVersion: String?
     public let ledgerStatus: MemoryItemStatus?
     public let manuallyAdded: Bool?
-    public let memoryId: String?
     public let memoryTier: MemoryLayer?
     public let objectEntityIds: [String]?
     public let predicate: String?
@@ -3504,7 +3503,6 @@ public enum OmiAPI {
       case ledgerSchemaVersion = "ledger_schema_version"
       case ledgerStatus = "ledger_status"
       case manuallyAdded = "manually_added"
-      case memoryId = "memory_id"
       case memoryTier = "memory_tier"
       case objectEntityIds = "object_entity_ids"
       case predicate
@@ -3568,7 +3566,6 @@ public enum OmiAPI {
       ledgerSchemaVersion = try c.decodeIfPresent(String.self, forKey: .ledgerSchemaVersion)
       ledgerStatus = try c.decodeIfPresent(MemoryItemStatus.self, forKey: .ledgerStatus)
       manuallyAdded = try c.decodeIfPresent(Bool.self, forKey: .manuallyAdded)
-      memoryId = try c.decodeIfPresent(String.self, forKey: .memoryId)
       memoryTier = try c.decodeIfPresent(MemoryLayer.self, forKey: .memoryTier)
       objectEntityIds = try c.decodeIfPresent([String].self, forKey: .objectEntityIds)
       predicate = try c.decodeIfPresent(String.self, forKey: .predicate)
@@ -3594,7 +3591,7 @@ public enum OmiAPI {
       writeReason = try c.decodeIfPresent(LedgerWriteReason.self, forKey: .writeReason)
     }
 
-    public init(appId: String? = nil, arguments: [String: OmiAnyCodable]? = nil, asOf: String? = nil, beliefClass: String? = nil, beliefComputedAt: String? = nil, body: String? = nil, canonicalMemoryId: String? = nil, captureConfidence: Double? = nil, captureContext: MemoryCaptureContext? = nil, captureDeviceIds: [String]? = nil, category: MemoryCategory? = nil, content: String, conversationId: String? = nil, createdAt: String, curationWeight: Int? = nil, currency: Double? = nil, currencyBand: String? = nil, dataProtectionLevel: String? = nil, durability: String? = nil, edited: Bool? = nil, evidence: [Evidence]? = nil, halfLifeDays: Double? = nil, headline: String? = nil, id: String, intentBacked: Bool? = nil, invalidAt: String? = nil, isBaseline: Bool? = nil, isDismissed: Bool? = nil, isLocked: Bool? = nil, isRead: Bool? = nil, kgExtracted: Bool? = nil, kind: MemoryKind? = nil, layer: String? = nil, ledgerSchemaVersion: String? = nil, ledgerStatus: MemoryItemStatus? = nil, manuallyAdded: Bool? = nil, memoryId: String? = nil, memoryTier: MemoryLayer? = nil, objectEntityIds: [String]? = nil, predicate: String? = nil, primaryCaptureDevice: String? = nil, qualifiers: [String: OmiAnyCodable]? = nil, reviewed: Bool? = nil, scoring: String? = nil, slot: String? = nil, subjectAttribution: SubjectAttribution? = nil, subjectEntityId: String? = nil, subjectScope: MemorySubjectScope? = nil, supersededBy: String? = nil, tags: [String]? = nil, triggerCondition: [String: OmiAnyCodable]? = nil, uid: String, uncertaintyReasons: [String]? = nil, updatedAt: String, userReview: Bool? = nil, validAt: String? = nil, validTo: String? = nil, veracity: Double? = nil, visibility: String? = nil, writeReason: LedgerWriteReason? = nil) {
+    public init(appId: String? = nil, arguments: [String: OmiAnyCodable]? = nil, asOf: String? = nil, beliefClass: String? = nil, beliefComputedAt: String? = nil, body: String? = nil, canonicalMemoryId: String? = nil, captureConfidence: Double? = nil, captureContext: MemoryCaptureContext? = nil, captureDeviceIds: [String]? = nil, category: MemoryCategory? = nil, content: String, conversationId: String? = nil, createdAt: String, curationWeight: Int? = nil, currency: Double? = nil, currencyBand: String? = nil, dataProtectionLevel: String? = nil, durability: String? = nil, edited: Bool? = nil, evidence: [Evidence]? = nil, halfLifeDays: Double? = nil, headline: String? = nil, id: String, intentBacked: Bool? = nil, invalidAt: String? = nil, isBaseline: Bool? = nil, isDismissed: Bool? = nil, isLocked: Bool? = nil, isRead: Bool? = nil, kgExtracted: Bool? = nil, kind: MemoryKind? = nil, layer: String? = nil, ledgerSchemaVersion: String? = nil, ledgerStatus: MemoryItemStatus? = nil, manuallyAdded: Bool? = nil, memoryTier: MemoryLayer? = nil, objectEntityIds: [String]? = nil, predicate: String? = nil, primaryCaptureDevice: String? = nil, qualifiers: [String: OmiAnyCodable]? = nil, reviewed: Bool? = nil, scoring: String? = nil, slot: String? = nil, subjectAttribution: SubjectAttribution? = nil, subjectEntityId: String? = nil, subjectScope: MemorySubjectScope? = nil, supersededBy: String? = nil, tags: [String]? = nil, triggerCondition: [String: OmiAnyCodable]? = nil, uid: String, uncertaintyReasons: [String]? = nil, updatedAt: String, userReview: Bool? = nil, validAt: String? = nil, validTo: String? = nil, veracity: Double? = nil, visibility: String? = nil, writeReason: LedgerWriteReason? = nil) {
       self.appId = appId
       self.arguments = arguments
       self.asOf = asOf
@@ -3631,7 +3628,6 @@ public enum OmiAPI {
       self.ledgerSchemaVersion = ledgerSchemaVersion
       self.ledgerStatus = ledgerStatus
       self.manuallyAdded = manuallyAdded
-      self.memoryId = memoryId
       self.memoryTier = memoryTier
       self.objectEntityIds = objectEntityIds
       self.predicate = predicate

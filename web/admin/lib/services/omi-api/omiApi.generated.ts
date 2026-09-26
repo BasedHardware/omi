@@ -3020,7 +3020,6 @@ export interface MemoryDB {
   ledger_schema_version?: string | null;
   ledger_status?: MemoryItemStatus | null;
   manually_added?: boolean;
-  memory_id?: string | null;
   memory_tier?: MemoryLayer | null;
   object_entity_ids?: Array<string>;
   predicate?: string | null;
