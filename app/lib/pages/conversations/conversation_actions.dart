@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -161,7 +162,10 @@ Future<void> shareConversation(BuildContext context, ServerConversation conversa
   final l10n = context.l10n;
   final wasPrivate = conversation.visibility != ConversationVisibility.shared;
   if (wasPrivate) {
-    final ok = await setConversationVisibility(conversation.id);
+    final ok = await setConversationVisibility(conversation.id).catchError((Object e) {
+      Logger.debug('Failed to share conversation: $e');
+      return false;
+    });
     if (!context.mounted) return;
     if (!ok) {
       OmiFeedback.error(context, l10n.conversationUrlNotShared);
