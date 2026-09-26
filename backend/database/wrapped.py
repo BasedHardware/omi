@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 import logging
 from typing import Any, Dict, Optional, cast
 
+from google.api_core.exceptions import GoogleAPIError
+
 from ._client import db
 
 logger = logging.getLogger(__name__)
@@ -155,7 +157,7 @@ def update_wrapped_status(
     try:
         wrapped_ref.update(update_data)
         return True
-    except Exception as e:
+    except GoogleAPIError as e:
         logger.warning(f"Failed to update wrapped status for {uid}/{year}: {e}")
         return False
 
@@ -192,7 +194,7 @@ def update_wrapped_progress(uid: str, year: int, progress: Dict[str, Any]) -> bo
             }
         )
         return True
-    except Exception as e:
+    except GoogleAPIError as e:
         logger.warning(f"Failed to update wrapped progress for {uid}/{year}: {e}")
         return False
 
