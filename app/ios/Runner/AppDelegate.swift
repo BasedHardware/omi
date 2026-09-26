@@ -85,6 +85,8 @@ final class QuickActionsIconPatcher: NSObject {
   private static let unusedForegroundTaskRefreshIdentifier = "com.pravera.flutter_foreground_task.refresh"
   private var methodChannel: FlutterMethodChannel?
   private var capturePolicyChannel: FlutterMethodChannel?
+  private var syncTransferChannel: FlutterMethodChannel?
+  private var syncTransferBackgroundTask: UIBackgroundTaskIdentifier = .invalid
   private var appleRemindersChannel: FlutterMethodChannel?
   private var appleHealthChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
@@ -236,6 +238,30 @@ final class QuickActionsIconPatcher: NSObject {
           }
       }
 
+      // A live-capture WAL drain gets only iOS's bounded background execution
+      // window. Dart limits background work to bounded phone-local drain passes
+      // and releases this lease when the pass finishes.
+      syncTransferChannel = FlutterMethodChannel(
+          name: "com.friend.ios/sync_transfer",
+          binaryMessenger: controller.binaryMessenger
+      )
+      syncTransferChannel?.setMethodCallHandler { [weak self] call, result in
+          guard let self else {
+              result(nil)
+              return
+          }
+          switch call.method {
+          case "start":
+              self.beginSyncTransferBackgroundTask()
+              result(nil)
+          case "stop":
+              self.endSyncTransferBackgroundTask()
+              result(nil)
+          default:
+              result(FlutterMethodNotImplemented)
+          }
+      }
+
       // Retrieve the link from parameters
     if let url = AppLinks.shared.getLink(launchOptions: launchOptions) {
       // We have a link, propagate it to your Flutter app or not
@@ -352,6 +378,20 @@ final class QuickActionsIconPatcher: NSObject {
       )
     }
     return launched
+  }
+
+  private func beginSyncTransferBackgroundTask() {
+    guard syncTransferBackgroundTask == .invalid else { return }
+    syncTransferBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "omi-live-capture-wal-drain") {
+      self.endSyncTransferBackgroundTask()
+    }
+  }
+
+  private func endSyncTransferBackgroundTask() {
+    guard syncTransferBackgroundTask != .invalid else { return }
+    let task = syncTransferBackgroundTask
+    syncTransferBackgroundTask = .invalid
+    UIApplication.shared.endBackgroundTask(task)
   }
 
   /// Swaps the engine-less storyboard controller for a plain notice before the

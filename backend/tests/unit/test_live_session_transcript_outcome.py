@@ -29,6 +29,8 @@ def _runtime(
         first_audio_byte_timestamp=first_audio,
         last_audio_received_time=last_audio,
     )
+    runtime.request = SimpleNamespace(uid='uid-1', source='omi', client_conversation_id='recording-1')
+    runtime.client_device_context = SimpleNamespace(platform='ios')
     if vad_gate == 'managed':
         runtime.receiver = SimpleNamespace(vad_gate=SimpleNamespace(total_speech_ms=total_speech_ms or 0))
     elif vad_gate == 'legacy':
@@ -145,7 +147,56 @@ def test_teardown_seam_calls_the_recorder_after_attempt_terminalization():
     runtime._finish_live_transcription = lambda: None
     with patch('routers.listen.runtime.record_live_session_transcript_outcome') as record:
         ListenSessionRuntime._record_session_transcript_outcome(runtime)
-    record.assert_called_once_with(outcome='transcribed')
+    record.assert_called_once_with(
+        outcome='transcribed',
+        uid='uid-1',
+        source='omi',
+        platform='ios',
+        recording_id='recording-1',
+    )
+
+
+def test_no_transcript_outcome_emits_a_uid_scoped_product_counter():
+    from utils.observability import transcription
+
+    emitted = []
+    before = transcription.OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome='no_transcript')._value.get()
+    with patch.object(transcription, 'emit_product_event', side_effect=lambda **kwargs: emitted.append(kwargs)):
+        transcription.record_live_session_transcript_outcome(
+            outcome='no_transcript',
+            uid='uid-1',
+            source='omi',
+            platform='ios',
+            recording_id='recording-1',
+        )
+
+    after = transcription.OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome='no_transcript')._value.get()
+    assert after == before + 1
+    assert emitted == [
+        {
+            'uid': 'uid-1',
+            'event': 'Listen Socket Zero Transcript',
+            'properties': {
+                'transcription_source': 'omi',
+                'app_platform': 'ios',
+                'recording_id': 'recording-1',
+            },
+        }
+    ]
+
+
+def test_transcribed_outcome_does_not_emit_uid_scoped_zero_transcript_event():
+    from utils.observability import transcription
+
+    with patch.object(transcription, 'emit_product_event') as emit:
+        transcription.record_live_session_transcript_outcome(
+            outcome='transcribed',
+            uid='uid-1',
+            source='omi',
+            platform='ios',
+        )
+
+    emit.assert_not_called()
 
 
 def test_outcome_children_are_queryable_from_process_start_without_increments():

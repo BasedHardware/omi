@@ -564,6 +564,92 @@ void main() {
     });
   });
 
+  group('silent upload death recovery', () {
+    test('connectivity recovery re-arms only retry-exhausted transient disk WALs', () async {
+      var persisted = <Wal>[];
+      final local = LocalWalSyncImpl(
+        listener,
+        persistWals: (wals) async => persisted = List<Wal>.from(wals),
+        loadWals: () async => <Wal>[],
+      );
+      final exhausted = Wal(
+        timerStart: 100,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        storage: WalStorage.disk,
+        status: WalStatus.miss,
+        retryCount: walMaxAutoRetries,
+        lastRetryAt: 99,
+      );
+      final stillBudgeted = Wal(
+        timerStart: 200,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        storage: WalStorage.disk,
+        status: WalStatus.miss,
+        retryCount: 2,
+      );
+      final permanent = Wal(
+        timerStart: 300,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        storage: WalStorage.disk,
+        status: WalStatus.unsupportedAudio,
+        retryCount: walMaxAutoRetries,
+      );
+      local.testWals = [exhausted, stillBudgeted, permanent];
+
+      expect(await local.resetExhaustedAutoRetries(), 1);
+
+      expect(exhausted.retryCount, 0);
+      expect(exhausted.lastRetryAt, 0);
+      expect(stillBudgeted.retryCount, 2);
+      expect(permanent.retryCount, walMaxAutoRetries);
+      expect(persisted.map((wal) => wal.id), containsAll([exhausted.id, stillBudgeted.id, permanent.id]));
+    });
+
+    test('transcript confirmation prunes only WALs stamped to that conversation', () async {
+      var persisted = <Wal>[];
+      final now = DateTime.fromMillisecondsSinceEpoch(500 * 1000);
+      final local = LocalWalSyncImpl(
+        listener,
+        now: () => now,
+        persistWals: (wals) async => persisted = List<Wal>.from(wals),
+        loadWals: () async => <Wal>[],
+      );
+      final confirmed = Wal(
+        timerStart: 450,
+        codec: BleAudioCodec.opus,
+        seconds: 30,
+        storage: WalStorage.disk,
+        status: WalStatus.miss,
+        conversationId: 'confirmed-conversation',
+      );
+      final unrelated = Wal(
+        timerStart: 460,
+        codec: BleAudioCodec.opus,
+        seconds: 30,
+        storage: WalStorage.disk,
+        status: WalStatus.miss,
+        conversationId: 'other-conversation',
+      );
+      final unstamped = Wal(
+        timerStart: 470,
+        codec: BleAudioCodec.opus,
+        seconds: 30,
+        storage: WalStorage.disk,
+        status: WalStatus.miss,
+      );
+      local.testWals = [confirmed, unrelated, unstamped];
+
+      expect(await local.confirmSessionTranscription(400, 'confirmed-conversation'), 1);
+
+      expect(local.testWals.map((wal) => wal.id), isNot(contains(confirmed.id)));
+      expect(local.testWals.map((wal) => wal.id), containsAll([unrelated.id, unstamped.id]));
+      expect(persisted.map((wal) => wal.id), containsAll([unrelated.id, unstamped.id]));
+    });
+  });
+
   group('syncWal — orphan WAL guard', () {
     // A WAL the user taps "sync" on may already be gone from `_wals` (a
     // concurrent delete/reload). Previously `.first` on the empty match list

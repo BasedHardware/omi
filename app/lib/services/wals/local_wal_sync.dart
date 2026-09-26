@@ -88,12 +88,11 @@ String? _walLocationBatchKey(Wal wal) {
 
 /// A recording the automatic drain may still upload.
 ///
-/// Spending [walMaxAutoRetries] takes it out of every auto loop for good: the
-/// reconciler spends the whole budget at once for a failure the server can only
-/// reach again, and an unclassified failure still stops after the budget rather
-/// than re-uploading the same bytes forever. The per-recording manual Retry
-/// ([LocalWalSyncImpl.syncWal]) deliberately ignores this budget, so the user
-/// keeps exactly one deliberate attempt per tap.
+/// Spending [walMaxAutoRetries] takes it out of the current auto loop. A later
+/// connectivity restoration re-arms transient disk WALs, while an unclassified
+/// failure still stops within one connectivity epoch rather than re-uploading
+/// the same bytes forever. The per-recording manual Retry
+/// ([LocalWalSyncImpl.syncWal]) deliberately ignores this budget.
 @visibleForTesting
 bool isAutoUploadEligible(Wal wal) =>
     wal.status == WalStatus.miss && wal.storage == WalStorage.disk && wal.retryCount < walMaxAutoRetries;
@@ -302,9 +301,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       final generation = _sessionGeneration;
       await _chunk(generation);
     });
-    _flushingTimer = _periodic(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds), (
-      t,
-    ) async {
+    _flushingTimer = _periodic(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds), (t) async {
       final generation = _sessionGeneration;
       await _flush(generation);
     });
@@ -410,7 +407,6 @@ class LocalWalSyncImpl implements LocalWalSync {
       return;
     }
 
-    var lossesThreshold = 10 * _framesPerSecond;
     var timerEnd = _now().millisecondsSinceEpoch ~/ 1000 - newFrameSyncDelaySeconds;
     var pivot = _frames.length - newFrameSyncDelaySeconds * _framesPerSecond;
     if (pivot <= 0) {
@@ -425,19 +421,7 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     bool shouldStored = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
     if (!shouldStored) {
-      bool synced = true;
-      var losses = 0;
-      for (var i = low; i < high; i++) {
-        if (!_frameSynced[i]) {
-          losses++;
-          if (losses >= lossesThreshold) {
-            synced = false;
-            break;
-          }
-        }
-      }
-
-      shouldStored = (synced == false);
+      shouldStored = _frameSynced.sublist(low, high).any((synced) => !synced);
     }
 
     if (shouldStored) {
@@ -630,28 +614,16 @@ class LocalWalSyncImpl implements LocalWalSync {
     final high = _frames.length;
     if (high <= 0) return;
 
-    var lossesThreshold = 10 * _framesPerSecond;
     var timerEnd = _now().millisecondsSinceEpoch ~/ 1000;
     var chunk = _frames.sublist(0, high).map((f) => f.payload).toList();
     var timerStart = timerEnd - high ~/ _framesPerSecond;
     var chunkFrameCount = high;
 
-    // Same shouldStored check as _chunk(): only store if unlimited storage enabled
-    // or if significant frame loss detected (meaning WebSocket didn't deliver them).
+    // Same shouldStored check as _chunk(): one unconfirmed frame is enough to
+    // retain the session. A transport send is not transcript confirmation.
     bool shouldStored = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
     if (!shouldStored) {
-      bool synced = true;
-      var losses = 0;
-      for (var i = 0; i < high; i++) {
-        if (!_frameSynced[i]) {
-          losses++;
-          if (losses >= lossesThreshold) {
-            synced = false;
-            break;
-          }
-        }
-      }
-      shouldStored = !synced;
+      shouldStored = _frameSynced.sublist(0, high).any((synced) => !synced);
     }
 
     if (shouldStored) {
@@ -725,6 +697,52 @@ class LocalWalSyncImpl implements LocalWalSync {
   Future<void> persistRetryMetadata(Wal wal) async {
     final generation = _sessionGeneration;
     await _saveWalsToFile(generation);
+  }
+
+  /// Re-arm recordings that spent their transient retry budget when the
+  /// network returns. Permanent audio/lookback failures use terminal statuses
+  /// and are intentionally untouched.
+  Future<int> resetExhaustedAutoRetries() async {
+    final generation = _sessionGeneration;
+    var reset = 0;
+    for (final wal in _wals) {
+      if (wal.status != WalStatus.miss || wal.storage != WalStorage.disk || wal.retryCount < walMaxAutoRetries) {
+        continue;
+      }
+      wal.retryCount = 0;
+      wal.lastRetryAt = 0;
+      reset++;
+    }
+    if (reset > 0) {
+      await _saveWalsToFile(generation);
+      _notifyUpdated(generation);
+      DebugLogManager.logInfo('Re-armed exhausted WAL retries after connectivity restored', {'count': reset});
+    }
+    return reset;
+  }
+
+  /// Delete the durable safety copy after the server confirms that this live
+  /// session produced transcript content. Until this acknowledgement arrives,
+  /// socket writes are transport attempts—not delivery confirmation.
+  Future<int> confirmSessionTranscription(int sessionStartSeconds, String conversationId) async {
+    final generation = _sessionGeneration;
+    final now = _now().millisecondsSinceEpoch ~/ 1000;
+    final confirmed = _wals
+        .where(
+          (wal) =>
+              wal.timerStart >= sessionStartSeconds && wal.timerStart <= now && wal.conversationId == conversationId,
+        )
+        .toList();
+    var deleted = 0;
+    for (final wal in confirmed) {
+      if (await _deleteWal(wal)) deleted++;
+    }
+    if (deleted > 0) {
+      await _saveWalsToFile(generation);
+      _notifyUpdated(generation);
+      DebugLogManager.logInfo('Pruned transcript-confirmed live-capture WALs', {'count': deleted});
+    }
+    return deleted;
   }
 
   /// Returns the approximate duration (in seconds) of UNSYNCED audio frames

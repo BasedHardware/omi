@@ -386,7 +386,14 @@ def record_listen_audio_outcome(*, source: str | None, outcome: str, platform: s
     ).inc()
 
 
-def record_live_session_transcript_outcome(*, outcome: LiveSessionTranscriptOutcome) -> None:
+def record_live_session_transcript_outcome(
+    *,
+    outcome: LiveSessionTranscriptOutcome,
+    uid: str | None = None,
+    source: str | None = None,
+    platform: str | None = None,
+    recording_id: str | None = None,
+) -> None:
     """Record the headline per-session transcript outcome once at session teardown.
 
     The one number that answers the incident question "did this session get any
@@ -399,6 +406,22 @@ def record_live_session_transcript_outcome(*, outcome: LiveSessionTranscriptOutc
     if outcome not in LIVE_SESSION_TRANSCRIPT_OUTCOMES:
         raise ValueError(f'unknown live session transcript outcome: {outcome}')
     OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome=outcome).inc()
+    if outcome != 'no_transcript' or not uid:
+        return
+    try:
+        emit_product_event(
+            uid=uid,
+            event='Listen Socket Zero Transcript',
+            properties={
+                'transcription_source': _bounded_source(source),
+                'app_platform': _bounded_platform(platform),
+                'recording_id': recording_id,
+            },
+        )
+    except Exception:
+        # Per-user observability is subordinate to socket teardown. The
+        # aggregate Prometheus outcome above remains authoritative.
+        pass
 
 
 def initialize_live_session_transcript_outcome_children() -> None:

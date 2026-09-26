@@ -53,11 +53,12 @@ void main() {
       expect(stops, 1);
     });
 
-    test('non-Android hosts never start the native service', () async {
+    test('non-mobile hosts never start the native service', () async {
       var starts = 0;
       var stops = 0;
       final keepAlive = SyncTransferKeepAlive(
         isAndroid: () => false,
+        isIOS: () => false,
         start: () async {
           starts++;
         },
@@ -71,6 +72,30 @@ void main() {
 
       expect(starts, 0);
       expect(stops, 0);
+    });
+
+    test('iOS starts and stops one bounded background-task lease', () async {
+      var starts = 0;
+      var stops = 0;
+      final keepAlive = SyncTransferKeepAlive(
+        isAndroid: () => false,
+        isIOS: () => true,
+        start: () async {
+          starts++;
+        },
+        stop: () async {
+          stops++;
+        },
+      );
+
+      await keepAlive.acquire();
+      await keepAlive.acquire();
+      await keepAlive.release();
+      expect(starts, 1);
+      expect(stops, 0);
+
+      await keepAlive.release();
+      expect(stops, 1);
     });
 
     test('a failed start still pairs with stop so cancel can drop the ref', () async {
