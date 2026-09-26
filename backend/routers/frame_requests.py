@@ -7,6 +7,7 @@ multipart route; conversation deletion owns permanent attached evidence.
 
 from __future__ import annotations
 
+import logging
 import time
 from io import BytesIO
 from datetime import datetime, timezone
@@ -51,6 +52,14 @@ from utils.retrieval.frame_request_storage import (
 )
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+def _sanitize_frame_request_error(exc: Exception, fallback: str) -> str:
+    logger.warning(f"Frame request operation failed: {type(exc).__name__}: {exc}")
+    return fallback
+
+
 _ALLOWED_IMAGE_FORMATS = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
 _MAX_IMAGE_PIXELS = 25_000_000
 _MAX_EGRESS_DIMENSION = 1920
@@ -228,7 +237,10 @@ async def create_frame_request(
             requested_ttl_seconds=request.requested_ttl_seconds,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=400,
+            detail=_sanitize_frame_request_error(exc, "frame_request_invalid_parameters"),
+        ) from exc
     _record_frame_lifecycle(
         uid,
         "frame_request_enqueued" if not deduplicated else "frame_request_deduplicated",
@@ -335,7 +347,10 @@ async def get_pending_frame_requests(
             cleanup_storage=lambda storage_id: delete_frame_request_pixels(uid, storage_id),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=400,
+            detail=_sanitize_frame_request_error(exc, "frame_request_invalid_parameters"),
+        ) from exc
     return FrameRequestBatch(requests=rows)
 
 
@@ -367,7 +382,10 @@ async def update_frame_request_state(
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail="frame_request_owner_mismatch") from exc
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=409,
+            detail=_sanitize_frame_request_error(exc, "frame_request_state_conflict"),
+        ) from exc
     _record_frame_lifecycle(
         uid,
         "frame_request_state_transition",
@@ -496,7 +514,10 @@ async def upload_frame_request(
             }
         ):
             return FrameRequestEnvelope(request=reconciled)
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=409,
+            detail=_sanitize_frame_request_error(exc, "frame_request_upload_conflict"),
+        ) from exc
     except Exception:
         # A Firestore transaction can have committed while the client observed
         # a transport error. Never delete an object on an ambiguous commit: a
@@ -613,7 +634,10 @@ async def promote_frame_request(
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail="frame_request_owner_mismatch") from exc
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=409,
+            detail=_sanitize_frame_request_error(exc, "frame_request_promotion_conflict"),
+        ) from exc
     _record_frame_lifecycle(uid, "frame_request_attached", state=frame_request.state, started=started)
     return FrameRequestEnvelope(request=frame_request)
 
