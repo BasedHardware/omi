@@ -36,6 +36,8 @@
   JSON export to an Excel workbook with datetime cells, duration and filters.
 * [`conversations_sqlite.md`](conversations_sqlite.md) — import conversation-list
   JSON exports into a SQLite database for SQL queries and multi-page merges.
+* [`action_items_xlsx.md`](action_items_xlsx.md) — convert an action-items list
+  JSON export to an Excel workbook (.xlsx) with completion status and filters.
 * [`memories_markdown.md`](memories_markdown.md) — export memories, facts, and learnings to structured Markdown notes for Obsidian & Notion.
 * [`conversations_atom.md`](conversations_atom.md) — publish conversation-list
   exports as an Atom 1.0 feed for any feed reader.
