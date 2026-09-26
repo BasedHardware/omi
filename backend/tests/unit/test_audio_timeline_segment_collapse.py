@@ -484,6 +484,47 @@ class TestSpeakerCaptureClockKillSwitch:
         assert '_capture_start_sample' not in reverted
 
 
+class _RecordingRing:
+    """Ring-buffer stand-in recording which write path positioned each frame."""
+
+    def __init__(self):
+        self.calls = []
+
+    def write(self, data, timestamp):
+        self.calls.append(('write', timestamp))
+
+    def write_positioned(self, data, start_ts):
+        self.calls.append(('write_positioned', start_ts))
+
+
+def test_ring_buffer_write_mode_follows_v2_not_only_the_switch(monkeypatch):
+    """P2-2: the kill switch may not move a v2 session's ring to arrival time.
+
+    v2 speaker queries project capture samples onto the wall axis for the
+    whole recording, so the ring stays capture-positioned while v2
+    persistence is on regardless of the switch; only a legacy (clock-only)
+    session reverts to arrival-timestamped ``write``.
+    """
+    pcm = b'\x01\x00' * RATE
+    for v2 in (False, True):
+        for switch in (None, 'false'):
+            receiver = _receiver(monkeypatch, v2=v2)
+            timeline = receiver.capture_timeline
+            ring = _RecordingRing()
+            receiver.host.state.audio_ring_buffer = ring
+            start, _end, _ = timeline.accept(pcm, arrival_wall=T0 + 1.0, arrival_monotonic=0.0)
+            if switch is None:
+                monkeypatch.delenv('LIVE_SPEAKER_CAPTURE_CLOCK', raising=False)
+            else:
+                monkeypatch.setenv('LIVE_SPEAKER_CAPTURE_CLOCK', switch)
+            now = T0 + 1.5
+            receiver._write_ring_buffer_frame(pcm, now, start)
+            if v2 or switch is None:
+                assert ring.calls == [('write_positioned', timeline.wall(start))], (v2, switch)
+            else:
+                assert ring.calls == [('write', now)], (v2, switch)
+
+
 # ---------------------------------------------------------------------------
 # Provider-path audit: every path the translator serves maps a later batch
 # ---------------------------------------------------------------------------

@@ -263,6 +263,25 @@ class ListenReceiver:
                 self.capture_timeline.wall(start_sample), pinnable=True
             )
 
+    def _write_ring_buffer_frame(self, decoded: bytes, now: float, start_sample: int) -> None:
+        """Position one accepted decoded frame in the speaker-ID ring buffer.
+
+        v2 speaker queries project capture samples onto the wall axis
+        (``started_at + capture offset``) for the whole recording, so a v2
+        session keeps ``write_positioned`` even when the kill switch is off:
+        arrival-timestamped spans under capture-clock queries would feed every
+        speaker window the wrong bytes for the entire session, not just one
+        buffer length. The switch may only revert the legacy (clock-only)
+        session, whose matcher formula is ``first_audio + provider time``.
+        """
+        ring = self.host.state.audio_ring_buffer
+        if ring is None:
+            return
+        if self.capture_timeline_v2 or live_speaker_capture_clock_enabled():
+            ring.write_positioned(decoded, self.capture_timeline.wall(start_sample))
+        else:
+            ring.write(decoded, now)
+
     def _enqueue_translated_segments(self, segments: List[Dict[str, Any]], provider: Optional[str] = None) -> None:
         """Owner-resolve epoch-translated segments before they enter the buffer.
 
@@ -1342,15 +1361,7 @@ class ListenReceiver:
                         # wire must stay byte-identical to the legacy session.
                         start_sample, end_sample, _ = self.capture_timeline.accept(decoded, now, time.monotonic())
                         self._note_accepted_frame(start_sample, end_sample)
-                        if self.host.state.audio_ring_buffer is not None:
-                            if live_speaker_capture_clock_enabled():
-                                # Speaker-ID clips locate audio on the capture
-                                # clock (kill switch: LIVE_SPEAKER_CAPTURE_CLOCK).
-                                self.host.state.audio_ring_buffer.write_positioned(
-                                    decoded, self.capture_timeline.wall(start_sample)
-                                )
-                            else:
-                                self.host.state.audio_ring_buffer.write(decoded, now)
+                        self._write_ring_buffer_frame(decoded, now, start_sample)
                         if not self.host.use_custom_stt:
                             if not buffer:
                                 self._stt_buffer_start_sample = start_sample

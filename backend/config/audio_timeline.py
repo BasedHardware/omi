@@ -26,5 +26,10 @@ def live_speaker_capture_clock_enabled() -> bool:
     speaker-ID windows to the legacy first-audio + provider-time formula
     without a deploy by setting this to a falsy value; persisted fields and
     the wire are on the v2 flag, not this switch. Unbound stays default-on.
+
+    The switch only applies to legacy (clock-only) sessions: a v2 session's
+    speaker queries and persisted offsets project capture samples onto the
+    wall axis, so its ring buffer stays capture-positioned regardless of the
+    switch (see ``ListenReceiver._write_ring_buffer_frame``).
     """
     return os.getenv('LIVE_SPEAKER_CAPTURE_CLOCK', '').strip().lower() not in _FALSY

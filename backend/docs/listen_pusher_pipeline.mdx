@@ -1106,8 +1106,13 @@ speaker path: a falsy value reverts both halves of the pair together — the
 ring buffer returns to arrival-timestamped writes and clock-only segments
 attach no capture window, so the matcher uses the legacy
 `first_audio + provider-time` formula — without a deploy and without touching
-the v2 persistence or the wire. Flipping it mid-session can mismatch the
-retained ring-buffer spans for up to the buffer's duration; it is an
+the v2 persistence or the wire. It only applies to legacy (clock-only)
+sessions: while a session's v2 persistence is on, its speaker queries and
+persisted offsets project capture samples onto the wall axis, so the ring
+buffer stays capture-positioned even with the switch off (arrival spans under
+capture-clock queries would mismatch every speaker window for the whole
+recording, not just one buffer length). Flipping it mid-session can mismatch
+the retained ring-buffer spans for up to the buffer's duration; it is an
 emergency lever, not a toggle.
 
 Every early return before a live speaker-ID match decision — in
