@@ -2115,7 +2115,7 @@ workflows:
           # Build arm64. Use --triple (not --arch) so binary always lands in
           # arm64-apple-macosx/release/ regardless of the machine's native arch.
           echo "Building arm64..."
-          xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
+          xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -emit-const-values
 
           ARM64_PATH="Desktop/.build/arm64-apple-macosx/release/$BINARY_NAME"
           if [ ! -f "$ARM64_PATH" ]; then
@@ -2129,7 +2129,7 @@ workflows:
 
           # Build x86_64 (cross-compile). Use --triple for explicit arch directory.
           echo "Building x86_64..."
-          xcrun swift build -c release --package-path Desktop --triple x86_64-apple-macosx
+          xcrun swift build -c release --package-path Desktop --triple x86_64-apple-macosx -Xswiftc -emit-const-values
 
           X86_64_PATH="Desktop/.build/x86_64-apple-macosx/release/$BINARY_NAME"
           # Symmetric existence check — without this, a silent x86_64 build failure
@@ -2176,6 +2176,9 @@ workflows:
           }
 
           cp Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
+          # SwiftPM emits constant values but does not embed App Intents
+          # metadata in a bundle assembled from its executable.
+          ./scripts/embed-app-intents-metadata.sh Desktop "$APP_BUNDLE" Release arm64
 
           # Sparkle: use x86_64 arch path; fallback to arm64
           SPARKLE_FW="Desktop/.build/x86_64-apple-macosx/release/Sparkle.framework"
