@@ -11121,5 +11121,22 @@
     "deviceOnboardingAllSetTitle": "Усё гатова",
     "deviceOnboardingAllSetSubtitle": "Націсніце на радок, каб праглядзець або змяніць яго.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Калі вы пытаецеся з дапамогай кнопкі, Omi можа прачытаць свой адказ услых.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Слухайце свой апошні адказ",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Прайграванне вашага апошняга адказу...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "Праз {device}",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Праз дынамік тэлефона",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Праз бягучы гукавы выхад",
+    "deviceOnboardingVoiceReplyOffDescription": "Адказы застаюцца на экране. Нічога не гавораць.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Прыватны. Размаўляе толькі праз AirPods, Bluetooth або праз правадныя навушнікі.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Выкарыстоўвае дынамік тэлефона, калі навушнікі не падключаны.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi будзе маўчаць. Адказы па-ранейшаму з'яўляюцца ў праграме.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} падлучаны. Тут будзе гаварыць Omi.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "Навушнікі не падключаны. Omi маўчыць, пакуль вы не падключыце некаторыя.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Гуляе праз {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Прайграванне ўслых праз дынамік тэлефона.",
+    "deviceOnboardingVoiceReplySettingsHint": "Вы можаце змяніць гэта ў любы час у {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "Паўтарыце гэты тур у любы час у {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Навушнікі"
 }

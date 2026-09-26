@@ -11327,4 +11327,69 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'Ha a gombbal kérdez, a Omi fel tudja olvasni a választ.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Hallgassa meg utolsó válaszát';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Az utolsó válasz lejátszása...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '$device számon keresztül';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'A telefon hangszóróján keresztül';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Az aktuális hangkimeneten keresztül';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'A válaszok a képernyőn maradnak. Semmit sem beszélnek.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Privát. Csak a AirPods, Bluetooth vagy vezetékes fejhallgatón keresztül beszél.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'A telefon hangszóróját használja, ha nincs fejhallgató csatlakoztatva.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff =>
+      'Omi néma marad. A válaszok továbbra is megjelennek az alkalmazásban.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device csatlakoztatva. Omi fog itt beszélni.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Nincs csatlakoztatva fejhallgató. Omi néma marad, amíg nem csatlakoztat néhányat.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Lejátszás a $device számon keresztül.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Hangosan játszik le a telefon hangszóróján keresztül.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Ezt bármikor módosíthatja a $settings › $voiceResponse számon';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'A körutat bármikor újra lejátszhatja a következő számon: $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Fejhallgató';
 }

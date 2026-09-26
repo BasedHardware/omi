@@ -11121,5 +11121,22 @@
     "deviceOnboardingAllSetTitle": "সব প্রস্তুত",
     "deviceOnboardingAllSetSubtitle": "পর্যালোচনা বা পরিবর্তন করতে একটি সারিতে ট্যাপ করুন।",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "আপনি বোতাম দিয়ে জিজ্ঞাসা করলে, Omi উচ্চস্বরে এর উত্তর পড়তে পারে।",
+    "deviceOnboardingVoiceReplyPreviewIdle": "আপনার শেষ উত্তর শুনুন",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "আপনার শেষ উত্তর বাজানো হচ্ছে...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "{device} এর মাধ্যমে",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "ফোন স্পিকারের মাধ্যমে",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "বর্তমান অডিও আউটপুট মাধ্যমে",
+    "deviceOnboardingVoiceReplyOffDescription": "উত্তরগুলি পর্দায় থাকে। কোনো কথা বলা হয় না।",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "ব্যক্তিগত। শুধুমাত্র AirPods, Bluetooth বা তারযুক্ত হেডফোনের মাধ্যমে কথা বলে।",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "কোনো হেডফোন সংযুক্ত না থাকলে ফোনের স্পিকার ব্যবহার করে।",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi নীরব থাকবে। উত্তর এখনও অ্যাপে প্রদর্শিত হবে।",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} সংযুক্ত। Omi এখানে কথা বলবে।",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "কোনো হেডফোন সংযুক্ত নেই৷ আপনি কিছু সংযোগ না করা পর্যন্ত Omi নীরব থাকে।",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "{device} এর মাধ্যমে বাজায়।",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "ফোন স্পিকারের মাধ্যমে জোরে বাজে।",
+    "deviceOnboardingVoiceReplySettingsHint": "আপনি {settings} › {voiceResponse} এ যেকোনো সময় এটি পরিবর্তন করতে পারেন",
+    "deviceOnboardingAllSetReplayHint": "{settings} › {deviceSettings} › {deviceTutorial} এ যেকোনও সময় এই সফরটি পুনরায় চালান",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "হেডফোন"
 }

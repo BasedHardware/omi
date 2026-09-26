@@ -3561,5 +3561,22 @@
     "deviceOnboardingAllSetTitle": "Всичко е готово",
     "deviceOnboardingAllSetSubtitle": "Докоснете ред, за да го прегледате или промените.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Когато питате с бутона, Omi може да прочете отговора си на глас.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Чуйте последния си отговор",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Пускане на последния ви отговор...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "Чрез {device}",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "През високоговорителя на телефона",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Чрез текущия аудио изход",
+    "deviceOnboardingVoiceReplyOffDescription": "Отговорите остават на екрана. Нищо не се говори.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Частно. Говори само чрез AirPods, Bluetooth или кабелни слушалки.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Използва високоговорителя на телефона, когато няма свързани слушалки.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi ще мълчи. Отговорите все още се показват в приложението.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} свързан. Omi ще говори тук.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "Няма свързани слушалки. Omi мълчи, докато не свържете някои.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Играе през {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Възпроизвежда на висок глас през високоговорителя на телефона.",
+    "deviceOnboardingVoiceReplySettingsHint": "Можете да промените това по всяко време в {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "Повторете тази обиколка по всяко време в {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Слушалки"
 }

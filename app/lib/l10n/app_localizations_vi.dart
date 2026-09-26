@@ -11280,4 +11280,67 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'Khi bạn hỏi bằng nút, Omi có thể đọc to câu trả lời của nó.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Nghe câu trả lời cuối cùng của bạn';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Đang phát câu trả lời cuối cùng của bạn...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Qua $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Qua loa điện thoại';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Thông qua đầu ra âm thanh hiện tại';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Câu trả lời vẫn ở trên màn hình. Không có gì được nói.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Riêng tư. Chỉ nói qua AirPods, Bluetooth hoặc tai nghe có dây.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'Sử dụng loa điện thoại khi không kết nối tai nghe.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi sẽ giữ im lặng. Câu trả lời vẫn xuất hiện trong ứng dụng.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device đã kết nối. Omi sẽ phát biểu tại đây.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Không có tai nghe được kết nối. Omi giữ im lặng cho đến khi bạn kết nối.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Phát qua $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Phát to qua loa điện thoại.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Bạn có thể thay đổi điều này bất cứ lúc nào trong $settings > $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Phát lại chuyến tham quan này bất cứ lúc nào trong $settings > $deviceSettings > $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Tai nghe';
 }

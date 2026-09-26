@@ -3561,5 +3561,22 @@
     "deviceOnboardingAllSetTitle": "Totul este pregătit",
     "deviceOnboardingAllSetSubtitle": "Atinge un rând pentru a-l verifica sau modifica.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Când întrebați cu butonul, Omi își poate citi răspunsul cu voce tare.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Ascultă ultimul tău răspuns",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Redac ultimul răspuns...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "Prin {device}",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Prin difuzorul telefonului",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Prin ieșirea audio curentă",
+    "deviceOnboardingVoiceReplyOffDescription": "Răspunsurile rămân pe ecran. Nu se vorbeste nimic.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Privat. Vorbește doar prin AirPods, Bluetooth sau căști cu fir.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Utilizează difuzorul telefonului când nu sunt conectate căști.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi va rămâne tăcut. Răspunsurile apar în continuare în aplicație.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} conectat. Omi va vorbi aici.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "Nu există căști conectate. Omi rămâne tăcut până când conectați unele.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Redă prin {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Redă cu voce tare prin difuzorul telefonului.",
+    "deviceOnboardingVoiceReplySettingsHint": "Puteți schimba oricând acest lucru în {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "Reluați acest tur oricând în {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Căști"
 }

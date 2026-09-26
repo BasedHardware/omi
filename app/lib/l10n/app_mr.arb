@@ -11121,5 +11121,22 @@
     "deviceOnboardingAllSetTitle": "सर्व काही तयार आहे",
     "deviceOnboardingAllSetSubtitle": "पुनरावलोकन किंवा बदल करण्यासाठी ओळीवर टॅप करा.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "तुम्ही बटणाने विचारता तेव्हा, Omi त्याचे उत्तर मोठ्याने वाचू शकतो.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "तुमचे शेवटचे उत्तर ऐका",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "तुमचे शेवटचे उत्तर प्ले करत आहे...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "{device} द्वारे",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "फोन स्पीकरद्वारे",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "सध्याच्या ऑडिओ आउटपुटद्वारे",
+    "deviceOnboardingVoiceReplyOffDescription": "उत्तरे स्क्रीनवर राहतात. काहीच बोलत नाही.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "खाजगी. AirPods, Bluetooth किंवा वायर्ड हेडफोनद्वारेच बोलते.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "हेडफोन कनेक्ट केलेले नसताना फोन स्पीकर वापरतो.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi शांत राहतील. उत्तरे अजूनही ॲपमध्ये दिसतात.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} कनेक्ट केले आहे. Omi येथे बोलतील.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "कोणतेही हेडफोन कनेक्ट केलेले नाहीत. तुम्ही काही कनेक्ट करेपर्यंत Omi शांत राहते.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "{device} द्वारे प्ले.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "फोन स्पीकरद्वारे मोठ्याने वाजते.",
+    "deviceOnboardingVoiceReplySettingsHint": "तुम्ही हे {settings} › {voiceResponse} वर कधीही बदलू शकता",
+    "deviceOnboardingAllSetReplayHint": "{settings} › {deviceSettings} › {deviceTutorial} वर कधीही हा टूर पुन्हा प्ले करा",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "हेडफोन्स"
 }

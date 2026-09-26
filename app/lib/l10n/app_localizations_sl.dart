@@ -11315,4 +11315,67 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'Ko vprašate z gumbom, lahko Omi glasno prebere svoj odgovor.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Poslušaj svoj zadnji odgovor';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Predvajam vaš zadnji odgovor ...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Prek $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Preko zvočnika telefona';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Prek trenutnega zvočnega izhoda';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Odgovori ostanejo na zaslonu. Nič se ne govori.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Zasebno. Govori samo prek AirPods, Bluetooth ali žičnih slušalk.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'Uporablja zvočnik telefona, ko niso priključene slušalke.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi bo molčal. Odgovori so še vedno prikazani v aplikaciji.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device povezan. Omi bo govoril tukaj.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Slušalke niso priključene. Omi ostane tiho, dokler jih ne povežete.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Igra prek $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Predvaja na glas prek zvočnika telefona.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'To lahko kadar koli spremenite v $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Predvajajte to turnejo kadar koli v $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Slušalke';
 }

@@ -121,7 +121,7 @@ class _VoiceReplyStepState extends State<VoiceReplyStep> with SingleTickerProvid
             Text(context.l10n.deviceOnboardingVoiceReplyTitle, style: OmiType.title1, textAlign: TextAlign.center),
             const SizedBox(height: OmiSpacing.xs),
             Text(
-              context.l10n.voiceResponseAudio,
+              context.l10n.deviceOnboardingVoiceReplySubtitle,
               style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.35),
               textAlign: TextAlign.center,
             ),
@@ -134,6 +134,7 @@ class _VoiceReplyStepState extends State<VoiceReplyStep> with SingleTickerProvid
                     _PreviewCard(
                       playing: _playing,
                       animation: _waveController,
+                      route: _route,
                       onPressed: _togglePreview,
                     ),
                     const SizedBox(height: OmiSpacing.lg),
@@ -150,6 +151,7 @@ class _VoiceReplyStepState extends State<VoiceReplyStep> with SingleTickerProvid
                       key: const Key('voice_reply_mode_off'),
                       selected: mode == 0,
                       title: context.l10n.voiceResponseOff,
+                      description: context.l10n.deviceOnboardingVoiceReplyOffDescription,
                       onTap: () => _selectMode(0),
                     ),
                     const SizedBox(height: OmiSpacing.xs),
@@ -157,6 +159,7 @@ class _VoiceReplyStepState extends State<VoiceReplyStep> with SingleTickerProvid
                       key: const Key('voice_reply_mode_headphones'),
                       selected: mode == 1,
                       title: context.l10n.voiceResponseHeadphonesOnly,
+                      description: context.l10n.deviceOnboardingVoiceReplyHeadphonesDescription,
                       onTap: () => _selectMode(1),
                     ),
                     const SizedBox(height: OmiSpacing.xs),
@@ -164,6 +167,7 @@ class _VoiceReplyStepState extends State<VoiceReplyStep> with SingleTickerProvid
                       key: const Key('voice_reply_mode_always'),
                       selected: mode == 2,
                       title: context.l10n.voiceResponseAlways,
+                      description: context.l10n.deviceOnboardingVoiceReplyAlwaysDescription,
                       onTap: () => _selectMode(2),
                     ),
                     const SizedBox(height: OmiSpacing.sm),
@@ -174,7 +178,10 @@ class _VoiceReplyStepState extends State<VoiceReplyStep> with SingleTickerProvid
             ),
             const SizedBox(height: OmiSpacing.sm),
             Text(
-              '${context.l10n.settings} › ${context.l10n.voiceResponseMode}',
+              context.l10n.deviceOnboardingVoiceReplySettingsHint(
+                context.l10n.settings,
+                context.l10n.voiceResponseMode,
+              ),
               style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
               textAlign: TextAlign.center,
             ),
@@ -195,11 +202,27 @@ class _VoiceReplyStepState extends State<VoiceReplyStep> with SingleTickerProvid
 }
 
 class _PreviewCard extends StatelessWidget {
-  const _PreviewCard({required this.playing, required this.animation, required this.onPressed});
+  const _PreviewCard({
+    required this.playing,
+    required this.animation,
+    required this.route,
+    required this.onPressed,
+  });
 
   final bool playing;
   final Animation<double> animation;
+  final VoiceOutputRoute route;
   final Future<void> Function() onPressed;
+
+  String _routeLabel(BuildContext context) => switch (route.kind) {
+        VoiceOutputRouteKind.headphones => context.l10n.deviceOnboardingVoiceReplyPreviewThroughDevice(
+            route.name == null || route.name!.isEmpty
+                ? context.l10n.deviceOnboardingVoiceReplyGenericHeadphones
+                : route.name!,
+          ),
+        VoiceOutputRouteKind.speaker => context.l10n.deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker,
+        VoiceOutputRouteKind.unknown => context.l10n.deviceOnboardingVoiceReplyPreviewThroughCurrentOutput,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -233,13 +256,16 @@ class _PreviewCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AnimatedSwitcher(
-                  duration: OmiMotion.of(context).quick,
-                  child: Text(
-                    playing ? context.l10n.stop : context.l10n.voiceResponseAudio,
-                    key: ValueKey(playing),
-                    style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
-                  ),
+                Text(
+                  playing
+                      ? context.l10n.deviceOnboardingVoiceReplyPreviewPlaying
+                      : context.l10n.deviceOnboardingVoiceReplyPreviewIdle,
+                  style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: OmiSpacing.xxs),
+                Text(
+                  _routeLabel(context),
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
                 ),
                 const SizedBox(height: OmiSpacing.xs),
                 SizedBox(
@@ -248,7 +274,7 @@ class _PreviewCard extends StatelessWidget {
                     animation: animation,
                     builder: (context, _) => CustomPaint(
                       key: const Key('voice_reply_waveform'),
-                      painter: _VoiceWaveformPainter(phase: playing ? animation.value : 0),
+                      painter: _VoiceWaveformPainter(active: playing, phase: animation.value),
                       size: const Size(double.infinity, 18),
                     ),
                   ),
@@ -267,11 +293,13 @@ class _ModeCard extends StatelessWidget {
     super.key,
     required this.selected,
     required this.title,
+    required this.description,
     required this.onTap,
   });
 
   final bool selected;
   final String title;
+  final String description;
   final VoidCallback onTap;
 
   @override
@@ -290,7 +318,7 @@ class _ModeCard extends StatelessWidget {
           onTap: onTap,
           borderRadius: OmiRadius.lgAll,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 64),
+            constraints: const BoxConstraints(minHeight: 76),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
               child: Row(
@@ -312,9 +340,23 @@ class _ModeCard extends StatelessWidget {
                   ),
                   const SizedBox(width: OmiSpacing.sm),
                   Expanded(
-                    child: Text(
-                      title,
-                      style: OmiType.callout.copyWith(color: foreground, fontWeight: FontWeight.w600),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: OmiType.callout.copyWith(color: foreground, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: OmiSpacing.xxs),
+                        Text(
+                          description,
+                          style: OmiType.footnote.copyWith(
+                            color: selected ? OmiColors.surface3 : OmiColors.textSecondary,
+                            height: 1.25,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -357,7 +399,7 @@ class _OutputStatus extends StatelessWidget {
   ({String text, Color tone, Color surface, IconData icon}) _content(BuildContext context) {
     if (mode == 0) {
       return (
-        text: context.l10n.voiceResponseOff,
+        text: context.l10n.deviceOnboardingVoiceReplyStatusOff,
         tone: OmiColors.textSecondary,
         surface: OmiColors.surface1,
         icon: Icons.volume_off_outlined,
@@ -369,19 +411,19 @@ class _OutputStatus extends StatelessWidget {
     if (mode == 1) {
       return switch (route.kind) {
         VoiceOutputRouteKind.headphones => (
-            text: '$routeName · ${context.l10n.connected}',
+            text: context.l10n.deviceOnboardingVoiceReplyStatusHeadphonesConnected(routeName),
             tone: OmiColors.success,
             surface: OmiColors.successSurface,
             icon: Icons.headphones,
           ),
         VoiceOutputRouteKind.speaker => (
-            text: '${context.l10n.voiceResponseHeadphonesOnly} · ${context.l10n.disconnected}',
+            text: context.l10n.deviceOnboardingVoiceReplyStatusHeadphonesDisconnected,
             tone: OmiColors.warning,
             surface: OmiColors.surface1,
             icon: Icons.headset_off_outlined,
           ),
         VoiceOutputRouteKind.unknown => (
-            text: '${context.l10n.audioOutput} · ${context.l10n.disconnected}',
+            text: context.l10n.deviceOnboardingVoiceReplyStatusHeadphonesDisconnected,
             tone: OmiColors.warning,
             surface: OmiColors.surface1,
             icon: Icons.help_outline,
@@ -391,30 +433,31 @@ class _OutputStatus extends StatelessWidget {
 
     return switch (route.kind) {
       VoiceOutputRouteKind.headphones => (
-          text: '$routeName · ${context.l10n.connected}',
+          text: context.l10n.deviceOnboardingVoiceReplyStatusAlwaysHeadphones(routeName),
           tone: OmiColors.success,
           surface: OmiColors.successSurface,
           icon: Icons.headphones,
         ),
       VoiceOutputRouteKind.speaker => (
-          text: '${context.l10n.phoneSpeaker} · ${context.l10n.connected}',
+          text: context.l10n.deviceOnboardingVoiceReplyStatusAlwaysSpeaker,
           tone: OmiColors.warning,
           surface: OmiColors.surface1,
           icon: Icons.volume_up_outlined,
         ),
       VoiceOutputRouteKind.unknown => (
-          text: context.l10n.audioOutput,
-          tone: OmiColors.textSecondary,
+          text: context.l10n.deviceOnboardingVoiceReplyStatusAlwaysSpeaker,
+          tone: OmiColors.warning,
           surface: OmiColors.surface1,
-          icon: Icons.speaker_outlined,
+          icon: Icons.volume_up_outlined,
         ),
     };
   }
 }
 
 class _VoiceWaveformPainter extends CustomPainter {
-  const _VoiceWaveformPainter({required this.phase});
+  const _VoiceWaveformPainter({required this.active, required this.phase});
 
+  final bool active;
   final double phase;
 
   @override
@@ -422,10 +465,10 @@ class _VoiceWaveformPainter extends CustomPainter {
     const bars = 18;
     const gap = 3.0;
     final width = (size.width - gap * (bars - 1)) / bars;
-    final paint = Paint()..color = OmiColors.textPrimary.withValues(alpha: phase == 0 ? 0.35 : 0.9);
+    final paint = Paint()..color = OmiColors.textPrimary.withValues(alpha: active ? 1 : 0.24);
     for (var index = 0; index < bars; index++) {
-      final base = 0.3 + ((index * 7) % 11) / 16;
-      final pulse = phase == 0 ? 1.0 : 0.55 + 0.45 * math.sin((phase * math.pi * 2) + index * 0.72).abs();
+      final base = active ? 0.3 + ((index * 7) % 11) / 16 : 0.22;
+      final pulse = active ? 0.55 + 0.45 * math.sin((phase * math.pi * 2) + index * 0.72).abs() : 1.0;
       final height = size.height * base * pulse;
       final left = index * (width + gap);
       final top = (size.height - height) / 2;
@@ -437,5 +480,6 @@ class _VoiceWaveformPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _VoiceWaveformPainter oldDelegate) => oldDelegate.phase != phase;
+  bool shouldRepaint(covariant _VoiceWaveformPainter oldDelegate) =>
+      oldDelegate.active != active || oldDelegate.phase != phase;
 }

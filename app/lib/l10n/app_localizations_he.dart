@@ -11194,4 +11194,67 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'כאשר אתה שואל באמצעות הכפתור, Omi יכול לקרוא את התשובה שלו בקול רם.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'שמע את תשובתך האחרונה';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'מנגן את התשובה האחרונה שלך...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'דרך $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'דרך הרמקול של הטלפון';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'דרך פלט האודיו הנוכחי';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'התשובות נשארות על המסך. שום דבר לא נאמר.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'פרטי. מדבר רק דרך AirPods, Bluetooth או אוזניות קוויות.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'משתמש ברמקול הטלפון כאשר אין אוזניות מחוברות.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi ישתוק. התשובות עדיין מופיעות באפליקציה.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device מחובר. Omi ידבר כאן.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected => 'לא מחוברות אוזניות. Omi נשאר שקט עד שתחבר כמה.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'מנגן דרך $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'מתנגן בקול רם דרך רמקול הטלפון.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'אתה יכול לשנות זאת בכל עת בטלפון $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'הפעל מחדש את הסיור הזה בכל עת ב-$settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'אוזניות';
 }

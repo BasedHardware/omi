@@ -11121,5 +11121,22 @@
     "deviceOnboardingAllSetTitle": "הכול מוכן",
     "deviceOnboardingAllSetSubtitle": "יש להקיש על שורה כדי לבדוק או לשנות אותה.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "כאשר אתה שואל באמצעות הכפתור, Omi יכול לקרוא את התשובה שלו בקול רם.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "שמע את תשובתך האחרונה",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "מנגן את התשובה האחרונה שלך...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "דרך {device}",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "דרך הרמקול של הטלפון",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "דרך פלט האודיו הנוכחי",
+    "deviceOnboardingVoiceReplyOffDescription": "התשובות נשארות על המסך. שום דבר לא נאמר.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "פרטי. מדבר רק דרך AirPods, Bluetooth או אוזניות קוויות.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "משתמש ברמקול הטלפון כאשר אין אוזניות מחוברות.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi ישתוק. התשובות עדיין מופיעות באפליקציה.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} מחובר. Omi ידבר כאן.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "לא מחוברות אוזניות. Omi נשאר שקט עד שתחבר כמה.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "מנגן דרך {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "מתנגן בקול רם דרך רמקול הטלפון.",
+    "deviceOnboardingVoiceReplySettingsHint": "אתה יכול לשנות זאת בכל עת בטלפון {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "הפעל מחדש את הסיור הזה בכל עת ב-{settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "אוזניות"
 }

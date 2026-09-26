@@ -11285,4 +11285,67 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'আপনি বোতাম দিয়ে জিজ্ঞাসা করলে, Omi উচ্চস্বরে এর উত্তর পড়তে পারে।';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'আপনার শেষ উত্তর শুনুন';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'আপনার শেষ উত্তর বাজানো হচ্ছে...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '$device এর মাধ্যমে';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'ফোন স্পিকারের মাধ্যমে';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'বর্তমান অডিও আউটপুট মাধ্যমে';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'উত্তরগুলি পর্দায় থাকে। কোনো কথা বলা হয় না।';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'ব্যক্তিগত। শুধুমাত্র AirPods, Bluetooth বা তারযুক্ত হেডফোনের মাধ্যমে কথা বলে।';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'কোনো হেডফোন সংযুক্ত না থাকলে ফোনের স্পিকার ব্যবহার করে।';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi নীরব থাকবে। উত্তর এখনও অ্যাপে প্রদর্শিত হবে।';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device সংযুক্ত। Omi এখানে কথা বলবে।';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'কোনো হেডফোন সংযুক্ত নেই৷ আপনি কিছু সংযোগ না করা পর্যন্ত Omi নীরব থাকে।';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return '$device এর মাধ্যমে বাজায়।';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'ফোন স্পিকারের মাধ্যমে জোরে বাজে।';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'আপনি $settings › $voiceResponse এ যেকোনো সময় এটি পরিবর্তন করতে পারেন';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return '$settings › $deviceSettings › $deviceTutorial এ যেকোনও সময় এই সফরটি পুনরায় চালান';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'হেডফোন';
 }

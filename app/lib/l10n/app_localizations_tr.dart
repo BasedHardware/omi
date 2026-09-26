@@ -11296,4 +11296,68 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'Buton ile sorduğunuz zaman Omi cevabını sesli olarak okuyabilir.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Son yanıtını duy';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Son cevabınız çalınıyor...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '$device aracılığıyla';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Telefonun hoparlörü aracılığıyla';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Geçerli ses çıkışı aracılığıyla';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Cevaplar ekranda kalır. Hiçbir şey konuşulmuyor.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Özel. Yalnızca AirPods, Bluetooth veya kablolu kulaklık aracılığıyla konuşur.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Hiçbir kulaklık bağlı olmadığında telefonun hoparlörünü kullanır.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi sessiz kalacak. Cevaplar hâlâ uygulamada görünüyor.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device bağlandı. Omi burada konuşacak.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Kulaklık bağlı değil. Omi siz bazılarını bağlayana kadar sessiz kalır.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return '$device\'e kadar oynatır.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Telefonun hoparlöründen yüksek sesle çalar.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Bunu istediğiniz zaman $settings › $voiceResponse numaralı telefondan değiştirebilirsiniz.';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Bu turu istediğiniz zaman $settings › $deviceSettings › $deviceTutorial\'da tekrar oynatın';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Kulaklıklar';
 }

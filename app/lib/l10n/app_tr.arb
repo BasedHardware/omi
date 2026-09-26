@@ -3596,5 +3596,22 @@
     "deviceOnboardingAllSetTitle": "Her Şey Hazır",
     "deviceOnboardingAllSetSubtitle": "İncelemek veya değiştirmek için bir satıra dokunun.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Buton ile sorduğunuz zaman Omi cevabını sesli olarak okuyabilir.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Son yanıtını duy",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Son cevabınız çalınıyor...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "{device} aracılığıyla",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Telefonun hoparlörü aracılığıyla",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Geçerli ses çıkışı aracılığıyla",
+    "deviceOnboardingVoiceReplyOffDescription": "Cevaplar ekranda kalır. Hiçbir şey konuşulmuyor.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Özel. Yalnızca AirPods, Bluetooth veya kablolu kulaklık aracılığıyla konuşur.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Hiçbir kulaklık bağlı olmadığında telefonun hoparlörünü kullanır.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi sessiz kalacak. Cevaplar hâlâ uygulamada görünüyor.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} bağlandı. Omi burada konuşacak.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "Kulaklık bağlı değil. Omi siz bazılarını bağlayana kadar sessiz kalır.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "{device}'e kadar oynatır.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Telefonun hoparlöründen yüksek sesle çalar.",
+    "deviceOnboardingVoiceReplySettingsHint": "Bunu istediğiniz zaman {settings} › {voiceResponse} numaralı telefondan değiştirebilirsiniz.",
+    "deviceOnboardingAllSetReplayHint": "Bu turu istediğiniz zaman {settings} › {deviceSettings} › {deviceTutorial}'da tekrar oynatın",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Kulaklıklar"
 }

@@ -11121,5 +11121,22 @@
     "deviceOnboardingAllSetTitle": "Сè е подготвено",
     "deviceOnboardingAllSetSubtitle": "Допрете ред за да го прегледате или промените.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Кога прашувате со копчето, Omi може гласно да го прочита својот одговор.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Слушнете го вашиот последен одговор",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Се репродуцира вашиот последен одговор...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "Преку {device}",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Преку звучникот на телефонот",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Преку тековниот аудио излез",
+    "deviceOnboardingVoiceReplyOffDescription": "Одговорите остануваат на екранот. Ништо не се зборува.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Приватен. Зборува само преку AirPods, Bluetooth или жични слушалки.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Го користи звучникот на телефонот кога нема поврзани слушалки.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi ќе молчи. Одговорите сè уште се појавуваат во апликацијата.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} поврзани. Omi ќе зборува овде.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "Нема поврзани слушалки. Omi останува нечујно додека не поврзете некои.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Се репродуцира преку {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Репродуцира гласно преку звучникот на телефонот.",
+    "deviceOnboardingVoiceReplySettingsHint": "Можете да го промените ова во секое време во {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "Повторете ја оваа турнеја во секое време во {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Слушалки"
 }

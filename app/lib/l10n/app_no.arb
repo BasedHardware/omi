@@ -3561,5 +3561,22 @@
     "deviceOnboardingAllSetTitle": "Alt er klart",
     "deviceOnboardingAllSetSubtitle": "Trykk på en rad for å se gjennom eller endre den.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Når du spør med knappen, kan Omi lese svaret høyt.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Hør ditt siste svar",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Spiller det siste svaret ditt...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "Gjennom {device}",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Gjennom telefonens høyttaler",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Gjennom gjeldende lydutgang",
+    "deviceOnboardingVoiceReplyOffDescription": "Svarene forblir på skjermen. Ingenting blir sagt.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Privat. Snakker bare gjennom AirPods, Bluetooth eller kablede hodetelefoner.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Bruker telefonhøyttaleren når ingen hodetelefoner er tilkoblet.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi forblir stille. Svarene vises fortsatt i appen.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} tilkoblet. Omi vil snakke her.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "Ingen hodetelefoner tilkoblet. Omi forblir stille til du kobler til noen.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Spiller gjennom {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Spiller høyt gjennom telefonens høyttaler.",
+    "deviceOnboardingVoiceReplySettingsHint": "Du kan endre dette når som helst i {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "Spill denne turen på nytt når som helst i {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Hodetelefoner"
 }

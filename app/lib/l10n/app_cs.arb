@@ -3561,5 +3561,22 @@
     "deviceOnboardingAllSetTitle": "Vše je připraveno",
     "deviceOnboardingAllSetSubtitle": "Klepnutím na řádek ho zkontrolujete nebo změníte.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Když se zeptáte pomocí tlačítka, Omi může svou odpověď přečíst nahlas.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Poslechněte si svou poslední odpověď",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Přehrávání vaší poslední odpovědi...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "Prostřednictvím {device}",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Prostřednictvím reproduktoru telefonu",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Prostřednictvím aktuálního audio výstupu",
+    "deviceOnboardingVoiceReplyOffDescription": "Odpovědi zůstávají na obrazovce. Nic se nemluví.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Soukromé. Mluví pouze prostřednictvím AirPods, Bluetooth nebo kabelových sluchátek.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Používá reproduktor telefonu, když nejsou připojena sluchátka.",
+    "deviceOnboardingVoiceReplyStatusOff": "Číslo Omi zůstane tiché. Odpovědi se stále zobrazují v aplikaci.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} připojeno. Zde bude mluvit Omi.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "Nejsou připojena žádná sluchátka. Číslo Omi zůstane tiché, dokud nějaké nepřipojíte.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Hraje přes {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Přehrává nahlas přes reproduktor telefonu.",
+    "deviceOnboardingVoiceReplySettingsHint": "Toto můžete kdykoli změnit na {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "Přehrajte si tuto prohlídku kdykoli na čísle {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Sluchátka"
 }

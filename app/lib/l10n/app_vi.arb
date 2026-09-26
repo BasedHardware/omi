@@ -3561,5 +3561,22 @@
     "deviceOnboardingAllSetTitle": "Bạn đã sẵn sàng",
     "deviceOnboardingAllSetSubtitle": "Nhấn vào một hàng để xem lại hoặc thay đổi.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Khi bạn hỏi bằng nút, Omi có thể đọc to câu trả lời của nó.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Nghe câu trả lời cuối cùng của bạn",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Đang phát câu trả lời cuối cùng của bạn...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "Qua {device}",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Qua loa điện thoại",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Thông qua đầu ra âm thanh hiện tại",
+    "deviceOnboardingVoiceReplyOffDescription": "Câu trả lời vẫn ở trên màn hình. Không có gì được nói.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Riêng tư. Chỉ nói qua AirPods, Bluetooth hoặc tai nghe có dây.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Sử dụng loa điện thoại khi không kết nối tai nghe.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi sẽ giữ im lặng. Câu trả lời vẫn xuất hiện trong ứng dụng.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} đã kết nối. Omi sẽ phát biểu tại đây.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "Không có tai nghe được kết nối. Omi giữ im lặng cho đến khi bạn kết nối.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Phát qua {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Phát to qua loa điện thoại.",
+    "deviceOnboardingVoiceReplySettingsHint": "Bạn có thể thay đổi điều này bất cứ lúc nào trong {settings} > {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "Phát lại chuyến tham quan này bất cứ lúc nào trong {settings} > {deviceSettings} > {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Tai nghe"
 }

@@ -11315,4 +11315,71 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Cuando preguntas con el botón, Omi puede leer su respuesta en voz alta.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Escuche su última respuesta';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Reproduciendo tu última respuesta...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'A través del $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'A través del altavoz del teléfono';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'A través de la salida de audio actual';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Las respuestas permanecen en la pantalla. No se habla nada.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Privado. Habla sólo a través del AirPods, Bluetooth o auriculares con cable.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Utiliza el altavoz del teléfono cuando no hay auriculares conectados.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff =>
+      'Omi permanecerá en silencio. Las respuestas todavía aparecen en la aplicación.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device conectado. Omi hablará aquí.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'No hay auriculares conectados. Omi permanece en silencio hasta que conectes alguno.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Reproduce a través del $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker =>
+      'Se reproduce en voz alta a través del altavoz del teléfono.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Puedes cambiar esto en cualquier momento en $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Reproduce este recorrido en cualquier momento en $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'auriculares';
 }

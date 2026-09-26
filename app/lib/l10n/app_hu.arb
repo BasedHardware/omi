@@ -3657,5 +3657,22 @@
     "deviceOnboardingAllSetTitle": "Minden készen áll",
     "deviceOnboardingAllSetSubtitle": "Koppints egy sorra az ellenőrzéshez vagy módosításhoz.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Ha a gombbal kérdez, a Omi fel tudja olvasni a választ.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Hallgassa meg utolsó válaszát",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Az utolsó válasz lejátszása...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "{device} számon keresztül",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "A telefon hangszóróján keresztül",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Az aktuális hangkimeneten keresztül",
+    "deviceOnboardingVoiceReplyOffDescription": "A válaszok a képernyőn maradnak. Semmit sem beszélnek.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Privát. Csak a AirPods, Bluetooth vagy vezetékes fejhallgatón keresztül beszél.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "A telefon hangszóróját használja, ha nincs fejhallgató csatlakoztatva.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi néma marad. A válaszok továbbra is megjelennek az alkalmazásban.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} csatlakoztatva. Omi fog itt beszélni.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "Nincs csatlakoztatva fejhallgató. Omi néma marad, amíg nem csatlakoztat néhányat.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Lejátszás a {device} számon keresztül.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Hangosan játszik le a telefon hangszóróján keresztül.",
+    "deviceOnboardingVoiceReplySettingsHint": "Ezt bármikor módosíthatja a {settings} › {voiceResponse} számon",
+    "deviceOnboardingAllSetReplayHint": "A körutat bármikor újra lejátszhatja a következő számon: {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Fejhallgató"
 }

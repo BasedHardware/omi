@@ -11121,5 +11121,22 @@
     "deviceOnboardingAllSetTitle": "ಎಲ್ಲವೂ ಸಿದ್ಧವಾಗಿದೆ",
     "deviceOnboardingAllSetSubtitle": "ಪರಿಶೀಲಿಸಲು ಅಥವಾ ಬದಲಾಯಿಸಲು ಸಾಲನ್ನು ಟ್ಯಾಪ್ ಮಾಡಿ.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "ನೀವು ಬಟನ್‌ನೊಂದಿಗೆ ಕೇಳಿದಾಗ, Omi ಅದರ ಉತ್ತರವನ್ನು ಜೋರಾಗಿ ಓದಬಹುದು.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "ನಿಮ್ಮ ಕೊನೆಯ ಉತ್ತರವನ್ನು ಕೇಳಿ",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "ನಿಮ್ಮ ಕೊನೆಯ ಉತ್ತರವನ್ನು ಪ್ಲೇ ಮಾಡಲಾಗುತ್ತಿದೆ...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "{device} ಮೂಲಕ",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "ಫೋನ್ ಸ್ಪೀಕರ್ ಮೂಲಕ",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "ಪ್ರಸ್ತುತ ಆಡಿಯೊ ಔಟ್‌ಪುಟ್ ಮೂಲಕ",
+    "deviceOnboardingVoiceReplyOffDescription": "ಉತ್ತರಗಳು ಪರದೆಯ ಮೇಲೆ ಉಳಿಯುತ್ತವೆ. ಏನೂ ಮಾತನಾಡುವುದಿಲ್ಲ.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "ಖಾಸಗಿ. AirPods, Bluetooth ಅಥವಾ ವೈರ್ಡ್ ಹೆಡ್‌ಫೋನ್‌ಗಳ ಮೂಲಕ ಮಾತ್ರ ಮಾತನಾಡುತ್ತದೆ.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "ಯಾವುದೇ ಹೆಡ್‌ಫೋನ್‌ಗಳನ್ನು ಸಂಪರ್ಕಿಸದಿದ್ದಾಗ ಫೋನ್ ಸ್ಪೀಕರ್ ಅನ್ನು ಬಳಸುತ್ತದೆ.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi ಮೌನವಾಗಿ ಉಳಿಯುತ್ತದೆ. ಉತ್ತರಗಳು ಇನ್ನೂ ಅಪ್ಲಿಕೇಶನ್‌ನಲ್ಲಿ ಗೋಚರಿಸುತ್ತವೆ.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} ಸಂಪರ್ಕಿಸಲಾಗಿದೆ. Omi ಇಲ್ಲಿ ಮಾತನಾಡುತ್ತಾರೆ.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "ಯಾವುದೇ ಹೆಡ್‌ಫೋನ್‌ಗಳು ಸಂಪರ್ಕಗೊಂಡಿಲ್ಲ. ನೀವು ಕೆಲವನ್ನು ಸಂಪರ್ಕಿಸುವವರೆಗೆ Omi ಮೌನವಾಗಿರುತ್ತದೆ.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "{device} ಮೂಲಕ ಆಡುತ್ತದೆ.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "ಫೋನ್ ಸ್ಪೀಕರ್ ಮೂಲಕ ಜೋರಾಗಿ ನುಡಿಸುತ್ತದೆ.",
+    "deviceOnboardingVoiceReplySettingsHint": "ನೀವು ಇದನ್ನು ಯಾವಾಗ ಬೇಕಾದರೂ {settings} › {voiceResponse} ರಲ್ಲಿ ಬದಲಾಯಿಸಬಹುದು",
+    "deviceOnboardingAllSetReplayHint": "{settings} › {deviceSettings} › {deviceTutorial} ರಲ್ಲಿ ಈ ಪ್ರವಾಸವನ್ನು ಯಾವಾಗ ಬೇಕಾದರೂ ರಿಪ್ಲೇ ಮಾಡಿ",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "ಹೆಡ್‌ಫೋನ್‌ಗಳು"
 }

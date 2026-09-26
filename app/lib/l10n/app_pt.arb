@@ -3596,5 +3596,22 @@
     "deviceOnboardingAllSetTitle": "Tudo pronto",
     "deviceOnboardingAllSetSubtitle": "Toque em uma linha para revisar ou alterar.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Quando você pergunta com o botão, Omi pode ler a resposta em voz alta.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Ouça sua última resposta",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Reproduzindo sua última resposta...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "Através do {device}",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Pelo alto-falante do telefone",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Através da saída de áudio atual",
+    "deviceOnboardingVoiceReplyOffDescription": "As respostas permanecem na tela. Nada é falado.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Privado. Fala apenas através do AirPods, Bluetooth ou fones de ouvido com fio.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Usa o alto-falante do telefone quando nenhum fone de ouvido está conectado.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi permanecerá em silêncio. As respostas ainda aparecem no aplicativo.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} conectado. Omi falará aqui.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "Nenhum fone de ouvido conectado. Omi fica em silêncio até você conectar alguns.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Toca através do {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "É reproduzido em voz alta pelo alto-falante do telefone.",
+    "deviceOnboardingVoiceReplySettingsHint": "Você pode alterar isso a qualquer momento em {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "Repita este passeio a qualquer momento em {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Fones de ouvido"
 }

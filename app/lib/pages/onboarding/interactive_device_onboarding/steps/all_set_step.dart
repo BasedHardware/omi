@@ -73,7 +73,11 @@ class AllSetStep extends StatelessWidget {
           ),
           const Spacer(),
           Text(
-            '${context.l10n.settings} › ${context.l10n.deviceTutorial}',
+            context.l10n.deviceOnboardingAllSetReplayHint(
+              context.l10n.settings,
+              context.l10n.deviceSettings,
+              context.l10n.deviceTutorial,
+            ),
             style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
             textAlign: TextAlign.center,
           ),

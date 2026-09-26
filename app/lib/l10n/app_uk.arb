@@ -3561,5 +3561,22 @@
     "deviceOnboardingAllSetTitle": "Усе готово",
     "deviceOnboardingAllSetSubtitle": "Торкніться рядка, щоб переглянути або змінити його.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Коли ви запитуєте за допомогою кнопки, Omi може прочитати свою відповідь вголос.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Почуй свою останню відповідь",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Відтворення вашої останньої відповіді...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "Через {device}",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Через динамік телефону",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Через поточний аудіовихід",
+    "deviceOnboardingVoiceReplyOffDescription": "Відповіді залишаються на екрані. Нічого не говориться.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Приватний. Розмовляє тільки через AirPods, Bluetooth або дротові навушники.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Використовує динамік телефону, коли навушники не підключені.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi буде мовчати. Відповіді все ще відображаються в додатку.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} підключено. Тут говоритиме Omi.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "Навушники не підключено. Omi мовчить, доки ви не підключите кілька.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Грає через {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Відтворюється вголос через динамік телефону.",
+    "deviceOnboardingVoiceReplySettingsHint": "Ви можете будь-коли змінити це в {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "Повторіть цей тур будь-коли в {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Навушники"
 }

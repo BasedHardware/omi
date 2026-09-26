@@ -11314,4 +11314,69 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Apabila anda bertanya dengan butang, Omi boleh membaca jawapannya dengan kuat.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Dengar jawapan terakhir anda';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Memainkan jawapan terakhir anda...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Melalui $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Melalui pembesar suara telefon';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Melalui output audio semasa';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Jawapan kekal di skrin. Tiada apa yang terucap.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Persendirian. Bercakap hanya melalui AirPods, Bluetooth atau fon kepala berwayar.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Menggunakan pembesar suara telefon apabila tiada fon kepala disambungkan.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi akan terus senyap. Jawapan masih muncul dalam apl.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device disambungkan. Omi akan bercakap di sini.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Tiada fon kepala disambungkan. Omi kekal senyap sehingga anda menyambung beberapa.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Dimainkan melalui $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Dimainkan dengan kuat melalui pembesar suara telefon.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Anda boleh menukar ini pada bila-bila masa di $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Main semula lawatan ini pada bila-bila masa dalam $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Fon kepala';
 }

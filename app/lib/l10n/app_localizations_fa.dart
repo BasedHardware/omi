@@ -11280,4 +11280,68 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'وقتی با دکمه سوال می کنید، Omi می تواند پاسخ آن را با صدای بلند بخواند.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'آخرین پاسخ خود را بشنوید';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'در حال پخش آخرین پاسخ شما...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'از طریق $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'از طریق بلندگوی تلفن';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'از طریق خروجی صوتی فعلی';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'پاسخ ها روی صفحه می ماند. چیزی گفته نمی شود.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'خصوصی. فقط از طریق AirPods، Bluetooth یا هدفون سیمی صحبت می کند.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'هنگامی که هدفونی وصل نیست از بلندگوی تلفن استفاده می کند.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi ساکت خواهد ماند. پاسخ ها همچنان در برنامه ظاهر می شوند.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device متصل. Omi اینجا صحبت خواهد کرد.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'هدفون وصل نیست Omi بی صدا می ماند تا زمانی که تعدادی را وصل کنید.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'از طریق $device پخش می شود.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'با صدای بلند از طریق بلندگوی تلفن پخش می شود.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'شما می توانید این را در هر زمان تغییر دهید در $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'این تور را هر زمان خواستید در $settings › $deviceSettings › $deviceTutorial تکرار کنید';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'هدفون';
 }

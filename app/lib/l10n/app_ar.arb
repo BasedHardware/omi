@@ -3561,5 +3561,22 @@
     "deviceOnboardingAllSetTitle": "أصبحت جاهزًا",
     "deviceOnboardingAllSetSubtitle": "اضغط على صف لمراجعته أو تغييره.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "عندما تسأل باستخدام الزر، يستطيع Omi قراءة إجابته بصوت عالٍ.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "اسمع إجابتك الأخيرة",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "جارٍ تشغيل إجابتك الأخيرة...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "من خلال {device}",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "من خلال مكبر صوت الهاتف",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "من خلال إخراج الصوت الحالي",
+    "deviceOnboardingVoiceReplyOffDescription": "تبقى الإجابات على الشاشة. لا شيء يتحدث.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "خاص. يتحدث فقط من خلال AirPods أو Bluetooth أو سماعات الرأس السلكية.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "يستخدم مكبر صوت الهاتف في حالة عدم توصيل سماعات الرأس.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi سيبقى صامتاً. لا تزال الإجابات تظهر في التطبيق.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} متصل. Omi سيتحدث هنا.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "لا توجد سماعات متصلة. Omi يظل صامتًا حتى تقوم بتوصيل البعض.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "يلعب من خلال {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "يتم تشغيله بصوت عالٍ من خلال مكبر صوت الهاتف.",
+    "deviceOnboardingVoiceReplySettingsHint": "يمكنك تغيير هذا في أي وقت في {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "أعد تشغيل هذه الجولة في أي وقت على {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "سماعات الرأس"
 }

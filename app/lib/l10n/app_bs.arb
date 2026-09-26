@@ -11121,5 +11121,22 @@
     "deviceOnboardingAllSetTitle": "Sve je spremno",
     "deviceOnboardingAllSetSubtitle": "Dodirnite red da ga pregledate ili promijenite.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Kada pitate pomoću dugmeta, Omi može naglas pročitati svoj odgovor.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Čuj svoj zadnji odgovor",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Reprodukcija vašeg posljednjeg odgovora...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "Putem {device}",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Preko zvučnika telefona",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Preko trenutnog audio izlaza",
+    "deviceOnboardingVoiceReplyOffDescription": "Odgovori ostaju na ekranu. Ništa se ne govori.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Privatno. Govori samo preko AirPods, Bluetooth ili žičanih slušalica.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Koristi zvučnik telefona kada nisu povezane slušalice.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi će šutjeti. Odgovori se i dalje pojavljuju u aplikaciji.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} povezan. Omi će govoriti ovdje.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "Nisu povezane slušalice. Omi ostaje tih dok ne povežete neke.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Reproducira preko {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Reproducira se naglas preko zvučnika telefona.",
+    "deviceOnboardingVoiceReplySettingsHint": "Ovo možete promijeniti bilo kada u {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "Ponovite ovu turneju bilo kada u {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Slušalice"
 }

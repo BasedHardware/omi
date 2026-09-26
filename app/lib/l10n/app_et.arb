@@ -3561,5 +3561,22 @@
     "deviceOnboardingAllSetTitle": "Kõik on valmis",
     "deviceOnboardingAllSetSubtitle": "Puuduta rida, et seda üle vaadata või muuta.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Kui küsite nupuga, saab Omi oma vastuse valjusti lugeda.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Kuulake oma viimast vastust",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Teie viimase vastuse esitamine...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "{device} kaudu",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Läbi telefoni kõlari",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Läbi praeguse heliväljundi",
+    "deviceOnboardingVoiceReplyOffDescription": "Vastused jäävad ekraanile. Midagi ei räägita.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Privaatne. Räägib ainult AirPods, Bluetooth või juhtmega kõrvaklappide kaudu.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Kasutab telefoni kõlarit, kui kõrvaklappe pole ühendatud.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi vaikib. Vastused kuvatakse endiselt rakenduses.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} ühendatud. Siin räägib Omi.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "Kõrvaklappe pole ühendatud. Omi vaikib, kuni ühendate mõne.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Mängib läbi numbri {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Mängib valjult läbi telefoni kõlari.",
+    "deviceOnboardingVoiceReplySettingsHint": "Saate seda igal ajal muuta numbril {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "Esitage seda ringkäiku igal ajal uuesti numbril {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Kõrvaklapid"
 }

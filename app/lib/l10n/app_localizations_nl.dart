@@ -11318,4 +11318,70 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Wanneer u met de knop vraagt, kan Omi het antwoord hardop voorlezen.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Luister naar je laatste antwoord';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Je laatste antwoord afspelen...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Via $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Via de telefoonluidspreker';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Via de huidige audio-uitvoer';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Antwoorden blijven op het scherm. Er wordt niets gesproken.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Privé. Spreekt alleen via AirPods, Bluetooth of bedrade hoofdtelefoons.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Gebruikt de telefoonluidspreker als er geen hoofdtelefoon is aangesloten.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi blijft stil. Antwoorden verschijnen nog steeds in de app.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device aangesloten. Omi zal hier spreken.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Geen hoofdtelefoon aangesloten. Omi blijft stil totdat u er een paar aansluit.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Speelt via $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker =>
+      'Wordt hardop afgespeeld via de luidspreker van de telefoon.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Je kunt dit op elk moment wijzigen via $settings ›$voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Speel deze tour op elk gewenst moment opnieuw af in $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Koptelefoon';
 }

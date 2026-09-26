@@ -11215,4 +11215,67 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'عندما تسأل باستخدام الزر، يستطيع Omi قراءة إجابته بصوت عالٍ.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'اسمع إجابتك الأخيرة';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'جارٍ تشغيل إجابتك الأخيرة...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'من خلال $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'من خلال مكبر صوت الهاتف';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'من خلال إخراج الصوت الحالي';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'تبقى الإجابات على الشاشة. لا شيء يتحدث.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'خاص. يتحدث فقط من خلال AirPods أو Bluetooth أو سماعات الرأس السلكية.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'يستخدم مكبر صوت الهاتف في حالة عدم توصيل سماعات الرأس.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi سيبقى صامتاً. لا تزال الإجابات تظهر في التطبيق.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device متصل. Omi سيتحدث هنا.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'لا توجد سماعات متصلة. Omi يظل صامتًا حتى تقوم بتوصيل البعض.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'يلعب من خلال $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'يتم تشغيله بصوت عالٍ من خلال مكبر صوت الهاتف.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'يمكنك تغيير هذا في أي وقت في $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'أعد تشغيل هذه الجولة في أي وقت على $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'سماعات الرأس';
 }

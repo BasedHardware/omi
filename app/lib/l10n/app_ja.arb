@@ -3561,5 +3561,22 @@
     "deviceOnboardingAllSetTitle": "準備ができました",
     "deviceOnboardingAllSetSubtitle": "確認または変更するには行をタップしてください。",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "ボタンで質問すると、Omi が答えを読み上げます。",
+    "deviceOnboardingVoiceReplyPreviewIdle": "最後の答えを聞いてください",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "最後の答えを再生しています...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "{device} まで",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "電話のスピーカーを通して",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "現在のオーディオ出力を通じて",
+    "deviceOnboardingVoiceReplyOffDescription": "答えは画面上に残ります。何も語られない。",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "プライベート。 AirPods、Bluetooth、または有線ヘッドフォンを介してのみ話します。",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "ヘッドフォンが接続されていない場合は、電話のスピーカーを使用します。",
+    "deviceOnboardingVoiceReplyStatusOff": "Omiは沈黙します。答えは引き続きアプリに表示されます。",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} 接続されました。 Omi がここで話します。",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "ヘッドフォンが接続されていません。 Omi は接続するまで沈黙を保ちます。",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "{device} まで再生します。",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "電話のスピーカーから大音量で再生されます。",
+    "deviceOnboardingVoiceReplySettingsHint": "これはいつでも {settings} › {voiceResponse} で変更できます。",
+    "deviceOnboardingAllSetReplayHint": "{settings} › {deviceSettings} › {deviceTutorial} でいつでもこのツアーを再生できます",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "ヘッドフォン"
 }

@@ -11294,4 +11294,69 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'جب آپ بٹن سے پوچھتے ہیں تو Omi اس کا جواب بلند آواز میں پڑھ سکتا ہے۔';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'اپنا آخری جواب سنیں۔';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'آپ کا آخری جواب چل رہا ہے...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '$device کے ذریعے';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'فون اسپیکر کے ذریعے';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'موجودہ آڈیو آؤٹ پٹ کے ذریعے';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'جوابات اسکرین پر رہتے ہیں۔ کچھ بولا نہیں جاتا۔';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'نجی۔ صرف AirPods، Bluetooth یا وائرڈ ہیڈ فون کے ذریعے بات کرتا ہے۔';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'جب کوئی ہیڈ فون منسلک نہ ہو تو فون اسپیکر استعمال کرتا ہے۔';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi خاموش رہیں گے۔ جوابات اب بھی ایپ میں نظر آتے ہیں۔';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device منسلک ہے۔ Omi یہاں بات کریں گے۔';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'کوئی ہیڈ فون منسلک نہیں ہے۔ Omi اس وقت تک خاموش رہتا ہے جب تک آپ کچھ کو جوڑ نہیں لیتے۔';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return '$device کے ذریعے کھیلتا ہے۔';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'فون اسپیکر کے ذریعے اونچی آواز میں چلاتا ہے۔';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'آپ اسے کسی بھی وقت $settings › $voiceResponse میں تبدیل کر سکتے ہیں۔';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'اس ٹور کو کسی بھی وقت $settings › $deviceSettings › $deviceTutorial میں دوبارہ چلائیں۔';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'ہیڈ فون';
 }

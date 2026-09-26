@@ -11076,4 +11076,65 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => '当您使用按钮询问时，Omi 可以大声读出答案。';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => '听听你最后的回答';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => '正在播放您的最后一个答案...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '通过$device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => '通过手机扬声器';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => '通过当前音频输出';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => '答案保留在屏幕上。什么也没说。';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription => '私人的。仅通过 AirPods、Bluetooth 或有线耳机通话。';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => '未连接耳机时使用手机扬声器。';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi将保持沉默。答案仍然出现在应用程序中。';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device已连接。 Omi 在此发言。';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected => '未连接耳机。 Omi 保持沉默，直到您接通一些。';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return '播放至 $device。';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => '通过手机扬声器大声播放。';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return '您可以随时在 $settings › $voiceResponse 中更改此设置';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return '随时重播此导览 $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => '耳机';
 }

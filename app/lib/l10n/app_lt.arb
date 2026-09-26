@@ -3561,5 +3561,22 @@
     "deviceOnboardingAllSetTitle": "Viskas paruošta",
     "deviceOnboardingAllSetSubtitle": "Palieskite eilutę, kad ją peržiūrėtumėte arba pakeistumėte.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Kai klausiate mygtuku, Omi gali perskaityti atsakymą garsiai.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Išgirskite savo paskutinį atsakymą",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Leidžiamas paskutinis jūsų atsakymas...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "Tel. {device}",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Per telefono garsiakalbį",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Per esamą garso išvestį",
+    "deviceOnboardingVoiceReplyOffDescription": "Atsakymai lieka ekrane. Nieko nekalbama.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Privatus. Kalba tik per AirPods, Bluetooth arba laidines ausines.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Naudoja telefono garsiakalbį, kai neprijungtos ausinės.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi tylės. Atsakymai vis tiek rodomi programoje.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} prijungtas. Čia kalbės Omi.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "Neprijungtos ausinės. Omi tyli, kol kai kuriuos prijungiate.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Groja per {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Groja garsiai per telefono garsiakalbį.",
+    "deviceOnboardingVoiceReplySettingsHint": "Tai galite bet kada pakeisti numeriu {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "Pakartokite šią kelionę bet kuriuo metu {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Ausinės"
 }

@@ -13391,5 +13391,107 @@
     "deviceOnboardingAllSetTitle": "You're All Set",
     "deviceOnboardingAllSetSubtitle": "Tap a row to review or change it.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "When you ask with the button, Omi can read its answer out loud.",
+    "@deviceOnboardingVoiceReplySubtitle": {
+        "description": "Teaching subtitle for the voice reply onboarding step"
+    },
+    "deviceOnboardingVoiceReplyPreviewIdle": "Hear your last answer",
+    "@deviceOnboardingVoiceReplyPreviewIdle": {
+        "description": "Title of the idle voice answer preview card"
+    },
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Playing your last answer...",
+    "@deviceOnboardingVoiceReplyPreviewPlaying": {
+        "description": "Title of the voice answer preview card while audio is playing"
+    },
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "Through {device}",
+    "@deviceOnboardingVoiceReplyPreviewThroughDevice": {
+        "description": "Voice preview output route when headphones are connected",
+        "placeholders": {
+            "device": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Through the phone speaker",
+    "@deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": {
+        "description": "Voice preview output route when using the phone speaker"
+    },
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Through the current audio output",
+    "@deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": {
+        "description": "Voice preview output route while the system route is not yet known"
+    },
+    "deviceOnboardingVoiceReplyOffDescription": "Answers stay on screen. Nothing is spoken.",
+    "@deviceOnboardingVoiceReplyOffDescription": {
+        "description": "Description of the Off voice response mode"
+    },
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Private. Speaks only through AirPods, Bluetooth or wired headphones.",
+    "@deviceOnboardingVoiceReplyHeadphonesDescription": {
+        "description": "Description of the Headphones only voice response mode"
+    },
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Uses the phone speaker when no headphones are connected.",
+    "@deviceOnboardingVoiceReplyAlwaysDescription": {
+        "description": "Description of the Always voice response mode"
+    },
+    "deviceOnboardingVoiceReplyStatusOff": "Omi will stay silent. Answers still appear in the app.",
+    "@deviceOnboardingVoiceReplyStatusOff": {
+        "description": "Output consequence when voice responses are off"
+    },
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} connected. Omi will speak here.",
+    "@deviceOnboardingVoiceReplyStatusHeadphonesConnected": {
+        "description": "Output consequence for Headphones only mode with connected headphones",
+        "placeholders": {
+            "device": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "No headphones connected. Omi stays silent until you connect some.",
+    "@deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": {
+        "description": "Output consequence for Headphones only mode without connected headphones"
+    },
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Plays through {device}.",
+    "@deviceOnboardingVoiceReplyStatusAlwaysHeadphones": {
+        "description": "Output consequence for Always mode with connected headphones",
+        "placeholders": {
+            "device": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Plays out loud through the phone speaker.",
+    "@deviceOnboardingVoiceReplyStatusAlwaysSpeaker": {
+        "description": "Output consequence for Always mode without connected headphones"
+    },
+    "deviceOnboardingVoiceReplySettingsHint": "You can change this anytime in {settings} › {voiceResponse}",
+    "@deviceOnboardingVoiceReplySettingsHint": {
+        "description": "Footer explaining where to change voice response settings",
+        "placeholders": {
+            "settings": {
+                "type": "String"
+            },
+            "voiceResponse": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingAllSetReplayHint": "Replay this tour anytime in {settings} › {deviceSettings} › {deviceTutorial}",
+    "@deviceOnboardingAllSetReplayHint": {
+        "description": "Footer explaining the complete Settings menu path for replaying the device tutorial",
+        "placeholders": {
+            "settings": {
+                "type": "String"
+            },
+            "deviceSettings": {
+                "type": "String"
+            },
+            "deviceTutorial": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Headphones",
+    "@deviceOnboardingVoiceReplyGenericHeadphones": {
+        "description": "Generic fallback name for connected headphones when the system does not provide a device name"
+    }
 }

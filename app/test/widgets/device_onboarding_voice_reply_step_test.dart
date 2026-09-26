@@ -131,20 +131,58 @@ void main() {
 
     routes.emit(const VoiceOutputRoute.headphones('AirPods Pro'));
     await tester.pump();
-    expect(find.text('AirPods Pro · Connected'), findsOneWidget);
+    expect(find.text('AirPods Pro connected. Omi will speak here.'), findsOneWidget);
 
     routes.emit(const VoiceOutputRoute.speaker());
     await tester.pump();
-    expect(find.text('Headphones only · Disconnected'), findsOneWidget);
+    expect(find.text('No headphones connected. Omi stays silent until you connect some.'), findsOneWidget);
 
     routes.emit(const VoiceOutputRoute.unknown());
     await tester.pump();
-    expect(find.text('Audio Output · Disconnected'), findsOneWidget);
+    expect(find.text('No headphones connected. Omi stays silent until you connect some.'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('voice_reply_mode_always')));
     routes.emit(const VoiceOutputRoute.speaker());
     await tester.pump();
-    expect(find.text('Speaker · Connected'), findsOneWidget);
+    expect(find.text('Plays out loud through the phone speaker.'), findsOneWidget);
+
+    routes.emit(const VoiceOutputRoute.headphones('AirPods Pro'));
+    await tester.pump();
+    expect(find.text('Plays through AirPods Pro.'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('voice_reply_mode_off')));
+    await tester.pump();
+    expect(find.text('Omi will stay silent. Answers still appear in the app.'), findsOneWidget);
+  });
+
+  testWidgets('teaching copy explains preview, modes, and settings paths', (tester) async {
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final provider = DeviceOnboardingProvider()..startOnboarding();
+    final routes = _FakeRouteSource();
+    addTearDown(routes.close);
+
+    await tester.pumpWidget(_app(
+      provider: provider,
+      child: VoiceReplyStep(
+        firstRun: true,
+        outputRouteSource: routes,
+        playPreview: (_) async {},
+        stopPreview: () async {},
+        onComplete: () {},
+      ),
+    ));
+    routes.emit(const VoiceOutputRoute.headphones('AirPods Pro'));
+    await tester.pump();
+
+    expect(find.text('When you ask with the button, Omi can read its answer out loud.'), findsOneWidget);
+    expect(find.text('Hear your last answer'), findsOneWidget);
+    expect(find.text('Through AirPods Pro'), findsOneWidget);
+    expect(find.text('Answers stay on screen. Nothing is spoken.'), findsOneWidget);
+    expect(find.text('Private. Speaks only through AirPods, Bluetooth or wired headphones.'), findsOneWidget);
+    expect(find.text('Uses the phone speaker when no headphones are connected.'), findsOneWidget);
+    expect(find.text('You can change this anytime in Settings › Voice Response'), findsOneWidget);
   });
 
   testWidgets('leaving the step stops an in-flight preview', (tester) async {
@@ -171,6 +209,7 @@ void main() {
     await tester.tap(find.byKey(const Key('voice_reply_preview_button')));
     await tester.pump();
     expect(find.byIcon(Icons.stop_rounded), findsOneWidget);
+    expect(find.text('Playing your last answer...'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     expect(stopCalls, 1);
@@ -192,6 +231,10 @@ void main() {
     expect(find.text("You're All Set"), findsOneWidget);
     expect(find.text('Headphones only'), findsOneWidget);
     expect(find.text('Star Ongoing Conversation'), findsOneWidget);
+    expect(
+      find.text('Replay this tour anytime in Settings › Device Settings › How to Use Your Omi'),
+      findsOneWidget,
+    );
     expect(find.byKey(const Key('all_set_press_once')), findsOneWidget);
     expect(find.byKey(const Key('all_set_voice_reply')), findsOneWidget);
     expect(find.byKey(const Key('all_set_double_tap')), findsOneWidget);

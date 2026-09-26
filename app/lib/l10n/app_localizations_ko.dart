@@ -11102,4 +11102,65 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => '버튼으로 질문하면 Omi가 답변을 소리내어 읽어줄 수 있습니다.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => '마지막 답변을 들어보세요';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => '마지막 답변을 재생 중입니다...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '$device을 통해';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => '전화 스피커를 통해';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => '현재 오디오 출력을 통해';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => '답변은 화면에 그대로 유지됩니다. 아무 말도하지 않습니다.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription => '비공개. AirPods, Bluetooth 또는 유선 헤드폰을 통해서만 말합니다.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => '헤드폰이 연결되어 있지 않을 때 휴대폰 스피커를 사용합니다.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi는 침묵할 것입니다. 답변은 여전히 ​​앱에 표시됩니다.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device 연결되었습니다. Omi가 여기서 말할 것입니다.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected => '연결된 헤드폰이 없습니다. Omi는 연결될 때까지 침묵을 유지합니다.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return '$device을 통해 재생됩니다.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => '전화 스피커를 통해 큰 소리로 재생됩니다.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return '$settings › $voiceResponse에서 언제든지 변경할 수 있습니다.';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return '$settings › $deviceSettings › $deviceTutorial에서 언제든지 이 둘러보기를 다시 재생하세요.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => '헤드폰';
 }

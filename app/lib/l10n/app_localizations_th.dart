@@ -11219,4 +11219,67 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'เมื่อคุณถามด้วยปุ่ม Omi จะสามารถอ่านออกเสียงคำตอบได้';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'ฟังคำตอบสุดท้ายของคุณ';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'กำลังเล่นคำตอบสุดท้ายของคุณ...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'ผ่าน $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'ผ่านลำโพงโทรศัพท์';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'ผ่านเอาต์พุตเสียงปัจจุบัน';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'คำตอบยังคงอยู่บนหน้าจอ ไม่มีอะไรจะพูด';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'ส่วนตัว. พูดผ่าน AirPods, Bluetooth หรือหูฟังแบบมีสายเท่านั้น';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'ใช้ลำโพงโทรศัพท์เมื่อไม่ได้เชื่อมต่อหูฟัง';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omiจะนิ่งเงียบ คำตอบยังคงปรากฏในแอป';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device เชื่อมต่อแล้ว Omi จะพูดที่นี่';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'ไม่มีหูฟังเชื่อมต่ออยู่ Omi จะเงียบจนกว่าคุณจะเชื่อมต่อบางส่วน';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'เล่นผ่าน $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'เล่นเสียงดังผ่านลำโพงโทรศัพท์';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'คุณสามารถเปลี่ยนได้ตลอดเวลาใน $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'เล่นทัวร์นี้ซ้ำได้ทุกเมื่อใน $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'หูฟัง';
 }

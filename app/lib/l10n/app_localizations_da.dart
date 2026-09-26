@@ -11270,4 +11270,68 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'Når du spørger med knappen, kan Omi læse sit svar højt.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Hør dit sidste svar';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Afspiller dit sidste svar...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Gennem $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Gennem telefonens højttaler';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Gennem den aktuelle lydudgang';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Svarene bliver på skærmen. Der bliver ikke talt noget.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Privat. Taler kun gennem AirPods, Bluetooth eller kablede hovedtelefoner.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Bruger telefonens højttaler, når der ikke er tilsluttet hovedtelefoner.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi forbliver tavs. Svarene vises stadig i appen.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device tilsluttet. Omi vil tale her.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Ingen høretelefoner tilsluttet. Omi forbliver tavs, indtil du tilslutter nogle.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Afspiller gennem $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Spiller højt gennem telefonens højttaler.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Du kan til enhver tid ændre dette i $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Gentag denne tur når som helst i $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Hovedtelefoner';
 }

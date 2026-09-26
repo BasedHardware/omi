@@ -3561,5 +3561,22 @@
     "deviceOnboardingAllSetTitle": "Ja ho tens tot a punt",
     "deviceOnboardingAllSetSubtitle": "Toca una fila per revisar-la o canviar-la.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Quan pregunteu amb el botó, Omi pot llegir la seva resposta en veu alta.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Escolta la teva última resposta",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "S'està reproduint la teva última resposta...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "A través del {device}",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "A través de l'altaveu del telèfon",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "A través de la sortida d'àudio actual",
+    "deviceOnboardingVoiceReplyOffDescription": "Les respostes es mantenen a la pantalla. No es parla res.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Privat. Parla només a través del AirPods, Bluetooth o auriculars amb cable.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Utilitza l'altaveu del telèfon quan no hi ha cap auricular connectat.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi romandrà en silenci. Les respostes encara apareixen a l'aplicació.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} connectat. Omi parlarà aquí.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "No hi ha auriculars connectats. Omi roman en silenci fins que en connecteu algun.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Reproducció al {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Es reprodueix en veu alta a través de l'altaveu del telèfon.",
+    "deviceOnboardingVoiceReplySettingsHint": "Podeu canviar-ho en qualsevol moment al {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "Repetiu aquesta gira en qualsevol moment a {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Auriculars"
 }

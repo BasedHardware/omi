@@ -3561,5 +3561,22 @@
     "deviceOnboardingAllSetTitle": "Kaikki on valmista",
     "deviceOnboardingAllSetSubtitle": "Tarkista tai muuta riviä napauttamalla sitä.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Kun kysyt painikkeella, Omi voi lukea vastauksensa ääneen.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Kuuntele viimeinen vastauksesi",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Toistetaan viimeistä vastaustasi...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "{device} kautta",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Puhelimen kaiuttimen kautta",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Nykyisen äänilähdön kautta",
+    "deviceOnboardingVoiceReplyOffDescription": "Vastaukset pysyvät näytöllä. Mitään ei puhuta.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Yksityinen. Puhuu vain numeroiden AirPods, Bluetooth tai langallisten kuulokkeiden kautta.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Käyttää puhelimen kaiutinta, kun kuulokkeita ei ole kytketty.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi pysyy hiljaa. Vastaukset näkyvät edelleen sovelluksessa.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} yhdistetty. Omi puhuu täällä.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "Kuulokkeita ei ole kytketty. Omi pysyy äänettömänä, kunnes yhdistät osan.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Toistaa numeron {device} kautta.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Toistaa ääneen puhelimen kaiuttimesta.",
+    "deviceOnboardingVoiceReplySettingsHint": "Voit muuttaa tätä milloin tahansa numerossa {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "Toista tämä kiertue milloin tahansa numerossa {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Kuulokkeet"
 }

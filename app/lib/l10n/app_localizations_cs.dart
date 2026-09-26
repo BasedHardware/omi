@@ -11281,4 +11281,69 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Když se zeptáte pomocí tlačítka, Omi může svou odpověď přečíst nahlas.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Poslechněte si svou poslední odpověď';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Přehrávání vaší poslední odpovědi...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Prostřednictvím $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Prostřednictvím reproduktoru telefonu';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Prostřednictvím aktuálního audio výstupu';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Odpovědi zůstávají na obrazovce. Nic se nemluví.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Soukromé. Mluví pouze prostřednictvím AirPods, Bluetooth nebo kabelových sluchátek.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Používá reproduktor telefonu, když nejsou připojena sluchátka.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Číslo Omi zůstane tiché. Odpovědi se stále zobrazují v aplikaci.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device připojeno. Zde bude mluvit Omi.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Nejsou připojena žádná sluchátka. Číslo Omi zůstane tiché, dokud nějaké nepřipojíte.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Hraje přes $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Přehrává nahlas přes reproduktor telefonu.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Toto můžete kdykoli změnit na $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Přehrajte si tuto prohlídku kdykoli na čísle $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Sluchátka';
 }

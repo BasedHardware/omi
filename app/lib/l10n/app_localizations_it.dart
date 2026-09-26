@@ -11347,4 +11347,71 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Quando chiedi con il pulsante, Omi può leggere la sua risposta ad alta voce.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Ascolta la tua ultima risposta';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Riproduzione della tua ultima risposta...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Tramite $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Attraverso l\'altoparlante del telefono';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Attraverso l\'uscita audio corrente';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Le risposte rimangono sullo schermo. Non si parla nulla.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Privato. Parla solo tramite AirPods, Bluetooth o cuffie con filo.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Utilizza l\'altoparlante del telefono quando non sono collegate le cuffie.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff =>
+      'Omi resterà in silenzio. Le risposte continuano ad essere visualizzate nell\'app.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device collegato. Omi parlerà qui.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Nessuna cuffia collegata. Omi rimane silenzioso finché non ne colleghi qualcuno.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Riproduce fino a $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker =>
+      'Viene riprodotto ad alta voce attraverso l\'altoparlante del telefono.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Puoi modificarlo in qualsiasi momento al numero $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Riproduci questo tour in qualsiasi momento al numero $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Cuffie';
 }

@@ -11313,4 +11313,69 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Калі вы пытаецеся з дапамогай кнопкі, Omi можа прачытаць свой адказ услых.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Слухайце свой апошні адказ';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Прайграванне вашага апошняга адказу...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Праз $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Праз дынамік тэлефона';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Праз бягучы гукавы выхад';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Адказы застаюцца на экране. Нічога не гавораць.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Прыватны. Размаўляе толькі праз AirPods, Bluetooth або праз правадныя навушнікі.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Выкарыстоўвае дынамік тэлефона, калі навушнікі не падключаны.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi будзе маўчаць. Адказы па-ранейшаму з\'яўляюцца ў праграме.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device падлучаны. Тут будзе гаварыць Omi.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Навушнікі не падключаны. Omi маўчыць, пакуль вы не падключыце некаторыя.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Гуляе праз $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Прайграванне ўслых праз дынамік тэлефона.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Вы можаце змяніць гэта ў любы час у $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Паўтарыце гэты тур у любы час у $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Навушнікі';
 }

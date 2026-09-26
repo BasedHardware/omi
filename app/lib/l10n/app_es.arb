@@ -3561,5 +3561,22 @@
     "deviceOnboardingAllSetTitle": "Todo está listo",
     "deviceOnboardingAllSetSubtitle": "Toca una fila para revisarla o cambiarla.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Cuando preguntas con el botón, Omi puede leer su respuesta en voz alta.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Escuche su última respuesta",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Reproduciendo tu última respuesta...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "A través del {device}",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "A través del altavoz del teléfono",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "A través de la salida de audio actual",
+    "deviceOnboardingVoiceReplyOffDescription": "Las respuestas permanecen en la pantalla. No se habla nada.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Privado. Habla sólo a través del AirPods, Bluetooth o auriculares con cable.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Utiliza el altavoz del teléfono cuando no hay auriculares conectados.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi permanecerá en silencio. Las respuestas todavía aparecen en la aplicación.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} conectado. Omi hablará aquí.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "No hay auriculares conectados. Omi permanece en silencio hasta que conectes alguno.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Reproduce a través del {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Se reproduce en voz alta a través del altavoz del teléfono.",
+    "deviceOnboardingVoiceReplySettingsHint": "Puedes cambiar esto en cualquier momento en {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "Reproduce este recorrido en cualquier momento en {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "auriculares"
 }

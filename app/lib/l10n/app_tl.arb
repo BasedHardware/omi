@@ -11121,5 +11121,22 @@
     "deviceOnboardingAllSetTitle": "Handa Ka Na",
     "deviceOnboardingAllSetSubtitle": "I-tap ang isang row para suriin o baguhin ito.",
     "deviceOnboardingAllSetSinglePressBadge": "1×",
-    "deviceOnboardingAllSetDoublePressBadge": "2×"
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Kapag nagtanong ka gamit ang button, mababasa ng Omi ang sagot nito nang malakas.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Pakinggan ang iyong huling sagot",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Pinapatugtog ang iyong huling sagot...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "Sa pamamagitan ng {device}",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Sa pamamagitan ng speaker ng telepono",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Sa pamamagitan ng kasalukuyang output ng audio",
+    "deviceOnboardingVoiceReplyOffDescription": "Mananatili sa screen ang mga sagot. Walang sinasabi.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Pribado. Nagsasalita lamang sa pamamagitan ng AirPods, Bluetooth o wired headphones.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Ginagamit ang speaker ng telepono kapag walang nakakonektang headphone.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi mananatiling tahimik. Lumalabas pa rin ang mga sagot sa app.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} konektado. Omi ang magsasalita dito.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "Walang nakakonektang headphone. Omi mananatiling tahimik hanggang sa kumonekta ka ng ilan.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Nagpe-play sa pamamagitan ng {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Tumutugtog nang malakas sa pamamagitan ng speaker ng telepono.",
+    "deviceOnboardingVoiceReplySettingsHint": "Maaari mo itong baguhin anumang oras sa {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "I-replay ang tour na ito anumang oras sa {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Mga headphone"
 }

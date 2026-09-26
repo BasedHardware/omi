@@ -11332,4 +11332,68 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'మీరు బటన్‌తో అడిగినప్పుడు, Omi దాని సమాధానాన్ని బిగ్గరగా చదవగలదు.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'మీ చివరి సమాధానం వినండి';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'మీ చివరి సమాధానాన్ని ప్లే చేస్తోంది...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '$device ద్వారా';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'ఫోన్ స్పీకర్ ద్వారా';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'ప్రస్తుత ఆడియో అవుట్‌పుట్ ద్వారా';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'సమాధానాలు తెరపైనే ఉంటాయి. ఏమీ మాట్లాడలేదు.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'ప్రైవేట్. AirPods, Bluetooth లేదా వైర్డు హెడ్‌ఫోన్‌ల ద్వారా మాత్రమే మాట్లాడుతుంది.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'హెడ్‌ఫోన్‌లు కనెక్ట్ కానప్పుడు ఫోన్ స్పీకర్‌ని ఉపయోగిస్తుంది.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi మౌనంగా ఉంటుంది. సమాధానాలు ఇప్పటికీ యాప్‌లో కనిపిస్తాయి.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device కనెక్ట్ చేయబడింది. Omi ఇక్కడ మాట్లాడతారు.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'హెడ్‌ఫోన్‌లు కనెక్ట్ కాలేదు. మీరు కొన్నింటిని కనెక్ట్ చేసే వరకు Omi నిశ్శబ్దంగా ఉంటుంది.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return '$device ద్వారా ఆడుతుంది.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'ఫోన్ స్పీకర్ ద్వారా బిగ్గరగా ప్లే చేస్తుంది.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'మీరు దీన్ని ఎప్పుడైనా $settings › $voiceResponseలో మార్చవచ్చు';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'ఈ పర్యటనను ఎప్పుడైనా $settings › $deviceSettings › $deviceTutorialలో మళ్లీ ప్లే చేయండి';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'హెడ్‌ఫోన్‌లు';
 }

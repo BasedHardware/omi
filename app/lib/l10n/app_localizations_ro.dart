@@ -11336,4 +11336,70 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Când întrebați cu butonul, Omi își poate citi răspunsul cu voce tare.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Ascultă ultimul tău răspuns';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Redac ultimul răspuns...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Prin $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Prin difuzorul telefonului';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Prin ieșirea audio curentă';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Răspunsurile rămân pe ecran. Nu se vorbeste nimic.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Privat. Vorbește doar prin AirPods, Bluetooth sau căști cu fir.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Utilizează difuzorul telefonului când nu sunt conectate căști.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff =>
+      'Omi va rămâne tăcut. Răspunsurile apar în continuare în aplicație.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device conectat. Omi va vorbi aici.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Nu există căști conectate. Omi rămâne tăcut până când conectați unele.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Redă prin $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Redă cu voce tare prin difuzorul telefonului.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Puteți schimba oricând acest lucru în $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Reluați acest tur oricând în $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Căști';
 }
