@@ -63,8 +63,8 @@ omi --json goal list | python goals_to_markdown.py - --output-dir ~/vault/goals/
 # Omi Tracked Goals
 
 ---
-**Generated:** `2026-09-26 12:00 UTC`  
-**Total Goals:** `2` (`2 active`, `0 completed`)  
+**Generated:** `2026-09-26 12:00 UTC`
+**Total Goals:** `2` (`2 active`, `0 completed`)
 ---
 
 ## Active Goals
