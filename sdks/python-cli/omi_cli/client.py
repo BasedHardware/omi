@@ -151,7 +151,7 @@ class OmiClient:
                     if response.status_code >= 500:
                         retry_after = _parse_retry_after(response.headers.get("Retry-After"))
                         if _retry_after_exceeds_automatic_wait(retry_after):
-                            if method in {"POST", "PATCH"}:
+                            if method in _AMBIGUOUS_WRITE_METHODS:
                                 raise _unknown_write_outcome(method, response=response)
                             raise self._error_from_response(response)
                         raise _RetryableHttp(response, retry_after=retry_after)
@@ -164,16 +164,16 @@ class OmiClient:
                         raise _RetryableHttp(response, retry_after=retry_after)
                     return self._handle_response(response)
         except _RetryableHttp as exc:
-            if method in {"POST", "PATCH"} and exc.response.status_code >= 500:
+            if method in _AMBIGUOUS_WRITE_METHODS and exc.response.status_code >= 500:
                 raise _unknown_write_outcome(method, response=exc.response) from exc
             # We exhausted retries — convert to the proper CliError now.
             raise self._error_from_response(exc.response)
         except httpx.TransportError as exc:
-            if method in {"POST", "PATCH"} and not isinstance(
+            if method in _AMBIGUOUS_WRITE_METHODS and not isinstance(
                 exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
             ):
                 raise _unknown_write_outcome(method) from exc
-            if method in {"POST", "PATCH"}:
+            if method in _AMBIGUOUS_WRITE_METHODS:
                 raise TransportError(
                     message="Connection failed",
                     detail=f"{type(exc).__name__} after {MAX_RETRY_ATTEMPTS} attempts. Check your connection and retry.",
@@ -263,12 +263,18 @@ class _RetryableHttp(Exception):
         self.retry_after = retry_after
 
 
+# Methods whose replay is unsafe once the request may have reached the server.
+# DELETE is included: a lost response or 5xx leaves the resource's removal
+# ambiguous, exactly like a POST/PATCH body write.
+_AMBIGUOUS_WRITE_METHODS = frozenset({"POST", "PATCH", "DELETE"})
+
+
 def _may_retry(method: str, exc: BaseException) -> bool:
     """Only replay writes when the failure establishes they were not applied."""
     if isinstance(exc, _RetryableHttp):
-        return method not in {"POST", "PATCH"} or exc.response.status_code == 429
+        return method not in _AMBIGUOUS_WRITE_METHODS or exc.response.status_code == 429
     if isinstance(exc, httpx.TransportError):
-        return method not in {"POST", "PATCH"} or isinstance(
+        return method not in _AMBIGUOUS_WRITE_METHODS or isinstance(
             exc, (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
         )
     return False
