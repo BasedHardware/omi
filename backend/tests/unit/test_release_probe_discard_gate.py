@@ -248,3 +248,27 @@ class TestReleaseProbeSkipsTheEmptyTitleFallback:
         result = pc._get_conversation_obj('uid-human', _structured(''), _conversation([]))
 
         assert result.discarded is True
+
+    def test_kept_empty_llm_title_gets_deterministic_server_fallback(self):
+        conversation = _conversation([_segment('Quarterly planning is ready. More detail follows.', 0.0, 3.0)])
+
+        result = pc._get_conversation_obj(
+            'uid-human',
+            _structured(''),
+            conversation,
+            relevance_discarded=False,
+        )
+
+        assert result.discarded is False
+        assert result.structured.title == 'Quarterly planning is ready.'
+
+    def test_explicit_discard_keeps_empty_title_as_the_durable_verdict(self):
+        result = pc._get_conversation_obj(
+            'uid-human',
+            _structured(''),
+            _conversation([]),
+            relevance_discarded=True,
+        )
+
+        assert result.discarded is True
+        assert result.structured.title == ''
