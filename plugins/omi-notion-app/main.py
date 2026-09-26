@@ -12,7 +12,7 @@ import secrets
 from datetime import datetime, timedelta
 import html
 from typing import Optional, List, Dict, Any
-from urllib.parse import urlencode, urlsplit, parse_qs
+from urllib.parse import urlencode, urlsplit, parse_qs, quote
 
 import requests
 from dotenv import load_dotenv
@@ -1251,6 +1251,10 @@ async def notion_callback(
 
         store_notion_tokens(uid, access_token, workspace_id, workspace_name, bot_id)
 
+        # uid is placed into the success-page "Continue" link href; URL-encode
+        # and HTML-attribute-escape it so it cannot break out of the attribute.
+        safe_continue_attr = html.escape(f"/?uid={quote(str(uid), safe='')}", quote=True)
+
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -1266,7 +1270,7 @@ async def notion_callback(
                         <p>Your Notion workspace is now linked to Omi</p>
                     </div>
 
-                    <a href="/?uid={uid}" class="btn btn-primary btn-block">
+                    <a href="{safe_continue_attr}" class="btn btn-primary btn-block">
                         Continue to Settings
                     </a>
 
