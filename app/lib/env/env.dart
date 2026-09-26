@@ -53,8 +53,11 @@ abstract class Env {
   /// its own scheme: the App Store app also registers `omi://`, and iOS gave it the redirect.
   static const _authCallbackSchemeFromDefine = String.fromEnvironment('OMI_AUTH_CALLBACK_SCHEME');
 
-  static String get authCallbackScheme =>
-      _authCallbackSchemeFromDefine.isNotEmpty ? _authCallbackSchemeFromDefine : profile.authCallbackScheme;
+  static String get authCallbackScheme => resolveAuthCallbackScheme(_authCallbackSchemeFromDefine, profile);
+
+  /// The `OMI_AUTH_CALLBACK_SCHEME` define when set, else [profile]'s own scheme.
+  static String resolveAuthCallbackScheme(String define, AppEnvironmentProfile profile) =>
+      define.isNotEmpty ? define : profile.authCallbackScheme;
 
   static String get authRedirectUri => '$authCallbackScheme://auth/callback';
 

@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:omi/pages/settings/widgets/developer_section_header.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/pages/settings/widgets/create_mcp_api_key_dialog.dart';
 import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
@@ -47,22 +48,10 @@ class DeveloperMcpSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        OmiSectionHeader(
-          l10n.mcp,
-          // The buttons wrap rather than overflow on a narrow phone at a large text size.
-          trailing: Wrap(
-            spacing: OmiSpacing.xs,
-            runSpacing: OmiSpacing.xs,
-            children: [
-              const DeveloperDocsButton(url: 'https://docs.omi.me/doc/developer/MCP', analyticsLabel: 'MCP'),
-              OmiButton.secondary(
-                label: l10n.createKey,
-                leading: const FaIcon(FontAwesomeIcons.plus),
-                size: OmiButtonSize.compact,
-                onPressed: () => showDialog(context: context, builder: (_) => const CreateMcpApiKeyDialog()),
-              ),
-            ],
-          ),
+        DeveloperSectionHeader(
+          title: l10n.mcp,
+          docs: const DeveloperDocsButton(url: 'https://docs.omi.me/doc/developer/MCP', analyticsLabel: 'MCP'),
+          onCreateKey: () => showDialog(context: context, builder: (_) => const CreateMcpApiKeyDialog()),
         ),
         const _McpKeysList(),
         const SizedBox(height: OmiSpacing.xl),

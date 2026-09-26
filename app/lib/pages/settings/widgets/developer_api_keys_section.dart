@@ -1,3 +1,4 @@
+import 'package:omi/pages/settings/widgets/developer_section_header.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
@@ -32,32 +33,20 @@ class DeveloperApiKeysSection extends StatelessWidget {
         builder: (context) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            OmiSectionHeader(
-              context.l10n.developerApi,
-              // The buttons wrap rather than overflow on a narrow phone at a large text size.
-              trailing: Wrap(
-                spacing: OmiSpacing.xs,
-                runSpacing: OmiSpacing.xs,
-                children: [
-                  OmiButton.secondary(
-                    label: context.l10n.docs,
-                    size: OmiButtonSize.compact,
-                    onPressed: () {
-                      launchUrl(Uri.parse(_docsUrl));
-                      PlatformManager.instance.analytics.pageOpened('Developer API Docs');
-                    },
-                  ),
-                  OmiButton.secondary(
-                    label: context.l10n.createKey,
-                    leading: const FaIcon(FontAwesomeIcons.plus),
-                    size: OmiButtonSize.compact,
-                    onPressed: () {
-                      final provider = Provider.of<DevApiKeyProvider>(context, listen: false);
-                      CreateDevApiKeySheet.show(context, provider);
-                    },
-                  ),
-                ],
+            DeveloperSectionHeader(
+              title: context.l10n.developerApi,
+              docs: OmiButton.secondary(
+                label: context.l10n.docs,
+                size: OmiButtonSize.compact,
+                onPressed: () {
+                  launchUrl(Uri.parse(_docsUrl));
+                  PlatformManager.instance.analytics.pageOpened('Developer API Docs');
+                },
               ),
+              onCreateKey: () {
+                final provider = Provider.of<DevApiKeyProvider>(context, listen: false);
+                CreateDevApiKeySheet.show(context, provider);
+              },
             ),
 
             // API Keys List

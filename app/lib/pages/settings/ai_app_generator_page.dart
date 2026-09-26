@@ -107,18 +107,14 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                           const SizedBox(height: OmiSpacing.lg),
 
                           // Suggestion cards (shimmer while they load)
-                          SizedBox(
-                            // Three lines and Try it grow with the reader's text size (a fixed 160pt
-                            // strip cut them at 1.3x).
-                            height: 160 * math.max(1.0, MediaQuery.textScalerOf(context).scale(16) / 16),
-                            child: ListView.builder(
-                              scrollDirection: Axis.horizontal,
-                              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
-                              itemCount: provider.isLoadingPrompts ? 3 : provider.samplePrompts.length,
-                              itemBuilder: (context, index) => provider.isLoadingPrompts
-                                  ? const _SuggestionCardShimmer()
-                                  : _buildSuggestionCard(provider.samplePrompts[index]),
-                            ),
+                          AiSuggestionStrip(
+                            prompts: provider.samplePrompts,
+                            loading: provider.isLoadingPrompts,
+                            onTry: (title) {
+                              _promptController.text = title;
+                              _promptFocusNode.requestFocus();
+                              setState(() {});
+                            },
                           ),
 
                           if (provider.errorMessage != null) ...[
@@ -336,37 +332,6 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
             ),
           ),
       ],
-    );
-  }
-
-  Widget _buildSuggestionCard(String title) {
-    return Container(
-      width: 260,
-      margin: const EdgeInsets.only(right: OmiSpacing.sm),
-      padding: const EdgeInsets.all(OmiSpacing.lg),
-      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: OmiType.callout.copyWith(fontWeight: FontWeight.w500, height: 1.4),
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const Spacer(),
-          OmiButton.secondary(
-            label: context.l10n.tryIt,
-            size: OmiButtonSize.compact,
-            onPressed: () {
-              OmiHaptics.light();
-              _promptController.text = title;
-              _promptFocusNode.requestFocus();
-              setState(() {});
-            },
-          ),
-        ],
-      ),
     );
   }
 
@@ -830,6 +795,58 @@ class _ShimmerBlock extends StatelessWidget {
 }
 
 /// A suggestion card while the sample prompts load.
+/// "Try something like": suggestion cards of up to three lines, each with Try it. The strip grows
+/// with the reader's text size (a fixed 160 pt strip cut the cards at larger text).
+class AiSuggestionStrip extends StatelessWidget {
+  const AiSuggestionStrip({super.key, required this.prompts, required this.loading, required this.onTry});
+
+  final List<String> prompts;
+  final bool loading;
+  final ValueChanged<String> onTry;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 160 * math.max(1.0, MediaQuery.textScalerOf(context).scale(16) / 16),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
+        itemCount: loading ? 3 : prompts.length,
+        itemBuilder: (context, index) => loading ? const _SuggestionCardShimmer() : _card(context, prompts[index]),
+      ),
+    );
+  }
+
+  Widget _card(BuildContext context, String title) {
+    return Container(
+      width: 260,
+      margin: const EdgeInsets.only(right: OmiSpacing.sm),
+      padding: const EdgeInsets.all(OmiSpacing.lg),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: OmiType.callout.copyWith(fontWeight: FontWeight.w500, height: 1.4),
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const Spacer(),
+          OmiButton.secondary(
+            label: context.l10n.tryIt,
+            size: OmiButtonSize.compact,
+            onPressed: () {
+              OmiHaptics.light();
+              onTry(title);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _SuggestionCardShimmer extends StatelessWidget {
   const _SuggestionCardShimmer();
 
