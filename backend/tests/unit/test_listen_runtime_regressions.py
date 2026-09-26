@@ -1138,3 +1138,82 @@ async def test_heartbeat_stops_after_close_message_instead_of_crashing():
     await runtime._heartbeat()
 
     assert runtime.state.active is False
+
+
+@pytest.mark.anyio
+async def test_legacy_process_loop_handles_numeric_and_none_started_at(monkeypatch):
+    """Legacy process_loop must not crash with AttributeError when started_at is None or numeric."""
+    import routers.listen.transcripts as transcripts_module
+
+    monkeypatch.setattr(transcripts_module, 'deserialize_conversation', lambda _data: SimpleNamespace())
+    host = SimpleNamespace(
+        wait=AsyncMock(return_value=False),
+        limits=SimpleNamespace(max_segment_buffer_size=8, max_photo_buffer_size=8),
+        translation_language=None,
+        state=SimpleNamespace(
+            active=True,
+            first_audio_byte_timestamp=1000.0,
+            last_transcript_time=0.0,
+            current_conversation_id='c1',
+            capture_timeline_v2=False,
+            speaker_id_enabled=False,
+            speaker_map_dirty=False,
+            words_transcribed_since_last_record=0,
+        ),
+        speakers=SimpleNamespace(tasks=set(), drain=AsyncMock(), person_embeddings={}),
+        request=SimpleNamespace(uid='u', speaker_auto_assign_enabled=False),
+        onboarding_handler=None,
+        onboarding_omi_speaker_id=None,
+        send_event=MagicMock(),
+        persistence=SimpleNamespace(call=AsyncMock()),
+    )
+    processor = TranscriptProcessor(host)
+    processor.cache = MagicMock()
+    processor.cache.get = AsyncMock(
+        return_value={
+            'id': 'c1',
+            'started_at': None,
+            'transcript_segments': [
+                {'id': 'seg-0', 'text': 'hi', 'start': 0.0, 'end': 1.0, 'speaker_id': 0, 'is_user': False}
+            ],
+        }
+    )
+    processor._write_live_update = AsyncMock()
+    processor._update_live_conversation = AsyncMock(
+        return_value=(SimpleNamespace(id='c1', transcript_segments=[]), [], [])
+    )
+    processor._deliver_live_updates = AsyncMock()
+    processor._speaker_detection = AsyncMock()
+    processor.flush_speaker_assignments = AsyncMock()
+
+    raw_segment = {'id': 'seg-1', 'start': 1.0, 'end': 2.0, 'text': 'hello', 'speaker_id': 0, 'is_user': False}
+    processor.enqueue([raw_segment])
+
+    call_count = 0
+
+    async def mock_wait(_delay):
+        nonlocal call_count
+        call_count += 1
+        if call_count > 1:
+            return True
+        return False
+
+    host.wait = mock_wait
+
+    await asyncio.wait_for(processor.process_loop(), timeout=1.0)
+    assert host.state.last_transcript_time > 0.0
+
+    # Also test numeric float started_at (would crash on .timestamp())
+    processor.cache.get = AsyncMock(
+        return_value={
+            'id': 'c1',
+            'started_at': 990.0,
+            'transcript_segments': [
+                {'id': 'seg-0', 'text': 'hi', 'start': 0.0, 'end': 1.0, 'speaker_id': 0, 'is_user': False}
+            ],
+        }
+    )
+    processor.enqueue([raw_segment])
+    call_count = 0
+    await asyncio.wait_for(processor.process_loop(), timeout=1.0)
+    assert host.state.last_transcript_time > 0.0

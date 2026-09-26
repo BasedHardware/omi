@@ -423,10 +423,10 @@ class TranscriptProcessor:
                         self.host.state.first_audio_byte_timestamp + raw_segments[0]['start'], tz=timezone.utc
                     )
                     data['started_at'] = started_at
-                conversation_started = data['started_at']
-                if isinstance(conversation_started, str):
-                    conversation_started = datetime.fromisoformat(conversation_started)
-                offset = self.host.state.first_audio_byte_timestamp - conversation_started.timestamp()
+                started_ts = (
+                    persisted_started_seconds(data.get('started_at')) or self.host.state.first_audio_byte_timestamp
+                )
+                offset = self.host.state.first_audio_byte_timestamp - started_ts
                 self.speaker_id_allocator.hydrate(data.get('transcript_segments', []))
                 for raw in raw_segments:
                     self.speaker_id_allocator.assign(raw)
