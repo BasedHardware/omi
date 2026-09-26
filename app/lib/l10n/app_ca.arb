@@ -3555,5 +3555,17 @@
     "capturePhoneStorageFull": "Emmagatzematge del telèfon ple",
     "captureStorageAlmostFull": "Emmagatzematge gairebé ple",
     "capturePendantDisconnectedDetail": "El penjoll ha perdut la connexió amb aquest telèfon. Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop. Tot el que s'ha gravat abans és segur.",
-    "participantsSummaryUncounted": "{name} i altres"
+    "participantsSummaryUncounted": "{name} i altres",
+    "transcriptionUnavailableSavingOnDevice": "Transcripció no disponible · s'està desant al dispositiu",
+    "addToClaudeConfig": "Afegir a claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Afegeix a claude_desktop_config.json",
+    "useYourMcpApiKey": "Utilitza la teva clau API MCP",
+    "singlePress": "Pulsació simple",
+    "triplePress": "Pulsació triple",
+    "longPress": "Pulsació llarga",
+    "turnOnOff": "Encendre/Apagar",
+    "singlePressAction": "Acció de pulsació simple",
+    "triplePressAction": "Acció de pulsació triple",
+    "askQuestion": "Fer una pregunta",
+    "longPressFixedNotice": "La pulsació llarga encén/apaga el dispositiu i no es pot personalitzar."
 }

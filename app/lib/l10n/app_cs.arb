@@ -3555,5 +3555,17 @@
     "capturePhoneStorageFull": "Úložiště telefonu je plné",
     "captureStorageAlmostFull": "Úložiště je téměř plné",
     "capturePendantDisconnectedDetail": "Přívěsek ztratil spojení s tímto telefonem. Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž. Vše nahrané předtím je v bezpečí.",
-    "participantsSummaryUncounted": "{name} a další"
+    "participantsSummaryUncounted": "{name} a další",
+    "transcriptionUnavailableSavingOnDevice": "Přepis není k dispozici · ukládá se v zařízení",
+    "addToClaudeConfig": "Přidat do claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Přidat do claude_desktop_config.json",
+    "useYourMcpApiKey": "Použijte svůj MCP API klíč",
+    "singlePress": "Jedno stisknutí",
+    "triplePress": "Trojité stisknutí",
+    "longPress": "Dlouhé stisknutí",
+    "turnOnOff": "Zapnout/Vypnout",
+    "singlePressAction": "Akce jednoho stisknutí",
+    "triplePressAction": "Akce trojitého stisknutí",
+    "askQuestion": "Položit otázku",
+    "longPressFixedNotice": "Dlouhým stisknutím se zařízení zapíná/vypíná a nelze jej přizpůsobit."
 }

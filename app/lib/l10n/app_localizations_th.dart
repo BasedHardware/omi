@@ -11201,4 +11201,40 @@ class AppLocalizationsTh extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name และคนอื่นๆ';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'การถอดเสียงไม่พร้อมใช้งาน · กำลังบันทึกในอุปกรณ์';
+
+  @override
+  String get addToClaudeConfig => 'เพิ่มไปยัง claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'เพิ่มไปยัง claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'ใช้คีย์ MCP API ของคุณ';
+
+  @override
+  String get singlePress => 'กดหนึ่งครั้ง';
+
+  @override
+  String get triplePress => 'กดสามครั้ง';
+
+  @override
+  String get longPress => 'กดค้าง';
+
+  @override
+  String get turnOnOff => 'เปิด/ปิด';
+
+  @override
+  String get singlePressAction => 'การดำเนินการกดหนึ่งครั้ง';
+
+  @override
+  String get triplePressAction => 'การดำเนินการกดสามครั้ง';
+
+  @override
+  String get askQuestion => 'ถามคำถาม';
+
+  @override
+  String get longPressFixedNotice => 'การกดค้างจะเป็นการเปิด/ปิดเครื่อง และไม่สามารถปรับแต่งได้';
 }

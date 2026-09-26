@@ -11281,4 +11281,40 @@ class AppLocalizationsPt extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name e outros';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transcrição indisponível · salvando no dispositivo';
+
+  @override
+  String get addToClaudeConfig => 'Adicionar ao claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Adicionar ao claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'Use sua chave API MCP';
+
+  @override
+  String get singlePress => 'Toque único';
+
+  @override
+  String get triplePress => 'Toque triplo';
+
+  @override
+  String get longPress => 'Pressionar longamente';
+
+  @override
+  String get turnOnOff => 'Ligar/Desligar';
+
+  @override
+  String get singlePressAction => 'Ação de toque único';
+
+  @override
+  String get triplePressAction => 'Ação de toque triplo';
+
+  @override
+  String get askQuestion => 'Fazer uma pergunta';
+
+  @override
+  String get longPressFixedNotice => 'Pressionar longamente liga/desliga o dispositivo e não pode ser personalizado.';
 }

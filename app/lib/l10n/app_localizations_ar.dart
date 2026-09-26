@@ -11197,4 +11197,40 @@ class AppLocalizationsAr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name وآخرون';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'النسخ غير متوفر · يتم الحفظ على الجهاز';
+
+  @override
+  String get addToClaudeConfig => 'أضف إلى claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'أضف إلى claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'استخدم مفتاح MCP API الخاص بك';
+
+  @override
+  String get singlePress => 'نقرة واحدة';
+
+  @override
+  String get triplePress => 'ثلاث نقرات';
+
+  @override
+  String get longPress => 'ضغط مطول';
+
+  @override
+  String get turnOnOff => 'تشغيل/إيقاف';
+
+  @override
+  String get singlePressAction => 'إجراء النقر المفرد';
+
+  @override
+  String get triplePressAction => 'إجراء النقر الثلاثي';
+
+  @override
+  String get askQuestion => 'طرح سؤال';
+
+  @override
+  String get longPressFixedNotice => 'الضغط المطول يقوم بتشغيل/إيقاف تشغيل الجهاز ولا يمكن تخصيصه.';
 }

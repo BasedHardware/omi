@@ -3590,5 +3590,17 @@
     "capturePhoneStorageFull": "Stockage du téléphone plein",
     "captureStorageAlmostFull": "Stockage presque plein",
     "capturePendantDisconnectedDetail": "Votre pendentif a perdu la connexion avec ce téléphone. Omi se reconnectera tout seul quand le pendentif sera allumé et à proximité. Tout ce qui a été enregistré avant est en sécurité.",
-    "participantsSummaryUncounted": "{name} et d'autres"
+    "participantsSummaryUncounted": "{name} et d'autres",
+    "transcriptionUnavailableSavingOnDevice": "Transcription indisponible · enregistrement sur l'appareil",
+    "addToClaudeConfig": "Ajouter à claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Ajouter à claude_desktop_config.json",
+    "useYourMcpApiKey": "Utilisez votre clé API MCP",
+    "singlePress": "Simple appui",
+    "triplePress": "Triple appui",
+    "longPress": "Appui long",
+    "turnOnOff": "Allumer/Éteindre",
+    "singlePressAction": "Action simple appui",
+    "triplePressAction": "Action triple appui",
+    "askQuestion": "Poser une question",
+    "longPressFixedNotice": "L'appui long allume/éteint l'appareil et ne peut pas être personnalisé."
 }

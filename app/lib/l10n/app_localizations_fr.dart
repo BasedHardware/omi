@@ -11362,4 +11362,40 @@ class AppLocalizationsFr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name et d\'autres';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transcription indisponible · enregistrement sur l\'appareil';
+
+  @override
+  String get addToClaudeConfig => 'Ajouter à claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Ajouter à claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'Utilisez votre clé API MCP';
+
+  @override
+  String get singlePress => 'Simple appui';
+
+  @override
+  String get triplePress => 'Triple appui';
+
+  @override
+  String get longPress => 'Appui long';
+
+  @override
+  String get turnOnOff => 'Allumer/Éteindre';
+
+  @override
+  String get singlePressAction => 'Action simple appui';
+
+  @override
+  String get triplePressAction => 'Action triple appui';
+
+  @override
+  String get askQuestion => 'Poser une question';
+
+  @override
+  String get longPressFixedNotice => 'L\'appui long allume/éteint l\'appareil et ne peut pas être personnalisé.';
 }

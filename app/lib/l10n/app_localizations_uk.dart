@@ -11286,4 +11286,40 @@ class AppLocalizationsUk extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name та інші';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Транскрипція недоступна · зберігається на пристрої';
+
+  @override
+  String get addToClaudeConfig => 'Додати до claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Додати до claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'Використовуйте свій MCP API-ключ';
+
+  @override
+  String get singlePress => 'Одинарне натискання';
+
+  @override
+  String get triplePress => 'Потрійне натискання';
+
+  @override
+  String get longPress => 'Довге натискання';
+
+  @override
+  String get turnOnOff => 'Увімкнути/Вимкнути';
+
+  @override
+  String get singlePressAction => 'Дія одинарного натискання';
+
+  @override
+  String get triplePressAction => 'Дія потрійного натискання';
+
+  @override
+  String get askQuestion => 'Поставити запитання';
+
+  @override
+  String get longPressFixedNotice => 'Довге натискання вмикає/вимикає пристрій і не може бути налаштоване.';
 }

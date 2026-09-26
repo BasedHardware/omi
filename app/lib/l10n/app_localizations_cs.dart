@@ -11263,4 +11263,40 @@ class AppLocalizationsCs extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name a další';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Přepis není k dispozici · ukládá se v zařízení';
+
+  @override
+  String get addToClaudeConfig => 'Přidat do claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Přidat do claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'Použijte svůj MCP API klíč';
+
+  @override
+  String get singlePress => 'Jedno stisknutí';
+
+  @override
+  String get triplePress => 'Trojité stisknutí';
+
+  @override
+  String get longPress => 'Dlouhé stisknutí';
+
+  @override
+  String get turnOnOff => 'Zapnout/Vypnout';
+
+  @override
+  String get singlePressAction => 'Akce jednoho stisknutí';
+
+  @override
+  String get triplePressAction => 'Akce trojitého stisknutí';
+
+  @override
+  String get askQuestion => 'Položit otázku';
+
+  @override
+  String get longPressFixedNotice => 'Dlouhým stisknutím se zařízení zapíná/vypíná a nelze jej přizpůsobit.';
 }

@@ -3555,5 +3555,17 @@
     "capturePhoneStorageFull": "Пам’ять телефона заповнена",
     "captureStorageAlmostFull": "Пам’ять майже заповнена",
     "capturePendantDisconnectedDetail": "Кулон втратив зв’язок із цим телефоном. Omi перепідключиться сам, коли кулон буде ввімкнений і поруч. Усе, що записано до цього, збережено.",
-    "participantsSummaryUncounted": "{name} та інші"
+    "participantsSummaryUncounted": "{name} та інші",
+    "transcriptionUnavailableSavingOnDevice": "Транскрипція недоступна · зберігається на пристрої",
+    "addToClaudeConfig": "Додати до claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Додати до claude_desktop_config.json",
+    "useYourMcpApiKey": "Використовуйте свій MCP API-ключ",
+    "singlePress": "Одинарне натискання",
+    "triplePress": "Потрійне натискання",
+    "longPress": "Довге натискання",
+    "turnOnOff": "Увімкнути/Вимкнути",
+    "singlePressAction": "Дія одинарного натискання",
+    "triplePressAction": "Дія потрійного натискання",
+    "askQuestion": "Поставити запитання",
+    "longPressFixedNotice": "Довге натискання вмикає/вимикає пристрій і не може бути налаштоване."
 }

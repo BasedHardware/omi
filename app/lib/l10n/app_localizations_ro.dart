@@ -11318,4 +11318,40 @@ class AppLocalizationsRo extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name și alții';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transcriere indisponibilă · se salvează pe dispozitiv';
+
+  @override
+  String get addToClaudeConfig => 'Adaugă la claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Adaugă la claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'Folosește cheia ta API MCP';
+
+  @override
+  String get singlePress => 'O singură apăsare';
+
+  @override
+  String get triplePress => 'Apăsare triplă';
+
+  @override
+  String get longPress => 'Apăsare lungă';
+
+  @override
+  String get turnOnOff => 'Pornire/Oprire';
+
+  @override
+  String get singlePressAction => 'Acțiune la o singură apăsare';
+
+  @override
+  String get triplePressAction => 'Acțiune la apăsare triplă';
+
+  @override
+  String get askQuestion => 'Pune o întrebare';
+
+  @override
+  String get longPressFixedNotice => 'Apăsarea lungă pornește/oprește dispozitivul și nu poate fi personalizată.';
 }

@@ -11176,4 +11176,40 @@ class AppLocalizationsHe extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ואחרים';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'תמליל לא זמין · נשמר במכשיר';
+
+  @override
+  String get addToClaudeConfig => 'הוסף ל-claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'הוסף ל-claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'השתמש במפתח ה-API של MCP שלך';
+
+  @override
+  String get singlePress => 'לחיצה אחת';
+
+  @override
+  String get triplePress => 'לחיצה משולשת';
+
+  @override
+  String get longPress => 'לחיצה ארוכה';
+
+  @override
+  String get turnOnOff => 'הפעלה/כיבוי';
+
+  @override
+  String get singlePressAction => 'פעולת לחיצה אחת';
+
+  @override
+  String get triplePressAction => 'פעולת לחיצה משולשת';
+
+  @override
+  String get askQuestion => 'שאל שאלה';
+
+  @override
+  String get longPressFixedNotice => 'לחיצה ארוכה מפעילה/מכבה את המכשיר ולא ניתן להתאימה אישית.';
 }

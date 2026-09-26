@@ -11327,4 +11327,40 @@ class AppLocalizationsMk extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name и други';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Транскрипцијата е недостапна · се зачувува на уредот';
+
+  @override
+  String get addToClaudeConfig => 'Додај во claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Додај во claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'Користи твој MCP API клуч';
+
+  @override
+  String get singlePress => 'Еден притисок';
+
+  @override
+  String get triplePress => 'Троен притисок';
+
+  @override
+  String get longPress => 'Долго притискање';
+
+  @override
+  String get turnOnOff => 'Вклучи/Исклучи';
+
+  @override
+  String get singlePressAction => 'Акција за еден притисок';
+
+  @override
+  String get triplePressAction => 'Акција за троен притисок';
+
+  @override
+  String get askQuestion => 'Постави прашање';
+
+  @override
+  String get longPressFixedNotice => 'Долго притискање го вклучува/исклучува уредот и не може да се прилагоди.';
 }

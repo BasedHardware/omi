@@ -11364,4 +11364,41 @@ class AppLocalizationsTl extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name at iba pa';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Hindi available ang transcript · naka-save sa device';
+
+  @override
+  String get addToClaudeConfig => 'Idagdag sa claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Idagdag sa claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'Gamitin ang iyong MCP API key';
+
+  @override
+  String get singlePress => 'Isang Pindot';
+
+  @override
+  String get triplePress => 'Tatlong Pindot';
+
+  @override
+  String get longPress => 'Matagal na Pindot';
+
+  @override
+  String get turnOnOff => 'Buksan/Patayin';
+
+  @override
+  String get singlePressAction => 'Aksyon ng Isang Pindot';
+
+  @override
+  String get triplePressAction => 'Aksyon ng Tatlong Pindot';
+
+  @override
+  String get askQuestion => 'Magtanong';
+
+  @override
+  String get longPressFixedNotice =>
+      'Binubuksan/pinapatay ng matagal na pindot ang device at hindi maaaring i-customize.';
 }

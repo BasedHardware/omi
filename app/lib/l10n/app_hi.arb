@@ -3555,5 +3555,17 @@
     "capturePhoneStorageFull": "फ़ोन स्टोरेज भर गया",
     "captureStorageAlmostFull": "स्टोरेज लगभग भर गया",
     "capturePendantDisconnectedDetail": "आपके पेंडेंट का इस फ़ोन से कनेक्शन टूट गया। पेंडेंट चालू और पास होने पर Omi अपने आप फिर से कनेक्ट हो जाएगा। इससे पहले रिकॉर्ड की गई हर चीज़ सुरक्षित है।",
-    "participantsSummaryUncounted": "{name} और अन्य"
+    "participantsSummaryUncounted": "{name} और अन्य",
+    "transcriptionUnavailableSavingOnDevice": "ट्रांसक्रिप्शन अनुपलब्ध · डिवाइस पर सहेजा जा रहा है",
+    "addToClaudeConfig": "claude_desktop_config.json में जोड़ें",
+    "addToClaudeDesktopConfig": "claude_desktop_config.json में जोड़ें",
+    "useYourMcpApiKey": "अपनी MCP API कुंजी का उपयोग करें",
+    "singlePress": "एक बार दबाएं",
+    "triplePress": "तीन बार दबाएं",
+    "longPress": "देर तक दबाएं",
+    "turnOnOff": "चालू/बंद करें",
+    "singlePressAction": "एक बार दबाने की क्रिया",
+    "triplePressAction": "तीन बार दबाने की क्रिया",
+    "askQuestion": "सवाल पूछें",
+    "longPressFixedNotice": "देर तक दबाने से डिवाइस चालू/बंद होता है और इसे कस्टमाइज़ नहीं किया जा सकता।"
 }

@@ -3590,5 +3590,17 @@
     "capturePhoneStorageFull": "Penyimpanan ponsel penuh",
     "captureStorageAlmostFull": "Penyimpanan hampir penuh",
     "capturePendantDisconnectedDetail": "Liontin kehilangan koneksi dengan ponsel ini. Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda. Semua yang direkam sebelumnya aman.",
-    "participantsSummaryUncounted": "{name} dan lainnya"
+    "participantsSummaryUncounted": "{name} dan lainnya",
+    "transcriptionUnavailableSavingOnDevice": "Transkripsi tidak tersedia · disimpan di perangkat",
+    "addToClaudeConfig": "Tambahkan ke claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Tambahkan ke claude_desktop_config.json",
+    "useYourMcpApiKey": "Gunakan kunci API MCP Anda",
+    "singlePress": "Tekan Sekali",
+    "triplePress": "Tekan Tiga Kali",
+    "longPress": "Tekan Lama",
+    "turnOnOff": "Nyalakan/Matikan",
+    "singlePressAction": "Aksi Tekan Sekali",
+    "triplePressAction": "Aksi Tekan Tiga Kali",
+    "askQuestion": "Ajukan Pertanyaan",
+    "longPressFixedNotice": "Tekan lama untuk menyalakan/mematikan perangkat dan tidak dapat disesuaikan."
 }

@@ -3555,5 +3555,17 @@
     "capturePhoneStorageFull": "Memoria del telefono piena",
     "captureStorageAlmostFull": "Memoria quasi piena",
     "capturePendantDisconnectedDetail": "Il ciondolo ha perso la connessione con questo telefono. Omi si riconnetterà da solo quando il ciondolo sarà acceso e vicino. Tutto ciò che è stato registrato prima è al sicuro.",
-    "participantsSummaryUncounted": "{name} e altri"
+    "participantsSummaryUncounted": "{name} e altri",
+    "transcriptionUnavailableSavingOnDevice": "Trascrizione non disponibile · salvataggio sul dispositivo",
+    "addToClaudeConfig": "Aggiungi a claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Aggiungi a claude_desktop_config.json",
+    "useYourMcpApiKey": "Usa la tua chiave API MCP",
+    "singlePress": "Singolo Tocco",
+    "triplePress": "Triplo Tocco",
+    "longPress": "Pressione Prolungata",
+    "turnOnOff": "Accendi/Spegni",
+    "singlePressAction": "Azione Singolo Tocco",
+    "triplePressAction": "Azione Triplo Tocco",
+    "askQuestion": "Fai una domanda",
+    "longPressFixedNotice": "La pressione prolungata accende/spegne il dispositivo e non può essere personalizzata."
 }

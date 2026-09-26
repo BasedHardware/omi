@@ -11330,4 +11330,40 @@ class AppLocalizationsCa extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name i altres';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transcripció no disponible · s\'està desant al dispositiu';
+
+  @override
+  String get addToClaudeConfig => 'Afegir a claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Afegeix a claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'Utilitza la teva clau API MCP';
+
+  @override
+  String get singlePress => 'Pulsació simple';
+
+  @override
+  String get triplePress => 'Pulsació triple';
+
+  @override
+  String get longPress => 'Pulsació llarga';
+
+  @override
+  String get turnOnOff => 'Encendre/Apagar';
+
+  @override
+  String get singlePressAction => 'Acció de pulsació simple';
+
+  @override
+  String get triplePressAction => 'Acció de pulsació triple';
+
+  @override
+  String get askQuestion => 'Fer una pregunta';
+
+  @override
+  String get longPressFixedNotice => 'La pulsació llarga encén/apaga el dispositiu i no es pot personalitzar.';
 }

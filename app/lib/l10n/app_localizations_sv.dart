@@ -11275,4 +11275,40 @@ class AppLocalizationsSv extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name och andra';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkription inte tillgänglig · sparas på enheten';
+
+  @override
+  String get addToClaudeConfig => 'Lägg till i claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Lägg till i claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'Använd din MCP API-nyckel';
+
+  @override
+  String get singlePress => 'Enkeltryck';
+
+  @override
+  String get triplePress => 'Trippeltryck';
+
+  @override
+  String get longPress => 'Långt tryck';
+
+  @override
+  String get turnOnOff => 'Slå på/av';
+
+  @override
+  String get singlePressAction => 'Enkeltrycksåtgärd';
+
+  @override
+  String get triplePressAction => 'Trippeltrycksåtgärd';
+
+  @override
+  String get askQuestion => 'Ställ en fråga';
+
+  @override
+  String get longPressFixedNotice => 'Långt tryck slår på/av enheten och kan inte anpassas.';
 }

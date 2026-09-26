@@ -11058,4 +11058,40 @@ class AppLocalizationsZh extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name等人';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => '转录不可用 · 正在设备上保存';
+
+  @override
+  String get addToClaudeConfig => '添加到 claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => '添加到 claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => '使用您的 MCP API 密钥';
+
+  @override
+  String get singlePress => '单击';
+
+  @override
+  String get triplePress => '三击';
+
+  @override
+  String get longPress => '长按';
+
+  @override
+  String get turnOnOff => '开机/关机';
+
+  @override
+  String get singlePressAction => '单击操作';
+
+  @override
+  String get triplePressAction => '三击操作';
+
+  @override
+  String get askQuestion => '提问';
+
+  @override
+  String get longPressFixedNotice => '长按用于开关机，无法自定义。';
 }

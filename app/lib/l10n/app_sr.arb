@@ -11115,5 +11115,23 @@
     "capturePhoneStorageFull": "Меморија телефона је пуна",
     "captureStorageAlmostFull": "Меморија је скоро пуна",
     "capturePendantDisconnectedDetail": "Привезак је изгубио везу са овим телефоном. Omi ће се сам поново повезати кад је привезак укључен и у близини. Све снимљено до сада је безбедно.",
-    "participantsSummaryUncounted": "{name} и други"
+    "participantsSummaryUncounted": "{name} и други",
+    "transcriptionUnavailableSavingOnDevice": "Транскрипција недоступна · чува се на уређају",
+    "addToClaudeConfig": "Додај на claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Додај у claude_desktop_config.json",
+    "@addToClaudeDesktopConfig": {
+        "description": "Description for Claude Desktop config"
+    },
+    "useYourMcpApiKey": "Користи свој MCP API кључ",
+    "@useYourMcpApiKey": {
+        "description": "Hint for client secret value"
+    },
+    "singlePress": "Један притисак",
+    "triplePress": "Три притиска",
+    "longPress": "Дуг притисак",
+    "turnOnOff": "Укључи/Искључи",
+    "singlePressAction": "Акција једног притиска",
+    "triplePressAction": "Акција три притиска",
+    "askQuestion": "Постави питање",
+    "longPressFixedNotice": "Дуг притисак укључује/искључује уређај и не може се прилагодити."
 }

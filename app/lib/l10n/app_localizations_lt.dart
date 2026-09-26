@@ -11285,4 +11285,40 @@ class AppLocalizationsLt extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ir kiti';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkripcija neprieinama · saugoma įrenginyje';
+
+  @override
+  String get addToClaudeConfig => 'Pridėti į claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Pridėti prie claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'Naudokite savo MCP API raktą';
+
+  @override
+  String get singlePress => 'Vienas paspaudimas';
+
+  @override
+  String get triplePress => 'Trigubas paspaudimas';
+
+  @override
+  String get longPress => 'Ilgas paspaudimas';
+
+  @override
+  String get turnOnOff => 'Įjungti / išjungti';
+
+  @override
+  String get singlePressAction => 'Vieno paspaudimo veiksmas';
+
+  @override
+  String get triplePressAction => 'Trigubo paspaudimo veiksmas';
+
+  @override
+  String get askQuestion => 'Užduoti klausimą';
+
+  @override
+  String get longPressFixedNotice => 'Ilgas paspaudimas įjungia / išjungia įrenginį ir jo negalima tinkinti.';
 }

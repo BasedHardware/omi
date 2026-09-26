@@ -11115,5 +11115,23 @@
     "capturePhoneStorageFull": "ఫోన్ స్టోరేజ్ నిండింది",
     "captureStorageAlmostFull": "స్టోరేజ్ దాదాపు నిండింది",
     "capturePendantDisconnectedDetail": "మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.",
-    "participantsSummaryUncounted": "{name} మరియు ఇతరులు"
+    "participantsSummaryUncounted": "{name} మరియు ఇతరులు",
+    "transcriptionUnavailableSavingOnDevice": "ట్రాన్స్‌క్రిప్షన్ అందుబాటులో లేదు · పరికరంలో సేవ్ చేయబడుతోంది",
+    "addToClaudeConfig": "claude_desktop_config.json కు జోడించండి",
+    "addToClaudeDesktopConfig": "claude_desktop_config.json కు జోడించండి",
+    "@addToClaudeDesktopConfig": {
+        "description": "Description for Claude Desktop config"
+    },
+    "useYourMcpApiKey": "మీ MCP API కీని ఉపయోగించండి",
+    "@useYourMcpApiKey": {
+        "description": "Hint for client secret value"
+    },
+    "singlePress": "ఒకే నొక్కడం",
+    "triplePress": "మూడు నొక్కడం",
+    "longPress": "ఎక్కువసేపు నొక్కండి",
+    "turnOnOff": "ఆన్/ఆఫ్ చేయండి",
+    "singlePressAction": "ఒకే నొక్కడం చర్య",
+    "triplePressAction": "మూడు నొక్కడం చర్య",
+    "askQuestion": "ప్రశ్న అడగండి",
+    "longPressFixedNotice": "ఎక్కువసేపు నొక్కడం పరికరాన్ని ఆన్/ఆఫ్ చేస్తుంది మరియు అనుకూలీకరించబడదు."
 }

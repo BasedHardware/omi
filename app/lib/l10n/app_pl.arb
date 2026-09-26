@@ -3590,5 +3590,17 @@
     "capturePhoneStorageFull": "Pamięć telefonu pełna",
     "captureStorageAlmostFull": "Pamięć prawie pełna",
     "capturePendantDisconnectedDetail": "Wisiorek utracił połączenie z tym telefonem. Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu. Wszystko nagrane wcześniej jest bezpieczne.",
-    "participantsSummaryUncounted": "{name} i inni"
+    "participantsSummaryUncounted": "{name} i inni",
+    "transcriptionUnavailableSavingOnDevice": "Transkrypcja niedostępna · zapisywanie na urządzeniu",
+    "addToClaudeConfig": "Dodaj do claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Dodaj do claude_desktop_config.json",
+    "useYourMcpApiKey": "Użyj swojego klucza API MCP",
+    "singlePress": "Pojedyncze naciśnięcie",
+    "triplePress": "Potrójne naciśnięcie",
+    "longPress": "Długie naciśnięcie",
+    "turnOnOff": "Włącz/Wyłącz",
+    "singlePressAction": "Akcja pojedynczego naciśnięcia",
+    "triplePressAction": "Akcja potrójnego naciśnięcia",
+    "askQuestion": "Zadaj pytanie",
+    "longPressFixedNotice": "Długie naciśnięcie włącza/wyłącza urządzenie i nie można go dostosować."
 }

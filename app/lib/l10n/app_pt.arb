@@ -3590,5 +3590,17 @@
     "capturePhoneStorageFull": "Armazenamento do telefone cheio",
     "captureStorageAlmostFull": "Armazenamento quase cheio",
     "capturePendantDisconnectedDetail": "Seu pendente perdeu a conexão com este telefone. O Omi se reconecta sozinho quando o pendente estiver ligado e por perto. Tudo o que foi gravado antes está seguro.",
-    "participantsSummaryUncounted": "{name} e outros"
+    "participantsSummaryUncounted": "{name} e outros",
+    "transcriptionUnavailableSavingOnDevice": "Transcrição indisponível · salvando no dispositivo",
+    "addToClaudeConfig": "Adicionar ao claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Adicionar ao claude_desktop_config.json",
+    "useYourMcpApiKey": "Use sua chave API MCP",
+    "singlePress": "Toque único",
+    "triplePress": "Toque triplo",
+    "longPress": "Pressionar longamente",
+    "turnOnOff": "Ligar/Desligar",
+    "singlePressAction": "Ação de toque único",
+    "triplePressAction": "Ação de toque triplo",
+    "askQuestion": "Fazer uma pergunta",
+    "longPressFixedNotice": "Pressionar longamente liga/desliga o dispositivo e não pode ser personalizado."
 }

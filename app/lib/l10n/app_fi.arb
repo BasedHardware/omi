@@ -3555,5 +3555,17 @@
     "capturePhoneStorageFull": "Puhelimen tallennustila täynnä",
     "captureStorageAlmostFull": "Tallennustila melkein täynnä",
     "capturePendantDisconnectedDetail": "Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa.",
-    "participantsSummaryUncounted": "{name} ja muut"
+    "participantsSummaryUncounted": "{name} ja muut",
+    "transcriptionUnavailableSavingOnDevice": "Transkriptio ei käytettävissä · tallennetaan laitteelle",
+    "addToClaudeConfig": "Lisää claude_desktop_config.json-tiedostoon",
+    "addToClaudeDesktopConfig": "Lisää claude_desktop_config.json-tiedostoon",
+    "useYourMcpApiKey": "Käytä MCP API -avaintasi",
+    "singlePress": "Kertapainallus",
+    "triplePress": "Kolmoispainallus",
+    "longPress": "Pitkä painallus",
+    "turnOnOff": "Kytke päälle/pois",
+    "singlePressAction": "Kertapainalluksen toiminto",
+    "triplePressAction": "Kolmoispainalluksen toiminto",
+    "askQuestion": "Esitä kysymys",
+    "longPressFixedNotice": "Pitkä painallus käynnistää/sammuttaa laitteen, eikä sitä voi mukauttaa."
 }

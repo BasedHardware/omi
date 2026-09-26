@@ -3555,5 +3555,17 @@
     "capturePhoneStorageFull": "Telefonlagringen er full",
     "captureStorageAlmostFull": "Lagringen er nesten full",
     "capturePendantDisconnectedDetail": "Anhenget mistet forbindelsen til denne telefonen. Omi kobler til igjen av seg selv når anhenget er på og i nærheten. Alt som ble tatt opp før dette, er trygt.",
-    "participantsSummaryUncounted": "{name} og andre"
+    "participantsSummaryUncounted": "{name} og andre",
+    "transcriptionUnavailableSavingOnDevice": "Transkripsjon utilgjengelig · lagres på enheten",
+    "addToClaudeConfig": "Legg til i claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Legg til i claude_desktop_config.json",
+    "useYourMcpApiKey": "Bruk din MCP API-nøkkel",
+    "singlePress": "Enkelt trykk",
+    "triplePress": "Tredobbelt trykk",
+    "longPress": "Langt trykk",
+    "turnOnOff": "Slå på/av",
+    "singlePressAction": "Enkelt trykk-handling",
+    "triplePressAction": "Tredobbelt trykk-handling",
+    "askQuestion": "Still et spørsmål",
+    "longPressFixedNotice": "Langt trykk slår enheten på/av og kan ikke tilpasses."
 }

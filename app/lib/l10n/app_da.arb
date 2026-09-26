@@ -3597,5 +3597,17 @@
     "capturePhoneStorageFull": "Telefonens lager er fuldt",
     "captureStorageAlmostFull": "Lageret er næsten fuldt",
     "capturePendantDisconnectedDetail": "Dit vedhæng mistede forbindelsen til denne telefon. Omi genopretter forbindelsen af sig selv, når vedhænget er tændt og i nærheden. Alt optaget før dette er i sikkerhed.",
-    "participantsSummaryUncounted": "{name} og andre"
+    "participantsSummaryUncounted": "{name} og andre",
+    "transcriptionUnavailableSavingOnDevice": "Transskription utilgængelig · gemmes på enheden",
+    "addToClaudeConfig": "Tilføj til claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Tilføj til claude_desktop_config.json",
+    "useYourMcpApiKey": "Brug din MCP API-nøgle",
+    "singlePress": "Enkelt tryk",
+    "triplePress": "Tredobbelt tryk",
+    "longPress": "Langt tryk",
+    "turnOnOff": "Tænd/sluk",
+    "singlePressAction": "Enkelt tryk-handling",
+    "triplePressAction": "Tredobbelt tryk-handling",
+    "askQuestion": "Stil spørgsmål",
+    "longPressFixedNotice": "Langt tryk tænder/slukker enheden og kan ikke tilpasses."
 }

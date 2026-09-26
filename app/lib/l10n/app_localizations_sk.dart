@@ -11256,4 +11256,40 @@ class AppLocalizationsSk extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name a ďalší';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkripcia nedostupná · ukladá sa v zariadení';
+
+  @override
+  String get addToClaudeConfig => 'Pridať do claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Pridať do claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'Použite svoj MCP API kľúč';
+
+  @override
+  String get singlePress => 'Jedno stlačenie';
+
+  @override
+  String get triplePress => 'Trojité stlačenie';
+
+  @override
+  String get longPress => 'Dlhé stlačenie';
+
+  @override
+  String get turnOnOff => 'Zapnúť/Vypnúť';
+
+  @override
+  String get singlePressAction => 'Akcia jedného stlačenia';
+
+  @override
+  String get triplePressAction => 'Akcia trojitého stlačenia';
+
+  @override
+  String get askQuestion => 'Položiť otázku';
+
+  @override
+  String get longPressFixedNotice => 'Dlhým stlačením sa zariadenie zapína/vypína a nemožno ho prispôsobiť.';
 }

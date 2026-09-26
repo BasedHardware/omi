@@ -3555,5 +3555,17 @@
     "capturePhoneStorageFull": "手机存储空间已满",
     "captureStorageAlmostFull": "存储空间即将用完",
     "capturePendantDisconnectedDetail": "吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。",
-    "participantsSummaryUncounted": "{name}等人"
+    "participantsSummaryUncounted": "{name}等人",
+    "transcriptionUnavailableSavingOnDevice": "转录不可用 · 正在设备上保存",
+    "addToClaudeConfig": "添加到 claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "添加到 claude_desktop_config.json",
+    "useYourMcpApiKey": "使用您的 MCP API 密钥",
+    "singlePress": "单击",
+    "triplePress": "三击",
+    "longPress": "长按",
+    "turnOnOff": "开机/关机",
+    "singlePressAction": "单击操作",
+    "triplePressAction": "三击操作",
+    "askQuestion": "提问",
+    "longPressFixedNotice": "长按用于开关机，无法自定义。"
 }

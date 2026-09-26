@@ -11115,5 +11115,23 @@
     "capturePhoneStorageFull": "ফোনের স্টোরেজ পূর্ণ",
     "captureStorageAlmostFull": "স্টোরেজ প্রায় পূর্ণ",
     "capturePendantDisconnectedDetail": "আপনার পেনড্যান্ট এই ফোনের সাথে সংযোগ হারিয়েছে। পেনড্যান্ট চালু ও কাছে থাকলে Omi নিজে থেকেই আবার সংযোগ করবে। এর আগে যা রেকর্ড হয়েছে তা নিরাপদ।",
-    "participantsSummaryUncounted": "{name} ও অন্যরা"
+    "participantsSummaryUncounted": "{name} ও অন্যরা",
+    "transcriptionUnavailableSavingOnDevice": "ট্রান্সক্রিপশন অনুপলব্ধ · ডিভাইসে সংরক্ষণ হচ্ছে",
+    "addToClaudeConfig": "claude_desktop_config.json এ যোগ করুন",
+    "addToClaudeDesktopConfig": "claude_desktop_config.json এ যোগ করুন",
+    "@addToClaudeDesktopConfig": {
+        "description": "Description for Claude Desktop config"
+    },
+    "useYourMcpApiKey": "আপনার MCP API চাবি ব্যবহার করুন",
+    "@useYourMcpApiKey": {
+        "description": "Hint for client secret value"
+    },
+    "singlePress": "একবার চাপুন",
+    "triplePress": "তিনবার চাপুন",
+    "longPress": "দীর্ঘক্ষণ চাপুন",
+    "turnOnOff": "চালু/বন্ধ করুন",
+    "singlePressAction": "একবার চাপার ক্রিয়া",
+    "triplePressAction": "তিনবার চাপার ক্রিয়া",
+    "askQuestion": "প্রশ্ন জিজ্ঞাসা করুন",
+    "longPressFixedNotice": "দীর্ঘক্ষণ চাপলে ডিভাইসটি চালু/বন্ধ হয় এবং কাস্টমাইজ করা যায় না।"
 }

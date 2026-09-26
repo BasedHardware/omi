@@ -11314,4 +11314,40 @@ class AppLocalizationsTe extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name మరియు ఇతరులు';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'ట్రాన్స్‌క్రిప్షన్ అందుబాటులో లేదు · పరికరంలో సేవ్ చేయబడుతోంది';
+
+  @override
+  String get addToClaudeConfig => 'claude_desktop_config.json కు జోడించండి';
+
+  @override
+  String get addToClaudeDesktopConfig => 'claude_desktop_config.json కు జోడించండి';
+
+  @override
+  String get useYourMcpApiKey => 'మీ MCP API కీని ఉపయోగించండి';
+
+  @override
+  String get singlePress => 'ఒకే నొక్కడం';
+
+  @override
+  String get triplePress => 'మూడు నొక్కడం';
+
+  @override
+  String get longPress => 'ఎక్కువసేపు నొక్కండి';
+
+  @override
+  String get turnOnOff => 'ఆన్/ఆఫ్ చేయండి';
+
+  @override
+  String get singlePressAction => 'ఒకే నొక్కడం చర్య';
+
+  @override
+  String get triplePressAction => 'మూడు నొక్కడం చర్య';
+
+  @override
+  String get askQuestion => 'ప్రశ్న అడగండి';
+
+  @override
+  String get longPressFixedNotice => 'ఎక్కువసేపు నొక్కడం పరికరాన్ని ఆన్/ఆఫ్ చేస్తుంది మరియు అనుకూలీకరించబడదు.';
 }
