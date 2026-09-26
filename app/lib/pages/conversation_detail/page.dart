@@ -731,22 +731,13 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     }
   }
 
-  /// Shares the conversation's link. A private conversation is made public only after the reader
-  /// agrees ("Anyone with the link can view"), and goes back to private if the share sheet reports
-  /// that it was dismissed without sharing.
+  /// Shares the conversation's link: Share opens the system share sheet straight away, with no
+  /// question first. A private conversation becomes link-visible for the sheet and goes back to
+  /// private if the sheet reports that it was dismissed without sharing.
   Future<void> _shareConversation(ConversationDetailProvider provider) async {
     OmiHaptics.medium();
     final conversation = provider.conversation;
     final wasPrivate = conversation.visibility != ConversationVisibility.shared;
-    if (wasPrivate) {
-      final confirmed = await showOmiConfirm(
-        context,
-        title: context.l10n.shareConversationQuestion,
-        message: context.l10n.anyoneWithLinkCanView,
-        confirmLabel: context.l10n.share,
-      );
-      if (!confirmed || !mounted) return;
-    }
 
     setState(() => _isSharing = true);
     try {

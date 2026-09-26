@@ -154,20 +154,13 @@ Future<void> toggleConversationStarred(BuildContext context, ServerConversation 
   );
 }
 
-/// Shares [conversation]'s link, the same way the conversation page does: a private conversation
-/// first asks ("Anyone with the link can view"), becomes shared, and goes back to private when the
-/// share sheet is dismissed without sharing.
+/// Shares [conversation]'s link, the same way the conversation page does: the system share sheet
+/// opens straight away; a private conversation becomes link-visible for it and goes back to private
+/// when the sheet is dismissed without sharing.
 Future<void> shareConversation(BuildContext context, ServerConversation conversation) async {
   final l10n = context.l10n;
   final wasPrivate = conversation.visibility != ConversationVisibility.shared;
   if (wasPrivate) {
-    final confirmed = await showOmiConfirm(
-      context,
-      title: l10n.shareConversationQuestion,
-      message: l10n.anyoneWithLinkCanView,
-      confirmLabel: l10n.share,
-    );
-    if (!confirmed || !context.mounted) return;
     final ok = await setConversationVisibility(conversation.id);
     if (!context.mounted) return;
     if (!ok) {
