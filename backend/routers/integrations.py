@@ -460,7 +460,7 @@ def get_oauth_url(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
         redis_db.r.setex(state_key, OAUTH_STATE_EXPIRY, json.dumps(state_data))
     except Exception as e:
         logger.error(f'ERROR: Failed to store OAuth state in Redis: {e}')
-        raise HTTPException(status_code=500, detail=f"Failed to initialize OAuth flow: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to initialize OAuth flow. Please try again.")
 
     client_id_env = cast(str, oauth['client_id_env'])
     client_id = os.getenv(client_id_env)
