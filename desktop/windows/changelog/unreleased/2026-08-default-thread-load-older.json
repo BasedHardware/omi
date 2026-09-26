@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Scrolling to the top of the main chat now loads older messages from the server, not just the most recent 100 — so long cross-device conversations stay reachable on Windows."
+  ]
+}

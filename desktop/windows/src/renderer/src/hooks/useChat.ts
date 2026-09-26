@@ -17,7 +17,7 @@ import type {
   VoiceHubSeedContext
 } from '../../../shared/types'
 import { saveDesktopMessage } from '../lib/desktopChatMessages'
-import { getMessages as getSessionMessages } from '../lib/chatSessionsClient'
+import { getMessages as getSessionMessages, type DesktopMessage } from '../lib/chatSessionsClient'
 import {
   awaitUploadsSettled,
   clearAttachments,
@@ -81,6 +81,25 @@ export type ChatMsg = {
 
 const OMI_BASE = import.meta.env.VITE_OMI_API_BASE as string
 
+// Number of turns to fetch per backend page on the default shared thread.
+// Matches Mac's single-page import size; older pages are fetched on demand via
+// `loadOlder()` (offset pagination against the same `/v2/desktop/messages` source
+// — INV-CHAT-1: one shared transcript, no second store, no mirroring).
+const BACKEND_HISTORY_LIMIT = 100
+
+// Project a backend shared-thread message (newest-first wire shape) to the
+// render `ChatMsg`. Shared by the initial hydrate and `loadOlder` so both pages
+// map identically.
+function toSharedThreadMsg(m: DesktopMessage): ChatMsg {
+  return {
+    id: m.id,
+    role: m.sender === 'ai' ? 'assistant' : 'user',
+    content: m.text,
+    ...(m.evidence ? { evidence: m.evidence } : {}),
+    ...(m.attachments?.length ? { attachments: m.attachments } : {})
+  }
+}
+
 // Hard ceiling on a single streamed reply. Mirrors the macOS client's per-send
 // watchdog (ChatProvider.swift): if the SAME generation is still in flight after
 // this long, abort the fetch, unlatch the engine, and surface a timeout so a
@@ -120,6 +139,12 @@ const NOT_READY_POLL_INTERVAL_MS = 300
 
 export type UseChat = {
   history: ChatMsg[]
+  /** True when the default shared thread may have older turns on the backend
+   *  beyond the pages already loaded. Drives the "load older" affordance. */
+  hasMoreOlder: boolean
+  /** Fetch the next older page of the default shared thread (backend `offset`)
+   *  and prepend it to `history`. No-op when there is nothing older to load. */
+  loadOlder: () => void
   sending: boolean
   /** Monotonic signal emitted after a hosted chat request settles. Consumers can
    *  use it for post-send work without inferring completion from the shared busy
@@ -279,6 +304,13 @@ export function useChat(): UseChat {
     })
   }
   const startedAtRef = useRef<number>(0)
+  // Default-thread backend pagination: how many shared-thread turns we've pulled
+  // so far (the `offset` for the next older page) and whether an older page may
+  // still exist. Reset by the initial hydrate / thread switch (INV-CHAT-1: reads
+  // come from the one shared backend thread, never a local mirror).
+  const backendOffsetRef = useRef(0)
+  const loadingOlderRef = useRef(false)
+  const [hasMoreOlder, setHasMoreOlder] = useState(false)
   // Synchronous mirror of `sending` for the re-entrancy guard. The `sending` state
   // captured in a `send` closure can be stale (e.g. a queued/auto-sent voice
   // message firing right as a previous reply finishes), which would wrongly drop
@@ -337,49 +369,106 @@ export function useChat(): UseChat {
       })
   }
 
-  // In infinite mode the ongoing thread is loaded once on mount (and legacy
-  // id-less messages get backfilled ids so the merge can match them). This hook
-  // is the app's single chat engine now (the bar is a viewport over it via the
-  // main-process bridge — INV-CHAT-1), so there is one loader/writer.
+  // Load the default shared thread: backend first (cross-device source of truth —
+  // Mac/mobile turns are invisible in local SQLite), local SQLite fallback when not
+  // signed in or the network call fails. `isCurrent` is re-checked before every state
+  // write; `onSettled` fires once (.finally) so the caller can chain agent-card
+  // projection after history has settled.
+  const loadDefaultThreadHistory = (
+    chatId: string,
+    isCurrent: () => boolean,
+    onSettled: () => void
+  ): void => {
+    const run = async (): Promise<void> => {
+      // Fresh thread read resets the pagination cursor.
+      backendOffsetRef.current = 0
+      setHasMoreOlder(false)
+      if (auth.currentUser) {
+        try {
+          const msgs = await getSessionMessages({ limit: BACKEND_HISTORY_LIMIT })
+          if (!isCurrent()) return
+          if (msgs.length) {
+            // Backend returns messages newest-first; reverse to chronological order
+            // for display (same as mobile: messages.sort ascending by createdAt).
+            setHistory([...msgs].reverse().map(toSharedThreadMsg))
+            backendOffsetRef.current = msgs.length
+            setHasMoreOlder(msgs.length === BACKEND_HISTORY_LIMIT)
+            return
+          }
+        } catch {
+          // Backend unavailable; fall through to local SQLite.
+        }
+      }
+      // Offline / not signed in / backend returned empty — load local SQLite.
+      const c = await window.omi.getLocalConversation(chatId)
+      if (!isCurrent() || !c?.messages) return
+      startedAtRef.current = c.startedAt || Date.now()
+      setHistory(
+        c.messages.map((m) => ({
+          id: m.id ?? crypto.randomUUID(),
+          role: m.role,
+          content: m.content,
+          ...(m.evidence ? { evidence: m.evidence } : {}),
+          ...(m.attachments?.length ? { attachments: m.attachments } : {})
+        }))
+      )
+    }
+    void run()
+      .catch(() => {
+        /* no prior conversation */
+      })
+      .finally(onSettled)
+  }
+
+  // Fetch the next OLDER page of the default shared thread and prepend it.
+  // Reads the same `/v2/desktop/messages` source at an increased `offset` —
+  // never a local mirror (INV-CHAT-1: one shared transcript, one loader/writer).
+  // No-ops unless signed in, the last page filled the limit (so an older page may
+  // exist), and no older-load is already in flight.
+  const loadOlderMessages = (): void => {
+    if (!auth.currentUser || loadingOlderRef.current || !hasMoreOlder) return
+    const requestedOffset = backendOffsetRef.current
+    loadingOlderRef.current = true
+    void getSessionMessages({ limit: BACKEND_HISTORY_LIMIT, offset: requestedOffset })
+      .then((older) => {
+        // A hydrate from reset()/switchThread()/selectApp() advanced or zeroed the
+        // cursor mid-load; this page belongs to a stale thread, so drop it.
+        if (backendOffsetRef.current !== requestedOffset) return
+        if (older.length) {
+          const prepend = [...older].reverse().map(toSharedThreadMsg)
+          setHistory((h) => [...prepend, ...h])
+        }
+        backendOffsetRef.current = requestedOffset + older.length
+        setHasMoreOlder(older.length === BACKEND_HISTORY_LIMIT)
+      })
+      .catch(() => {
+        /* keep the current page; a later scroll-up can retry */
+      })
+      .finally(() => {
+        loadingOlderRef.current = false
+      })
+  }
+
+  // In infinite mode the ongoing thread is loaded once on mount — backend first
+  // (cross-device source of truth), local SQLite fallback (offline / auth not ready).
+  // This hook is the app's single chat engine now (the bar is a viewport over it via
+  // the main-process bridge — INV-CHAT-1), so there is one loader/writer.
   useEffect(() => {
     if (mode !== 'infinite' || !chatIdRef.current) return
     let cancelled = false
     // Capture the generation so a switchThread()/reset() that lands before this
-    // async default-thread read resolves cancels the write — otherwise a slow
-    // default load could overwrite a thread the user has since switched to (C5
-    // symmetry with the send/agent/kernel paths).
+    // async load resolves cancels the write (C5 symmetry with send/agent/kernel paths).
     const myGen = genRef.current
-    void window.omi
-      .getLocalConversation(chatIdRef.current)
-      .then((c) => {
-        // Skip if a send already started before this async load resolved —
-        // otherwise we'd overwrite the in-flight bubble (sendingRef is set
-        // synchronously at the top of send()).
-        if (cancelled || sendingRef.current || genRef.current !== myGen || !c?.messages) return
-        startedAtRef.current = c.startedAt || Date.now()
-        setHistory(
-          c.messages.map((m) => {
-            const evidence = parseChatEvidenceFromRecord(m)
-            return {
-              id: m.id ?? crypto.randomUUID(),
-              role: m.role,
-              content: m.content,
-              ...(m.attachments?.length ? { attachments: m.attachments } : {}),
-              ...(evidence ? { evidence } : {})
-            }
-          })
-        )
-      })
-      .catch(() => {
-        /* no prior conversation — start empty */
-      })
-      .finally(() => {
-        // Project this thread's shared-thread agent cards AFTER the history load has
-        // settled, so the load's setHistory can't clobber the merged cards.
+    loadDefaultThreadHistory(
+      chatIdRef.current,
+      () => !cancelled && !sendingRef.current && genRef.current === myGen,
+      () => {
+        // Project shared-thread agent cards AFTER history has settled.
         if (!cancelled && genRef.current === myGen && !sendingRef.current && chatIdRef.current) {
           loadAgentCards(chatIdRef.current, () => !cancelled && genRef.current === myGen)
         }
-      })
+      }
+    )
     return () => {
       cancelled = true
     }
@@ -1651,32 +1740,10 @@ export function useChat(): UseChat {
           /* leave the thread empty on a load failure */
         })
     } else {
-      // Default thread: the local conversation (as the mount loader reads it).
-      const localId = chatIdRef.current
-      void window.omi
-        .getLocalConversation(localId)
-        .then((c) => {
-          if (!isCurrent() || !c?.messages) return
-          startedAtRef.current = c.startedAt || Date.now()
-          setHistory(
-            c.messages.map((m) => {
-              const evidence = parseChatEvidenceFromRecord(m)
-              return {
-                id: m.id ?? crypto.randomUUID(),
-                role: m.role,
-                content: m.content,
-                ...(m.attachments?.length ? { attachments: m.attachments } : {}),
-                ...(evidence ? { evidence } : {})
-              }
-            })
-          )
-          // Project this thread's shared-thread agent cards after the load replaced
-          // history, so the load can't clobber them (B4, INV-CHAT-1).
-          loadAgentCards(chatIdRef.current ?? 'default', isCurrent)
-        })
-        .catch(() => {
-          /* no prior conversation — start empty */
-        })
+      // Default thread: backend first (cross-device parity), local SQLite fallback.
+      loadDefaultThreadHistory(chatIdRef.current ?? resolveDefaultChatId(), isCurrent, () => {
+        loadAgentCards(chatIdRef.current ?? 'default', isCurrent)
+      })
     }
   }
 
@@ -1741,37 +1808,18 @@ export function useChat(): UseChat {
           /* leave the thread empty on a load failure */
         })
     } else {
-      // Back to the plain default thread: the local conversation.
-      const localId = chatIdRef.current
-      void window.omi
-        .getLocalConversation(localId)
-        .then((c) => {
-          if (!isCurrent() || !c?.messages) return
-          startedAtRef.current = c.startedAt || Date.now()
-          setHistory(
-            c.messages.map((m) => {
-              const evidence = parseChatEvidenceFromRecord(m)
-              return {
-                id: m.id ?? crypto.randomUUID(),
-                role: m.role,
-                content: m.content,
-                ...(m.attachments?.length ? { attachments: m.attachments } : {}),
-                ...(evidence ? { evidence } : {})
-              }
-            })
-          )
-          // Project this thread's shared-thread agent cards after the load replaced
-          // history, so the load can't clobber them (B4, INV-CHAT-1).
-          loadAgentCards(chatIdRef.current ?? 'default', isCurrent)
-        })
-        .catch(() => {
-          /* no prior conversation — start empty */
-        })
+      // Back to the plain default thread: backend first (cross-device parity), local
+      // SQLite fallback.
+      loadDefaultThreadHistory(chatIdRef.current ?? resolveDefaultChatId(), isCurrent, () => {
+        loadAgentCards(chatIdRef.current ?? 'default', isCurrent)
+      })
     }
   }
 
   return {
     history,
+    hasMoreOlder,
+    loadOlder: loadOlderMessages,
     sending,
     quotaCheckSeq,
     speaking,

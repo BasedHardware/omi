@@ -373,9 +373,17 @@ export function LegacyHome(): React.JSX.Element {
       // onWheel/onTouchMove already cover wheel/touch; this covers the rest.
       setScrollMode('freeScrolling')
     }
-    if (el.scrollTop < 80 && visibleCount < chat.history.length) {
-      restoreFromBottom.current = el.scrollHeight - el.scrollTop
-      setVisibleCount((n) => Math.min(n + PAGE_SIZE, chat.history.length))
+    if (el.scrollTop < 80) {
+      if (visibleCount < chat.history.length) {
+        restoreFromBottom.current = el.scrollHeight - el.scrollTop
+        setVisibleCount((n) => Math.min(n + PAGE_SIZE, chat.history.length))
+      } else if (chat.hasMoreOlder) {
+        // The in-memory window is exhausted but the shared backend thread has
+        // older turns. Pull the next older page (INV-CHAT-1: same /v2/desktop
+        // source, offset cursor). Prepending doesn't shift the rendered tail, so
+        // there's no scroll jump; the next scroll-up reveals the new page.
+        chat.loadOlder()
+      }
     }
   }
 
