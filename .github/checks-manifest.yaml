@@ -59,6 +59,11 @@ checks:
     triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "optional tool parameters sent as JSON null must take defaults and validation errors must return ChatToolResponse HTTP 200"
+  - id: open-meteo-error-handling-tests
+    command: ["python3", "plugins/omi-open-meteo-app/test_error_handling.py"]
+    triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Open-Meteo plugin must prevent internal exception details and network traces from leaking into chat tool responses"
   - id: linear-exact-issue-lookup-tests
     command: ["python3", "plugins/omi-linear-app/test_issue_lookup.py"]
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
