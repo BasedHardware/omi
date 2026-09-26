@@ -63,8 +63,6 @@ def _sanitize_update_error(exc: ValueError) -> str:
     return "invalid_update_state"
 
 
-
-
 class DesktopUpdatePolicyResponse(BaseModel):
     """Server-controlled desktop update banner policy."""
 
