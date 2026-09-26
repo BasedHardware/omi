@@ -101,7 +101,7 @@ def build_html(items: list[dict[str, Any]], generated_at: str) -> str:
             f"<td class='{cls}'>{escape(text)}</td>"
             f"<td>{escape(str(conv_id))}</td>"
             f"<td>{created}</td>"
-            f"<td class='{cls}'>{'✓' if cls == 'done' else '…'}</td>"
+            f"<td class='{cls}'>{'\u2713' if cls == 'done' else '\u2026'}</td>"
             f"</tr>"
         )
 
@@ -144,7 +144,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("-o", "--output", metavar="FILE", default="action_items.html",
                         help="Output HTML file (default: action_items.html)")
     parser.add_argument("--overwrite", action="store_true",
-                        help="Overwrite output file if it already exists")
+                        help="Replace the output file if it already exists")
     return parser.parse_args(argv)
 
 
@@ -155,13 +155,20 @@ def main(argv: list[str] | None = None) -> None:
     html = build_html(items, generated_at)
 
     out = Path(args.output)
-    mode = "w" if args.overwrite else "x"
-    try:
-        out.open(mode, encoding="utf-8").write(html)
-    except FileExistsError:
-        print(f"Error: '{out}' already exists. Use --overwrite to replace it.", file=sys.stderr)
-        sys.exit(1)
-    print(f"Written {len(items)} item(s) → {out}")
+    mode = "w" if args.overwrite else "xb"
+    if mode == "xb":
+        try:
+            out.write_bytes(html.encode("utf-8"))
+        except FileExistsError:
+            print(
+                f"Error: '{out}' already exists. Use --overwrite to replace it.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    else:
+        out.write_text(html, encoding="utf-8")
+
+    print(f"Written {len(items)} item(s) \u2192 {out}")
 
 
 if __name__ == "__main__":
