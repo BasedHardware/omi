@@ -11115,5 +11115,6 @@
     "capturePhoneStorageFull": "Pohrana telefona je puna",
     "captureStorageAlmostFull": "Pohrana je gotovo puna",
     "capturePendantDisconnectedDetail": "Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovno povezati kad je privjesak uključen i u blizini. Sve dosad snimljeno je sigurno.",
-    "participantsSummaryUncounted": "{name} i drugi"
+    "participantsSummaryUncounted": "{name} i drugi",
+    "showOnLockScreen": "Prikaži na zaključanom zaslonu"
 }

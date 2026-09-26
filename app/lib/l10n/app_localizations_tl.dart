@@ -11364,4 +11364,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name at iba pa';
   }
+
+  @override
+  String get showOnLockScreen => 'Ipakita sa lock screen';
 }

@@ -11201,4 +11201,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name และคนอื่นๆ';
   }
+
+  @override
+  String get showOnLockScreen => 'แสดงบนหน้าจอล็อก';
 }

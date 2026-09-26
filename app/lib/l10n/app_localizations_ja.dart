@@ -11080,4 +11080,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$nameほか';
   }
+
+  @override
+  String get showOnLockScreen => 'ロック画面に表示';
 }

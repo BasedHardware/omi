@@ -11309,4 +11309,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name és mások';
   }
+
+  @override
+  String get showOnLockScreen => 'Megjelenítés a zárolási képernyőn';
 }

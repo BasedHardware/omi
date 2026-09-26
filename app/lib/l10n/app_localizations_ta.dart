@@ -11343,4 +11343,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name மற்றும் மற்றவர்கள்';
   }
+
+  @override
+  String get showOnLockScreen => 'பூட்டுத் திரையில் காட்டு';
 }

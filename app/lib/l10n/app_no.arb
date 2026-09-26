@@ -3555,5 +3555,6 @@
     "capturePhoneStorageFull": "Telefonlagringen er full",
     "captureStorageAlmostFull": "Lagringen er nesten full",
     "capturePendantDisconnectedDetail": "Anhenget mistet forbindelsen til denne telefonen. Omi kobler til igjen av seg selv når anhenget er på og i nærheten. Alt som ble tatt opp før dette, er trygt.",
-    "participantsSummaryUncounted": "{name} og andre"
+    "participantsSummaryUncounted": "{name} og andre",
+    "showOnLockScreen": "Vis på låseskjermen"
 }

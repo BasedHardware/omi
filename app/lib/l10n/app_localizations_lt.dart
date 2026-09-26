@@ -11285,4 +11285,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ir kiti';
   }
+
+  @override
+  String get showOnLockScreen => 'Rodyti užrakinimo ekrane';
 }

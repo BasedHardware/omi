@@ -11281,4 +11281,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name e outros';
   }
+
+  @override
+  String get showOnLockScreen => 'Mostrar na tela de bloqueio';
 }

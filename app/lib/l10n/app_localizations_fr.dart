@@ -11362,4 +11362,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name et d\'autres';
   }
+
+  @override
+  String get showOnLockScreen => 'Afficher sur l’écran verrouillé';
 }

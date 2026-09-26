@@ -11303,4 +11303,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name и другие';
   }
+
+  @override
+  String get showOnLockScreen => 'Показывать на экране блокировки';
 }

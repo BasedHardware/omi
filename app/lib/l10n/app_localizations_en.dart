@@ -11255,4 +11255,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name + others';
   }
+
+  @override
+  String get showOnLockScreen => 'Show on Lock Screen';
 }

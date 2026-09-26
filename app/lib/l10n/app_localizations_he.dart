@@ -11176,4 +11176,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ואחרים';
   }
+
+  @override
+  String get showOnLockScreen => 'הצגה במסך הנעילה';
 }

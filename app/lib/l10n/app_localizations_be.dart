@@ -11295,4 +11295,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name і іншыя';
   }
+
+  @override
+  String get showOnLockScreen => 'Паказваць на экране блакіроўкі';
 }

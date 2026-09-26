@@ -3590,5 +3590,6 @@
     "capturePhoneStorageFull": "Penyimpanan ponsel penuh",
     "captureStorageAlmostFull": "Penyimpanan hampir penuh",
     "capturePendantDisconnectedDetail": "Liontin kehilangan koneksi dengan ponsel ini. Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda. Semua yang direkam sebelumnya aman.",
-    "participantsSummaryUncounted": "{name} dan lainnya"
+    "participantsSummaryUncounted": "{name} dan lainnya",
+    "showOnLockScreen": "Tampilkan di layar kunci"
 }

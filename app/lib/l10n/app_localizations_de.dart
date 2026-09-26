@@ -11358,4 +11358,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name und weitere';
   }
+
+  @override
+  String get showOnLockScreen => 'Auf dem Sperrbildschirm anzeigen';
 }

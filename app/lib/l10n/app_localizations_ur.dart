@@ -11276,4 +11276,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name اور دیگر';
   }
+
+  @override
+  String get showOnLockScreen => 'لاک اسکرین پر دکھائیں';
 }

@@ -3555,5 +3555,6 @@
     "capturePhoneStorageFull": "Spațiul telefonului e plin",
     "captureStorageAlmostFull": "Spațiul e aproape plin",
     "capturePendantDisconnectedDetail": "Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță.",
-    "participantsSummaryUncounted": "{name} și alții"
+    "participantsSummaryUncounted": "{name} și alții",
+    "showOnLockScreen": "Afișează pe ecranul de blocare"
 }

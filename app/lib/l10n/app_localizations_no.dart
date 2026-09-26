@@ -11266,4 +11266,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name og andre';
   }
+
+  @override
+  String get showOnLockScreen => 'Vis på låseskjermen';
 }

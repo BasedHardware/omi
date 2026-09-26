@@ -11286,4 +11286,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name та інші';
   }
+
+  @override
+  String get showOnLockScreen => 'Показувати на екрані блокування';
 }

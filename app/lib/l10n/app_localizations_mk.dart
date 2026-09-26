@@ -11327,4 +11327,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name и други';
   }
+
+  @override
+  String get showOnLockScreen => 'Прикажи на заклучениот екран';
 }

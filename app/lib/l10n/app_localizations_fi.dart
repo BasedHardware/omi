@@ -11269,4 +11269,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ja muut';
   }
+
+  @override
+  String get showOnLockScreen => 'Näytä lukitusnäytöllä';
 }

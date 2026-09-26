@@ -3555,5 +3555,6 @@
     "capturePhoneStorageFull": "फ़ोन स्टोरेज भर गया",
     "captureStorageAlmostFull": "स्टोरेज लगभग भर गया",
     "capturePendantDisconnectedDetail": "आपके पेंडेंट का इस फ़ोन से कनेक्शन टूट गया। पेंडेंट चालू और पास होने पर Omi अपने आप फिर से कनेक्ट हो जाएगा। इससे पहले रिकॉर्ड की गई हर चीज़ सुरक्षित है।",
-    "participantsSummaryUncounted": "{name} और अन्य"
+    "participantsSummaryUncounted": "{name} और अन्य",
+    "showOnLockScreen": "लॉक स्क्रीन पर दिखाएँ"
 }

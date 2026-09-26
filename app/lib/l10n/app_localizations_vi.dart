@@ -11261,4 +11261,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name và những người khác';
   }
+
+  @override
+  String get showOnLockScreen => 'Hiển thị trên màn hình khóa';
 }

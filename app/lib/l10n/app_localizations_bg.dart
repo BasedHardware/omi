@@ -11308,4 +11308,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name и други';
   }
+
+  @override
+  String get showOnLockScreen => 'Показване на заключения екран';
 }

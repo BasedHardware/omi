@@ -11197,4 +11197,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name وآخرون';
   }
+
+  @override
+  String get showOnLockScreen => 'إظهار على شاشة القفل';
 }

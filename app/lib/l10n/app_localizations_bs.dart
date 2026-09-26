@@ -11296,4 +11296,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name i drugi';
   }
+
+  @override
+  String get showOnLockScreen => 'Prikaži na zaključanom ekranu';
 }

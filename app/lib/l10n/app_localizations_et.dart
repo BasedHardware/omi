@@ -11263,4 +11263,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ja teised';
   }
+
+  @override
+  String get showOnLockScreen => 'Kuva lukustuskuval';
 }

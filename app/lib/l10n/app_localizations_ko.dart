@@ -11084,4 +11084,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name 외 여러 명';
   }
+
+  @override
+  String get showOnLockScreen => '잠금 화면에 표시';
 }

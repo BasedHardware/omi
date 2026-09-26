@@ -11318,4 +11318,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name și alții';
   }
+
+  @override
+  String get showOnLockScreen => 'Afișează pe ecranul de blocare';
 }

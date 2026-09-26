@@ -13385,5 +13385,9 @@
                 "type": "String"
             }
         }
+    },
+    "showOnLockScreen": "Show on Lock Screen",
+    "@showOnLockScreen": {
+        "description": "Setting for recording Live Activities on the lock screen and Dynamic Island"
     }
 }

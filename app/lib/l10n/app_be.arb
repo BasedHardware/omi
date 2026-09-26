@@ -11115,5 +11115,6 @@
     "capturePhoneStorageFull": "Памяць тэлефона запоўнена",
     "captureStorageAlmostFull": "Памяць амаль запоўнена",
     "capturePendantDisconnectedDetail": "Кулон страціў сувязь з гэтым тэлефонам. Omi перападключыцца сам, калі кулон уключаны і побач. Усё, што запісана да гэтага, захавана.",
-    "participantsSummaryUncounted": "{name} і іншыя"
+    "participantsSummaryUncounted": "{name} і іншыя",
+    "showOnLockScreen": "Паказваць на экране блакіроўкі"
 }

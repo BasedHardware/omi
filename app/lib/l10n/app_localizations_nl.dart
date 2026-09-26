@@ -11300,4 +11300,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name en anderen';
   }
+
+  @override
+  String get showOnLockScreen => 'Toon op vergrendelscherm';
 }

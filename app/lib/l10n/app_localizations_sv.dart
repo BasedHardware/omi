@@ -11275,4 +11275,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name och andra';
   }
+
+  @override
+  String get showOnLockScreen => 'Visa på låsskärmen';
 }
