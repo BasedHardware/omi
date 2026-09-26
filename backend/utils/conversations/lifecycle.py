@@ -587,6 +587,33 @@ def record_recording_session_event(
     return None
 
 
+def renew_live_recording_session_lease(
+    uid: str,
+    recording_session_id: str,
+    conversation_id: str,
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    """Keep an actively audio-producing recording fenced from stale recovery."""
+    try:
+        return recording_sessions_db.renew_recording_session_lease(
+            uid,
+            recording_session_id,
+            conversation_id,
+            firestore_client=firestore_client,
+        )
+    except Exception:
+        if recording_session_mode() == 'enforce':
+            raise
+        logger.exception(
+            'recording session lease renewal failed uid=%s session=%s conversation=%s',
+            uid,
+            recording_session_id,
+            conversation_id,
+        )
+        return False
+
+
 def tombstone_recording_session(
     uid: str,
     recording_session_id: str,

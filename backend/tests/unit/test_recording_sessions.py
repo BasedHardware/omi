@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import copy
 import threading
@@ -119,6 +119,26 @@ def test_retry_keeps_one_canonical_recording_session_binding(recording_store):
     assert first == retry
     assert first['mapping_conflict'] is False
     assert len(recording_store.documents) == 1
+
+
+def test_audio_activity_renews_only_the_matching_in_progress_session(recording_store):
+    recording_sessions.create_or_get_recording_session(
+        'uid', 'session', 'conversation', firestore_client=recording_store
+    )
+    path = ('users', 'uid', 'recording_sessions', 'session')
+    before = recording_store.documents[path]['lease_expires_at']
+    recording_store.documents[path]['lease_expires_at'] = before - timedelta(minutes=10)
+
+    renewed = recording_sessions.renew_recording_session_lease(
+        'uid', 'session', 'conversation', firestore_client=recording_store
+    )
+    mismatched = recording_sessions.renew_recording_session_lease(
+        'uid', 'session', 'other-conversation', firestore_client=recording_store
+    )
+
+    assert renewed is True
+    assert mismatched is False
+    assert recording_store.documents[path]['lease_expires_at'] > before - timedelta(minutes=10)
 
 
 def test_completed_retry_returns_its_canonical_terminal_envelope(recording_store):

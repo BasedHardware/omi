@@ -616,6 +616,11 @@ class ListenReceiver:
         funnel telemetry never belongs to the audio failure domain.
         """
 
+        conversations = getattr(self.host, 'conversations', None)
+        note_audio_activity = getattr(conversations, 'note_audio_activity', None)
+        if callable(note_audio_activity):
+            note_audio_activity()
+
         if getattr(self.host.state, 'first_audio_byte_timestamp', None) is not None:
             return
 
