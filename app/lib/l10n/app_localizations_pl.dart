@@ -11261,6 +11261,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String get captureRecoveryBanner => 'Dźwięk z zawieszki nie dociera do aplikacji — dotknij, aby naprawić';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Zatrzymaj Transcribe Later na wisiorku, zanim zaczniesz nagrywać telefonem.';
+
+  @override
   String get captureNotTranscribing => 'Brak transkrypcji';
 
   @override

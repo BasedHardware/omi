@@ -11274,6 +11274,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get captureRecoveryBanner => 'పెండెంట్ ఆడియో యాప్‌కు చేరడం లేదు — రిపేర్ చేయడానికి ట్యాప్ చేయండి';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'మీ ఫోన్‌తో రికార్డ్ చేయడానికి ముందు మీ పెండెంట్‌లో Transcribe Later ఆపండి.';
+
+  @override
   String get captureNotTranscribing => 'ట్రాన్స్‌క్రిప్షన్ లేదు';
 
   @override

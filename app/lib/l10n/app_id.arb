@@ -3579,6 +3579,7 @@
     "moreWaysToRecord": "Cara lain untuk merekam",
     "openCall": "Buka panggilan",
     "captureRecoveryBanner": "Audio pendant tidak sampai ke aplikasi — ketuk untuk memperbaiki",
+    "phoneRecordingBlockedByPendantBatch": "Hentikan Transcribe Later di pendant Anda sebelum merekam dengan ponsel.",
     "captureNotTranscribing": "Tidak mentranskripsi",
     "captureAudioSavedTranscribesLater": "Audio disimpan, ditranskripsi nanti",
     "captureStillRecording": "Masih merekam",

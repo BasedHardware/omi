@@ -3544,6 +3544,7 @@
     "moreWaysToRecord": "Інші способи запису",
     "openCall": "Відкрити дзвінок",
     "captureRecoveryBanner": "Звук кулона не надходить до застосунку — натисніть, щоб виправити",
+    "phoneRecordingBlockedByPendantBatch": "Зупиніть Transcribe Later на підвісці перед записом на телефоні.",
     "captureNotTranscribing": "Немає транскрипції",
     "captureAudioSavedTranscribesLater": "Аудіо збережено, транскрипція пізніше",
     "captureStillRecording": "Запис триває",
