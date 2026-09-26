@@ -390,6 +390,7 @@ class LiveLegSocket(STTSocket):
             self.finish()
             return False
         if sent_spans and self._send_tracker is not None:
+            self._send_tracker.send_path = 'managed_chain'
             self._send_tracker.note_accepted_spans(sent_spans)
         duration = len(data) / (self.sample_rate * 2)
         self._seconds += duration

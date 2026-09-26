@@ -208,6 +208,7 @@ class TranscriptProcessor:
         finished_at: datetime,
         started_at: Optional[datetime],
         audio_timeline: Optional[Dict[str, Any]] = None,
+        update_finished_at: bool = True,
     ) -> Optional[tuple[Conversation, List[TranscriptSegment], List[str]]]:
         updated: List[TranscriptSegment] = []
         removed: List[str] = []
@@ -257,9 +258,10 @@ class TranscriptProcessor:
                     conversation.id,
                     {'source': conversation.source},
                 )
-        await self.host.persistence.call(
-            conversations_db.update_conversation_finished_at, self.host.request.uid, conversation.id, finished_at
-        )
+        if update_finished_at:
+            await self.host.persistence.call(
+                conversations_db.update_conversation_finished_at, self.host.request.uid, conversation.id, finished_at
+            )
         return conversation, updated, removed
 
     async def flush_speaker_assignments(self, conversation_id: Optional[str]) -> None:
@@ -406,7 +408,22 @@ class TranscriptProcessor:
                 # pinned origin below. Dispatched before the first-audio guard
                 # below, since it has its own pre-audio handling (photo-only
                 # drains, re-queuing segments until the origin is pinned).
-                await self._process_v2_batches(raw_segments, photos, diarized_speaker_ids_by_conversation)
+                # _process_v2_batches rebases raw dictionaries before its DB
+                # call. Retain pristine copies so any exception can retry the
+                # whole drain with stable ids and absolute times.
+                retry_segments = [dict(raw) for raw in raw_segments]
+                try:
+                    await self._process_v2_batches(raw_segments, photos, diarized_speaker_ids_by_conversation)
+                except asyncio.CancelledError:
+                    self.segment_buffer.extendleft(reversed(retry_segments))
+                    self.photo_buffer.extendleft(reversed(photos))
+                    raise
+                except Exception as error:
+                    self.segment_buffer.extendleft(reversed(retry_segments))
+                    self.photo_buffer.extendleft(reversed(photos))
+                    logger.error(
+                        'Audio-timeline batch persist failed; retained for retry type=%s', type(error).__name__
+                    )
                 continue
             if not self.host.state.first_audio_byte_timestamp:
                 continue
@@ -515,13 +532,14 @@ class TranscriptProcessor:
             )
 
     def _reroute_unplaced(self, segments: List[Dict[str, Any]], *, base: float = 0.0) -> None:
-        """Retain late text on the current generation without claiming audio."""
+        """Retain text with its SEND owner without claiming audio."""
         for raw in segments:
             raw['start'] = float(raw['start']) + base
             raw['end'] = raw['start']
             raw['audio_alignment'] = 'unplaced'
             raw.pop('audio_capture_run', None)
-            raw['_conversation_id'] = self.host.state.current_conversation_id
+            # The buffer may be retried after rollover. Never silently adopt
+            # whichever conversation happens to be current at retry time.
             self.segment_buffer.append(raw)
             OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='unplaced').inc()
 
@@ -537,9 +555,9 @@ class TranscriptProcessor:
         the owning conversation resolved from their capture span. The current
         generation gets the full live path (persist, deliver, translate,
         speaker detection) with offsets projected against the conversation's
-        pinned first-audio origin; a late batch whose owner is still open is
-        written to that owner, while a terminal owner is fenced out and its
-        text is explicitly unplaced on the active conversation.
+        pinned first-audio origin; a late batch stays with its SEND owner.
+        Terminal owners receive unplaced text without reopening the row or
+        changing its finished time.
 
         Late-but-open owners are **persist-only**: their segments are written
         and speaker-detected on the row that owns them, but WebSocket
@@ -557,7 +575,7 @@ class TranscriptProcessor:
         groups: Dict[str, List[Dict[str, Any]]] = {}
         order: List[str] = []
         for raw in raw_segments:
-            owner = raw.pop('_conversation_id', None) or state.current_conversation_id
+            owner = raw.get('_conversation_id')
             if not owner:
                 self.segment_buffer.append(raw)
                 continue
@@ -636,10 +654,12 @@ class TranscriptProcessor:
                 self._reroute_unplaced(segments)
                 continue
             if not is_current and data.get('status') != 'in_progress':
-                # Terminal or processing generation: a late old-provider
-                # callback must not reopen it.
-                self._reroute_unplaced(segments)
-                continue
+                # Late text belongs to the SEND owner even after its lifecycle
+                # advanced. The segment transaction invalidates stale client
+                # processing; do not reopen the row or move finished_at.
+                for raw in segments:
+                    raw['audio_alignment'] = 'unplaced'
+                    raw.pop('audio_capture_run', None)
 
             finished_at = datetime.now(timezone.utc)
             new_segments: List[TranscriptSegment] = []
@@ -678,15 +698,34 @@ class TranscriptProcessor:
                 finished_at,
                 pin_started_at,
                 audio_timeline=pin_marker,
+                update_finished_at=is_current or data.get('status') == 'in_progress',
             )
             if result is None:
                 if not is_current:
                     self._reroute_unplaced(segments, base=started_ts)
                     continue
                 await self.host.conversations.create_new_in_progress_conversation(rollover=True)
-                result = await self._write_fresh(
-                    new_segments, [], finished_at, pin_started_at, audio_timeline=pin_marker
-                )
+                # Old offsets and marker describe the failed owner's audio.
+                # The fresh row has no verified capture origin for this batch.
+                recovered_segments = [
+                    segment.model_copy(
+                        update={
+                            'start': UNPLACED_SEGMENT_OFFSET,
+                            'end': UNPLACED_SEGMENT_OFFSET,
+                            'audio_alignment': 'unplaced',
+                            'audio_capture_run': None,
+                        }
+                    )
+                    for segment in new_segments
+                ]
+                result = await self._write_fresh(recovered_segments, [], finished_at, None, audio_timeline=None)
+                if result is not None:
+                    owner = state.current_conversation_id
+                    new_segments = recovered_segments
+                    for raw in segments:
+                        raw['audio_alignment'] = 'unplaced'
+                        raw['start'] = raw['end'] = UNPLACED_SEGMENT_OFFSET
+                        raw.pop('audio_capture_run', None)
                 record_fallback(
                     component='other',
                     from_mode='fenced_generation',

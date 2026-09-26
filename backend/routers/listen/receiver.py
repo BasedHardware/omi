@@ -98,9 +98,13 @@ from utils.metrics import (
     AUDIO_TIMELINE_REJECT_REASONS,
     OMI_AUDIO_TIMELINE_CALLBACK_ERRORS_TOTAL,
     OMI_AUDIO_TIMELINE_MAPPED_TOTAL,
+    OMI_AUDIO_TIMELINE_PAST_SEND_TOTAL,
+    OMI_AUDIO_TIMELINE_PROVIDER_SOCKETS_TOTAL,
     OMI_AUDIO_TIMELINE_REJECTS_TOTAL,
     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
     audio_timeline_provider_label,
+    audio_timeline_past_send_bucket,
+    audio_timeline_send_path_label,
 )
 from utils.product_telemetry import emit_product_event
 
@@ -215,6 +219,7 @@ class ListenReceiver:
         # Capture start sample of the STT buffer's first byte; the buffer is
         # one contiguous run of accepted decoded audio.
         self._stt_buffer_start_sample: Optional[int] = None
+        self._initial_conversation_id = host.state.current_conversation_id
 
     def _owner_for_sample(self, sample: int) -> Optional[str]:
         """The conversation that owned a capture sample at acceptance time."""
@@ -298,21 +303,16 @@ class ListenReceiver:
         callback time. A segment straddling two recording generations has no
         provable audio owner: without word-to-audio alignment its text cannot be split, and
         assigning its audio window to one conversation would guess. Its text
-        is retained on the active conversation as explicitly unplaced.
+        is retained as explicitly unplaced under its provider SEND owner.
         """
         kept: List[Dict[str, Any]] = []
         for segment in segments:
             if segment.pop('_capture_unplaced', False):
-                owner_sample = segment.pop('_capture_owner_sample', None)
-                owner = self._owner_for_sample(owner_sample) if owner_sample is not None else None
-                # A late provider final may outlive the retained owner ledger.
-                # Keep its text on the active recording with an explicit
-                # unplaced marker; never attach a speaker-ID audio window.
-                if owner is None and self.capture_timeline is not None and self.capture_timeline.anchors:
-                    anchor = self.capture_timeline.wall(self.capture_timeline.next_sample)
-                    segment['start'] = anchor
-                    segment['end'] = anchor
-                segment['_conversation_id'] = owner or self.host.state.current_conversation_id
+                owner = segment.pop('_provider_send_owner', None)
+                segment['_conversation_id'] = owner or self._initial_conversation_id
+                OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(
+                    mode='v2', outcome='send_owner_fallback' if owner else 'send_owner_unavailable'
+                ).inc()
                 kept.append(segment)
                 OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='unplaced').inc()
                 continue
@@ -330,6 +330,7 @@ class ListenReceiver:
                 self._fallback_unplaced(segment, kept, 'straddled')
                 continue
             segment['_conversation_id'] = start_owner
+            segment.pop('_provider_send_owner', None)
             kept.append(segment)
             OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='mapped').inc()
         if kept:
@@ -339,7 +340,11 @@ class ListenReceiver:
         segment['audio_alignment'] = 'unplaced'
         segment.pop('audio_capture_run', None)
         segment['end'] = segment['start']
-        segment['_conversation_id'] = self.host.state.current_conversation_id
+        owner = segment.pop('_provider_send_owner', None)
+        segment['_conversation_id'] = owner or self._initial_conversation_id
+        OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(
+            mode='v2', outcome='send_owner_fallback' if owner else 'send_owner_unavailable'
+        ).inc()
         kept.append(segment)
         OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome=outcome).inc()
         OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='unplaced').inc()
@@ -445,7 +450,41 @@ class ListenReceiver:
         try:
             loop.call_soon_threadsafe(run)
         except RuntimeError:
-            logger.warning('Listen STT callback arrived after loop shutdown; dropped %d segments', len(segments))
+            # SDK callbacks may escape after ASGI has shut down the listen
+            # loop. The callback is already on a provider thread, so use a
+            # short, private event loop to finish the v2 persistence handoff.
+            # Never resurrect a row after the account-deletion fence closed.
+            fence = getattr(self.host.request, 'owner_persistence_blocked', None)
+            if self.capture_timeline_v2 and not (fence is not None and fence.is_set()) and current is None:
+                try:
+                    asyncio.run(self._persist_after_loop_close(run))
+                    return
+                except Exception as error:
+                    logger.error(
+                        'Late STT callback persist failed type=%s segments=%d', type(error).__name__, len(segments)
+                    )
+            OMI_AUDIO_TIMELINE_CALLBACK_ERRORS_TOTAL.labels(mode='v2', provider='unknown').inc()
+            logger.warning('Listen STT callback could not persist after loop shutdown segments=%d', len(segments))
+
+    async def _persist_after_loop_close(self, run: Any) -> None:
+        run()
+        processor = self.host.transcripts
+        if not getattr(processor, 'segment_buffer', None):
+            return
+        segments = [dict(raw) for raw in processor.segment_buffer]
+        for _ in range(3):
+            try:
+                processor.segment_buffer.clear()
+                await processor._process_v2_batches(  # type: ignore[reportPrivateUsage]  # teardown handoff
+                    [dict(raw) for raw in segments], [], {}
+                )
+                if not processor.segment_buffer:
+                    return
+            except Exception as error:
+                logger.error('Late STT callback retry failed type=%s', type(error).__name__)
+                processor.segment_buffer.clear()
+            processor.segment_buffer.extend(dict(raw) for raw in segments)
+        raise RuntimeError('Late STT callback could not be persisted')
 
     def _enqueue_epoch_segments(self, segments: List[Dict[str, Any]], provider: Optional[str] = None) -> None:
         """Owner-resolve epoch-translated segments by the pinned persistence mode.
@@ -498,12 +537,14 @@ class ListenReceiver:
                 mode=mode,
                 reason=reason if reason in AUDIO_TIMELINE_REJECT_REASONS else 'other',
                 provider=audio_timeline_provider_label(epoch.provider_label),
+                send_path=audio_timeline_send_path_label(epoch.send_path),
             ).inc()
 
         def record_mapped() -> None:
             OMI_AUDIO_TIMELINE_MAPPED_TOTAL.labels(
                 mode='v2' if self.capture_timeline_v2 else 'legacy',
                 provider=audio_timeline_provider_label(epoch.provider_label),
+                send_path=audio_timeline_send_path_label(epoch.send_path),
             ).inc()
             if not self.capture_timeline_v2:
                 OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='legacy', outcome='mapped').inc()
@@ -517,9 +558,16 @@ class ListenReceiver:
             on_reject=record_reject,
             on_mapped=record_mapped,
             on_recover=record_recovered,
+            on_past_send=lambda seconds: OMI_AUDIO_TIMELINE_PAST_SEND_TOTAL.labels(
+                provider=audio_timeline_provider_label(epoch.provider_label),
+                send_path=audio_timeline_send_path_label(epoch.send_path),
+                bucket=audio_timeline_past_send_bucket(seconds),
+            ).inc(),
+            owner_at_send=lambda: self.host.state.current_conversation_id,
             project_times=self.capture_timeline_v2,
         )
         epoch.provider_label = audio_timeline_provider_label(getattr(self.host.stt_service, 'value', None))
+        epoch.initial_owner = self.host.state.current_conversation_id
 
         if self.capture_timeline_v2:
             # v2: the translation projects start/end onto the capture wall
@@ -910,6 +958,24 @@ class ListenReceiver:
         self.stt_socket = None
         self.stt_sockets_multi = [None] * len(self.channel_configs)
 
+    def _record_selected_epoch(self, epoch: Optional[ProviderEpochTranslator], raw: Any) -> None:
+        if epoch is None:
+            return
+        if getattr(raw, 'manages_vad', False):
+            path = 'managed_chain'
+            vad_state = 'active' if getattr(raw, 'gate', None) is not None else 'off'
+        elif self.vad_gate is None:
+            path = 'direct_unrecorded'
+            vad_state = 'off'
+        else:
+            passthrough = self.host.stt_service == STTService.modulate
+            path = 'vad_gate_passthrough' if passthrough else 'vad_gate_active'
+            vad_state = 'passthrough' if passthrough else 'active'
+        epoch.send_path = path
+        OMI_AUDIO_TIMELINE_PROVIDER_SOCKETS_TOTAL.labels(
+            provider=audio_timeline_provider_label(epoch.provider_label), send_path=path, vad_state=vad_state
+        ).inc()
+
     async def initialize_stt(self) -> bool:
         request = self.host.request
         if self.host.use_custom_stt:
@@ -975,6 +1041,7 @@ class ListenReceiver:
                 return False
             if epoch is not None:
                 epoch.provider_label = audio_timeline_provider_label(getattr(self.host.stt_service, 'value', None))
+            self._record_selected_epoch(epoch, raw)
             passthrough = self.host.stt_service == STTService.modulate
             self.stt_socket = (
                 GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough, send_tracker=epoch)
@@ -1069,6 +1136,8 @@ class ListenReceiver:
             if managed_chain_enabled(self.host):
                 self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
             return False
+
+        self._record_selected_epoch(epoch, raw)
 
         passthrough = self.host.stt_service == STTService.modulate
         self.stt_socket = (
