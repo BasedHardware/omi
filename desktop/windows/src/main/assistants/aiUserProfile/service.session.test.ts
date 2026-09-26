@@ -28,7 +28,8 @@ const h = vi.hoisted(() => ({
     generatedAt: 0
   })),
   // Never settles — a source fetch stays in flight so a sign-out can abort it.
-  netFetch: vi.fn((_url: string, _init: { signal: AbortSignal }) => new Promise<Response>(() => {}))
+  netFetch: vi.fn((_url: string, _init: { signal: AbortSignal }) => new Promise<Response>(() => {})),
+  onBackendSessionChanged: vi.fn()
 }))
 
 vi.mock('electron', () => ({ net: { fetch: h.netFetch } }))
@@ -41,6 +42,11 @@ vi.mock('../../ipc/db', () => ({
   updateAiUserProfileText: vi.fn(),
   deleteAiUserProfile: vi.fn(),
   deleteAllAiUserProfiles: vi.fn()
+}))
+// Screen-activity sync is started from configureAiProfileSession (#10728). Keep
+// these session tests isolated from Rewind DB / net side effects.
+vi.mock('../../rewind/screenActivitySync', () => ({
+  onBackendSessionChanged: h.onBackendSessionChanged
 }))
 vi.mock('./orchestrate', async (importOriginal) => {
   // Keep the REAL error classes (service.ts imports them) — swap only the flow.
@@ -86,6 +92,7 @@ describe('configureAiProfileSession', () => {
     await flush()
 
     expect(h.generateProfile).toHaveBeenCalledTimes(1)
+    expect(h.onBackendSessionChanged).toHaveBeenCalledWith(SESSION)
   })
 
   it('does not generate on a null (sign-out) session, and clears the cached one', async () => {
@@ -95,6 +102,7 @@ describe('configureAiProfileSession', () => {
     await flush()
 
     expect(h.generateProfile).not.toHaveBeenCalled()
+    expect(h.onBackendSessionChanged).toHaveBeenCalledWith(null)
     // The session really was cleared: a generate with no session now throws
     // rather than reusing the signed-out user's token.
     await expect(generateNow()).rejects.toThrow(/no backend session/)

@@ -1859,6 +1859,82 @@ export async function searchRewindEmbeddings(
     .map(({ frameId, similarity }) => ({ frameId, similarity }))
 }
 
+export type ScreenActivitySyncCandidate = {
+  id: number
+  ts: number
+  app: string
+  windowTitle: string
+  ocrText: string
+  priorState: number
+  embedding: number[] | null
+}
+
+const SCREEN_ACTIVITY_SYNC_PENDING = 0
+const SCREEN_ACTIVITY_SYNC_TEXT = 1
+
+const SCREEN_ACTIVITY_SYNC_CANDIDATES_SQL = `
+SELECT f.id AS id,
+       f.ts AS ts,
+       f.app AS app,
+       f.window_title AS windowTitle,
+       f.ocr_text AS ocrText,
+       f.screen_activity_sync_state AS priorState,
+       v.vec AS vec
+  FROM rewind_frames f
+  LEFT JOIN rewind_embeddings e ON e.frame_id = f.id
+  LEFT JOIN rewind_embedding_vectors v ON v.hash = e.hash
+ WHERE (
+        f.screen_activity_sync_state = ?
+        AND length(trim(f.ocr_text)) > 0
+       )
+    OR (
+        f.screen_activity_sync_state = ?
+        AND v.vec IS NOT NULL
+       )
+ ORDER BY f.id ASC
+ LIMIT ?
+`
+
+/** Rows waiting for cross-device screen-activity sync (OCR first, embeddings later). */
+export function fetchScreenActivitySyncCandidates(limit: number): ScreenActivitySyncCandidate[] {
+  const rows = get()
+    .prepare(SCREEN_ACTIVITY_SYNC_CANDIDATES_SQL)
+    .all(SCREEN_ACTIVITY_SYNC_PENDING, SCREEN_ACTIVITY_SYNC_TEXT, limit) as {
+    id: number
+    ts: number
+    app: string
+    windowTitle: string
+    ocrText: string
+    priorState: number
+    vec: Buffer | null
+  }[]
+
+  return rows.map((row) => ({
+    id: row.id,
+    ts: row.ts,
+    app: row.app ?? '',
+    windowTitle: row.windowTitle ?? '',
+    ocrText: row.ocrText ?? '',
+    priorState: row.priorState,
+    embedding: row.vec ? Array.from(bufferToVector(row.vec), (v) => Number(v)) : null
+  }))
+}
+
+export function markScreenActivitySyncCandidates(candidates: ScreenActivitySyncCandidate[]): void {
+  const d = get()
+  const stmt = d.prepare(
+    `UPDATE rewind_frames
+        SET screen_activity_sync_state = ?
+      WHERE id = ? AND screen_activity_sync_state = ?`
+  )
+  d.transaction(() => {
+    for (const c of candidates) {
+      const next = c.embedding !== null ? 2 : 1
+      stmt.run(next, c.id, c.priorState)
+    }
+  })()
+}
+
 /** Hydrate frames by id, in the given order (ids with no row are skipped). */
 export function rewindFramesByIds(ids: number[]): RewindFrame[] {
   if (ids.length === 0) return []
