@@ -8,6 +8,12 @@ overlay:
   gke:
     backend-listen:
       env:
+        # 2026-09-26 incident: with the code-fixed order, a Modulate breaker opening sent
+        # new sessions to Deepgram (402 since 09-14) and then streaming Parakeet (no ready
+        # frame, 0 connects since 08-26), so they got no transcript. The configured order
+        # (STT_SERVICE_MODELS) puts Soniox second. Parakeet window allocation stays 0.
+        STT_CONNECT_ORDER_FROM_CONFIG:
+          value: 'true'
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
         FREE_TIER_LOCAL_PROCESSING:
