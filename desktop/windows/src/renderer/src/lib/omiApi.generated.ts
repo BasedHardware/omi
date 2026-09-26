@@ -449,6 +449,10 @@ export interface AppPromptsGenerationResponse {
   prompts: Array<string>;
 }
 
+export interface AppRejectRequest {
+  reason: string;
+}
+
 export interface AppResult {
   app_id: string | null;
   content: string;
@@ -5169,6 +5173,7 @@ export interface OmiApiSchemas {
   "AppPagination": AppPagination;
   "AppPaginationLinks": AppPaginationLinks;
   "AppPromptsGenerationResponse": AppPromptsGenerationResponse;
+  "AppRejectRequest": AppRejectRequest;
   "AppResult": AppResult;
   "AppReview": AppReview;
   "AppSearchFilters": AppSearchFilters;
@@ -11698,7 +11703,7 @@ export async function refresh_app_manifest_v1_apps__app_id__refresh_manifest_pos
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function reject_app_v1_apps__app_id__reject_post(path: { app_id: string }, query: { uid: string }, header: { secret_key: string }, init?: OmiApiClientInit): Promise<AppMutationResponse> {
+export async function reject_app_v1_apps__app_id__reject_post(path: { app_id: string }, query: { uid: string }, header: { secret_key: string }, body: AppRejectRequest | null, init?: OmiApiClientInit): Promise<AppMutationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/apps/${path.app_id}/reject`;
   const _params = query ? Object.entries(query)
@@ -11708,10 +11713,12 @@ export async function reject_app_v1_apps__app_id__reject_post(path: { app_id: st
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "POST",
     headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       "secret-key": String(header.secret_key),
     },
+    body: body ? JSON.stringify(body) : undefined,
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();

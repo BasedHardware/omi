@@ -189,6 +189,10 @@ class AppCreateResponse(AppMutationResponse):
     app_id: str
 
 
+class AppRejectRequest(PydanticBaseModel):
+    reason: str
+
+
 class AppMigrationResponse(AppMutationResponse):
     message: str
 
@@ -2059,7 +2063,10 @@ async def mcp_oauth_callback(code: str, state: str):
         )
     except Exception as e:
         logger.error(f"Token exchange failed: {e}")
-        return HTMLResponse('<html><body><h1>Token exchange failed</h1><p>Failed to exchange authorization code for access token.</p></body></html>', status_code=502)
+        return HTMLResponse(
+            '<html><body><h1>Token exchange failed</h1><p>Failed to exchange authorization code for access token.</p></body></html>',
+            status_code=502,
+        )
 
     # Update stored tokens
     oauth_tokens['access_token'] = token_data['access_token']
@@ -2072,7 +2079,10 @@ async def mcp_oauth_callback(code: str, state: str):
         tools = await discover_mcp_tools(server_url, token_data['access_token'])
     except Exception as e:
         logger.error(f"Tool discovery failed: {e}")
-        return HTMLResponse('<html><body><h1>Tool discovery failed</h1><p>Failed to discover tools on the MCP server.</p></body></html>', status_code=502)
+        return HTMLResponse(
+            '<html><body><h1>Tool discovery failed</h1><p>Failed to discover tools on the MCP server.</p></body></html>',
+            status_code=502,
+        )
 
     # Use the resolved URL from the first tool (discover_mcp_tools stores the working URL)
     resolved_url = tools[0].endpoint if tools else server_url
@@ -2354,18 +2364,20 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
 
 
 @router.post('/v1/apps/{app_id}/reject', tags=['v1'], response_model=AppMutationResponse)
-def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
+def reject_app(app_id: str, uid: str, data: Optional[AppRejectRequest] = Body(None), secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, False)
     invalidate_approved_apps_cache()  # App removed from public list, invalidate cache
     delete_app_cache_by_id(app_id)
     app = get_available_app_by_id(app_id, uid)
-    # TODO: Add reason for rejection in payload and also redirect to the app page
+
+    reason_text = f" Reason: {data.reason}." if data and data.reason else ""
     send_notification(
         uid,
         'App Rejected 😔',
-        f'Your app {app["name"]} has been rejected. Please make the necessary changes and resubmit for approval.',
+        f'Your app {app["name"]} has been rejected.{reason_text} Please make the necessary changes and resubmit for approval.',
+        {'app_id': app_id, 'type': 'app_rejected', 'navigate_to': f'/apps/{app_id}'},
     )
     return {'status': 'ok'}
 
