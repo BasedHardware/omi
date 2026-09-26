@@ -4,6 +4,7 @@ Whoop Integration App for Omi
 This app provides Whoop fitness tracker integration through OAuth2 authentication
 and chat tools for accessing strain, recovery, sleep, and workout data.
 """
+
 import os
 import html
 import re
@@ -59,19 +60,20 @@ WHOOP_SCOPES = [
     "read:workout",
     "read:profile",
     "read:body_measurement",
-    "offline"
+    "offline",
 ]
 
 app = FastAPI(
     title="Whoop Omi Integration",
     description="Whoop integration for Omi - Track your recovery, strain, and sleep with chat",
-    version="1.0.0"
+    version="1.0.0",
 )
 
 
 # ============================================
 # Helper Functions
 # ============================================
+
 
 def _clean_date_param(date_val: Any) -> Optional[str]:
     """Safely extract YYYY-MM-DD from string or ISO date representations."""
@@ -92,6 +94,15 @@ def _safe_float(val: Any, default: Optional[float] = None) -> Optional[float]:
         return float(val)
     except (ValueError, TypeError):
         return default
+
+
+def _format_tool_error(action: str, result: Optional[dict]) -> str:
+    """Format safe tool error message, preserving HTTP status code if present."""
+    if isinstance(result, dict):
+        err = result.get("error")
+        if isinstance(err, str) and err.startswith("HTTP "):
+            return f"Failed to get {action}: {err}"
+    return f"Failed to get {action}. Please try again."
 
 
 def get_valid_access_token(uid: str) -> Optional[str]:
@@ -118,12 +129,14 @@ def get_valid_access_token(uid: str) -> Optional[str]:
                 if new_token:
                     access_token = new_token["access_token"]
                     new_refresh = new_token.get("refresh_token", refresh_token)
-                    new_expires_at = (datetime.now(timezone.utc) + timedelta(seconds=new_token.get("expires_in", 3600))).strftime("%Y-%m-%dT%H:%M:%SZ")
+                    new_expires_at = (
+                        datetime.now(timezone.utc) + timedelta(seconds=new_token.get("expires_in", 3600))
+                    ).strftime("%Y-%m-%dT%H:%M:%SZ")
                     update_whoop_tokens(uid, access_token, new_refresh, new_expires_at)
                 else:
                     return None
         except Exception as e:
-            log(f"Error checking token expiry: {e}")
+            log(f"Error checking token expiry: {type(e).__name__}")
 
     return access_token
 
@@ -137,9 +150,9 @@ def refresh_access_token(refresh_token: str) -> Optional[dict]:
                 "client_id": WHOOP_CLIENT_ID,
                 "client_secret": WHOOP_CLIENT_SECRET,
                 "refresh_token": refresh_token,
-                "grant_type": "refresh_token"
+                "grant_type": "refresh_token",
             },
-            timeout=WHOOP_REQUEST_TIMEOUT
+            timeout=WHOOP_REQUEST_TIMEOUT,
         )
 
         if response.status_code == 200:
@@ -148,7 +161,7 @@ def refresh_access_token(refresh_token: str) -> Optional[dict]:
             log(f"Token refresh failed: {response.status_code}")
             return None
     except Exception as e:
-        log(f"Error refreshing token: {e}")
+        log(f"Error refreshing token: {type(e).__name__}")
         return None
 
 
@@ -159,9 +172,7 @@ def whoop_api_request(uid: str, method: str, endpoint: str, params: dict = None)
         return None
 
     url = f"{WHOOP_API_BASE}{endpoint}"
-    headers = {
-        "Authorization": f"Bearer {access_token}"
-    }
+    headers = {"Authorization": f"Bearer {access_token}"}
 
     try:
         if method == "GET":
@@ -176,8 +187,8 @@ def whoop_api_request(uid: str, method: str, endpoint: str, params: dict = None)
             return {"error": f"HTTP {response.status_code}", "status_code": response.status_code}
 
     except Exception as e:
-        log(f"Whoop API request error: {e}")
-        return {"error": str(e)}
+        log(f"Whoop API request error: {type(e).__name__}")
+        return {"error": "Whoop API request failed"}
 
 
 # Safety cap on continuation pages per collection; a real Whoop week of data
@@ -197,7 +208,7 @@ def whoop_fetch_all_records(uid: str, endpoint: str, params: dict) -> Tuple[Opti
     for _ in range(MAX_COLLECTION_PAGES):
         result = whoop_api_request(uid, "GET", endpoint, params=page_params)
         if not result or "error" in result:
-            return None, result.get("error", "Unknown error") if result else "No response from Whoop"
+            return None, "Whoop API request failed"
 
         records.extend(result.get("records", []))
         next_token = result.get("next_token")
@@ -243,10 +254,7 @@ def format_recovery_score(recovery: dict) -> str:
         zone = "Red (Low)"
         emoji = "🔴"
 
-    parts = [
-        f"{emoji} **Recovery: {recovery_score_val:.0f}%** ({zone})",
-        ""
-    ]
+    parts = [f"{emoji} **Recovery: {recovery_score_val:.0f}%** ({zone})", ""]
 
     if hrv is not None:
         try:
@@ -307,10 +315,7 @@ def format_strain_score(cycle: dict) -> str:
         level = "Low"
         emoji = "🟢"
 
-    parts = [
-        f"{emoji} **Day Strain: {strain_val:.1f}** ({level})",
-        ""
-    ]
+    parts = [f"{emoji} **Day Strain: {strain_val:.1f}** ({level})", ""]
 
     if kilojoule is not None:
         try:
@@ -430,7 +435,7 @@ def format_workout(workout: dict) -> str:
         48: "Swimming",
         71: "Walking",
         82: "Yoga",
-        -1: "Other"
+        -1: "Other",
     }
     sport_name = sport_names.get(sport_id, f"Activity {sport_id}")
 
@@ -487,6 +492,7 @@ def format_workout(workout: dict) -> str:
 # Chat Tools Manifest
 # ============================================
 
+
 @app.get("/.well-known/omi-tools.json")
 async def get_omi_tools_manifest():
     """
@@ -501,15 +507,12 @@ async def get_omi_tools_manifest():
                 "method": "POST",
                 "parameters": {
                     "properties": {
-                        "date": {
-                            "type": "string",
-                            "description": "Date in YYYY-MM-DD format. Defaults to today."
-                        }
+                        "date": {"type": "string", "description": "Date in YYYY-MM-DD format. Defaults to today."}
                     },
-                    "required": []
+                    "required": [],
                 },
                 "auth_required": True,
-                "status_message": "Getting your recovery data..."
+                "status_message": "Getting your recovery data...",
             },
             {
                 "name": "get_strain",
@@ -518,15 +521,12 @@ async def get_omi_tools_manifest():
                 "method": "POST",
                 "parameters": {
                     "properties": {
-                        "date": {
-                            "type": "string",
-                            "description": "Date in YYYY-MM-DD format. Defaults to today."
-                        }
+                        "date": {"type": "string", "description": "Date in YYYY-MM-DD format. Defaults to today."}
                     },
-                    "required": []
+                    "required": [],
                 },
                 "auth_required": True,
-                "status_message": "Getting your strain data..."
+                "status_message": "Getting your strain data...",
             },
             {
                 "name": "get_sleep",
@@ -537,13 +537,13 @@ async def get_omi_tools_manifest():
                     "properties": {
                         "date": {
                             "type": "string",
-                            "description": "Date in YYYY-MM-DD format. Gets sleep that ended on this date. Defaults to today."
+                            "description": "Date in YYYY-MM-DD format. Gets sleep that ended on this date. Defaults to today.",
                         }
                     },
-                    "required": []
+                    "required": [],
                 },
                 "auth_required": True,
-                "status_message": "Getting your sleep data..."
+                "status_message": "Getting your sleep data...",
             },
             {
                 "name": "get_workouts",
@@ -552,56 +552,44 @@ async def get_omi_tools_manifest():
                 "method": "POST",
                 "parameters": {
                     "properties": {
-                        "days": {
-                            "type": "integer",
-                            "description": "Number of days to look back (default: 7, max: 30)"
-                        },
+                        "days": {"type": "integer", "description": "Number of days to look back (default: 7, max: 30)"},
                         "max_results": {
                             "type": "integer",
-                            "description": "Maximum number of workouts to return (default: 10)"
-                        }
+                            "description": "Maximum number of workouts to return (default: 10)",
+                        },
                     },
-                    "required": []
+                    "required": [],
                 },
                 "auth_required": True,
-                "status_message": "Getting your workouts..."
+                "status_message": "Getting your workouts...",
             },
             {
                 "name": "get_weekly_summary",
                 "description": "Get a summary of the user's week from Whoop including average recovery, strain, and sleep. Use this when the user wants a weekly overview or trends.",
                 "endpoint": "/tools/get_weekly_summary",
                 "method": "POST",
-                "parameters": {
-                    "properties": {},
-                    "required": []
-                },
+                "parameters": {"properties": {}, "required": []},
                 "auth_required": True,
-                "status_message": "Getting your weekly summary..."
+                "status_message": "Getting your weekly summary...",
             },
             {
                 "name": "get_body_measurements",
                 "description": "Get the user's body measurements from Whoop including height, weight, and max heart rate.",
                 "endpoint": "/tools/get_body_measurements",
                 "method": "POST",
-                "parameters": {
-                    "properties": {},
-                    "required": []
-                },
+                "parameters": {"properties": {}, "required": []},
                 "auth_required": True,
-                "status_message": "Getting your body measurements..."
+                "status_message": "Getting your body measurements...",
             },
             {
                 "name": "get_profile",
                 "description": "Get the user's Whoop profile information.",
                 "endpoint": "/tools/get_profile",
                 "method": "POST",
-                "parameters": {
-                    "properties": {},
-                    "required": []
-                },
+                "parameters": {"properties": {}, "required": []},
                 "auth_required": True,
-                "status_message": "Getting your profile..."
-            }
+                "status_message": "Getting your profile...",
+            },
         ]
     }
 
@@ -609,6 +597,7 @@ async def get_omi_tools_manifest():
 # ============================================
 # Chat Tool Endpoints
 # ============================================
+
 
 @app.post("/tools/get_recovery", tags=["chat_tools"], response_model=ChatToolResponse)
 async def tool_get_recovery(request: Request):
@@ -638,7 +627,7 @@ async def tool_get_recovery(request: Request):
         result = whoop_api_request(uid, "GET", "/recovery", params=params)
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get recovery: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error=_format_tool_error("recovery", result))
 
         records = result.get("records", [])
 
@@ -649,19 +638,13 @@ async def tool_get_recovery(request: Request):
         cycle_id = recovery.get("cycle_id")
         created_at = str(recovery.get("created_at") or "")[:10]
 
-        result_parts = [
-            f"**Recovery for {created_at}**",
-            "",
-            format_recovery_score(recovery)
-        ]
+        result_parts = [f"**Recovery for {created_at}**", "", format_recovery_score(recovery)]
 
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
-        log(f"Error getting recovery: {e}")
-        import traceback
-        traceback.print_exc()
-        return ChatToolResponse(error=f"Failed to get recovery: {str(e)}")
+        log(f"Error getting recovery: {type(e).__name__}")
+        return ChatToolResponse(error="Failed to get recovery. Please try again.")
 
 
 @app.post("/tools/get_strain", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -691,7 +674,7 @@ async def tool_get_strain(request: Request):
         result = whoop_api_request(uid, "GET", "/cycle", params=params)
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get strain: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error=_format_tool_error("strain", result))
 
         records = result.get("records", [])
 
@@ -701,17 +684,13 @@ async def tool_get_strain(request: Request):
         cycle = records[0]
         start_date = str(cycle.get("start") or "")[:10]
 
-        result_parts = [
-            f"**Strain for {start_date}**",
-            "",
-            format_strain_score(cycle)
-        ]
+        result_parts = [f"**Strain for {start_date}**", "", format_strain_score(cycle)]
 
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
-        log(f"Error getting strain: {e}")
-        return ChatToolResponse(error=f"Failed to get strain: {str(e)}")
+        log(f"Error getting strain: {type(e).__name__}")
+        return ChatToolResponse(error="Failed to get strain. Please try again.")
 
 
 @app.post("/tools/get_sleep", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -741,7 +720,7 @@ async def tool_get_sleep(request: Request):
         result = whoop_api_request(uid, "GET", "/activity/sleep", params=params)
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get sleep: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error=_format_tool_error("sleep", result))
 
         records = result.get("records", [])
 
@@ -751,17 +730,13 @@ async def tool_get_sleep(request: Request):
         sleep = records[0]
         end_date = str(sleep.get("end") or "")[:10]
 
-        result_parts = [
-            f"**Sleep ending {end_date}**",
-            "",
-            format_sleep(sleep)
-        ]
+        result_parts = [f"**Sleep ending {end_date}**", "", format_sleep(sleep)]
 
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
-        log(f"Error getting sleep: {e}")
-        return ChatToolResponse(error=f"Failed to get sleep: {str(e)}")
+        log(f"Error getting sleep: {type(e).__name__}")
+        return ChatToolResponse(error="Failed to get sleep. Please try again.")
 
 
 @app.post("/tools/get_workouts", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -798,13 +773,13 @@ async def tool_get_workouts(request: Request):
         params = {
             "start": start_date.strftime("%Y-%m-%dT00:00:00.000Z"),
             "end": end_date.strftime("%Y-%m-%dT23:59:59.999Z"),
-            "limit": max_results
+            "limit": max_results,
         }
 
         result = whoop_api_request(uid, "GET", "/activity/workout", params=params)
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get workouts: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error=_format_tool_error("workouts", result))
 
         workouts = result.get("records", [])
 
@@ -822,8 +797,8 @@ async def tool_get_workouts(request: Request):
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
-        log(f"Error getting workouts: {e}")
-        return ChatToolResponse(error=f"Failed to get workouts: {str(e)}")
+        log(f"Error getting workouts: {type(e).__name__}")
+        return ChatToolResponse(error="Failed to get workouts. Please try again.")
 
 
 @app.post("/tools/get_weekly_summary", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -849,7 +824,7 @@ async def tool_get_weekly_summary(request: Request):
         params = {
             "start": start_date.strftime("%Y-%m-%dT00:00:00.000Z"),
             "end": end_date.strftime("%Y-%m-%dT23:59:59.999Z"),
-            "limit": 7
+            "limit": 7,
         }
 
         # Fetch recovery, cycles, sleep, and workouts, following pagination for each
@@ -902,7 +877,9 @@ async def tool_get_weekly_summary(request: Request):
             avg_recovery = sum(recovery_scores) / len(recovery_scores)
             min_recovery = min(recovery_scores)
             max_recovery = max(recovery_scores)
-            result_parts.append(f"**Recovery:** Avg {avg_recovery:.0f}% (Range: {min_recovery:.0f}%-{max_recovery:.0f}%)")
+            result_parts.append(
+                f"**Recovery:** Avg {avg_recovery:.0f}% (Range: {min_recovery:.0f}%-{max_recovery:.0f}%)"
+            )
         else:
             result_parts.append("**Recovery:** No data")
 
@@ -937,8 +914,8 @@ async def tool_get_weekly_summary(request: Request):
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
-        log(f"Error getting weekly summary: {e}")
-        return ChatToolResponse(error=f"Failed to get weekly summary: {str(e)}")
+        log(f"Error getting weekly summary: {type(e).__name__}")
+        return ChatToolResponse(error="Failed to get weekly summary. Please try again.")
 
 
 @app.post("/tools/get_body_measurements", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -958,7 +935,7 @@ async def tool_get_body_measurements(request: Request):
         result = whoop_api_request(uid, "GET", "/user/measurement/body")
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get measurements: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error=_format_tool_error("measurements", result))
 
         height_m = result.get("height_meter")
         weight_kg = result.get("weight_kilogram")
@@ -986,8 +963,8 @@ async def tool_get_body_measurements(request: Request):
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
-        log(f"Error getting body measurements: {e}")
-        return ChatToolResponse(error=f"Failed to get measurements: {str(e)}")
+        log(f"Error getting body measurements: {type(e).__name__}")
+        return ChatToolResponse(error="Failed to get measurements. Please try again.")
 
 
 @app.post("/tools/get_profile", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1007,7 +984,7 @@ async def tool_get_profile(request: Request):
         result = whoop_api_request(uid, "GET", "/user/profile/basic")
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get profile: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error=_format_tool_error("profile", result))
 
         first_name = result.get("first_name", "")
         last_name = result.get("last_name", "")
@@ -1019,19 +996,20 @@ async def tool_get_profile(request: Request):
             "",
             f"**Name:** {first_name} {last_name}",
             f"**Email:** {email}",
-            f"**User ID:** {user_id}"
+            f"**User ID:** {user_id}",
         ]
 
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
-        log(f"Error getting profile: {e}")
-        return ChatToolResponse(error=f"Failed to get profile: {str(e)}")
+        log(f"Error getting profile: {type(e).__name__}")
+        return ChatToolResponse(error="Failed to get profile. Please try again.")
 
 
 # ============================================
 # OAuth & Setup Endpoints
 # ============================================
+
 
 @app.get("/")
 async def root(uid: str = Query(None)):
@@ -1044,8 +1022,8 @@ async def root(uid: str = Query(None)):
             "endpoints": {
                 "auth": "/auth/whoop?uid=<user_id>",
                 "setup_check": "/setup/whoop?uid=<user_id>",
-                "tools_manifest": "/.well-known/omi-tools.json"
-            }
+                "tools_manifest": "/.well-known/omi-tools.json",
+            },
         }
 
     tokens = get_whoop_tokens(uid)
@@ -1141,7 +1119,7 @@ async def whoop_auth(uid: str = Query(...)):
         "redirect_uri": WHOOP_REDIRECT_URI,
         "response_type": "code",
         "scope": " ".join(WHOOP_SCOPES),
-        "state": state
+        "state": state,
     }
 
     auth_url = f"{WHOOP_AUTH_URL}?{urlencode(params)}"
@@ -1155,14 +1133,11 @@ async def whoop_auth(uid: str = Query(...)):
 
 
 @app.get("/auth/whoop/callback")
-async def whoop_callback(
-    code: str = Query(None),
-    state: str = Query(None),
-    error: str = Query(None)
-):
+async def whoop_callback(code: str = Query(None), state: str = Query(None), error: str = Query(None)):
     """Handle Whoop OAuth2 callback."""
     if error:
-        return HTMLResponse(content=f"""
+        return HTMLResponse(
+            content=f"""
         <html>
             <head><style>{get_css()}</style></head>
             <body>
@@ -1174,10 +1149,13 @@ async def whoop_callback(
                 </div>
             </body>
         </html>
-        """, status_code=400)
+        """,
+            status_code=400,
+        )
 
     if not code or not state:
-        return HTMLResponse(content=f"""
+        return HTMLResponse(
+            content=f"""
         <html>
             <head><style>{get_css()}</style></head>
             <body>
@@ -1189,12 +1167,15 @@ async def whoop_callback(
                 </div>
             </body>
         </html>
-        """, status_code=400)
+        """,
+            status_code=400,
+        )
 
     # Look up uid from state (Whoop requires 8-char state, so we store state->uid mapping)
     uid = get_uid_from_oauth_state(state)
     if not uid:
-        return HTMLResponse(content=f"""
+        return HTMLResponse(
+            content=f"""
         <html>
             <head><style>{get_css()}</style></head>
             <body>
@@ -1206,7 +1187,9 @@ async def whoop_callback(
                 </div>
             </body>
         </html>
-        """, status_code=400)
+        """,
+            status_code=400,
+        )
 
     delete_oauth_state(state)
 
@@ -1219,9 +1202,9 @@ async def whoop_callback(
                 "client_secret": WHOOP_CLIENT_SECRET,
                 "code": code,
                 "grant_type": "authorization_code",
-                "redirect_uri": WHOOP_REDIRECT_URI
+                "redirect_uri": WHOOP_REDIRECT_URI,
             },
-            timeout=WHOOP_REQUEST_TIMEOUT
+            timeout=WHOOP_REQUEST_TIMEOUT,
         )
 
         if response.status_code != 200:
@@ -1272,10 +1255,10 @@ async def whoop_callback(
         """)
 
     except Exception as e:
-        log(f"OAuth error: {e}")
-        import traceback
-        traceback.print_exc()
-        return HTMLResponse(content=f"Authentication error: {str(e)}", status_code=500)
+        log(f"OAuth error: {type(e).__name__}")
+        return HTMLResponse(
+            content="Authentication error: An unexpected error occurred during authentication.", status_code=500
+        )
 
 
 @app.get("/setup/whoop")
@@ -1301,6 +1284,7 @@ async def health_check():
 # ============================================
 # CSS Styles
 # ============================================
+
 
 def get_css() -> str:
     """Returns Whoop-inspired dark theme CSS."""
@@ -1404,6 +1388,7 @@ def get_css() -> str:
 
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.getenv("PORT", 8080))
     host = os.getenv("HOST", "0.0.0.0")
 

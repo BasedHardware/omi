@@ -94,6 +94,11 @@ checks:
     triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#15118: guard weekly summary uncalculated scores and sanitize date parameters"
+  - id: whoop-error-handling-tests
+    command: ["python3", "plugins/omi-whoop-app/test_error_handling.py"]
+    triggers: ["plugins/omi-whoop-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "sanitize tool error messages and prevent raw exception leakage"
   - id: plugin-remaining-apps-uid-reflection-tests
     command: ["python3", "plugins/test_uid_reflection_remaining_apps.py"]
     triggers: ["plugins/omi-dropbox-app/**", "plugins/omi-google-calendar-app/**", "plugins/omi-hive-app/**", "plugins/omi-ms365-app/**", "plugins/omi-shipbob-app/**", "plugins/omi-shopify-app/**", "plugins/omi-linear-app/**", "plugins/test_uid_reflection_remaining_apps.py", ".github/checks-manifest.yaml"]
