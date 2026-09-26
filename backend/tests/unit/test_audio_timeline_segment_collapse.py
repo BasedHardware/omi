@@ -243,14 +243,19 @@ async def test_window_drifted_timestamps_do_not_collapse_clock_only(monkeypatch)
     The same collapse would persist a zero-length segment through the legacy
     path (the managed chain's offset rebase keeps start == end), which is the
     prod-relevant shape: prod runs the legacy chain but the same window
-    adapter and translator feed its speaker-ID windows.
+    adapter and translator feed its speaker-ID windows. The persisted offsets
+    are the exact legacy numbers — the gate remap keeps the gated-stream
+    times (its pre-roll re-sends make the forwarded stream contiguous) and
+    the first leg's offset is zero — not merely "some positive duration".
     """
     receiver = await _drive_window_session(monkeypatch, v2=False)
 
     assert [segment['text'] for segment in receiver.collected] == ['One.', 'Two.']
     for segment in receiver.collected:
         assert segment['end'] > segment['start'], f'zero-length segment collapsed: {segment}'
-        assert segment['end'] - segment['start'] >= 0.5
+    first, good = receiver.collected
+    assert (first['start'], first['end']) == (pytest.approx(0.3), pytest.approx(4.5))
+    assert (good['start'], good['end']) == (pytest.approx(4.7), pytest.approx(5.4))
 
 
 def _window_drops(reason: str) -> float:
