@@ -362,12 +362,15 @@ class CaptureController extends ChangeNotifier
         if (!_admitsCapture(revision)) return;
         _recordingTelemetry.observeAudio(bytes.length);
         final frames = _activeSource?.processBytes(bytes) ?? [];
-        for (final frame in frames) {
-          _wal.getSyncs().phone.onFrameCaptured(frame);
-          if (_socket?.state == SocketServiceState.connected) {
-            _socket?.send(frame.payload);
-            _recordingTelemetry.observeSent(frame.payload.length);
-            _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+        if (frames.isNotEmpty) {
+          final phoneSync = _wal.getSyncs().phone;
+          for (final frame in frames) {
+            phoneSync.onFrameCaptured(frame);
+            if (_socket?.state == SocketServiceState.connected) {
+              _socket?.send(frame.payload);
+              _recordingTelemetry.observeSent(frame.payload.length);
+              phoneSync.markFrameSynced(frame.syncKey);
+            }
           }
         }
       },
@@ -1778,9 +1781,10 @@ class CaptureController extends ChangeNotifier
 
         // Process bytes through audio source and feed to WAL
         final frames = _activeSource?.processBytes(snapshot) ?? [];
-        if (_isWalSupported) {
+        if (_isWalSupported && frames.isNotEmpty) {
+          final phoneSync = _wal.getSyncs().phone;
           for (final frame in frames) {
-            _wal.getSyncs().phone.onFrameCaptured(frame);
+            phoneSync.onFrameCaptured(frame);
           }
         }
 
@@ -1794,9 +1798,10 @@ class CaptureController extends ChangeNotifier
           _recordingTelemetry.observeSent(socketPayload.length);
 
           // Mark frames as synced
-          if (_isWalSupported) {
+          if (_isWalSupported && frames.isNotEmpty) {
+            final phoneSync = _wal.getSyncs().phone;
             for (final frame in frames) {
-              _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+              phoneSync.markFrameSynced(frame.syncKey);
             }
           }
         }
@@ -2415,13 +2420,16 @@ class CaptureController extends ChangeNotifier
           // Process through AudioSource for frame splitting and sync key generation
           final frames = _activeSource?.processBytes(bytes) ?? [];
 
-          for (final frame in frames) {
-            _wal.getSyncs().phone.onFrameCaptured(frame);
+          if (frames.isNotEmpty) {
+            final phoneSync = _wal.getSyncs().phone;
+            for (final frame in frames) {
+              phoneSync.onFrameCaptured(frame);
 
-            if (_socket?.state == SocketServiceState.connected) {
-              _socket?.send(frame.payload);
-              _recordingTelemetry.observeSent(frame.payload.length);
-              _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+              if (_socket?.state == SocketServiceState.connected) {
+                _socket?.send(frame.payload);
+                _recordingTelemetry.observeSent(frame.payload.length);
+                phoneSync.markFrameSynced(frame.syncKey);
+              }
             }
           }
         },
@@ -3434,8 +3442,12 @@ class CaptureController extends ChangeNotifier
     try {
       final finalPersonId = personId.isEmpty ? (await externalActions.createPerson(personName))?.id : personId;
       if (finalPersonId == null || finalPersonId.isEmpty) return false;
-      final saved = await externalActions.assignSpeaker(conversationId, targets, finalPersonId,
-          speakerId: applyToSpeaker ? speakerId : null);
+      final saved = await externalActions.assignSpeaker(
+        conversationId,
+        targets,
+        finalPersonId,
+        speakerId: applyToSpeaker ? speakerId : null,
+      );
       if (!saved) return false;
       if (_conversation?.id != conversationId || activeCaptureSessionId != sessionId) return true;
       if (applyToSpeaker) {
@@ -3451,13 +3463,15 @@ class CaptureController extends ChangeNotifier
       }
       _segmentsPhotosVersion++;
       if (_socket?.state == SocketServiceState.connected) {
-        _socket?.send(jsonEncode({
-          'type': 'speaker_assigned',
-          'speaker_id': speakerId,
-          'person_id': finalPersonId,
-          'person_name': personName,
-          'segment_ids': targets,
-        }));
+        _socket?.send(
+          jsonEncode({
+            'type': 'speaker_assigned',
+            'speaker_id': speakerId,
+            'person_id': finalPersonId,
+            'person_name': personName,
+            'segment_ids': targets,
+          }),
+        );
       }
       suggestionsBySegmentId.removeWhere((key, value) => targets.contains(key));
       return true;
@@ -3575,12 +3589,13 @@ class CaptureController extends ChangeNotifier
 
   /// Writes the phone source's buffered tail to the WAL and, when connected, the socket.
   void _flushPhoneFrames() {
+    final phoneSync = _wal.getSyncs().phone;
     for (final frame in _activeSource?.flush() ?? const []) {
-      _wal.getSyncs().phone.onFrameCaptured(frame);
+      phoneSync.onFrameCaptured(frame);
       if (_socket?.state == SocketServiceState.connected) {
         _socket?.send(frame.payload);
         _recordingTelemetry.observeSent(frame.payload.length);
-        _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+        phoneSync.markFrameSynced(frame.syncKey);
       }
     }
   }
