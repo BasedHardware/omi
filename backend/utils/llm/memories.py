@@ -281,7 +281,6 @@ def new_memories_extractor(
     if not content or len(content) < 25:  # less than 5 words, probably nothing
         return []
     # TODO: later, focus a lot on user said things, rn is hard because of speech profile accuracy
-    # TODO: include negative facts too? Things the user doesn't like?
     # TODO: make it more strict?
 
     language_instruction = _get_language_instruction(uid, language)
