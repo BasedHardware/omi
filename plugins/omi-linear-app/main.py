@@ -148,19 +148,21 @@ def linear_graphql_request(
             error_data = response.json() if response.content else {}
             errors = error_data.get("errors", [])
             if errors:
-                return {"error": errors[0].get("message", f"API error: {response.status_code}")}
-            return {"error": f"API error: {response.status_code}"}
+                print(f"Linear GraphQL HTTP error: {errors}")
+            return {"error": "Linear API request failed"}
         
         result = response.json()
         errors = result.get("errors")
         if errors:
+            print(f"Linear GraphQL error: {errors}")
             if isinstance(errors, list) and errors and isinstance(errors[0], dict):
                 return {"error": errors[0].get("message", "GraphQL error")}
             return {"error": "GraphQL error"}
         
         return result.get("data", {})
     except requests.RequestException as e:
-        return {"error": f"Request failed: {str(e)}"}
+        print(f"Linear API error: {e}")
+        return {"error": "Linear API request failed"}
 
 
 def get_issue_by_identifier(uid: str, issue_identifier: str) -> Dict[str, Any]:
@@ -682,7 +684,8 @@ async def tool_create_issue(request: Request):
         )
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to create issue: {str(e)}")
+        print(f"Error creating issue: {e}")
+        return ChatToolResponse(error="Failed to create issue")
 
 
 def coerce_limit(value: Any, default: int = 10, min_val: int = 1, max_val: int = 50) -> int:
@@ -785,7 +788,8 @@ async def tool_list_my_issues(request: Request):
         )
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to list issues: {str(e)}")
+        print(f"Error listing user issues: {e}")
+        return ChatToolResponse(error="Failed to list issues")
 
 
 @app.post("/tools/list_recent_issues", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -885,7 +889,8 @@ async def tool_list_recent_issues(request: Request):
         )
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to list issues: {str(e)}")
+        print(f"Error listing user issues: {e}")
+        return ChatToolResponse(error="Failed to list issues")
 
 
 @app.post("/tools/update_issue_status", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -983,7 +988,8 @@ async def tool_update_issue_status(request: Request):
         )
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to update issue: {str(e)}")
+        print(f"Error updating issue: {e}")
+        return ChatToolResponse(error="Failed to update issue")
 
 
 @app.post("/tools/search_issues", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1087,7 +1093,8 @@ async def tool_search_issues(request: Request):
         )
     
     except Exception as e:
-        return ChatToolResponse(error=f"Search failed: {str(e)}")
+        print(f"Error searching issues: {e}")
+        return ChatToolResponse(error="Search failed")
 
 
 @app.post("/tools/get_issue", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1164,7 +1171,8 @@ async def tool_get_issue(request: Request):
         return ChatToolResponse(result="\n".join(details))
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get issue: {str(e)}")
+        print(f"Error getting issue: {e}")
+        return ChatToolResponse(error="Failed to get issue")
 
 
 @app.post("/tools/add_comment", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1235,7 +1243,8 @@ async def tool_add_comment(request: Request):
         )
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to add comment: {str(e)}")
+        print(f"Error adding comment: {e}")
+        return ChatToolResponse(error="Failed to add comment")
 
 
 # ============================================
