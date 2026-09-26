@@ -7,6 +7,7 @@ extension DesktopAutomationActionRegistry {
   func registerRemotePromptActions() {
     register(
       name: "remote_prompts_state",
+      effects: [],
       summary: "Return the remote-prompt engine's fetched specs and active prompt"
     ) { _ in
       await MainActor.run {
@@ -23,6 +24,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "remote_prompts_refresh",
+      effects: [.localState, .networkOrModel],
       summary: "Fetch prompts from the backend now (same call as the 5-minute poll)"
     ) { _ in
       await RemotePromptEngine.shared.refreshFromServer()
@@ -38,6 +40,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "remote_prompt_answer",
+      effects: [.localState],
       summary: "Answer the active remote prompt through the same path as its buttons",
       params: ["value"]
     ) { params in
@@ -55,6 +58,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "remote_prompt_dismiss",
+      effects: [.localState],
       summary: "Dismiss the active remote prompt through the same path as its close button"
     ) { _ in
       await MainActor.run {
@@ -69,6 +73,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "remote_prompts_reset",
+      effects: [.localState],
       summary: "Forget local prompt resolutions and counters so triggers can be exercised again"
     ) { _ in
       await MainActor.run {

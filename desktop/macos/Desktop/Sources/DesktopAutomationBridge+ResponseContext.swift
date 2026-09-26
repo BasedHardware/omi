@@ -12,6 +12,7 @@ extension DesktopAutomationActionRegistry {
     // (hover-reveal + click are cursor gestures automation must not use).
     register(
       name: "main_chat_open_response_context",
+      effects: [.localState],
       summary: "Open the Response Context popover on the latest attributed assistant message (non-prod)",
       params: []
     ) { _ in

@@ -625,6 +625,7 @@ final class TaskChatCoordinator: ObservableObject {
     func registerAutomationActions() {
       DesktopAutomationActionRegistry.shared.register(
         name: "task_thread_scenario_13",
+        effects: [.localState, .networkOrModel, .remoteWrite],
         summary: "Exercise live task-backed thread continuity through the app kernel",
         params: ["task", "resume"]
       ) { [weak self] params in

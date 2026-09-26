@@ -5,6 +5,7 @@ extension DesktopAutomationActionRegistry {
   func registerNotificationActions() {
     register(
       name: "settings_notifications_snapshot",
+      effects: [.networkOrModel],
       summary: "Return notification settings and local permission state"
     ) { _ in
       async let settingsTask = APIClient.shared.getNotificationSettings()
@@ -24,6 +25,7 @@ extension DesktopAutomationActionRegistry {
 
     register(
       name: "set_notification_settings",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Update notification settings via the real API",
       params: ["enabled", "frequency"]
     ) { params in
@@ -53,6 +55,7 @@ extension DesktopAutomationActionRegistry {
     // token the caller holds, through the same production sendNotification path.
     register(
       name: "send_test_notification",
+      effects: [.localState, .networkOrModel, .remoteWrite],
       summary: "Deliver a proactive test notification through the real sendNotification path (this bundle only)",
       params: ["title", "message", "assistant_id"]
     ) { params in
