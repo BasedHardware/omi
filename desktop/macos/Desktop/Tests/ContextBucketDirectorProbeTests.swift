@@ -70,7 +70,7 @@
           return ProactiveLaneResult(
             operation: operation,
             lane: "omi:auto:desktop-proactive-reasoning",
-            providerModel: "gpt-5.6-luna",
+            providerModel: "gpt-6-luna",
             usage: ProactiveLaneUsage(cachedTokens: 1, cacheWriteTokens: 0),
             cacheWrite: false,
             fallbackClass: "unknown",
@@ -111,13 +111,15 @@
       // once and never read.
       XCTAssertEqual(captured?.cacheKey, "director:v1")
       XCTAssertEqual(captured?.cacheKey, ContextPromptCacheKey.director)
-      XCTAssertEqual(captured?.maxCompletionTokens, 800)
+      XCTAssertEqual(
+        captured?.maxCompletionTokens,
+        ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens)
       XCTAssertFalse(captured?.authorizationSnapshotWasPresent ?? true)
       XCTAssertEqual(captured?.schemaKeys, Set(["type", "properties", "required", "additionalProperties"]))
       XCTAssertEqual(result["decision"], "suggest")
       XCTAssertEqual(result["bucket_entry_ref_count"], "1")
       XCTAssertEqual(result["fact_ref_count"], "1")
-      XCTAssertEqual(result["model"], "gpt-5.6-luna")
+      XCTAssertEqual(result["model"], "gpt-6-luna")
       XCTAssertNotNil(result["latency_ms"])
     }
 
@@ -227,6 +229,14 @@
       XCTAssertTrue(ContextDirectorEligibility.permitsEvaluation(of: eligible))
       XCTAssertFalse(ContextDirectorEligibility.permitsEvaluation(of: noFacts))
       XCTAssertFalse(ContextDirectorEligibility.permitsEvaluation(of: zeroWorthiness))
+      XCTAssertTrue(ContextDirectorEligibility.permitsJITEvaluation(of: eligible))
+      XCTAssertFalse(ContextDirectorEligibility.permitsJITEvaluation(of: noFacts))
+      XCTAssertTrue(
+        ContextDirectorEligibility.permitsJITEvaluation(of: zeroWorthiness),
+        "planned JIT matching is grounded on validated facts, not director worthiness")
+      XCTAssertEqual(ContextProactivityVisitAdmission.route(for: eligible), .jitThenLegacyDirector)
+      XCTAssertEqual(ContextProactivityVisitAdmission.route(for: noFacts), .skip)
+      XCTAssertEqual(ContextProactivityVisitAdmission.route(for: zeroWorthiness), .jitOnly)
     }
 
     func testReplayReturnsEffectiveSilenceForZeroWorthinessWithoutModel() async throws {
@@ -310,7 +320,7 @@
           return ProactiveLaneResult(
             operation: operation,
             lane: "omi:auto:desktop-proactive-reasoning",
-            providerModel: "gpt-5.6-luna",
+            providerModel: "gpt-6-luna",
             usage: ProactiveLaneUsage(cachedTokens: 0, cacheWriteTokens: 0),
             cacheWrite: false,
             fallbackClass: "unknown",

@@ -324,16 +324,45 @@ extension SBOnboardingModel {
     }
   }
 
-  func answerMic() { advance(userAnswer: micState == .on ? "Allowed" : "Skip", to: .systemAudio) }
-  func answerSystemAudio() { advance(userAnswer: sysState == .on ? "Allowed" : "Skip", to: .screen) }
-  func answerScreen() { advance(userAnswer: scrState == .on ? "Allowed" : "Skip", to: .files) }
-  /// Restores the legacy Files-stage contract: scan what is readable after the
-  /// Full Disk Access choice, then form the aggregate local-file memories
-  /// before moving on. A skipped FDA grant still scans folders macOS permits.
+  /// Skip on the mic step is a durable off for the automatic listening path: write
+  /// `.off` so launch/restore never tries to start (and prompt) again. Allowing
+  /// undoes an earlier skip so a user who goes Back and grants isn't left dark —
+  /// the capture step's explicit answer remains the final word either way.
+  func answerMic() {
+    let allowed = micState == .on
+    if allowed {
+      if AssistantSettings.shared.audioRecordingMode == .off {
+        AssistantSettings.shared.audioRecordingMode = .onlyMeetings
+      }
+    } else {
+      AssistantSettings.shared.audioRecordingMode = .off
+    }
+    advance(userAnswer: allowed ? "Allowed" : "Skip", to: .systemAudio)
+  }
+
+  func answerSystemAudio() {
+    UserDefaults.standard.set(sysState != .on, forKey: .onboardingSystemAudioSkipped)
+    advance(userAnswer: sysState == .on ? "Allowed" : "Skip", to: .screen)
+  }
+
+  /// Skip on the screen step is a durable off for screen analysis — completion and
+  /// every later automatic restore read this as the user's standing intent instead
+  /// of force-enabling Rewind for someone who just declined it.
+  func answerScreen() {
+    AssistantSettings.shared.screenAnalysisEnabled = scrState == .on
+    advance(userAnswer: scrState == .on ? "Allowed" : "Skip", to: .files)
+  }
+  /// A granted Files step builds the local-file profile. A skipped step must
+  /// not enumerate Desktop/Documents/Downloads: touching those folders can
+  /// itself raise Files & Folders consent when Full Disk Access is absent.
   func answerFiles() {
+    guard fdaState == .on else {
+      advance(userAnswer: "Skip", to: .accessibility)
+      return
+    }
     switch localFileProfileState {
     case .idle:
-      thread.append(Msg(isOmi: false, text: fdaState == .on ? "Allowed" : "Skip"))
+      thread.append(Msg(isOmi: false, text: "Allowed"))
       startLocalFileScan()
     case .scanning:
       break
@@ -378,7 +407,14 @@ extension SBOnboardingModel {
     guard localFileProfileState.isTerminal else { return }
     advance(userAnswer: nil, to: .accessibility)
   }
-  func answerAccessibility() { advance(userAnswer: accState == .on ? "Allowed" : "Skip", to: .automation) }
+  /// Skip on accessibility is a durable "not now": the sidebar must not pulse the
+  /// row as denied for a user who explicitly walked past it. macOS exposes no
+  /// denied/notDetermined distinction for AX, so the onboarding decision is the
+  /// only honest signal — an Allow clears it, a Skip sets it.
+  func answerAccessibility() {
+    UserDefaults.standard.set(accState != .on, forKey: .onboardingAccessibilitySkipped)
+    advance(userAnswer: accState == .on ? "Allowed" : "Skip", to: .automation)
+  }
   func answerAutomation() { advance(userAnswer: autoState == .on ? "Allowed" : "Skip", to: .notifications) }
   func answerNotifications() { advance(userAnswer: notifState == .on ? "Allowed" : "Skip", to: .shortcutOpen) }
 
@@ -501,9 +537,11 @@ extension SBOnboardingModel {
 
   /// Push-to-talk options (hold to talk, hands-free).
   var talkShortcutOptions: [(id: String, shortcut: ShortcutSettings.KeyboardShortcut, sub: String)] {
+    // Settings' order (`ShortcutSettings.pttPresets`, whose first entry is the default), so the two
+    // surfaces recommend the same key.
     [
-      ("fn", ShortcutSettings.KeyboardShortcut(modifierOnly: .function), "press to set"),
       ("opt", ShortcutSettings.KeyboardShortcut(modifierOnly: .option), "press to set"),
+      ("fn", ShortcutSettings.KeyboardShortcut(modifierOnly: .function), "press to set"),
       ("ctrl", ShortcutSettings.KeyboardShortcut(modifierOnly: .control), "press to set"),
     ]
   }
@@ -571,6 +609,12 @@ extension SBOnboardingModel {
     if let l = NSEvent.addLocalMonitorForEvents(
       matching: mask,
       handler: { [weak self] event in
+        // The main menu is detached on these steps (see `armShortcutSummon`), which also took ⌘Q
+        // with it. Quitting must never depend on finishing a setup step.
+        if Self.isQuitChord(event) {
+          NSApp.terminate(nil)
+          return nil
+        }
         let matched = self?.handleShortcutEvent(event) ?? false
         return matched ? nil : event
       })
@@ -585,6 +629,13 @@ extension SBOnboardingModel {
     {
       shortcutMonitors.append(g)
     }
+  }
+
+  /// ⌘Q exactly (no other modifiers). Never a candidate chord, so it cannot collide with a pick.
+  nonisolated static func isQuitChord(_ event: NSEvent) -> Bool {
+    event.type == .keyDown
+      && event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command
+      && event.charactersIgnoringModifiers?.lowercased() == "q"
   }
 
   /// The shortcuts offered on the current step — used so the user can just PRESS

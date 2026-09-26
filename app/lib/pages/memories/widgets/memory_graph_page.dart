@@ -17,6 +17,7 @@ import 'package:vector_math/vector_math_64.dart' as v;
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -41,9 +42,9 @@ class GraphNode3D {
     required this.baseColor,
     required v.Vector3 initialPosition,
     this.isFixed = false,
-  })  : position = initialPosition,
-        velocity = v.Vector3.zero(),
-        force = v.Vector3.zero();
+  }) : position = initialPosition,
+       velocity = v.Vector3.zero(),
+       force = v.Vector3.zero();
 }
 
 class GraphEdge3D {
@@ -225,6 +226,8 @@ class MemoryGraphPage extends StatefulWidget {
   final bool showShareButton;
   final bool trackOpenEvent;
   final double initialZoom;
+  @visibleForTesting
+  final Future<Map<String, dynamic>> Function() loadGraph;
 
   const MemoryGraphPage({
     super.key,
@@ -233,6 +236,7 @@ class MemoryGraphPage extends StatefulWidget {
     this.showShareButton = true,
     this.trackOpenEvent = true,
     this.initialZoom = 1.0,
+    this.loadGraph = KnowledgeGraphApi.getKnowledgeGraph,
   });
 
   @override
@@ -317,7 +321,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
 
     try {
-      final data = await KnowledgeGraphApi.getKnowledgeGraph();
+      final data = await widget.loadGraph();
       if (!mounted) return;
 
       final newNodes = data['nodes'] as List<dynamic>? ?? [];
@@ -488,7 +492,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       case 'organization':
         return Colors.orangeAccent;
       case 'thing':
-        return Colors.purpleAccent;
+        return Colors.yellowAccent;
       default:
         return Colors.blueAccent;
     }
@@ -549,24 +553,23 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   @override
   Widget build(BuildContext context) {
     if (widget.embedded) {
-      return ColoredBox(color: Colors.black, child: _buildBody());
+      return ColoredBox(color: OmiColors.surface0, child: _buildBody());
     }
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: OmiColors.surface0,
       extendBodyBehindAppBar: widget.showAppBar,
       appBar: widget.showAppBar
           ? AppBar(
-              title: const Text('omi.me', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-              centerTitle: true,
+              title: Text(context.l10n.memoryGraphTitle),
               backgroundColor: Colors.transparent,
-              elevation: 0,
-              leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.of(context).pop()),
+              leading: const OmiBackButton(),
               actions: widget.showShareButton
                   ? [
-                      IconButton(
+                      OmiIconButton(
                         key: _shareButtonKey,
                         icon: const FaIcon(FontAwesomeIcons.share, size: 20),
+                        label: context.l10n.share,
                         onPressed: _shareGraph,
                       ),
                     ]
@@ -579,42 +582,13 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
   Widget _buildBody() {
     if (_isLoading) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(color: Colors.purpleAccent),
-            const SizedBox(height: 16),
-            Text(context.l10n.loadingKnowledgeGraph, style: const TextStyle(color: Colors.white70)),
-          ],
-        ),
-      );
+      return OmiLoadingState(label: context.l10n.loadingKnowledgeGraph);
     }
 
     if (_error != null) {
-      return Center(
+      return SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
-              const SizedBox(height: 16),
-              Text(
-                _error!,
-                style: const TextStyle(color: Colors.white70),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              // Explicit colors: the bare button resolved to theme primary/onPrimary
-              // (black-on-black on this theme), an invisible label.
-              ElevatedButton(
-                onPressed: _loadGraph,
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black),
-                child: Text(context.l10n.retry),
-              ),
-            ],
-          ),
+          child: OmiErrorState(message: _error!, onRetry: _loadGraph),
         ),
       );
     }
@@ -624,26 +598,20 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         simulation.nodes.isEmpty || (simulation.nodes.length == 1 && simulation.nodes.first.id == 'user-node');
 
     if (isEmpty) {
-      return Center(
-        child: Padding(
-          padding: EdgeInsets.all(widget.embedded ? 16.0 : 32.0),
+      final emptyState = OmiEmptyState(
+        icon: Icons.hub_outlined,
+        title: context.l10n.noKnowledgeGraphYet,
+        message: context.l10n.knowledgeGraphWillBuildAutomatically,
+      );
+      if (!widget.embedded) {
+        return SafeArea(child: emptyState);
+      }
+      // Scaled down to fit when embedded in the small Home card.
+      return LayoutBuilder(
+        builder: (context, constraints) => Center(
           child: FittedBox(
             fit: BoxFit.scaleDown,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.hub_outlined, color: Colors.white30, size: 64),
-                const SizedBox(height: 16),
-                Text(context.l10n.noKnowledgeGraphYet, style: const TextStyle(color: Colors.white70, fontSize: 18)),
-                const SizedBox(height: 12),
-                Text(
-                  context.l10n.knowledgeGraphWillBuildAutomatically,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white38, fontSize: 14),
-                ),
-              ],
-            ),
+            child: SizedBox(width: constraints.maxWidth, child: emptyState),
           ),
         ),
       );

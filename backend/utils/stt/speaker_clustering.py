@@ -6,9 +6,10 @@ import os
 from typing import Any, Callable, Sequence
 
 # Enrollment verification compares a clip to a long-lived, taught voiceprint at
-# SPEAKER_MATCH_THRESHOLD=0.45. Online clustering compares short capture clips to
-# noisy in-session centroids, so it deliberately has a separate, more permissive
-# operating point. This changes clustering only; enrollment verification stays at 0.45.
+# SPEAKER_MATCH_THRESHOLD (see utils/stt/speaker_match.py). Online clustering compares
+# short capture clips to noisy in-session centroids, so it deliberately has a
+# separate operating point. This changes clustering only; enrollment verification
+# is tuned from the offline bench, not from here.
 SPEAKER_CLUSTERING_THRESHOLD = float(os.getenv('SPEAKER_CLUSTERING_THRESHOLD', '0.60'))
 
 # Eight active speakers preserves ordinary group conversations while making a

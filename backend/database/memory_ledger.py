@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
 from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownMemberType]  # firestore SDK stub gap
 
+from database import _client as _client_mod
 from database import projection_repair
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
@@ -17,7 +18,8 @@ from models.memory_state_head import (
     trusted_memory_state_head_fields_from_control,
     trusted_memory_state_head_fields_from_state,
 )
-from ._client import db
+
+db = getattr(_client_mod, 'data_plane_db', _client_mod.db)
 
 T = TypeVar("T")
 
@@ -112,17 +114,23 @@ def _assert_legacy_commit_privacy_fences(
     collections = MemoryCollections(uid=uid)
     for memory_id in memory_ids:
         item_snapshot = _document(database, f'{collections.memory_items}/{memory_id}').get(transaction=transaction)
-        item_payload = item_snapshot.to_dict() if getattr(item_snapshot, 'exists', False) else None
+        item_exists = getattr(item_snapshot, 'exists', False)
+        item_payload = item_snapshot.to_dict() if item_exists else None
+        if item_exists:
+            if not isinstance(item_payload, dict):
+                raise LegacyCommitPrivacyFence('legacy memory commit canonical identity is unreadable')
+            if item_payload.get('status') == 'tombstoned':
+                raise LegacyCommitPrivacyFence('legacy memory commit references a privacy-deleted memory')
+            # Still read the override: delete_batch writes suppression before the
+            # canonical tombstone, so a live item can already be privacy-deleted.
         override_snapshot = _document(database, f'{collections.memory_historical_overrides}/{memory_id}').get(
             transaction=transaction
         )
-        override_payload = override_snapshot.to_dict() if getattr(override_snapshot, 'exists', False) else None
-        if (
-            isinstance(item_payload, dict)
-            and item_payload.get('status') == 'tombstoned'
-            or isinstance(override_payload, dict)
-            and override_payload.get('status') == 'tombstoned'
-        ):
+        override_exists = getattr(override_snapshot, 'exists', False)
+        override_payload = override_snapshot.to_dict() if override_exists else None
+        if override_exists and not isinstance(override_payload, dict):
+            raise LegacyCommitPrivacyFence('legacy memory commit canonical identity is unreadable')
+        if isinstance(override_payload, dict) and override_payload.get('status') == 'tombstoned':
             raise LegacyCommitPrivacyFence('legacy memory commit references a privacy-deleted memory')
 
 

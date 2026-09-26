@@ -41,8 +41,13 @@ sudo apt-get install -y x11-utils tesseract-ocr tesseract-ocr-eng
 
 The app targets X11. On a Wayland session it defaults to **XWayland**
 (`ozone-platform=x11`) because a native Wayland surface breaks Electron global
-shortcuts (push-to-talk / overlay summon) and the X11 active-window path. To run
-native Wayland anyway, set `OMI_OZONE=wayland` (accepting those limitations).
+shortcuts (push-to-talk / overlay summon) and the X11 active-window path. On
+compositors known to have limited XWayland support (niri, Sway, Hyprland —
+detected via each one's own session marker env var, see
+`src/main/linuxCompositor.ts`) it instead defaults to native Wayland, since
+XWayland there can fail to map the main window at all. Set `OMI_OZONE=x11` or
+`OMI_OZONE=wayland` to override the auto-detected choice in either direction
+(accepting native Wayland's limitations if you force it on).
 
 Screen capture on Wayland goes through the desktop portal, which asks
 "Share screen?" for consent — and Electron has no persisted-consent path, so

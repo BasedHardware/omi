@@ -19,6 +19,7 @@ import {
   Truck,
   Bell,
   ShieldAlert,
+  ThumbsDown,
   FlaskConical,
   Rocket,
   Handshake,
@@ -140,6 +141,11 @@ export function DashboardSidebar() {
       title: "Fair Use",
       href: "/dashboard/fair-use",
       icon: ShieldAlert,
+    },
+    {
+      title: "Negative Feedback",
+      href: "/dashboard/feedback",
+      icon: ThumbsDown,
     },
   ];
 

@@ -11,11 +11,12 @@ import database.action_items as action_items_db
 import database.redis_db as redis_db
 import database.users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
-from database.vector_db import delete_vector, delete_transcript_chunk_vectors
+from database.vector_db import delete_action_item_vector, delete_vector, delete_transcript_chunk_vectors
 import database.vector_db as vector_db
-from utils.other.storage import delete_conversation_audio_files
+from utils.other.storage import delete_conversation_audio_files, delete_speech_profile_blob
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
+from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
 from models.conversation import (
     BulkAssignSegmentsRequest,
     CalendarEventLink,
@@ -39,6 +40,7 @@ from models.conversation import (
     project_shared_conversation,
 )
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
 from utils.conversations.mcp_transcript_search import (
@@ -50,13 +52,18 @@ from models.conversation_enums import ConversationStatus, ConversationVisibility
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
 from models.app import App
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from models.transcript_segment import TranscriptSegment
 from models.other import Person
 from models.shared import StatusResponse
 
+from utils.conversations.projection_payload import (
+    client_processing_mutation,
+    sanitize_untrusted_provenance_field,
+)
 from utils.conversations.process_conversation import (
     AppUsageAttribution,
+    DerivedEffectsDisposition,
     process_conversation,
     run_first_open_derived_work,
     retrieve_in_progress_conversation,
@@ -67,6 +74,7 @@ from utils.conversations.meeting_receipt import record_and_persist_finalized_mee
 from utils.integration_telemetry import emit_posthog_event
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
+from utils.metrics import record_lazy_desktop_deferral
 from utils.memory.retraction_scope import retraction_can_be_skipped
 from utils.memory.canonical_memory_adapter import ConversationReplacementConflictError
 from utils import byok
@@ -79,12 +87,14 @@ from utils.conversations.search import (
     search_conversations,
 )
 from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
+from utils.manual_speaker_assignments import teaching_segment_ids
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
 from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.journey_metrics_contract import resolve_client_kind
+from utils.product_metrics import extract_app_build, record_product_event
 from utils.product_telemetry import emit_product_event
 from services.conversation_frame_evidence import delete_conversation_and_frame_evidence
 from utils.other.list_budget import (
@@ -100,6 +110,7 @@ from utils.conversations.calendar_utils import extract_attendees, parse_event_ti
 from utils.retrieval.tools.calendar_tools import get_google_calendar_event
 from utils.retrieval.tools.google_utils import refresh_google_token
 from utils.conversations.location import resolve_geolocation
+from utils.conversations.transcript_hash import transcript_sha256_for_binding
 from utils.observability.fallback import record_fallback
 import logging
 
@@ -113,6 +124,9 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
         uid, conversation_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
     )
     if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversation.get('is_locked', False):
@@ -173,13 +187,21 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
         reacquired = lifecycle_service.reacquire_deferred_processing(uid, conversation_id)
     except Exception as e:
         logger.error(f"lazy enrich reacquire failed uid={uid} conv={conversation_id}: {e}")
+        # A reacquire that RAISED is a broken dependency, not a lost fence.
+        # `deferred=True` doubles as the concurrency fence and clients poll
+        # during enrichment, so a merged label would bury this in benign polls.
+        record_lazy_desktop_deferral(event='enrich_reacquire_error')
         return conversation
     if not reacquired:
         # The row was terminalized or discarded before reacquisition. A stale
         # processor must not persist derived side effects after ownership loss.
+        record_lazy_desktop_deferral(event='enrich_lost_ownership')
         return conversation
 
     def _run_enrichment():
+        # Counted here, not before the submit: a rejected submit (shut-down
+        # pool during a deploy) would otherwise leave a start with no terminal.
+        record_lazy_desktop_deferral(event='enrich_started')
         try:
             conv_obj = deserialize_conversation(conversation)
             conv_obj.deferred = False
@@ -188,19 +210,26 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
                     uid,
                     conv_obj.language or 'en',
                     conv_obj,
-                    force_process=True,
-                    is_reprocess=False,
                     app_usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
+                    trigger=ProcessingTrigger.FIRST_OPEN,
                 )
+            # The enrichment itself succeeded here; count it now so a receipt
+            # publish failure below is not misattributed to enrichment and does
+            # not skew the stored-vs-enrich_complete reconciliation.
+            record_lazy_desktop_deferral(event='enrich_complete')
             # Deferred desktop meetings must publish their exact Chat receipt
             # at the same terminal transition as ordinary finalization. The
             # initial lazy row deliberately skipped this adapter, so doing it
             # here closes the gap without waking Chat for processing rows.
             if enriched is not None:
-                record_and_persist_finalized_meeting_receipt(uid, enriched)
+                try:
+                    record_and_persist_finalized_meeting_receipt(uid, enriched)
+                except Exception:
+                    logger.exception('lazy enrich receipt publish failed uid=%s conv=%s', uid, conversation_id)
             logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
+            record_lazy_desktop_deferral(event='enrich_failed')
             try:
                 recovered = lifecycle_service.recover_deferred_processing_failure(uid, conversation_id)
                 if not recovered:
@@ -258,6 +287,154 @@ def _dispatch_first_open_work(uid: str, conversation: dict) -> None:
 
 class ProcessConversationRequest(BaseModel):
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
+    # Unvalidated on purpose: a malformed projection must not 422 a finished recording.
+    # Schema, size caps, and transcript-hash binding run in the handler.
+    client_processing: Optional[Any] = Field(
+        default=None,
+        description=(
+            "Untrusted client-authored display projection. Accepted as a raw payload "
+            "and validated in the handler so a malformed projection cannot 422 a "
+            "finished recording. Hash-bound to the persisted transcript. Display only "
+            "— never an input to intelligence."
+        ),
+    )
+
+
+# Provenance is untrusted client input. Bound it before it reaches a log
+# record so a newline / C0 control / oversized token cannot forge a second line.
+def _projection_provenance_for_log(raw: Any) -> tuple[Any, Any, Any]:
+    """Pull provenance for logs. Never raises; never returns body text."""
+    try:
+        if raw is None or isinstance(raw, (str, bytes, list, tuple, int, float, bool)):
+            return None, None, None
+        if isinstance(raw, dict):
+            provenance = raw.get('provenance')
+        else:
+            provenance = getattr(raw, 'provenance', None)
+        if provenance is None or isinstance(provenance, (str, bytes, list, tuple, int, float, bool)):
+            return None, None, None
+        if isinstance(provenance, dict):
+            return (
+                sanitize_untrusted_provenance_field(provenance.get('model_id')),
+                sanitize_untrusted_provenance_field(provenance.get('runtime')),
+                sanitize_untrusted_provenance_field(provenance.get('device_class')),
+            )
+        return (
+            sanitize_untrusted_provenance_field(getattr(provenance, 'model_id', None)),
+            sanitize_untrusted_provenance_field(getattr(provenance, 'runtime', None)),
+            sanitize_untrusted_provenance_field(getattr(provenance, 'device_class', None)),
+        )
+    except Exception:
+        return None, None, None
+
+
+def _log_client_projection_rejected(reason: str, raw: Any) -> None:
+    """Content-free reject log. Provenance may be missing or malformed."""
+    try:
+        model_id, runtime, device_class = _projection_provenance_for_log(raw)
+        logger.warning(
+            'client_processing rejected reason=%s model_id=%s runtime=%s device_class=%s',
+            reason,
+            model_id,
+            runtime,
+            device_class,
+        )
+    except Exception:
+        logger.warning('client_processing rejected reason=%s', reason)
+
+
+def _accepted_client_projection(raw: Any, segments: Any) -> Optional[ClientProcessing]:
+    """Bind a client projection to the persisted transcript, or drop it.
+
+    Schema failures and hash mismatch are not request errors: the conversation
+    still finalizes on the deterministic minimum. Warnings are content-free
+    (reason plus provenance only — never transcript or body).
+    """
+    if raw is None:
+        return None
+    try:
+        projection = ClientProcessing.model_validate(raw)
+    except (TypeError, ValidationError, ValueError):
+        _log_client_projection_rejected('schema_invalid', raw)
+        return None
+    # Stored rows only: every caller here binds against a persisted transcript.
+    # `transcript_sha256_for_binding` returns None for a legacy row whose stored
+    # identity is not canonical -- for those, a matching digest would not imply
+    # matching rendered attribution, so the projection is dropped, not trusted.
+    expected = transcript_sha256_for_binding(segments or [])
+    if expected is None:
+        _log_client_projection_rejected('stored_transcript_not_canonical', raw)
+        return None
+    if expected != projection.transcript_sha256:
+        _log_client_projection_rejected('hash_mismatch', raw)
+        return None
+    return projection
+
+
+def _drop_display_projection(conversation: Conversation) -> None:
+    """Clear the in-memory projection after a transcript mutation invalidated storage.
+
+    Consults ``PROJECTION_FAMILY_FIELDS`` rather than naming the field, so a
+    sibling projection classified there is dropped here too without a code change.
+    """
+    for field in PROJECTION_FAMILY_FIELDS:
+        setattr(conversation, field, None)
+
+
+# Must match database.conversations.CLIENT_PROCESSING_BIND_REPORT_KEY.
+# Local copy: this router is loaded under a stubbed database.conversations.
+_CLIENT_PROCESSING_BIND_REPORT_KEY = '_client_processing_bind_report'
+
+
+def _projection_bind_report() -> dict[str, bool]:
+    return {'submitted_projection_bound': False}
+
+
+def _carry_projection_bind_report(extra_updates: dict[str, Any]) -> dict[str, bool]:
+    """Attach an out-parameter the transactional bind fills. Never persisted."""
+    report = _projection_bind_report()
+    extra_updates[_CLIENT_PROCESSING_BIND_REPORT_KEY] = report
+    return report
+
+
+def _echo_submitted_projection_if_bound(
+    conversation: Conversation,
+    client_projection: Optional[ClientProcessing],
+    bind_report: dict[str, bool],
+) -> Optional[ClientProcessing]:
+    """Attach the submitted projection only when THIS transaction stored it.
+
+    The bind report is the transaction's answer. A later request's projection
+    on the document is not this request's, and a rejected candidate must not
+    appear in the response.
+    """
+    if client_projection is not None and bind_report.get('submitted_projection_bound') is True:
+        conversation.client_processing = client_projection
+        return client_projection
+    return None
+
+
+def _bind_late_client_projection(uid: str, conversation: Conversation, raw: Any) -> Conversation:
+    """Idempotency hit: bind a late projection to the stored transcript.
+
+    Updates only ``client_processing``. Never touches ``structured``, never
+    re-enters processing, never reprocesses. Invalid, mismatched, or missing
+    projection: return the existing conversation unchanged (still not a 422).
+    The write re-checks the digest against the transactional snapshot so a
+    T2 segment update cannot resurrect a T1 projection.
+    """
+    if raw is None:
+        return conversation
+    bound = _accepted_client_projection(raw, getattr(conversation, 'transcript_segments', None))
+    if bound is None:
+        return conversation
+    # Route-level hash is a fast drop. The write re-checks the stored
+    # transcript inside the same transaction so a T2 segment update that
+    # landed after this snapshot cannot resurrect a T1 projection.
+    payload = client_processing_mutation(bound)
+    if conversations_db.bind_client_processing(uid, conversation.id, payload):
+        conversation.client_processing = bound
+    return conversation
 
 
 class ConversationSearchItem(Conversation):
@@ -312,6 +489,11 @@ def process_in_progress_conversation(
             conversation.external_data = {}
         conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.model_dump()
 
+    client_projection = _accepted_client_projection(
+        request.client_processing if request is not None else None,
+        getattr(conversation, 'transcript_segments', None),
+    )
+
     # Geolocation
     if conversation.geolocation:
         conversation.geolocation = resolve_geolocation(conversation.geolocation)
@@ -328,9 +510,39 @@ def process_in_progress_conversation(
             )
             conversation.geolocation = resolve_geolocation(Geolocation(**geolocation))
 
-    if not lifecycle_service.admit_processing(uid, conversation.id):
+    # Winner owns ingress. The accepted projection rides the admission CAS:
+    # status→processing and client_processing are one write. A later request
+    # (including a loser that late-binds) can only land after this commit, so
+    # a stalled second write cannot last-writer-wins an older projection over
+    # a newer one (section 1.7 (c)). A mutation failure is an admission
+    # failure — the row stays in_progress instead of stranding on processing
+    # with no durable job. Ingress-owned mutation only; the coordinator's
+    # existing-row persist still strips the field. Omit extra_updates when
+    # there is no projection so positional admit stubs keep working.
+    extra_updates = client_processing_mutation(client_projection) if client_projection is not None else None
+    bind_report = _projection_bind_report()
+    if extra_updates is None:
+        admitted = lifecycle_service.admit_processing(uid, conversation.id)
+    else:
+        bind_report = _carry_projection_bind_report(extra_updates)
+        admitted = lifecycle_service.admit_processing(uid, conversation.id, extra_updates=extra_updates)
+    if not admitted:
         latest = _get_valid_conversation_by_id(uid, conversation.id)
-        return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
+        latest_conversation = deserialize_conversation(latest)
+        # Losing the compare-and-swap still 200s, but must not silently drop a
+        # valid projection. Hash-bind against the conversation actually stored
+        # and write client_processing alone — never structured, never reprocess.
+        latest_conversation = _bind_late_client_projection(
+            uid,
+            latest_conversation,
+            request.client_processing if request is not None else None,
+        )
+        return CreateConversationResponse(conversation=latest_conversation, messages=[])
+
+    # The admission CAS reports whether the submitted projection bound.
+    # A follow-up read would race a later request's write and could strand
+    # this row on processing if it raised before the guard.
+    client_projection = _echo_submitted_projection_if_bound(conversation, client_projection, bind_report)
 
     current_in_progress_id = redis_db.get_in_progress_conversation_id(uid)
     if current_in_progress_id == conversation.id:
@@ -338,10 +550,15 @@ def process_in_progress_conversation(
 
     conversation.status = ConversationStatus.processing
     persisted = False
+    derived_effects_disposition = DerivedEffectsDisposition.RUN
 
     def record_persistence(current: bool) -> None:
         nonlocal persisted
         persisted = current
+
+    def record_derived_effects_disposition(current: DerivedEffectsDisposition) -> None:
+        nonlocal derived_effects_disposition
+        derived_effects_disposition = current
 
     # This synchronous path has no durable job for the reconciler to replay, so
     # a processing failure must return the admission to in_progress — otherwise
@@ -352,12 +569,20 @@ def process_in_progress_conversation(
             uid,
             conversation.language,
             conversation,
-            force_process=True,
             persistence_observer=record_persistence,
+            derived_effects_disposition_observer=record_derived_effects_disposition,
+            client_projection=client_projection,
+            trigger=ProcessingTrigger.CLIENT_FINALIZE,
         )
     if not persisted:
         latest = _get_valid_conversation_by_id(uid, conversation.id)
         return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
+    # A terminal free-tier minimum persists successfully but must not fan out
+    # apps/webhooks — the same decision the durable finalizer already honours
+    # via derived_effects_disposition_observer (section 1.7). The conversation
+    # itself still returns to the client; this suppresses derived effects only.
+    if derived_effects_disposition == DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS:
+        return CreateConversationResponse(conversation=conversation, messages=[])
     messages = asyncio.run(trigger_external_integrations(uid, conversation))
 
     return CreateConversationResponse(conversation=conversation, messages=messages)
@@ -369,6 +594,7 @@ def process_in_progress_conversation(
 def finalize_conversation(
     conversation_id: str,
     request: ProcessConversationRequest = None,
+    http_request: Request = None,  # type: ignore[assignment]
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
 ):
     """Finalize exactly one backend conversation.
@@ -381,6 +607,16 @@ def finalize_conversation(
     conversation = deserialize_conversation(conversation)
 
     if conversation.status != ConversationStatus.in_progress:
+        # Section 1.7 (c): a later projection overwrites projection fields only.
+        # A slow device finishing local inference after the first finalize is
+        # the normal case — hash-bind against the stored transcript and persist
+        # client_processing alone. Never rewrite structured, never re-enter
+        # processing, never reprocess. Mismatch / invalid: drop, still 200.
+        conversation = _bind_late_client_projection(
+            uid,
+            conversation,
+            request.client_processing if request is not None else None,
+        )
         return CreateConversationResponse(conversation=conversation, messages=[])
 
     extra_updates = {}
@@ -389,6 +625,20 @@ def finalize_conversation(
             conversation.external_data = {}
         conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.model_dump()
         extra_updates['external_data'] = conversation.external_data
+
+    # Persist an accepted projection on the conversation document so the
+    # Cloud Tasks worker's stored-projection has_projection path can see it.
+    # Drop-never-422: a bad payload must not reject the finished recording.
+    # Do not attach yet: the outbox transaction re-checks the digest and may
+    # drop a T1-validated candidate after a T2 race.
+    client_projection = _accepted_client_projection(
+        request.client_processing if request is not None else None,
+        getattr(conversation, 'transcript_segments', None),
+    )
+    bind_report = _projection_bind_report()
+    if client_projection is not None:
+        extra_updates.update(client_processing_mutation(client_projection))
+        bind_report = _carry_projection_bind_report(extra_updates)
 
     # The durable Cloud Tasks worker cannot inherit this request's BYOK
     # context: the task payload is the opaque {job_id, dispatch_generation}
@@ -407,12 +657,18 @@ def finalize_conversation(
             uid,
             conversation.id,
             has_byok_keys=False,
-            force_process=True,
+            trigger=ProcessingTrigger.CLIENT_FINALIZE,
             extra_updates=extra_updates or None,
             require_cloud_tasks=True,
             client_kind=resolve_client_kind(x_app_platform=conversation.client_platform, user_agent=None),
+            app_build=extract_app_build(http_request),
         )
     except lifecycle_service.FinalizationDispatchUnavailable as error:
+        record_product_event(
+            'conversation_finalized',
+            request=http_request,
+            outcome='error',
+        )
         raise HTTPException(status_code=503, detail='Conversation finalization is temporarily unavailable') from error
 
     if finalization['route'] == 'noop':
@@ -423,6 +679,11 @@ def finalize_conversation(
     # The only accepted outcomes are an enqueued task or an outbox row retained
     # for reconciler retry after an uncertain task-create acknowledgement.
     if finalization['route'] not in {'cloud_tasks', 'queued'}:
+        record_product_event(
+            'conversation_finalized',
+            request=http_request,
+            outcome='error',
+        )
         raise HTTPException(status_code=503, detail='Conversation finalization is temporarily unavailable')
 
     conversation.status = ConversationStatus.processing
@@ -430,6 +691,10 @@ def finalize_conversation(
     current_in_progress_id = redis_db.get_in_progress_conversation_id(uid)
     if current_in_progress_id == conversation_id:
         redis_db.remove_in_progress_conversation_id(uid)
+
+    # The outbox transaction reports whether the submitted projection bound.
+    # A follow-up read would attribute a later request's projection to this one.
+    _echo_submitted_projection_if_bound(conversation, client_projection, bind_report)
 
     # The Cloud Tasks worker owns expensive processing, memory extraction, and
     # integration fanout under the persisted job lease. Returning this snapshot
@@ -486,6 +751,7 @@ def reprocess_conversation(
     # on the raw doc because the Conversation model does not carry `deleted`.
     if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
+    was_discarded = bool(conversation.get('discarded'))
     conversation = deserialize_conversation(conversation)
     if not language_code:
         language_code = conversation.language or 'en'
@@ -496,15 +762,21 @@ def reprocess_conversation(
         uid,
         language_code,
         conversation,
-        force_process=True,
-        is_reprocess=True,
-        bypass_jit_first_open=True,
+        trigger=ProcessingTrigger.USER_REPROCESS,
         app_id=app_id,
         explicit_app=explicit_app,
         app_usage_attribution=(
             AppUsageAttribution.EXPLICIT_SELECTION if explicit_app else AppUsageAttribution.NON_USER_REPROCESS
         ),
     )
+
+    # Reprocessing a hidden conversation is an explicit recovery: persist it as
+    # the user's choice (``restore_discarded``) so no later reassessment hides it
+    # again, including when the selected app supplies the summary.
+    if was_discarded and not processed_conversation.discarded:
+        restored = lifecycle_service.restore_discarded(uid, conversation_id)
+        if restored and processed_conversation.sync_relevance == 'review':
+            processed_conversation.sync_relevance = 'keep'
 
     return processed_conversation
 
@@ -552,43 +824,6 @@ LEGACY_SEGMENT_INDEX_PREFIX = '#index:'
 def _reject_oversized_filter(values: List[str], field_name: str) -> None:
     if len(values) > MAX_IN_FILTER_VALUES:
         raise HTTPException(status_code=400, detail=f"{field_name} accepts at most {MAX_IN_FILTER_VALUES} values")
-
-
-def _resolve_bulk_segment_indices(conversation: Conversation, requested_ids: List[str]) -> List[int]:
-    """Resolve assignment targets before mutating any transcript segment.
-
-    Desktop sends positional targets for legacy transcripts that were stored without
-    segment IDs. Exact IDs remain the preferred wire contract; positional targets are
-    only accepted for completed conversations because an in-progress transcript can
-    still be reordered or merged.
-    """
-    segments = conversation.transcript_segments
-    segment_indices_by_id = {segment.id: index for index, segment in enumerate(segments)}
-    resolved_indices: List[int] = []
-    unresolved_ids: List[str] = []
-    allow_legacy_indices = conversation.status == ConversationStatus.completed
-
-    for requested_id in requested_ids:
-        segment_index = segment_indices_by_id.get(requested_id)
-        if segment_index is None and allow_legacy_indices and requested_id.startswith(LEGACY_SEGMENT_INDEX_PREFIX):
-            raw_index = requested_id[len(LEGACY_SEGMENT_INDEX_PREFIX) :]
-            if raw_index.isascii() and raw_index.isdecimal():
-                candidate_index = int(raw_index)
-                if candidate_index < len(segments):
-                    segment_index = candidate_index
-
-        if segment_index is None:
-            unresolved_ids.append(requested_id)
-        elif segment_index not in resolved_indices:
-            resolved_indices.append(segment_index)
-
-    if unresolved_ids:
-        raise HTTPException(
-            status_code=409,
-            detail=f'Unable to resolve transcript segment assignment target(s): {", ".join(unresolved_ids)}',
-        )
-
-    return resolved_indices
 
 
 @router.get(
@@ -908,6 +1143,21 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     return calendar_event
 
 
+@router.post(
+    "/v1/conversations/{conversation_id}/capture-group/separate",
+    response_model=StatusResponse,
+    tags=['conversations'],
+    description=(
+        "Separate this conversation from the capture group (one event recorded by several devices) it belongs to. "
+        "The decision is sticky: this capture is never regrouped with the members it left. Idempotent."
+    ),
+)
+def separate_conversation_from_capture_group(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    _get_valid_conversation_by_id(uid, conversation_id)
+    changed = conversations_db.leave_capture_group(uid, conversation_id, sticky=True)
+    return StatusResponse(status='ok' if changed else 'unchanged')
+
+
 @router.patch(
     "/v1/conversations/{conversation_id}/summary", tags=['conversations'], response_model=ConversationStatusResponse
 )
@@ -919,6 +1169,10 @@ def patch_conversation_summary(
         raise HTTPException(status_code=404, detail="Conversation not found")
     if result == 'app_result_not_found':
         raise HTTPException(status_code=404, detail="App summary not found for this conversation")
+    if result == 'app_result_ambiguous':
+        raise HTTPException(
+            status_code=409, detail="Multiple summaries share this app ID; edit cannot be targeted safely"
+        )
     return {'status': 'Ok'}
 
 
@@ -968,6 +1222,7 @@ def delete_conversation(
     # before changing production behavior for all users. See test_ws_j_delete_privacy.py +
     # backend/docs/memory/domain_model.md §Delete/privacy matrix.
     cascade: bool = Query(False),
+    http_request: Request = None,  # type: ignore[assignment]
     uid: str = Depends(auth.get_current_user_uid),
 ):
     logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
@@ -991,8 +1246,23 @@ def delete_conversation(
                     status_code=503,
                     detail='Conversation memory retraction is busy, please retry',
                 ) from error
+            except RuntimeError as error:
+                # Isolated router tests stub database/utils.other at import time.
+                if type(error).__name__ != "DestructiveOperationInProgress":
+                    raise
+                from utils.other.account_gate_http import account_gate_busy_http_exception
 
+                raise account_gate_busy_http_exception() from error
+
+        from utils.notifications import sync_action_item_reminder
+
+        armed = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
+        for item in armed:
+            if item.get('due_at') and not item.get('completed'):
+                sync_action_item_reminder(
+                    user_id=uid, action_item_id=item['id'], description='', completed=True, due_at=None
+                )
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
     # Screen frames (meeting-note screenshots) are primary conversation
@@ -1010,6 +1280,7 @@ def delete_conversation(
     delete_vector(uid, conversation_id)
     delete_transcript_chunk_vectors(uid, conversation_id)
 
+    record_product_event('conversation_deleted', request=http_request)
     return {"status": "Ok"}
 
 
@@ -1082,14 +1353,16 @@ def set_action_item_status(
 
     # Mirror status updates to the standalone action_items collection
     try:
+        from utils.notifications import sync_action_item_reminder
+
         existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
-        # Map descriptions to item IDs for quick lookup
-        description_to_ids = {}
+        # Map descriptions to items for quick lookup
+        description_to_items = {}
         for ai in existing_items:
             desc = ai.get('description')
             if not desc:
                 continue
-            description_to_ids.setdefault(desc, []).append(ai['id'])
+            description_to_items.setdefault(desc, []).append(ai)
 
         for i, action_item_idx in enumerate(data.items_idx):
             if not (0 <= action_item_idx < len(action_items)):
@@ -1097,9 +1370,15 @@ def set_action_item_status(
             action_item = action_items[action_item_idx]
             new_completed_status = data.values[i]
 
-            ids = description_to_ids.get(action_item.description, [])
-            for action_item_id in ids:
-                action_items_db.mark_action_item_completed(uid, action_item_id, bool(new_completed_status))
+            for ai in description_to_items.get(action_item.description, []):
+                action_items_db.mark_action_item_completed(uid, ai['id'], bool(new_completed_status))
+                sync_action_item_reminder(
+                    user_id=uid,
+                    action_item_id=ai['id'],
+                    description=ai.get('description', ''),
+                    completed=bool(new_completed_status),
+                    due_at=ai.get('due_at'),
+                )
     except Exception as e:
         # Don't break conversation route if mirrored update fails
         logger.error(f'Failed to mirror action item status update: {e}')
@@ -1159,13 +1438,83 @@ def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=
 
     # Mirror deletion in the standalone action_items collection
     try:
+        from utils.notifications import sync_action_item_reminder
+
         existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         for ai in existing_items:
             if ai.get('description') == data.description:
                 action_items_db.delete_action_item(uid, ai['id'])
+                delete_action_item_vector(uid, ai['id'])
+                # The deleted row may own a client-scheduled reminder; the client only
+                # cancels it on the deletion data message, so send one here too (#5085).
+                if ai.get('due_at') and not ai.get('completed'):
+                    sync_action_item_reminder(
+                        user_id=uid,
+                        action_item_id=ai['id'],
+                        description='',
+                        completed=True,
+                        due_at=None,
+                    )
     except Exception as e:
         logger.error(f'Failed to mirror action item deletion: {e}')
     return {"status": "Ok"}
+
+
+def _assign_manual_speaker(
+    conversation_id,
+    assign_type,
+    value,
+    uid,
+    background_tasks,
+    *,
+    segment_ids=None,
+    speaker_id=None,
+    segment_index=None,
+    use_for_speech_training=True,
+):
+    if assign_type not in {'is_user', 'person_id'}:
+        raise HTTPException(status_code=400, detail='Invalid assign type')
+    value = None if value == 'null' else value
+    is_user = assign_type == 'is_user' and str(value).lower() in {'true', '1'}
+    person_id = value if assign_type == 'person_id' else None
+    try:
+        raw, resolved, removed, before = conversations_db.assign_conversation_speaker(
+            uid,
+            conversation_id,
+            person_id=person_id,
+            is_user=is_user,
+            segment_ids=segment_ids,
+            speaker_id=speaker_id,
+            segment_index=segment_index,
+            use_for_speech_training=use_for_speech_training,
+        )
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except PermissionError as error:
+        raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.') from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    conversation = deserialize_conversation(raw)
+    _drop_display_projection(conversation)
+    if background_tasks is not None:
+        for path in removed:
+            background_tasks.add_task(delete_speech_profile_blob, path)
+        if person_id and use_for_speech_training:
+            background_tasks.add_task(
+                extract_speaker_samples,
+                uid=uid,
+                person_id=person_id,
+                conversation_id=conversation_id,
+                segment_ids=teaching_segment_ids(raw.get('transcript_segments') or [], resolved),
+            )
+    _emit_speaker_identity_confirmed(
+        uid=uid,
+        conversation_id=conversation_id,
+        scope='speaker' if speaker_id is not None else 'segment' if segment_index is not None else 'bulk',
+        before=[_speaker_assignment(TranscriptSegment(**{'is_user': False, **s})) for s in before],
+        after=[_speaker_assignment(s) for s in conversation.transcript_segments if s.id in resolved],
+    )
+    return conversation
 
 
 @router.patch(
@@ -1180,175 +1529,47 @@ def set_assignee_conversation_segment(
     value: Optional[str] = None,
     use_for_speech_training: bool = True,
     uid: str = Depends(auth.get_current_user_uid),
+    background_tasks: BackgroundTasks = None,
 ):
-    """
-    Another complex endpoint.
-
-    Modify the assignee of a segment in the transcript of a conversation.
-    But,
-    if `use_for_speech_training` is True, the corresponding audio segment will be used for speech training.
-
-    Speech training of whom?
-
-    If `assign_type` is 'is_user', the segment will be used for the user speech training.
-    If `assign_type` is 'person_id', the segment will be used for the person with the given id speech training.
-
-    What is required for a segment to be used for speech training?
-    1. The segment must have more than 5 words.
-    2. The conversation audio file shuold be already stored in the user's bucket.
-
-    :return: The updated conversation.
-    """
-    logger.info(
-        f'set_assignee_conversation_segment {conversation_id} {segment_idx} {assign_type} {value} {use_for_speech_training} {uid}'
+    return _assign_manual_speaker(
+        conversation_id,
+        assign_type,
+        value,
+        uid,
+        background_tasks,
+        segment_index=segment_idx,
+        use_for_speech_training=use_for_speech_training,
     )
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
-    conversation = deserialize_conversation(conversation)
-
-    # Bound-check segment_idx before indexing. Same class as the events / action-items
-    # handlers above (0 <= idx < len): an out-of-range idx (e.g. a stale client after
-    # reprocess/merge shrank the segments) otherwise raises IndexError -> HTTP 500, and a
-    # negative idx would silently mutate the wrong segment. This is a single-target route,
-    # so a missing segment is a 404 rather than a skip.
-    if not (0 <= segment_idx < len(conversation.transcript_segments)):
-        raise HTTPException(status_code=404, detail="Segment not found")
-
-    if value == 'null':
-        value = None
-
-    is_unassigning = value is None or value is False
-
-    before = [_speaker_assignment(conversation.transcript_segments[segment_idx])]
-    if assign_type == 'is_user':
-        conversation.transcript_segments[segment_idx].is_user = bool(value) if value is not None else False
-        conversation.transcript_segments[segment_idx].person_id = None
-    elif assign_type == 'person_id':
-        conversation.transcript_segments[segment_idx].is_user = False
-        conversation.transcript_segments[segment_idx].person_id = value
-    else:
-        logger.info(assign_type)
-        raise HTTPException(status_code=400, detail="Invalid assign type")
-
-    conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
-    )
-    _emit_speaker_identity_confirmed(
-        uid=uid,
-        conversation_id=conversation_id,
-        scope='segment',
-        before=before,
-        after=[_speaker_assignment(conversation.transcript_segments[segment_idx])],
-    )
-    # thinh's note: disabled for now
-    # segment_words = len(conversation.transcript_segments[segment_idx].text.split(' '))
-    # # TODO: can do this async
-    # if use_for_speech_training and not is_unassigning and segment_words > 5:  # some decent sample at least
-    #     person_id = value if assign_type == 'person_id' else None
-    #     expand_speech_profile(conversation_id, uid, segment_idx, assign_type, person_id)
-    # else:
-    #     path = f'{conversation_id}_segment_{segment_idx}.wav'
-    #     delete_additional_profile_audio(uid, path)
-    #     delete_speech_sample_for_people(uid, path)
-
-    return conversation
 
 
 @router.patch(
     '/v1/conversations/{conversation_id}/assign-speaker/{speaker_id}',
+    operation_id='set_assignee_conversation_segment_v1_conversations__conversation_id__assign_speaker__speaker_id__patch',
     response_model=Conversation,
     tags=['conversations'],
 )
-def set_assignee_conversation_segment(
+def set_assignee_conversation_speaker(
     conversation_id: str,
     speaker_id: int,
     assign_type: str,
     value: Optional[str] = None,
     use_for_speech_training: bool = True,
     uid: str = Depends(auth.get_current_user_uid),
+    background_tasks: BackgroundTasks = None,
 ):
-    """
-    Another complex endpoint.
-
-    Modify the assignee of all segments in the transcript of a conversation with the given speaker_id.
-    But,
-    if `use_for_speech_training` is True, the corresponding audio segment will be used for speech training.
-
-    Speech training of whom?
-
-    If `assign_type` is 'is_user', the segment will be used for the user speech training.
-    If `assign_type` is 'person_id', the segment will be used for the person with the given id speech training.
-
-    What is required for a segment to be used for speech training?
-    1. The segment must have more than 5 words.
-    2. The conversation audio file should be already stored in the user's bucket.
-
-    :return: The updated conversation.
-    """
-    logger.info(
-        f'set_assignee_conversation_segment {conversation_id} {speaker_id} {assign_type} {value} {use_for_speech_training} {uid}'
+    return _assign_manual_speaker(
+        conversation_id,
+        assign_type,
+        value,
+        uid,
+        background_tasks,
+        speaker_id=speaker_id,
+        use_for_speech_training=use_for_speech_training,
     )
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
-    conversation = deserialize_conversation(conversation)
-
-    if value == 'null':
-        value = None
-
-    is_unassigning = value is None or value is False
-
-    targeted_segments = [segment for segment in conversation.transcript_segments if segment.speaker_id == speaker_id]
-    before = [_speaker_assignment(segment) for segment in targeted_segments]
-
-    if assign_type == 'is_user':
-        for segment in conversation.transcript_segments:
-            if segment.speaker_id == speaker_id:
-                segment.is_user = bool(value) if value is not None else False
-                segment.person_id = None
-    elif assign_type == 'person_id':
-        for segment in conversation.transcript_segments:
-            if segment.speaker_id == speaker_id:
-                logger.info(f"{segment.speaker_id} {speaker_id} {value}")
-                segment.is_user = False
-                segment.person_id = value
-    else:
-        logger.info(assign_type)
-        raise HTTPException(status_code=400, detail="Invalid assign type")
-
-    conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
-    )
-    _emit_speaker_identity_confirmed(
-        uid=uid,
-        conversation_id=conversation_id,
-        scope='speaker',
-        before=before,
-        after=[_speaker_assignment(segment) for segment in targeted_segments],
-    )
-    # This will be used when we setup recording for conversations, not used for now
-    # get the segment with the most words with the speaker_id
-    # segment_idx = 0
-    # segment_words = 0
-    # for segment in conversation.transcript_segments:
-    #     if segment.speaker == speaker_id:
-    #         if len(segment.text.split(' ')) > segment_words:
-    #             segment_words = len(segment.text.split(' '))
-    #             if segment_words > 5:
-    #                 segment_idx = segment.idx
-    #
-    # if use_for_speech_training and not is_unassigning and segment_words > 5:  # some decent sample at least
-    #     person_id = value if assign_type == 'person_id' else None
-    #     expand_speech_profile(conversation_id, uid, segment_idx, assign_type, person_id)
-    # else:
-    #     path = f'{conversation_id}_segment_{segment_idx}.wav'
-    #     delete_additional_profile_audio(uid, path)
-    #     delete_speech_sample_for_people(uid, path)
-
-    return conversation
 
 
 @router.patch(
-    '/v1/conversations/{conversation_id}/segments/assign-bulk',
-    response_model=Conversation,
-    tags=['conversations'],
+    '/v1/conversations/{conversation_id}/segments/assign-bulk', response_model=Conversation, tags=['conversations']
 )
 def assign_segments_bulk(
     conversation_id: str,
@@ -1356,51 +1577,14 @@ def assign_segments_bulk(
     background_tasks: BackgroundTasks,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
-    conversation = deserialize_conversation(conversation)
-
-    if data.assign_type not in {'is_user', 'person_id'}:
-        raise HTTPException(status_code=400, detail="Invalid assign type")
-
-    value = data.value
-    if value == 'null':
-        value = None
-
-    segment_indices = _resolve_bulk_segment_indices(conversation, data.segment_ids)
-    resolved_segment_ids = [conversation.transcript_segments[index].id for index in segment_indices]
-    before = [_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices]
-
-    for index in segment_indices:
-        segment = conversation.transcript_segments[index]
-        if data.assign_type == 'is_user':
-            segment.is_user = bool(value) if value is not None else False
-            segment.person_id = None
-        else:
-            segment.is_user = False
-            segment.person_id = value
-
-    conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+    return _assign_manual_speaker(
+        conversation_id,
+        data.assign_type,
+        data.value,
+        uid,
+        background_tasks,
+        segment_ids=data.segment_ids,
     )
-    _emit_speaker_identity_confirmed(
-        uid=uid,
-        conversation_id=conversation_id,
-        scope='bulk',
-        before=before,
-        after=[_speaker_assignment(conversation.transcript_segments[index]) for index in segment_indices],
-    )
-
-    # Trigger speaker sample extraction when assigning to a person
-    if data.assign_type == 'person_id' and value:
-        background_tasks.add_task(
-            extract_speaker_samples,
-            uid=uid,
-            person_id=value,
-            conversation_id=conversation_id,
-            segment_ids=resolved_segment_ids,
-        )
-
-    return conversation
 
 
 # *********************************************
@@ -1805,7 +1989,8 @@ def search_conversations_endpoint(
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the
     # raw request: search_request.page/per_page are optional and unbounded, so a null/0/huge value here
     # would 500 (None + 1 / len(...) >= None). search_conversations returns clamped current_page/per_page.
-    search_results['total_pages'] = effective_page + 1 if len(conversations) >= effective_per_page else effective_page
+    has_more = len(conversations) >= effective_per_page or len(typesense_ids) >= effective_per_page
+    search_results['total_pages'] = effective_page + 1 if has_more else effective_page
     return search_results
 
 

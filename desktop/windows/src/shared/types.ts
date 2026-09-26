@@ -812,10 +812,10 @@ export type OmiBridgeApi = {
    *  on any failure. Faithful port of macOS's URLSession isAppSetupCompleted. */
   checkAppSetup: (args: { url: string; uid: string }) => Promise<boolean>
   // Bulk-delete memories from the main process (survives renderer navigation /
-  // reload; paced + backed-off). Renderer supplies the API base, a fresh token,
-  // and the ids; progress streams via onMemoriesDeleteProgress.
+  // reload; paced + backed-off). Renderer supplies a fresh token and the ids;
+  // the API base is main-owned config and progress streams via
+  // onMemoriesDeleteProgress.
   memoriesBulkDelete: (args: {
-    baseURL: string
     token: string
     ids: string[]
   }) => Promise<{ deleted: number; failed: number; firstError?: string }>
@@ -961,15 +961,6 @@ export type OmiBridgeApi = {
   // browser (main owns the loopback callback + token exchange; the renderer
   // finishes with signInWithCustomToken on the returned custom token).
   signInWithProvider: (provider: SignInProvider) => Promise<SignInResult>
-  // Integrations (3d): Google OAuth + Gmail/Calendar. Main owns the OAuth grant
-  // and REST reads; the renderer synthesizes the returned items and writes
-  // /v3/memories + /v1/action-items itself (it holds the Firebase token).
-  googleConnect: () => Promise<GoogleStatus>
-  googleDisconnect: () => Promise<GoogleStatus>
-  googleStatus: () => Promise<GoogleStatus>
-  googleGmailFetchNew: () => Promise<FetchNewResult<GmailItem>>
-  googleCalendarFetchNew: () => Promise<FetchNewResult<CalendarItem>>
-  googleMarkProcessed: (source: GoogleSource, ids: string[]) => Promise<void>
   // Gmail session connector (Option B): an Omi-owned login window + own-session
   // cookie replay against Gmail's web endpoints — no restricted-scope OAuth.
   // `gmailSessionConnect` opens the login window and resolves once signed in;
@@ -1961,45 +1952,6 @@ export type SignInProvider = 'google' | 'apple'
 export type SignInResult =
   | { ok: true; customToken: string; email?: string; givenName?: string; familyName?: string }
   | { ok: false; error: string }
-
-// --- Integrations: Google (Gmail + Calendar) OAuth (parity 3d) ---
-
-export type GoogleSource = 'gmail' | 'calendar'
-
-/** Connection status surfaced to Settings. */
-export type GoogleStatus = {
-  connected: boolean
-  email?: string
-  /** ms epoch of the most recent successful sync (either source); undefined if never. */
-  lastSyncAt?: number
-}
-
-/** One Gmail message, metadata only — never the full body. */
-export type GmailItem = {
-  id: string
-  subject: string
-  from: string
-  snippet: string
-  internalDateMs: number
-}
-
-/** One upcoming Calendar event. */
-export type CalendarItem = {
-  id: string
-  title: string
-  startMs: number
-  endMs: number
-  location?: string
-  description?: string
-  updatedMs: number
-}
-
-/** Result of a fetch-new call. `ok:false` + error:'not_connected' when no grant. */
-export type FetchNewResult<T> = {
-  ok: boolean
-  items: T[]
-  error?: string
-}
 
 // --- Integrations: Gmail via an Omi-owned Electron session (Option B) ---
 // Windows can't harvest system-browser cookies the way macOS does (Chrome 127+

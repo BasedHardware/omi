@@ -39,7 +39,10 @@ class AuthState: ObservableObject {
   // UserDefaults keys (must match AuthService)
   private static let kAuthIsSignedIn = "auth_isSignedIn"
   private static let kAuthUserEmail = "auth_userEmail"
-  private static let kAuthUserId = "auth_userId"
+  /// `nonisolated` so the automation bridge can answer "which account is this"
+  /// without hopping to the main actor. It is an immutable String; the
+  /// isolation bought nothing and cost the identity check its callers.
+  nonisolated private static let kAuthUserId = "auth_userId"
 
   @Published private(set) var sessionPhase: AuthSessionPhase
   @Published var isLoading: Bool = false
@@ -48,6 +51,22 @@ class AuthState: ObservableObject {
 
   var isSignedIn: Bool { sessionPhase == .authenticated }
   var isRestoringAuth: Bool { sessionPhase == .restoring }
+
+  /// The signed-in uid, for the non-production automation bridge only.
+  ///
+  /// Read from the same `auth_userId` default `AuthService` writes, rather than
+  /// from Firebase, so it answers during `.restoring` too — a harness that
+  /// checks identity right after launch must not get `nil` merely because the
+  /// credential has not finished validating.
+  nonisolated static func automationAccountUserID(
+    defaults: UserDefaults = .standard,
+    isNonProduction: Bool = AppBuild.isNonProduction
+  ) -> String? {
+    guard isNonProduction else { return nil }
+    let raw = defaults.string(forKey: kAuthUserId)?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return (raw?.isEmpty ?? true) ? nil : raw
+  }
 
   private init() {
     BundleEnvironment.loadIfNeeded()
@@ -117,6 +136,13 @@ struct OMIApp: App {
     return version.isEmpty ? title : "\(title) v\(version)"
   }
 
+  /// Posts the one navigation request the shell listens for. `hub` selects a page inside Memories.
+  static func navigate(to item: SidebarNavItem, hub: MemoryHubDestination? = nil) {
+    var info: [String: Any] = ["rawValue": item.rawValue]
+    if let hub { info["hubDestination"] = hub.rawValue }
+    NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil, userInfo: info)
+  }
+
   /// Size the shell first comes up at. The summoned shell is a panel you call over your work, not an
   /// app you switch to, so it matches `ShellSummonPlacement.defaultSize` rather than the old
   /// managed-window 1200×800. Rewind mode is still a window and keeps its own.
@@ -165,49 +191,23 @@ struct OMIApp: App {
         }
       }
 
-      // Sidebar navigation shortcuts: Cmd+1..6 for main pages, Cmd+, for Settings
+      // ⌘1…⌘4 are the top bar's pills in order; ⌥⌘1…⌥⌘5 its Memories chip row; ⌘, Settings.
       CommandGroup(after: .sidebar) {
-        Button("Home") {
-          NotificationCenter.default.post(
-            name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.dashboard.rawValue])
-        }
-        .keyboardShortcut("1", modifiers: .command)
+        Button("Chat") { Self.navigate(to: .dashboard) }
+          .keyboardShortcut("1", modifiers: .command)
+        Button("Memories") { Self.navigate(to: .conversations, hub: .activity) }
+          .keyboardShortcut("2", modifiers: .command)
+        Button("Tasks") { Self.navigate(to: .tasks) }
+          .keyboardShortcut("3", modifiers: .command)
+        Button("Apps") { Self.navigate(to: .apps) }
+          .keyboardShortcut("4", modifiers: .command)
 
-        Button("Conversations") {
-          NotificationCenter.default.post(
-            name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.conversations.rawValue])
+        Menu("Go to in Memories") {
+          ForEach(Array(ActivityDestinationChip.allCases.enumerated()), id: \.element) { index, chip in
+            Button(chip.title) { Self.navigate(to: .conversations, hub: chip.hubDestination) }
+              .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: [.command, .option])
+          }
         }
-        .keyboardShortcut("2", modifiers: .command)
-
-        Button("Memories") {
-          NotificationCenter.default.post(
-            name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.memories.rawValue])
-        }
-        .keyboardShortcut("3", modifiers: .command)
-
-        Button("Tasks") {
-          NotificationCenter.default.post(
-            name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.tasks.rawValue])
-        }
-        .keyboardShortcut("4", modifiers: .command)
-
-        Button("Rewind") {
-          NotificationCenter.default.post(
-            name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.rewind.rawValue])
-        }
-        .keyboardShortcut("5", modifiers: .command)
-
-        Button("Apps") {
-          NotificationCenter.default.post(
-            name: .navigateToSidebarItem, object: nil,
-            userInfo: ["rawValue": SidebarNavItem.apps.rawValue])
-        }
-        .keyboardShortcut("6", modifiers: .command)
 
         Divider()
 
@@ -236,7 +236,7 @@ struct OMIApp: App {
   }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked Sendable {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemValidation, @unchecked Sendable {
   /// The live AppDelegate instance. SwiftUI's `@NSApplicationDelegateAdaptor` does
   /// NOT make `NSApp.delegate` our `AppDelegate` — on macOS 14+ it installs an
   /// internal forwarding delegate, so `NSApp.delegate as? AppDelegate` is `nil`.
@@ -297,6 +297,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // background-service startup so the probe has no product side effects.
     if AuthStorageCanary.runIfRequested() { return }
     if UserNotificationCallbackBridge.runSignedSmokeIfRequested() { return }
+    // A keystroke nothing handled must not fall off the end of a responder chain, where AppKit
+    // answers it with the alert sound. See `UnhandledKeystrokeSink`.
+    UnhandledKeystrokeSink.installEverywhere()
     // Running from the mounted DMG / a translocated mount breaks TCC permissions
     // and Sparkle updates — install to /Applications and relaunch before any
     // services start. Returns true when this process is being replaced.
@@ -313,6 +316,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
     DesktopAutomationBridge.shared.startIfNeeded()
     DesktopAutomationWindowPresentation.installIfNeeded()
+    // Watching from launch, so the first push-to-talk turn already knows
+    // whether there is a network to route to instead of guessing.
+    NetworkReachability.shared.start()
     LocalAgentAPIServer.shared.startIfNeeded()
     publishNamedBundleRuntimeManifest()
 
@@ -478,7 +484,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
     // Initialize analytics (PostHog)
     AnalyticsManager.shared.initialize()
-    OnboardingRerunFlag.install()
     AnalyticsManager.shared.detectAndReportCrash()
     AnalyticsManager.shared.recoverMonitoringSessionIfNeeded()
     if let attempt = pendingUpdateRelaunch?.attempt {
@@ -534,8 +539,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // activation, and periodic network recovery.
     Task { await JITTriggerFeedbackClient.shared.installLifecycleRetry() }
 
-    Task { await ContextWorkstreamReconciler.shared.start() }
-
     scheduleAppLifecycleMaintenance()
 
     // Offer an integration when the user opens an app Omi can connect to.
@@ -554,6 +557,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     // opens gets the tap-to-ask card. Started here for the same reason as the
     // line above — it installs its own observers and decides eligibility itself.
     FirstRealAppCardCoordinator.shared.start()
+    ContextReminderCoordinator.shared.start()
 
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {
@@ -651,27 +655,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     startSentryHeartbeat()
     startForegroundTracking()
 
-    // Dress and place the shell once SwiftUI has created it. `ShellSummon` owns both from here on:
-    // transparent, buttonless, summoned or anchored, and remembered per display.
+    // Dress and place the shell once SwiftUI has created it. A freshly-reset dev profile can take
+    // longer than the first launch tick to mount the `main` scene, so recovery asks SwiftUI for the
+    // scene and probes again instead of giving up after one 200 ms lookup (#12501).
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-      guard let window = ShellSummon.shellWindow() else {
-        log("AppDelegate: WARNING - shell window not found after launch")
-        return
-      }
-      ShellSummon.applyPresentation(to: window)
-      if restoreMainWindowAfterUpdateRelaunch == false {
-        window.orderOut(nil)
-        log("AppDelegate: Shell suppressed after background update relaunch")
-      } else if DesktopAutomationWindowPresentation.currentMode != .normal {
-        DesktopAutomationWindowPresentation.applyLaunchMode(to: window)
-        log(
-          "AppDelegate: Shell launched in \(DesktopAutomationWindowPresentation.currentMode.rawValue) automation presentation"
-        )
-      } else {
-        NSApp.activate()
-        ShellSummon.summon(alwaysPlace: true)
-        log("AppDelegate: Shell summoned on launch")
-      }
+      self.scheduleShellWindowPresentation(
+        restoreMainWindowAfterUpdateRelaunch: restoreMainWindowAfterUpdateRelaunch)
     }
 
     log("AppDelegate: applicationDidFinishLaunching completed")
@@ -868,7 +857,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     if let button = item.button {
       if OMIApp.launchMode == .rewind {
         if let icon = NSImage(
-          systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "omi Rewind")
+          systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "Omi Rewind")
         {
           icon.isTemplate = true
           button.image = icon
@@ -923,14 +912,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     log("AppDelegate: [MENUBAR] NSStatusItem created successfully")
 
     let displayName =
-      Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "omi"
+      Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Omi"
 
     // Set up the button with compact circle mark.
     if let button = statusBarItem.button {
       if OMIApp.launchMode == .rewind {
         // Rewind mode uses SF Symbol
         if let icon = NSImage(
-          systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "omi Rewind")
+          systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: "Omi Rewind")
         {
           icon.isTemplate = true
           button.image = icon
@@ -976,17 +965,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
     menu.addItem(NSMenuItem.separator())
 
-    // Open app item
+    // No key equivalent: ⌘O here only worked with this menu open, yet read as the global shortcut.
     let openItem = NSMenuItem(
-      title: "Open \(displayName)", action: #selector(openOmiFromMenu), keyEquivalent: "o")
+      title: "Open \(displayName)", action: #selector(openOmiFromMenu), keyEquivalent: "")
     openItem.target = self
     menu.addItem(openItem)
+    menu.addItem(FloatingBarMenuBarItem.make())  // Show/Hide Floating Bar: the way back after Hide
+
+    let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettingsFromMenu), keyEquivalent: "")
+    settingsItem.target = self
+    menu.addItem(settingsItem)
+    let undoDictationItem = NSMenuItem(
+      title: "Undo Last Dictation", action: #selector(undoLastDictationFromMenu), keyEquivalent: "")
+    undoDictationItem.target = self
+    menu.addItem(undoDictationItem)
 
     menu.addItem(NSMenuItem.separator())
 
-    // Check for Updates
     let updatesItem = NSMenuItem(
-      title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
+      title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: "")
     updatesItem.target = self
     menu.addItem(updatesItem)
 
@@ -1002,14 +999,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
       }
 
       let resetItem = NSMenuItem(
-        title: "Reset Onboarding...", action: #selector(resetOnboarding), keyEquivalent: "")
+        title: "Reset Onboarding…", action: #selector(resetOnboarding), keyEquivalent: "")
       resetItem.target = self
       menu.addItem(resetItem)
 
       menu.addItem(NSMenuItem.separator())
 
       let reportItem = NSMenuItem(
-        title: "Report Issue...", action: #selector(reportIssue), keyEquivalent: "")
+        title: "Report Issue…", action: #selector(reportIssue), keyEquivalent: "")
       reportItem.target = self
       menu.addItem(reportItem)
 
@@ -1090,6 +1087,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     openMainAppWindow()
   }
 
+  @MainActor @objc private func openSettingsFromMenu() {
+    AnalyticsManager.shared.menuBarActionClicked(action: "open_settings")
+    openMainAppWindow()
+    OMIApp.navigate(to: .settings)
+  }
+
   /// "Continue in Omi": bring the main window forward *and* land on the chat
   /// timeline, wherever the window was last resting. The pending request
   /// survives window creation, so a freshly created window also lands on chat.
@@ -1098,11 +1101,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     openMainAppWindow()
   }
 
-  /// Land on the chat with `draft` already in the composer, focused, and not
-  /// sent. The only "ask this" entry that leaves the send to the user; every
-  /// other prefill path auto-sends.
-  @MainActor func openMainAppChat(prefilledDraft draft: String) {
-    MainChatNavigationRequestStore.shared.request(draft: draft)
+  /// Land on the chat with `draft` in the composer, focused and unsent — the
+  /// only "ask this" entry that leaves the send to the user. `attachedFrame`
+  /// stages the first-real-app card's screen referent alongside the draft.
+  @MainActor func openMainAppChat(prefilledDraft draft: String, attachedFrame: ChatAttachment? = nil) {
+    MainChatNavigationRequestStore.shared.request(draft: draft, attachment: attachedFrame)
+    openMainAppWindow()
+  }
+
+  /// Merge an offline question only once the actual composer has restored its draft.
+  @MainActor func openMainAppChat(appendingDraft draft: String, authorization: RuntimeOwnerAuthorizationSnapshot) {
+    MainChatNavigationRequestStore.shared.request(draft: draft, disposition: .append, authorization: authorization)
     openMainAppWindow()
   }
 
@@ -1115,6 +1124,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
     DesktopAutomationWindowPresentation.revealForUser()
     // Capture this BEFORE any activate call mutates AppKit's notion of frontmost.
     let alreadyFrontmost = NSWorkspace.shared.frontmostApplication == NSRunningApplication.current
+    // The screen still shows the app the user is leaving; pin it now — once
+    // Omi is front, the periodic capture skips Omi and nothing fresher exists.
+    if !alreadyFrontmost {
+      RewindFrameLoader.shared.recordSummonBoundary()
+    }
     NSApp.activate(ignoringOtherApps: true)
     var foundWindow = revealMainWindowIfAvailable()
     if !foundWindow {
@@ -1173,6 +1187,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
   @MainActor @objc private func resetOnboarding() {
     AnalyticsManager.shared.menuBarActionClicked(action: "reset_onboarding")
+    // Settings asks the same question; the status menu has no shell window to draw it in.
+    let alert = NSAlert()
+    alert.messageText = "Reset Onboarding?"
+    alert.informativeText =
+      "This will reset onboarding for this app build only, clear onboarding chat history, "
+      + "and restart the app without affecting the other installed build."
+    alert.addButton(withTitle: "Reset & Restart")
+    alert.addButton(withTitle: "Cancel")
+    NSApp.activate(ignoringOtherApps: true)
+    guard alert.runModal() == .alertFirstButtonReturn else { return }
     (AppState.current ?? AppState()).resetOnboardingAndRestart()
   }
 
@@ -1271,6 +1295,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
     let outcome = SystemCaptureControls.setAudioRecording(enabled)
     sender.state = outcome.resultingIsOn ? .on : .off
+  }
+
+  @MainActor @objc private func undoLastDictationFromMenu() {
+    PushToTalkManager.shared.undoLastDictationAfterMenuTracking()
+  }
+
+  @MainActor func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+    if menuItem.action == #selector(undoLastDictationFromMenu) {
+      return PushToTalkManager.shared.canUndoLastDictation
+    }
+    return true
   }
 
   // MARK: - NSMenuDelegate
@@ -1404,8 +1439,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
 
     // Stop transcription retry service
     TranscriptionRetryService.shared.stop()
-
-    Task { await ContextWorkstreamReconciler.shared.stop() }
 
     // Finalize the active Rewind MP4 chunk while the app is still alive.
     // AVAssetWriter files are not readable until finishWriting writes the trailer.

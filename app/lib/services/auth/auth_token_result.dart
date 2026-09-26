@@ -2,9 +2,9 @@ sealed class AuthTokenResult {
   const AuthTokenResult();
 
   String? get tokenOrNull => switch (this) {
-        AuthTokenSuccess(:final token) => token,
-        _ => null,
-      };
+    AuthTokenSuccess(:final token) => token,
+    _ => null,
+  };
 }
 
 final class AuthTokenSuccess extends AuthTokenResult {
@@ -40,7 +40,7 @@ enum AuthSessionExpirationReason {
   missingToken,
   terminalTokenFailure,
   backendRejectedRefreshedToken,
-  accountDeleted
+  accountDeleted,
 }
 
 final class AuthSessionExpiredEvent {
@@ -51,11 +51,16 @@ final class AuthSessionExpiredEvent {
 }
 
 final class AuthUserSnapshot {
-  const AuthUserSnapshot({required this.uid, this.email, this.displayName});
+  const AuthUserSnapshot({required this.uid, this.email, this.displayName, this.isAnonymous = false});
 
   final String uid;
   final String? email;
   final String? displayName;
+
+  /// Mirrors Firebase's anonymous-user state so gateway consumers (e.g.
+  /// [AuthService.isSignedIn]) keep their exact production semantics when
+  /// the gateway is faked at this I/O boundary.
+  final bool isAnonymous;
 }
 
 final class RefreshedAuthToken {

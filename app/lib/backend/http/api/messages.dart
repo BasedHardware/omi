@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_timezone/flutter_timezone.dart';
+
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/messages_wire.g.dart' as wire;
 import 'package:omi/backend/schema/message.dart';
@@ -16,21 +18,15 @@ class ChatPageContext {
   final String? startDate;
   final String? endDate;
 
-  const ChatPageContext({
-    required this.type,
-    this.id,
-    this.title,
-    this.startDate,
-    this.endDate,
-  });
+  const ChatPageContext({required this.type, this.id, this.title, this.startDate, this.endDate});
 
   Map<String, dynamic> toJson() => {
-        'type': type,
-        if (id != null) 'id': id,
-        if (title != null) 'title': title,
-        if (startDate != null) 'start_date': startDate,
-        if (endDate != null) 'end_date': endDate,
-      };
+    'type': type,
+    if (id != null) 'id': id,
+    if (title != null) 'title': title,
+    if (startDate != null) 'start_date': startDate,
+    if (endDate != null) 'end_date': endDate,
+  };
 
   ChatPageContext copyWith({
     String? type,
@@ -184,9 +180,16 @@ Stream<ServerMessageChunk> sendMessageStreamServer(
   }
 
   var messageId = "1000"; // Default new message
+  String? deviceTimeZone;
+  try {
+    deviceTimeZone = (await FlutterTimezone.getLocalTimezone()).identifier;
+  } catch (_) {
+    // Omit time_zone when device timezone is unavailable so chat send is not blocked.
+  }
   final body = <String, dynamic>{
     'text': text,
     'file_ids': filesId,
+    if (deviceTimeZone != null) 'time_zone': deviceTimeZone,
     if (context != null) 'context': context.toJson(),
   };
 

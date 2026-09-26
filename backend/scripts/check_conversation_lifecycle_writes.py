@@ -43,6 +43,30 @@ LIFECYCLE_FIELDS = {
 }
 
 
+def _dict_keys(node: ast.AST) -> set[str]:
+    if not isinstance(node, ast.Dict):
+        return set()
+    keys: set[str] = set()
+    for key in node.keys:
+        if isinstance(key, ast.Constant) and isinstance(key.value, str):
+            keys.add(key.value)
+    return keys
+
+
+def _is_sync_donor_tombstone_discard(relative_path: str, node: ast.Call) -> bool:
+    """Assignment may stamp discarded=True only as part of a redirect tombstone.
+
+    User discard stays owned by the lifecycle service. A donor write that also
+    sets deleted + sync_merged_into is the indexed hide for merge redirects,
+    not a second discard authority.
+    """
+    if relative_path != 'backend/utils/sync/assignment.py':
+        return False
+    payloads = [_dict_keys(argument) for argument in node.args]
+    payloads.extend(_dict_keys(keyword.value) for keyword in node.keywords)
+    return any({'deleted', 'discarded', 'sync_merged_into'} <= keys for keys in payloads)
+
+
 def _literal_lifecycle_fields(node: ast.AST) -> set[str]:
     if not isinstance(node, ast.Dict):
         return set()
@@ -126,6 +150,7 @@ class _LifecycleWriteVisitor(ast.NodeVisitor):
                 fields
                 and self.relative_path not in RAW_STORAGE_ALLOWLIST
                 and (is_transaction_write or writes_conversation_ref)
+                and not _is_sync_donor_tombstone_discard(self.relative_path, node)
             ):
                 self.errors.append(
                     f'{self.relative_path}:{node.lineno}: raw lifecycle fields {sorted(fields)}; '
@@ -134,11 +159,49 @@ class _LifecycleWriteVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+def _transcript_writer_violations(tree: ast.Module, relative_path: str) -> list[str]:
+    """Static owner inventory for #15247; behavioral tests prove receipt precedence."""
+    if relative_path != 'backend/database/conversations.py':
+        return []
+    policies = {
+        'upsert_conversation_with_lifecycle': '_reapply_current_manual_assignments',
+        'persist_processing_result_with_lifecycle': '_reapply_current_manual_assignments',
+        'update_conversation_segments': 'apply_manual_assignments',
+        'assign_conversation_speaker': 'manual_assignment',
+        # These rewrite current transactional content rather than caller snapshots.
+        'update_conversation_segment_text': 'prepare_conversation_for_read',
+        'migrate_conversations_level_batch': 'decode_manual_speaker_assignments',
+        'create_conversation_if_absent_with_lifecycle': None,
+    }
+    errors = []
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        calls = [n for n in ast.walk(node) if isinstance(n, ast.Call)]
+        writes = any(
+            isinstance(n.func, ast.Attribute)
+            and n.func.attr in {'set', 'update', 'create'}
+            and isinstance(n.func.value, ast.Name)
+            and n.func.value.id in {'transaction', 'txn', 'batch', 'doc_ref', 'conversation_ref'}
+            for n in calls
+        )
+        transcript = any(isinstance(n, ast.Constant) and n.value == 'transcript_segments' for n in ast.walk(node))
+        snapshot_input = any(a.arg == 'conversation_data' for a in node.args.args)
+        if not writes or not (transcript or snapshot_input):
+            continue
+        required = policies.get(node.name)
+        if node.name not in policies or (
+            required and not any(isinstance(n.func, ast.Name) and n.func.id == required for n in calls)
+        ):
+            errors.append(f'{relative_path}:{node.lineno}: transcript writer {node.name} lacks current receipt policy')
+    return errors
+
+
 def violations(source: str, relative_path: str) -> list[str]:
     tree = ast.parse(source, filename=relative_path)
     visitor = _LifecycleWriteVisitor(relative_path)
     visitor.visit(tree)
-    return visitor.errors
+    return visitor.errors + _transcript_writer_violations(tree, relative_path)
 
 
 def _source_files() -> list[Path]:

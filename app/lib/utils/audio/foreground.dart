@@ -36,7 +36,8 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
       if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
         Position? lastKnown;
         try {
-          lastKnown = await Geolocator.getLastKnownPosition() ??
+          lastKnown =
+              await Geolocator.getLastKnownPosition() ??
               await Geolocator.getLastKnownPosition(forceAndroidLocationManager: true);
         } catch (_) {}
         late final Position locationData;
@@ -179,16 +180,24 @@ class ForegroundUtil {
     Logger.debug('startForegroundTask');
 
     try {
-      ServiceRequestResult result;
+      // restartService() calls startForegroundService() again. A stop that
+      // lands before the new startForeground() crashes Android 14+ with
+      // ForegroundServiceDidNotStartInTimeException. An already-running
+      // service has already promoted; leave it alone.
       if (await FlutterForegroundTask.isRunningService) {
-        result = await FlutterForegroundTask.restartService();
-      } else {
-        result = await FlutterForegroundTask.startService(
-          notificationTitle: 'Your Omi Device is connected.',
-          notificationText: 'Transcription service is running in the background.',
-          callback: _startForegroundCallback,
-        );
+        Logger.debug('ForegroundTask already running');
+        return const ServiceRequestSuccess();
       }
+      final ServiceRequestResult result = await FlutterForegroundTask.startService(
+        // Explicit location. The manifest also lists shortService as the
+        // timeout fallback; omitting serviceTypes makes the plugin pass
+        // FOREGROUND_SERVICE_TYPE_MANIFEST and adopt both, which imposes
+        // the 3-minute shortService limit on this task.
+        serviceTypes: const [ForegroundServiceTypes.location],
+        notificationTitle: 'Your Omi Device is connected.',
+        notificationText: 'Transcription service is running in the background.',
+        callback: _startForegroundCallback,
+      );
       Logger.debug('ForegroundTask started successfully');
       return result;
     } catch (e) {

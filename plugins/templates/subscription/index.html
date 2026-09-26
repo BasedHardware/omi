@@ -558,7 +558,7 @@
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="container" id="subscription-container" data-uid="{{ uid }}">
         <div class="header">
             <div class="omi-device">
                 <img src="/templates/static/images/omi.png" alt="Omi Device" />
@@ -674,7 +674,7 @@
         <div class="testimonials">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3rem; flex-wrap: wrap; gap: 1rem;">
                 <h2 style="margin: 0; font-size: 2.5rem; font-weight: 700; color: #ffffff;">What Our Users Say</h2>
-                <a href="https://testimonial.to/omi" target="_blank" rel="noopener noreferrer" 
+                <a href="https://testimonial.to/omi" target="_blank" rel="noopener noreferrer"
                    style="background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; padding: 0.8rem 1.5rem; border-radius: 20px; text-decoration: none; font-weight: 600; font-size: 0.9rem; transition: all 0.3s ease; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);">
                     Share Your Review
                 </a>
@@ -717,22 +717,22 @@
                     <div class="testimonial-author">- Retraced Echoes</div>
                 </div>
             </div>
-            
+
             <!-- Embedded Wall of Love Widget -->
             <div class="wall-of-love-section">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin: 4rem 0 2rem 0; flex-wrap: wrap; gap: 1rem;">
                     <h3 style="margin: 0; font-size: 2rem; font-weight: 700; color: #ffffff;">See More Reviews</h3>
-                    <a href="https://testimonial.to/omi/all" target="_blank" rel="noopener noreferrer" 
+                    <a href="https://testimonial.to/omi/all" target="_blank" rel="noopener noreferrer"
                        style="background: transparent; border: 2px solid #6366f1; color: #6366f1; padding: 0.6rem 1.2rem; border-radius: 20px; text-decoration: none; font-weight: 600; font-size: 0.9rem; transition: all 0.3s ease; display: flex; align-items: center; gap: 0.5rem;">
                         View All Reviews
                     </a>
                 </div>
                 <div class="testimonial-embed">
-                    <iframe 
-                        src="https://testimonial.to/omi/all?theme=dark&hideDate=on&randomize=on&showSource=on" 
-                        width="100%" 
-                        height="600" 
-                        frameborder="0" 
+                    <iframe
+                        src="https://testimonial.to/omi/all?theme=dark&hideDate=on&randomize=on&showSource=on"
+                        width="100%"
+                        height="600"
+                        frameborder="0"
                         scrolling="yes"
                         style="border-radius: 16px; background: #1F1F25;">
                     </iframe>
@@ -786,17 +786,24 @@
     </div>
 
     <script>
-        // Get UID from URL parameters if not provided by template
+        // Get UID safely from DOM data attribute or URL parameters with sanitization
+        const containerElement = document.getElementById('subscription-container');
+        const templateUid = (containerElement && containerElement.getAttribute('data-uid')) || '';
         const urlParams = new URLSearchParams(window.location.search);
-        const uid = urlParams.get('uid') || '{{ uid }}';
-        
+        const rawParamUid = urlParams.get('uid') || '';
+
+        // Strict client-side validation to eliminate script injection
+        const safeUidPattern = /^[a-zA-Z0-9_-]{1,128}$/;
+        const paramUid = safeUidPattern.test(rawParamUid) ? rawParamUid : '';
+        const uid = paramUid || templateUid;
+
         // Update button links with UID if needed
-        if (uid && uid !== '{{ uid }}') {
+        if (uid && uid !== templateUid) {
             const buttons = document.querySelectorAll('.cta-button');
             buttons.forEach(button => {
                 const href = button.getAttribute('href');
-                if (href && !href.includes('uid=')) {
-                    button.setAttribute('href', href + (href.includes('?') ? '&' : '?') + 'uid=' + encodeURIComponent(uid));
+                if (href && !href.includes('client_reference_id=')) {
+                    button.setAttribute('href', href + (href.includes('?') ? '&' : '?') + 'client_reference_id=' + encodeURIComponent(uid));
                 }
             });
         }
@@ -806,7 +813,7 @@
             button.addEventListener('click', function(e) {
                 const plan = this.href.includes('annual') ? 'annual' : 'monthly';
                 console.log(`User clicked ${plan} plan with UID: ${uid}`);
-                
+
                 // Add loading state
                 this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Redirecting...';
                 this.style.pointerEvents = 'none';
@@ -818,7 +825,7 @@
             card.addEventListener('mouseenter', function() {
                 this.style.transform = 'translateY(-10px) scale(1.02)';
             });
-            
+
             card.addEventListener('mouseleave', function() {
                 this.style.transform = 'translateY(0) scale(1)';
             });

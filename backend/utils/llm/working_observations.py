@@ -1,10 +1,10 @@
 import json
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, List, Optional, Protocol, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field, field_validator
 
 from database.memory_non_active_routes import (
     NonActiveRoute,
@@ -17,8 +17,14 @@ from models.memory_contracts import (
     deterministic_contract_id,
 )
 from utils.llm.usage_tracker import Features, track_usage
-from utils.llm.prompt_cache import EXPLICIT_CACHE_OPTIONS
+from utils.llm.prompt_cache import (
+    EXPLICIT_CACHE_BREAKPOINT,
+    EXPLICIT_CACHE_OPTIONS,
+    has_cacheable_prefix,
+    prefix_cache_key,
+)
 from utils.memory.rejected_memory_feedback import bound_rejected_memory_examples
+from utils.memory.belief_model import belief_model_enabled
 
 if TYPE_CHECKING:
     from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix
@@ -50,6 +56,120 @@ logger = logging.getLogger(__name__)
 # Thirty-two one-evidence candidates leave margin to retract the preceding
 # bounded source set in the same atomic commit.
 MAX_WORKING_OBSERVATION_ITEMS = 32
+MEMORY_L1_CACHE_NAMESPACE = 'omi-memory-l1-v1'
+
+# Decision state is deliberately an argument on the existing memory
+# proposition.  It is not a new memory kind, task, or trigger.  Keep this
+# vocabulary small so a model cannot invent a second action-item lifecycle.
+DECISION_STATES = frozenset({"proposed", "accepted", "resolved"})
+_ARGUMENT_KEY_LIMIT = 64
+_ARGUMENT_STRING_LIMIT = 1_024
+_ARGUMENT_CONTAINER_LIMIT = 32
+_ARGUMENT_DEPTH_LIMIT = 4
+_TASK_CONTROL_ARGUMENT_KEYS = frozenset(
+    {
+        "action_item",
+        "create_action_item",
+        "create_task",
+        "task",
+        "task_id",
+        "task_completed",
+        "task_status",
+        "completion_status",
+        "completed_task",
+    }
+)
+
+
+def _bounded_argument_value(value: Any, *, depth: int = 0) -> Any:
+    """Return a bounded JSON-shaped value suitable for existing arguments.
+
+    LLM output is untrusted.  Keep ordinary proposition qualifiers intact, but
+    avoid allowing a malformed response to smuggle an unbounded payload into a
+    canonical memory write.  The canonical model remains the final validator.
+    """
+
+    if depth > _ARGUMENT_DEPTH_LIMIT:
+        return None
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, str):
+        return value.strip()[:_ARGUMENT_STRING_LIMIT]
+    if isinstance(value, Mapping):
+        bounded: dict[str, Any] = {}
+        for raw_key, raw_value in list(value.items())[:_ARGUMENT_CONTAINER_LIMIT]:
+            if not isinstance(raw_key, str):
+                continue
+            key = raw_key.strip()[:_ARGUMENT_KEY_LIMIT]
+            if not key:
+                continue
+            bounded[key] = _bounded_argument_value(raw_value, depth=depth + 1)
+        return bounded
+    if isinstance(value, (list, tuple)):
+        return [_bounded_argument_value(item, depth=depth + 1) for item in value[:_ARGUMENT_CONTAINER_LIMIT]]
+    return None
+
+
+def normalize_scoped_claim_arguments(
+    value: Any,
+    *,
+    basis: Optional[str] = None,
+) -> dict[str, Any]:
+    """Normalize existing proposition arguments without creating new slots.
+
+    ``decision`` is optional.  When present it is one of the three released
+    states, and ``rationale`` survives only alongside a valid decision.  Task
+    control fields are intentionally dropped: memory synthesis may describe a
+    decision, but it never creates or completes a second task.
+    """
+
+    bounded = _bounded_argument_value(value)
+    if not isinstance(bounded, dict):
+        return {}
+    arguments = {key: item for key, item in bounded.items() if key.casefold() not in _TASK_CONTROL_ARGUMENT_KEYS}
+    decision = arguments.get("decision")
+    # Non-string decisions (list/object from the model) are unhashable and
+    # raise TypeError on set membership; drop them instead of losing the
+    # whole extraction batch.
+    if not isinstance(decision, str):
+        decision = None
+    else:
+        decision = decision.strip().casefold()
+    if decision not in DECISION_STATES or (basis or "").strip().casefold() == "observed":
+        arguments.pop("decision", None)
+        arguments.pop("rationale", None)
+        return arguments
+    arguments["decision"] = decision
+    rationale = arguments.get("rationale")
+    if not isinstance(rationale, str) or not rationale.strip():
+        arguments.pop("rationale", None)
+    else:
+        arguments["rationale"] = rationale.strip()[:_ARGUMENT_STRING_LIMIT]
+    return arguments
+
+
+def _belief_classification_instructions() -> str:
+    """Extra extractor fields. Omitted when the belief-model flag is off so prompts stay identical."""
+    if not belief_model_enabled():
+        return ""
+    return (
+        "Also classify each item:\n"
+        "- `subject_scope`: use only the released values primary_user, user_owned_project, "
+        "user_relationship, or third_party. This is ownership/relationship scope, not a source-quality "
+        "score. Voice, OCR, API, and device transport do not outrank one another by modality. Never "
+        "default to primary_user when the subject is unclear; assistant, media, and passive screen content "
+        "must remain unattributed or third_party.\n"
+        "- `belief_class`: identity, relationship, preference, state, plan, episodic, meta_standing "
+        "(durable instruction to Omi), or meta_residue (session leftover).\n"
+        "- `half_life_days`: omit unless wording names a shorter horizon (e.g. \"this week\" → 7). "
+        "identity, relationship, and meta_standing have no half-life.\n"
+        "- `valid_to`: ISO timestamp when the claim names an end date (\"until Friday\", \"until launch\").\n"
+        "- `arguments`: preserve explicit object/qualifier details in the existing arguments object. "
+        "When the source contains an actual decision, arguments may include `decision` with exactly one "
+        "of proposed, accepted, or resolved, and may include `rationale` only when explicitly stated. "
+        "A proposal is not acceptance. Do not infer task completion, create a task, or turn passive activity "
+        "into a standing instruction.\n\n"
+    )
 
 
 def _empty_archive_items() -> list[WorkingObservationArchiveItem]:
@@ -59,6 +179,34 @@ def _empty_archive_items() -> list[WorkingObservationArchiveItem]:
 class WorkingObservationBatch(BaseModel):
     items: List[WorkingObservationArchiveItem] = Field(
         default_factory=_empty_archive_items,
+        description=f"At most {MAX_WORKING_OBSERVATION_ITEMS} distinct, highest-value observations.",
+    )
+
+
+class BeliefClassifiedArchiveItem(WorkingObservationArchiveItem):
+    """Same archive item with belief fields visible in the LLM schema when the flag is on."""
+
+    subject_scope: Optional[str] = None
+    belief_class: Optional[str] = None
+    half_life_days: Optional[float] = None
+    valid_to: Optional[AwareDatetime] = None
+    # Existing proposition arguments carry object/qualifier/decision details;
+    # this does not create a new memory slot or lifecycle.
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("arguments", mode="before")
+    @classmethod
+    def normalize_arguments(cls, value: Any) -> dict[str, Any]:
+        return normalize_scoped_claim_arguments(value)
+
+
+def _empty_belief_archive_items() -> list[BeliefClassifiedArchiveItem]:
+    return []
+
+
+class BeliefWorkingObservationBatch(BaseModel):
+    items: List[BeliefClassifiedArchiveItem] = Field(
+        default_factory=_empty_belief_archive_items,
         description=f"At most {MAX_WORKING_OBSERVATION_ITEMS} distinct, highest-value observations.",
     )
 
@@ -79,8 +227,12 @@ def _source_type_instructions(source_type: str, user_name: str) -> str:
             f"but do not assume every speaker is {user_name}. "
             f"Treat a statement as about {user_name} only when source role, first-person context, "
             f"or surrounding evidence supports that attribution. "
+            f"When the source header says owner identity is untrusted, first-person context "
+            f"does not attribute the statement to {user_name}. "
             f"For named people or known roles, preserve the source-local speaker label and keep the item "
             f"about that person or relationship context, not as a user fact. "
+            f"Voice is not automatically stronger than OCR or another source: use explicit speaker and "
+            f"owner evidence, and keep uncertainty unknown. "
             f"Ignore background noise, transcription errors, and long passages where nothing memorable happens."
         )
     elif "ocr" in type_hint or "screenshot" in type_hint or "desktop" in type_hint:
@@ -90,17 +242,24 @@ def _source_type_instructions(source_type: str, user_name: str) -> str:
             f"Extract visible facts: what they're working on, who they're talking to, "
             f"what's on their screen that reveals preferences or context. "
             f"Ignore transient UI elements (scroll position, loading spinners) unless "
-            f"they reveal something meaningful."
+            f"they reveal something meaningful. Screen capture is not proof that visible text is "
+            f"{user_name}'s belief, decision, or task; media, assistant text, and passive activity remain "
+            f"unattributed unless the source explicitly establishes ownership."
         )
     elif "chat" in type_hint or "message" in type_hint or "conversation" in type_hint:
         return (
             f"This is a conversation between {user_name} and an AI assistant (and possibly others). "
             f"Extract what {user_name} said, decided, or revealed about themselves or their life. "
             f"Ignore generic assistant messages, praise, nudges, and conversational filler. "
-            f"Only extract assistant content when it confirms something {user_name} stated."
+            f"Only extract assistant content when it confirms something {user_name} stated. "
+            f"Assistant text alone cannot establish a primary-user fact, decision, or task completion."
         )
     else:
-        return f"This is a {source_type} from {user_name}'s digital life. Extract what's worth remembering."
+        return (
+            f"This is a {source_type} from {user_name}'s digital life. Extract what's worth remembering, "
+            f"but treat source ownership as unknown unless the content explicitly establishes it. "
+            f"Do not default an assistant, media, or passive observation to primary_user."
+        )
 
 
 def _rejection_feedback_block(rejected_memory_examples: Sequence[str]) -> str:
@@ -150,6 +309,11 @@ def _build_l1_messages(
         f"- Do NOT infer that every transcript speaker is the primary user.\n"
         f"- Speaker labels like speaker_0, speaker_1, ent_speaker_0, or human are source/session-local labels.\n"
         f"- Preserve the source-local label in `speaker_label` when present; keep `speaker_scope` as session-local/source-local.\n"
+        f"- WHO IS WHO: the owner is only the segments the transcript marks as the owner. When the header says owner identity is untrusted, first-person statements are unattributed.\n"
+        f"- BYSTANDER: if {user_name} said little or nothing, the slice contributes nothing about {user_name}.\n"
+        f"- PARTICIPATING IS NOT A FACT: asking, debating, or expressing interest does not make a topic {user_name}'s work, job, or durable interest. Example: a guest introduces themselves as a marine biologist and {user_name} asks about funding — extract nothing about {user_name}.\n"
+        f"- NAME WHOSE FACT: every item names its subject in about; omit subject-less facts.\n"
+        f"- BASIS: decided only for a commitment or decision on tape by the owner; proposed for suggestions or plans without a decision; observed otherwise. Phrase accordingly; do not upgrade interest into a decision.\n"
         f"- Use `about` = \"the user\" only for facts clearly about the primary user.\n"
         f"- Do not emit an item about an unidentified non-primary speaker. Named people and known roles remain valid when the owner cares about them or the relationship is durable.\n"
         f"- Facts about family, friends, teammates, projects, or pets are valid, but keep them about that person/entity; do not rewrite them as facts about the user unless the quote supports that.\n"
@@ -161,6 +325,7 @@ def _build_l1_messages(
         f"- An entity → e.g. \"Milo (cat)\", \"neighborhood coffee shop\"\n"
         f"- If attribution is uncertain, do not emit the item. Do not hedge inside the item text or `about` field.\n"
         f"- Use class=\"sensitive\" for credentials, health details, finances, family matters.\n\n"
+        f"{_belief_classification_instructions()}"
         f"{language_instruction + chr(10) + chr(10) if language_instruction else ''}"
         f"Return JSON:\n{format_instructions}"
     )
@@ -184,11 +349,11 @@ def _content_from_response(response: object) -> str:
 
 
 def _with_deterministic_archive_ids(
-    items: List[WorkingObservationArchiveItem], uid: str, source_id: str, source_type: str
+    items: Sequence[WorkingObservationArchiveItem], uid: str, source_id: str, source_type: str
 ) -> List[WorkingObservationArchiveItem]:
     normalized: list[WorkingObservationArchiveItem] = []
     for item in items:
-        updates = {
+        updates: dict[str, Any] = {
             "user_id": item.user_id or uid,
             "source_id": item.source_id or source_id,
             "source_type": item.source_type or source_type,
@@ -199,27 +364,54 @@ def _with_deterministic_archive_ids(
             "source_type": updates["source_type"],
             "text": item.text,
             "evidence_quotes": item.evidence_quotes,
+            "source_refs": item.source_refs,
             "about": item.about,
             "speaker_label": item.speaker_label,
             "speaker_scope": item.speaker_scope,
+            "arguments": getattr(item, "arguments", {}),
         }
         updates["archive_id"] = "l1_" + deterministic_contract_id("l1-archive-item", payload)[:20]
+        # Never fill subject scope from the transport or modality.  If the
+        # model omitted it, leave it unknown for the canonical admission owner
+        # to handle.  Only the released scope vocabulary is accepted here.
+        supplied_scope = getattr(item, "subject_scope", None)
+        if supplied_scope is not None:
+            normalized_scope = str(supplied_scope).strip().casefold()
+            if normalized_scope not in {
+                "primary_user",
+                "user_owned_project",
+                "user_relationship",
+                "third_party",
+            }:
+                normalized_scope = None
+            # Assistant/media/unknown sources cannot establish a primary-user
+            # fact merely because the source was captured on the user's
+            # device.  Explicitly attributed voice/conversation sources retain
+            # the model's owner scope.
+            source_hint = (source_type or "").casefold()
+            if normalized_scope == "primary_user" and any(
+                marker in source_hint
+                for marker in ("assistant", "media", "article", "screen", "ocr", "desktop", "unknown")
+            ):
+                normalized_scope = None
+            updates["subject_scope"] = normalized_scope
         normalized.append(item.model_copy(update=updates))
     return normalized
 
 
 def _bounded_archive_items(
-    items: List[WorkingObservationArchiveItem],
+    items: Sequence[WorkingObservationArchiveItem],
 ) -> List[WorkingObservationArchiveItem]:
     """Preserve provider order while deduplicating within one attributed subject."""
     bounded: List[WorkingObservationArchiveItem] = []
-    seen_propositions: set[tuple[str, str, str]] = set()
+    seen_propositions: set[tuple[str, str, str, str]] = set()
     for item in items:
         normalized_content = " ".join(item.text.casefold().split())
         proposition_key = (
             normalized_content,
             " ".join(item.about.casefold().split()),
             " ".join((item.speaker_label or "").casefold().split()),
+            json.dumps(getattr(item, "arguments", {}), sort_keys=True, default=str),
         )
         if proposition_key in seen_propositions:
             continue
@@ -258,7 +450,9 @@ def extract_l1_memory_archive_items_from_text(
         return []
 
     name = user_name or "the user"
-    parser = PydanticOutputParser(pydantic_object=WorkingObservationBatch)
+    parser = PydanticOutputParser(
+        pydantic_object=BeliefWorkingObservationBatch if belief_model_enabled() else WorkingObservationBatch
+    )
     legacy_messages = _build_l1_messages(
         name,
         source_type,
@@ -267,12 +461,27 @@ def extract_l1_memory_archive_items_from_text(
         language_instruction=language_instruction,
         rejected_memory_examples=rejected_memory_examples,
     )
-    cache_enabled = bool(prompt_prefix and prompt_prefix.cache_eligible and prompt_cache_enabled)
+    static_system = legacy_messages[0][1]
+    cache_enabled = bool(prompt_cache_enabled and has_cacheable_prefix(static_system))
+    static_system_message: dict[str, Any] = (
+        {
+            'role': 'system',
+            'content': [
+                {
+                    'type': 'text',
+                    'text': static_system,
+                    'prompt_cache_breakpoint': dict(EXPLICIT_CACHE_BREAKPOINT),
+                }
+            ],
+        }
+        if cache_enabled
+        else {'role': 'system', 'content': static_system}
+    )
     if prompt_prefix is not None:
         volatile_human = _rejection_feedback_block(rejected_memory_examples)
         messages: Sequence[Any] = [
-            *prompt_prefix.messages(cache_enabled=cache_enabled),
-            {'role': 'system', 'content': legacy_messages[0][1]},
+            static_system_message,
+            *prompt_prefix.messages(cache_enabled=False),
             {
                 'role': 'user',
                 'content': (
@@ -282,7 +491,7 @@ def extract_l1_memory_archive_items_from_text(
             },
         ]
     else:
-        messages = legacy_messages
+        messages = [static_system_message, {'role': 'user', 'content': legacy_messages[1][1]}]
 
     if llm is not None:
         model = llm
@@ -293,8 +502,8 @@ def extract_l1_memory_archive_items_from_text(
                 LlmInvoker,
                 llm_factory(
                     'memory_l1',
-                    cache_key=prompt_prefix.cache_key if cache_enabled and prompt_prefix else None,
-                    prompt_cache_options=EXPLICIT_CACHE_OPTIONS if cache_enabled else None,
+                    cache_key=prefix_cache_key(MEMORY_L1_CACHE_NAMESPACE, static_system) if cache_enabled else None,
+                    prompt_cache_options=EXPLICIT_CACHE_OPTIONS if prompt_cache_enabled else None,
                 ),
             )
         except Exception as exc:

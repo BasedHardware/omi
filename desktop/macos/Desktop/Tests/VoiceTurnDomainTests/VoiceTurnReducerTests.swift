@@ -78,7 +78,9 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertEqual(accepted.model.turn?.phase, .terminal(.success))
     XCTAssertEqual(
       accepted.model.lastTerminal,
-      .init(turnID: turnID, reason: .success, route: .hub(sessionID: sessionID)))
+      .init(
+        turnID: turnID, reason: .success, route: .hub(sessionID: sessionID),
+        answerTextCompleted: true))
     XCTAssertEqual(accepted.effects.filter(\.isTerminal).count, 1)
 
     let duplicate = reduce(accepted.model, .finish(turnID: turnID, reason: .success))
@@ -2065,6 +2067,36 @@ final class VoiceTurnReducerTests: XCTestCase {
     let cleared = reduce(model, .deadlineFired(turnID: turnID, deadline: .hintVisibility))
 
     XCTAssertEqual(cleared.model.turn?.projection.hint, "")
+  }
+
+  func testDictationRecognizedMarksTheProjectionUntilTheTurnEnds() {
+    let turnID = VoiceTurnID()
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    XCTAssertFalse(model.turn?.projection.isDictating == true)
+
+    model = reduce(model, .dictationRecognized(turnID: turnID)).model
+    XCTAssertTrue(model.turn?.projection.isDictating == true)
+    // Presentation only: still listening, nothing routed or terminated.
+    XCTAssertTrue(model.turn?.projection.isListening == true)
+    XCTAssertEqual(model.turn?.phase, .recording)
+
+    model = reduce(model, .finalize(turnID: turnID)).model
+    XCTAssertTrue(model.turn?.projection.isDictating == true, "the flag survives key-up while the paste is prepared")
+
+    let ended = reduce(model, .cancel(turnID: turnID, reason: .cancelled)).model
+    XCTAssertFalse(ended.turn?.projection.isDictating == true)
+  }
+
+  func testClearPresentationResetsDictationTint() {
+    let turnID = VoiceTurnID()
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .dictationRecognized(turnID: turnID)).model
+    XCTAssertTrue(model.turn?.projection.isDictating == true)
+
+    let cleared = reduce(model, .clearPresentation(turnID: turnID))
+
+    XCTAssertEqual(cleared.model.turn?.projection, .idle)
+    XCTAssertEqual(cleared.model.turn?.phase, .recording)
   }
 
   func testTerminalHintDeadlineClearsHintWithoutResurrectingTurn() {

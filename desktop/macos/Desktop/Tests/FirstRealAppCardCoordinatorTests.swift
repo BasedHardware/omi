@@ -49,6 +49,7 @@ final class FirstRealAppCardCoordinatorTests: XCTestCase {
   private var openedChatPrompts: [String] = []
   private var telemetry: [(String, [String: Any])] = []
   private var pttStart: (@MainActor () -> Void)?
+  private var warmCaptureRequests = 0
   private var pttObservationStopped = false
   private var frontmost: (bundleIdentifier: String?, localizedName: String?) = (nil, nil)
   private var isOnboardingComplete = true
@@ -67,6 +68,7 @@ final class FirstRealAppCardCoordinatorTests: XCTestCase {
     openedChatPrompts = []
     telemetry = []
     pttStart = nil
+    warmCaptureRequests = 0
     pttObservationStopped = false
     frontmost = (realApp.bundleIdentifier, realApp.appName)
     isOnboardingComplete = true
@@ -102,6 +104,7 @@ final class FirstRealAppCardCoordinatorTests: XCTestCase {
         self?.pttStart = onStart
         return { self?.pttObservationStopped = true }
       },
+      warmCapture: { [weak self] in self?.warmCaptureRequests += 1 },
       openChat: { [weak self] prompt in self?.openedChatPrompts.append(prompt) },
       scheduler: scheduler
     )
@@ -135,6 +138,41 @@ final class FirstRealAppCardCoordinatorTests: XCTestCase {
     XCTAssertEqual(presented.first?.ownerID, "owner-1")
     XCTAssertEqual(presented.first?.title, "I can see Safari")
     XCTAssertEqual(telemetryPhases, ["shown"])
+  }
+
+  /// The card tells the user to hold ⌥. On a fresh install that press is the one
+  /// measured failing — `capture_never_operational` — because CoreAudio has not
+  /// opened the microphone yet. Showing the card is the moment to have it running.
+  func testShowingTheCardAsksPushToTalkToWarmItsCapture() {
+    isOnboardingComplete = false
+    let coordinator = makeCoordinator()
+    coordinator.start()
+    isOnboardingComplete = true
+    coordinator.beginObservingActivationsIfReady()
+
+    XCTAssertEqual(warmCaptureRequests, 0)
+    activateRealApp(on: coordinator)
+
+    XCTAssertEqual(presented.count, 1)
+    XCTAssertEqual(warmCaptureRequests, 1)
+  }
+
+  /// A card that is never shown must not open the microphone: the warm capture
+  /// is tied to the invitation, not to app switching.
+  func testACardThatDoesNotFireNeverWarmsTheCapture() {
+    isOnboardingComplete = false
+    let coordinator = makeCoordinator()
+    coordinator.start()
+    isOnboardingComplete = true
+    coordinator.beginObservingActivationsIfReady()
+
+    // The user switches to Omi itself — the card is suppressed.
+    frontmost = (omiBundleID, "Omi")
+    coordinator.handleActivation(bundleIdentifier: omiBundleID, appName: "Omi")
+    scheduler.fire(after: FirstRealAppCardPolicy.requiredDwell)
+
+    XCTAssertEqual(presented.count, 0)
+    XCTAssertEqual(warmCaptureRequests, 0)
   }
 
   func testTheCardNeverFiresTwiceInOneSession() {
@@ -387,13 +425,13 @@ final class FirstRealAppCardCoordinatorTests: XCTestCase {
   /// contract is that the draft is there to be taken exactly once.
   func testThePrefilledDraftIsHandedOverExactlyOnceAndUnsent() {
     let store = MainChatNavigationRequestStore.shared
-    _ = store.consumeDraft()
+    _ = store.consumeDraft(existingDraft: "")
 
     store.request(draft: FirstRealAppCardPolicy.prompt)
 
     XCTAssertTrue(store.isPending)
-    XCTAssertEqual(store.consumeDraft(), "Summarize what's on my screen")
-    XCTAssertNil(store.consumeDraft(), "a second composer must not re-take the draft")
+    XCTAssertEqual(store.consumeDraft(existingDraft: ""), "Summarize what's on my screen")
+    XCTAssertNil(store.consumeDraft(existingDraft: ""), "a second composer must not re-take the draft")
     XCTAssertTrue(store.consume())
   }
 
@@ -412,5 +450,61 @@ final class FirstRealAppCardCoordinatorTests: XCTestCase {
     ownerID = "owner-1"
     activateRealApp(on: coordinator)
     XCTAssertEqual(presented.count, 1)
+  }
+
+  // MARK: - Attachment handoff contract
+
+  /// The card's handoff is one unit: the composer that takes the draft is the
+  /// one that stages the frame, and a request without an attachment clears any
+  /// stale one — the same slot ownership the draft has always had.
+  func testRequestCarriesDraftAndAttachmentTogetherAndIsConsumedOnce() {
+    let store = MainChatNavigationRequestStore.shared
+    _ = store.consumeDraft()
+    _ = store.consumeAttachment()
+
+    let attachment = ChatAttachment(fileName: "Screen frame (ChatGPT).jpg", mimeType: "image/jpeg")
+    store.request(draft: FirstRealAppCardPolicy.prompt, attachment: attachment)
+
+    XCTAssertTrue(store.isPending)
+    XCTAssertEqual(store.consumeDraft(), "Summarize what's on my screen")
+    XCTAssertEqual(store.consumeAttachment()?.id, attachment.id)
+    XCTAssertNil(store.consumeAttachment(), "a second composer must not re-take the frame")
+
+    // A plain request owns the slot: no attachment may survive from before.
+    store.request(draft: "Continue in Omi")
+    XCTAssertNil(store.consumeAttachment())
+    XCTAssertEqual(store.consumeDraft(), "Continue in Omi")
+  }
+
+  /// A requester that must suspend before committing (the card's frame
+  /// decode) reserves a generation; if any other request lands while it is
+  /// suspended, the stale reservation's commit is dropped — a slow card
+  /// handoff can never overwrite a newer request's draft and attachment.
+  func testStaleReservationCannotOverwriteANewerRequest() {
+    let store = MainChatNavigationRequestStore.shared
+    _ = store.consumeDraft()
+    _ = store.consumeAttachment()
+
+    let generation = store.reserve()
+    // A newer request overtakes the suspended card handoff.
+    store.request(draft: "Continue in Omi")
+
+    // The stale reservation sees it lost and drops its commit.
+    XCTAssertTrue(generation < store.currentGeneration)
+    XCTAssertEqual(store.consumeDraft(), "Continue in Omi")
+    XCTAssertNil(store.consumeAttachment())
+  }
+
+  /// An un-overtaken reservation remains current, so its commit lands.
+  func testCurrentReservationStillCommits() {
+    let store = MainChatNavigationRequestStore.shared
+    _ = store.consumeDraft()
+
+    let generation = store.reserve()
+    XCTAssertEqual(generation, store.currentGeneration)
+    // The card's seam (`openMainAppChat`) commits through `request`, which is
+    // legitimate while the reservation is still current.
+    store.request(draft: "Summarize what's on my screen")
+    XCTAssertEqual(store.consumeDraft(), "Summarize what's on my screen")
   }
 }

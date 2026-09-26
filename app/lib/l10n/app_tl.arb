@@ -14,7 +14,7 @@
     "@transcriptTab": {
         "description": "Tab label for transcript view"
     },
-    "actionItemsTab": "Mga Aksyon",
+    "actionItemsTab": "Mga Gawain",
     "@actionItemsTab": {
         "description": "Tab label for action items"
     },
@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "Tatanggalin din nito ang mga nauugnay na alaala, gawain, at audio file. Hindi maaaring bawiin ang aksyong ito.",
+    "deleteConversationMessage": "Tatanggalin din nito ang mga nauugnay na alaala, gawain, at audio file.",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -128,11 +128,11 @@
     "@remaining": {
         "description": "Label showing time remaining for SD card transfer"
     },
-    "loading": "Naglo-load...",
+    "loading": "Naglo-load…",
     "@loading": {
         "description": "Loading indicator text"
     },
-    "loadingDuration": "Naglo-load ng tagal...",
+    "loadingDuration": "Naglo-load ng tagal…",
     "@loadingDuration": {
         "description": "Loading duration indicator"
     },
@@ -162,7 +162,7 @@
     "@createPersonHint": {
         "description": "Hint text for creating a person"
     },
-    "speechProfile": "Profil ng Boses",
+    "speechProfile": "Voice Profile",
     "@speechProfile": {
         "description": "Speech profile setting"
     },
@@ -188,7 +188,7 @@
     "@selectLanguage": {
         "description": "Title for language selection"
     },
-    "deleting": "Inaalis...",
+    "deleting": "Inaalis…",
     "@deleting": {
         "description": "Deleting in progress indicator"
     },
@@ -224,7 +224,7 @@
     "@disconnected": {
         "description": "Status text when device is disconnected"
     },
-    "searching": "Naghahanap...",
+    "searching": "Naghahanap",
     "@searching": {
         "description": "Loading text displayed while search is in progress"
     },
@@ -304,7 +304,7 @@
     "@starConversationHint": {
         "description": "Hint explaining how to star conversations"
     },
-    "searchConversations": "Maghanap ng pag-uusap...",
+    "searchConversations": "Maghanap ng pag-uusap",
     "@searchConversations": {
         "description": "Placeholder text for conversation search field"
     },
@@ -350,7 +350,7 @@
     "@noMessagesYet": {
         "description": "Empty chat state message"
     },
-    "deletingMessages": "Inaalis ang iyong mga mensahe mula sa memorya ni Omi...",
+    "deletingMessages": "Inaalis ang iyong mga mensahe mula sa memorya ni Omi…",
     "@deletingMessages": {
         "description": "Loading text when clearing chat"
     },
@@ -414,7 +414,7 @@
     "@buildAndShareApp": {
         "description": "Create app button subtitle"
     },
-    "searchApps": "Maghanap ng mga app...",
+    "searchApps": "Maghanap ng mga app",
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
@@ -557,6 +557,7 @@
     "offlineSync": "Offline Sync",
     "autoSync": "Awtomatikong pag-sync",
     "autoSyncDescription": "Awtomatikong i-sync ang mga offline na recording kapag nakakonekta ang iyong device",
+    "omiButtonActions": "Mga aksyon ng button ng Omi",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -608,7 +609,7 @@
     "@privacyIntro": {
         "description": "Data privacy page introduction"
     },
-    "learnMore": "Matutunan ang higit pa...",
+    "learnMore": "Matutunan ang higit pa…",
     "@learnMore": {
         "description": "Learn more link"
     },
@@ -832,7 +833,7 @@
     "@developerSettingsTitle": {
         "description": "Developer settings page title"
     },
-    "saving": "Nase-save...",
+    "saving": "Nase-save…",
     "@saving": {
         "description": "Text shown while saving settings"
     },
@@ -936,7 +937,7 @@
     "@providing": {
         "description": "Providing stat title"
     },
-    "providingSubtitle": "Mga aksyon, at mga tala na awtomatikong na-capture.",
+    "providingSubtitle": "Mga gawain at tala, awtomatikong na-capture.",
     "@providingSubtitle": {
         "description": "Providing stat subtitle"
     },
@@ -1006,19 +1007,19 @@
     "@shareStatsMessage": {
         "description": "Share stats base message"
     },
-    "sharePeriodToday": "Ngayon, omi ay:",
+    "sharePeriodToday": "Ngayon, Omi ay:",
     "@sharePeriodToday": {
         "description": "Share stats period: Today"
     },
-    "sharePeriodMonth": "Sa buwan na ito, omi ay:",
+    "sharePeriodMonth": "Sa buwan na ito, Omi ay:",
     "@sharePeriodMonth": {
         "description": "Share stats period: Month"
     },
-    "sharePeriodYear": "Sa taon na ito, omi ay:",
+    "sharePeriodYear": "Sa taon na ito, Omi ay:",
     "@sharePeriodYear": {
         "description": "Share stats period: Year"
     },
-    "sharePeriodAllTime": "Sa ngayon, omi ay:",
+    "sharePeriodAllTime": "Sa ngayon, Omi ay:",
     "@sharePeriodAllTime": {
         "description": "Share stats period: All Time"
     },
@@ -1071,7 +1072,7 @@
     "selectLogFile": "Piliin ang Log File",
     "shareLogs": "Ibahagi ang Logs",
     "debugLogCleared": "Debug log ay naburahin",
-    "exportStarted": "Nagsimula ang pag-export. Maaaring tumagal ng ilang segundo...",
+    "exportStarted": "Nagsimula ang pag-export. Maaaring tumagal ng ilang segundo…",
     "exportAllData": "I-export ang Lahat ng Data",
     "exportDataDesc": "I-export ang mga pag-uusap sa isang JSON file",
     "exportedConversations": "Mga Exported Conversations mula sa Omi",
@@ -1113,7 +1114,6 @@
     "daySummary": "Day Summary",
     "summaryGenerated": "Summary ay nabuo",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Idagdag sa claude_desktop_config.json",
     "copyConfig": "Kopyahin ang Config",
     "configCopied": "Config ay kinopya sa clipboard",
     "listeningMins": "Nakikinig (mins)",
@@ -1358,7 +1358,7 @@
         }
     },
     "account": "Account",
-    "actionItemsSyncedTo": "Ang iyong mga action item ay i-sync sa iyong {appName} account",
+    "actionItemsSyncedTo": "Ang iyong mga gawain ay i-sync sa iyong {appName} account",
     "@actionItemsSyncedTo": {
         "placeholders": {
             "appName": {
@@ -1472,7 +1472,7 @@
     "importConfiguration": "I-import ang Configuration",
     "exportConfiguration": "I-export ang configuration",
     "bringYourOwn": "Dalhin ang iyong sarili",
-    "payYourSttProvider": "Gamitin ang omi nang libre. Direkta lang sa iyong STT provider ang babayaran mo.",
+    "payYourSttProvider": "Gamitin ang Omi nang libre. Direkta lang sa iyong STT provider ang babayaran mo.",
     "freeMinutesMonth": "300 libreng minuto/buwan kasama. Unlimited sa ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Ang Host ay kinakailangan",
@@ -1555,7 +1555,7 @@
     "saveChanges": "I-save ang Mga Pagbabago",
     "resetToDefault": "I-reset sa default",
     "viewTemplate": "Tingnan ang Template",
-    "trySomethingLike": "Subukan ang isang bagay tulad ng...",
+    "trySomethingLike": "Subukan ang isang bagay tulad ng…",
     "tryIt": "Subukan ito",
     "creatingPlan": "Lumilikha ng plano",
     "developingLogic": "Bumubuo ng logic",
@@ -1564,8 +1564,8 @@
     "finalTouches": "Huling touchup",
     "processing": "Pinoproseso",
     "features": "Mga Features",
-    "creatingYourApp": "Lumilikha ng iyong app...",
-    "generatingIcon": "Bumubuo ng icon...",
+    "creatingYourApp": "Lumilikha ng iyong app…",
+    "generatingIcon": "Bumubuo ng icon…",
     "whatShouldWeMake": "Ano ang dapat tayong gawing?",
     "appName": "App Name",
     "description": "Description",
@@ -1582,7 +1582,7 @@
     "usersPayToUse": "Ang mga users ay nagbabayad upang gumamit ng iyong app",
     "freeForEveryone": "Libre para sa lahat",
     "perMonthLabel": "/ buwan",
-    "creating": "Lumilikha...",
+    "creating": "Lumilikha…",
     "@creating": {
         "description": "Loading state text when app generation is in progress"
     },
@@ -1593,7 +1593,7 @@
     "@connect": {
         "description": "Title for device connection page"
     },
-    "searchingForDevices": "Naghahanap ng mga device...",
+    "searchingForDevices": "Naghahanap ng mga device",
     "@searchingForDevices": {
         "description": "Status text while scanning for Bluetooth devices"
     },
@@ -1646,7 +1646,7 @@
     "@backgroundActivity": {
         "description": "Title for background activity permission"
     },
-    "backgroundActivityDesc": "Hayaang tumakbo ang Omi sa background para sa mas magandang stability",
+    "backgroundActivityDesc": "Para patuloy na mag-record ang Omi kapag naka-off ang screen o lumipat ka ng app.",
     "@backgroundActivityDesc": {
         "description": "Description for background activity permission"
     },
@@ -1654,7 +1654,7 @@
     "@locationAccess": {
         "description": "Title for location access permission"
     },
-    "locationAccessDesc": "Paganahin ang background location para sa buong karanasan",
+    "locationAccessDesc": "Para maitala ng Omi kung saan nangyari ang iyong mga usapan.",
     "@locationAccessDesc": {
         "description": "Description for location access permission"
     },
@@ -1662,7 +1662,7 @@
     "@notifications": {
         "description": "AppBar title for notifications settings page"
     },
-    "notificationsDesc": "Paganahin ang mga notipikasyon upang manatiling informed",
+    "notificationsDesc": "Para makapagpadala ang Omi ng mga buod ng usapan, paalala sa gawain at sagot mula sa iyong mga app.",
     "@notificationsDesc": {
         "description": "Description for notifications permission"
     },
@@ -1673,7 +1673,7 @@
     "@locationServiceDisabled": {
         "description": "Title for dialog when location services are off"
     },
-    "locationServiceDisabledDesc": "Ang Location Service ay Disabled. Mangyaring pumunta sa Settings > Privacy & Security > Location Services at paganahin ito",
+    "locationServiceDisabledDesc": "Naka-off ang Location Services sa device na ito. I-on ito sa Settings.",
     "@locationServiceDisabledDesc": {
         "description": "Instructions to enable location services"
     },
@@ -1780,10 +1780,6 @@
     "openSettings": "Buksan ang Settings",
     "@openSettings": {
         "description": "Button text to open app settings"
-    },
-    "wantDifferentName": "Gusto mo bang gamitin ang ibang pangalan?",
-    "@wantDifferentName": {
-        "description": "Question asking if user wants to change their display name"
     },
     "whatsYourName": "Ano ang iyong pangalan?",
     "@whatsYourName": {
@@ -1907,7 +1903,7 @@
     "@personalGrowthJourney": {
         "description": "Subtitle describing Omi on auth screen"
     },
-    "actionItemsTitle": "Mga To-Do",
+    "actionItemsTitle": "Mga Gawain",
     "@actionItemsTitle": {
         "description": "Title for the Action Items page"
     },
@@ -1927,7 +1923,7 @@
     "@tabOld": {
         "description": "Label for Old tab"
     },
-    "emptyTodoMessage": "🎉 Tapos na!\nWalang pending action items",
+    "emptyTodoMessage": "🎉 Tapos na!\nWalang pending na gawain",
     "@emptyTodoMessage": {
         "description": "Message when To Do list is empty"
     },
@@ -1943,19 +1939,19 @@
     "@noItems": {
         "description": "Generic no items message"
     },
-    "actionItemMarkedIncomplete": "Ang action item ay minarkahan bilang incomplete",
+    "actionItemMarkedIncomplete": "Ang gawain ay minarkahan bilang incomplete",
     "@actionItemMarkedIncomplete": {
         "description": "Snackbar message when item marked incomplete"
     },
-    "actionItemCompleted": "Ang action item ay kumpleto na",
+    "actionItemCompleted": "Ang gawain ay kumpleto na",
     "@actionItemCompleted": {
         "description": "Snackbar message when item completed"
     },
-    "deleteActionItemTitle": "I-delete ang Action Item",
+    "deleteActionItemTitle": "I-delete ang Gawain",
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "Sigurado ka ba na gusto mong i-delete ang action item na ito?",
+    "deleteActionItemMessage": "Sigurado ka ba na gusto mong i-delete ang gawaing ito?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1963,7 +1959,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "Sigurado ka ba na gusto mong i-delete ang {count} piniling action item{s}?",
+    "deleteSelectedItemsMessage": "Sigurado ka ba na gusto mong i-delete ang {count} piniling task{s}?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -1976,7 +1972,7 @@
             }
         }
     },
-    "actionItemDeletedResult": "Ang action item \"{description}\" ay natanggal na",
+    "actionItemDeletedResult": "Ang gawain \"{description}\" ay natanggal na",
     "@actionItemDeletedResult": {
         "description": "Snackbar message after deleting single item",
         "placeholders": {
@@ -1985,7 +1981,7 @@
             }
         }
     },
-    "itemsDeletedResult": "{count} action item{s} ay natanggal na",
+    "itemsDeletedResult": "{count} task{s} ay natanggal na",
     "@itemsDeletedResult": {
         "description": "Snackbar message after bulk delete",
         "placeholders": {
@@ -1997,7 +1993,7 @@
             }
         }
     },
-    "failedToDeleteItem": "Nabigo ang pagtanggal ng action item",
+    "failedToDeleteItem": "Nabigo ang pagtanggal ng gawain",
     "@failedToDeleteItem": {
         "description": "Error message when deletion fails"
     },
@@ -2009,11 +2005,11 @@
     "@failedToDeleteSomeItems": {
         "description": "Error message when partial deletion failure"
     },
-    "welcomeActionItemsTitle": "Handa para sa Action Items",
+    "welcomeActionItemsTitle": "Handa para sa Mga Gawain",
     "@welcomeActionItemsTitle": {
         "description": "Heading for empty state welcome"
     },
-    "welcomeActionItemsDescription": "Ang iyong AI ay awtomatikong makakakuha ng mga tasks at to-dos mula sa iyong mga pag-usap. Makikita nila dito kapag ginawa.",
+    "welcomeActionItemsDescription": "Ang iyong AI ay awtomatikong kukuha ng mga gawain mula sa iyong mga pag-uusap. Makikita nila dito kapag ginawa.",
     "@welcomeActionItemsDescription": {
         "description": "Description for empty state welcome"
     },
@@ -2042,11 +2038,11 @@
     "@deleteSelected": {
         "description": "Tooltip for delete selected"
     },
-    "searchMemories": "Maghanap ng mga alaala...",
+    "searchMemories": "Maghanap ng mga alaala",
     "@searchMemories": {
         "description": "Search input hint text"
     },
-    "memoryDeleted": "Ang Alaala ay Natanggal.",
+    "memoryDeleted": "Ang Alaala ay Natanggal",
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
@@ -2102,7 +2098,7 @@
     "@createMemoryTooltip": {
         "description": "Tooltip for create memory FAB"
     },
-    "createActionItemTooltip": "Lumikha ng bagong action item",
+    "createActionItemTooltip": "Lumikha ng bagong gawain",
     "@createActionItemTooltip": {
         "description": "Tooltip for create action item FAB"
     },
@@ -2159,7 +2155,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "Gusto ko na kumain ng ice cream...",
+    "memoryContentHint": "Mas gusto ko ang mga pulong sa umaga.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -2175,11 +2171,11 @@
     "@retry": {
         "description": "Button label to retry an action"
     },
-    "createActionItem": "Lumikha ng Action Item",
+    "createActionItem": "Lumikha ng Gawain",
     "@createActionItem": {
         "description": "Dialog title for creating action item"
     },
-    "editActionItem": "I-edit ang Action Item",
+    "editActionItem": "I-edit ang Gawain",
     "@editActionItem": {
         "description": "Dialog title for editing action item"
     },
@@ -2187,23 +2183,23 @@
     "@actionItemDescriptionHint": {
         "description": "Input hint"
     },
-    "actionItemDescriptionEmpty": "Ang action item description ay hindi maaaring walang laman.",
+    "actionItemDescriptionEmpty": "Ang paglalarawan ng gawain ay hindi maaaring walang laman.",
     "@actionItemDescriptionEmpty": {
         "description": "Error message"
     },
-    "actionItemUpdated": "Ang action item ay na-update na",
+    "actionItemUpdated": "Ang gawain ay na-update na",
     "@actionItemUpdated": {
         "description": "Snackbar"
     },
-    "failedToUpdateActionItem": "Nabigo ang pag-update ng action item",
+    "failedToUpdateActionItem": "Nabigo ang pag-update ng gawain",
     "@failedToUpdateActionItem": {
         "description": "Error message when updating action item fails"
     },
-    "actionItemCreated": "Ang action item ay nilikha na",
+    "actionItemCreated": "Ang gawain ay nilikha na",
     "@actionItemCreated": {
         "description": "Snackbar"
     },
-    "failedToCreateActionItem": "Nabigo ang paglikha ng action item",
+    "failedToCreateActionItem": "Nabigo ang paglikha ng gawain",
     "@failedToCreateActionItem": {
         "description": "Error message when creating action item fails"
     },
@@ -2251,19 +2247,19 @@
     "@markComplete": {
         "description": "Menu item to mark action item as complete"
     },
-    "actionItemDeleted": "Ang action item ay natanggal na",
+    "actionItemDeleted": "Ang gawain ay natanggal na",
     "@actionItemDeleted": {
         "description": "Message shown when action item is deleted"
     },
-    "failedToDeleteActionItem": "Nabigo ang pagtanggal ng action item",
+    "failedToDeleteActionItem": "Nabigo ang pagtanggal ng gawain",
     "@failedToDeleteActionItem": {
         "description": "Error message when deleting action item fails"
     },
-    "deleteActionItemConfirmTitle": "I-delete ang Action Item",
+    "deleteActionItemConfirmTitle": "I-delete ang Gawain",
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "Sigurado ka ba na gusto mong i-delete ang action item na ito?",
+    "deleteActionItemConfirmMessage": "Sigurado ka ba na gusto mong i-delete ang gawaing ito?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2299,7 +2295,7 @@
     "@pleaseSelectReason": {
         "description": "Validation message prompting user to select a reason for their feedback"
     },
-    "tellUsMoreWhatWentWrong": "Sabihin sa amin nang higit pa ang nangyari...",
+    "tellUsMoreWhatWentWrong": "Sabihin sa amin nang higit pa ang nangyari…",
     "@tellUsMoreWhatWentWrong": {
         "description": "Hint text for feedback textarea asking user to provide more details"
     },
@@ -2380,7 +2376,7 @@
     "@exportButton": {
         "description": "Export button text"
     },
-    "actionItemsCopiedToClipboard": "Action items ay nai-copy sa clipboard",
+    "actionItemsCopiedToClipboard": "Ang mga gawain ay nai-copy sa clipboard",
     "@actionItemsCopiedToClipboard": {
         "description": "Success message when action items are copied"
     },
@@ -2596,7 +2592,7 @@
     "@debugLogCleared": {
         "description": "Confirmation message after clearing debug logs"
     },
-    "exportStartedMessage": "Nagsimula na ang export. Ito ay maaaring tumagal ng ilang segundo...",
+    "exportStartedMessage": "Nagsimula na ang export. Ito ay maaaring tumagal ng ilang segundo…",
     "@exportStartedMessage": {
         "description": "Snackbar message when export starts"
     },
@@ -2639,10 +2635,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "Idagdag sa claude_desktop_config.json",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2676,10 +2668,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "Gamitin ang iyong MCP API key",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -2724,14 +2712,6 @@
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
     },
-    "autoCreateSpeakers": "Awtomatikong Lumikha ng Speakers",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "Awtomatikong lumikha kapag ang pangalan ay natuklasan",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
-    },
     "followUpQuestions": "Follow-up Questions",
     "@followUpQuestions": {
         "description": "Experimental feature name"
@@ -2748,7 +2728,7 @@
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
     },
-    "actionItemDescriptionCannotBeEmpty": "Ang paglalarawan ng action item ay hindi maaaring walang laman",
+    "actionItemDescriptionCannotBeEmpty": "Ang paglalarawan ng gawain ay hindi maaaring walang laman",
     "@actionItemDescriptionCannotBeEmpty": {
         "description": "Error message when action item description is empty"
     },
@@ -2865,7 +2845,7 @@
     "@resetToDefault": {
         "description": "Reset keyboard shortcut to default value"
     },
-    "pressKeys": "Pindutin ang mga susi...",
+    "pressKeys": "Pindutin ang mga susi…",
     "@pressKeys": {
         "description": "Placeholder text when recording keyboard shortcut"
     },
@@ -2885,7 +2865,7 @@
     "@search": {
         "description": "Search button and label"
     },
-    "searchPlaceholder": "Maghanap...",
+    "searchPlaceholder": "Maghanap",
     "@searchPlaceholder": {
         "description": "Search input placeholder text"
     },
@@ -2955,10 +2935,6 @@
     "@reviewAndManageConversations": {
         "description": "Subtitle explaining what users can do on conversations page"
     },
-    "startCapturingConversations": "Magsimulang kumuha ng mga conversation gamit ang iyong Omi device upang makita ang mga ito dito.",
-    "@startCapturingConversations": {
-        "description": "Message explaining how to get started with conversations"
-    },
     "useMobileAppToCapture": "Gamitin ang iyong mobile app upang kumuha ng audio",
     "@useMobileAppToCapture": {
         "description": "Tip about using mobile app for audio capture"
@@ -2991,7 +2967,7 @@
     "@searchResults": {
         "description": "Badge label for search results section"
     },
-    "actionItems": "Action Items",
+    "actionItems": "Mga Gawain",
     "@actionItems": {
         "description": "Section header for action items"
     },
@@ -3011,7 +2987,7 @@
     "@tasksLater": {
         "description": "Category label for tasks due later"
     },
-    "loadingTasks": "Kumakarga ng mga gawain...",
+    "loadingTasks": "Kumakarga ng mga gawain…",
     "@loadingTasks": {
         "description": "Message shown while tasks are being loaded"
     },
@@ -3091,30 +3067,30 @@
     "@timeAM": {
         "description": "AM time indicator"
     },
-    "actionItemUpdatedSuccessfully": "Ang action item ay matagumpay na na-update",
+    "actionItemUpdatedSuccessfully": "Ang gawain ay matagumpay na na-update",
     "@actionItemUpdatedSuccessfully": {
         "description": "Success message when action item is updated"
     },
-    "actionItemCreatedSuccessfully": "Ang action item ay matagumpay na nalikha",
+    "actionItemCreatedSuccessfully": "Ang gawain ay matagumpay na nalikha",
     "@actionItemCreatedSuccessfully": {
         "description": "Success message when action item is created"
     },
-    "actionItemDeletedSuccessfully": "Ang action item ay matagumpay na nabura",
+    "actionItemDeletedSuccessfully": "Ang gawain ay matagumpay na nabura",
     "@actionItemDeletedSuccessfully": {
         "description": "Success message when action item is deleted"
     },
-    "deleteActionItem": "Burahin ang Action Item",
+    "deleteActionItem": "Burahin ang Gawain",
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "Sigurado ka na ba na nais mong burahin ang action item na ito? Ang aksyong ito ay hindi maaaring bawiin.",
+    "deleteActionItemConfirmation": "Sigurado ka na ba na nais mong burahin ang gawaing ito? Ang aksyong ito ay hindi maaaring bawiin.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
     "@description": {
         "description": "Label for description field"
     },
-    "enterActionItemDescription": "Magpasok ng paglalarawan ng action item...",
+    "enterActionItemDescription": "Magpasok ng paglalarawan ng gawain",
     "@enterActionItemDescription": {
         "description": "Placeholder text for action item description field"
     },
@@ -3126,11 +3102,11 @@
     "@setDueDateAndTime": {
         "description": "Placeholder for due date picker button"
     },
-    "reloadingApps": "Nag-reload ng mga app...",
+    "reloadingApps": "Nag-reload ng mga app…",
     "@reloadingApps": {
         "description": "Loading message shown when reloading apps list"
     },
-    "loadingApps": "Kumakarga ng mga app...",
+    "loadingApps": "Kumakarga ng mga app…",
     "@loadingApps": {
         "description": "Loading message shown when apps are being loaded"
     },
@@ -3178,11 +3154,11 @@
     "@buildSubmitCustomOmiApp": {
         "description": "Subtitle describing the purpose of the create app page"
     },
-    "submittingYourApp": "Nag-submit ng iyong app...",
+    "submittingYourApp": "Nag-submit ng iyong app…",
     "@submittingYourApp": {
         "description": "Loading message shown while app is being submitted"
     },
-    "preparingFormForYou": "Naghahanda ng form para sa iyo...",
+    "preparingFormForYou": "Naghahanda ng form para sa iyo…",
     "@preparingFormForYou": {
         "description": "Loading message shown while form is being prepared"
     },
@@ -3210,7 +3186,7 @@
     "@chatPrompt": {
         "description": "Label for chat prompt text field"
     },
-    "chatPromptPlaceholder": "Ikaw ay isang kahanga-hangang app, ang iyong trabaho ay tumugon sa mga query ng user at gawing masaya sila...",
+    "chatPromptPlaceholder": "Ikaw ay isang kahanga-hangang app, ang iyong trabaho ay tumugon sa mga query ng user at gawing masaya sila…",
     "@chatPromptPlaceholder": {
         "description": "Placeholder text for chat prompt field"
     },
@@ -3218,7 +3194,7 @@
     "@conversationPrompt": {
         "description": "Section title for conversation prompt"
     },
-    "conversationPromptPlaceholder": "Ikaw ay isang kahanga-hangang app, bibigyan ka ng transcript at summary ng isang conversation...",
+    "conversationPromptPlaceholder": "Ikaw ay isang kahanga-hangang app, bibigyan ka ng transcript at summary ng isang conversation…",
     "@conversationPromptPlaceholder": {
         "description": "Placeholder text for conversation prompt field"
     },
@@ -3423,7 +3399,7 @@
     "@pricingPaid": {
         "description": "Paid pricing option"
     },
-    "loadingCapabilities": "Kumakarga ng capabilities...",
+    "loadingCapabilities": "Kumakarga ng capabilities…",
     "@loadingCapabilities": {
         "description": "Loading state message while fetching app capabilities"
     },
@@ -3613,13 +3589,9 @@
     "@failedToTranscribeAudio": {
         "description": "Error message when audio transcription fails"
     },
-    "transcribing": "Nag-transcribe...",
+    "transcribing": "Nag-transcribe…",
     "@transcribing": {
         "description": "Loading message while transcribing audio"
-    },
-    "transcriptionFailed": "Ang transcription ay nabigo",
-    "@transcriptionFailed": {
-        "description": "Error message when transcription fails"
     },
     "discardedConversation": "Itinakda ang Conversation",
     "@discardedConversation": {
@@ -3633,7 +3605,7 @@
     "@from": {
         "description": "Preposition for time range in conversation"
     },
-    "copied": "Nakopyahin!",
+    "copied": "Nakopyahin",
     "@copied": {
         "description": "Button label after copying link"
     },
@@ -3686,7 +3658,7 @@
     "@failedToGenerateShareLink": {
         "description": "Error when share link generation fails"
     },
-    "reloadingConversations": "Nag-reload ng mga conversation...",
+    "reloadingConversations": "Nag-reload ng mga conversation…",
     "@reloadingConversations": {
         "description": "Loading message when refreshing conversations"
     },
@@ -3770,7 +3742,7 @@
     "@wearableAiCompanion": {
         "description": "Widget subtitle for device promotion"
     },
-    "loadingMemories": "Kumakarga ng mga memories...",
+    "loadingMemories": "Kumakarga ng mga memories…",
     "@loadingMemories": {
         "description": "Loading overlay message when reloading memories"
     },
@@ -3789,7 +3761,7 @@
     "@manual": {
         "description": "Filter option for manual memories"
     },
-    "loadingYourMemories": "Kumakarga ng iyong mga memories...",
+    "loadingYourMemories": "Kumakarga ng iyong mga memories…",
     "@loadingYourMemories": {
         "description": "Loading state message"
     },
@@ -3949,7 +3921,7 @@
     "pleaseSelectYourPrimaryLanguage": "Piliin ang iyong pangunahing wika",
     "chooseYourLanguage": "Piliin ang iyong wika",
     "selectPreferredLanguageForBestExperience": "Piliin ang iyong preferred na wika para sa pinakamahusay na Omi experience",
-    "searchLanguages": "Maghanap ng mga wika...",
+    "searchLanguages": "Maghanap ng mga wika",
     "selectALanguage": "Pumili ng isang wika",
     "tryDifferentSearchTerm": "Subukan ang ibang search term",
     "pleaseEnterYourName": "Mangyaring ilagay ang iyong pangalan",
@@ -3973,9 +3945,9 @@
     "accessibility": "Accessibility",
     "detectBrowserBasedMeetings": "Tukuyin ang browser-based na mga meeting",
     "accessibilityDescription": "Kailangan ng Omi ng accessibility permission upang matukoy kung kailan ka sumali sa Zoom, Meet, o Teams meetings sa iyong browser.",
-    "pleaseWait": "Mangyaring maghintay...",
+    "pleaseWait": "Mangyaring maghintay…",
     "joinTheCommunity": "Sumali sa komunidad!",
-    "loadingProfile": "Nag-load ng profile...",
+    "loadingProfile": "Nag-load ng profile…",
     "profileSettings": "Profile Settings",
     "noEmailSet": "Walang email na itinakda",
     "userIdCopiedToClipboard": "User ID na kinopya sa clipboard",
@@ -4023,7 +3995,7 @@
     "pilotFeaturesDescription": "Ang mga features na ito ay mga pagsubok at walang guaranteed na suporta.",
     "suggestFollowUpQuestion": "Mag-suggest ng follow up question",
     "saveSettings": "I-save ang Mga Setting",
-    "syncingDeveloperSettings": "Nag-sync ng Developer Settings...",
+    "syncingDeveloperSettings": "Nag-sync ng Developer Settings…",
     "summary": "Buod",
     "auto": "Awtomatiko",
     "noSummaryForApp": "Walang buod na available para sa app na ito. Subukan ang ibang app para sa mas mahusay na resulta.",
@@ -4053,18 +4025,18 @@
     "letOmiChooseAutomatically": "Hayaan ang Omi na pumili ng pinakamahusay na app nang awtomatiko",
     "deleteConversationConfirmation": "Sigurado ka na ba na gusto mong burahin ang conversation na ito? Ang aksyong ito ay hindi mababawi.",
     "conversationDeleted": "Conversation na nabura",
-    "generatingLink": "Gumagawa ng link...",
+    "generatingLink": "Gumagawa ng link…",
     "editConversation": "I-edit ang conversation",
     "conversationLinkCopiedToClipboard": "Conversation link na kinopya sa clipboard",
     "conversationTranscriptCopiedToClipboard": "Conversation transcript na kinopya sa clipboard",
     "editConversationDialogTitle": "I-edit ang Conversation",
     "changeTheConversationTitle": "Baguhin ang pamagat ng conversation",
     "conversationTitle": "Conversation Title",
-    "enterConversationTitle": "Ilagay ang pamagat ng conversation...",
+    "enterConversationTitle": "Ilagay ang pamagat ng conversation…",
     "conversationTitleUpdatedSuccessfully": "Conversation title na successfully na-update",
     "failedToUpdateConversationTitle": "Failed na i-update ang conversation title",
     "errorUpdatingConversationTitle": "Error sa pag-update ng conversation title",
-    "settingUp": "Nag-setup...",
+    "settingUp": "Nag-setup…",
     "@settingUp": {
         "description": "Status message when initializing recording"
     },
@@ -4076,11 +4048,7 @@
     "@preparingSystemAudioCapture": {
         "description": "Status when preparing audio capture"
     },
-    "clickTheButtonToCaptureAudio": "I-click ang button upang kunin ang audio para sa live transcripts, AI insights, at automatic saving.",
-    "@clickTheButtonToCaptureAudio": {
-        "description": "Instructions for starting recording"
-    },
-    "reconnecting": "Nag-reconnect...",
+    "reconnecting": "Nag-reconnect…",
     "@reconnecting": {
         "description": "Status when reconnecting to audio"
     },
@@ -4096,7 +4064,7 @@
     "@startRecording": {
         "description": "Button text to start recording"
     },
-    "resumingInCountdown": "Magsisimula ulit sa {countdown}s...",
+    "resumingInCountdown": "Magsisimula ulit sa {countdown}s…",
     "@resumingInCountdown": {
         "description": "Status when auto-resuming with countdown",
         "placeholders": {
@@ -4109,7 +4077,7 @@
     "@tapPlayToResume": {
         "description": "Instruction when paused"
     },
-    "listeningForAudio": "Nakinig para sa audio...",
+    "listeningForAudio": "Nakinig para sa audio…",
     "@listeningForAudio": {
         "description": "Status when listening for audio"
     },
@@ -4147,15 +4115,11 @@
             }
         }
     },
-    "startRecordingToSeeTranscript": "Magsimula ng recording upang makita ang live transcript",
-    "@startRecordingToSeeTranscript": {
-        "description": "Empty state message for transcript"
-    },
     "paused": "Iniwas",
     "@paused": {
         "description": "Recording status: paused"
     },
-    "initializing": "Nag-initialize...",
+    "initializing": "Nag-initialize…",
     "@initializing": {
         "description": "Recording status: initializing"
     },
@@ -4180,10 +4144,6 @@
     "@settingUpSystemAudioCapture": {
         "description": "Status when setting up audio capture"
     },
-    "capturingAudioAndGeneratingTranscript": "Kumukuha ng audio at gumagawa ng transcript",
-    "@capturingAudioAndGeneratingTranscript": {
-        "description": "Status when actively recording"
-    },
     "clickToBeginRecordingSystemAudio": "I-click upang magsimula ng pag-record ng system audio",
     "@clickToBeginRecordingSystemAudio": {
         "description": "Instruction to start system audio recording"
@@ -4201,7 +4161,7 @@
             }
         }
     },
-    "translatedByOmi": "isinalin ng omi",
+    "translatedByOmi": "isinalin ng Omi",
     "@translatedByOmi": {
         "description": "Credit line for translations"
     },
@@ -4239,7 +4199,7 @@
     "@selectAudioInput": {
         "description": "Dropdown header for audio device selection"
     },
-    "loadingDevices": "Nag-load ng mga device...",
+    "loadingDevices": "Nag-load ng mga device…",
     "@loadingDevices": {
         "description": "Status when loading audio devices"
     },
@@ -4309,7 +4269,7 @@
     "@signOutQuestion": {
         "description": "Dialog title asking user to confirm sign out"
     },
-    "signOutConfirmation": "Sigurado ka na ba na gusto mong mag-sign out?",
+    "signOutConfirmation": "Kailangan mong mag-sign in muli para makita ang iyong mga usapan. Mananatili sa teleponong ito ang naka-pair na device at mga kagustuhan sa app.",
     "@signOutConfirmation": {
         "description": "Confirmation message in sign out dialog"
     },
@@ -4374,7 +4334,7 @@
     "setConversationEndDescription": "Itakda kung kailan mag-auto-end ang mga conversation",
     "importDataDescription": "Mag-import ng data mula sa ibang mga source",
     "exportConversationsDescription": "I-export ang mga conversation sa JSON",
-    "exportingConversations": "Nag-export ng mga conversation...",
+    "exportingConversations": "Nag-export ng mga conversation…",
     "clearNodesDescription": "I-clear ang lahat ng nodes at connections",
     "deleteKnowledgeGraphQuestion": "Burahin ang Knowledge Graph?",
     "deleteKnowledgeGraphWarning": "Ito ay buburahin ang lahat ng derived knowledge graph data. Ang iyong original na mga memory ay manatiling ligtas.",
@@ -4462,7 +4422,7 @@
             }
         }
     },
-    "newVersionAvailable": "Ang Bagong Bersyon ay Available 🎉",
+    "newVersionAvailable": "Ang Bagong Bersyon ay Available",
     "@newVersionAvailable": {
         "description": "Dialog title when a new app version is available"
     },
@@ -4526,7 +4486,7 @@
     "@cancelSubscriptionButton": {
         "description": "Button text to cancel subscription"
     },
-    "cancelling": "Nag-cancel...",
+    "cancelling": "Nag-cancel…",
     "@cancelling": {
         "description": "Loading text while cancelling"
     },
@@ -4685,7 +4645,7 @@
             }
         }
     },
-    "addingToService": "Nagdadagdag sa {serviceName}...",
+    "addingToService": "Nagdadagdag sa {serviceName}…",
     "@addingToService": {
         "description": "Loading message when adding task to a service",
         "placeholders": {
@@ -4746,7 +4706,7 @@
     "@omiApiKeys": {
         "description": "Dialog title for API keys info"
     },
-    "apiKeysDescription": "Ang API Keys ay ginagamit para sa authentication kapag ang iyong app ay nakikipag-ugnayan sa OMI server. Pinapayagan nila ang iyong application na lumikha ng mga memory at mag-access ng ibang OMI services nang secure.",
+    "apiKeysDescription": "Ang API Keys ay ginagamit para sa authentication kapag ang iyong app ay nakikipag-ugnayan sa Omi server. Pinapayagan nila ang iyong application na lumikha ng mga memory at mag-access ng ibang Omi services nang secure.",
     "@apiKeysDescription": {
         "description": "Description of what API keys are used for"
     },
@@ -5425,7 +5385,7 @@
     "@knowledgeGraphDeletedSuccessfully": {
         "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
     },
-    "exportStartedMayTakeFewSeconds": "Export ay nagsimula. Maaaring ito ay aabot ng ilang segundo...",
+    "exportStartedMayTakeFewSeconds": "Export ay nagsimula. Maaaring ito ay aabot ng ilang segundo…",
     "@exportStartedMayTakeFewSeconds": {
         "description": "Developer settings - exportStartedMayTakeFewSeconds"
     },
@@ -5433,7 +5393,7 @@
     "@knowledgeGraphDeleteDescription": {
         "description": "Developer settings - knowledgeGraphDeleteDescription"
     },
-    "configureDailySummaryDigest": "I-configure ang iyong daily action items digest",
+    "configureDailySummaryDigest": "I-configure ang iyong pang-araw-araw na digest ng mga gawain",
     "@configureDailySummaryDigest": {
         "description": "Subtitle for Daily Summary menu item in profile settings"
     },
@@ -5759,7 +5719,7 @@
     "@checkingForUpdates": {
         "description": "Title shown while checking for updates"
     },
-    "checkingFirmwareVersion": "Kumikita ng firmware version...",
+    "checkingFirmwareVersion": "Kumikita ng firmware version…",
     "@checkingFirmwareVersion": {
         "description": "Status text while checking firmware version"
     },
@@ -5994,7 +5954,7 @@
     "@showLess": {
         "description": "Text shown to collapse expanded content, with up arrow"
     },
-    "loadingYourRecording": "Nag-load ng iyong recording...",
+    "loadingYourRecording": "Nag-load ng iyong recording…",
     "@loadingYourRecording": {
         "description": "Loading message shown while audio waveform is being processed"
     },
@@ -6002,7 +5962,7 @@
     "@photoDiscardedMessage": {
         "description": "Message shown when a photo was discarded as not significant"
     },
-    "analyzing": "Nag-analyze...",
+    "analyzing": "Nag-analyze…",
     "@analyzing": {
         "description": "Loading text shown while analyzing a photo"
     },
@@ -6010,7 +5970,7 @@
     "@searchCountries": {
         "description": "Placeholder text for country search field"
     },
-    "checkingAppleWatch": "Kumikita ng Apple Watch...",
+    "checkingAppleWatch": "Kumikita ng Apple Watch…",
     "@checkingAppleWatch": {
         "description": "Loading text while checking Apple Watch status"
     },
@@ -6098,7 +6058,7 @@
     "@dontAskAgain": {
         "description": "Checkbox label to not show confirmation dialog again"
     },
-    "waitingForTranscriptOrPhotos": "Naghihintay para sa transcript o mga photo...",
+    "waitingForTranscriptOrPhotos": "Naghihintay para sa transcript o mga photo…",
     "@waitingForTranscriptOrPhotos": {
         "description": "Placeholder text shown while waiting for content"
     },
@@ -6164,7 +6124,7 @@
     "@noSummary": {
         "description": "Message when no summary is available"
     },
-    "updateOmiFirmware": "I-update ang omi firmware",
+    "updateOmiFirmware": "I-update ang Omi firmware",
     "@updateOmiFirmware": {
         "description": "Button text to update Omi device firmware"
     },
@@ -6260,7 +6220,7 @@
     "@wrappedYouTalkedAbout": {
         "description": "Badge for top categories in Wrapped"
     },
-    "wrappedActionItems": "Action Items",
+    "wrappedActionItems": "Mga Gawain",
     "@wrappedActionItems": {
         "description": "Badge for action items in Wrapped"
     },
@@ -6385,11 +6345,11 @@
     "@wrappedGenerateMyWrapped": {
         "description": "Button text to start generating the 2025 wrapped"
     },
-    "wrappedProcessingDefault": "Processing...",
+    "wrappedProcessingDefault": "Processing…",
     "@wrappedProcessingDefault": {
         "description": "Default processing status text"
     },
-    "wrappedCreatingYourStory": "Lumilikha ng iyong\n2025 story...",
+    "wrappedCreatingYourStory": "Lumilikha ng iyong\n2025 story…",
     "@wrappedCreatingYourStory": {
         "description": "Text shown while generating the wrapped, includes newline"
     },
@@ -6429,7 +6389,7 @@
     "@wrappedFailedToStartGeneration": {
         "description": "Error message when generation fails to start"
     },
-    "wrappedStarting": "Nagsisimula...",
+    "wrappedStarting": "Nagsisimula…",
     "@wrappedStarting": {
         "description": "Initial processing step text"
     },
@@ -6701,15 +6661,15 @@
     "@somethingWentWrongTryAgain": {
         "description": "Generic error message shown in snackbar when an error occurs"
     },
-    "uploadingVoiceProfile": "Ina-upload ang iyong voice profile....",
+    "uploadingVoiceProfile": "Ina-upload ang iyong voice profile….",
     "@uploadingVoiceProfile": {
         "description": "Loading message shown while uploading voice profile"
     },
-    "memorizingYourVoice": "Natatandaan ang iyong boses...",
+    "memorizingYourVoice": "Natatandaan ang iyong boses…",
     "@memorizingYourVoice": {
         "description": "Loading message shown while processing voice profile"
     },
-    "personalizingExperience": "Personalisasyon ng iyong karanasan...",
+    "personalizingExperience": "Personalisasyon ng iyong karanasan…",
     "@personalizingExperience": {
         "description": "Loading message shown while personalizing user experience"
     },
@@ -6880,7 +6840,7 @@
     "@clearChatQuestion": {
         "description": "Dialog title asking to clear chat"
     },
-    "syncingMessages": "Sine-sync ang mga mensahe sa server...",
+    "syncingMessages": "Sine-sync ang mga mensahe sa server…",
     "@syncingMessages": {
         "description": "Loading text when syncing messages"
     },
@@ -7116,11 +7076,11 @@
             }
         }
     },
-    "summarizingConversation": "Sine-summarize ang pag-usap...\nIto ay maaaring tumagal ng ilang segundo",
+    "summarizingConversation": "Sine-summarize ang pag-usap…\nIto ay maaaring tumagal ng ilang segundo",
     "@summarizingConversation": {
         "description": "Loading text while summarizing a conversation"
     },
-    "resummarizingConversation": "Re-summarizing ang pag-usap...\nIto ay maaaring tumagal ng ilang segundo",
+    "resummarizingConversation": "Re-summarizing ang pag-usap…\nIto ay maaaring tumagal ng ilang segundo",
     "@resummarizingConversation": {
         "description": "Loading text while re-summarizing a conversation"
     },
@@ -7299,7 +7259,7 @@
     "@doNotCloseApp": {
         "description": "Warning during download"
     },
-    "downloading": "Dine-download...",
+    "downloading": "Dine-download…",
     "@downloading": {
         "description": "Status during download"
     },
@@ -7418,7 +7378,7 @@
             }
         }
     },
-    "preparingModel": "Hinihanda ang {model}...",
+    "preparingModel": "Hinihanda ang {model}…",
     "@preparingModel": {
         "description": "Status when preparing model",
         "placeholders": {
@@ -7466,7 +7426,7 @@
     "@useTemplateFrom": {
         "description": "Label for template selector"
     },
-    "selectProviderTemplate": "Pumili ng provider template...",
+    "selectProviderTemplate": "Pumili ng provider template…",
     "@selectProviderTemplate": {
         "description": "Placeholder for template dropdown"
     },
@@ -7740,7 +7700,7 @@
     "@signUpSuccess": {
         "description": "Success message after signing up"
     },
-    "loadingKnowledgeGraph": "Kina-load ang Knowledge Graph...",
+    "loadingKnowledgeGraph": "Kina-load ang Knowledge Graph…",
     "@loadingKnowledgeGraph": {
         "description": "Loading text for knowledge graph"
     },
@@ -7748,7 +7708,7 @@
     "@noKnowledgeGraphYet": {
         "description": "Title when knowledge graph is empty"
     },
-    "buildingKnowledgeGraphFromMemories": "Binubuo ang iyong knowledge graph mula sa mga alaala...",
+    "buildingKnowledgeGraphFromMemories": "Binubuo ang iyong knowledge graph mula sa mga alaala…",
     "@buildingKnowledgeGraphFromMemories": {
         "description": "Message while building knowledge graph"
     },
@@ -7768,7 +7728,7 @@
     "@getButton": {
         "description": "Button text to get/install an app"
     },
-    "openingApp": "Binubuksan ang {appName}...",
+    "openingApp": "Binubuksan ang {appName}…",
     "@openingApp": {
         "description": "Snackbar message when opening an app",
         "placeholders": {
@@ -7818,7 +7778,7 @@
     "@moneyEarned": {
         "description": "Label for money earned from app"
     },
-    "writeYourReply": "Isulat ang iyong reply...",
+    "writeYourReply": "Isulat ang iyong reply…",
     "@writeYourReply": {
         "description": "Hint text for reply input field"
     },
@@ -7957,7 +7917,7 @@
     "@selectContactsToShareSummary": {
         "description": "Subtitle for share to contacts sheet"
     },
-    "searchContactsHint": "Maghanap ng mga contact...",
+    "searchContactsHint": "Maghanap ng mga contact",
     "@searchContactsHint": {
         "description": "Hint text for contacts search field"
     },
@@ -8096,7 +8056,7 @@
             }
         }
     },
-    "transferring": "Naglilipat...",
+    "transferring": "Naglilipat…",
     "@transferring": {
         "description": "Status text shown during file transfer"
     },
@@ -8128,7 +8088,7 @@
     "@recordingInfo": {
         "description": "Menu item to view recording information"
     },
-    "transferInProgress": "Nagsisimula ang paglipat...",
+    "transferInProgress": "Nagsisimula ang paglipat…",
     "@transferInProgress": {
         "description": "Menu item text when transfer is ongoing"
     },
@@ -8286,7 +8246,7 @@
     "@errorUpdatingAppStatus": {
         "description": "Error message when updating app status fails"
     },
-    "calculatingETA": "Kinakalkula...",
+    "calculatingETA": "Kinakalkula…",
     "@calculatingETA": {
         "description": "Migration ETA calculation in progress message"
     },
@@ -8303,19 +8263,19 @@
     "@aboutAMinuteRemaining": {
         "description": "Migration time remaining is about a minute"
     },
-    "almostDone": "Halos tapos na...",
+    "almostDone": "Halos tapos na…",
     "@almostDone": {
         "description": "Migration is almost complete"
     },
-    "omiSays": "sinabi ni omi",
+    "omiSays": "sinabi ni Omi",
     "@omiSays": {
         "description": "Notification title for omi app messages"
     },
-    "analyzingYourData": "Sinusuri ang iyong data...",
+    "analyzingYourData": "Sinusuri ang iyong data…",
     "@analyzingYourData": {
         "description": "Migration start message when analyzing data"
     },
-    "migratingToProtection": "Minomuber sa {level} protection...",
+    "migratingToProtection": "Minomuber sa {level} protection…",
     "@migratingToProtection": {
         "description": "Notification body when migration starts",
         "placeholders": {
@@ -8324,11 +8284,11 @@
             }
         }
     },
-    "noDataToMigrateFinalizing": "Walang data na ilipat. Fininalizing...",
+    "noDataToMigrateFinalizing": "Walang data na ilipat. Fininalizing…",
     "@noDataToMigrateFinalizing": {
         "description": "Migration message when no data needs to be migrated"
     },
-    "migratingItemsProgress": "Minomuber ang {itemType}... {percentage}%",
+    "migratingItemsProgress": "Minomuber ang {itemType}… {percentage}%",
     "@migratingItemsProgress": {
         "description": "Migration progress message with item type and percentage",
         "placeholders": {
@@ -8340,7 +8300,7 @@
             }
         }
     },
-    "allObjectsMigratedFinalizing": "Lahat ng objects ay nalipat. Fininalizing...",
+    "allObjectsMigratedFinalizing": "Lahat ng objects ay nalipat. Fininalizing…",
     "@allObjectsMigratedFinalizing": {
         "description": "Migration message when all objects have been migrated"
     },
@@ -8389,7 +8349,7 @@
     "@templateName": {
         "description": "Label for template name field"
     },
-    "templateNameHint": "e.g., Meeting Action Items Extractor",
+    "templateNameHint": "e.g., Meeting Task Extractor",
     "@templateNameHint": {
         "description": "Hint text for template name field"
     },
@@ -8397,7 +8357,7 @@
     "@nameMustBeAtLeast3Characters": {
         "description": "Validation error when name is too short"
     },
-    "conversationPromptHint": "e.g., I-extract ang action items, decisions na ginawa, at key takeaways mula sa ibinigay na conversation.",
+    "conversationPromptHint": "e.g., I-extract ang mga gawain, decisions na ginawa, at key takeaways mula sa ibinigay na conversation.",
     "@conversationPromptHint": {
         "description": "Hint text for conversation prompt field"
     },
@@ -8417,15 +8377,15 @@
     "@onlyYouCanUseTemplate": {
         "description": "Description when template is private"
     },
-    "generatingDescription": "Lumilikha ng description...",
+    "generatingDescription": "Lumilikha ng description…",
     "@generatingDescription": {
         "description": "Status message during app creation"
     },
-    "creatingAppIcon": "Lumilikha ng app icon...",
+    "creatingAppIcon": "Lumilikha ng app icon…",
     "@creatingAppIcon": {
         "description": "Status message during app creation"
     },
-    "installingApp": "Nag-i-install ng app...",
+    "installingApp": "Nag-i-install ng app…",
     "@installingApp": {
         "description": "Status message during app creation"
     },
@@ -8604,7 +8564,7 @@
     "@aiGenPleaseEnterDescription": {
         "description": "Validation error when app description is empty in AI app generator"
     },
-    "aiGenCreatingAppIcon": "Lumilikha ng app icon...",
+    "aiGenCreatingAppIcon": "Lumilikha ng app icon…",
     "@aiGenCreatingAppIcon": {
         "description": "Status message shown while generating app icon"
     },
@@ -8683,7 +8643,7 @@
     "@couldNotLaunchUpgradePage": {
         "description": "Error when upgrade page cannot be launched"
     },
-    "transcriptionJsonPlaceholder": "I-paste ang iyong JSON configuration dito...",
+    "transcriptionJsonPlaceholder": "I-paste ang iyong JSON configuration dito…",
     "@transcriptionJsonPlaceholder": {
         "description": "JSON configuration placeholder hint text in transcription settings"
     },
@@ -8793,7 +8753,7 @@
     "@onboardingYoureAllSet": {
         "description": "Onboarding step description for completion"
     },
-    "searchTranscriptOrSummary": "Maghanap ng transcript o summary...",
+    "searchTranscriptOrSummary": "Maghanap ng transcript o summary",
     "@searchTranscriptOrSummary": {
         "description": "Placeholder text for search field in conversation detail page"
     },
@@ -9131,11 +9091,11 @@
     "@msgUploadFileFailed": {
         "description": "Error when file upload fails"
     },
-    "msgReadingMemories": "Binabasa ang iyong mga memories...",
+    "msgReadingMemories": "Binabasa ang iyong mga memories…",
     "@msgReadingMemories": {
         "description": "Loading text while reading memories"
     },
-    "msgLearningMemories": "Natututo mula sa iyong mga memories...",
+    "msgLearningMemories": "Natututo mula sa iyong mga memories…",
     "@msgLearningMemories": {
         "description": "Loading text while learning from memories"
     },
@@ -9205,7 +9165,7 @@
             }
         }
     },
-    "conversationNewIndicator": "Bago 🚀",
+    "conversationNewIndicator": "Bago",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -9218,7 +9178,7 @@
             }
         }
     },
-    "mergingStatus": "Nagsasama...",
+    "mergingStatus": "Nagsasama…",
     "@mergingStatus": {
         "description": "Status indicator shown when conversations are being merged"
     },
@@ -9391,11 +9351,11 @@
     },
     "newFolder": "Bagong Folder",
     "color": "Kulay",
-    "waitingForDevice": "Naghihintay para sa device...",
+    "waitingForDevice": "Naghihintay para sa device…",
     "@waitingForDevice": {
         "description": "Status message while waiting for device connection"
     },
-    "saySomething": "Sabihin ang kahit ano...",
+    "saySomething": "Sabihin ang kahit ano…",
     "@saySomething": {
         "description": "Prompt for user to start speaking"
     },
@@ -9447,15 +9407,15 @@
     "downloadAudio": "I-download ang Audio",
     "audioDownloadSuccess": "Matagumpay na na-download ang audio",
     "audioDownloadFailed": "Nabigo ang pag-download ng audio",
-    "downloadingAudio": "Nag-download ng audio...",
+    "downloadingAudio": "Nag-download ng audio…",
     "shareAudio": "Ibahagi ang Audio",
     "preparingAudio": "Naghahanda ng Audio",
-    "gettingAudioFiles": "Nakakakuha ng audio files...",
+    "gettingAudioFiles": "Nakakakuha ng audio files…",
     "downloadingAudioProgress": "Nag-download ng Audio",
     "processingAudio": "Nagpoproseso ng Audio",
-    "combiningAudioFiles": "Pinagsasama ang audio files...",
+    "combiningAudioFiles": "Pinagsasama ang audio files…",
     "audioReady": "Handa na ang Audio",
-    "openingShareSheet": "Binubuksan ang share sheet...",
+    "openingShareSheet": "Binubuksan ang share sheet…",
     "audioShareFailed": "Nabigo ang Share",
     "dailyRecaps": "Daily Recaps",
     "removeFilter": "Alisin ang Filter",
@@ -9532,7 +9492,7 @@
         }
     },
     "mcpConnectionFailed": "Nabigo ang pagkonekta sa MCP server",
-    "authorizingMcpServer": "Nag-authorize...",
+    "authorizingMcpServer": "Nag-authorize…",
     "whereDidYouHearAboutOmi": "Paano ka nakahanap sa amin?",
     "tiktok": "TikTok",
     "youtube": "YouTube",
@@ -9635,7 +9595,7 @@
         "description": "Pairing description for Neo One device"
     },
     "downloadingFromDevice": "Nag-download mula sa device",
-    "reconnectingToInternet": "Muling kumokonekta sa internet...",
+    "reconnectingToInternet": "Muling kumokonekta sa internet…",
     "uploadingToCloud": "Nag-upload {current} ng {total}",
     "@uploadingToCloud": {
         "placeholders": {
@@ -9647,8 +9607,8 @@
             }
         }
     },
-    "processingOnServer": "Pinoproseso sa server...",
-    "processingOnServerProgress": "Pinoproseso... {current}/{total} segments",
+    "processingOnServer": "Pinoproseso sa server…",
+    "processingOnServerProgress": "Pinoproseso… {current}/{total} segments",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {
@@ -9793,7 +9753,7 @@
     "answerTheCallFrom": "Sagutin ang call mula sa",
     "onTheCallEnterThisCode": "Sa call, ipasok ang code na ito",
     "followTheVoiceInstructions": "Sundin ang voice instructions",
-    "statusCalling": "Tumatawag...",
+    "statusCalling": "Tumatawag…",
     "statusCallInProgress": "Call in progress",
     "statusVerifiedLabel": "Na-verify",
     "statusCallMissed": "Call missed",
@@ -9808,11 +9768,11 @@
     "phoneNoContactsFound": "Walang contacts na nahanap",
     "phoneEnterNumber": "Ipasok ang number",
     "failedToStartCall": "Nabigo ang pagpagsimula ng call",
-    "callStateConnecting": "Kumokonekta...",
-    "callStateRinging": "Tumutunog...",
+    "callStateConnecting": "Kumokonekta…",
+    "callStateRinging": "Tumutunog…",
     "callStateEnded": "Call Ended",
     "callStateFailed": "Call Failed",
-    "transcriptPlaceholder": "Ang transcript ay magpapakita dito...",
+    "transcriptPlaceholder": "Ang transcript ay magpapakita dito…",
     "phoneUnmute": "I-unmute",
     "phoneMute": "I-mute",
     "phoneSpeaker": "Speaker",
@@ -9891,7 +9851,7 @@
     "@phoneCallsUpsellFeature1": {
         "description": "Phone calls upsell feature 1"
     },
-    "phoneCallsUpsellFeature2": "Automatic call summaries at action items",
+    "phoneCallsUpsellFeature2": "Automatic call summaries at mga gawain",
     "@phoneCallsUpsellFeature2": {
         "description": "Phone calls upsell feature 2"
     },
@@ -10036,7 +9996,7 @@
         }
     },
     "transcriptionPaused": "Recording, muling kumokonekta",
-    "transcriptionPausedReconnecting": "Patuloy na nag-record — muling kumokonekta sa transcription...",
+    "transcriptionPausedReconnecting": "Patuloy na nag-record — muling kumokonekta sa transcription…",
     "fairUseBannerStatus": "Fair Use: {status}",
     "@fairUseBannerStatus": {
         "placeholders": {
@@ -10217,7 +10177,7 @@
     "@tellUsMore": {
         "description": "Label for optional details text field"
     },
-    "cancelReasonDetailHint": "Pinapahalagahan namin ang anumang feedback...",
+    "cancelReasonDetailHint": "Pinapahalagahan namin ang anumang feedback…",
     "@cancelReasonDetailHint": {
         "description": "Hint for cancel reason detail text field"
     },
@@ -10325,10 +10285,10 @@
     "disconnectHistory": "Disconnect History",
     "noDisconnectsRecorded": "Walang disconnects na naitala",
     "diagnostics": "Diagnostics",
-    "waitingForData": "Naghihintay ng data...",
+    "waitingForData": "Naghihintay ng data…",
     "liveRssiOverTime": "Live RSSI over time",
     "noRssiDataYet": "Walang RSSI data pa",
-    "collectingData": "Nagkololekta ng data...",
+    "collectingData": "Nagkololekta ng data…",
     "cleanDisconnect": "Clean disconnect",
     "connectionTimeout": "Connection timeout",
     "remoteDeviceTerminated": "Remote device terminated",
@@ -10380,7 +10340,7 @@
     "@stableFirmware": {
         "description": "Title for the stable firmware rollback page"
     },
-    "fetchingStableFirmware": "Kukunin ang pinakabagong stable firmware...",
+    "fetchingStableFirmware": "Kukunin ang pinakabagong stable firmware…",
     "@fetchingStableFirmware": {
         "description": "Loading text while fetching stable firmware version"
     },
@@ -10408,11 +10368,11 @@
     "enableLocationTitle": "I-enable ang Location",
     "enableLocationDescription": "Ang location permission ay kailangan upang mahanap ang nearby Bluetooth devices.",
     "voiceRecordingFound": "Recording na nahanap",
-    "transcriptionConnecting": "Kumokonekta sa transcription...",
+    "transcriptionConnecting": "Kumokonekta sa transcription…",
     "@transcriptionConnecting": {
         "description": "Status when transcription WebSocket is connecting"
     },
-    "transcriptionReconnecting": "Muling kumokonekta sa transcription...",
+    "transcriptionReconnecting": "Muling kumokonekta sa transcription…",
     "@transcriptionReconnecting": {
         "description": "Status when transcription WebSocket is reconnecting"
     },
@@ -10467,10 +10427,6 @@
     "planUpdate": "Update ng Plano",
     "@planUpdate": {
         "description": "Header for plan deprecation notice"
-    },
-    "planDeprecationMessage": "Ang iyong Unlimited na plano ay inihihinto na. Lumipat sa Operator na plano — parehong magagandang feature sa $49/buwan. Ang kasalukuyan mong plano ay patuloy na gagana samantala.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
     },
     "upgradeYourPlan": "I-upgrade ang Iyong Plano",
     "@upgradeYourPlan": {
@@ -10538,7 +10494,7 @@
     "connectTaskAppToExport": "Ikonekta ang isang task app sa Settings para mag-export",
     "deselectAllTasksMenu": "I-deselect lahat",
     "hideCompletedTasks": "Itago ang tapos na",
-    "searchActionItems": "Maghanap ng mga action item",
+    "searchActionItems": "Maghanap ng mga gawain",
     "selectActionItems": "Pumili ng marami",
     "selectAllTasksMenu": "Piliin lahat",
     "showCompletedTasks": "Ipakita ang tapos na",
@@ -10628,11 +10584,11 @@
     "deviceOnboardingTranscriptionTitle": "Magsalita sa Iyong Omi",
     "deviceOnboardingTranscriptionSubtitle": "Magsabi ng ilang salita at panoorin itong lumitaw nang real-time",
     "deviceOnboardingGoodJob": "Magaling!",
-    "deviceOnboardingStartSpeaking": "Magsimulang magsalita...",
+    "deviceOnboardingStartSpeaking": "Magsimulang magsalita…",
     "deviceOnboardingAskQuestionTitle": "Magtanong sa Omi",
     "deviceOnboardingAskQuestionSubtitle": "Pindutin ang button nang isang beses, sabihin ang iyong tanong, pagkatapos ay pindutin muli kapag tapos na",
-    "deviceOnboardingProcessingQuestion": "Pinoproseso ang iyong tanong...",
-    "deviceOnboardingListening": "Nakikinig...",
+    "deviceOnboardingProcessingQuestion": "Pinoproseso ang iyong tanong…",
+    "deviceOnboardingListening": "Nakikinig…",
     "deviceOnboardingTurnOffTitle": "Patayin",
     "deviceOnboardingTurnOnTitle": "Buksan",
     "deviceOnboardingTurnOffSubtitle": "Pindutin nang matagal ang button sa loob ng 3 segundo",
@@ -10641,7 +10597,7 @@
     "deviceOnboardingStatusConnected": "Nakakonekta",
     "deviceOnboardingStatusConnectedDone": "Nakakonekta!",
     "deviceOnboardingStatusDisconnected": "Nadiskonekta",
-    "deviceOnboardingStatusTurningOff": "Pinapatay...",
+    "deviceOnboardingStatusTurningOff": "Pinapatay…",
     "deviceOnboardingDoubleTapTitle": "I-customize ang Double Tap",
     "deviceOnboardingEndConversation": "Tapusin ang Usapan",
     "deviceOnboardingEndConversationDesc": "I-save at tapusin ang kasalukuyang usapan",
@@ -10734,7 +10690,7 @@
     "onDeviceModelSize": "Laki ng Modelo",
     "onDeviceTranscription": "Transkripsyon sa Device",
     "onDeviceTranscriptionDesc": "Ang transkripsyon ay pinoproseso lokal sa iyong device",
-    "searchSettings": "Maghanap ng setting…",
+    "searchSettings": "Maghanap ng setting",
     "speechToTextProvider": "Serbisyo ng Boses-sa-Teksto",
     "speechToTextProviderDesc": "Piliin ang serbisyong gagamitin para sa transkripsyon",
     "sttFilterAuto": "Awtomatiko",
@@ -10801,6 +10757,363 @@
     "pendantFullSyncBlocked": "Puno na ang storage ng Pendant at nasa recording mode pa rin ito, kaya hindi mailipat ang naka-imbak na audio. Pindutin ang button ng Pendant para ihinto ang pag-record, pagkatapos ay mag-sync muli.",
     "conversationsNotCapturedCount": "Hindi na-record ({count})",
     "transcriptionNoAudio": "Hindi tumatanggap ng audio ang transkripsyon",
+    "chatBlockTask": "Gawain",
+    "chatBlockGoal": "Layunin",
+    "chatBlockConversation": "Pag-uusap",
+    "chatBlockMemory": "Alaala",
+    "chatBlockQuestion": "Tanong",
+    "chatBlockOpenInGoals": "Buksan sa Mga Layunin",
+    "chatBlockOpenConversation": "Buksan ang pag-uusap",
+    "chatBlockOpenInMemories": "Buksan sa Mga Alaala",
+    "chatBlockUnavailable": "Hindi na available",
+    "chatBlockRecommendedNextSteps": "Mga inirerekomendang susunod na hakbang",
     "couldNotLoadMemories": "Hindi ma-load ang mga alaala",
-    "couldNotLoadKnowledgeGraph": "Hindi ma-load ang knowledge graph"
+    "couldNotLoadKnowledgeGraph": "Hindi ma-load ang knowledge graph",
+    "speechProfileOwnerTitle": "Profile ng Boses ni {name}",
+    "play": "I-play",
+    "redo": "I-record muli",
+    "answerWithYourVoice": "Sumagot gamit ang iyong boses:",
+    "speechProfileTopicLocation": "Saan ka nakatira?",
+    "speechProfileTopicWork": "Ano ang trabaho mo?",
+    "speechProfileTopicGoal": "Ano ang pangmatagalan mong layunin?",
+    "speechToTextUnavailableDesc": "Hindi available ang pag-convert ng boses sa teksto sa ngayon. Suriin ang iyong koneksyon sa internet at ang mga setting ng pagkilala sa boses ng iyong device, pagkatapos ay subukan muli.",
+    "memoryHistoryPartial": "Hindi available ang ilang bahagi ng kasaysayan ng mga alaala. Ipinapakita ang kasaysayang natanggap sa ngayon.",
+    "memoryHistory": "Kasaysayan",
+    "@memoryHistory": {
+        "description": "Filter option for retained memory history"
+    },
+    "tapPlusToStartRecording": "I-tap ang record button para magsimulang mag-record",
+    "processingTakingLonger": "Ginagawa pa — mas matagal ito kaysa karaniwan.",
+    "speechProfileEnrollmentPrompt": "Para malaman ng Omi kung alin ang boses mo — magsalita tungkol sa kahit ano nang mga 5 segundo.",
+    "home": "Home",
+    "failedToUpdateBaselineStatus": "Hindi na-update ang status ng baseline.",
+    "memoryAllowUse": "Payagan ang paggamit",
+    "memoryDontUse": "Huwag gamitin",
+    "unstarConversation": "Alisin ang bituin sa pag-uusap",
+    "moreOptions": "Higit pang mga opsyon",
+    "filterByDate": "I-filter ayon sa petsa",
+    "memoryGraph": "Graph ng mga alaala",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceRecognitionStatus": "{status, select, ready{Handa na ang boses para makilala} saved_sample_awaiting_embedding{Na-save ang sample; kailangan pa ng pagproseso ng boses} not_learned{Hindi pa natutunan ang boses} other{Hindi alam ang katayuan ng boses}}",
+    "tagSpeakerIncludingLaterSpeech": "I-tag din ang susunod na pananalita ng speaker na ito",
+    "updateSummaryWithNewNames": "I-update ang buod gamit ang mga bagong pangalan",
+    "syncStatusUnsupportedAudio": "Hindi mabasa ang audio — hindi ma-sync",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{Ano ang magagawa mo para sa akin?} goal{Tulungan mo akong magtakda ng layunin} activity{Ibuod ang mga kamakailan kong aktibidad} improve{Paano pa ako mapapabuti?} other{}}",
+    "nextWeek": "Sa susunod na linggo",
+    "clearSearch": "I-clear ang paghahanap",
+    "audioUploadFailedKeptLocal": "Nabigo ang pag-upload — {duration} na audio ang nakatago sa iyong phone.",
+    "audioUploadFailedTapRetry": "Nabigo ang pag-upload — {duration} na audio ang nakatago sa iyong phone. I-tap para subukang muli.",
+    "audioUploadRetrying": "Sinusubukang i-upload muli… {duration} na audio ang nakatago sa iyong phone",
+    "capturing": "Kumukuha",
+    "capturingPhotos": "Kumukuha ng mga larawan",
+    "listeningTranscriptWillAppear": "Nakikinig… lalabas dito ang transcript.",
+    "recordingOfflineTranscriptWillCatchUp": "Nagre-record offline — hahabol ang transcript kapag online ka na ulit.",
+    "transcriptionUnavailableRecordingSaved": "Hindi available ang transcription — tuloy ang pagre-record at naka-save ang iyong audio.",
+    "uploadingAudioForTranscription": "Ina-upload ang {duration} na audio para sa transcription…",
+    "filterBySpeaker": "I-filter ayon sa nagsasalita",
+    "notNow": "Hindi Ngayon",
+    "discard": "Itapon",
+    "keepEditing": "Ipagpatuloy ang Pag-edit",
+    "discardChangesTitle": "Itapon ang mga Pagbabago?",
+    "discardChangesMessage": "Mawawala ang mga hindi mo na-save na pagbabago.",
+    "pause": "I-pause",
+    "deleteConversationsTitle": "{count, plural, =1{Burahin ang 1 Usapan?} other{Burahin ang {count} Usapan?}}",
+    "deleteConversationsMessage": "Mabubura din ang kanilang mga alaala, gawain, at audio file.",
+    "conversationsDeletedCount": "{count, plural, =1{Nabura ang 1 usapan} other{Nabura ang {count} usapan}}",
+    "conversationsMovedCount": "{count, plural, =1{Nailipat ang 1 usapan} other{Nailipat ang {count} usapan}}",
+    "failedToMoveConversations": "Hindi mailipat ang mga usapan",
+    "discardedConversationTitle": "Itinapon · {duration}",
+    "noConversationsHeroMessage": "Lalabas dito ang mga usapang nire-record mo. I-tap ang record button sa Home para i-record ang una.",
+    "conversationMap": "Mapa ng mga Usapan",
+    "conversationCount": "{count, plural, =1{1 usapan} other{{count} usapan}}",
+    "taskCount": "{count, plural, =1{1 gawain} other{{count} gawain}}",
+    "skipBack10Seconds": "Bumalik ng 10 segundo",
+    "skipForward10Seconds": "Umabante ng 10 segundo",
+    "failedToShareRecap": "Hindi maibahagi ang recap",
+    "captureOfflineBuffering": "Offline, nagba-buffer",
+    "captureOfflineBufferingFor": "Offline, nagba-buffer · {minutes} min",
+    "memoryDetailsTitle": "Alaala",
+    "editMemoryTitle": "I-edit ang Alaala",
+    "newMemoryTitle": "Bagong Alaala",
+    "memoryReadOnlyHint": "Itinatago ang alaalang ito bilang kasaysayan at hindi ito mae-edit.",
+    "openConversation": "Buksan ang usapan",
+    "memoryGraphTitle": "Graph ng Alaala",
+    "memoryReviewTitle": "Mga natutunan ko ngayon",
+    "memoryReviewRight": "Tama",
+    "memoryReviewWrong": "Mali",
+    "memoryReviewFix": "Ayusin",
+    "memoryReviewConfirmed": "Nakumpirma. Isasaalang-alang ko ito.",
+    "memoryReviewDropped": "Tinanggal. Iiwasan ko ang ganitong mga detalye.",
+    "memoryReviewUpdated": "Na-update.",
+    "memoryReviewSaveFailed": "Hindi ma-save, subukan ulit",
+    "indentTask": "I-indent",
+    "outdentTask": "Bawasan ang indent",
+    "goalDeleted": "Na-delete ang layunin",
+    "sharedTasksAcceptFailed": "Hindi matanggap ang mga gawaing ito. Baka natanggap mo na ang share na ito.",
+    "pausePlayback": "I-pause",
+    "deleteSample": "I-delete ang sample",
+    "deletePersonTitle": "I-delete ang Tao?",
+    "deletePersonLabel": "I-delete ang tao",
+    "noPeopleYet": "Wala Pang Tao",
+    "deleteTasksTitle": "{count, plural, =1{I-delete ang 1 Gawain?} other{I-delete ang {count} Gawain?}}",
+    "tasksCountLabel": "{count, plural, =1{1 gawain} other{{count} gawain}}",
+    "sharedTasksAdded": "{count, plural, =1{Naidagdag ang 1 gawain sa listahan mo} other{Naidagdag ang {count} gawain sa listahan mo}}",
+    "sharedTasksAddButton": "{count, plural, =1{Idagdag ang 1 Gawain} other{Idagdag ang {count} Gawain}}",
+    "sharedTasksTitle": "Nagbahagi si {name} ng {count, plural, =1{1 gawain} other{{count} gawain}}",
+    "exportedToPlatform": "Na-export sa {platform}",
+    "taskDueDate": "Takdang petsa {date}",
+    "linkEvent": "I-link ang Event",
+    "noCalendarEventsNearby": "Walang nahanap na event sa kalendaryo sa oras na ito.",
+    "suggestedEvent": "Iminumungkahi",
+    "openInGoogleCalendar": "Buksan sa Google Calendar",
+    "shareWithAttendees": "Ibahagi sa mga Dumalo",
+    "unlinkCalendarEvent": "I-unlink ang Event sa Kalendaryo",
+    "meetingNotesSubject": "Mga Tala: {title}",
+    "previousResult": "Nakaraang resulta",
+    "nextResult": "Susunod na resulta",
+    "playFromHere": "I-play mula rito",
+    "shareConversationQuestion": "Ibahagi ang Pag-uusap?",
+    "conversationTasksEmptyMessage": "Lalabas dito ang mga gawain mula sa pag-uusap na ito.",
+    "noPendingTasks": "Walang nakabinbing gawain",
+    "nCompleted": "{count} tapos na",
+    "identifySpeaker": "Tukuyin ang nagsasalita",
+    "couldNotLoadCheckout": "Hindi ma-load ang checkout page. Suriin ang iyong koneksyon at subukang muli.",
+    "phoneFreeCallLimitReached": "Naabot na ang buwanang limitasyon ng libreng tawag. Magre-reset ito sa susunod na buwan.",
+    "couldNotLoadImportHistory": "Hindi ma-load ang kasaysayan ng pag-import",
+    "phoneCallButton": "Tumawag",
+    "searchContacts": "Maghanap ng contact",
+    "phoneContactsAccessTitle": "Payagan ang Access sa Contacts",
+    "phoneSelectCountryTitle": "Pumili ng Bansa",
+    "phoneNoVerifiedNumbersTitle": "Walang Na-verify na Numero",
+    "phoneNoVerifiedNumbersMessage": "I-verify ang iyong numero para tumawag gamit ang Omi.",
+    "phoneDeleteNumberFailed": "Hindi ma-delete ang numerong ito",
+    "forgetDeviceConfirmTitle": "Kalimutan ang Device?",
+    "forgetDeviceConfirmMessage": "Hihinto ang Omi sa pagkonekta sa device na ito. Para magamit ito ulit, kailangan mo itong i-pair muli.",
+    "deviceForgottenMessage": "Nakalimutan na ang device",
+    "unpairDeviceConfirmTitle": "I-unpair ang Device?",
+    "rollBack": "Ibalik",
+    "dataRateKbps": "{rate} kbps",
+    "diagnosticsExportTitle": "Omi Device Diagnostics",
+    "diagnosticsFailBadge": "Nabigo",
+    "diagnosticsReconnectedIn": "muling nakakonekta sa loob ng {duration}",
+    "timeCompactDays": "{count}d",
+    "durationAgo": "{duration} ang nakalipas",
+    "sttLanguageFollowsPrimary": "Sumusunod sa iyong pangunahing wika",
+    "creatorPayouts": "Mga Bayad sa Creator",
+    "sttLanguageOverride": "I-override",
+    "sttUsePrimaryLanguage": "Gamitin ang Pangunahing Wika",
+    "sttPrimaryLanguageUnsupported": "Hindi sinusuportahan ng provider na ito ang {language}, kaya {fallback} ang ginagamit.",
+    "deviceRamBelowMinimum": "Natukoy na RAM: {ram} GB. Inirerekomendang minimum: 4 GB.",
+    "olderIphoneModelDetected": "Natukoy na modelo: {model} (mas luma sa iPhone XS). Maaaring mas mabagal ang pagkilala sa device.",
+    "copyLogs": "Kopyahin ang mga Log",
+    "openProviderDocs": "Buksan ang Dokumentasyon",
+    "getApiKey": "Kumuha ng API Key",
+    "showApiKey": "Ipakita ang API Key",
+    "hideApiKey": "Itago ang API Key",
+    "removeVocabularyWord": "Alisin ang {word}",
+    "vocabularyWordCount": "{count, plural, =1{1 salita} other{{count} salita}}",
+    "phoneFreeCallsRemaining": "{remaining} sa {limit} libreng tawag ang natitira ngayong buwan",
+    "phoneFreeCallsRemainingWithMax": "{remaining} sa {limit} libreng tawag ang natitira ngayong buwan · hanggang {minutes} min bawat isa",
+    "appCreators": "Mga Gumagawa ng App",
+    "homeScreen": "Home Screen",
+    "phoneCalls": "Mga Tawag sa Telepono",
+    "vadGate": "VAD Gate",
+    "vadGateDescription": "Pagsala ng boses sa server para mabawasan ang gastos sa speech-to-text",
+    "flashCustomFirmware": "I-flash ang Custom na Firmware",
+    "flashCustomFirmwareDescription": "Mag-flash ng custom na firmware build",
+    "selectFirmwareZip": "Piliin ang ZIP file ng firmware",
+    "customFirmwareWarning": "Maaaring masira ang iyong device dahil sa custom na firmware. Tiyaking valid na Omi firmware build ito, at huwag idiskonekta habang nag-a-update.",
+    "firmwareFlashed": "Na-flash na ang firmware",
+    "deviceWillRestart": "Magre-restart ang iyong device.",
+    "exportFailedTryAgain": "Nabigo ang pag-export. Pakisubukang muli.",
+    "firmwareFlashTarget": "Device: {deviceName}",
+    "keepSubscription": "Panatilihin ang Subscription",
+    "couldNotLoadPage": "Hindi ma-load ang pahinang ito. Suriin ang iyong koneksyon at subukang muli.",
+    "leaveFlowStepOf": "Hakbang {current} ng {total}",
+    "sharedTasksLinkExpired": "Hindi nahanap ang mga ibinahaging task na ito, o nag-expire na ang link.",
+    "sharedTasksUnknownSender": "Isang tao",
+    "allow": "Payagan",
+    "permissionAllowed": "Pinayagan",
+    "permissionBlockedHint": "Naka-off sa Settings. Payagan ito doon para magamit ito.",
+    "useDifferentAccount": "Gumamit ng Ibang Account",
+    "onboardingStepOf": "Hakbang {current} sa {total}",
+    "onboardingCompleteMessage": "Hayaang tumakbo ang Omi sa background nang 2 araw at magsisimula itong magbigay ng kapaki-pakinabang na feedback.",
+    "cantFindDeviceHint": "Hindi mahanap ang device mo? Tiyaking naka-on ito at malapit sa iyong telepono, saka mag-scan ulit.",
+    "scanAgain": "Mag-scan Ulit",
+    "howToPair": "Paano Mag-pair",
+    "contactSupportAction": "Makipag-ugnayan sa Suporta",
+    "deviceOfflineWakeHint": "Offline ang {deviceName}. Pindutin ang button nito para gisingin, saka subukang muli.",
+    "batteryLevelSemantics": "Baterya {level}%",
+    "updateOmiGlassFirmware": "I-update ang Firmware ng OmiGlass",
+    "deviceConnecting": "Kumokonekta…",
+    "recordOptionsTip": "Tip: i-tap ang arrow sa record button para mag-record ng tawag.",
+    "firmwareUpdateFailedTitle": "Nabigo ang Update",
+    "firmwareUpdateFailedMessage": "Hindi natapos ang update. Nasa kasalukuyang firmware pa rin ang device mo at ligtas itong gamitin. Panatilihin itong naka-charge at malapit sa telepono, saka subukang muli.",
+    "firmwareDownloadFailedMessage": "Hindi ma-download ang update at walang nagbago sa device mo. Tingnan ang koneksyon sa internet, saka subukang muli.",
+    "firmwareBatteryTooLow": "Nasa {level}% ang baterya. I-charge ang device nang hindi bababa sa 15% bago mag-update.",
+    "startUpdate": "Simulan ang Update",
+    "otaNotSupported": "Hindi maa-update ang firmware na ito sa Wi-Fi.",
+    "otaConnectFailed": "Hindi makakonekta sa {deviceName}. Panatilihin itong naka-on at malapit, saka subukang muli.",
+    "otaUpdateUnavailable": "Hindi available ang update na ito ngayon. Subukang muli mamaya.",
+    "otaStarting": "Sinisimulan ang update…",
+    "otaStartFailed": "Hindi masimulan ang update. Tingnan ang pangalan at password ng Wi-Fi, saka subukang muli.",
+    "otaRebooting": "Nagre-restart ang {deviceName} gamit ang bagong firmware.",
+    "otaUpdateCancelled": "Kinansela ang update",
+    "cancelUpdate": "Kanselahin ang Update",
+    "otaKeepNearby": "Habang nag-a-update, panatilihing naka-on at malapit ang device, at huwag isara ang app.",
+    "otaWifiConnecting": "Kumokonekta sa Wi-Fi…",
+    "otaWifiConnected": "Nakakonekta sa Wi-Fi",
+    "otaWifiFailed": "Hindi makasali sa Wi-Fi. Tingnan ang pangalan ng network at password.",
+    "otaDownloadFailed": "Nabigo ang pag-download ng firmware. Tingnan ang koneksyon sa Wi-Fi at subukang muli.",
+    "otaInstallFailed": "Nabigo ang pag-install. Nasa kasalukuyang firmware pa rin ang device mo.",
+    "otaUpdatedMessage": "Na-update na ang {deviceName} at kusa itong magre-restart.",
+    "showPassword": "Ipakita ang password",
+    "hidePassword": "Itago ang password",
+    "appNotFoundOrRemoved": "Hindi na available ang app na ito",
+    "startupFailedTitle": "Hindi ma-start ang Omi",
+    "startupFailedMessage": "May naganap na problema habang nagsi-start ang Omi. Suriin ang iyong koneksyon, pagkatapos ay subukan muli.",
+    "startupFailedConfigMessage": "May problema sa configuration ang build na ito ng Omi. Hindi ito problema sa iyong device. Makipag-ugnayan sa suporta at isama ang mga detalye sa ibaba.",
+    "discardRecordingTitle": "Itapon ang Recording?",
+    "discardRecordingMessage": "Hindi pa na-save ang iyong voice sample. Kung aalis ka ngayon, ito ay itatapon.",
+    "keepRecording": "Ipagpatuloy ang Pag-record",
+    "view": "Tingnan",
+    "appDataAccessTitle": "Payagan ang access ng {appName}?",
+    "appDataAccessMessage": "Matatanggap ng {appName} ang iyong mga usapan, alaala at recording sa server ng developer nito. Walang pananagutan ang Omi sa kung paano gagamitin doon ang data na iyon.",
+    "appDisabledNamed": "Na-disable ang {appName}",
+    "appRatingCount": "{count, plural, =1{1 rating} other{{count} rating}}",
+    "previewImageLabel": "Screenshot {index} ng {total}",
+    "chatWithApp": "Makipag-chat sa {appName}",
+    "appSettingsLabel": "Mga setting ng {appName}",
+    "appOptions": "Mga opsyon ng app",
+    "cancelSubscriptionKeepAccessMessage": "Mananatili ang iyong access hanggang sa katapusan ng kasalukuyang billing period.",
+    "chatSendMessage": "Ipadala ang mensahe",
+    "chatAddAttachment": "Magdagdag ng attachment",
+    "removeAttachment": "Alisin ang attachment",
+    "chatRemoveSelectedText": "Alisin ang sinipi na teksto",
+    "chatOfflineHint": "Offline ka. Kumonekta muli para makapagpadala ng mensahe.",
+    "chatReplyFailed": "Hindi nakasagot si Omi. Tingnan ang iyong koneksyon at subukang muli.",
+    "disableAppNamed": "I-disable ang {appName}",
+    "whatWentWrong": "Ano ang mali?",
+    "selectAReason": "Pumili ng dahilan",
+    "submit": "Ipasa",
+    "feedbackReasonTooVerbose": "Masyadong mahaba",
+    "feedbackReasonIncorrect": "Mali o gawa-gawa",
+    "feedbackReasonNotHelpful": "Hindi nakatulong o walang kaugnayan",
+    "feedbackReasonIgnoredInstructions": "Hindi sinunod ang mga tagubilin",
+    "additionalFeedbackOptional": "Karagdagang feedback (opsyonal)",
+    "helpful": "Nakatulong",
+    "daySummaryForDate": "Buod ng Araw · {date}",
+    "chatStarterYesterday": "Ano ang ginawa ko kahapon?",
+    "chatStarterDoDifferently": "Ano ang puwede kong gawin nang iba ngayon?",
+    "chatStarterTeachMe": "Puwede mo ba akong turuan ng bago?",
+    "thinking": "Nag-iisip",
+    "couldNotLoadWhatsNew": "Hindi ma-load ang mga bago",
+    "githubRepositoryUrl": "URL ng GitHub Repository",
+    "githubRepositoryUrlHint": "Link sa source code repository ng iyong app",
+    "triggerEvents": "Mga Trigger Event",
+    "noAppsInCategoryYet": "Wala Pang App sa Kategoryang Ito",
+    "scopes": "Mga Scope",
+    "aiAppGeneratorBannerTitle": "Gumawa ng app gamit ang AI sa isang tap",
+    "refreshManifest": "I-refresh ang manifest",
+    "versionLabel": "Bersyon {version}",
+    "appUsersCount": "{count}+ user",
+    "discovery": "Natuklasan",
+    "chatBlockShowMore": "Magpakita Pa",
+    "chatBlockShowLess": "Magpakita ng Mas Kaunti",
+    "triggerEvent": "Trigger Event",
+    "webhookUrl": "Webhook URL",
+    "appHomeUrl": "URL ng Home ng App",
+    "authUrl": "Auth URL",
+    "setupCompletedUrl": "URL ng Natapos na Setup",
+    "chatToolsManifestUrl": "URL ng Manifest ng Chat Tools",
+    "invalidWebhookUrlError": "Maglagay ng valid na webhook URL",
+    "githubRepositoryUrlRequired": "Kailangan ang URL ng GitHub repository",
+    "removeScreenshot": "Alisin ang screenshot",
+    "addScreenshot": "Magdagdag ng screenshot",
+    "aiGenRegenerateIcon": "Gumawa muli ng icon",
+    "categoryAppCount": "{count, plural, =1{1 app} other{{count} na app}}",
+    "generateDescription": "Bumuo ng paglalarawan",
+    "selectImageFileTitle": "Pumili ng image file",
+    "selectThumbnailImageTitle": "Pumili ng thumbnail na imahe",
+    "appIdNotFoundError": "Hindi nahanap ang App ID",
+    "manifestRefreshedSuccess": "Matagumpay na na-refresh ang manifest",
+    "manifestRefreshFailed": "Nabigong i-refresh ang manifest",
+    "captureRecordingsSheetTitle": "Mga recording ng usapang ito",
+    "captureRecordingSeparate": "Ihiwalay…",
+    "captureRecordingSeparateTitle": "Ihiwalay ang recording na ito?",
+    "captureRecordingSeparateMessage": "Ipapakita ang {recording} bilang sariling usapan at hindi na muling ipapangkat sa event na ito.",
+    "captureRecordingSeparateConfirm": "Ihiwalay",
+    "captureRecordingSeparateFailed": "Hindi maihiwalay. Subukang muli.",
+    "captureRecordingOpenFailed": "Hindi mabuksan ang recording na ito.",
+    "captureRecordingViewing": "Tinitingnan mo ang recording na ito",
+    "captureRecordedBy": "Ni-record ng {devices}",
+    "captureSourceDesktop": "Desktop",
+    "renameConversation": "Palitan ang pangalan",
+    "captureRecordingsCount": "{count, plural, =1{1 recording} other{{count} recording}}",
+    "captureSourcePendant": "Pendant",
+    "conversationDeveloperTools": "Mga developer tool sa mga usapan",
+    "conversationDeveloperToolsDescription": "Ipakita ang Kopyahin ang Conversation ID at Subukan ang Prompt sa menu ng usapan",
+    "participantsSummary": "{name} + {count, plural, =1{1 iba pa} few{{count} iba pa} many{{count} iba pa} other{{count} iba pa}}",
+    "recordingAndTranscription": "Pagre-record at Transcription",
+    "notificationsAndDisplay": "Mga Notipikasyon at Display",
+    "helpAndAbout": "Tulong at Tungkol",
+    "speakerTagPromptTitle": "Tulungan ang Omi na makilala ang mga boses",
+    "speakerTagPromptSubtitle": "Mabilisang pagsuri sa mga boses mula sa nakaraang dalawang araw",
+    "speakerTagPromptIsThisYou": "Ikaw ba ito?",
+    "speakerTagPromptIsThisPerson": "Si {name} ba ito?",
+    "speakerTagPromptWhoIsThis": "Sino ito?",
+    "speakerTagPromptThatsMe": "Ako iyan",
+    "speakerTagPromptNotMe": "Hindi ako",
+    "speakerTagPromptSomeoneNew": "Bagong tao",
+    "speakerTagPromptDontKnow": "Taong hindi ko kilala",
+    "speakerTagPromptNotSure": "Hindi sigurado",
+    "speakerTagPromptPlayClip": "I-play ang clip",
+    "speakerTagPromptProgress": "{current} sa {total}",
+    "speakerTagPromptSaveVoicesTitle": "Tandaan ang boses ng mga taong pinangalanan mo",
+    "speakerTagPromptSaveVoicesBody": "Nagtatago ang Omi ng maikling sample ng boses para makilala sila sa susunod. Mababago mo ito anumang oras sa Settings.",
+    "speakerTagPromptThanks": "Salamat! Mas gagaling ang Omi sa pagkilala ng mga boses.",
+    "speakerTagPromptNameHint": "Pangalan nila",
+    "speakerTagPromptClipUnavailable": "Hindi ma-play ang clip na ito",
+    "speakerTagPromptAnswerFailed": "Hindi ito ma-save. Pakisubukang muli.",
+    "voiceSettingsAskToTag": "Hilingin sa akin na i-tag ang mga boses",
+    "voiceSettingsAskToTagSubtitle": "Paminsan-minsan, itatanong ng Omi kung sino ang nagsasalita sa mga kamakailan mong pag-uusap",
+    "voiceSettingsSaveOthersSubtitle": "Kapag pinangalanan mo ang isang tao, nagtatago ang Omi ng maikling sample ng boses para makilala siya sa susunod",
+    "leaveBlank": "Iwanang blangko",
+    "mcpOAuthSetup": "Sa claude.ai, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Idagdag sa ~/.claude.json",
+    "claudeDesktopConnectorSetup": "Sa Claude Desktop → Settings → Connectors, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret.",
+    "transcriptionUnavailableRecordingContinues": "Hindi available ang mga transcript, nagpapatuloy ang pag-record sa device at ipoproseso mamaya",
+    "transcriptionsPendingFraction": "Mga transcript na naghihintay {pending}/{total}",
+    "transcriptionsPendingCount": "Mga transcript na naghihintay {count}",
+    "captureSourceCall": "Tawag",
+    "captureSourcePhoneMic": "Mic ng telepono",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "Ituloy",
+    "finish": "Tapusin",
+    "pendantPausedResumesWhenYouFinish": "Naka-pause ang pendant · magpapatuloy pagkatapos mo",
+    "pendantIsListeningTitle": "Nakikinig ang iyong pendant",
+    "oneSourceAtATime": "Isang source lang ang nire-record ng Omi sa bawat pagkakataon.",
+    "recordWithPhoneInstead": "Sa telepono na lang mag-record",
+    "pendantPausesUntilYouFinish": "Naka-pause ang pendant hanggang matapos ka",
+    "pendantPausesDuringCall": "Naka-pause ang pendant habang may tawag",
+    "keepUsingPendant": "Ituloy ang paggamit ng pendant",
+    "recordWith": "Mag-record gamit ang",
+    "moreWaysToRecord": "Iba pang paraan ng pag-record",
+    "openCall": "Buksan ang tawag",
+    "captureRecoveryBanner": "Hindi nakakarating sa app ang audio ng pendant — i-tap para ayusin",
+    "phoneRecordingBlockedByPendantBatch": "Itigil ang Transcribe Later sa iyong pendant bago mag-record gamit ang telepono.",
+    "captureNotTranscribing": "Hindi nagta-transcribe",
+    "captureAudioSavedTranscribesLater": "Na-save ang audio, ita-transcribe mamaya",
+    "captureStillRecording": "Nagre-record pa rin",
+    "captureMicInUseElsewhere": "Ginagamit ng ibang app ang mic",
+    "captureMicInterruptedDetail": "Kinuha ng isang tawag o ibang app ang mikropono, kaya hindi nakakarinig ang Omi ngayon. Kusang magpapatuloy ang Omi kapag malaya na ang mikropono. Ligtas ang lahat ng na-record bago nito.",
+    "captureCustomSttUnreachableDetail": "Hindi maabot ang iyong custom na speech-to-text na serbisyo. Itinatabi ng Omi ang audio sa teleponong ito at ipapadala kapag bumalik ang serbisyo. Walang mawawala.",
+    "captureStarting": "Nagsisimula…",
+    "capturePhoneStorageFull": "Puno na ang storage ng telepono",
+    "captureStorageAlmostFull": "Halos puno na ang storage",
+    "capturePendantDisconnectedDetail": "Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.",
+    "participantsSummaryUncounted": "{name} at iba pa"
 }

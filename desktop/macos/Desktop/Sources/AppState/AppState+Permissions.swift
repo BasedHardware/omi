@@ -38,6 +38,7 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
   private let shellWindowProvider: () -> NSWindow?
   private let appKitOperations: AppKitAlertOperations
   private let revealMainWindow: () -> Void
+  private let isAppActive: () -> Bool
   private let canHostSheet: SheetHostChecker
   private var pendingAlerts: [PendingAlert] = []
   private var activeAlert: AlertRequest?
@@ -59,11 +60,13 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
         ShellSummon.summon()
       }
     },
+    isAppActive: @escaping () -> Bool = { NSApp.isActive },
     canHostSheet: @escaping SheetHostChecker = { $0.attachedSheet == nil }
   ) {
     self.shellWindowProvider = shellWindowProvider
     self.appKitOperations = appKitOperations ?? .live
     self.revealMainWindow = revealMainWindow
+    self.isAppActive = isAppActive
     self.canHostSheet = canHostSheet
     NotificationCenter.default.addObserver(
       self,
@@ -108,7 +111,18 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
     }
     let pending = pendingAlerts[0]
     guard let window = shellWindowProvider() else {
-      revealMainWindowIfNeeded()
+      // Only summon the shell when Omi already holds the foreground. Warnings
+      // still reach here from work the owner never started:
+      // `MicrophoneCaptureAuthorizationPolicy.action(for:userInitiated:)`
+      // abandons an automatic start before the pre-capture permission alert,
+      // but the exhausted silent-mic watchdog's terminal alert and a failed
+      // automatic `startTranscription` both raise one afterwards. Revealing
+      // for those takes the screen away from whatever the owner is working in,
+      // for a failure they did not trigger. The alert keeps its place in the
+      // queue and `applicationDidBecomeActive` drains it when they come back.
+      if isAppActive() {
+        revealMainWindowIfNeeded()
+      }
       return
     }
     guard canHostSheet(window) else {
@@ -149,8 +163,11 @@ final class AppKitSheetAlertPresenter: DesktopAlertPresenting {
   /// summoned first. Mirrors `ShellSummon.toggleAction`: a visible but inactive
   /// shell is usually ordered in behind whatever the user is working in, so
   /// attaching a sheet to it would leave the warning invisible behind the
-  /// foreground application. Requiring the app to be active forces the reveal
-  /// path (`openMainAppWindow` / `ShellSummon.summon`) before presenting.
+  /// foreground application. Requiring the app to be active means an inactive
+  /// Omi has no presentable window: the alert then waits for the owner to come
+  /// back rather than pulling the app over their work, and the reveal path
+  /// (`openMainAppWindow` / `ShellSummon.summon`) runs only for an active Omi
+  /// whose shell is hidden or minimized.
   static func presentableShellWindow(_ window: NSWindow?, isActive: Bool) -> NSWindow? {
     guard isActive, let window, window.isVisible, !window.isMiniaturized else { return nil }
     return window
@@ -624,24 +641,15 @@ extension AppState {
     return (hasPermission, error)
   }
 
-  /// Query the TCC automation permission status for System Events without triggering a prompt
+  /// Query the TCC automation permission status for System Events without triggering a prompt.
+  ///
+  /// Delegates to `SBAutomationConsent`, which owns this mechanism, so the
+  /// passive read and the consent request cannot disagree. In particular it
+  /// starts System Events when the target is stopped: without that step the
+  /// probe answers `-600` on an idle Mac and a granted permission is
+  /// indistinguishable from an absent one.
   nonisolated static func queryAutomationPermissionStatus() -> OSStatus {
-    let bundleIDString = "com.apple.systemevents"
-    var addressDesc = AEAddressDesc()
-
-    let status: OSStatus = bundleIDString.withCString { cString in
-      AECreateDesc(typeApplicationBundleID, cString, strlen(cString), &addressDesc)
-      let result = AEDeterminePermissionToAutomateTarget(
-        &addressDesc,
-        typeWildCard,
-        typeWildCard,
-        false  // askUserIfNeeded = false → never shows dialog
-      )
-      AEDisposeDesc(&addressDesc)
-      return result
-    }
-
-    return status
+    SBAutomationConsent.currentSystemEventsPermission()
   }
 
   /// Check accessibility permission status
@@ -955,13 +963,21 @@ extension AppState {
     }
   }
 
-  /// Check if accessibility permission was explicitly denied
+  /// Check if accessibility permission was denied. Onboarding writes a durable skip
+  /// marker, so a deliberate "Skip for now" never reads as denied — macOS exposes no
+  /// denied/notDetermined distinction for AX to ask the system directly.
   func isAccessibilityPermissionDenied() -> Bool {
-    return hasCompletedOnboarding && (!hasAccessibilityPermission || isAccessibilityBroken)
+    SBOnboardingPermissionIntentPolicy.accessibilityDenied(
+      hasCompletedOnboarding: hasCompletedOnboarding,
+      accessibilityUsable: hasAccessibilityPermission && !isAccessibilityBroken,
+      skippedInOnboarding: UserDefaults.standard.bool(forKey: .onboardingAccessibilitySkipped))
   }
 
   /// Trigger accessibility permission prompt
   func triggerAccessibilityPermission() {
+    // A fresh Grant action supersedes the onboarding skip. If the user later
+    // revokes access, the sidebar must report the missing grant again.
+    UserDefaults.standard.set(false, forKey: .onboardingAccessibilitySkipped)
     let osVersion = ProcessInfo.processInfo.operatingSystemVersion
     let bundleId = Bundle.main.bundleIdentifier ?? "unknown"
     log(

@@ -366,7 +366,11 @@ actor APIClient {
         statusCode: httpResponse.statusCode,
         payload: payload,
         provider: provider)
-      throw RealtimeTokenMintError(statusCode: httpResponse.statusCode, healthError: healthError, payload: payload)
+      throw RealtimeTokenMintError(
+        statusCode: httpResponse.statusCode,
+        healthError: healthError,
+        payload: payload,
+        responseBody: data)
     }
 
     let resp = try decoder.decode(Resp.self, from: data)
@@ -392,7 +396,8 @@ actor APIClient {
     contextPlanID: String = "",
     stableCacheIdentity: String = "",
     dynamicContextIdentity: String = "",
-    contextCacheReplaced: Bool = false
+    contextCacheReplaced: Bool = false,
+    turnId: String = ""
   ) async {
     let base = rustBackendURL
     guard !base.isEmpty else { return }
@@ -405,25 +410,60 @@ actor APIClient {
     do {
       let headers = try await buildHeaders(requireAuth: true)
       for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
-      let body: [String: Any] = [
-        "provider": provider,
-        "model": model,
-        "input_text_tokens": inputText,
-        "input_audio_tokens": inputAudio,
-        "input_cached_tokens": inputCached,
-        "output_text_tokens": outputText,
-        "output_audio_tokens": outputAudio,
-        // Opaque hashes/plan identifiers only; no rendered context or user text.
-        "context_plan_id": contextPlanID,
-        "stable_cache_identity": stableCacheIdentity,
-        "dynamic_context_identity": dynamicContextIdentity,
-        "context_cache_replaced": contextCacheReplaced,
-      ]
+      let body = Self.realtimeUsageReportBody(
+        provider: provider,
+        model: model,
+        inputText: inputText,
+        inputAudio: inputAudio,
+        inputCached: inputCached,
+        outputText: outputText,
+        outputAudio: outputAudio,
+        contextPlanID: contextPlanID,
+        stableCacheIdentity: stableCacheIdentity,
+        dynamicContextIdentity: dynamicContextIdentity,
+        contextCacheReplaced: contextCacheReplaced,
+        turnId: turnId)
       request.httpBody = try JSONSerialization.data(withJSONObject: body)
       _ = try await session.data(for: request)
     } catch {
       log("APIClient: realtime usage report failed: \(error.localizedDescription)")
     }
+  }
+
+  /// Opaque turn identity only. Empty `turnId` is omitted so retries without a
+  /// turn stay on the backend's empty-string default.
+  static func realtimeUsageReportBody(
+    provider: String,
+    model: String,
+    inputText: Int,
+    inputAudio: Int,
+    inputCached: Int,
+    outputText: Int,
+    outputAudio: Int,
+    contextPlanID: String,
+    stableCacheIdentity: String,
+    dynamicContextIdentity: String,
+    contextCacheReplaced: Bool,
+    turnId: String
+  ) -> [String: Any] {
+    var body: [String: Any] = [
+      "provider": provider,
+      "model": model,
+      "input_text_tokens": inputText,
+      "input_audio_tokens": inputAudio,
+      "input_cached_tokens": inputCached,
+      "output_text_tokens": outputText,
+      "output_audio_tokens": outputAudio,
+      // Opaque hashes/plan identifiers only; no rendered context or user text.
+      "context_plan_id": contextPlanID,
+      "stable_cache_identity": stableCacheIdentity,
+      "dynamic_context_identity": dynamicContextIdentity,
+      "context_cache_replaced": contextCacheReplaced,
+    ]
+    if !turnId.isEmpty {
+      body["turn_id"] = turnId
+    }
+    return body
   }
 
   func performVoidRequest(
@@ -650,6 +690,21 @@ struct RealtimeTokenMintError: LocalizedError {
   let statusCode: Int
   let healthError: CredentialHealthError
   let payload: APIErrorPayload?
+  /// Raw HTTP body so `ManagedPlanGateHTTP` can read FastAPI nested `detail.error`
+  /// (`plan_gated`) that `APIErrorPayload` cannot decode as a string.
+  let responseBody: Data
+
+  init(
+    statusCode: Int,
+    healthError: CredentialHealthError,
+    payload: APIErrorPayload?,
+    responseBody: Data = Data()
+  ) {
+    self.statusCode = statusCode
+    self.healthError = healthError
+    self.payload = payload
+    self.responseBody = responseBody
+  }
 
   var errorDescription: String? {
     var description = healthError.localizedDescription
@@ -808,6 +863,13 @@ extension APIClient {
     let response: ConversationMutationResponse = try await performRequest(request)
     invalidateConversationsCountCache()
     return response.conversation
+  }
+
+  /// Separates a conversation from its cross-surface capture group. Sticky: the
+  /// server never regroups it with the members it left.
+  func separateConversationFromCaptureGroup(id: String) async throws {
+    struct SeparateResponse: Decodable { let status: String }
+    let _: SeparateResponse = try await post("v1/conversations/\(id)/capture-group/separate")
   }
 
   /// Sets the visibility of a conversation for sharing

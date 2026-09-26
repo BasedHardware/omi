@@ -17,6 +17,21 @@ class OnDeviceAppleProvider implements ISttProvider {
 
   OnDeviceAppleProvider({this.language = 'en'});
 
+  /// Whether iOS has an on-device recognizer (language model installed, not
+  /// network-backed) for [language]. Bare codes like "en" are resolved
+  /// natively to an installed full locale such as en-US. Returns false on any
+  /// channel error so callers treat "unknown" as "unavailable".
+  static Future<bool> isOnDeviceAvailable(String language) async {
+    if (!Platform.isIOS) return false;
+    try {
+      final available = await _channel.invokeMethod<bool>('onDeviceAvailable', {'language': language});
+      return available ?? false;
+    } catch (e) {
+      CustomSttLogService.instance.error('OnDeviceApple', 'Availability check failed: $e');
+      return false;
+    }
+  }
+
   @override
   Future<SttTranscriptionResult?> transcribe(
     Uint8List audioData, {
@@ -46,10 +61,7 @@ class OnDeviceAppleProvider implements ISttProvider {
         }
 
         final duration = audioData.lengthInBytes / 32000.0;
-        final filteredText = _qualityGate.filter(
-          result,
-          audioData: audioData,
-        );
+        final filteredText = _qualityGate.filter(result, audioData: audioData);
         if (filteredText == null) {
           CustomSttLogService.instance.warning('OnDeviceApple', 'Dropped low-quality local transcript: $result');
           return null;
@@ -73,7 +85,7 @@ class OnDeviceAppleProvider implements ISttProvider {
       }
     } catch (e) {
       CustomSttLogService.instance.error('OnDeviceApple', 'Transcription error: $e');
-      return null;
+      rethrow; // Keep failed/timed-out audio in the polling buffer for retry.
     }
   }
 

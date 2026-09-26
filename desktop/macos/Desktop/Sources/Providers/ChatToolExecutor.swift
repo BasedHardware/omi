@@ -128,7 +128,7 @@ class ChatToolExecutor {
 
   // MARK: - Onboarding State
 
-  /// Set by OnboardingChatView before starting the chat
+  /// Set by the live onboarding flow before starting the chat
   static var onboardingAppState: AppState?
   /// Called when AI invokes complete_onboarding
   static var onCompleteOnboarding: (() -> Void)?
@@ -143,7 +143,7 @@ class ChatToolExecutor {
   /// Called when request_permission returns "pending" — used to trigger the permission help timer
   static var onPermissionPending: ((_ permissionType: String) -> Void)?
 
-  /// Email/calendar insights from background reading (set by OnboardingChatView)
+  /// Email/calendar insights from background reading (set by the live onboarding flow)
   static var emailInsightsText: String?
   static var calendarInsightsText: String?
 
@@ -361,6 +361,13 @@ class ChatToolExecutor {
         authorizationSnapshot: currentOwnerAuthorizationSnapshot,
         api: backendAPIClient)
 
+    case .createContextReminder:
+      let text = (toolCall.arguments["text"] as? String) ?? ""
+      return await ContextReminderCoordinator.shared.createFromCurrentContext(
+        text: text,
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: currentOwnerAuthorizationSnapshot)
+
     case .showRewindEvidence:
       return await executeShowRewindEvidence(
         toolCall.arguments,
@@ -545,7 +552,39 @@ class ChatToolExecutor {
       if toolCall.name == "get_local_status" {
         return await executeLocalStatus(expectedOwnerID: expectedOwnerID)
       }
+      if toolCall.name == "search_transcripts" {
+        return await ChatLocalHybridTool.execute(
+          toolCall.arguments, runID: originatingRunId, attemptID: originatingAttemptId,
+          expectedOwnerID: expectedOwnerID, sourceKinds: [.transcriptChunk])
+      }
+      if toolCall.name == "web_search" {
+        return await executeWebSearch(
+          toolCall.arguments, expectedOwnerID: expectedOwnerID)
+      }
       return "Unknown tool: \(toolCall.name)"
+    }
+  }
+
+  private static func executeWebSearch(
+    _ arguments: [String: Any],
+    expectedOwnerID: String?
+  ) async -> String {
+    guard NegativeFeedbackRemediationFeature.isEnabled else {
+      return "Unknown tool: web_search"
+    }
+    guard !AppState.isPaywalledEffective else {
+      return "Web search is only available on paid Omi plans."
+    }
+    guard let query = arguments["query"] as? String, !query.isEmpty else {
+      return "Error: query is required"
+    }
+    guard let expectedOwnerID else { return authorizedOwnerChangedResult() }
+    do {
+      return try await APIClient.shared.searchPublicWebForVoice(
+        query: query,
+        expectedOwnerID: expectedOwnerID)
+    } catch {
+      return "The web lookup failed. Please try again."
     }
   }
 
@@ -1737,12 +1776,33 @@ class ChatToolExecutor {
 
   // MARK: - Semantic Search
 
+  private struct ScreenHistorySearchResult: Sendable {
+    let screenshotId: Int64
+    let score: Double
+    let relevance: String
+    let isLocal: Bool
+  }
+
+  struct SemanticSearchDependencies: Sendable {
+    var runtime: LocalEmbeddingRuntime = .makeDefault()
+    var legacySearch:
+      @Sendable (String, Date, Date, String?, Int) async throws -> [(screenshotId: Int64, similarity: Float)] = {
+        query, start, end, app, topK in
+        try await OCREmbeddingService.shared.searchSimilar(
+          query: query, startDate: start, endDate: end, appFilter: app, topK: topK)
+      }
+    var screenshot: @Sendable (Int64) async throws -> Screenshot? = { id in
+      try await RewindDatabase.shared.getScreenshot(id: id)
+    }
+  }
+
   /// Search screenshots using vector similarity
-  private static func executeSemanticSearch(
+  static func executeSemanticSearch(
     _ args: [String: Any],
     runID: String?,
     attemptID: String?,
-    expectedOwnerID: String?
+    expectedOwnerID: String?,
+    dependencies: SemanticSearchDependencies = SemanticSearchDependencies()
   ) async -> String {
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
     guard let query = args["query"] as? String, !query.isEmpty else {
@@ -1758,16 +1818,34 @@ class ChatToolExecutor {
     let startDate = calendar.date(byAdding: .day, value: -days, to: endDate) ?? endDate
 
     do {
-      let vectorResults = try await OCREmbeddingService.shared.searchSimilar(
-        query: query,
-        startDate: startDate,
-        endDate: endDate,
-        appFilter: appFilter,
-        topK: max(limit * 2, 20)
-      )
+      let runtime = dependencies.runtime
+      let searchResults = try await ScreenHistorySearchRoute.search(runtime: runtime) { engine in
+        guard let owner = RewindCaptureOwnerSnapshot.capture(), owner.isCurrent() else {
+          throw LocalMutationAuthorizationError.revoked
+        }
+        let store = try await RewindDatabase.shared.localEmbeddingStore(owner: owner)
+        let search = LocalHybridSearch(
+          store: store, runtime: runtime,
+          authorization: LocalMutationAuthorization { owner.isCurrent() })
+        let hits = try await search.search(
+          query: query, engine: engine, startDate: startDate,
+          endDate: endDate, appFilter: appFilter, limit: limit, sourceKinds: [.screenshot])
+        return hits.map {
+          ScreenHistorySearchResult(
+            screenshotId: $0.sourceId, score: $0.fusedScore,
+            relevance: "hybrid: \($0.matchedBy.rawValue)", isLocal: true)
+        }
+      } legacy: {
+        let results = try await dependencies.legacySearch(query, startDate, endDate, appFilter, max(limit * 2, 20))
+        return results.map {
+          ScreenHistorySearchResult(
+            screenshotId: $0.screenshotId, score: Double($0.similarity),
+            relevance: "similarity: \(String(format: "%.2f", $0.similarity))", isLocal: false)
+        }
+      }
       guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
-      log("Tool semantic_search: vector returned \(vectorResults.count) results")
+      log("Tool semantic_search returned \(searchResults.count) candidates")
 
       // Filter by similarity threshold and fetch screenshot details
       let displayTimeZone = TimeZone.current
@@ -1776,12 +1854,12 @@ class ChatToolExecutor {
       var sources = [APIClient.ToolSource]()
       var count = 0
 
-      for result in vectorResults where result.similarity > 0.3 {
+      for result in searchResults where result.isLocal || result.score > Double(Float(0.3)) {
         guard isExpectedOwnerCurrent(expectedOwnerID) else {
           return authorizedOwnerChangedResult()
         }
         guard
-          let screenshot = try? await RewindDatabase.shared.getScreenshot(id: result.screenshotId)
+          let screenshot = try? await dependencies.screenshot(result.screenshotId)
         else {
           continue
         }
@@ -1795,7 +1873,7 @@ class ChatToolExecutor {
         let windowTitle = screenshot.windowTitle ?? ""
         let titlePart = windowTitle.isEmpty ? "" : " - \(windowTitle)"
         lines.append(
-          "\n\(count). [\(dateStr)] \(screenshot.appName)\(titlePart) (screenshot_id: \(result.screenshotId), similarity: \(String(format: "%.2f", result.similarity)))"
+          "\n\(count). [\(dateStr)] \(screenshot.appName)\(titlePart) (screenshot_id: \(result.screenshotId), \(result.relevance))"
         )
 
         // Include OCR text preview (truncated)
@@ -2193,6 +2271,23 @@ class ChatToolExecutor {
           expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
+      // A denied grant is spent: `requestAccess` never resurfaces it, and forcing
+      // System Settings from a chat turn repeats the auto-reprompt class. Report it.
+      let microphoneAction = MicrophoneCaptureAuthorizationPolicy.action(
+        for: AudioCaptureService.authorizationStatus())
+      if microphoneAction == .surfacePermissionAlert {
+        guard
+          isPermissionAuthorizationCurrent(
+            expectedOwnerID,
+            authorizationSnapshot: authorizationSnapshot)
+        else { return authorizedOwnerChangedResult() }
+        appState?.hasMicrophonePermission = false
+        return permissionRequestResult(
+          type: type, granted: false,
+          pendingMessage:
+            "Microphone permission is denied at the system level; tell the user to re-enable it in System Settings › Privacy & Security › Microphone.",
+          requiresRestart: false)
+      }
       NSApp.activate()
       guard let granted = await requestMicrophonePermissionDirectly(),
         isPermissionAuthorizationCurrent(
@@ -2221,13 +2316,33 @@ class ChatToolExecutor {
           expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
+      // Same rule as microphone: a denied authorization is spent — no re-request,
+      // no forced System Settings jump from a chat turn.
+      guard let preStatus = await notificationAuthorizationStatusDirectly(),
+        isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
+      else { return authorizedOwnerChangedResult() }
+      if preStatus == .denied {
+        appState?.hasNotificationPermission = false
+        appState?.notificationAuthorizationStatus = .denied
+        return permissionRequestResult(
+          type: type, granted: false,
+          pendingMessage:
+            "Notifications are denied at the system level; tell the user to re-enable Omi in System Settings › Notifications.",
+          requiresRestart: false)
+      }
       guard let granted = await requestNotificationPermissionDirectly(),
         isPermissionAuthorizationCurrent(
           expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
       appState?.hasNotificationPermission = granted
-      if !granted {
+      if !granted, preStatus == .notDetermined {
+        // The user just answered the system prompt with No, so the real TCC state
+        // is now .denied. Without this the cache still reads .notDetermined and a
+        // later caller treats a spent authorization as still askable.
+        appState?.notificationAuthorizationStatus = .denied
         _ = openNotificationPrivacySettings(
           expectedOwnerID: expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
@@ -2246,6 +2361,7 @@ class ChatToolExecutor {
           expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
+      UserDefaults.standard.set(false, forKey: .onboardingAccessibilitySkipped)
       requestAccessibilityPermissionDirectly(
         expectedOwnerID: expectedOwnerID,
         authorizationSnapshot: authorizationSnapshot)
@@ -2428,7 +2544,12 @@ class ChatToolExecutor {
       targets: AppState.accessibilityProbeTargets())
     let accessibilityProjection = AppState.accessibilityProjection(accessibilitySignals)
     let accessibilityGranted = accessibilityProjection.hasPermission
-    let automationStatus = AppState.queryAutomationPermissionStatus()
+    // The automation probe may start System Events and wait for LaunchServices
+    // (up to ~5s on a cold target), so it must never run on the main actor —
+    // same rule as `AppState.refreshAutomationPermission`.
+    let automationStatus = await Task.detached(priority: .userInitiated) {
+      AppState.queryAutomationPermissionStatus()
+    }.value
     let fullDiskAccessGranted = checkFullDiskAccessDirectly()
     guard
       isPermissionAuthorizationCurrent(
@@ -2442,8 +2563,8 @@ class ChatToolExecutor {
     appState?.hasNotificationPermission = notificationsGranted
     appState?.hasAccessibilityPermission = accessibilityGranted
     appState?.isAccessibilityBroken = accessibilityProjection.isBroken
-    appState?.hasAutomationPermission = automationStatus == noErr
-    appState?.automationPermissionError = automationPermissionError(for: automationStatus)
+    // `-600` is "System Events unreachable", not an answer about the grant (see accessibility above).
+    let automationGranted = appState?.applyAutomationPermissionStatus(automationStatus) ?? (automationStatus == noErr)
     appState?.hasFullDiskAccess = fullDiskAccessGranted
 
     return onboardingPermissionStatusPayload(
@@ -2451,7 +2572,7 @@ class ChatToolExecutor {
       microphone: microphoneGranted,
       notifications: notificationsGranted,
       accessibility: accessibilityGranted,
-      automation: automationStatus == noErr,
+      automation: automationGranted,
       fullDiskAccess: fullDiskAccessGranted
     )
   }
@@ -2468,6 +2589,14 @@ class ChatToolExecutor {
     await awaitCancellablePermissionRequest { completion in
       UserNotificationCallbackBridge.authorizationStatus { authorizationStatus in
         completion(authorizationStatus == .authorized)
+      }
+    }
+  }
+
+  private static func notificationAuthorizationStatusDirectly() async -> UNAuthorizationStatus? {
+    await awaitCancellablePermissionRequest { completion in
+      UserNotificationCallbackBridge.authorizationStatus { authorizationStatus in
+        completion(authorizationStatus)
       }
     }
   }
@@ -2545,7 +2674,24 @@ class ChatToolExecutor {
           completion(OSStatus(errAEEventNotPermitted))
           return
         }
-        completion(AppState.queryAutomationPermissionStatus())
+        // The passive probe may start System Events and wait for LaunchServices
+        // (up to ~5s), so it cannot run inside this `Task { @MainActor … }` —
+        // hop off, then route the answer back through `completion` (the
+        // once-resume adapter already tolerates a late completion).
+        Task.detached(priority: .userInitiated) {
+          let status = AppState.queryAutomationPermissionStatus()
+          await MainActor.run {
+            guard
+              isPermissionAuthorizationCurrent(
+                expectedOwnerID,
+                authorizationSnapshot: authorizationSnapshot)
+            else {
+              completion(OSStatus(errAEEventNotPermitted))
+              return
+            }
+            completion(status)
+          }
+        }
       }
     }
   }

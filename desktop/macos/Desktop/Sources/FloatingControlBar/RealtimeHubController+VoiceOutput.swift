@@ -63,6 +63,7 @@ extension RealtimeHubController {
   func prepareVoiceOutputForDeterministicSlowToolAcknowledgement() {
     guard let activeLease = VoiceTurnCoordinator.shared.outputSnapshot.activeLease else {
       assistantText = ""
+      externalRunAuthorityState?.answer.replace(with: "")
       return
     }
     switch activeLease.lane {
@@ -74,6 +75,7 @@ extension RealtimeHubController {
     // A provider-authored pre-tool status must not be journaled beside the
     // final answer even when it raced ahead of the function call.
     assistantText = ""
+    externalRunAuthorityState?.answer.replace(with: "")
   }
 
   func acquireVoiceOutput(_ lane: VoiceOutputLane, reason: String) -> VoiceOutputLease? {

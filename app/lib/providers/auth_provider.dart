@@ -2,11 +2,14 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/http/api/apps.dart' as apps_api;
+import 'package:omi/backend/http/api/notifications.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/env/environment_profile.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
@@ -63,6 +66,7 @@ class AuthenticationProvider extends BaseProvider {
 
     Future.microtask(() {
       _authStateSubscription = _auth.authStateChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) {
+        PlatformManager.instance.analytics.bindIdentity(user?.uid);
         AuthService.instance.handleAuthUserChanged(user?.uid);
         Logger.debug(
           'DEBUG AuthProvider: authStateChanges fired - user=${user?.uid}, isAnonymous=${user?.isAnonymous}',
@@ -80,6 +84,7 @@ class AuthenticationProvider extends BaseProvider {
         notifyListeners();
       });
       _idTokenSubscription = _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
+        PlatformManager.instance.analytics.bindIdentity(user?.uid);
         AuthService.instance.handleAuthUserChanged(user?.uid);
         if (user == null) {
           Logger.debug('User is currently signed out or the token has been revoked!');
@@ -135,6 +140,30 @@ class AuthenticationProvider extends BaseProvider {
   void setLoading(bool value) {
     _loading = value;
     notifyListeners();
+  }
+
+  /// True only for a local_dev build. Drives whether the dev sign-in affordance
+  /// is offered at all; the authoritative gate is server-side.
+  bool get isLocalDevProfile => Env.profile == AppEnvironmentProfile.localDev;
+
+  Future<void> onLocalDevSignIn(Function() onSignIn) async {
+    if (loading) return;
+    setLoadingState(true);
+    try {
+      final credential = await AuthService.instance.signInWithLocalDevToken();
+      if (credential != null && _hasFirebaseUser) {
+        await _signIn(onSignIn, credential: credential, authProvider: 'local_dev');
+      } else {
+        AppSnackbar.showSnackbarError('Local development sign-in did not produce a session.');
+      }
+    } catch (e) {
+      // Surfaced verbatim: this path exists for developers, and the message
+      // already says exactly what is wrong (harness down, wrong profile, no
+      // emulator). Replacing it with a generic string would hide the diagnosis.
+      Logger.debug('Local development sign in error: $e');
+      AppSnackbar.showSnackbarError('$e');
+    }
+    setLoadingState(false);
   }
 
   Future<void> onGoogleSignIn(Function() onSignIn) async {
@@ -199,6 +228,12 @@ class AuthenticationProvider extends BaseProvider {
     try {
       final token = await AuthService.instance.getIdToken();
       NotificationService.instance.saveNotificationToken();
+      try {
+        final timeZone = (await FlutterTimezone.getLocalTimezone()).identifier;
+        unawaited(syncUserTimeZoneServer(timeZone: timeZone));
+      } catch (e) {
+        Logger.debug('Failed to sync device timezone: $e');
+      }
 
       Logger.debug('Firebase token retrieved successfully');
       return token;

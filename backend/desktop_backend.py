@@ -32,10 +32,13 @@ from routers import (
     desktop_realtime,
     desktop_screen_crisp,
     desktop_tts_updates,
+    memory_use,
 )
 from utils.http_client import close_all_clients
 from utils.jit_rollout import close_posthog_control_plane
+from utils.free_tier_cohort import close_free_tier_control_plane
 from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_server
+from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
 
 
 def _initialize_firebase_admin() -> None:
@@ -79,8 +82,10 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        await shutdown_managed_spend_ledger()
         await close_all_clients()
         close_posthog_control_plane()
+        close_free_tier_control_plane()
         stop_metrics_sidecar_server()
 
 
@@ -104,6 +109,15 @@ def _build_app() -> FastAPI:
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=[
+            "X-Omi-Memory-As-Of",
+            "X-Omi-Memory-Belief-Enabled",
+            "X-Omi-Memory-Canonical-Lifecycle-Exposed",
+            "X-Omi-Memory-Default-Delete-Supported",
+            "X-Omi-Memory-Device-Scope-Supported",
+            "X-Omi-Memory-Next-Cursor",
+            "X-Omi-List-Truncated",
+        ],
     )
     app.include_router(desktop_core.router)
     app.include_router(auth.router)
@@ -117,6 +131,7 @@ def _build_app() -> FastAPI:
     app.include_router(desktop_realtime.router)
     app.include_router(desktop_screen_crisp.router)
     app.include_router(desktop_tts_updates.router)
+    app.include_router(memory_use.router)
     app.include_router(desktop_deprecated.router)
     app.include_router(metrics.router)
     jit_rollout.validate_jit_rollout_contract(app)

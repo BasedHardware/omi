@@ -115,8 +115,26 @@ def test_backend_hermetic_gate_is_always_reported_and_fails_closed() -> None:
     assert 'github.event.pull_request.base.sha' not in scope
     assert 'PR_BASE_REF: origin/${{ github.base_ref }}' in scope
     assert 'github.event.merge_group.base_sha' in scope
+    assert 'timeout-minutes: 10' in scope
+    assert 'fetch-depth: 0' in scope
+    assert 'filter: blob:none' in scope
     assert 'git diff --name-only "$base_sha"...HEAD' in scope
     assert "^(backend/|package\\.json$|package-lock\\.json$|\\.github/workflows/backend-hermetic-e2e\\.yml$)" in scope
+
+    # #10945: fail closed on unresolvable scope base or a failed (partial-clone)
+    # history fetch. The scope job must FAIL rather than silently emit
+    # applies=false, which would skip the hermetic backend gate entirely.
+    run_block = scope.split('run: |', 1)[1]
+    assert 'set -euo pipefail' in run_block
+    assert 'if [[ -z "$base_sha" ]] || ! git cat-file -e "${base_sha}^{commit}"; then' in run_block
+    assert 'Cannot resolve hermetic backend scope base' in run_block
+    assert 'exit 1' in run_block
+    assert 'a failed diff must never yield empty -> applies=false' in run_block
+    # applies=false must be reachable only AFTER a successful diff, never as a fallback.
+    diff_index = run_block.index('changed_files="$(git diff')
+    applies_false_index = run_block.index('echo "applies=false" >> "$GITHUB_OUTPUT"')
+    assert diff_index < applies_false_index
+    # The two exit-1 guards precede the diff; a failed scope never reaches applies=false.
 
     for job_name in ('hermetic-e2e', 'listen-pusher-stack-gauntlet', 'sync-cloud-tasks-stack-gauntlet'):
         job = workflow.split(f'  {job_name}:\n', 1)[1]

@@ -20,10 +20,18 @@ Tuning knobs:
         event boost should widen 100x. Those policies are listed here and always
         serve their base limit.
 
-        Default: "action_items:list". Read from env at startup, so the exemption
-        is operator-escapable without a code change: set
-        RATE_LIMIT_BOOST_EXEMPT="" to put every policy back under the boost.
+        Default: "action_items:list,action_items:list_hot_client". Read from env
+        at startup, so the exemption is operator-escapable without a code change:
+        set RATE_LIMIT_BOOST_EXEMPT="" to put every policy back under the boost.
         Unknown names are ignored (a typo must not take the process down).
+
+    ACTION_ITEMS_LIST_HOT_CLIENT_MAX: requests per 60s that one uid may make to
+        GET /v1/action-items *from a hot-loop client class* (see
+        utils/action_items_list_guard.py). This is a second, stricter ceiling
+        that composes with action_items:list rather than replacing it: every
+        client keeps the 12/min cap, and a client identified as the stale
+        polling build additionally may not exceed this number. Default 4.
+        Set to 0 to disable the extra ceiling (the rollback).
 
 Redis efficiency:
     Each check = 1 Lua script call (atomic INCR + TTL check).
@@ -39,9 +47,38 @@ import os
 RATE_LIMIT_BOOST: float = float(os.getenv("RATE_LIMIT_BOOST", "1.0"))
 RATE_LIMIT_SHADOW: bool = os.getenv("RATE_LIMIT_SHADOW_MODE", "false").lower() == "true"
 
+
+def _hot_client_max() -> int:
+    """Base per-minute ceiling for the hot-loop list client class.
+
+    Read once at import like every other policy number. Invalid input falls back
+    to the default rather than raising: a typo in an env var must not refuse to
+    start the process, and this is a cost control, not a correctness control.
+    """
+    raw = os.getenv("ACTION_ITEMS_LIST_HOT_CLIENT_MAX", "4").strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return 4
+    return max(0, value)
+
+
+ACTION_ITEMS_LIST_HOT_CLIENT_MAX: int = _hot_client_max()
+
 # Policies the boost must not touch. Env-overridable (see module docstring);
 # resolved against RATE_POLICIES below so a typo is dropped, not enforced.
-_BOOST_EXEMPT_DEFAULT = "action_items:list"
+# The abuse ceilings below are decisions, not defaults: RATE_LIMIT_BOOST exists
+# to temporarily widen limits for events, and a boosted event window is exactly
+# when scripted abuse would exploit a multiplied dev-write budget (boost=100
+# would turn 30/min into 3,000/min). dev:memories and dev:conversations are
+# exempt too — they are the shared hourly ceilings the dedicated policies
+# compose with; exempting only the dedicated budgets would leave the aggregate
+# hourly caps boosted into no-ops.
+_BOOST_EXEMPT_DEFAULT = (
+    "action_items:list,action_items:list_hot_client,static_map:get,"
+    "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments,"
+    "mcp:oauth_url_client,mcp:oauth_url_client_global"
+)
 _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
 
 # ---------------------------------------------------------------------------
@@ -61,6 +98,9 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # cheaper than :create — no Deepgram, just LLM structuring). Used per finished
     # conversation by Parakeet/local-STT users, so a bit more headroom than :create.
     "conversations:from-segments": (30, 3600),
+    # Desktop sends running per-day totals periodically; allow several devices
+    # plus reconnect bursts while still capping accidental hot loops.
+    "users:desktop_usage_daily": (600, 3600),
     # Chat — 2-6 LLM calls per message
     "chat:send_message": (120, 3600),
     "chat:initial": (60, 3600),
@@ -71,6 +111,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "file:upload": (40, 3600),
     # STT proxy — parakeet GPU batch transcription behind the Omi auth guard
     "stt:transcribe": (60, 3600),
+    # Speaker tag prompts: each clip merges stored audio chunks; each answer may
+    # queue voice-sample extraction. A daily set holds at most a handful.
+    "speaker_tag_prompts:clip": (60, 3600),
+    "speaker_tag_prompts:answer": (60, 3600),
     # Agent/MCP — bursty tool calls
     "agent:execute_tool": (120, 3600),
     # JIT frame metadata is cheap, but uploads carry bounded pixel bytes.
@@ -103,7 +147,20 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # prod this cap resolved to 1,200/60s and never fired once, while the loop
     # ran at ~97/min — 48.8% of all billable Firestore document reads.
     "action_items:list": (12, 60),
+    # Second, stricter ceiling for the hot-loop client class only. It does not
+    # replace action_items:list — both buckets are checked, so the tighter one
+    # binds for a stale poller while every other client is governed solely by
+    # the 12/min policy above. Base max is env-tunable
+    # (ACTION_ITEMS_LIST_HOT_CLIENT_MAX, 0 disables); boost-exempt for the same
+    # reason as its parent policy.
+    "action_items:list_hot_client": (ACTION_ITEMS_LIST_HOT_CLIENT_MAX, 60),
     "action_items:write": (120, 3600),
+    # Static map previews — Redis-cached image renders, so a hit costs one
+    # cache read, but a client loop with ever-changing pins would translate
+    # straight into billable provider calls. A home-feed hydration plus recap
+    # pages is tens of requests per session; this cap only exists to stop a
+    # hot loop.
+    "static_map:get": (240, 3600),
     # Memories — single LLM call each
     "memories:create": (60, 3600),
     # Memory batch writes — each request can create up to 100 memories, so the
@@ -165,14 +222,37 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "dev:conversation_transcript_read": (25, 3600),
     "dev:goals_read": (120, 3600),
     "dev:conversations": (25, 3600),
+    # Dedicated per-route budget for POST /v1/dev/user/conversations/from-segments,
+    # mirroring the first-party conversations:from-segments (30/hour) sizing.
+    # Composed on top of the shared dev:conversations ceiling so per-route
+    # tuning can never raise the aggregate conversation-write limit.
+    "dev:conversations_from_segments": (30, 3600),
     # Ask (/v1/dev/user/ask): one qa_rag LLM call per request over the caller's
     # conversations — billable like a conversation create, so it carries its own
     # low per-key cap instead of riding the cheap dev:conversations_read list limit.
     "dev:ask": (25, 3600),
     "dev:memories": (120, 3600),
+    # Per-minute burst ceiling on POST /v1/dev/user/memories, composed with
+    # dev:memories above. The hourly window alone admits the whole 120-request
+    # quota inside a single minute, which is exactly the scripted-burst shape
+    # seen on 2026-09-11 (69/min from one client). 30/min stays well above
+    # legitimate app/integration traffic while capping bursts far below it.
+    "dev:memories_write_burst": (30, 60),
     "dev:memories_batch": (15, 3600),
     "dev:action_items_write": (120, 3600),
     "dev:goals_write": (120, 3600),
+    # Unauthenticated URL-form (CIMD) client_id lookups on /authorize + /token:
+    # each can cost a bounded outbound metadata fetch, so the budget is
+    # per-minute and sits in front of the lookup. Keyed by the normalized
+    # client_id metadata host — the peer is the load balancer and forwarded
+    # headers are untrusted — so one abusive host cannot starve the rest.
+    # Boost-exempt: an event window must not widen an unauthenticated abuse
+    # surface.
+    "mcp:oauth_url_client": (30, 60),
+    # Fleet-wide backstop composed with the per-host bucket above: caps total
+    # unauthenticated URL-form admission when many distinct hosts attack at
+    # once, sized generously so real clients never notice it.
+    "mcp:oauth_url_client_global": (600, 60),
     # MCP REST data API
     "mcp:read": (300, 3600),
     "mcp:memories_read": (120, 3600),
@@ -181,6 +261,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "test:prompt": (30, 3600),
     # Apps
     "apps:generate_prompts": (30, 3600),
+    # Persona intro message is a billable LLM call (Features.PERSONA) with no
+    # quota gate, unlike its sibling generate_prompts. Same bound as that
+    # sibling until a quota-gate policy decision is made (see #12781).
+    "apps:twitter_initial_message": (30, 3600),
     # TTS — ElevenLabs proxy. Coarse outer ring; fine-grained burst + daily
     # char caps are enforced in database.redis_db.check_tts_rate_limit.
     "tts:synthesize": (300, 3600),

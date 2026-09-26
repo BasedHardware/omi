@@ -72,6 +72,10 @@ cache-wide, Stable, rollback, or emergency mutation paths from GitHub.
 
 `desktop_promote_prod.yml` is protected, manual-only, and independent of backend deployment. `promote` requires the requested release ID to be the exact current Beta pointer. It then reads the immutable manifest registered by Beta from the control plane and verifies its canonical identity; it does not reconstruct a manifest from mutable release metadata. Both update the existing legacy appcast/static bridges and verify the final pointer, hashes, and exactly one default/non-Beta Stable feed item.
 
+At promotion time the workflow records **serving-backend provenance** on the Stable pointer document (`serving_backends`): the live `desktop-backend` and shared Python API `/health` identities it actually observed. This is an observation, not a compatibility guarantee. The immutable release manifest stays unchanged; provenance belongs on the pointer because a later backend deploy must not rewrite a retained release ID. An exact-retry of the same release ID returns the existing pointer, including whatever provenance was stored on the first successful write.
+
+The same run prints a **backend drift** table to the GitHub Actions job summary. For each service it shows the serving SHA (or `unknown` if health omitted it), how many commits on desktop-relevant paths are on `origin/main` but not in that SHA, and up to 30 commit subjects. The table is read-only: it never fails the promotion. Treat a large lag as an operator signal to deploy backends separately, not as proof that the app build is unsafe.
+
 `operation=promote` is roll-forward. `operation=repoint` can choose a retained normal-path manifest in either direction and requires the exact current release ID and generation. Both use the same transactional pointer authority and reject emergency-only evidence. A stale compare-and-swap is rejected; a lost response is acknowledged only when the requested release is already selected at exactly the expected next generation.
 
 Repointing stops future rollout but cannot downgrade clients that Sparkle has already upgraded to a higher build. Ship a higher-version hotfix for those users.

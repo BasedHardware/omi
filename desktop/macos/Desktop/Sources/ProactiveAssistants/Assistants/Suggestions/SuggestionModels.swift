@@ -22,14 +22,16 @@ enum SuggestionCategory: String, Codable {
 /// moment it is relevant, so a source that is slow or empty simply contributes nothing.
 struct SuggestionGrounding: Sendable {
   var memories: [String] = []
-  var openCommitments: [String] = []
+  var commitmentRecords: [SuggestionCommitment] = []
   var relatedScreens: [String] = []
   /// What the user is actually trying to achieve. Without this the assistant can only say
   /// "you have a task"; with it, it can say why the current screen is not that.
   var goals: [String] = []
 
+  var openCommitments: [String] { commitmentRecords.map(\.text) }
+
   var isEmpty: Bool {
-    memories.isEmpty && openCommitments.isEmpty && relatedScreens.isEmpty && goals.isEmpty
+    memories.isEmpty && commitmentRecords.isEmpty && relatedScreens.isEmpty && goals.isEmpty
   }
 
   /// Preamble for the grounding block.
@@ -454,23 +456,35 @@ enum SuggestionCommitmentGuard {
     openCommitments: [String]
   ) -> Bool {
     guard category == .commitment else { return true }
+    return groundedTaskId(
+      suggestion: suggestion,
+      category: category,
+      commitments: openCommitments.map { SuggestionCommitment(id: $0, text: $0) }
+    ) != nil
+  }
+
+  static func groundedTaskId(
+    suggestion: String,
+    category: SuggestionCategory,
+    commitments: [SuggestionCommitment]
+  ) -> String? {
+    guard category == .commitment else { return nil }
 
     let suggestionTokens = contentTokens(suggestion)
-    guard !suggestionTokens.isEmpty else { return false }
+    guard !suggestionTokens.isEmpty else { return nil }
 
-    return openCommitments.contains { commitment in
-      let commitmentTokens = contentTokens(commitment)
-      guard !commitmentTokens.isEmpty else { return false }
+    for commitment in commitments {
+      let commitmentTokens = contentTokens(commitment.text)
+      guard !commitmentTokens.isEmpty else { continue }
       let shared = commitmentTokens.intersection(suggestionTokens)
-      guard shared.count >= minimumSharedTokens else { return false }
+      guard shared.count >= minimumSharedTokens else { continue }
 
-      // Naming something only that commitment contains is a reference, however short the
-      // nudge and however long the task. Otherwise fall back to proportional coverage,
-      // which is what stops "send the update" from matching every commitment that happens
-      // to contain both words.
-      if !shared.subtracting(genericTaskWords).isEmpty { return true }
-      return Double(shared.count) / Double(commitmentTokens.count) >= requiredCoverage
+      if !shared.subtracting(genericTaskWords).isEmpty { return commitment.id }
+      if Double(shared.count) / Double(commitmentTokens.count) >= requiredCoverage {
+        return commitment.id
+      }
     }
+    return nil
   }
 }
 

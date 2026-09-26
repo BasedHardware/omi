@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/providers/voice_recorder_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Compact waveform pill that lives inside the chat input row, between the
@@ -63,12 +64,9 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
               height: 44,
               child: Center(
                 child: ShimmerWithTimeout(
-                  baseColor: const Color(0xFF35343B),
-                  highlightColor: Colors.white,
-                  child: Text(
-                    context.l10n.transcribing,
-                    style: const TextStyle(color: Colors.white, fontSize: 15),
-                  ),
+                  baseColor: OmiColors.surface3,
+                  highlightColor: OmiColors.textPrimary,
+                  child: Text(context.l10n.transcribing, style: OmiType.subhead),
                 ),
               ),
             );
@@ -83,9 +81,10 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
                     provider.state == VoiceRecorderState.pendingRecovery
                         ? context.l10n.voiceRecordingFound
                         : context.l10n.error,
-                    style: TextStyle(
-                      color: provider.state == VoiceRecorderState.pendingRecovery ? Colors.white : Colors.redAccent,
-                      fontSize: 13,
+                    style: OmiType.footnote.copyWith(
+                      color: provider.state == VoiceRecorderState.pendingRecovery
+                          ? OmiColors.textPrimary
+                          : OmiColors.danger,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -99,12 +98,10 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
                       ),
                     ),
                   ),
-                  GestureDetector(
-                    onTap: provider.retry,
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 8),
-                      child: Icon(Icons.refresh, color: Colors.white, size: 20),
-                    ),
+                  OmiIconButton(
+                    icon: const Icon(Icons.refresh, size: 20),
+                    label: context.l10n.tryAgain,
+                    onPressed: provider.retry,
                   ),
                 ],
               ),
@@ -146,11 +143,7 @@ class AudioWavePainter extends CustomPainter {
       final level = levels[i].clamp(0.0, 1.0);
       final barHeight = (minBarHeight + level * (maxBarHeight - minBarHeight)).clamp(minBarHeight, maxBarHeight);
 
-      canvas.drawLine(
-        Offset(x, centerY - barHeight / 2),
-        Offset(x, centerY + barHeight / 2),
-        paint,
-      );
+      canvas.drawLine(Offset(x, centerY - barHeight / 2), Offset(x, centerY + barHeight / 2), paint);
     }
   }
 

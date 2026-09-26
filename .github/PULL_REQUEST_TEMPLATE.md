@@ -61,5 +61,4 @@ Failure-Class: none
 
 ## Scoped cleanups (optional)
 
-<!-- Related fixes you made along the way (see AGENTS.md → "Leave It Better
-     Than You Found It"). Each should be its own commit and verifiable. -->
+<!-- Mention any related cleanup included in this PR and how it was verified. -->

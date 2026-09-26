@@ -280,6 +280,7 @@ export class RunToolCapabilityBroker {
       executionRole: persisted.profile.executionRole,
       screenContext: persisted.screenContext,
       jitKnowledgeToolsEnabled: persisted.jitKnowledgeToolsEnabled,
+      jitProactivity: persisted.jitProactivity,
       surfaceKind: persisted.surfaceKind,
       chatFirstUi: persisted.chatFirstUi,
       controlGeneration: persisted.chatFirstControlGeneration,
@@ -727,6 +728,7 @@ export class RunToolCapabilityBroker {
     chatMode: string | null;
     screenContext: boolean;
     jitKnowledgeToolsEnabled: boolean;
+    jitProactivity: boolean;
     chatFirstUi: boolean;
     chatFirstControlGeneration: number | null;
     /** Spawn-time child tool restriction; null = no policy, [] = no tools (fail closed). */
@@ -773,7 +775,15 @@ export class RunToolCapabilityBroker {
       && !Array.isArray(admitted.capabilities)
       ? admitted.capabilities as Record<string, unknown>
       : {};
-    const chatFirstUi = admittedCapabilities.chatFirstUi === true && text(row.surface_kind) === "main_chat";
+    // The run's surface, falling back to the session's for runs admitted before
+    // it was recorded. `s.surface_kind` is where the session was first
+    // registered — for a shared shell that can be `floating_chat` while main
+    // Chat runs on it, and gating chat-first on that rejected the tool the
+    // model had just been offered.
+    const runSurfaceKind = typeof runInput.surfaceKind === "string" && runInput.surfaceKind.trim()
+      ? runInput.surfaceKind.trim()
+      : text(row.surface_kind);
+    const chatFirstUi = admittedCapabilities.chatFirstUi === true && runSurfaceKind === "main_chat";
     const controlGeneration = Number(admittedCapabilities.chatFirstControlGeneration);
     return {
       ownerId: text(row.owner_id),
@@ -782,7 +792,10 @@ export class RunToolCapabilityBroker {
       attemptStatus: text(row.authoritative_attempt_status) as AttemptStatus,
       currentAttemptId: text(latest.attempt_id),
       profile: this.profileForSession(sessionId),
-      surfaceKind: externalSurface?.authority === "swift_realtime" ? "realtime_voice" : text(row.surface_kind),
+      // Also the run's surface: Swift re-validates an authorized invocation with
+      // `surfaceKind == "main_chat"` before it will execute a chat-first tool,
+      // and selects the manifest digest from the same field.
+      surfaceKind: externalSurface?.authority === "swift_realtime" ? "realtime_voice" : runSurfaceKind,
       externalRefKind: row.external_ref_kind === null ? null : text(row.external_ref_kind),
       externalRefId: row.external_ref_id === null ? null : text(row.external_ref_id),
       originatingUserText: typeof runInput.prompt === "string" ? runInput.prompt : "",
@@ -791,6 +804,7 @@ export class RunToolCapabilityBroker {
       chatMode: typeof metadata.chatMode === "string" ? metadata.chatMode : null,
       screenContext: admittedScreenContext(runInput),
       jitKnowledgeToolsEnabled: metadata.jitKnowledgeToolsEnabled === true,
+      jitProactivity: metadata.jitBudget !== undefined,
       chatFirstUi,
       chatFirstControlGeneration: chatFirstUi && Number.isSafeInteger(controlGeneration) && controlGeneration >= 0
         ? controlGeneration

@@ -9,11 +9,9 @@ enum AppSessionStartKind { coldStart, foreground }
 /// app has first entered the background, so repeated `resumed` callbacks do
 /// not inflate the retention denominator.
 class AppSessionTelemetry {
-  AppSessionTelemetry({
-    AnalyticsManager? analytics,
-    String Function()? createSessionId,
-  })  : _analytics = analytics ?? AnalyticsManager(),
-        _createSessionId = createSessionId ?? const Uuid().v4;
+  AppSessionTelemetry({AnalyticsManager? analytics, String Function()? createSessionId})
+    : _analytics = analytics ?? AnalyticsManager(),
+      _createSessionId = createSessionId ?? const Uuid().v4;
 
   final AnalyticsManager _analytics;
   final String Function() _createSessionId;
@@ -28,6 +26,7 @@ class AppSessionTelemetry {
 
   void recordBackgrounded() {
     _isBackgrounded = true;
+    _analytics.setForeground(false);
   }
 
   void recordResumed() {
@@ -37,12 +36,8 @@ class AppSessionTelemetry {
   }
 
   void _emit(AppSessionStartKind kind) {
-    _analytics.track(
-      'App Session Started',
-      properties: {
-        'app_session_id': _createSessionId(),
-        'start_kind': kind.name,
-      },
-    );
+    final sessionId = _createSessionId();
+    _analytics.setSessionContext(sessionId);
+    _analytics.track('App Session Started', properties: {'app_session_id': sessionId, 'start_kind': kind.name});
   }
 }

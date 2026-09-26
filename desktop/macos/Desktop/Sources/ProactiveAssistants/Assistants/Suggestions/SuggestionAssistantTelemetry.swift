@@ -112,7 +112,7 @@ enum SuggestionAssistantTelemetry {
           return .decodeFailed
         case .apiError(let message, _):
           return classifyAPIMessage(message)
-        case .missingAPIKey:
+        case .missingAPIKey, .planGated:
           return .other
         }
       }

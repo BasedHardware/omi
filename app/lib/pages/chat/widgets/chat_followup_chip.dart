@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 /// The one grounded follow-up an answer invites, as a single tappable chip.
@@ -7,12 +8,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 /// Tapping sends the chip's words as a normal user message through the existing
 /// chat send path; the chip owns no send logic of its own.
 class ChatFollowUpChip extends StatelessWidget {
-  const ChatFollowUpChip({
-    super.key,
-    required this.question,
-    required this.onSend,
-    this.source = 'chat_block',
-  });
+  const ChatFollowUpChip({super.key, required this.question, required this.onSend, this.source = 'chat_block'});
 
   final String question;
   final void Function(String) onSend;
@@ -29,22 +25,21 @@ class ChatFollowUpChip extends StatelessWidget {
           label: question,
           child: InkWell(
             key: const Key('chat_followup_chip'),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: OmiRadius.pillAll,
             onTap: () {
               PlatformManager.instance.analytics.followUpChipTapped(source: source);
               onSend(question);
             },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+              // 12 + 19.5pt line + 12 reaches the 44pt target; the min height holds it if the text shrinks.
+              constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: OmiSpacing.sm),
               decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1F),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                color: OmiColors.surface1,
+                borderRadius: OmiRadius.pillAll,
+                border: Border.all(color: OmiColors.border),
               ),
-              child: Text(
-                question,
-                style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.3),
-              ),
+              child: Text(question, style: OmiType.subhead.copyWith(height: 1.3)),
             ),
           ),
         ),

@@ -58,17 +58,22 @@ struct JITProactivityFlags: Equatable, Sendable {
   /// field is wire compatibility, not an unknown-off veto; a present
   /// `unknown` still fails closed.
   let killSwitchPresent: Bool
+  /// Optional server capability for the qualification-only full-turn budget.
+  /// Older servers omit it; omission keeps the released JIT route unchanged.
+  let budgetContractVersion: String?
 
   init(
     rollout: JITProactivityRolloutState,
     killSwitch: JITProactivityRolloutState,
     effective: JITProactivityRolloutState = .unknown,
-    killSwitchPresent: Bool = true
+    killSwitchPresent: Bool = true,
+    budgetContractVersion: String? = nil
   ) {
     self.rollout = rollout
     self.killSwitch = killSwitch
     self.effective = effective
     self.killSwitchPresent = killSwitchPresent
+    self.budgetContractVersion = budgetContractVersion
   }
 
   /// The server-computed `effective` verdict owns admission: the client must

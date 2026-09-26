@@ -20,9 +20,11 @@ import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
-/// A recording the server permanently refused for being older than the
-/// automatic-recovery window must say so on its row, and must not offer a
-/// Retry that can never succeed (#10975).
+/// A recording the server will never accept must say so on its row, and must
+/// not offer a Retry that can never succeed: too old for the automatic-recovery
+/// window (#10975), or audio the transcription job cannot read. Both offer
+/// deletion instead, because otherwise the "needs attention" banner is permanent
+/// and the only way out is an unlabelled swipe.
 
 class _Listener implements IWalSyncListener {
   @override
@@ -65,12 +67,12 @@ class _WalService implements IWalService {
 }
 
 SyncUploadGate _offlineGate() => SyncUploadGate(
-      limiter: SyncRateLimiter.instance,
-      uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
-        throw StateError('unexpected upload in a widget test');
-      },
-      fairUseStatusLoader: () async => {'stage': 'none'},
-    );
+  limiter: SyncRateLimiter.instance,
+  uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
+    throw StateError('unexpected upload in a widget test');
+  },
+  fairUseStatusLoader: () async => {'stage': 'none'},
+);
 
 Widget _app(Widget child, SyncProvider provider) {
   return MaterialApp(
@@ -141,20 +143,20 @@ void main() {
   }
 
   Wal makeWal(WalStatus status) => Wal(
-        timerStart: 1700000000,
-        codec: BleAudioCodec.opus,
-        seconds: 60,
-        status: status,
-        storage: WalStorage.disk,
-        device: 'omi',
-        filePath: 'too_old_audio.bin',
-      );
+    timerStart: 1700000000,
+    codec: BleAudioCodec.opus,
+    seconds: 60,
+    status: status,
+    storage: WalStorage.disk,
+    device: 'omi',
+    filePath: 'too_old_audio.bin',
+  );
 
   testWidgets('the row explains the rejection and offers no Retry', (tester) async {
     await pumpRow(tester, makeWal(WalStatus.outsideRecoveryWindow));
 
     expect(find.text("Too old to sync — Omi can't accept it"), findsOneWidget);
-    expect(find.text('Retry'), findsNothing);
+    expect(find.text('Try Again'), findsNothing);
     expect(find.text('Waiting to sync'), findsNothing);
   });
 
@@ -162,6 +164,24 @@ void main() {
     await pumpRow(tester, makeWal(WalStatus.miss)..retryCount = walMaxAutoRetries);
 
     expect(find.text('Failed — tap Retry'), findsOneWidget);
-    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Try Again'), findsOneWidget);
+    expect(find.text('Delete'), findsNothing, reason: 'a deliberate retry can still succeed here');
+  });
+
+  testWidgets('unreadable audio explains itself and offers Delete, not Retry', (tester) async {
+    await pumpRow(tester, makeWal(WalStatus.unsupportedAudio));
+
+    expect(find.text("Audio couldn't be read — can't be synced"), findsOneWidget);
+    expect(find.text('Try Again'), findsNothing);
+    expect(find.text('Failed — tap Retry'), findsNothing);
+    expect(find.text('Delete'), findsOneWidget);
+  });
+
+  testWidgets('every unsyncable state offers the same way out', (tester) async {
+    for (final status in [WalStatus.corrupted, WalStatus.outsideRecoveryWindow, WalStatus.unsupportedAudio]) {
+      await pumpRow(tester, makeWal(status));
+      expect(find.text('Delete'), findsOneWidget, reason: '$status has no other resolution');
+      expect(find.text('Try Again'), findsNothing, reason: '$status cannot be retried into success');
+    }
   });
 }

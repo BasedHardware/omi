@@ -6,6 +6,9 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/memory_review.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/ui/components/omi_icon_button.dart';
+import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 /// Where a review card is rendered. Carried into analytics verbatim.
@@ -26,14 +29,13 @@ enum MemoryReviewSource {
 /// desktop shows here, and a vote cast here is not persisted in the chat
 /// message or in preferences. A tap paints optimistically only until the
 /// request returns, then the row goes back to reading the live memory.
+///
+/// A row whose id the provider has not loaded is still actionable: the item
+/// carries the id and the recap text, and the provider's review and edit
+/// requests are id-addressed. Such a row stays pending until a verdict is
+/// written, and the card never renders untappable control chrome.
 class MemoryReviewCard extends StatefulWidget {
-  const MemoryReviewCard({
-    super.key,
-    required this.items,
-    required this.source,
-    this.impressionKey,
-    this.title = 'Things I learned today',
-  });
+  const MemoryReviewCard({super.key, required this.items, required this.source, this.impressionKey, this.title});
 
   final List<MemoryReviewItem> items;
   final MemoryReviewSource source;
@@ -42,27 +44,27 @@ class MemoryReviewCard extends StatefulWidget {
   /// and back rebuilds its State; without this the impression count would
   /// measure scrolling rather than reach.
   final String? impressionKey;
-  final String title;
+
+  /// Defaults to the localized "Things I learned today".
+  final String? title;
 
   @override
   State<MemoryReviewCard> createState() => _MemoryReviewCardState();
 }
 
-enum _RowState { loading, pending, confirmed, dropped, updated }
+enum _RowState { pending, confirmed, dropped, updated }
 
 class _MemoryReviewCardState extends State<MemoryReviewCard> {
-  static const _cardColor = Color(0xFF1A1A1F);
-
   final Map<String, _RowState> _optimistic = {};
   final Set<String> _inFlight = {};
   final Set<String> _failed = {};
   final Map<String, TextEditingController> _editors = {};
 
-  /// Ids this process has already asked the provider to go looking for. A card
-  /// scrolled in and out of the chat list rebuilds its State, and an id that is
-  /// genuinely absent from the account would otherwise re-trigger a full
-  /// memories fetch on every rebuild.
-  static final Set<String> _requestedIds = {};
+  /// The text a persisted correction submitted, per row. A knowledge-ledger
+  /// correction appends a new row under a *new* id, so the id this card
+  /// references stops resolving in the provider; without this the row would
+  /// fall back to the original learned text under an "Updated." status.
+  final Map<String, String> _settledEdits = {};
 
   /// Card identities already counted as shown in this process.
   static final Set<String> _seenImpressions = {};
@@ -98,20 +100,34 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
     }
   }
 
-  /// A memory referenced by the card may not be in the provider's page yet.
+  /// A memory referenced by the card may not be in the provider's list (cold
+  /// provider, truncated bulk list, or an id this client never paged in).
   /// There is no by-id read on this client, so ask the provider — the single
-  /// owner of memory state — to load its list once. Until it resolves the row
-  /// renders its content with the controls disabled.
+  /// owner of memory state — to load its list. Hydration is best-effort: the
+  /// controls act by id regardless, and only settled verdicts need the live
+  /// row.
   void _ensureMemoriesLoaded() {
+    _startHydrationIfNeeded();
+  }
+
+  void _startHydrationIfNeeded() {
     if (!mounted) return;
     final provider = _memoriesProvider(listen: false);
-    if (provider == null || provider.loading) return;
-    final unresolved = _rows
+    if (provider == null) return;
+    // A fetch the provider owns is already in flight (memories page, an
+    // earlier card); when it settles the rows re-read whatever it loaded.
+    // A never-loaded provider reports `loading == true` before any request
+    // exists, so that alone must not read as "a fetch is in flight".
+    if (provider.loading && provider.hasLoaded) return;
+    final eligible = _rows
         .where((item) => _memoryFor(provider, item.memoryId) == null)
         .map((item) => item.memoryId)
-        .where(_requestedIds.add)
+        // The provider owns the attempt budget (session-scoped, reset on user
+        // data clear), so a State rebuilt by scrolling does not re-count and
+        // a failing backend is not retried forever.
+        .where(provider.consumeHydrationAsk)
         .toList(growable: false);
-    if (unresolved.isEmpty) return;
+    if (eligible.isEmpty) return;
     provider.loadMemories();
   }
 
@@ -121,10 +137,21 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
 
   /// Live state first: an optimistic verdict only survives until its request
   /// returns, after which `userReview`/`edited` on the memory are authoritative.
-  _RowState _stateFor(Memory? memory, String memoryId) {
+  _RowState _stateFor(MemoriesProvider? provider, Memory? memory, String memoryId) {
     final optimistic = _optimistic[memoryId];
     if (optimistic != null) return optimistic;
-    if (memory == null) return _RowState.loading;
+    if (memory == null) {
+      // A correction that appended a replacement row leaves this id
+      // unresolvable; that is settled, not unknown — but only while nothing
+      // live answers for the id, so a later refresh or another device still
+      // wins. A verdict this card persisted while unresolved settles the row
+      // the same way; anything else is pending, because the controls act by
+      // id and no verdict has been read.
+      if (_settledEdits.containsKey(memoryId)) return _RowState.updated;
+      final settled = provider?.settledReviewFor(memoryId);
+      if (settled != null) return settled ? _RowState.confirmed : _RowState.dropped;
+      return _RowState.pending;
+    }
     if (memory.userReview == false) return _RowState.dropped;
     if (memory.userReview == true) return _RowState.confirmed;
     if (memory.edited) return _RowState.updated;
@@ -132,20 +159,20 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
   }
 
   String _statusText(_RowState state) {
+    final l10n = context.l10n;
     switch (state) {
       case _RowState.confirmed:
-        return "Confirmed. I'll act on this.";
+        return l10n.memoryReviewConfirmed;
       case _RowState.dropped:
-        return "Dropped. I'll avoid facts like this.";
+        return l10n.memoryReviewDropped;
       case _RowState.updated:
-        return 'Updated.';
-      case _RowState.loading:
+        return l10n.memoryReviewUpdated;
       case _RowState.pending:
         return '';
     }
   }
 
-  Future<void> _review(MemoryReviewItem item, Memory memory, bool accepted) async {
+  Future<void> _review(MemoryReviewItem item, Memory? memory, bool accepted) async {
     if (_inFlight.contains(item.memoryId)) return;
     final provider = _memoriesProvider(listen: false);
     if (provider == null) return;
@@ -155,14 +182,19 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
       _optimistic[item.memoryId] = accepted ? _RowState.confirmed : _RowState.dropped;
     });
 
-    final persisted = await provider.reviewMemory(memory, accepted);
+    // A row the provider never loaded still mutates: the requests are
+    // id-addressed, and the item carries the identity to address it with.
+    final persisted = await provider.reviewMemory(memory ?? _standInMemory(item), accepted);
     if (!mounted) return;
     setState(() {
       _inFlight.remove(item.memoryId);
       // Drop the optimistic paint either way: on success the provider has
-      // already applied the verdict to the memory this row reads.
+      // already applied the verdict to the memory this row reads, and when no
+      // live memory answers for the id the settled verdict below does.
       _optimistic.remove(item.memoryId);
-      if (!persisted) _failed.add(item.memoryId);
+      if (!persisted) {
+        _failed.add(item.memoryId);
+      }
     });
     PlatformManager.instance.analytics.memoryReviewAction(
       source: widget.source.analyticsValue,
@@ -172,7 +204,7 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
     );
   }
 
-  Future<void> _saveEdit(MemoryReviewItem item, Memory memory) async {
+  Future<void> _saveEdit(MemoryReviewItem item, Memory? memory) async {
     final controller = _editors[item.memoryId];
     final value = controller?.text.trim() ?? '';
     if (value.isEmpty || _inFlight.contains(item.memoryId)) return;
@@ -184,19 +216,22 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
       _optimistic[item.memoryId] = _RowState.updated;
     });
 
-    final persisted = await provider.editMemory(memory, value);
+    final persisted = await provider.editMemory(memory ?? _standInMemory(item), value);
     if (!mounted) return;
     setState(() {
       _inFlight.remove(item.memoryId);
+      // Drop the optimistic paint either way. What the row shows next is
+      // derived state: the live memory when the id still resolves, otherwise
+      // the correction recorded below.
+      _optimistic.remove(item.memoryId);
       if (persisted) {
         _editors.remove(item.memoryId)?.dispose();
         // A knowledge-ledger correction appends a new row under a new id, so
-        // the memory this reference points at can stop resolving. Keep the
-        // "Updated." state for this card rather than falling back to a
-        // disabled row.
-        _optimistic[item.memoryId] = _RowState.updated;
+        // the memory this reference points at can stop resolving. Remember what
+        // was submitted so the row shows the corrected text under "Updated."
+        // rather than the original learned text under a disabled control.
+        _settledEdits[item.memoryId] = value;
       } else {
-        _optimistic.remove(item.memoryId);
         _failed.add(item.memoryId);
       }
     });
@@ -213,38 +248,68 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
     return memory?.category.name ?? '';
   }
 
+  /// The mutation carrier for a row whose live memory has not been loaded:
+  /// identity (the id) plus the recap text. Only the id-addressed review and
+  /// edit requests consume it; no list-mutating provider path reads anything
+  /// else off it.
+  Memory _standInMemory(MemoryReviewItem item) {
+    return Memory(
+      id: item.memoryId,
+      uid: '',
+      content: item.content,
+      category: MemoryCategory.system,
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      visibility: MemoryVisibility.private,
+    );
+  }
+
+  /// What a row displays: the live memory when it resolves, otherwise the
+  /// last correction this card persisted, otherwise the recap text.
+  String _contentOf(MemoryReviewItem item, Memory? memory) {
+    final live = memory?.content.trim() ?? '';
+    return live.isNotEmpty ? live : (_settledEdits[item.memoryId] ?? item.content);
+  }
+
   @override
   Widget build(BuildContext context) {
     final rows = _rows;
     if (rows.isEmpty) return const SizedBox.shrink();
     final provider = _memoriesProvider(listen: true);
+    // A load that already settled in failure is the card's cue to spend its
+    // capped retry: the initState ask started this load, and only a rebuild
+    // observes how it settled.
+    if (provider != null && provider.hasLoaded && provider.loadFailed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _startHydrationIfNeeded());
+    }
 
     return Column(
       key: const Key('memory_review_card'),
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          widget.title,
-          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-        ),
+        Text(widget.title ?? context.l10n.memoryReviewTitle, style: OmiType.headline),
         const SizedBox(height: 10),
-        ...rows.map((item) => _buildRow(item, provider == null ? null : _memoryFor(provider, item.memoryId))),
+        ...rows.map((item) {
+          final memory = provider == null ? null : _memoryFor(provider, item.memoryId);
+          return _buildRow(item, provider, memory);
+        }),
       ],
     );
   }
 
-  Widget _buildRow(MemoryReviewItem item, Memory? memory) {
-    final state = _stateFor(memory, item.memoryId);
+  Widget _buildRow(MemoryReviewItem item, MemoriesProvider? provider, Memory? memory) {
+    final interactive = provider != null;
+    final state = _stateFor(provider, memory, item.memoryId);
     final editing = _editors.containsKey(item.memoryId);
     final dimmed = state == _RowState.dropped;
-    final content = memory?.content.trim().isNotEmpty == true ? memory!.content.trim() : item.content;
+    final content = _contentOf(item, memory);
 
     return Container(
       key: Key('memory_review_row_${item.memoryId}'),
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: _cardColor, borderRadius: BorderRadius.circular(14)),
+      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -253,27 +318,26 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
           // reflows under the user's finger.
           AnimatedOpacity(
             opacity: dimmed ? 0.45 : 1.0,
-            duration: const Duration(milliseconds: 150),
-            child: editing
-                ? _buildEditor(item, memory)
-                : Text(
-                    content,
-                    style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.35),
-                  ),
+            duration: OmiMotion.of(context).quick,
+            child: editing ? _buildEditor(item, memory) : Text(content, style: OmiType.subhead.copyWith(height: 1.35)),
           ),
           const SizedBox(height: 10),
-          SizedBox(
-            height: 28,
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
             child: Row(
               children: [
                 if (item.categoryLabel.isNotEmpty) ...[
                   Text(
                     item.categoryLabel,
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 11, letterSpacing: 0.3),
+                    style: OmiType.caption.copyWith(color: OmiColors.textTertiary, letterSpacing: 0.3),
                   ),
                   const SizedBox(width: 12),
                 ],
-                Expanded(child: _buildTrailing(item, memory, state, editing)),
+                Expanded(
+                  // Without a MemoriesProvider there is no mutation owner, so
+                  // no controls render at all — never dead chrome.
+                  child: interactive ? _buildTrailing(item, memory, state, editing) : const SizedBox.shrink(),
+                ),
               ],
             ),
           ),
@@ -281,9 +345,9 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
             Padding(
               padding: const EdgeInsets.only(top: 6),
               child: Text(
-                "Couldn't save, try again",
+                context.l10n.memoryReviewSaveFailed,
                 key: Key('memory_review_error_${item.memoryId}'),
-                style: TextStyle(color: Colors.orange.shade300, fontSize: 12),
+                style: OmiType.footnote.copyWith(color: OmiColors.warning),
               ),
             ),
         ],
@@ -298,14 +362,15 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
       controller: controller,
       maxLines: 1,
       autofocus: true,
-      style: const TextStyle(color: Colors.white, fontSize: 15),
-      decoration: InputDecoration(
+      style: OmiType.subhead,
+      cursorColor: OmiColors.accent,
+      decoration: const InputDecoration(
         isDense: true,
-        contentPadding: const EdgeInsets.symmetric(vertical: 8),
-        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade700)),
-        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
+        contentPadding: EdgeInsets.symmetric(vertical: 8),
+        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: OmiColors.border)),
+        focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: OmiColors.accent)),
       ),
-      onSubmitted: memory == null ? null : (_) => _saveEdit(item, memory),
+      onSubmitted: (_) => _saveEdit(item, memory),
     );
   }
 
@@ -316,80 +381,94 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
         children: [
           _control(
             key: Key('memory_review_cancel_${item.memoryId}'),
-            label: 'Cancel',
+            label: context.l10n.cancel,
             onTap: () => setState(() => _editors.remove(item.memoryId)?.dispose()),
           ),
           const SizedBox(width: 8),
           _control(
             key: Key('memory_review_save_${item.memoryId}'),
-            label: 'Save',
+            label: context.l10n.save,
             emphasized: true,
-            onTap: memory == null || _inFlight.contains(item.memoryId) ? null : () => _saveEdit(item, memory),
+            onTap: _inFlight.contains(item.memoryId) ? null : () => _saveEdit(item, memory),
           ),
         ],
       );
     }
 
-    if (state != _RowState.pending && state != _RowState.loading) {
+    if (state != _RowState.pending) {
       return Align(
         alignment: Alignment.centerLeft,
         child: Text(
           _statusText(state),
           key: Key('memory_review_status_${item.memoryId}'),
-          style: TextStyle(color: Colors.grey.shade400, fontSize: 12.5),
+          style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
         ),
       );
     }
 
-    final enabled = memory != null && !_inFlight.contains(item.memoryId);
+    // Actionable by identity, not by list membership: the requests are
+    // id-addressed and the item carries the id, so a row the provider never
+    // loaded stays tappable. `_inFlight` only disables its own write.
+    final enabled = !_inFlight.contains(item.memoryId);
     return Row(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         _control(
           key: Key('memory_review_accept_${item.memoryId}'),
-          label: '✓ Right',
+          label: context.l10n.memoryReviewRight,
           onTap: enabled ? () => _review(item, memory, true) : null,
         ),
         const SizedBox(width: 8),
         _control(
           key: Key('memory_review_reject_${item.memoryId}'),
-          label: '✗ Wrong',
+          label: context.l10n.memoryReviewWrong,
           onTap: enabled ? () => _review(item, memory, false) : null,
         ),
         const SizedBox(width: 8),
         _control(
           key: Key('memory_review_fix_${item.memoryId}'),
-          label: 'Fix',
+          label: context.l10n.memoryReviewFix,
           onTap: enabled
               ? () => setState(() {
-                    _failed.remove(item.memoryId);
-                    _editors[item.memoryId] = TextEditingController(text: memory.content.trim());
-                  })
+                  _failed.remove(item.memoryId);
+                  _editors[item.memoryId] = TextEditingController(text: _contentOf(item, memory));
+                })
               : null,
         ),
       ],
     );
   }
 
+  /// A text control with a 44pt target (the painted label stays compact).
   Widget _control({required Key key, required String label, VoidCallback? onTap, bool emphasized = false}) {
     final color = onTap == null
-        ? Colors.grey.shade700
+        ? OmiColors.textDisabled
         : emphasized
-            ? Colors.white
-            : Colors.grey.shade300;
+        ? OmiColors.textPrimary
+        : OmiColors.textSecondary;
     return Semantics(
       button: true,
       enabled: onTap != null,
       label: label,
+      excludeSemantics: true,
       child: InkWell(
         key: key,
         onTap: onTap,
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          child: Text(
-            label,
-            style: TextStyle(color: color, fontSize: 13, fontWeight: emphasized ? FontWeight.w600 : FontWeight.w500),
+        borderRadius: OmiRadius.pillAll,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: kOmiMinTapTarget, minWidth: kOmiMinTapTarget),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            child: Center(
+              widthFactor: 1,
+              child: Text(
+                label,
+                style: OmiType.footnote.copyWith(
+                  color: color,
+                  fontWeight: emphasized ? FontWeight.w600 : FontWeight.w500,
+                ),
+              ),
+            ),
           ),
         ),
       ),

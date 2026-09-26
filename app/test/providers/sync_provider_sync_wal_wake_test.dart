@@ -7,6 +7,7 @@ import 'package:omi/l10n/app_localizations_en.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_transfer_keep_alive.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -94,12 +95,9 @@ void main() {
     await provider.syncWal(wal);
 
     expect(syncs.syncWalCalls, 1);
-    expect(
-        wakes,
-        [
-          WakeTrigger.cooldownElapsed,
-        ],
-        reason: 'successful syncWal must wake coordinator so uploaded WALs reconcile');
+    expect(wakes, [
+      WakeTrigger.cooldownElapsed,
+    ], reason: 'successful syncWal must wake coordinator so uploaded WALs reconcile');
     provider.dispose();
   });
 
@@ -135,12 +133,9 @@ void main() {
     expect(provider.syncState.hasError, isFalse);
     expect(provider.syncState.isIdle, isTrue);
     expect(wal.status, WalStatus.miss);
-    expect(
-        wakes,
-        [
-          WakeTrigger.cooldownElapsed,
-        ],
-        reason: 'transient localUploadFailures must emit exactly one re-arm wake from _performSync');
+    expect(wakes, [
+      WakeTrigger.cooldownElapsed,
+    ], reason: 'transient localUploadFailures must emit exactly one re-arm wake from _performSync');
     provider.dispose();
   });
 
@@ -284,6 +279,82 @@ void main() {
 
     expect(SyncRateLimiter.instance.isLimited, isTrue);
     expect(syncs.syncWalCalls, 1, reason: 'device recovery must stay available during an upload cooldown');
+    provider.dispose();
+  });
+
+  test('syncWal holds transfer keep-alive until the upload finishes (#5221)', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+
+    var starts = 0;
+    var stops = 0;
+    final hang = Completer<SyncLocalFilesResponse?>();
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final syncs = _FakeSyncs([wal])..hangSyncWal = hang;
+    final keepAlive = SyncTransferKeepAlive(
+      isAndroid: () => true,
+      start: () async {
+        starts++;
+      },
+      stop: () async {
+        stops++;
+      },
+    );
+
+    final provider = SyncProvider(walService: _FakeWalService(syncs), startBackgroundSync: false, keepAlive: keepAlive);
+    await provider.initialized;
+
+    final upload = provider.syncWal(wal);
+    await Future<void>.delayed(Duration.zero);
+    expect(starts, 1);
+    expect(stops, 0);
+    expect(keepAlive.isHeld, isTrue);
+
+    hang.complete(SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []));
+    await upload;
+
+    expect(stops, 1);
+    expect(keepAlive.isHeld, isFalse);
+    provider.dispose();
+  });
+
+  test('cancelSync drops transfer keep-alive immediately (#5221)', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+
+    var stops = 0;
+    final hang = Completer<SyncLocalFilesResponse?>();
+    final wal = Wal(timerStart: 1000, codec: BleAudioCodec.pcm16, seconds: 30, status: WalStatus.miss);
+    final syncs = _FakeSyncs([wal])..hangSyncWal = hang;
+    final keepAlive = SyncTransferKeepAlive(
+      isAndroid: () => true,
+      start: () async {},
+      stop: () async {
+        stops++;
+      },
+    );
+
+    final provider = SyncProvider(
+      walService: _FakeWalService(syncs),
+      startBackgroundSync: false,
+      keepAlive: keepAlive,
+      wakeTransfer: (_) async {},
+    );
+    await provider.initialized;
+
+    final upload = provider.syncWal(wal);
+    await Future<void>.delayed(Duration.zero);
+    expect(keepAlive.isHeld, isTrue);
+
+    provider.cancelSync();
+    expect(keepAlive.isHeld, isFalse);
+    expect(stops, 1);
+
+    hang.complete(SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []));
+    await upload;
+    expect(stops, 1, reason: 'the in-flight finally must not stop a second time after cancel');
     provider.dispose();
   });
 }

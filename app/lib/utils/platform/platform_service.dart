@@ -1,3 +1,4 @@
+import 'package:omi/env/physical_qualification.dart';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -9,16 +10,12 @@ class PlatformService {
   static bool get isIOS => Platform.isIOS;
   static bool get isMobile => isAndroid || isIOS;
   static bool get isApple => isIOS;
-  static bool get isAnalyticsSupported => !(kIsWeb);
-  static bool get isIntercomSupported => true;
-  static bool get isCrashlyticsSupported => true;
+  static bool get isAnalyticsSupported => !PhysicalQualification.enabled && !(kIsWeb);
+  static bool get isIntercomSupported => !PhysicalQualification.enabled;
+  static bool get isCrashlyticsSupported => !PhysicalQualification.enabled;
 
   /// Execute a function only if the platform supports it
-  static T? executeIfSupported<T>(
-    bool isSupported,
-    T Function() function, {
-    T? fallback,
-  }) {
+  static T? executeIfSupported<T>(bool isSupported, T Function() function, {T? fallback}) {
     if (isSupported) {
       return function();
     }
@@ -26,11 +23,7 @@ class PlatformService {
   }
 
   /// Execute a future function only if the platform supports it
-  static Future<T?> executeIfSupportedAsync<T>(
-    bool isSupported,
-    Future<T> Function() function, {
-    T? fallback,
-  }) async {
+  static Future<T?> executeIfSupportedAsync<T>(bool isSupported, Future<T> Function() function, {T? fallback}) async {
     if (isSupported) {
       return await function();
     }

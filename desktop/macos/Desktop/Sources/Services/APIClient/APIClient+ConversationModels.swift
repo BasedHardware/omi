@@ -101,10 +101,20 @@ enum TranscriptPresenceState: Equatable {
 struct CaptureAudioFile: Codable, Equatable, Identifiable {
   let id: String
   let duration: TimeInterval
+  /// Unix time of the part's earliest chunk: where its media timeline starts
+  /// on the wall clock. Nil for a part the device never stamped.
+  let firstChunkTimestamp: TimeInterval?
 
   init(_ wire: OmiAPI.AudioFile) {
     id = wire.id
     duration = wire.duration
+    firstChunkTimestamp = wire.chunkTimestamps.min()
+  }
+
+  init(id: String, duration: TimeInterval, firstChunkTimestamp: TimeInterval?) {
+    self.id = id
+    self.duration = duration
+    self.firstChunkTimestamp = firstChunkTimestamp
   }
 }
 
@@ -134,6 +144,78 @@ struct CaptureConversationAudio: Codable, Equatable {
   }
 }
 
+/// Conversations from different capture surfaces (desktop, pendant, phone) that
+/// recorded one event. Server-authored only after the captures are shown to
+/// share speech; `id` is the event identity and survives a change of primary.
+struct ServerCaptureGroup: Codable, Equatable {
+  struct Member: Codable, Equatable {
+    let id: String
+    let source: ConversationSource
+    let startedAt: Date?
+    let finishedAt: Date?
+  }
+
+  let id: String
+  let primaryId: String
+  let revision: Int
+  let members: [Member]
+
+  init(id: String, primaryId: String, revision: Int, members: [Member]) {
+    self.id = id
+    self.primaryId = primaryId
+    self.revision = revision
+    self.members = members
+  }
+
+  init(_ wire: OmiAPI.CaptureGroup) {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let fallback = ISO8601DateFormatter()
+    let date = { (raw: String?) in raw.flatMap { formatter.date(from: $0) ?? fallback.date(from: $0) } }
+    id = wire.id
+    primaryId = wire.primaryId
+    revision = wire.revision ?? 1
+    members = (wire.members ?? []).map {
+      Member(
+        id: $0.id, source: $0.source.flatMap(ConversationSource.init(rawValue:)) ?? .unknown,
+        startedAt: date($0.startedAt), finishedAt: date($0.finishedAt))
+    }
+  }
+}
+
+/// One list row per capture group, built only from rows the client has loaded.
+///
+/// Every member stays in the loaded list (paging offsets count server rows), so
+/// a member whose group has no other loaded member is shown as itself: grouping
+/// can hide a duplicate, never a conversation.
+enum CaptureGroupPresentation {
+  static func collapse(_ conversations: [ServerConversation]) -> [ServerConversation] {
+    let representatives = representativeIds(conversations)
+    return conversations.filter { conversation in
+      guard let group = conversation.captureGroup, let representative = representatives[group.id] else {
+        return true
+      }
+      return representative == conversation.id
+    }
+  }
+
+  /// Group id → the member shown for it, for groups with at least two loaded members.
+  private static func representativeIds(_ conversations: [ServerConversation]) -> [String: String] {
+    var loaded: [String: [ServerConversation]] = [:]
+    for conversation in conversations {
+      if let groupId = conversation.captureGroup?.id {
+        loaded[groupId, default: []].append(conversation)
+      }
+    }
+    var result: [String: String] = [:]
+    for (groupId, members) in loaded where members.count > 1 {
+      let primary = members.first { $0.id == $0.captureGroup?.primaryId }
+      result[groupId] = (primary ?? members[0]).id
+    }
+    return result
+  }
+}
+
 struct ServerConversation: Codable, Identifiable, Equatable {
   static func == (lhs: ServerConversation, rhs: ServerConversation) -> Bool {
     lhs.id == rhs.id && lhs.createdAt == rhs.createdAt && lhs.updatedAt == rhs.updatedAt
@@ -145,6 +227,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
       && lhs.audioFiles == rhs.audioFiles
       && lhs.conversationAudio == rhs.conversationAudio
       && lhs.transcriptSegmentsIncluded == rhs.transcriptSegmentsIncluded
+      && lhs.localSummary == rhs.localSummary
+      && lhs.captureGroup == rhs.captureGroup
   }
 
   let id: String
@@ -155,6 +239,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   let finishedAt: Date?
 
   var structured: Structured
+  /// Attribution for the selected display-only on-device summary.
+  var localSummary: ConversationLocalSummary?
   var transcriptSegments: [TranscriptSegment]
   var transcriptSegmentsIncluded: Bool
   let geolocation: Geolocation?
@@ -180,6 +266,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   // Lazy processing: true while only the raw transcript is stored (no LLM summary yet);
   // cleared once enriched on first open (get_conversation_by_id).
   let deferred: Bool
+  /// Cross-surface event membership; nil for a conversation captured by one surface.
+  var captureGroup: ServerCaptureGroup?
 
   enum CodingKeys: String, CodingKey {
     case id
@@ -188,6 +276,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case startedAt = "started_at"
     case finishedAt = "finished_at"
     case structured
+    case localSummary = "local_summary"
     case transcriptSegments = "transcript_segments"
     case geolocation
     case photos
@@ -209,7 +298,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     // The domain model adapts wire string-dates into Date via the APIClient
     // decoder's ISO8601 strategy, preserves tolerant defaults, and tracks
     // whether transcript_segments was present in the response.
-    let wire = try OmiAPI.Conversation(from: decoder)
+    let wire = try ConversationProjectionRendering.decodeWire(from: decoder)
     let container = try decoder.container(keyedBy: CodingKeys.self)
 
     id = wire.id
@@ -217,7 +306,11 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
     startedAt = try Self.parseOptionalDate(wire.startedAt, decoder: decoder)
     finishedAt = try Self.parseOptionalDate(wire.finishedAt, decoder: decoder)
-    structured = Structured(wire.structured)
+    let rendered = ConversationProjectionRendering.resolve(
+      wire, transcriptIncluded: container.contains(.transcriptSegments))
+    structured = rendered.structured
+    localSummary =
+      try rendered.localSummary ?? container.decodeIfPresent(ConversationLocalSummary.self, forKey: .localSummary)
     // container.contains distinguishes `"transcript_segments": null` (present,
     // empty) from the key being absent (omitted). wire.transcriptSegments is
     // nil for both, so we must check the container directly.
@@ -238,6 +331,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     folderId = wire.folderId
     inputDeviceName = wire.clientDeviceId
     deferred = wire.deferred ?? false
+    captureGroup = wire.captureGroup.map(ServerCaptureGroup.init)
   }
 
   // Date helpers shared with Event/Structured adapters.
@@ -286,7 +380,9 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     starred: Bool,
     folderId: String?,
     inputDeviceName: String?,
-    deferred: Bool = false
+    deferred: Bool = false,
+    localSummary: ConversationLocalSummary? = nil,
+    captureGroup: ServerCaptureGroup? = nil
   ) {
     self.id = id
     self.createdAt = createdAt
@@ -294,6 +390,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.startedAt = startedAt
     self.finishedAt = finishedAt
     self.structured = structured
+    self.localSummary = localSummary
     self.transcriptSegments = transcriptSegments
     self.transcriptSegmentsIncluded = transcriptSegmentsIncluded
     self.geolocation = geolocation
@@ -311,6 +408,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.folderId = folderId
     self.inputDeviceName = inputDeviceName
     self.deferred = deferred
+    self.captureGroup = captureGroup
   }
 
   /// Returns the title from structured data, or a fallback.
@@ -405,33 +503,55 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     structured.overview
   }
 
-  /// Returns duration in seconds based on start/finish times or transcript
+  /// Returns duration in seconds: the transcript span when the record carries
+  /// usable transcript segments, the wall window when it does not (including
+  /// records whose segments all fail validation).
+  ///
+  /// `started_at` is the live-socket streaming-session origin, not the moment
+  /// this conversation's speech began, so `finished_at - started_at` over-counts
+  /// by however long the socket had already been open — an 8s dictation scrap
+  /// read as 42m45s here while mobile showed 8s (#4056). Mirrors the backend
+  /// helper `utils/conversations/duration.py` and the Flutter
+  /// `ServerConversation.getDurationInSeconds`; the shared vectors live in
+  /// `contracts/parity/conversation_duration.json`.
+  ///
+  /// A list response that omits `transcript_segments` leaves nothing to measure,
+  /// so those rows still report the wall window — the same answer mobile gives.
   var durationInSeconds: Int {
-    if let start = startedAt, let end = finishedAt {
-      return Int(end.timeIntervalSince(start))
+    if let span = transcriptSpanSeconds {
+      // A finite segment end can still exceed Int.max (a malformed persisted
+      // segment), where Int(Double) would trap and crash the client. Clamp in
+      // Double space first: Double(Int.max) rounds up to 2^63, so converting
+      // that boundary back to Int traps — compare before converting.
+      let bounded = max(span, 0)
+      return bounded >= Double(Int.max) ? Int.max : Int(bounded)
     }
-    // Fallback to transcript duration
-    guard let lastSegment = transcriptSegments.last else { return 0 }
-    return Int(lastSegment.end)
+    guard let start = startedAt, let end = finishedAt else { return 0 }
+    return max(0, Int(end.timeIntervalSince(start)))
   }
 
-  /// Formatted duration string (e.g., "5m 30s")
+  /// Largest valid segment `end`, or nil when no segment can answer. Segments
+  /// with blank text, non-finite bounds, or `end < start` are ignored.
+  private var transcriptSpanSeconds: Double? {
+    var span: Double?
+    for segment in transcriptSegments {
+      guard !segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+      guard segment.start.isFinite, segment.end.isFinite, segment.end >= segment.start else { continue }
+      let end = max(0, segment.end)
+      span = span.map { Swift.max($0, end) } ?? end
+    }
+    return span
+  }
+
+  /// Formatted duration string ("8s", "5m 30s", "1h 5m").
   var formattedDuration: String {
-    let duration = durationInSeconds
-    let minutes = duration / 60
-    let seconds = duration % 60
-    if minutes > 0 {
-      return "\(minutes)m \(seconds)s"
-    }
-    return "\(seconds)s"
+    OmiDateFormat.duration(Double(durationInSeconds))
   }
 
-  /// Full transcript as a single string
+  /// Full transcript as a single string, speakers unnamed ("You", "Speaker N"). Surfaces that know
+  /// the user's people use `SpeakerLabelFormatter(people:).transcript(_:)` instead.
   var transcript: String {
-    transcriptSegments.map { segment in
-      let speaker = segment.isUser ? "You" : "Speaker \(segment.speakerId)"
-      return "\(speaker): \(segment.text)"
-    }.joined(separator: "\n\n")
+    SpeakerLabelFormatter(names: [:]).transcript(transcriptSegments)
   }
 
   var transcriptPresenceState: TranscriptPresenceState {
@@ -452,13 +572,9 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   }
 }
 
-/// One headed block of the conversation's written summary.
-///
-/// The backend moved the substance of a summary out of `overview` and into these when the notes
-/// pipeline landed: `overview` became a single short compatibility paragraph, and the headed
-/// detail — what was discussed, the friction, the follow-ups — lives here. The generated wire DTO
-/// has carried them since; this domain model did not, so every desktop surface was rendering the
-/// compatibility paragraph and calling it the summary.
+/// One headed block of the conversation's written summary. The overview may be a compatibility
+/// projection of these sections or an explicit legacy/user-edited body; the selection policy owns
+/// which representation is displayed.
 struct SummarySection: Codable, Equatable, Identifiable {
   var id: String { heading }
   let heading: String
@@ -485,8 +601,7 @@ struct Structured: Codable, Equatable {
   let category: String
   let actionItems: [ActionItem]
   let events: [Event]
-  /// The headed blocks the backend writes the real summary into. Empty for captures processed
-  /// before the notes pipeline, which is why every reader must fall back to `overview`.
+  /// Headed summary blocks. Older captures may omit them; the selection policy then uses overview.
   let sections: [SummarySection]
 
   init(from decoder: Decoder) throws {

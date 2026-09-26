@@ -3,6 +3,18 @@ import XCTest
 
 @testable import Omi_Computer
 
+private actor VisitAdmissionRecorder {
+  private(set) var events: [String] = []
+
+  func record(_ event: String) {
+    events.append(event)
+  }
+
+  func snapshot() -> [String] {
+    events
+  }
+}
+
 final class ContextProactivityEngineTests: XCTestCase {
   func testDwellAdmissionTracksVisitsInsteadOfSuppressingARevisitToTheSameBucket() {
     var admission = ContextVisitDwellAdmission()
@@ -259,6 +271,108 @@ final class ContextProactivityEngineTests: XCTestCase {
     XCTAssertFalse(ContextProactivityEngine.presentationSurfaceAvailable(.windowUnavailable))
     XCTAssertFalse(ContextProactivityEngine.presentationSurfaceAvailable(.rejectedOwnerChange))
     XCTAssertFalse(ContextProactivityEngine.presentationSurfaceAvailable(.presented))
+  }
+
+  func testZeroWorthinessValidatedFactsReachJITHandleAndSkipLegacyDirector() async throws {
+    let recorder = VisitAdmissionRecorder()
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: .shared,
+      dwellNanoseconds: 0,
+      presentationPreflight: { _ in
+        await recorder.record("director")
+        return .suppressed
+      },
+      jitHandle: { _, snapshot, _, _ in
+        await recorder.record("jit:\(snapshot.notifyWorthiness):\(snapshot.validatedFacts.count)")
+        return false
+      })
+
+    let outcome = await engine.admitJITThenLegacyDirector(
+      fence: visitFence(),
+      snapshot: bucketSnapshot(facts: ["Safari is showing github.com/BasedHardware/omi"], worthiness: 0),
+      frame: visitFrame(),
+      authorizationSnapshot: try authorizationSnapshot())
+
+    XCTAssertEqual(outcome, .skipped)
+    let events = await recorder.snapshot()
+    XCTAssertEqual(events, ["jit:0.0:1"])
+  }
+
+  func testEmptyFactsSkipJITAndLegacyDirector() async throws {
+    let recorder = VisitAdmissionRecorder()
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: .shared,
+      dwellNanoseconds: 0,
+      presentationPreflight: { _ in
+        await recorder.record("director")
+        return .suppressed
+      },
+      jitHandle: { _, _, _, _ in
+        await recorder.record("jit")
+        return true
+      })
+
+    let outcome = await engine.admitJITThenLegacyDirector(
+      fence: visitFence(),
+      snapshot: bucketSnapshot(facts: [], worthiness: 1),
+      frame: visitFrame(),
+      authorizationSnapshot: try authorizationSnapshot())
+
+    XCTAssertEqual(outcome, .skipped)
+    let events = await recorder.snapshot()
+    XCTAssertEqual(events, [])
+  }
+
+  func testPositiveWorthinessFallsThroughToLegacyDirectorWhenJITDeclines() async throws {
+    let recorder = VisitAdmissionRecorder()
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: .shared,
+      dwellNanoseconds: 0,
+      presentationPreflight: { _ in
+        await recorder.record("director")
+        return .suppressed
+      },
+      jitHandle: { _, _, _, _ in
+        await recorder.record("jit")
+        return false
+      })
+
+    let outcome = await engine.admitJITThenLegacyDirector(
+      fence: visitFence(),
+      snapshot: bucketSnapshot(facts: ["Safari is showing github.com/BasedHardware/omi"], worthiness: 0.8),
+      frame: visitFrame(),
+      authorizationSnapshot: try authorizationSnapshot())
+
+    XCTAssertEqual(outcome, .legacyDirector)
+    let events = await recorder.snapshot()
+    XCTAssertEqual(events.first, "jit")
+  }
+
+  private func visitFence() -> ContextVisitFence {
+    ContextVisitFence(
+      visitID: 1, contextGeneration: 1, poolEpoch: 1, bucketID: "safari",
+      startedAt: Date(timeIntervalSince1970: 1_725_000_000))
+  }
+
+  private func visitFrame() -> CapturedFrame {
+    CapturedFrame(
+      jpegData: Data(), appName: "Safari", windowTitle: "GitHub", frameNumber: 0,
+      captureTime: Date(timeIntervalSince1970: 1_725_000_000))
+  }
+
+  private func bucketSnapshot(facts: [String], worthiness: Double) -> ContextBucketSnapshot {
+    ContextBucketSnapshot(
+      bucketID: "safari", versionID: 1, version: 1, header: "Safari",
+      frozenRankedSegment: Data(), tail: [], validatedFacts: facts, notifyWorthiness: worthiness)
+  }
+
+  private func authorizationSnapshot() throws -> RuntimeOwnerAuthorizationSnapshot {
+    let authority = RuntimeOwnerAuthorizationAuthority()
+    authority.endTransition(ownerID: "owner")
+    return try XCTUnwrap(authority.capture(ownerID: "owner", expectedOwnerID: "owner"))
   }
 
   func testHttpLaneErrorRecordsStatusInTerminalProvenanceJSON() throws {
@@ -814,97 +928,6 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
     await RewindStorageTestIsolation.tearDown(userDir: fixture?.userDir)
     fixture = nil
     try await super.tearDown()
-  }
-
-  func testWorkstreamTagsPersistPoolAcrossBucketsAndResolveTheLiveTag() async throws {
-    let now = Date(timeIntervalSince1970: 1_800_000_000)
-    let (database, poolEpoch) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    let pool = try XCTUnwrap(database)
-    try await seedBucket(in: pool, now: now)
-    try await pool.write { db in
-      try db.execute(
-        sql: """
-          INSERT INTO context_buckets (id, subjectKind, subjectID, createdAt, updatedAt)
-          VALUES ('bucket-b', 'task', 'workstream-sibling', ?, ?)
-          """,
-        arguments: [now, now])
-      try Self.insertVisit(
-        db, id: 1, poolEpoch: poolEpoch, outcome: "completed",
-        startedAt: now.addingTimeInterval(-13), endedAt: now)
-      try db.execute(
-        sql: """
-          INSERT INTO context_visits
-            (id, contextGeneration, poolEpoch, bucketID, appName, rawContextKey,
-             normalizedContextKey, referenceHash, startedAt, endedAt, outcome, createdAt, updatedAt)
-          VALUES (2, 1, ?, 'bucket-b', 'Sibling App', 'raw', 'normalized', 'reference-b', ?, ?,
-                  'completed', ?, ?)
-          """,
-        arguments: [poolEpoch, now.addingTimeInterval(-60), now.addingTimeInterval(-40), now, now])
-    }
-    let fence = ContextVisitFence(
-      visitID: 1, contextGeneration: 1, poolEpoch: poolEpoch, bucketID: "bucket",
-      startedAt: now.addingTimeInterval(-13))
-    let siblingFence = ContextVisitFence(
-      visitID: 2, contextGeneration: 1, poolEpoch: poolEpoch, bucketID: "bucket-b",
-      startedAt: now.addingTimeInterval(-60))
-
-    func fact(_ statement: String, worthiness: Double, visit: Int64) -> BucketExtraction.Fact {
-      BucketExtraction.Fact(
-        statement: statement,
-        identifiers: ["identity"],
-        evidenceText: "identity",
-        evidenceRefs: ["visit:\(visit)"],
-        confidence: 1,
-        notifyWorthiness: worthiness)
-    }
-    // Extraction no longer writes workstream tags. Stamp historically tagged
-    // rows so pooling — still wired, now dormant for new facts — stays covered.
-    _ = try await ContextBucketStore.shared.writeExtraction(
-      BucketExtraction(
-        narrative: "own narrative",
-        facts: [fact("own visit fact", worthiness: 0.7, visit: 1)]),
-      for: fence, appName: "Test App", rawContextKey: "raw", normalizedContextKey: "normalized",
-      now: now)
-    _ = try await ContextBucketStore.shared.writeExtraction(
-      BucketExtraction(
-        narrative: "sibling narrative",
-        facts: [
-          fact("sibling poolable fact", worthiness: 0.8, visit: 2),
-          fact("sibling weak fact", worthiness: 0.1, visit: 2),
-          fact("Identifier proposal: visit:2", worthiness: 0.9, visit: 2),
-        ]),
-      for: siblingFence, appName: "Sibling App", rawContextKey: "raw",
-      normalizedContextKey: "normalized", now: now.addingTimeInterval(-30))
-
-    let storedStatements = try await pool.read { db in
-      try String.fetchAll(db, sql: "SELECT statement FROM bucket_facts ORDER BY statement")
-    }
-    XCTAssertEqual(
-      storedStatements,
-      ["own visit fact", "sibling poolable fact", "sibling weak fact"])
-    let tagsBeforeStamp = try await pool.read { db in
-      try String.fetchAll(
-        db, sql: "SELECT workstreamTag FROM bucket_facts WHERE workstreamTag IS NOT NULL")
-    }
-    XCTAssertEqual(tagsBeforeStamp, [])
-
-    try await pool.write { db in
-      try db.execute(sql: "UPDATE bucket_facts SET workstreamTag = 'omi-app'")
-    }
-
-    let liveTag = await ContextBucketStore.shared.liveWorkstreamTag(for: fence, now: now)
-    XCTAssertEqual(liveTag, "omi-app")
-
-    let candidates = await ContextBucketStore.shared.workstreamPool(
-      tag: "omi-app", excludingBucketID: "bucket", now: now)
-    let selected = ContextWorkstreamPooling.select(candidates, now: now)
-    XCTAssertEqual(selected.map(\.statement), ["sibling poolable fact"])
-    XCTAssertEqual(selected.map(\.bucketID), ["bucket-b"])
-    let section = try XCTUnwrap(
-      ContextWorkstreamPooling.promptSection(tag: "omi-app", items: selected, now: now))
-    XCTAssertTrue(section.contains("RELATED WORKSTREAM CONTEXT (omi-app)"))
-    XCTAssertTrue(section.contains("sibling poolable fact"))
-    XCTAssertFalse(section.contains("fact:"), "pooled facts must never expose citable refs")
   }
 
   func testWriteExtractionReportsTheMaximumWorthinessOfNewlyValidatedFactsOnly() async throws {

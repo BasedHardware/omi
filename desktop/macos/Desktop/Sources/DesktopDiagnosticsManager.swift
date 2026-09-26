@@ -900,6 +900,7 @@ final class DesktopDiagnosticsManager {
     "attempt_id", "capture_start_outcome", "capture_start_status_class",
     "ms_to_first_audio_bucket", "ms_to_first_usable_frame_bucket",
     "first_chunks_energy_bucket", "turn_disposition",
+    "turn_kind",
     "input_route_class", "input_route_source", "route_changed_during_attempt",
     "recovery_triggered", "recovery_attempt_id", "recovery_outcome_of_next_turn",
     "judgeable", "telemetry_schema_version",
@@ -1433,8 +1434,10 @@ final class DesktopDiagnosticsManager {
     "task_workflow",
     "auth_storage",
     "state_authority",
+    "local_llm",
     "ptt_input_routing",
     "account_cutover",
+    "voice_typing",
     "other",
   ]
 
@@ -1460,6 +1463,12 @@ final class DesktopDiagnosticsManager {
     "stale_alive_latch",
     "out_of_memory",
     "process_exited",
+    // The local engine answered, and the answer was empty: schema-valid, no
+    // overview, no sections, no action items, no events. Distinct from every
+    // failure reason here because nothing failed — which is why it needs its
+    // own label rather than bucketing to `other`. The rate is the signal for
+    // whether constrained decoding is really constraining.
+    "contentless_projection",
     "http_401",
     "db_lock_contention",
     "mode_switch_timeout",
@@ -1468,6 +1477,7 @@ final class DesktopDiagnosticsManager {
     "db_backoff",
     "state_divergence",
     "status_inferred",
+    "engine_failed",
   ]
 
   private func bucketFallbackArea(_ area: String) -> String {

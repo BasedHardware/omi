@@ -61,6 +61,14 @@ final class ChatMessageRatingPersistenceTests: XCTestCase {
     XCTAssertTrue(queue.isEmpty)
   }
 
+  func testQueuedRatingCarriesReasonThroughSync() {
+    var queue = ChatMessageRatingQueue()
+    queue.enqueue(messageId: "m1", rating: -1, reason: .alreadyDone)
+    let synced = ChatMessage(id: "m1", text: "Done.", sender: .ai, isSynced: true)
+    let ready = queue.drain(using: [synced])
+    XCTAssertEqual(ready.first?.reason, .alreadyDone)
+  }
+
   func testQueuedVoiceRatingKeepsItsSurfaceThroughSync() {
     // A floating-bar thumb on an unsynced reply waits in the queue; when it
     // drains after sync it must still identify as a voice rating — silently
@@ -76,6 +84,33 @@ final class ChatMessageRatingPersistenceTests: XCTestCase {
     XCTAssertEqual(ready.count, 1)
     XCTAssertEqual(ready.first?.surface, "voice")
     XCTAssertEqual(ready.first?.rating, 1)
+  }
+
+  func testQueuedRatingKeepsItsReasonThroughSync() {
+    // Same failure mode as the surface test above, one field over: a
+    // thumbs-down given on a reply that has not synced yet waits in the queue,
+    // and the reason must survive the drain. Dropping it at flush would send a
+    // reasonless rating, and the daily report would file the user's answer
+    // under "not_captured" — indistinguishable from never having asked.
+    var queue = ChatMessageRatingQueue()
+    queue.enqueue(
+      messageId: "m1", rating: -1, surface: "text", reason: .incorrectOrHallucination)
+
+    let unsynced = ChatMessage(id: "m1", text: "Done.", sender: .ai, isSynced: false)
+    XCTAssertTrue(queue.drain(using: [unsynced]).isEmpty)
+
+    let synced = ChatMessage(id: "m1", text: "Done.", sender: .ai, isSynced: true)
+    let ready = queue.drain(using: [synced])
+    XCTAssertEqual(ready.count, 1)
+    XCTAssertEqual(ready.first?.reason, .incorrectOrHallucination)
+    XCTAssertEqual(ready.first?.rating, -1)
+  }
+
+  func testQueueDefaultsToNoReason() {
+    var queue = ChatMessageRatingQueue()
+    queue.enqueue(messageId: "m1", rating: -1)
+    let synced = ChatMessage(id: "m1", text: "Done.", sender: .ai, isSynced: true)
+    XCTAssertNil(queue.drain(using: [synced]).first?.reason)
   }
 
   func testQueueDefaultsToTextSurface() {
@@ -228,6 +263,52 @@ final class ChatMessageRatingPersistenceTests: XCTestCase {
     await fulfillment(of: [persisted], timeout: 0.2)
     XCTAssertEqual(provider.messages.first?.rating, -1)
     XCTAssertFalse(provider.pendingMessageRatings.contains(messageId))
+  }
+
+  /// A journal refresh can echo every row it reads unchanged. The citation
+  /// chips a row borrows from an earlier turn are a projection (they are never
+  /// persisted), so a no-op refresh must still run the citation inheritance
+  /// and publish what it bound — otherwise the chips never land on a row the
+  /// journal already mirrors exactly.
+  func testNoOpRefreshStillBindsCitationsInheritedFromEarlierTurn() throws {
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    let borrowed = ChatCitationReference(
+      ordinal: 5, kind: .conversation, sourceID: "c1", preview: "Trip planning")
+    let turnDate = Date(timeIntervalSince1970: 1_700_000_000)
+    let earlier = ChatMessage(
+      id: "assistant-earlier",
+      text: "Here are that day's trips [5].",
+      createdAt: turnDate,
+      sender: .ai,
+      isSynced: true,
+      contentBlocks: [
+        .text(id: "t1", text: "Here are that day's trips [5]."),
+        .citation(id: "citation-5-c1", reference: borrowed),
+      ],
+      turnOwner: .mainChat)
+    let followUp = ChatMessage(
+      id: "assistant-followup",
+      text: "Pick one from that day [5].",
+      createdAt: turnDate,
+      sender: .ai,
+      isSynced: false,
+      turnOwner: .mainChat,
+      journalStatus: .completed)
+    provider.messages = [earlier, followUp]
+
+    // A journal echo identical to the published row: no row replacement.
+    provider.projectJournalTurn(
+      try makeTurn(
+        surface: surface,
+        turnId: "assistant-followup",
+        content: "Pick one from that day [5]."))
+
+    let bound = provider.messages.last?.contentBlocks.compactMap { block -> ChatCitationReference? in
+      guard case .citation(_, let reference) = block else { return nil }
+      return reference
+    }
+    XCTAssertEqual(bound, [borrowed], "the no-op refresh still binds the borrowed citation")
   }
 
   /// Thread 2 regression: a thumbs tap on the live tail is keyed by the local

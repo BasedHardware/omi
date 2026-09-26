@@ -5,16 +5,16 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MACOS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 if [ "$#" -lt 1 ]; then
-    echo "Usage: scripts/omi-jit-qa <local-dev-gcp|deployed-dev> [run.sh options]" >&2
+    echo "Usage: scripts/omi-jit-qa <local-dev-gcp|deployed-dev|cloud-qa> [run.sh options]" >&2
     exit 2
 fi
 
 target="$1"
 shift
 case "$target" in
-    local-dev-gcp|deployed-dev) ;;
+    local-dev-gcp|deployed-dev|cloud-qa) ;;
     *)
-        echo "ERROR: target must be local-dev-gcp or deployed-dev" >&2
+        echo "ERROR: target must be local-dev-gcp, deployed-dev, or cloud-qa" >&2
         exit 2
         ;;
 esac

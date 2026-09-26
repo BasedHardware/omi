@@ -1,2 +1,0 @@
-bleak>=0.21.0
-adafruit-nrfutil>=0.5.0 # Or a specific version if known/needed 

@@ -36,4 +36,19 @@ describe('TaskRow', () => {
     expect(onSnooze).toHaveBeenCalledWith('task-1', 1);
     expect(onEnterSelectionMode).not.toHaveBeenCalled();
   });
+
+  it('plays the success-check appear when a task is completed', () => {
+    const { container } = render(
+      <TaskRow
+        task={task({ completed: true })}
+        onToggleComplete={vi.fn()}
+        onSnooze={vi.fn()}
+        onDelete={vi.fn()}
+      />,
+    );
+
+    const check = container.querySelector('.t-success-check');
+    expect(check).not.toBeNull();
+    expect(check).toHaveAttribute('data-state', 'in');
+  });
 });

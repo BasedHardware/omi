@@ -316,6 +316,88 @@ class TestDevWebhookAutoDisable:
         assert idempotency_keys[0]
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("status_code", [400, 401, 404, 410, 422])
+    async def test_post_dev_webhook_does_not_retry_deterministic_4xx(self, status_code):
+        # A deterministic rejection cannot converge: retrying a 400 can only
+        # reproduce it (2026-09-05: one dead endpoint returning 400 produced
+        # 3,282 attempts in 30 minutes walking the full schedule per event).
+        # The delivery still fails through the normal terminal path — DLQ
+        # enqueued with the final response — it just stops wasting the
+        # schedule, semaphore slots, and circuit-breaker trips on the way.
+        from utils.webhooks import _post_dev_webhook, db_executor, enqueue_dev_webhook_dlq
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=MagicMock(status_code=status_code))
+        mock_sem = AsyncMock()
+        mock_sem.__aenter__ = AsyncMock()
+        mock_sem.__aexit__ = AsyncMock()
+
+        sleep_calls = []
+
+        async def fake_sleep(delay):
+            sleep_calls.append(delay)
+
+        with (
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
+            patch("utils.webhooks.asyncio.sleep", side_effect=fake_sleep),
+            patch("utils.webhooks.run_blocking", new_callable=AsyncMock) as mock_run_blocking,
+        ):
+            response = await _post_dev_webhook(
+                "test_webhook",
+                "https://example.com/webhook",
+                json={"hello": "world"},
+                retry_delays=(0.1, 0.2),
+                idempotency_key="event-4xx",
+                dlq_uid="uid-1",
+            )
+
+        assert response.status_code == status_code
+        assert mock_client.post.await_count == 1, "deterministic 4xx must not be retried"
+        assert sleep_calls == []
+        # The exhausted-delivery terminal path is intact: DLQ gets the final response.
+        mock_run_blocking.assert_awaited_once()
+        assert mock_run_blocking.await_args.args[1] is enqueue_dev_webhook_dlq
+        assert mock_run_blocking.await_args.kwargs["status_code"] == status_code
+        idempotency_keys = [call.kwargs["headers"]["Idempotency-Key"] for call in mock_client.post.await_args_list]
+        assert idempotency_keys == ["event-4xx"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("transient_status", [408, 429])
+    async def test_post_dev_webhook_still_retries_transient_4xx(self, transient_status):
+        # 408/429 are the transient 4xx members: they keep the retry
+        # schedule. Pins the carve-out against accidental over-narrowing.
+        from utils.webhooks import _post_dev_webhook
+
+        responses = [MagicMock(status_code=transient_status), MagicMock(status_code=200)]
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=responses)
+        mock_sem = AsyncMock()
+        mock_sem.__aenter__ = AsyncMock()
+        mock_sem.__aexit__ = AsyncMock()
+
+        sleep_calls = []
+
+        async def fake_sleep(delay):
+            sleep_calls.append(delay)
+
+        with (
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
+            patch("utils.webhooks.asyncio.sleep", side_effect=fake_sleep),
+        ):
+            response = await _post_dev_webhook(
+                "test_webhook",
+                "https://example.com/webhook",
+                json={"hello": "world"},
+                retry_delays=(0.1, 0.2),
+            )
+
+        assert response.status_code == 200
+        assert mock_client.post.await_count == 2
+        assert sleep_calls == [0.1]
+
+    @pytest.mark.asyncio
     async def test_post_dev_webhook_enqueues_exhausted_delivery_without_blocking_event_loop(self):
         from utils.webhooks import _post_dev_webhook, db_executor, enqueue_dev_webhook_dlq
 

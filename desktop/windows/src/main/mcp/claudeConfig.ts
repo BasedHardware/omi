@@ -1,7 +1,7 @@
 // Claude Code MCP config-write. Claude Code reads a single JSON file at
 // ~/.claude.json (same path on Windows — %USERPROFILE%\.claude.json). We add one
-// `mcpServers["omi-memory"]` HTTP entry pointing at Omi's hosted MCP SSE endpoint,
-// authenticated by the hosted MCP key.
+// `mcpServers["omi-memory"]` HTTP entry pointing at Omi's canonical hosted MCP
+// endpoint (Streamable HTTP), authenticated by the hosted MCP key.
 //
 // SAFETY (never corrupt an existing config):
 //   • parse-modify-write — read the whole file, preserve every unknown key,
@@ -24,9 +24,11 @@ import {
   MCP_SERVER_KEY,
   buildHttpServerEntry,
   mcpServerUrl,
+  mcpLegacyServerUrl,
   type McpHttpServerEntry
 } from '../../shared/mcpExports'
 import { fileExists, commandOnPath } from './cliPresence'
+import { entryConnection, jsonEntryScan } from './entryScan'
 
 const MAX_BACKUPS = 5
 
@@ -159,6 +161,39 @@ export function writeClaudeMcpEntry(
   return { changed: true, configPath: path }
 }
 
+/** How the omi-memory entry relates to the canonical endpoint + key. */
+export type ClaudeMcpState = 'connected' | 'needsUpdate' | 'disconnected'
+
+/**
+ * State of the omi-memory entry in ~/.claude.json against `apiBase` and `key`.
+ * The exact canonical URL — declared by the entry's `url` field or the arg
+ * right after `mcp-remote` in `args` — reads 'connected'; the legacy /sse
+ * alias reads 'needsUpdate' — a rewrite target, not connected. Conflicting
+ * declared endpoints are ambiguous → disconnected. When `key` is given, ALSO
+ * require the entry's Bearer to equal it — so a rotated/stale key reads as
+ * disconnected. Omit `key` to test only that an entry exists at a known
+ * endpoint (used to decide whether to rewrite on rotate).
+ */
+export function claudeMcpStatus(
+  apiBase: string,
+  path = claudeConfigPath(),
+  key?: string
+): ClaudeMcpState {
+  try {
+    const servers = (readConfig(path).mcpServers ?? {}) as Record<string, unknown>
+    const entry = servers[MCP_SERVER_KEY]
+    if (entry === undefined) return 'disconnected'
+    return entryConnection(
+      jsonEntryScan(entry),
+      mcpServerUrl(apiBase),
+      mcpLegacyServerUrl(apiBase),
+      key
+    )
+  } catch {
+    return 'disconnected'
+  }
+}
+
 /**
  * True when ~/.claude.json has an omi-memory entry whose URL matches `apiBase`.
  * When `key` is given, ALSO require the entry's Bearer to equal it — so a
@@ -170,17 +205,7 @@ export function claudeMcpConnected(
   path = claudeConfigPath(),
   key?: string
 ): boolean {
-  try {
-    const servers = (readConfig(path).mcpServers ?? {}) as Record<string, unknown>
-    const entry = servers[MCP_SERVER_KEY] as
-      | { url?: unknown; headers?: { Authorization?: unknown } }
-      | undefined
-    if (entry?.url !== mcpServerUrl(apiBase)) return false
-    if (key === undefined) return true
-    return entry.headers?.Authorization === `Bearer ${key}`
-  } catch {
-    return false
-  }
+  return claudeMcpStatus(apiBase, path, key) === 'connected'
 }
 
 /** Remove the omi-memory entry (disconnect). Backs up first; no-op if absent. */

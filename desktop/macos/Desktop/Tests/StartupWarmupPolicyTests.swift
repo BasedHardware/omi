@@ -402,7 +402,7 @@ final class StartupWarmupPolicyTests: XCTestCase {
     let dashboardURL =
       testsURL
       .deletingLastPathComponent()
-      .appendingPathComponent("Sources/MainWindow/Pages/DashboardPage.swift")
+      .appendingPathComponent("Sources/MainWindow/Dashboard/DashboardViewModel.swift")
     let containerSource = try String(contentsOf: containerURL, encoding: .utf8)
     let dashboardSource = try String(contentsOf: dashboardURL, encoding: .utf8)
 

@@ -17,7 +17,7 @@ app = Flask(__name__)
 APP_ID = "01JPP8Y2PA2YWQPTMDAFHXWX8E"
 API_KEY = "get_this_api_key_in_omi_app"
 # USER_ID is now extracted dynamically from requests rather than being hardcoded
-API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/facts"
+API_URL = f"https://api.omi.me/v2/integrations/{APP_ID}/user/memories"
 
 # OpenAI API configuration
 # Set your OpenAI API key in environment variables for security
@@ -127,7 +127,7 @@ def extract_memories_with_gpt(text):
         return processed_memories
 
     except Exception as e:
-        print(f"  ❌ Error using GPT for memory extraction: {str(e)}")
+        print(f"  ❌ Error using GPT for memory extraction: {type(e).__name__}")
         print("  ⚠️ Falling back to rule-based extraction")
         # Fallback to the rule-based approach
         return extract_memories_consolidated(text)
@@ -297,7 +297,7 @@ def submit_memories():
             # Print the full memory with no truncation
             print(f"\n🔍 MEMORY #{memory_count} ({len(memory)} chars): {memory}")
 
-            # Create the facts data according to existing structure (API still uses "facts")
+            # Create the memories data according to v2 endpoint structure
             memory_data = {"text": memory, "text_source": "other", "text_source_spec": "learning_notes"}
 
             # Print full request data without truncation
@@ -307,7 +307,7 @@ def submit_memories():
             if memory_count > 1:
                 time.sleep(0.5)  # Half second delay between requests
 
-            # Send the request to OMI API with dynamic user_id (still using the facts endpoint)
+            # Send the request to OMI API with dynamic user_id
             response = requests.post(f"{API_URL}?uid={user_id}", headers=headers, data=json.dumps(memory_data))
 
             # Record result
@@ -327,11 +327,10 @@ def submit_memories():
                     else:
                         print("📥 Response: Empty response body (success)")
                 except:
-                    print(f"📥 Response: {response.text}")
+                    print("📥 Response: unparseable body")
             else:
                 error_count += 1
                 print(f"❌ ERROR: Status code {response.status_code}")
-                print(f"📥 Response: {response.text}")
                 result["error"] = response.text
 
             results.append(result)
@@ -360,7 +359,7 @@ def submit_memories():
         )
 
     except Exception as e:
-        print(f"❌ EXCEPTION: {str(e)}")
+        print(f"❌ EXCEPTION: {type(e).__name__}")
         import traceback
 
         print(traceback.format_exc())

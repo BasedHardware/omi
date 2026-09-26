@@ -65,9 +65,10 @@ struct OnboardingOpenerView: View {
     Task {
       await chatProvider.sendMainDraft(
         question,
-        onAccepted: {
+        onAcceptedWithAttemptID: { attemptID in
           AnalyticsManager.shared.chatMessageSent(
-            messageLength: question.count, hasSelectedAppContext: false, source: "onboarding_opener")
+            messageLength: question.count, hasSelectedAppContext: false, source: "onboarding_opener",
+            attemptID: attemptID)
         })
     }
   }

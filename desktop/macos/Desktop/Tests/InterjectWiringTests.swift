@@ -48,7 +48,7 @@ final class InterjectWiringTests: XCTestCase {
   }
 
   @MainActor
-  func testHubTranscriptPathWritesTheSameLedger() async throws {
+  func testHubTranscriptDoesNotParseTokenOntoTheLedger() async throws {
     try await withInterjectHarness {
       let deliveryID = try XCTUnwrap(UUID(uuidString: "cccccccc-cccc-cccc-cccc-cccccccccccc"))
       let cardID = try XCTUnwrap(UUID(uuidString: "dddddddd-dddd-dddd-dddd-dddddddddddd"))
@@ -67,12 +67,147 @@ final class InterjectWiringTests: XCTestCase {
       )
 
       await FloatingControlBarManager.shared.consumeInterjectHubTranscript(
+        "It's a focus suggestion for the meeting you have next.")
+      await FloatingControlBarManager.shared.consumeInterjectHubTranscript(
         "[[interject:false_positive]] Okay — I won't nudge you about that.")
 
       let record = await InterjectSuggestionFeedbackStore.shared.current(
         evaluationID: deliveryID, suggestionID: cardID)
-      XCTAssertEqual(record?.verb, .falsePositive)
+      XCTAssertNil(record, "hub transcript must not parse a token onto the ledger")
     }
+  }
+
+  @MainActor
+  func testHubFeedbackToolRiffDoesNotWriteTeachRate() async throws {
+    try await withInterjectHarness {
+      let deliveryID = try XCTUnwrap(UUID(uuidString: "11111111-1111-1111-1111-111111111111"))
+      let cardID = try XCTUnwrap(UUID(uuidString: "22222222-2222-2222-2222-222222222222"))
+      FloatingControlBarManager.shared.seedInterjectRecentCardForTests(
+        ownerID: ownerID,
+        title: "Focus",
+        createdAt: Date(),
+        context: FloatingBarNotificationContext(
+          sourceTitle: "Focus",
+          assistantId: "context-director",
+          provenanceRef: deliveryID.uuidString),
+        identity: nil,
+        notificationID: cardID
+      )
+
+      let admitted = InterjectHubFeedbackTool.admit()
+      await InterjectHubFeedbackTool.recordIfAdmitted(admitted, verbRaw: "riff")
+
+      let record = await InterjectSuggestionFeedbackStore.shared.current(
+        evaluationID: deliveryID, suggestionID: cardID)
+      XCTAssertNil(record, "riff must not write teach-rate")
+    }
+  }
+
+  @MainActor
+  func testHubFeedbackToolUsefulWritesThroughMutationOwner() async throws {
+    try await withInterjectHarness {
+      let deliveryID = try XCTUnwrap(UUID(uuidString: "33333333-3333-3333-3333-333333333333"))
+      let cardID = try XCTUnwrap(UUID(uuidString: "44444444-4444-4444-4444-444444444444"))
+      FloatingControlBarManager.shared.seedInterjectRecentCardForTests(
+        ownerID: ownerID,
+        title: "Focus",
+        createdAt: Date(),
+        context: FloatingBarNotificationContext(
+          sourceTitle: "Focus",
+          assistantId: "context-director",
+          provenanceRef: deliveryID.uuidString),
+        identity: nil,
+        notificationID: cardID
+      )
+
+      let admitted = InterjectHubFeedbackTool.admit()
+      await InterjectHubFeedbackTool.recordIfAdmitted(admitted, verbRaw: "useful")
+
+      let record = await InterjectSuggestionFeedbackStore.shared.current(
+        evaluationID: deliveryID, suggestionID: cardID)
+      XCTAssertEqual(record?.verb, .useful)
+    }
+  }
+
+  @MainActor
+  func testHubFeedbackToolFlagOffIsANoOp() async throws {
+    try await withInterjectHarness {
+      InterjectFeature.testOverride = false
+      let deliveryID = try XCTUnwrap(UUID(uuidString: "55555555-5555-5555-5555-555555555555"))
+      let cardID = try XCTUnwrap(UUID(uuidString: "66666666-6666-6666-6666-666666666666"))
+      FloatingControlBarManager.shared.seedInterjectRecentCardForTests(
+        ownerID: ownerID,
+        title: "Focus",
+        createdAt: Date(),
+        context: FloatingBarNotificationContext(
+          sourceTitle: "Focus",
+          assistantId: "context-director",
+          provenanceRef: deliveryID.uuidString),
+        identity: nil,
+        notificationID: cardID
+      )
+
+      let admitted = InterjectHubFeedbackTool.admit()
+      XCTAssertNil(admitted, "flag-off hub tool must admit nothing")
+      await InterjectHubFeedbackTool.recordIfAdmitted(admitted, verbRaw: "useful")
+
+      let record = await InterjectSuggestionFeedbackStore.shared.current(
+        evaluationID: deliveryID, suggestionID: cardID)
+      XCTAssertNil(record, "flag-off hub tool must not write")
+    }
+  }
+
+  /// Owner/turn fence: if the recent card changes between admission and the
+  /// async write, the stale admission must not classify the new card.
+  @MainActor
+  func testHubFeedbackToolReplacedCardDoesNotGetClassified() async throws {
+    try await withInterjectHarness {
+      let deliveryID = try XCTUnwrap(UUID(uuidString: "77777777-7777-7777-7777-777777777777"))
+      let cardID = try XCTUnwrap(UUID(uuidString: "88888888-8888-8888-8888-888888888888"))
+      FloatingControlBarManager.shared.seedInterjectRecentCardForTests(
+        ownerID: ownerID,
+        title: "Focus",
+        createdAt: Date(),
+        context: FloatingBarNotificationContext(
+          sourceTitle: "Focus",
+          assistantId: "context-director",
+          provenanceRef: deliveryID.uuidString),
+        identity: nil,
+        notificationID: cardID
+      )
+      let admitted = InterjectHubFeedbackTool.admit()
+      XCTAssertNotNil(admitted)
+
+      // The latest card changes before the async write runs.
+      let replacementDeliveryID = try XCTUnwrap(UUID(uuidString: "99999999-9999-9999-9999-999999999999"))
+      let replacementCardID = try XCTUnwrap(UUID(uuidString: "aaaaaaaa-8888-8888-8888-888888888888"))
+      FloatingControlBarManager.shared.seedInterjectRecentCardForTests(
+        ownerID: ownerID,
+        title: "Call Sam",
+        createdAt: Date(),
+        context: FloatingBarNotificationContext(
+          sourceTitle: "Task",
+          assistantId: "context-director",
+          provenanceRef: replacementDeliveryID.uuidString),
+        identity: nil,
+        notificationID: replacementCardID
+      )
+
+      await InterjectHubFeedbackTool.recordIfAdmitted(admitted, verbRaw: "useful")
+
+      let staleRecord = await InterjectSuggestionFeedbackStore.shared.current(
+        evaluationID: deliveryID, suggestionID: cardID)
+      XCTAssertNil(staleRecord, "stale admission must not write the original card")
+      let replacementRecord = await InterjectSuggestionFeedbackStore.shared.current(
+        evaluationID: replacementDeliveryID, suggestionID: replacementCardID)
+      XCTAssertNil(replacementRecord, "stale admission must not classify the replacement card")
+    }
+  }
+
+  func testHubFeedbackToolResultIsOpaque() {
+    XCTAssertEqual(InterjectHubFeedbackTool.opaqueResult, #"{"ok":true}"#)
+    XCTAssertFalse(InterjectHubFeedbackTool.opaqueResult.contains("riff"))
+    XCTAssertFalse(InterjectHubFeedbackTool.opaqueResult.contains("useful"))
   }
 
   @MainActor
@@ -267,6 +402,7 @@ final class InterjectWiringTests: XCTestCase {
       title: "Insight",
       message: "Body",
       assistantId: "context-director",
+      kind: .insight,
       context: FloatingBarNotificationContext(
         sourceTitle: "Insight",
         assistantId: "context-director",

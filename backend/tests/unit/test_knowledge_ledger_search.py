@@ -6,7 +6,14 @@ import pytest
 
 from database.memory_vector_metadata import build_ledger_memory_vector_filter
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items_by_ids
-from utils.memory.atom_keyword_index import keyword_search_ledger_memory_ids
+from utils.memory.atom_keyword_index import (
+    TYPESENSE_PROJECTION_READINESS_COLLECTION,
+    TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID,
+    TYPESENSE_PROJECTION_READINESS_SCHEMA_VERSION,
+    TypesenseProjectionNotReady,
+    keyword_search_ledger_memory_ids,
+    require_typesense_projection_ready,
+)
 from models.knowledge_ledger_search import (
     LEDGER_INDEX_VERSION,
     LedgerRowIndexState,
@@ -269,3 +276,38 @@ def test_keyword_search_returns_no_rows_when_ledger_schema_is_not_adopted(monkey
     monkeypatch.setattr("utils.memory.atom_keyword_index.user_allows_atom_keyword_index", lambda *args, **kwargs: True)
 
     assert keyword_search_ledger_memory_ids("u1", "release") == []
+
+
+def test_qa_ledger_search_requires_live_typesense_readiness_epoch(monkeypatch):
+    marker = {
+        "id": TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID,
+        "userId": "u1",
+        "readiness_schema_version": TYPESENSE_PROJECTION_READINESS_SCHEMA_VERSION,
+        "projection_epoch": "sha:run-1",
+        "source_sha": "a" * 40,
+        "projection_count": 1,
+    }
+    document = MagicMock()
+    document.retrieve.return_value = marker
+    documents = MagicMock()
+    documents.__getitem__.return_value = document
+    collection = MagicMock(documents=documents)
+    client = MagicMock()
+    client.collections.__getitem__.return_value = collection
+    monkeypatch.setenv("MEMORY_TYPESENSE_READINESS_REQUIRED", "true")
+    monkeypatch.setenv("MEMORY_TYPESENSE_READINESS_COLLECTION", TYPESENSE_PROJECTION_READINESS_COLLECTION)
+    monkeypatch.setenv("MEMORY_TYPESENSE_READINESS_SOURCE_SHA", "a" * 40)
+    monkeypatch.setattr("utils.memory.atom_keyword_index._typesense_client", lambda: client)
+
+    require_typesense_projection_ready("u1")
+
+    marker["projection_epoch"] = ""
+    with pytest.raises(TypesenseProjectionNotReady, match="no epoch"):
+        require_typesense_projection_ready("u1")
+
+
+def test_normal_ledger_search_keeps_readiness_gate_disabled(monkeypatch):
+    monkeypatch.delenv("MEMORY_TYPESENSE_READINESS_REQUIRED", raising=False)
+    monkeypatch.delenv("MEMORY_TYPESENSE_READINESS_COLLECTION", raising=False)
+    monkeypatch.delenv("MEMORY_TYPESENSE_READINESS_SOURCE_SHA", raising=False)
+    require_typesense_projection_ready("u1")

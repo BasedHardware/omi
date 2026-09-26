@@ -15,6 +15,7 @@ import time
 import unittest
 import urllib.error
 from pathlib import Path
+from typing import TextIO
 from unittest.mock import Mock, patch
 
 import preflight_runner
@@ -336,6 +337,100 @@ class SelectionTests(unittest.TestCase):
             "base...head",
         )
 
+    def test_local_diff_includes_staged_unstaged_untracked_and_both_rename_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ):
+            for key in list(os.environ):
+                if key.startswith("GIT_"):
+                    del os.environ[key]
+            root = Path(tmp)
+
+            def git(*args: str) -> None:
+                subprocess.run(
+                    [
+                        "git",
+                        "-c",
+                        "core.hooksPath=/dev/null",
+                        "-c",
+                        "commit.gpgsign=false",
+                        "-c",
+                        "user.name=Fixture",
+                        "-c",
+                        "user.email=fixture@example.com",
+                        *args,
+                    ],
+                    cwd=root,
+                    check=True,
+                    capture_output=True,
+                )
+
+            git("init", "-q")
+            for name in ("staged.txt", "unstaged.txt", "before.txt", "deleted.txt"):
+                (root / name).write_text("baseline\n", encoding="utf-8")
+            (root / ".gitignore").write_text("ignored.txt\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "-qm", "baseline")
+            (root / "staged.txt").write_text("staged\n", encoding="utf-8")
+            git("add", "staged.txt")
+            (root / "unstaged.txt").write_text("unstaged\n", encoding="utf-8")
+            (root / "new.txt").write_text("new\n", encoding="utf-8")
+            (root / "ignored.txt").write_text("ignored\n", encoding="utf-8")
+            (root / "deleted.txt").unlink()
+            git("mv", "before.txt", "after.txt")
+            self.assertEqual(
+                changed_files(root, "HEAD", "HEAD", include_worktree=True),
+                ["after.txt", "before.txt", "deleted.txt", "new.txt", "staged.txt", "unstaged.txt"],
+            )
+            self.assertEqual(changed_files(root, "HEAD", "HEAD"), [])
+            self.assertEqual(changed_files(root, "HEAD", "HEAD~0", include_worktree=True), [])
+
+    def test_metadata_selection_preserves_every_body_dependent_contract(self) -> None:
+        # #12935 reran code tests for a description edit; the body needs four checks.
+        names = {
+            check.name
+            for check in select_checks(
+                ["backend/routers/example.py"],
+                platform="linux",
+                metadata_only=True,
+            )
+        }
+        self.assertEqual(
+            names,
+            {
+                "product-file-line-count-ratchet",
+                "product-invariants",
+                "failure-class-protocol",
+                "failure-class-guard-artifact-ratchet",
+            },
+        )
+
+    def test_manifest_edit_summary_uses_the_executors_entry_diff_filter(self) -> None:
+        with patch("pr_preflight.manifest_changed_check_ids", return_value={"pr-preflight-contract-tests"}):
+            names = {
+                check.name
+                for check in select_checks(
+                    [".github/checks-manifest.yaml"],
+                    platform="linux",
+                    base="base",
+                )
+            }
+        self.assertIn("pr-preflight-contract-tests", names)
+        self.assertNotIn("backend-deploy-source-admission", names)
+
+    def test_metadata_cli_forwards_scope_to_executor(self) -> None:
+        from pr_preflight import main
+
+        with patch("sys.argv", ["pr-preflight", "--metadata-only", "--root", str(REPO_ROOT)]), patch(
+            "pr_preflight.run_git", return_value="base"
+        ), patch("pr_preflight.changed_files", return_value=[]), patch(
+            "pr_preflight.resolve_pr_metadata", return_value=None
+        ), patch(
+            "pr_preflight.current_branch", return_value="feature"
+        ), patch(
+            "pr_preflight.subprocess.run", return_value=Mock(returncode=0)
+        ) as run:
+            self.assertEqual(main(), 0)
+        self.assertIn("--metadata-only", run.call_args.args[0])
+
     def test_stale_event_payload_base_widens_diff_scope_past_the_live_base(self) -> None:
         """Behavioral regression for FC-stale-event-payload-diff-base (#10758).
 
@@ -414,6 +509,84 @@ class SelectionTests(unittest.TestCase):
                 self.assertEqual(sorted(live_diff), ["pr_file.txt"])
                 self.assertEqual(sorted(stale_diff), ["pr_file.txt", "unrelated_file.txt"])
 
+    def test_changed_files_agrees_on_branch_head_and_both_merge_parent_orders(self) -> None:
+        """make preflight / product-invariants consume this list.
+
+        Two-dot `main HEAD` includes files unique to main on the branch head
+        and drops them on GitHub's merge ref. Three-dot is parent-order
+        invariant.
+        """
+        git_isolation = ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"]
+
+        def run(*args: str, cwd: Path) -> None:
+            subprocess.run(
+                ["git", *git_isolation, *args],
+                cwd=cwd,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+
+        def rev_parse(cwd: Path, ref: str = "HEAD") -> str:
+            result = subprocess.run(
+                ["git", *git_isolation, "rev-parse", ref],
+                cwd=cwd,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+            return result.stdout.strip()
+
+        with patch.dict(os.environ):
+            for key in list(os.environ):
+                if key.startswith("GIT_"):
+                    del os.environ[key]
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                run("init", "-q", "-b", "main", cwd=root)
+                run("config", "user.email", "test@example.com", cwd=root)
+                run("config", "user.name", "Test", cwd=root)
+                (root / "root.txt").write_text("root", encoding="utf-8")
+                run("add", "root.txt", cwd=root)
+                run("commit", "-q", "-m", "root", cwd=root)
+
+                run("checkout", "-q", "-b", "pr", cwd=root)
+                (root / "pr_file.txt").write_text("pr", encoding="utf-8")
+                run("add", "pr_file.txt", cwd=root)
+                run("commit", "-q", "-m", "pr", cwd=root)
+                pr_sha = rev_parse(root)
+
+                run("checkout", "-q", "main", cwd=root)
+                (root / "unrelated_file.txt").write_text("main", encoding="utf-8")
+                run("add", "unrelated_file.txt", cwd=root)
+                run("commit", "-q", "-m", "main advanced", cwd=root)
+                main_sha = rev_parse(root)
+
+                run("checkout", "-q", "--detach", pr_sha, cwd=root)
+                run("merge", "--no-ff", "-q", "-m", "branch-first", main_sha, cwd=root)
+                branch_first = rev_parse(root)
+                run("checkout", "-q", "--detach", main_sha, cwd=root)
+                run("merge", "--no-ff", "-q", "-m", "base-first", pr_sha, cwd=root)
+                base_first = rev_parse(root)
+
+                expected = ["pr_file.txt"]
+                self.assertEqual(changed_files(root, "main", pr_sha), expected)
+                self.assertEqual(changed_files(root, "main", branch_first), expected)
+                self.assertEqual(changed_files(root, "main", base_first), expected)
+                # Two-dot against the live main tip is the parent-order defect:
+                # on the branch head it includes main's unique file.
+                two_dot_branch = subprocess.run(
+                    ["git", *git_isolation, "diff", "--name-only", main_sha, pr_sha],
+                    cwd=root,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                ).stdout.splitlines()
+                self.assertIn("unrelated_file.txt", two_dot_branch)
+
     def test_make_preflight_resolves_pr_metadata_before_running_checks(self) -> None:
         result = subprocess.run(
             ["make", "-n", "preflight"],
@@ -456,6 +629,7 @@ class SelectionTests(unittest.TestCase):
                 "failure-class-protocol",
                 "failure-class-guard-artifact-ratchet",
                 "desktop-changelog-data",
+                "mobile-changelog-data",
                 "deferred-work-markers",
                 "lifecycle-headers",
                 "version-prefixed-filenames",
@@ -653,20 +827,20 @@ class SelectionTests(unittest.TestCase):
         # the behavioral regression backing FC-stale-event-payload-diff-base.
         self.assertNotIn("github.event.pull_request.base.sha", metadata_job)
         self.assertIn('--base "origin/${{ github.base_ref }}"', metadata_job)
-        self.assertIn("astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84", metadata_job)
-        self.assertLess(metadata_job.index("Set up uv"), metadata_job.index("Run current PR metadata preflight"))
+        self.assertIn("scripts/pr-preflight --metadata-only", metadata_job)
+        self.assertNotIn("--metadata-only", hygiene_job)
         self.assertIn("github.event_name != 'pull_request'", changes_job)
         self.assertIn("github.event_name != 'pull_request'", hygiene_job)
-
-        # The manifest can select the Firestore admission proof for either PR
-        # preflight path. Java must be present before the selected check runs.
-        for job, gate in (
-            (metadata_job, "Run current PR metadata preflight"),
-            (hygiene_job, "Run shared PR contract preflight"),
-        ):
-            self.assertIn("actions/setup-java@v5", job)
-            self.assertIn("java-version: '21'", job)
-            self.assertLess(job.index("Set up Java for manifest-selected Firestore checks"), job.index(gate))
+        # #12935: metadata checks took 0.70s; code checks consumed the remaining
+        # 140s. Only Hygiene needs the code suites' dependency toolchains.
+        for tool in ("astral-sh/setup-uv@", "actions/setup-java@", "oven-sh/setup-bun@"):
+            self.assertNotIn(tool, metadata_job)
+            self.assertIn(tool, hygiene_job)
+        self.assertIn("java-version: '21'", hygiene_job)
+        self.assertLess(
+            hygiene_job.index("Set up Java for manifest-selected Firestore checks"),
+            hygiene_job.index("Run shared PR contract preflight"),
+        )
 
     def test_issue_sync_action_is_pinned(self) -> None:
         workflow = (REPO_ROOT / ".github/workflows/main.yml").read_text(encoding="utf-8")
@@ -721,6 +895,7 @@ class SingleFlightTests(unittest.TestCase):
         command: list[str],
         *,
         extra_env: dict[str, str] | None = None,
+        stdout_file: TextIO | None = None,
     ) -> subprocess.Popen[str]:
         env = {**os.environ, "OMI_PREFLIGHT_STATE_DIR": str(state_root)}
         if extra_env:
@@ -730,7 +905,7 @@ class SingleFlightTests(unittest.TestCase):
             cwd=REPO_ROOT,
             env=env,
             stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
+            stdout=stdout_file if stdout_file is not None else subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             encoding="utf-8",
@@ -738,10 +913,34 @@ class SingleFlightTests(unittest.TestCase):
 
     def wait_for_lock(self, state_root: Path) -> None:
         lock = state_root / "test" / "lock" / "owner.json"
-        deadline = time.monotonic() + 5
+        # The runner fingerprints before acquiring, and the fingerprint runs
+        # `git rev-parse HEAD` — seconds, not milliseconds, on a host with a
+        # contended object store. Keep the deadline generous so slow hosts are
+        # not misread as a missing lock.
+        deadline = time.monotonic() + 30
         while not lock.exists() and time.monotonic() < deadline:
             time.sleep(0.02)
         self.assertTrue(lock.exists(), "runner did not acquire its lock")
+
+    def wait_for_join(self, process: subprocess.Popen[str], log: Path) -> None:
+        # The second runner reaches the lock only after its own fingerprint
+        # (again `git rev-parse HEAD`). Releasing the hold before the join is
+        # observed lets the first child finish and release the lock first, so
+        # the second acquires freshly and re-runs the command — the double
+        # execution this test exists to catch, but as a host-timing artifact.
+        # Wait for the join line instead of sleeping a fixed interval.
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            try:
+                output = log.read_text(encoding="utf-8", errors="replace")
+            except FileNotFoundError:
+                output = ""
+            if "Joining identical preflight" in output:
+                return
+            if process.poll() is not None:
+                self.fail(f"second runner exited before joining; output:\n{output}")
+            time.sleep(0.05)
+        self.fail(f"second runner did not report joining within 30s; output:\n{output}")
 
     @unittest.skipUnless(os.name == "nt", "Windows-only")
     def test_process_liveness_check_does_not_send_windows_ctrl_c(self) -> None:
@@ -772,7 +971,7 @@ class SingleFlightTests(unittest.TestCase):
                 f"hold = Path({str(hold)!r})\n"
                 "p.write_text(p.read_text() + 'x' if p.exists() else 'x')\n"
                 "print('==> focused-tests', flush=True)\n"
-                "deadline = time.monotonic() + 10\n"
+                "deadline = time.monotonic() + 30\n"
                 "while hold.exists() and time.monotonic() < deadline:\n"
                 "    time.sleep(0.02)\n"
             )
@@ -782,20 +981,20 @@ class SingleFlightTests(unittest.TestCase):
             first.stdin.write("same\n")
             first.stdin.close()
             self.wait_for_lock(temp)
-            second = self.run_runner(temp, command)
-            assert second.stdin is not None
-            second.stdin.write("same\n")
-            second.stdin.close()
-            time.sleep(0.3)
-            hold.unlink(missing_ok=True)
-            first_output = first.stdout.read() if first.stdout else ""
-            second_output = second.stdout.read() if second.stdout else ""
-            self.assertEqual(first.wait(), 0, first_output)
-            self.assertEqual(second.wait(), 0, second_output)
+            second_log = temp / "second.log"
+            with second_log.open("w", encoding="utf-8") as second_output_file:
+                second = self.run_runner(temp, command, stdout_file=second_output_file)
+                assert second.stdin is not None
+                second.stdin.write("same\n")
+                second.stdin.close()
+                self.wait_for_join(second, second_log)
+                hold.unlink(missing_ok=True)
+                first_output = first.stdout.read() if first.stdout else ""
+                self.assertEqual(first.wait(), 0, first_output)
+                self.assertEqual(second.wait(), 0)
             if first.stdout:
                 first.stdout.close()
-            if second.stdout:
-                second.stdout.close()
+            second_output = second_log.read_text(encoding="utf-8")
             self.assertEqual(counter.read_text(), "x")
             self.assertIn("Joining identical preflight", second_output)
             status = json.loads((temp / "test" / "status.json").read_text())

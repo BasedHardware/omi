@@ -16,9 +16,16 @@ from models.conversation_enums import ConversationStatus
 from models.geolocation import Geolocation
 from utils.app_integrations import trigger_external_integrations
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.location import async_resolve_geolocation
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
-from utils.conversations.process_conversation import extract_memories, process_conversation
+from utils.conversations.process_conversation import (
+    DerivedEffectsDisposition,
+    TERMINAL_NO_DERIVED_EFFECTS_FIELD,
+    extract_memories,
+    process_conversation,
+)
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.jit_rollout import JITDecisionStage
@@ -53,7 +60,7 @@ async def finalize_persisted_conversation(
     finalization_job_id: str,
     dispatch_generation: int,
     lease_epoch: int,
-    force_process: bool = False,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     final_attempt: bool = False,
 ) -> ConversationFinalizationDisposition:
     """Finalize persisted data once the caller has acquired the job lease.
@@ -131,6 +138,7 @@ async def finalize_persisted_conversation(
         resolved_language = language or getattr(conversation, 'language', None) or 'en'
         persistence: dict[str, bool] = {'owned': True}
         derived_effects: list = []
+        derived_disposition: list[DerivedEffectsDisposition] = [DerivedEffectsDisposition.RUN]
         if conversation.status != ConversationStatus.completed:
             conversation = await run_blocking(
                 postprocess_executor,
@@ -138,11 +146,19 @@ async def finalize_persisted_conversation(
                 uid,
                 resolved_language,
                 conversation,
-                force_process=force_process,
+                trigger=trigger,
                 defer_derived_effects=True,
                 persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
                 derived_effects_observer=derived_effects.append,
+                derived_effects_disposition_observer=lambda d: derived_disposition.__setitem__(0, d),
             )
+        elif conversation_data.get(TERMINAL_NO_DERIVED_EFFECTS_FIELD):
+            # The coordinator already persisted a free-tier terminal minimum.
+            # That write is durable; this request-scoped default is not. A
+            # completed replay skips process_conversation, so restore the
+            # disposition from the unmodeled marker before the empty-bundle
+            # memory-extraction fallback can run.
+            derived_disposition[0] = DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
         # If lifecycle persistence lost to discard/terminal state, no canonical
         # memory or derived side effect may happen.  process_conversation
         # reports this through the observer and returns without side effects;
@@ -169,6 +185,8 @@ async def finalize_persisted_conversation(
             dispatch_generation,
             lease_epoch,
         )
+        if fanout['status'] in {'claimed', 'completed'}:
+            await run_blocking(db_executor, link_duplicate_captures, uid, conversation)
         if fanout['status'] == 'completed':
             return ConversationFinalizationDisposition.completed
         if fanout['status'] == 'fenced':
@@ -185,21 +203,34 @@ async def finalize_persisted_conversation(
         # usage/app, vector, action/goal, audio artifact/enqueue, webhook, and
         # memory extraction — only behind the winning claim.  A processing
         # conversation hands the bundle back from process_conversation; an
-        # already-completed replay re-extracts memories behind the proven claim.
-        if derived_effects:
+        # already-completed replay re-extracts memories behind the proven claim
+        # unless the durable terminal marker is set (free-tier minimum).
+        # TERMINAL_NO_DERIVED_EFFECTS suppresses only that intelligence bundle,
+        # the empty-bundle memory fallback, and third-party app webhooks. Capture
+        # receipt, keyframes, and arrival intent are not derived intelligence
+        # (§1.7) and must still run so a free-tier desktop meeting wakes Chat.
+        skip_derived_effects = derived_disposition[0] == DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
+        if skip_derived_effects:
+            logger.info(
+                'persisted conversation finalization terminal with no derived effects uid=%s conversation=%s',
+                uid,
+                conversation_id,
+            )
+        elif derived_effects:
             await run_blocking(postprocess_executor, derived_effects[0])
         elif not getattr(conversation, 'discarded', False):
             # A finalization job owns a durable lease. Keep canonical memory
             # extraction inside that lease so a temporary fail-closed gate
             # leaves the job retryable instead of dropping the source.
             await run_blocking(postprocess_executor, extract_memories, uid, conversation)
-        await trigger_external_integrations(
-            uid,
-            conversation,
-            idempotency_key=fanout['fanout_key'],
-            require_delivery=True,
-            last_delivery_attempt=final_attempt,
-        )
+        if not skip_derived_effects:
+            await trigger_external_integrations(
+                uid,
+                conversation,
+                idempotency_key=fanout['fanout_key'],
+                require_delivery=True,
+                last_delivery_attempt=final_attempt,
+            )
         # Publish the content-free capture-arrival intent before marking the
         # durable fanout projection completed. Desktop waits on that projection
         # before waking Chat; ordering the marker first closes the small window
@@ -241,7 +272,9 @@ async def finalize_persisted_conversation(
             try:
                 structured = getattr(conversation, 'structured', None)
                 summary = getattr(structured, 'title', '') or getattr(structured, 'overview', '') or ''
-                persist_capture_arrival_intent(uid, conversation_id=conversation_id, summary=summary)
+                await run_blocking(
+                    db_executor, persist_capture_arrival_intent, uid, conversation_id=conversation_id, summary=summary
+                )
             except Exception as error:
                 logger.warning(
                     'chat-first capture arrival intent failed during finalization uid=%s error=%s',
@@ -264,7 +297,16 @@ async def finalize_persisted_conversation(
         # metric or log; never include the exception message or user identity.
         reason = classify_finalization_failure(error)
         record_finalization_failure(reason)
-        logger.error(
+        # WARNING, not ERROR: this fires on every failed attempt, including
+        # attempts of conversations that later succeed on retry. The
+        # authoritative terminality decision lives in the pusher-side handler
+        # (utils/pusher_finalization.py), which escalates to ERROR exactly
+        # when record_failure reports the attempt budget exhausted. Severity
+        # is the fault-origin signal (FC-request-input-rejection-escapes-as-
+        # server-fault); logging every retryable attempt at ERROR paged
+        # operators for self-healing traffic (2026-09-06: 5-7/30min bursts
+        # against ~210-255 healthy processing/30min).
+        logger.warning(
             'persisted conversation finalization failed failure=processing_failed reason=%s',
             reason.value,
         )

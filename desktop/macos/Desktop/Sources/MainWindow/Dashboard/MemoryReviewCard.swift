@@ -38,6 +38,9 @@ struct MemoryReviewItem: Identifiable, Equatable, Sendable {
 enum MemoryReviewSource: String, Sendable {
   /// The "Things I learned today" section of the daily summary card in Chat.
   case dailySummaryChat = "daily_summary_chat"
+  /// The same section on the dedicated daily-recap page (the sheet the Chat pill and the
+  /// Activity day open). Matches mobile's telemetry source of the same name.
+  case dailySummaryDetail = "daily_summary_detail"
   /// A `memoryReviewCard` content block rendered in the Chat-first transcript.
   case chatBlock = "chat_block"
 }
@@ -223,13 +226,22 @@ protocol MemoryReviewMutating: Sendable {
 }
 
 /// The live read of `user_review` / `edited`, resolved per memory id.
+///
+/// Throwing rather than optional-returning: "the read failed" and "nobody has voted on any of
+/// these" are different facts, and a card that cannot tell them apart shows a settled verdict as
+/// unreviewed and offers the controls again.
 protocol MemoryReviewStateReading: Sendable {
-  func verdicts(for items: [MemoryReviewItem]) async -> [String: MemoryReviewVerdict]
+  func verdicts(for items: [MemoryReviewItem]) async throws -> [String: MemoryReviewVerdict]
 }
 
 struct LiveMemoryReviewMutator: MemoryReviewMutating {
   func review(memoryID: String, keep: Bool) async throws {
     try await APIClient.shared.reviewMemory(id: memoryID, keep: keep)
+    // Same reason the edit path below mirrors its content. The verdict lives on the memory and the
+    // backend remains its only writer; this records what that write already accepted into the local
+    // mirror the desktop reads memories from, so the verdict survives the card being rebuilt
+    // instead of reverting to "unreviewed" until an unrelated memory sync happens to run.
+    try? await Self.mirrorVerdict(memoryID: memoryID, keep: keep)
   }
 
   func edit(memoryID: String, content: String) async throws {
@@ -237,6 +249,14 @@ struct LiveMemoryReviewMutator: MemoryReviewMutating {
     // Keep the local mirror in step with the write, so the re-read below confirms the edit rather
     // than reporting the text the reader just replaced.
     try? await MemoryStorage.shared.updateContentByBackendId(memoryID, content: content)
+  }
+
+  private static func mirrorVerdict(memoryID: String, keep: Bool) async throws {
+    guard var record = try await MemoryStorage.shared.getMemoryByBackendId(memoryID) else { return }
+    record.reviewed = true
+    record.userReview = keep
+    guard let mirrored = record.toServerMemory() else { return }
+    try await MemoryStorage.shared.syncServerMemory(mirrored)
   }
 }
 
@@ -248,15 +268,10 @@ struct LiveMemoryReviewMutator: MemoryReviewMutating {
 /// correction is recognised the way the reader would recognise it: the stored content no longer
 /// matches what the summary captured.
 struct LiveMemoryReviewStateReader: MemoryReviewStateReading {
-  func verdicts(for items: [MemoryReviewItem]) async -> [String: MemoryReviewVerdict] {
+  func verdicts(for items: [MemoryReviewItem]) async throws -> [String: MemoryReviewVerdict] {
     let ids = items.map(\.memoryID).filter { !$0.isEmpty }
     guard !ids.isEmpty else { return [:] }
-    let stored: [ServerMemory]
-    do {
-      stored = try await MemoryStorage.shared.getMemories(backendIds: ids)
-    } catch {
-      return [:]
-    }
+    let stored = try await MemoryStorage.shared.getMemories(backendIds: ids)
     var byID: [String: ServerMemory] = [:]
     for memory in stored { byID[memory.id] = memory }
     var verdicts: [String: MemoryReviewVerdict] = [:]
@@ -320,17 +335,24 @@ final class MemoryReviewCardStore: ObservableObject {
   }
 
   /// Render-time read. Once per card mount: the section is chrome, not a poller.
+  ///
+  /// The attempt counts only once it has actually succeeded. Marking it up front meant a cancelled
+  /// or failed read left every row reading "unreviewed" for as long as the card stayed mounted,
+  /// silently and with no way back; leaving the flag down lets the next mount try again.
   func loadLiveStateIfNeeded() async {
     guard !didLoadLiveState, !items.isEmpty else { return }
-    didLoadLiveState = true
-    await refreshLiveState()
+    didLoadLiveState = await refreshLiveState()
   }
 
-  func refreshLiveState() async {
-    let verdicts = await stateReader.verdicts(for: items)
+  /// Returns whether the memories could be read at all. A failed read sends no events: reporting
+  /// every row as `.none` would be indistinguishable from a day nobody has voted on.
+  @discardableResult
+  func refreshLiveState() async -> Bool {
+    guard let verdicts = try? await stateReader.verdicts(for: items) else { return false }
     for item in items {
       send(.liveStateLoaded(verdicts[item.memoryID] ?? .none), to: item)
     }
+    return true
   }
 
   func send(_ event: MemoryReviewEvent, to item: MemoryReviewItem) {
@@ -375,5 +397,42 @@ final class MemoryReviewCardStore: ObservableObject {
         source: source, action: action, succeeded: succeeded, category: item.category)
     }
     send(succeeded ? .requestSucceeded(action) : .requestFailed(action), to: item)
+  }
+}
+
+// MARK: - Harness handle
+
+/// The store of the review section currently on screen, for non-production automation only.
+///
+/// The section owns its store as a `@StateObject` built at init, so a mounted card was reachable
+/// from nowhere: an E2E flow could seed a summary and see a card render, but could not read which
+/// rows it had bound or click one of them without the cursor. The bridge's `memory_review_*`
+/// actions read and drive through this handle, which makes them second *callers* of the same
+/// `MemoryReviewCardStore.send` the ✓ / ✗ buttons call — never a second row state machine.
+///
+/// `weak`, so the handle never keeps a dismissed card's rows alive, and gated: on a production
+/// bundle `register` does nothing and `mounted` is always nil, so nothing here is a shipped path.
+@MainActor
+enum MemoryReviewCardRegistry {
+  private(set) static weak var mounted: MemoryReviewCardStore?
+
+  static func register(_ store: MemoryReviewCardStore) {
+    register(store, enabled: AppBuild.isNonProduction)
+  }
+
+  /// The gate as a parameter, because `AppBuild.isNonProduction` reads `Bundle.main`, and under
+  /// `swift test` that is the test runner rather than an Omi bundle — so a test asserting the
+  /// production no-op would pass for the wrong reason and a test asserting the registration
+  /// could not run at all.
+  static func register(_ store: MemoryReviewCardStore, enabled: Bool) {
+    guard enabled else { return }
+    mounted = store
+  }
+
+  /// Identity-checked: two sections can overlap for a frame while the card rebuilds on new rows,
+  /// and the outgoing one must not clear the handle the incoming one just took.
+  static func unregister(_ store: MemoryReviewCardStore) {
+    guard mounted === store else { return }
+    mounted = nil
   }
 }

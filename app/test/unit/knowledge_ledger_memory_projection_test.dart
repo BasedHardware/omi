@@ -10,6 +10,7 @@ Map<String, dynamic> _ledgerJson({
   bool? userReview,
   String? supersededBy,
   String? invalidAt,
+  String? ledgerStatus,
 }) {
   return {
     'id': id,
@@ -26,23 +27,20 @@ Map<String, dynamic> _ledgerJson({
     'slot': slot,
     'subject_scope': 'primary_user',
     'intent_backed': true,
+    'ledger_status': ledgerStatus,
     'curation_weight': 7,
     'valid_at': '2026-08-23T12:00:00Z',
     'write_reason': 'direct_user_statement',
     'trigger_condition': kind == 'trigger'
         ? {
-            'keywords': ['Toronto']
+            'keywords': ['Toronto'],
           }
         : <String, dynamic>{},
     'user_review': userReview,
     'superseded_by': supersededBy,
     'invalid_at': invalidAt,
     'evidence': [
-      {
-        'evidence_id': 'ev-1',
-        'independence_group': 'user-assertion',
-        'source_type': 'chat_turn',
-      },
+      {'evidence_id': 'ev-1', 'independence_group': 'user-assertion', 'source_type': 'chat_turn'},
     ],
   };
 }
@@ -79,7 +77,7 @@ void main() {
     expect(playbook.ledgerBody, 'Run the release checklist in order.');
     expect(trigger.isLedgerTrigger, isTrue);
     expect(trigger.triggerCondition, {
-      'keywords': ['Toronto']
+      'keywords': ['Toronto'],
     });
   });
 
@@ -92,6 +90,15 @@ void main() {
       expect(memory.isCurrentKnowledgeLedgerRow, isFalse);
       expect(memory.isHistoricalKnowledgeLedgerRow, isTrue);
     }
+  });
+
+  test('inactive ledger status is historical and survives the adapter round trip', () {
+    final memory = Memory.fromJson(_ledgerJson(ledgerStatus: 'hidden'));
+
+    expect(memory.ledgerStatus, 'hidden');
+    expect(memory.isCurrentKnowledgeLedgerRow, isFalse);
+    expect(memory.isHistoricalKnowledgeLedgerRow, isTrue);
+    expect(Memory.fromJson(memory.toJson()).ledgerStatus, 'hidden');
   });
 
   test('legacy rows never gain ledger authority from compatibility tier fields', () {

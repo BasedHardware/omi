@@ -21,6 +21,7 @@ from utils.other import chat_file  # noqa: E402
 from utils.retrieval import graph  # noqa: E402
 from utils.retrieval.agentic import AGENT_STREAM_FAILURE_MESSAGE  # noqa: E402
 import utils.retrieval.tools.file_tools as file_tools  # noqa: E402
+from utils.llm.model_config import LUNA_MODEL
 
 
 class _Callback:
@@ -105,7 +106,7 @@ async def test_doc_file_chat_uses_completions_and_never_assistants(monkeypatch):
     assert answer == 'PDF summary'
     assert callback.chunks == ['PDF summary']
     assert callback.ended is True
-    assert request['model'] == 'gpt-5.6-luna'
+    assert request['model'] == LUNA_MODEL
     assert request['max_completion_tokens'] == 2048
     assert 'max_tokens' not in request
     assert request['messages'][0]['content'][1] == {'type': 'file', 'file': {'file_id': 'openai-file-1'}}
@@ -188,7 +189,7 @@ async def test_mid_stream_completion_error_is_journey_failure(monkeypatch):
     assert callback_data['answer'] == AGENT_STREAM_FAILURE_MESSAGE
 
 
-def test_upload_pdf_uses_user_data_and_rejects_non_pdf(tmp_path, monkeypatch):
+def test_upload_pdf_uses_user_data_and_rejects_unsupported(tmp_path, monkeypatch):
     created: dict[str, object] = {}
 
     def _create(*, file, purpose):
@@ -203,10 +204,46 @@ def test_upload_pdf_uses_user_data_and_rejects_non_pdf(tmp_path, monkeypatch):
     assert result['file_id'] == 'file-1'
     assert created['purpose'] == 'user_data'
 
-    txt_path = tmp_path / 'note.txt'
-    txt_path.write_text('hello')
-    with pytest.raises(chat_file.UnsupportedChatFileError, match='txt'):
-        chat_file.FileChatTool.upload(txt_path)
+    zip_path = tmp_path / 'archive.zip'
+    zip_path.write_bytes(b'PK\x03\x04')
+    with pytest.raises(chat_file.UnsupportedChatFileError, match='zip'):
+        chat_file.FileChatTool.upload(zip_path)
+
+
+@pytest.mark.parametrize(
+    'name,mime_type',
+    [
+        ('note.txt', 'text/plain'),
+        (
+            'brief.docx',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ),
+    ],
+)
+def test_completion_messages_send_file_part_for_documents(name, mime_type):
+    tool = object.__new__(chat_file.FileChatTool)
+    attached = FileChat(
+        id='file-1',
+        name=name,
+        mime_type=mime_type,
+        openai_file_id='openai-file-doc',
+        created_at=datetime.now(timezone.utc),
+    )
+    messages = tool._completion_messages_sync('summarize', [attached])
+    assert messages[0]['content'][1] == {'type': 'file', 'file': {'file_id': 'openai-file-doc'}}
+
+
+def test_completion_messages_reject_legacy_unsupported_type():
+    tool = object.__new__(chat_file.FileChatTool)
+    attached = FileChat(
+        id='file-1',
+        name='note.ogg',
+        mime_type='audio/ogg',
+        openai_file_id='openai-file-ogg',
+        created_at=datetime.now(timezone.utc),
+    )
+    with pytest.raises(chat_file.UnsupportedChatFileError, match='ogg'):
+        tool._completion_messages_sync('summarize', [attached])
 
 
 def test_search_files_tool_provider_failure_is_soft(monkeypatch):

@@ -509,6 +509,24 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
+          "fieldPath": "completed",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "action_items",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
           "fieldPath": "conversation_id",
           "order": "ASCENDING"
         },
@@ -1481,6 +1499,24 @@
       ]
     },
     {
+      "collectionGroup": "feedback_events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "value",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "created_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "hourly_usage",
       "queryScope": "COLLECTION",
       "fields": [
@@ -1619,6 +1655,10 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "signup_os",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "signup_platform_at",
           "order": "ASCENDING"
         },
@@ -1642,6 +1682,28 @@
         },
         {
           "fieldPath": "created_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "daily_summary_enabled",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "daily_summary_hour_local",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "time_zone",
           "order": "ASCENDING"
         },
         {

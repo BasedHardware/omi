@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { usePathname, useSearchParams } from '@tschk/moonshine-next/navigation';
-import { motion } from 'framer-motion';
 import dynamic from '@tschk/moonshine-next/dynamic';
 import { Sidebar, MobileMenuButton } from './Sidebar';
+import { PageSlide } from '@/components/ui/PageSlide';
 import { ChatProvider, useChat as useChatContext } from '@/components/chat/ChatContext';
 import { BottomNavigation } from './BottomNavigation';
 import {
@@ -15,7 +15,12 @@ import { HeaderRecordingIndicator } from '@/components/recording';
 import { getChatApps } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MemoriesPrefetcher } from '@/components/memories/MemoriesPrefetcher';
-import { ChatBubble } from '@/components/chat/ChatBubble';
+
+const ChatBubble = dynamic(
+  () =>
+    import('@/components/chat/ChatBubble').then((mod) => ({ default: mod.ChatBubble })),
+  { ssr: false },
+);
 
 // Dynamic imports for panels - not visible on initial load
 const ChatPanel = dynamic(
@@ -100,14 +105,14 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
         <ChatAppRouter />
         {/* Prefetch memories in background for instant page load */}
         <MemoriesPrefetcher />
-        <div className="h-screen w-screen bg-bg-primary flex overflow-hidden">
+        <div className="flex h-screen w-screen overflow-hidden bg-bg-primary">
           {/* Sidebar */}
           <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
           {/* Main content area - flex row to support push/slide panels */}
-          <div className="flex-1 flex min-w-0 h-full overflow-hidden">
+          <div className="flex h-full min-w-0 flex-1 overflow-hidden">
             {/* Main content */}
-            <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden pb-16 lg:pb-0">
+            <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden pb-16 lg:pb-0">
               {/* Header - conditionally shown */}
               {!hideHeader && (
                 <header
@@ -121,7 +126,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
                   <MobileMenuButton onClick={() => setSidebarOpen(true)} />
 
                   {title && (
-                    <h1 className="text-xl font-display font-semibold text-text-primary">
+                    <h1 className="font-display text-xl font-semibold text-text-primary">
                       {title}
                     </h1>
                   )}
@@ -130,7 +135,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
 
               {/* Mobile menu button when header is hidden */}
               {hideHeader && (
-                <div className="lg:hidden absolute top-4 left-4 z-30">
+                <div className="absolute left-4 top-4 z-30 lg:hidden">
                   <MobileMenuButton onClick={() => setSidebarOpen(true)} />
                 </div>
               )}
@@ -139,7 +144,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
                   OmiSpacing.md (12) and rounds it to OmiChrome.windowRadius
                   (26), so the shell reads as a card floating over the window
                   rather than a full-bleed page. */}
-              <div className="flex-1 min-h-0 p-0 sm:p-3">
+              <div className="min-h-0 flex-1 p-0 sm:p-3">
                 <div
                   className={cn(
                     'h-full w-full overflow-hidden',
@@ -147,8 +152,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
                     'sm:shadow-[0_14px_26px_rgba(0,0,0,0.22)]',
                   )}
                 >
-                  {/* Keyed on the pathname so each destination fades and lifts
-                      in.
+                  {/* Keyed on the pathname so each destination enters.
 
                       Deliberately not wrapped in `AnimatePresence
                       initial={false}`: every route registers its own copy of
@@ -156,19 +160,14 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
                       makes each navigation look like a first render, and
                       `initial={false}` exists precisely to suppress the enter
                       animation on a first render — so the transition never
-                      played on any page. A plain keyed `initial` animates on
-                      both a remount and an in-place key change. There is no
-                      exit animation for the same reason: the outgoing tree is
-                      already gone by the time the new one mounts. */}
-                  <motion.div
-                    key={pathname}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                    className="h-full"
-                  >
+                      played on any page. `PageSlide` flips `data-page` on
+                      mount so the incoming `.t-page` runs the enter slide.
+                      There is no exit animation for the same reason: the
+                      outgoing tree is already gone by the time the new one
+                      mounts. */}
+                  <PageSlide pageKey={pathname ?? ''} className="h-full">
                     {children}
-                  </motion.div>
+                  </PageSlide>
                 </div>
               </div>
             </main>

@@ -14,10 +14,11 @@ void main() {
     final firstResponse = Completer<ActionItemsResponse>();
     var requests = 0;
     final provider = ActionItemsProvider(
-      getActionItems: ({limit = 50, offset = 0, completed, conversationId, startDate, endDate}) {
-        requests++;
-        return firstResponse.future;
-      },
+      getActionItems:
+          ({limit = 50, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) {
+            requests++;
+            return firstResponse.future;
+          },
     );
 
     final tasksPageLoad = provider.ensureLoaded(showShimmer: true);
@@ -38,12 +39,13 @@ void main() {
     final firstResponse = Completer<ActionItemsResponse?>();
     var requests = 0;
     final provider = ActionItemsProvider(
-      getActionItems: ({limit = 50, offset = 0, completed, conversationId, startDate, endDate}) {
-        requests++;
-        return requests == 1
-            ? firstResponse.future
-            : Future.value(const ActionItemsResponse(actionItems: [], hasMore: false));
-      },
+      getActionItems:
+          ({limit = 50, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) {
+            requests++;
+            return requests == 1
+                ? firstResponse.future
+                : Future.value(const ActionItemsResponse(actionItems: [], hasMore: false));
+          },
     );
 
     final initialLoad = provider.ensureLoaded(showShimmer: true);

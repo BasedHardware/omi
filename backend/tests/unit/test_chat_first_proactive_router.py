@@ -230,6 +230,10 @@ def test_materialize_records_typed_rejections_and_dead_letter_metric(monkeypatch
         'CHAT_FIRST_PROACTIVE_TOTAL',
         SimpleNamespace(labels=lambda **kwargs: SimpleNamespace(inc=lambda: metric_events.append(kwargs))),
     )
+    monkeypatch.setattr(
+        'utils.chat_first_materialize_queue.CHAT_FIRST_PROACTIVE_TOTAL',
+        SimpleNamespace(labels=lambda **kwargs: SimpleNamespace(inc=lambda: metric_events.append(kwargs))),
+    )
 
     response = _client().post(
         '/v2/chat/materialize-prompts',
@@ -246,6 +250,11 @@ def test_materialize_records_typed_rejections_and_dead_letter_metric(monkeypatch
         'event': 'dead_letter',
         'source': 'capture_arrival',
         'reason': 'permanent_rejection:invalid_intent',
+    } in metric_events
+    assert {
+        'event': 'materialize_batch_rejected',
+        'source': 'materialization',
+        'reason': 'all_hard_reject',
     } in metric_events
     assert response.json()['rejection_outcomes'] == [{'intent_id': 'intent-poison', 'outcome': 'recorded'}]
 

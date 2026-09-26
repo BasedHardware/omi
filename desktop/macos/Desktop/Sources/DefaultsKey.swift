@@ -39,6 +39,7 @@ enum DefaultsKey: String {
   case automationOwnerABackup = "automation_swap_owner_a_backup"
   case chatBridgeMode = "chatBridgeMode"
   case preferredMicrophoneDeviceUID = "preferredMicrophoneDeviceUID"
+  /// Retired "Multiple Chat Sessions" toggle; only cleared from disk, never written now.
   case multiChatEnabled = "multiChatEnabled"
   /// Opt-in: proactive notifications are also spoken out loud on delivery.
   case speakNotificationsAloud = "speakNotificationsAloud"
@@ -50,6 +51,11 @@ enum DefaultsKey: String {
   /// budgets in `IntegrationNudgePolicy` are what keep that from being noise.
   case integrationNudgesEnabled = "integrationNudgesEnabled"
   case aiChatWorkingDirectory = "aiChatWorkingDirectory"
+  /// JSON array of skill names the user disabled in Settings. Absent or empty
+  /// means every skill is enabled. Read by the skill-catalog projection and
+  /// exported to the agent runtime as `OMI_DISABLED_SKILLS`, so the toggle
+  /// hides a skill from the catalog and from load_skill/search_skills alike.
+  case disabledSkillsJSON = "disabledSkillsJSON"
   /// Presence-only marker: the user turned Launch at Login OFF in Settings on
   /// a build that has this key. Absent means "no recorded decline" — the
   /// default-on migration (`OmiApp.migrateLaunchAtLoginDefault`) enables once;
@@ -73,7 +79,29 @@ enum DefaultsKey: String {
   case onboardingHowDidYouHearSource = "onboardingHowDidYouHearSource"
   case onboardingRole = "onboardingRole"
   case onboardingJustCompleted = "onboardingJustCompleted"
+  /// Legacy onboarding ACP session id (pre-kernel `surface_conversations`).
+  case onboardingACPSessionId = "onboardingACPSessionId"
+  /// Legacy locally persisted onboarding chat messages; kernel journal owns this now.
+  case onboardingChatMessages = "onboardingChatMessages"
+  /// Mid-onboarding restart marker kept by `OnboardingChatPersistence`.
+  case onboardingMidOnboarding = "onboardingMidOnboarding"
+  /// Retired-wizard exploration text; only cleared from disk, never written now.
+  case onboardingExplorationText = "onboardingExplorationText"
+  /// Retired-wizard exploration completion; only cleared from disk, never written now.
+  case onboardingExplorationCompleted = "onboardingExplorationCompleted"
+  /// `complete_onboarding` tool-call marker kept by `OnboardingChatPersistence`.
+  case onboardingToolCompleted = "onboardingToolCompleted"
+  /// Monthly-goal answered marker kept by `OnboardingChatPersistence`.
+  case onboardingGoalCompleted = "onboardingGoalCompleted"
   case hasCompletedFileIndexing = "hasCompletedFileIndexing"
+  /// Durable record that the user skipped Accessibility during onboarding. Absent
+  /// means "no recorded skip" (pre-marker onboarding or an Allow); macOS exposes no
+  /// denied/notDetermined distinction for AX, so this is the only signal that keeps
+  /// the sidebar from pulsing a deliberate skip as "denied".
+  case onboardingAccessibilitySkipped = "onboardingAccessibilitySkipped"
+  /// System-audio process taps have no preflight API. Preserve an onboarding
+  /// skip separately so later microphone sessions do not test the tap anyway.
+  case onboardingSystemAudioSkipped = "onboardingSystemAudioSkipped"
   case screenAnalysisEnabled = "screenAnalysisEnabled"
   case ratingPromptQuestionCount = "ratingPromptQuestionCount"
   case ratingPromptSubmittedRating = "ratingPromptSubmittedRating"
@@ -101,6 +129,16 @@ enum DefaultsKey: String {
   /// One-shot marker: the PTT-only microphone choice has been folded into the shared
   /// `preferredMicrophoneDeviceUID`, so it is never carried over twice.
   case shortcutPTTMicrophoneMergedIntoPreferred = "shortcut_pttMicrophoneMergedIntoPreferred"
+  /// Silent Type: a dictation still types into the focused app, but the turn is
+  /// never written to the chat transcript. Absent means off.
+  case shortcutSilentTypeEnabled = "shortcut_silentTypeEnabled"
+  /// Ambient capture mutes its microphone contribution while a dictation app (Wispr Flow,
+  /// superwhisper, macOS Dictation) holds the mic. Absent means on.
+  case transcriptionIgnoreDictationApps = "transcription_ignoreDictationApps"
+  /// Current local day's per-bundle call-audio aggregates. The meeting detector
+  /// flushes the previous day as `Desktop Call App Audio Summary` on the first
+  /// tick of a new day and when it starts after a relaunch.
+  case callAppAudioDailyLedger = "callAppAudioDailyLedger"
   case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
   case floatingBarCachedPlan = "floatingBar_cachedPlan"
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
@@ -111,6 +149,8 @@ enum DefaultsKey: String {
   case byokEnrolledFingerprints = "byok_enrolled_fingerprints"
   /// UID that last owned persisted BYOK keys on this Mac.
   case byokOwnerUid = "byok_owner_uid"
+  /// Durable, owner-scoped explanation shown after unsafe legacy/foreign BYOK keys are cleared.
+  case byokOwnerResetNotice = "byok_owner_reset_notice"
   case rewindDisableContentCache = "rewindDisableContentCache"
   // Task-order migration keys are typed so TasksPage and its tests share the
   // migration contract instead of repeating raw UserDefaults literals.
@@ -127,6 +167,13 @@ enum DefaultsKey: String {
   /// `PUT /v1/users/preferences/app`. Same name mobile uses in SharedPreferences.
   case preferredSummarizationAppId = "preferredSummarizationAppId"
   case disableSystemAudioCapture = "disableSystemAudioCapture"
+  /// Local embedding runtime: skip Apple NLCE / hybrid and keep Gemini screen search.
+  case disableLocalEmbeddings = "disableLocalEmbeddings"
+  /// Local embedding runtime: opt in to on-device hybrid search. Defaults off on
+  /// production-family bundles and on in non-production; `OMI_LOCAL_EMBEDDINGS` overrides.
+  case localEmbeddingsEnabled = "localEmbeddingsEnabled"
+  /// Local embedding runtime: pin an engine id. Unknown ids fail closed to keyword-only.
+  case forceLocalEmbeddingEngine = "forceLocalEmbeddingEngine"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is
@@ -140,6 +187,12 @@ struct ScopedDefaultsKey {
 
   static func trialNudge(_ kind: String, ownerHash: String) -> Self {
     Self(rawValue: "trial_nudge.v1.\(kind).\(ownerHash)")
+  }
+
+  /// Dismissed chat-quota warnings. Entries carry their own billing cycle, so
+  /// the set expires on its own instead of needing a sweep.
+  static func chatQuotaBannerDismissals(ownerHash: String) -> Self {
+    Self(rawValue: "chat_quota_banner_dismissals.v1.\(ownerHash)")
   }
 
   static func tasksFullSyncCompleted(ownerID: String) -> Self {
@@ -199,6 +252,13 @@ struct ScopedDefaultsKey {
     Self(rawValue: "dailySummary.postcardLandedID.v1.\(ownerID)")
   }
 
+  /// Owner-scoped id of the daily summary that was on screen when the owner last cleared Chat.
+  /// The card is chrome rather than a turn (INV-CHAT-1), so clearing the transcript cannot
+  /// delete it — this is what makes Clear take it away anyway, until a newer summary arrives.
+  static func dailySummaryClearedID(ownerID: String) -> Self {
+    Self(rawValue: "dailySummary.clearedID.v1.\(ownerID)")
+  }
+
   static func importConnectorAvailabilityText(connectorID: String) -> Self {
     Self(rawValue: "appsImportConnectorAvailabilityText.\(connectorID)")
   }
@@ -225,12 +285,10 @@ struct ScopedDefaultsKey {
     Self(rawValue: "proactiveTaskInterruptionLedger.v1.\(ownerID)")
   }
 
-  /// Owner-scoped record of which Home knows-list rows have already been shown,
-  /// opened, or dismissed. Without it a thin candidate source repeats the same
-  /// four rows on every visit; owner-scoped for the same bleed class as above.
-  static func homeKnowsImpressions(ownerID: String) -> Self {
-    Self(rawValue: "homeKnows.impressions.v1.\(ownerID)")
+  static func suggestionTaskNudgeLedger(ownerID: String) -> Self {
+    Self(rawValue: "suggestionTaskNudgeLedger.v1.\(ownerID)")
   }
+
 }
 
 /// Typed accessors that take a `DefaultsKey` instead of a `String`.
@@ -241,6 +299,7 @@ struct ScopedDefaultsKey {
 /// compiler-checked.
 extension UserDefaults {
   func string(forKey key: DefaultsKey) -> String? { string(forKey: key.rawValue) }
+  func data(forKey key: DefaultsKey) -> Data? { data(forKey: key.rawValue) }
   func bool(forKey key: DefaultsKey) -> Bool { bool(forKey: key.rawValue) }
   func integer(forKey key: DefaultsKey) -> Int { integer(forKey: key.rawValue) }
   func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }

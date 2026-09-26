@@ -65,6 +65,36 @@ enum ContextDirectorEligibility {
   static func permitsEvaluation(of snapshot: ContextBucketSnapshot) -> Bool {
     snapshot.notifyWorthiness > 0 && !snapshot.validatedFacts.isEmpty
   }
+
+  /// Planned JIT matching is grounded on validated facts, not director worthiness.
+  /// A standing Safari trigger still has to see a Safari fact whose
+  /// `notifyWorthiness` is 0. Ambient nano keeps the worthiness gate via
+  /// `JITAmbientRuntimeContext.locallyRelevant`.
+  static func permitsJITEvaluation(of snapshot: ContextBucketSnapshot) -> Bool {
+    !snapshot.validatedFacts.isEmpty
+  }
+}
+
+enum ContextProactivityVisitRoute: Equatable, Sendable {
+  case skip
+  case jitOnly
+  case jitThenLegacyDirector
+}
+
+enum ContextProactivityAdmissionOutcome: Equatable, Sendable {
+  case skipped
+  case jitConsumed
+  case legacyDirector
+}
+
+enum ContextProactivityVisitAdmission {
+  static func route(for snapshot: ContextBucketSnapshot) -> ContextProactivityVisitRoute {
+    guard ContextDirectorEligibility.permitsJITEvaluation(of: snapshot) else { return .skip }
+    if ContextDirectorEligibility.permitsEvaluation(of: snapshot) {
+      return .jitThenLegacyDirector
+    }
+    return .jitOnly
+  }
 }
 
 enum ContextDirectorGrounding {
@@ -139,10 +169,16 @@ enum ContextDirectorTaskSelection {
 
 actor ContextProactivityEngine {
   static let shared = ContextProactivityEngine(client: .shared, store: .shared)
+  typealias JITHandle =
+    @Sendable (
+      ContextVisitFence, ContextBucketSnapshot, CapturedFrame, RuntimeOwnerAuthorizationSnapshot
+    ) async -> Bool
+
   private let client: ProactiveLaneClient
   private let store: ContextBucketStore
   private let presentationPreflight: @Sendable (String) async -> OwnerBoundNotificationPresentationResult
   private let retrieve: @Sendable (String, RuntimeOwnerAuthorizationSnapshot) async -> [ContextRetrievedItem]
+  private let jitHandle: JITHandle
   private var dwellAdmission = ContextVisitDwellAdmission()
   private let dwellNanoseconds: UInt64
 
@@ -158,6 +194,11 @@ actor ContextProactivityEngine {
       query, authorizationSnapshot in
       await ContextDirectorRetrievalExecutor.retrieve(
         query: query, authorizationSnapshot: authorizationSnapshot)
+    },
+    jitHandle: @escaping JITHandle = { fence, snapshot, frame, authorizationSnapshot in
+      await JITProactivityCoordinator.shared.handle(
+        fence: fence, snapshot: snapshot, frame: frame,
+        authorizationSnapshot: authorizationSnapshot)
     }
   ) {
     self.client = client
@@ -165,6 +206,7 @@ actor ContextProactivityEngine {
     self.dwellNanoseconds = dwellNanoseconds
     self.presentationPreflight = presentationPreflight
     self.retrieve = retrieve
+    self.jitHandle = jitHandle
   }
 
   func contextEntered(_ fence: ContextVisitFence) async {
@@ -195,9 +237,10 @@ actor ContextProactivityEngine {
       freshness.fresh,
       let snapshot = await store.snapshot(for: fence)
     else { return }
-    // Facts are the only source of notification worthiness. A bucket containing
-    // ambient narrative alone cannot purchase a frontier-model call.
-    guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else { return }
+    // Validated facts are enough to run planned JIT matching. A bucket of
+    // ambient narrative alone still cannot purchase a frontier-model call;
+    // `admitJITThenLegacyDirector` keeps that worthiness gate on the director.
+    guard ContextProactivityVisitAdmission.route(for: snapshot) != .skip else { return }
     // After a departure the latest tracked frame can be the NEXT context's
     // screen. Sample the frame first, then re-read freshness and bound the
     // sample against it: the transition persists `endedAt` before the next
@@ -219,16 +262,10 @@ actor ContextProactivityEngine {
         startedAt: fence.startedAt,
         endedAt: frameFreshness.endedAt)
     else { return }
-    if await JITProactivityCoordinator.shared.handle(
-      fence: fence, snapshot: snapshot, frame: frameSample.frame,
-      authorizationSnapshot: authorizationSnapshot)
-    {
-      return
-    }
-    await evaluateAndDeliver(
+    await admitJITThenLegacyDirector(
       fence: fence,
       snapshot: snapshot,
-      currentFrame: frameSample.frame,
+      frame: frameSample.frame,
       authorizationSnapshot: authorizationSnapshot)
   }
 
@@ -271,24 +308,41 @@ actor ContextProactivityEngine {
       log("DepartureEvalDebug: no snapshot")
       return
     }
-    guard ContextDirectorEligibility.permitsEvaluation(of: snapshot) else {
+    let route = ContextProactivityVisitAdmission.route(for: snapshot)
+    guard route != .skip else {
       log(
         "DepartureEvalDebug: ineligible snapshot worthiness=\(snapshot.notifyWorthiness) facts=\(snapshot.validatedFacts.count)"
       )
       return
     }
-    if await JITProactivityCoordinator.shared.handle(
-      fence: fence, snapshot: snapshot, frame: departingFrame,
+    _ = await admitJITThenLegacyDirector(
+      fence: fence,
+      snapshot: snapshot,
+      frame: departingFrame,
       authorizationSnapshot: authorizationSnapshot)
-    {
-      return
+  }
+
+  /// Shared post-snapshot tail: planned JIT may run on validated facts even at
+  /// zero worthiness; the legacy director still requires positive worthiness.
+  @discardableResult
+  func admitJITThenLegacyDirector(
+    fence: ContextVisitFence,
+    snapshot: ContextBucketSnapshot,
+    frame: CapturedFrame,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async -> ContextProactivityAdmissionOutcome {
+    let route = ContextProactivityVisitAdmission.route(for: snapshot)
+    guard route != .skip else { return .skipped }
+    if await jitHandle(fence, snapshot, frame, authorizationSnapshot) {
+      return .jitConsumed
     }
-    log("DepartureEvalDebug: proceeding to evaluateAndDeliver")
+    guard route == .jitThenLegacyDirector else { return .skipped }
     await evaluateAndDeliver(
       fence: fence,
       snapshot: snapshot,
-      currentFrame: departingFrame,
+      currentFrame: frame,
       authorizationSnapshot: authorizationSnapshot)
+    return .legacyDirector
   }
 
   /// The shared post-settle tail of the director pipeline: presentation
@@ -342,42 +396,6 @@ actor ContextProactivityEngine {
     }
     var recentDeliveries = await store.recentDeliveredForBucket(
       bucketID: snapshot.bucketID, now: currentFrame.captureTime)
-    // The related-workstream section: validated facts from sibling buckets of
-    // the visit's live workstream, quality-gated and quoted as non-citable
-    // context. Read the flag once so section, dedup, and provenance agree; with
-    // the flag off (or no live tag) the prompt is byte-identical to today.
-    let workstreamPoolingEnabled = await MainActor.run {
-      ContextBucketsFeature.isWorkstreamPoolingEnabled
-    }
-    var workstreamSection: String? = nil
-    var workstreamProvenance: [String: Any]? = nil
-    var pooledFactIDs: Set<String> = []
-    if workstreamPoolingEnabled,
-      let liveTag = await store.liveWorkstreamTag(for: fence, now: currentFrame.captureTime)
-    {
-      let selected = ContextWorkstreamPooling.select(
-        await store.workstreamPool(
-          tag: liveTag, excludingBucketID: snapshot.bucketID, now: currentFrame.captureTime),
-        now: currentFrame.captureTime)
-      if !selected.isEmpty {
-        workstreamSection = ContextWorkstreamPooling.promptSection(
-          tag: liveTag, items: selected, now: currentFrame.captureTime)
-        pooledFactIDs = Set(selected.map(\.factID))
-        workstreamProvenance = [
-          "tag": liveTag,
-          "pooled_fact_ids": selected.map(\.factID),
-        ]
-      }
-      // Tag-aware dedup: with pooling, the same cross-app point is reachable
-      // from every bucket carrying this tag, so sibling deliveries join the
-      // bucket's own under the same prompt cap.
-      let workstreamDeliveries = await store.recentDeliveredForWorkstream(
-        tag: liveTag, excludingBucketID: snapshot.bucketID, now: currentFrame.captureTime)
-      recentDeliveries = Array(
-        (recentDeliveries + workstreamDeliveries)
-          .sorted { $0.deliveredAt > $1.deliveredAt }
-          .prefix(ContextBucketRecentDelivery.promptCap))
-    }
     let candidatesEnabled = await MainActor.run {
       ContextBucketsFeature.isProactiveCandidatesEnabled
     }
@@ -457,15 +475,14 @@ actor ContextProactivityEngine {
     let envSignal = await MainActor.run {
       EnvironmentalSpeakerAnalyzer.analyze(segments: LiveTranscriptMonitor.shared.segments)
     }
-    var volatileExtras = workstreamSection.map { "\n\n" + $0 } ?? ""
+    var volatileExtras = ""
     if candidatesEnabled {
       let selected = ContextWorkstreamPooling.selectRecent(
         await store.recentContextPool(
           excludingBucketID: snapshot.bucketID, now: currentFrame.captureTime),
         now: currentFrame.captureTime)
-      let fresh = selected.filter { !pooledFactIDs.contains($0.factID) }
       if let section = ContextWorkstreamPooling.recentContextPromptSection(
-        items: fresh, now: currentFrame.captureTime)
+        items: selected, now: currentFrame.captureTime)
       {
         volatileExtras += "\n\n" + section
       }
@@ -558,7 +575,7 @@ actor ContextProactivityEngine {
         imageData: currentFrame.jpegData,
         jsonSchema: Self.schema(allowLookup: retrievalHopEnabled),
         cacheKey: cacheKey,
-        maxCompletionTokens: 800,
+        maxCompletionTokens: ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens,
         authorizationSnapshot: authorizationSnapshot)
       await ContextProactivityTelemetry.record(result)
       guard
@@ -669,9 +686,6 @@ actor ContextProactivityEngine {
       if var hopProvenance = retrievalProvenance {
         hopProvenance["cited_refs"] = retrievedRefs
         provenance["retrieval"] = hopProvenance
-      }
-      if let workstreamProvenance {
-        provenance["workstream"] = workstreamProvenance
       }
       let provenanceData = try JSONSerialization.data(withJSONObject: provenance, options: [.sortedKeys])
       let provenanceJSON = String(data: provenanceData, encoding: .utf8) ?? "{}"
@@ -925,15 +939,11 @@ actor ContextProactivityEngine {
           recentDeliveries: recentDeliveries),
         imageData: currentFrame.jpegData,
         jsonSchema: ContextProactiveCandidateGate.schema,
-        // 400, not 120: the reasoning model bills its thinking into completion
-        // tokens. Measured directly against the same model with this exact
-        // prompt shape: at 120 the call finished with `finish_reason=length`,
-        // 120/120 tokens spent on reasoning, and EMPTY content in 2 of 3
-        // attempts — which parses as malformed and silently suppresses the
-        // candidate. At 400 every attempt finished clean (33-174 reasoning
-        // tokens plus the small JSON body). Live provenance shows the same
-        // degenerate shape (a bare "false" reason) at the old cap.
-        maxCompletionTokens: 400,
+        // The backend-compatible floor applies to every reasoning request. The
+        // reasoning model bills its thinking into completion tokens, so a small
+        // client cap can finish with `finish_reason=length` and empty content,
+        // which parses as malformed and silently suppresses the
+        maxCompletionTokens: ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens,
         authorizationSnapshot: authorizationSnapshot)
       await ContextProactivityTelemetry.record(result)
       // The gate awaited the model; ownership can be revoked or the visit can
@@ -1170,7 +1180,7 @@ actor ContextProactivityEngine {
         imageData: imageData,
         jsonSchema: Self.schema(allowLookup: true),
         cacheKey: cacheKey,
-        maxCompletionTokens: 800,
+        maxCompletionTokens: ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens,
         authorizationSnapshot: authorizationSnapshot)
       await ContextProactivityTelemetry.record(result)
       let hopRaw = try JSONDecoder().decode(

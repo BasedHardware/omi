@@ -81,8 +81,12 @@ extension AnalyticsManager {
       return .grounded
     // Terminal before any question was committed: no `question_asked` exists
     // for these, so no answer record either (asked and answered stay paired).
-    case "too_short", "silent_rejected", "permission_denied", "capture_failed", "transcription_failed",
-      "hub_warm_timeout", "deferred_commit_timeout":
+    // `capture_not_ready` belongs here for the same reason as `capture_failed`:
+    // the microphone never became operational, so the turn ended before any
+    // question was committed. Left in `default` it emitted an orphan `.error`
+    // answer with no `question_asked` to pair with.
+    case "too_short", "silent_rejected", "permission_denied", "capture_failed", "capture_not_ready",
+      "transcription_failed", "hub_warm_timeout", "deferred_commit_timeout":
       return nil
     // A cancellation may land before or after the commit; the reason string
     // cannot tell them apart, so a cancelled turn with no delivered answer is

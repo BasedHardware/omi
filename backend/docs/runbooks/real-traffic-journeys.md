@@ -183,7 +183,9 @@ deployment health, not read as zero traffic.
 
 Both Pusher release workflows verify the live Grafana provisioning contract
 before any image publication or promotion. This requires the protected
-`GRAFANA_TOKEN` secret and proves the exact memory-admission and capture-outcome
+`MONITOR_GRAFANA_TOKEN` secret (dest repo secret for `monitor.omiapi.com`,
+prod environment secret for `monitor.omi.me`; never the TV `GRAFANA_TOKEN`)
+and proves the exact memory-admission and capture-outcome
 rule identities and expressions, unpaused state, healthy Prometheus datasource,
 current healthy Pusher/backend-listen scrape targets, and Telegram contact-point
 route. The post-rollout proof additionally requires all three finalization

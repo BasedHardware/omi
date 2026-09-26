@@ -21,6 +21,7 @@ from utils.other.storage import (
 )
 from utils.multipart import MultipartMaxPartSizeRoute, SPEECH_PROFILE_MAX_PART_SIZE, max_part_size
 from utils.stt.speaker_embedding import extract_embedding
+from utils.stt.streaming import is_stt_available
 from utils.stt.vad import apply_vad_for_speech_profile, VADEmptyError
 import logging
 
@@ -52,9 +53,23 @@ class SpeechProfileStatusResponse(BaseModel):
     url: Optional[str] = None
 
 
+class SttAvailabilityResponse(BaseModel):
+    available: bool
+
+
 @router.get('/v3/speech-profile', tags=['v3'], response_model=HasSpeechProfileResponse)
 def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
     return {'has_profile': get_user_has_speech_profile(uid)}
+
+
+@router.get('/v3/speech-profile/stt-availability', tags=['v3'], response_model=SttAvailabilityResponse)
+def get_speech_profile_stt_availability(uid: str = Depends(auth.get_current_user_uid)):
+    """Pre-flight check the client uses before entering the recording UI, so a
+    known-down streaming primary (whichever provider STT_SERVICE_MODELS
+    currently leads with) surfaces as an upfront error dialog instead of a
+    dead recording screen with no questions/progress.
+    """
+    return {'available': is_stt_available()}
 
 
 @router.get('/v4/speech-profile', tags=['v3'], response_model=SpeechProfileResponse)
@@ -87,7 +102,7 @@ def get_speech_profile_status(uid: str = Depends(auth.get_current_user_uid)):
 # ******************************************
 
 # Consist of bytes (for initiating deepgram)
-# and audio itself, which we use on post-processing to use speechbrain model
+# and audio itself, which post-processing embeds for speaker identification
 
 
 @router.post('/v3/upload-audio', tags=['v3'], response_model=SpeechProfileUploadResponse)
@@ -120,18 +135,27 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
     with av.open(file_path) as container:
         duration = (float(container.duration) / av.time_base) + 5 if container.duration else 0
 
+    # Extract before upload so a 200 means the same embedding stack used for
+    # live/post-process matching actually stored a voiceprint (#12765).
+    try:
+        embedding = extract_embedding(file_path)
+    except Exception as e:
+        logger.error(f"Speech profile: failed to extract speaker embedding for {uid}: {e}")
+        raise HTTPException(status_code=503, detail="Failed to extract speaker embedding") from e
+
+    # Persist the voiceprint before overwriting GCS audio. A Firestore miss
+    # must not leave a new profile blob live without a matching embedding.
+    try:
+        set_user_speaker_embedding(uid, embedding.flatten().tolist())
+    except Exception as e:
+        logger.error(f"Speech profile: failed to store speaker embedding for {uid}: {e}")
+        raise HTTPException(status_code=503, detail="Failed to store speaker embedding") from e
+
     url = upload_profile_audio(file_path, uid)
     # Cache the duration only once the profile blob is actually stored: a failed
     # overwrite must not leave the cache describing an upload that never landed.
     set_speech_profile_duration(uid, duration)
-
-    # Extract and store speaker embedding for user identification in listen sessions
-    try:
-        embedding = extract_embedding(file_path)
-        set_user_speaker_embedding(uid, embedding.flatten().tolist())
-        logger.info(f"Speech profile: stored speaker embedding for {uid}")
-    except Exception as e:
-        logger.error(f"Speech profile: failed to extract/store speaker embedding for {uid}: {e}")
+    logger.info("Speech profile: stored speaker embedding for %s", uid)
 
     return {"url": url}
 

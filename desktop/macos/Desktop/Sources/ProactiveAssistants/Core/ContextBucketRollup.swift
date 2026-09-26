@@ -143,8 +143,6 @@ enum BucketFactValidator {
 /// prefix.
 enum ContextPromptCacheKey {
   static let director = "director:v1"
-  static let reconcilerTagging = "reconciler:v1"
-  static let reconcilerCandidates = "reconciler-candidates:v1"
 }
 
 enum ContextBucketPromptAssembler {
@@ -446,7 +444,7 @@ enum ContextProactivityPromptBuilder {
   /// and which decision type to use, and never said what the spoken text must
   /// contain, so that answer was fully compliant.
   ///
-  /// Measured against the production reasoning model (gpt-5.6-luna,
+  /// Measured against the production reasoning model (gpt-6-luna,
   /// reasoning_effort low) on the `referent-*` cases of the context-bucket
   /// benchmark, 12 replicates per case. Scored on whether the user-visible text
   /// contains one of the case's declared `referentTokens`:

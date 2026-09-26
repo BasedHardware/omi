@@ -94,8 +94,63 @@ class MemoryLinkSpec(_StrictModel):
     summary: str = Field(min_length=1, max_length=200)
 
 
+class MemoryReviewItemSpec(_StrictModel):
+    """One reviewable claim about the owner, as the desktop adapter sends it.
+
+    ``content`` and ``category`` are permitted to arrive empty: the desktop
+    adapter forwards whatever the daily-summary block carried, and the client
+    codec — not this contract — decides an empty row is not worth rendering.
+    Rejecting the whole card over one blank field would journal nothing at all.
+    """
+
+    memory_id: StableId
+    content: str = Field(max_length=1000)
+    category: str = Field(default='', max_length=64)
+
+
+class MemoryReviewCardSpec(_StrictModel):
+    """The daily-summary review rows, journaled through the chat-first tool.
+
+    ``summary_id`` and ``date`` are opaque provenance the card carries back to
+    its summary; the adapter substitutes an empty string when the source block
+    had neither, so neither is an identity this contract can constrain.
+    """
+
+    type: Literal['memoryReviewCard']
+    summary_id: str = Field(default='', max_length=128)
+    date: str = Field(default='', max_length=32)
+    # The generator selects three (``MEMORIES_LEARNED_LIMIT``); the bound is the
+    # ceiling on the entity reads one card costs, not a product limit.
+    items: list[MemoryReviewItemSpec] = Field(min_length=1, max_length=8)
+
+
 ChatFirstBlockSpec = Annotated[
-    Union[QuestionCardSpec, TaskCardSpec, GoalLinkSpec, CaptureLinkSpec, ConversationLinkSpec, MemoryLinkSpec],
+    Union[
+        QuestionCardSpec,
+        TaskCardSpec,
+        GoalLinkSpec,
+        CaptureLinkSpec,
+        ConversationLinkSpec,
+        MemoryLinkSpec,
+    ],
+    Field(discriminator='type'),
+]
+
+# What a client may ask the journal to accept, which is a superset of what the
+# server emits. ``memoryReviewCard`` is authored by the daily-summary card on the
+# client and journaled back; no proactive intent ever produces one. Keeping it out
+# of ``ChatFirstBlockSpec`` keeps it out of the materialization *response* schema,
+# where a new union branch is a breaking change for every released app client.
+ChatFirstJournalBlockSpec = Annotated[
+    Union[
+        QuestionCardSpec,
+        TaskCardSpec,
+        GoalLinkSpec,
+        CaptureLinkSpec,
+        ConversationLinkSpec,
+        MemoryLinkSpec,
+        MemoryReviewCardSpec,
+    ],
     Field(discriminator='type'),
 ]
 
@@ -111,7 +166,7 @@ class ChatFirstBlockValidationRequest(_StrictModel):
     owner_fence: StableId
     run_id: StableId
     attempt_id: StableId
-    blocks: list[ChatFirstBlockSpec] = Field(min_length=1, max_length=8)
+    blocks: list[ChatFirstJournalBlockSpec] = Field(min_length=1, max_length=8)
 
 
 class ChatFirstBlockValidationReceipt(_StrictModel):
@@ -404,7 +459,7 @@ class DeferralReceipt(_StrictModel):
     state: Literal['pending', 'released']
 
 
-def stable_block_id(*, uid: str, generation: int, block: ChatFirstBlockSpec) -> str:
+def stable_block_id(*, uid: str, generation: int, block: ChatFirstJournalBlockSpec) -> str:
     """Generate an opaque, retry-stable block ID without exposing block text."""
 
     canonical = block.model_dump_json(exclude_none=True)
@@ -416,6 +471,7 @@ __all__ = [
     'CaptureLinkSpec',
     'ConversationLinkSpec',
     'ChatFirstBlockSpec',
+    'ChatFirstJournalBlockSpec',
     'ChatFirstBlockValidationReceipt',
     'ChatFirstBlockValidationRequest',
     'ChatFirstSubject',
@@ -428,6 +484,8 @@ __all__ = [
     'MaterializePromptsRequest',
     'MaterializePromptsResponse',
     'MemoryLinkSpec',
+    'MemoryReviewCardSpec',
+    'MemoryReviewItemSpec',
     'ProactiveBudgetReservation',
     'ProactiveBudgetState',
     'ProactiveDeferral',

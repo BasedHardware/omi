@@ -1,10 +1,10 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { motion } from 'framer-motion';
 import { Plus, Star, Pencil, Trash2, Inbox, Briefcase, Heart, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Folder } from '@/types/folder';
+import { OpenSurface } from '@/components/ui/OpenSurface';
 
 // Special folder IDs for built-in tabs
 export const FOLDER_ALL = 'all';
@@ -35,22 +35,24 @@ export function FolderTabs({
     x: number;
     y: number;
   } | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const handleContextMenu = (e: React.MouseEvent, folder: Folder) => {
     e.preventDefault();
     setContextMenu({ folder, x: e.clientX, y: e.clientY });
+    setMenuOpen(true);
   };
 
-  const closeContextMenu = () => setContextMenu(null);
+  const closeContextMenu = () => setMenuOpen(false);
 
   return (
     <div className="relative">
       {/* Tabs container - wraps instead of scrolling */}
-      <div ref={scrollRef} className="flex items-center gap-2 flex-wrap">
+      <div ref={scrollRef} className="flex flex-wrap items-center gap-2">
         {/* All tab - always first */}
         <TabButton
           label="All"
-          icon={<Inbox className="w-3.5 h-3.5" />}
+          icon={<Inbox className="h-3.5 w-3.5" />}
           isSelected={selectedFolderId === FOLDER_ALL}
           onClick={() => onSelectFolder(FOLDER_ALL)}
         />
@@ -58,7 +60,7 @@ export function FolderTabs({
         {/* Starred tab - always second */}
         <TabButton
           label="Starred"
-          icon={<Star className="w-3.5 h-3.5" />}
+          icon={<Star className="h-3.5 w-3.5" />}
           isSelected={selectedFolderId === FOLDER_STARRED}
           onClick={() => onSelectFolder(FOLDER_STARRED)}
         />
@@ -81,65 +83,65 @@ export function FolderTabs({
           onClick={onCreateFolder}
           disabled={loading}
           className={cn(
-            'flex-shrink-0 flex items-center justify-center',
-            'w-8 h-8 rounded-full',
+            'flex flex-shrink-0 items-center justify-center',
+            'h-8 w-8 rounded-full',
             'bg-bg-tertiary hover:bg-bg-quaternary',
             'text-text-tertiary hover:text-text-secondary',
             'transition-colors duration-150',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
+            'disabled:cursor-not-allowed disabled:opacity-50',
           )}
           title="Create folder"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="h-4 w-4" />
         </button>
       </div>
 
       {/* Context menu for folder options */}
+      {contextMenu && menuOpen && (
+        <div className="fixed inset-0 z-50" onClick={closeContextMenu} />
+      )}
       {contextMenu && (
-        <>
-          {/* Backdrop */}
-          <div className="fixed inset-0 z-50" onClick={closeContextMenu} />
-          {/* Menu */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
+        <OpenSurface
+          open={menuOpen}
+          onExited={() => setContextMenu(null)}
+          data-origin="top-left"
+          className={cn(
+            't-dropdown',
+            'fixed z-50 rounded-lg py-1',
+            'border border-bg-tertiary bg-bg-secondary',
+            'min-w-[140px] shadow-lg',
+          )}
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+        >
+          <button
+            onClick={() => {
+              onEditFolder?.(contextMenu.folder);
+              closeContextMenu();
+            }}
             className={cn(
-              'fixed z-50 py-1 rounded-lg',
-              'bg-bg-secondary border border-bg-tertiary',
-              'shadow-lg min-w-[140px]',
+              'flex w-full items-center gap-2 px-3 py-2',
+              'text-sm text-text-secondary hover:text-text-primary',
+              'transition-colors hover:bg-bg-tertiary',
             )}
-            style={{ left: contextMenu.x, top: contextMenu.y }}
           >
-            <button
-              onClick={() => {
-                onEditFolder?.(contextMenu.folder);
-                closeContextMenu();
-              }}
-              className={cn(
-                'w-full flex items-center gap-2 px-3 py-2',
-                'text-sm text-text-secondary hover:text-text-primary',
-                'hover:bg-bg-tertiary transition-colors',
-              )}
-            >
-              <Pencil className="w-4 h-4" />
-              <span>Edit folder</span>
-            </button>
-            <button
-              onClick={() => {
-                onDeleteFolder?.(contextMenu.folder);
-                closeContextMenu();
-              }}
-              className={cn(
-                'w-full flex items-center gap-2 px-3 py-2',
-                'text-sm text-error hover:bg-error/10',
-                'transition-colors',
-              )}
-            >
-              <Trash2 className="w-4 h-4" />
-              <span>Delete folder</span>
-            </button>
-          </motion.div>
-        </>
+            <Pencil className="h-4 w-4" />
+            <span>Edit folder</span>
+          </button>
+          <button
+            onClick={() => {
+              onDeleteFolder?.(contextMenu.folder);
+              closeContextMenu();
+            }}
+            className={cn(
+              'flex w-full items-center gap-2 px-3 py-2',
+              'text-sm text-error hover:bg-error/10',
+              'transition-colors',
+            )}
+          >
+            <Trash2 className="h-4 w-4" />
+            <span>Delete folder</span>
+          </button>
+        </OpenSurface>
       )}
     </div>
   );
@@ -170,9 +172,9 @@ function TabButton({
       onClick={onClick}
       onContextMenu={onContextMenu}
       className={cn(
-        'flex-shrink-0 flex items-center gap-1.5',
-        'px-3 py-1.5 rounded-full',
-        'text-sm font-medium whitespace-nowrap',
+        'flex flex-shrink-0 items-center gap-1.5',
+        'rounded-full px-3 py-1.5',
+        'whitespace-nowrap text-sm font-medium',
         'transition-all duration-150',
         isSelected
           ? 'bg-text-primary text-bg-primary'
@@ -198,10 +200,10 @@ function TabButton({
 export function FolderTabsSkeleton() {
   return (
     <div className="flex items-center gap-2">
-      <div className="h-8 w-12 rounded-full bg-bg-tertiary animate-pulse" />
-      <div className="h-8 w-20 rounded-full bg-bg-tertiary animate-pulse" />
-      <div className="h-8 w-16 rounded-full bg-bg-tertiary animate-pulse" />
-      <div className="h-8 w-24 rounded-full bg-bg-tertiary animate-pulse" />
+      <div className="h-8 w-12 animate-pulse rounded-full bg-bg-tertiary" />
+      <div className="h-8 w-20 animate-pulse rounded-full bg-bg-tertiary" />
+      <div className="h-8 w-16 animate-pulse rounded-full bg-bg-tertiary" />
+      <div className="h-8 w-24 animate-pulse rounded-full bg-bg-tertiary" />
     </div>
   );
 }

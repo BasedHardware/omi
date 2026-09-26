@@ -8,6 +8,7 @@ harnesses one stable dependency seam.
 from collections.abc import Callable, Sequence
 from datetime import datetime
 import logging
+import os
 from typing import Any
 
 import database.action_items as action_items_db
@@ -35,6 +36,20 @@ from utils.task_intelligence.conversation_capture_policy import (
 logger = logging.getLogger(__name__)
 
 WakeWordAdjudicator = Callable[..., WakeWordAdjudication]
+WAKE_WORD_ADJUDICATION_ENABLED_ENV = 'WAKE_WORD_ADJUDICATION_ENABLED'
+
+
+def wake_word_adjudication_enabled() -> bool:
+    """Return whether the LLM adjudicator may run.
+
+    Default on preserves today's behaviour. An operator turns it off without a
+    code deploy; the deterministic marker verdict then stands unchanged.
+    """
+
+    value = os.getenv(WAKE_WORD_ADJUDICATION_ENABLED_ENV)
+    if value is None:
+        return True
+    return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
 
 
 def capture_enabled(uid: str) -> bool:
@@ -94,6 +109,9 @@ def prepare_wake_word_capture_gate(
     transcript_segments = getattr(conversation, 'transcript_segments', ()) or ()
     matched_segment_ids = find_wake_word_segment_ids(transcript_segments)
     if not matched_segment_ids:
+        return None
+    if not wake_word_adjudication_enabled():
+        logger.info('wake-word adjudication disabled; keeping deterministic marker verdicts')
         return None
     action_items = getattr(getattr(conversation, 'structured', None), 'action_items', ()) or ()
     marked_transcript = conversation_transcript_for_action_items(
@@ -342,4 +360,6 @@ __all__ = [
     'process_conversation_before_legacy',
     'prepare_wake_word_capture_gate',
     'reconcile_after_legacy',
+    'wake_word_adjudication_enabled',
+    'WAKE_WORD_ADJUDICATION_ENABLED_ENV',
 ]

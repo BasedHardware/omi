@@ -100,6 +100,15 @@ final class VoiceTurnCoordinator {
   private var timelineSequence: UInt64 = 0
   private var turnStartedAt: [VoiceTurnID: ContinuousClock.Instant] = [:]
   private var turnFullAnswerDurationMs: [VoiceTurnID: Int] = [:]
+  /// Delivery state of the most recent terminal, alongside `model.lastTerminal`.
+  /// The journal funnel reads this so a reply whose audio fully drained before a
+  /// barge-in is sealed as the delivered answer it was, not as a cut-off failure.
+  private(set) var lastTerminalAnswerDelivered = false
+  /// Whether the most recent terminal's provider response finished, alongside
+  /// `model.lastTerminal`. The journal funnel reads this so a reply whose text
+  /// completed but whose spoken delivery was cut is not later re-answered by
+  /// the model as though it had never been given.
+  private(set) var lastTerminalAnswerTextCompleted = false
   private var pendingFacts: [VoiceTurnFact] = []
   private var isDrainingEvents = false
 
@@ -292,6 +301,19 @@ final class VoiceTurnCoordinator {
     return activeTurn?.activeLease == lease
   }
 
+  /// True when the turn's full-answer playback has drained. Captured before a
+  /// barge-in terminalizes the turn, because terminal processing consumes the
+  /// per-turn duration this is derived from.
+  func fullAnswerDrained(turnID: VoiceTurnID) -> Bool {
+    turnFullAnswerDurationMs[turnID] != nil
+  }
+
+  /// True when the given (still-active) turn's provider response has finished,
+  /// meaning its accumulated answer text is complete rather than a fragment.
+  func providerResponseFinished(turnID: VoiceTurnID) -> Bool {
+    activeTurn?.id == turnID && activeTurn?.providerFinished == true
+  }
+
   func configure(
     barState: FloatingControlBarState,
     resizeForPTT: @escaping @MainActor (Bool) -> Void = {
@@ -479,6 +501,8 @@ final class VoiceTurnCoordinator {
       case .terminal(let terminal):
         let terminalDurationMs = turnStartedAt.removeValue(forKey: terminal.turnID).map(Self.elapsedMilliseconds)
         let fullAnswerDurationMs = turnFullAnswerDurationMs.removeValue(forKey: terminal.turnID)
+        lastTerminalAnswerDelivered = fullAnswerDurationMs != nil
+        lastTerminalAnswerTextCompleted = terminal.answerTextCompleted
         DesktopDiagnosticsManager.shared.recordVoiceTurnTerminal(
           turnID: terminal.turnID.description,
           reason: terminal.reason.rawValue,
@@ -617,6 +641,7 @@ final class VoiceTurnCoordinator {
     case .omniSTT: return "omni_stt"
     case .deepgramBatch: return "deepgram_batch"
     case .deepgramLive: return "deepgram_live"
+    case .onDeviceASR: return "on_device_asr"
     }
   }
 

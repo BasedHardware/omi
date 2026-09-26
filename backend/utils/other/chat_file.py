@@ -15,7 +15,7 @@ from PIL import Image, UnidentifiedImageError
 from pydantic import ValidationError
 
 import database.chat as chat_db
-from models.chat import ChatSession, FileChat
+from models.chat import ChatSession, FileChat, chat_file_is_document
 from utils.executors import db_executor, run_blocking
 from utils.llm.gateway_client import (
     file_chat_auto_lane_id,
@@ -25,18 +25,22 @@ from utils.llm.gateway_client import (
     is_gateway_model_not_found,
     should_route_features_through_gateway,
 )
+from utils.llm.model_config import LUNA_MODEL
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
-# Images stay on the live-verified vision lane (image_url). PDF file parts stay on
-# a separate documents lane because the request shape differs ({type:file,file:{file_id}}).
-# Live probe 2026-08-28 confirmed gpt-5.6-luna accepts that file-part contract, so both
-# lanes pin Luna. In gateway feature mode both are omi:auto:file-chat-* lanes, so the
-# model call lands in the gateway ledger; OpenAI Files upload/download stays direct
+# Images stay on the live-verified vision lane (image_url). Document file parts stay
+# on a separate documents lane because the request shape differs ({type:file,file:{file_id}}).
+# Live probe 2026-08-28 confirmed gpt-5.6-luna accepts that file-part contract for PDF.
+# The attach allowlist now matches the provider's documented File inputs table
+# (models.chat.CHAT_FILE_DOCUMENT_EXTENSIONS / CHAT_FILE_DOCUMENT_MIME_TYPES); a
+# development documents-lane probe of .txt/.docx/.csv is still required before merge.
+# In gateway feature mode both are omi:auto:file-chat-* lanes, so the model call
+# lands in the gateway ledger; OpenAI Files upload/download stays direct
 # (file bytes/file_id lifecycle, no model tokens).
-_FILE_CHAT_VISION_MODEL = "gpt-5.6-luna"
-_FILE_CHAT_DOCUMENT_MODEL = "gpt-5.6-luna"
+_FILE_CHAT_VISION_MODEL = LUNA_MODEL
+_FILE_CHAT_DOCUMENT_MODEL = LUNA_MODEL
 _FILE_CHAT_COMPLETION_TOKENS = 2048
 
 
@@ -125,12 +129,6 @@ def _file_chat_gateway_enabled() -> bool:
         return False
 
 
-def _file_is_pdf(name: str, mime_type: str) -> bool:
-    if (mime_type or '').lower() == 'application/pdf':
-        return True
-    return Path(name).suffix.lower() == '.pdf'
-
-
 def _reraise_provider_file_error(error: Exception) -> NoReturn:
     if isinstance(error, openai.NotFoundError):
         raise StaleChatFileError("Unsupported attachment: the uploaded file is no longer available.") from error
@@ -141,16 +139,16 @@ def _reraise_provider_file_error(error: Exception) -> NoReturn:
 
 def _completion_model(files: List[FileChat]) -> str:
     """Model id for the completions call: a gateway lane id in gateway mode."""
-    pdf = bool(files) and any(f.is_pdf() for f in files)
+    documents = bool(files) and any(f.is_document() for f in files)
     if _file_chat_gateway_enabled():
-        return file_chat_auto_lane_id(pdf=pdf)
+        return file_chat_auto_lane_id(pdf=documents)
     return _direct_completion_model(files)
 
 
 def _direct_completion_model(files: List[FileChat]) -> str:
     """Provider model for the feature-off and compatibility fallback paths."""
-    pdf = bool(files) and any(f.is_pdf() for f in files)
-    if pdf:
+    documents = bool(files) and any(f.is_document() for f in files)
+    if documents:
         return _FILE_CHAT_DOCUMENT_MODEL
     return _FILE_CHAT_VISION_MODEL
 
@@ -210,8 +208,8 @@ class File:
     def is_image(self) -> bool:
         return self.mime_type.startswith("image")
 
-    def is_pdf(self) -> bool:
-        return _file_is_pdf(str(self.file_path), self.mime_type)
+    def is_document(self) -> bool:
+        return chat_file_is_document(str(self.file_path), self.mime_type)
 
     @staticmethod
     def _to_snake_case(string: str) -> str:
@@ -234,7 +232,7 @@ class FileChatTool:
         self.chat_session = ChatSession(**session_data)
 
     @staticmethod
-    def upload(file_path: Union[str, Path]) -> Dict[str, Any]:
+    def upload(file_path: Union[str, Path], file_name: Optional[str] = None) -> Dict[str, Any]:
         # OpenAI Files upload/download stays direct by design: it is the file
         # bytes/file_id lifecycle, not a model call; only the completions hop
         # is gateway-metered.
@@ -249,17 +247,22 @@ class FileChatTool:
                 # An image mime type Pillow has no decoder for (.heic from an iPhone camera roll).
                 raise _unsupported_chat_file_error(file_path) from error
             file.purpose = "vision"
-        elif file.is_pdf():
+        elif file.is_document():
             file.purpose = "user_data"
         else:
-            # Chat Completions file parts accept PDFs. Reject other docs at attach,
-            # never after the user sends the chat.
+            # Chat Completions file parts accept the provider's documented document
+            # set (PDF, text/code, office docs, spreadsheets). Reject anything else
+            # at attach, never after the user sends the chat.
             raise _unsupported_chat_file_error(file_path)
 
         with open(file_path, 'rb') as f:
             # upload file to OpenAI
             try:
-                response = openai.files.create(file=f, purpose=cast(Any, file.purpose))
+                # file_path is a randomized temp name on the upload routes; send the
+                # provider the name the user picked so it is what lands on the chat
+                # record, not the temp basename the provider would echo back.
+                upload_file = (Path(file_name).name, f) if file_name else f
+                response = openai.files.create(file=upload_file, purpose=cast(Any, file.purpose))
             except openai.BadRequestError as error:
                 # The provider rejects the extension (audio/video, archives it does not index).
                 raise _unsupported_chat_file_error(file_path) from error
@@ -309,7 +312,7 @@ class FileChatTool:
         files: List[FileChat],
         callback: Optional[_StreamingCallbackProtocol] = None,
     ) -> str:
-        """One Chat Completions stream: images as base64 image_url, PDFs as file parts."""
+        """One Chat Completions stream: images as base64 image_url, documents as file parts."""
         assert callback is not None
         output_list: List[str] = []
         gateway_fallback_used = False
@@ -434,7 +437,7 @@ class FileChatTool:
                         },
                     )
                 )
-            elif file.is_pdf():
+            elif file.is_document():
                 contents.append(
                     cast(
                         ChatCompletionContentPartParam,
@@ -468,7 +471,7 @@ class FileChatTool:
                         },
                     )
                 )
-            elif file.is_pdf():
+            elif file.is_document():
                 contents.append(
                     cast(
                         ChatCompletionContentPartParam,
@@ -485,7 +488,12 @@ class FileChatTool:
     def cleanup(self) -> None:
         """Cleanup chat session files on OpenAI. Thread/assistant deletes are gone with Assistants."""
         logger.info("start cleanup chat with file")
-        files = chat_db.get_chat_files(self.uid)
+        # Only this session's files: get_chat_files with no ids answers with every
+        # file the account owns, so clearing one chat wiped attachments from the rest.
+        file_ids = list(self.chat_session.file_ids or [])
+        if not file_ids:
+            return
+        files = chat_db.get_chat_files(self.uid, file_ids)
         if files:
             # Delete OpenAI objects from raw docs first — do not gate on FileChat validation,
             # or a malformed doc with openai_file_id leaks after Firestore delete (#9608 follow-up).

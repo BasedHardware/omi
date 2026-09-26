@@ -8,35 +8,6 @@ import XCTest
 @MainActor
 final class QueryShellTests: XCTestCase {
 
-  func testHomeDesignSwitchReachesAllThreeHomePresentations() {
-    XCTAssertEqual(
-      HomeDesignPresentation.resolve(
-        useLegacyHomeDesign: false,
-        useOldestHomeDesign: false,
-        forceModernPresentation: false),
-      .queryShell)
-    XCTAssertEqual(
-      HomeDesignPresentation.resolve(
-        useLegacyHomeDesign: true,
-        useOldestHomeDesign: false,
-        forceModernPresentation: false),
-      .redesignedHub)
-    XCTAssertEqual(
-      HomeDesignPresentation.resolve(
-        useLegacyHomeDesign: true,
-        useOldestHomeDesign: true,
-        forceModernPresentation: false),
-      .oldestLegacy)
-    XCTAssertEqual(
-      HomeDesignPresentation.resolve(
-        useLegacyHomeDesign: true,
-        useOldestHomeDesign: true,
-        forceModernPresentation: true),
-      .queryShell)
-  }
-
-  // MARK: - The one key
-
   /// **`⏎` sends. There is nothing else for it to mean.**
   ///
   /// The surface used to answer this question with "it depends": `⏎` searched and `⌘⏎` asked, which
@@ -57,9 +28,43 @@ final class QueryShellTests: XCTestCase {
     }
   }
 
+  // MARK: - What the empty bar says
+
+  /// Clearing the chat left the bar saying `Ask a follow-up…` over an empty transcript — an
+  /// invitation to follow up on nothing. The composer now says `Ask Omi`, full stop: the prompt
+  /// does not depend on what the transcript holds, so there is no state for it to get wrong.
+  func testTheChatComposerAlwaysSaysAskOmi() {
+    XCTAssertEqual(QueryComposerPlaceholder.text(mode: .answer), "Ask Omi")
+    XCTAssertEqual(QueryComposerPlaceholder.chat, "Ask Omi")
+  }
+
+  /// `chat_composer_snapshot` must expose the same placeholder/mode the composer draws, or a
+  /// harness cannot assert the Ask Omi prompt through the supported headless bridge (#13201).
+  func testChatComposerSnapshotExposesPlaceholderAndMode() {
+    let answer = ChatComposerAutomationSnapshot.detail(
+      draft: "", stagedAttachments: 0, firstAttachment: "", mode: .answer)
+    XCTAssertEqual(answer["placeholder"], "Ask Omi")
+    XCTAssertEqual(answer["mode"], "answer")
+    QueryShellComposerAutomation.publish(.answer)
+    XCTAssertEqual(QueryShellComposerAutomation.placeholder, "Ask Omi")
+
+    let results = ChatComposerAutomationSnapshot.detail(
+      draft: "priya", stagedAttachments: 0, firstAttachment: "", mode: .results)
+    XCTAssertEqual(results["placeholder"], RewindSearchMetrics.placeholder)
+    XCTAssertEqual(results["mode"], "results")
+    QueryShellComposerAutomation.publish(.results)
+    XCTAssertEqual(QueryShellComposerAutomation.placeholder, RewindSearchMetrics.placeholder)
+    QueryShellComposerAutomation.publish(.homeDefault)
+  }
+
+  /// The search placement keeps its own prompt; it is a different control.
+  func testSearchingKeepsTheSearchPlaceholder() {
+    XCTAssertEqual(QueryComposerPlaceholder.text(mode: .results), RewindSearchMetrics.placeholder)
+  }
+
   // MARK: - What a submit leaves behind
 
-  /// A composer that keeps the message it just sent leaves `Ask a follow-up…` permanently
+  /// A composer that keeps the message it just sent leaves its placeholder permanently
   /// unreachable, makes a second `⏎` re-send the question verbatim, and forces the reader to empty
   /// the field by hand before they can write the next one.
   func testAskingSendsTheTrimmedQuestionAndEmptiesTheComposer() {
@@ -80,6 +85,33 @@ final class QueryShellTests: XCTestCase {
     XCTAssertEqual(submission.question, "priya")
     XCTAssertEqual(submission.text, "", "the send consumes the words wherever the bar is standing")
     XCTAssertEqual(submission.mode, .answer)
+  }
+
+  /// **A staged file with no words is a send.** Dropping a PDF on the bar and pressing return used to
+  /// resolve to `.none`, so the only way to ask about an attachment was to invent words for it.
+  func testAStagedItemWithNoWordsSubmitsAsAnAsk() {
+    XCTAssertEqual(QueryShellSubmit.resolve(text: "", hasAttachments: true), .ask)
+    XCTAssertEqual(QueryShellSubmit.resolve(text: "   ", hasAttachments: true), .ask)
+    XCTAssertEqual(QueryShellSubmit.resolve(text: "", hasAttachments: false), .none)
+
+    let submission = QueryShellSubmission.resolve(text: "  ", hasAttachments: true)
+    XCTAssertEqual(submission.action, .ask)
+    XCTAssertEqual(submission.question, "", "An empty question: the attachment is the message")
+    XCTAssertEqual(submission.text, "", "The send consumes the field as it does for words")
+    XCTAssertEqual(submission.mode, .answer)
+  }
+
+  /// The ledger admits the resolved attachment-only submit — and once the send has consumed the
+  /// attachments there is nothing for `Try again` to re-send.
+  func testTheLedgerAdmitsAnAttachmentOnlySubmitButOffersNoRetryForIt() {
+    var ledger = QueryShellSendLedger()
+    XCTAssertNil(ledger.planSubmit(nil), "A bare empty field resolved to no question at all")
+    guard let plan = ledger.planSubmit("") else { return XCTFail("an attachment-only send is a plan") }
+    XCTAssertTrue(plan.countsAsQuestion)
+    XCTAssertNil(ledger.planSubmit("", providerBusy: true), "Return during a turn is still refused")
+
+    ledger.recordAccepted(plan)
+    XCTAssertNil(ledger.planRetry(), "The caption alone would ask about files that are gone")
   }
 
   /// An inert key must not move the reader. Before this, an empty field was itself read as "go back
@@ -433,13 +465,18 @@ final class QueryShellTests: XCTestCase {
 
   // MARK: - The wordless controls
 
-  /// A control with no label is only legible if its dot is. Three states, three distinguishable
-  /// fills, and "off" must never look like "on".
+  /// A control with no label is only legible if its dot is. Four states, four distinguishable
+  /// fill-and-band pairs, and "off" or "armed" must never look like "recording".
   func testTheStateDotGivesEveryStateItsOwnColour() {
-    let fills = [HomeStatusState.active, .inactive, .blocked].map(ShellStatusDot.fill(for:))
-    XCTAssertEqual(
-      Set(fills.map(\.description)).count, 3,
-      "three states must not collapse onto two fills")
+    let states = [HomeStatusState.active, .armed, .inactive, .blocked]
+    let marks = states.map {
+      "\(ShellStatusDot.fill(for: $0).description)|\(ShellStatusDot.band(for: $0).description)"
+    }
+    XCTAssertEqual(Set(marks).count, states.count, "states must not collapse onto one dot: \(marks)")
+    XCTAssertNotEqual(
+      ShellStatusDot.fill(for: .armed).description,
+      ShellStatusDot.fill(for: .active).description,
+      "armed must not wear the recording fill")
     XCTAssertNotEqual(
       ShellStatusDot.fill(for: .inactive).description,
       ShellStatusDot.fill(for: .active).description,

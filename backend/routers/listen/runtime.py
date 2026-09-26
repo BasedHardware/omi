@@ -48,10 +48,16 @@ from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
 from utils.observability.journeys import ClientJourneyAttempt
-from utils.observability.transcription import LiveSTTAttempt
+from utils.observability.transcription import (
+    LiveSTTAttempt,
+    LiveSessionTranscriptOutcome,
+    record_live_session_transcript_outcome,
+    record_live_stt_audio_seconds,
+)
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.product_telemetry import emit_product_event
 from utils.stt.streaming import get_stt_service_for_language
+from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
 from utils.transcribe_decisions import (
     effective_conversation_timeout,
@@ -80,12 +86,21 @@ from .registry import unregister as unregister_listen_session
 from .speakers import SpeakerMatcher
 from .transcripts import TranscriptProcessor
 from utils.listen_audio import build_channel_config
-from utils.observability.transcription import record_listen_session_accepted
+from utils.observability.transcription import record_listen_no_audio_teardown, record_listen_session_accepted
 
 logger = logging.getLogger(__name__)
 
 PUSHER_ENABLED = bool(os.getenv('HOSTED_PUSHER_API_URL'))
 FREEMIUM_THRESHOLD_SECONDS = 180
+
+
+def should_emit_plus_meter_warning(subscription: Any) -> bool:
+    """S18: the listen threshold event is the Plus (1,500-min) meter warning only.
+
+    Basic no longer enters on-device through this event (S17). Inactive or
+    missing subscriptions must not emit it.
+    """
+    return getattr(subscription, 'plan', None) == PlanType.plus
 
 
 def _account_deletion_blocks_owner_persistence(uid: str) -> bool:
@@ -260,6 +275,7 @@ class ListenSessionRuntime:
 
     def complete_live_transcription(self) -> None:
         """Record the first nonempty transcript successfully delivered to the client."""
+        self.state.live_transcript_delivered = True
         if self.state.live_transcription_attempt is not None:
             self.state.live_transcription_attempt.finish('success', phase='transcript_delivery')
         client_attempt = getattr(self.state, 'client_live_transcription_attempt', None)
@@ -283,6 +299,91 @@ class ListenSessionRuntime:
                 client_attempt.fail('provider_error')
             else:
                 client_attempt.cancel()
+
+    # Under this wall-clock span a session is "too short" for the transcript
+    # SLI: the provider barely had anything to transcribe. Matches the ~10s
+    # brief guidance; quiet sessions must not count as failures.
+    SESSION_TOO_SHORT_AUDIO_SECONDS = 10.0
+
+    def _session_speech_seconds(self) -> Optional[float]:
+        """Cumulative VAD speech seconds, or None when no gate measured speech.
+
+        The managed chain exposes the total on its session object (which also
+        plays the receiver's vad_gate role); the legacy path exposes it through
+        VADStreamingGate.get_metrics(). Multi-channel and VAD-off sessions have
+        no gate, so they are judged on audio span alone.
+        """
+
+        gate = getattr(self.receiver, 'vad_gate', None)
+        if gate is None:
+            return None
+        total_speech_ms = getattr(gate, 'total_speech_ms', None)
+        if isinstance(total_speech_ms, (int, float)):
+            return float(total_speech_ms) / 1000.0
+        get_metrics = getattr(gate, 'get_metrics', None)
+        if callable(get_metrics):
+            try:
+                metrics = get_metrics()
+                if isinstance(metrics, dict):
+                    return float(metrics.get('speech_ms_total') or 0) / 1000.0
+            except Exception as error:
+                logger.warning('Listen session speech total read failed type=%s', type(error).__name__)
+        return None
+
+    def _session_ended_in_terminal_stt_failure(self) -> bool:
+        # Only an STT-terminal death (chain exhausted at session start, or a
+        # provider close 1011) forfeits the too_short excuse. The broader
+        # live_transcription_failed flag is also set by supervisor lifetime_done
+        # — including the 90s idle heartbeat reap of a silent socket — and a
+        # silent session must stay too_short, not count as no_transcript.
+        return self.state.stt_terminal_failure or self.state.close_code == 1011
+
+    def _session_transcript_outcome(self) -> LiveSessionTranscriptOutcome:
+        """Classify the session for the headline SLI (what the user felt)."""
+
+        if self.state.live_transcript_delivered:
+            return 'transcribed'
+        if self._session_ended_in_terminal_stt_failure():
+            # An STT-terminal session never gets the too_short excuse, even when
+            # it died before its first audio byte: initialize_stt failures are
+            # exactly the incident shape (chain exhausted at session start).
+            return 'no_transcript'
+        first = self.state.first_audio_byte_timestamp
+        last = self.state.last_audio_received_time
+        audio_span = max(0.0, last - first) if first is not None and last is not None else 0.0
+        if audio_span < self.SESSION_TOO_SHORT_AUDIO_SECONDS:
+            return 'too_short'
+        speech_seconds = self._session_speech_seconds()
+        if speech_seconds is not None and speech_seconds <= 0:
+            return 'too_short'
+        return 'no_transcript'
+
+    def _record_session_transcript_outcome(self) -> None:
+        """Emit omi_live_session_transcript_outcome_total exactly once per session.
+
+        Session-end seam: _teardown_components reaches this on every disconnect
+        path after STT initialization (the run() finally). Limitations, on
+        purpose: (1) sessions that fail admission/_bootstrap or crash before
+        the supervisor starts never tear down and are not counted — the same
+        seam the existing LiveSTTAttempt terminal uses; (2) the unit is one
+        accepted backend-STT WebSocket, so a client that reconnects mid
+        conversation counts once per socket: the runtime cannot see the prior
+        socket's transcripts without cross-connection state, and each
+        transcript-less reconnect is itself a user-felt failure. Custom-STT
+        sessions are skipped: their transcripts are the client's own.
+        """
+
+        if getattr(self, '_session_transcript_outcome_recorded', False):
+            return
+        self._session_transcript_outcome_recorded = True
+        # getattr: harness-constructed runtimes may predate this field; a real
+        # session always sets it in __init__ and defaults to counting.
+        if getattr(self, 'use_custom_stt', False):
+            return
+        try:
+            record_live_session_transcript_outcome(outcome=self._session_transcript_outcome())
+        except Exception as error:
+            logger.warning('Listen session transcript outcome metric failed type=%s', type(error).__name__)
 
     async def _admit(self) -> bool:
         if not self.request.uid:
@@ -314,7 +415,31 @@ class ListenSessionRuntime:
         # onboarding state more than the admission TTL ago — or never calls
         # the state endpoint at all — still gets a server-owned session, while
         # completed accounts can never re-enter onboarding provenance.
-        if request.onboarding_mode:
+        speech_profile_redo_admitted = False
+        if request.onboarding_mode and request.speech_profile_redo:
+            # Re-recording an existing speech profile from Settings does not
+            # claim onboarding provenance, so it never touches the completed-
+            # account gate above — every account, onboarded or not, can always
+            # redo their profile. The client flag alone is only a hint: the
+            # redo is proven from durable state, an actually persisted speech
+            # profile. Without one the claim falls through to the provenance
+            # admission below, so a query parameter cannot mint the bypass.
+            # OnboardingHandler mints its own session id (see
+            # utils/onboarding.py) when none is supplied, and explicitly
+            # clearing onboarding_session_id here keeps any resulting
+            # conversation untagged as onboarding-provenance.
+            try:
+                has_profile = await self.persistence.call(get_user_has_speech_profile, request.uid)
+            except Exception as error:
+                # Fail closed: an unverifiable redo claim is treated as a
+                # plain onboarding request and judged by the gate below.
+                logger.warning('Speech profile redo check failed type=%s', type(error).__name__)
+                has_profile = False
+            if has_profile:
+                self.onboarding_admitted = True
+                self.onboarding_session_id = None
+                speech_profile_redo_admitted = True
+        if request.onboarding_mode and not speech_profile_redo_admitted:
             try:
                 admitted = await run_blocking(db_executor, user_db.ensure_backend_onboarding_admission, request.uid)
             except Exception as error:
@@ -340,6 +465,7 @@ class ListenSessionRuntime:
             self.language,
             multi_lang_enabled=self.multi_lang_enabled,
             preferred_service=request.stt_service,
+            **window_selection_kwargs(self, request.uid),
         )
         # The provider the serving policy chose, captured before `_create_stt_socket`
         # can walk the fallback chain. Only the *selected* value is safe to hold onto:
@@ -384,7 +510,19 @@ class ListenSessionRuntime:
             is_multi_channel=self.is_multi_channel,
             include_speech_profile=include_profile,
         ):
-            self.has_speech_profile = await self.persistence.call(get_user_has_speech_profile, request.uid)
+            # A Firestore voiceprint is sufficient for matching even if its GCS
+            # audio cache has disappeared. Only probe audio for legacy profiles
+            # whose embedding still needs to be extracted.
+            try:
+                embedding = await self.persistence.call(user_db.get_user_speaker_embedding, request.uid)
+            except Exception as error:
+                logger.error('Speaker ID user embedding availability failed type=%s', type(error).__name__)
+                embedding = None
+            self.has_speech_profile = bool(embedding) or await self.persistence.call(
+                get_user_has_speech_profile, request.uid
+            )
+            if not self.has_speech_profile:
+                logger.info('Speaker ID owner profile skipped reason=no_embedding_or_audio')
         self.state.speaker_id_enabled = should_enable_speaker_identification(
             use_custom_stt=self.use_custom_stt,
             private_cloud_sync_enabled=self.private_cloud_sync_enabled,
@@ -401,13 +539,15 @@ class ListenSessionRuntime:
         self._build_components()
         if not self.user_has_credits:
             try:
-                await send_credit_limit_notification(request.uid)
-                await request.websocket.send_json(
-                    FreemiumThresholdReachedEvent(
-                        remaining_seconds=0, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT
-                    ).to_json()
-                )
-                self.state.freemium_threshold_sent = True
+                subscription = await self.persistence.call(user_db.get_user_valid_subscription, request.uid)
+                if should_emit_plus_meter_warning(subscription):
+                    await send_credit_limit_notification(request.uid)
+                    await request.websocket.send_json(
+                        FreemiumThresholdReachedEvent(
+                            remaining_seconds=0, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT
+                        ).to_json()
+                    )
+                    self.state.freemium_threshold_sent = True
             except Exception as error:
                 logger.error('Credit-limit notification failed type=%s', type(error).__name__)
         if FAIR_USE_ENABLED:
@@ -532,19 +672,22 @@ class ListenSessionRuntime:
         elif self.state.remaining_seconds_cache is not None and transcription_seconds > 0:
             self.state.remaining_seconds_cache = max(0, self.state.remaining_seconds_cache - transcription_seconds)
         remaining = self.state.remaining_seconds_cache
+        subscription = await self.persistence.call(user_db.get_user_valid_subscription, self.request.uid)
         if remaining is not None and remaining <= FREEMIUM_THRESHOLD_SECONDS and not self.state.freemium_threshold_sent:
-            await self.asend_event(
-                FreemiumThresholdReachedEvent(remaining_seconds=remaining, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT)
-            )
-            self.state.freemium_threshold_sent = True
-            try:
-                await send_credit_limit_notification(self.request.uid)
-            except Exception as error:
-                logger.error('Credit-limit notification refresh failed type=%s', type(error).__name__)
+            if should_emit_plus_meter_warning(subscription):
+                await self.asend_event(
+                    FreemiumThresholdReachedEvent(
+                        remaining_seconds=remaining, action=FREEMIUM_ACTION_SETUP_ON_DEVICE_STT
+                    )
+                )
+                self.state.freemium_threshold_sent = True
+                try:
+                    await send_credit_limit_notification(self.request.uid)
+                except Exception as error:
+                    logger.error('Credit-limit notification refresh failed type=%s', type(error).__name__)
         self.user_has_credits = remaining is None or remaining > 0
         if self.user_has_credits and (remaining is None or remaining > FREEMIUM_THRESHOLD_SECONDS):
             self.state.freemium_threshold_sent = False
-        subscription = await self.persistence.call(user_db.get_user_valid_subscription, self.request.uid)
         if not subscription or subscription.plan == PlanType.basic:
             last_words = self.state.last_transcript_time or self.state.first_audio_byte_timestamp
             if (
@@ -562,13 +705,21 @@ class ListenSessionRuntime:
             await self.persistence.call(record_dg_usage_ms, self.request.uid, self.state.dg_usage_ms_pending)
             self.state.dg_usage_ms_pending = 0
         if self.use_custom_stt:
-            # Exempt from transcription billing and live caps, but the speech
-            # still drives Omi-paid LLM post-processing — meter it in its own
-            # isolated fair-use lane so the spend is visible (#7690).
-            if FAIR_USE_ENABLED and self.receiver.vad_gate is not None:
+            # Exempt from transcription billing and live STT caps. Speech still
+            # drives Omi-paid LLM post-processing: meter the isolated fair-use
+            # lane and record speech_seconds (never transcription_seconds) so
+            # the processing budget can cap enrichment (#7690).
+            custom_speech_ms = 0
+            if self.receiver.vad_gate is not None:
                 custom_speech_ms = self.receiver.vad_gate.consume_speech_ms_delta()
-                if custom_speech_ms:
+                if FAIR_USE_ENABLED and custom_speech_ms:
                     await self.persistence.call(record_speech_ms, self.request.uid, custom_speech_ms, 'custom_stt')
+            if custom_speech_ms:
+                await self.persistence.call(
+                    record_usage,
+                    self.request.uid,
+                    speech_seconds=custom_speech_ms // 1000,
+                )
             return 0
         if not self.state.last_usage_record_timestamp:
             return 0
@@ -576,11 +727,29 @@ class ListenSessionRuntime:
         if self.receiver.vad_gate is not None:
             speech_ms = self.receiver.vad_gate.consume_speech_ms_delta()
             speech_seconds = speech_ms // 1000
+            if speech_ms and not managed_chain_enabled(self):
+                # Live provider minutes: VAD speech seconds actually sent for
+                # STT (not wall-clock, not fair-use transcription_seconds),
+                # attributed to the provider serving at flush time — failover
+                # can switch it mid-session, same read-at-use rule as
+                # _serving_provider(). The consumed delta makes each
+                # millisecond reach this counter exactly once. Custom-STT
+                # sessions returned above: their audio runs on the user's own
+                # STT and is not a provider's minutes.
+                provider = getattr(self, 'stt_service', None)
+                record_live_stt_audio_seconds(
+                    provider=getattr(provider, 'value', provider),
+                    platform=getattr(getattr(self, 'client_device_context', None), 'platform', None),
+                    seconds=speech_ms / 1000,
+                )
             if FAIR_USE_ENABLED and speech_ms:
                 await self.persistence.call(record_speech_ms, self.request.uid, speech_ms)
         now = time.time()
         seconds = billable_transcription_seconds(
-            self.state.last_usage_record_timestamp, self.state.last_audio_received_time, now
+            self.state.last_usage_record_timestamp,
+            self.state.last_audio_received_time,
+            now,
+            getattr(self.state, 'last_audio_resume_time', None),
         )
         words = self.state.words_transcribed_since_last_record
         self.state.words_transcribed_since_last_record = 0
@@ -617,6 +786,10 @@ class ListenSessionRuntime:
                 max_pending_requests=self.limits.max_pending_requests,
                 max_pending_speaker_sample_requests=self.limits.max_pending_speaker_sample_requests,
                 client_kind=self.client_kind,
+                # v2 audio requires the capture clock (single channel, server
+                # STT — always on internally) AND the AUDIO_TIMELINE_V2
+                # persistence admission AND a pusher capability acknowledgment.
+                audio_timeline_v2=bool(getattr(self.state, 'capture_timeline_v2', False)),
             ),
             ListenPusherSessionDeps(
                 get_current_conversation_id=lambda: self.state.current_conversation_id,
@@ -782,6 +955,7 @@ class ListenSessionRuntime:
             self.request.owner_persistence_blocked.set()
             await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
         self._finish_live_transcription()
+        self._record_session_transcript_outcome()
         if not owner_persistence_blocked:
             try:
                 await self.transcripts.flush_translations()
@@ -860,4 +1034,13 @@ class ListenSessionRuntime:
 
 
 async def run_listen_session(request: ListenRequest) -> None:
-    await ListenSessionRuntime(request).run()
+    runtime: Optional[ListenSessionRuntime] = None
+    try:
+        runtime = ListenSessionRuntime(request)
+        await runtime.run()
+    finally:
+        if runtime is not None and runtime.state.first_audio_byte_timestamp is None:
+            record_listen_no_audio_teardown(
+                source=request.source,
+                platform=runtime.client_device_context.platform,
+            )

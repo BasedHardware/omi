@@ -33,11 +33,25 @@ from typing import Any, Callable, Dict, List, NamedTuple, Optional, Sequence, Ty
 
 logger = logging.getLogger(__name__)
 
-# Cursor keys are scoped to the UTC hour the job is serving: the hour groups are
-# recomputed from wall-clock every execution, so a cursor from a previous hour
-# points into a different user population. 2h TTL covers the every-minute
-# scheduler plus clock skew without leaving stale keys around.
+# The checkpoint is a single stable key, bounded only by its TTL. It used to be
+# scoped to the UTC hour being served, which made it unreadable by design: the
+# execution that exhausted its budget wrote `...:2026-09-02T18` and the next
+# execution read `...:2026-09-02T19`, so the unfinished tail was never resumed
+# and the whole point of the checkpoint was lost. The serving cohort that a
+# checkpoint describes has to outlive the hour bucket, so the key must too.
+#
+# Starvation is prevented by `rotate_to`, not by the key: a run rotates the hour
+# groups to start at the checkpoint and then walks the *whole* rotated list, so
+# a carried-over cursor reorders a pass and never removes an hour from it. The
+# TTL is the staleness bound — a cursor no execution reached within two hours
+# describes a population that no longer exists, and expiring it costs a
+# re-walk from the head, never a lost summary.
 JOB_CURSOR_TTL_SECONDS = 60 * 60 * 2
+JOB_CURSOR_KEY = 'daily_summary_job_cursor'
+
+# Fallback bound when the deployed budget is missing or nonpositive. ~360k chars
+# is roughly 90k tokens, comfortably inside the 272k-token model limit.
+DEFAULT_MAX_HISTORY_CHARS = 360_000
 
 _CURSOR_HOUR = 'hour'
 _CURSOR_UID = 'uid'
@@ -92,8 +106,14 @@ def select_conversations_within_budget(
     The first conversation is always kept: a single oversized conversation must
     still produce a summary attempt rather than an empty prompt.
     """
-    if max_chars <= 0 or not conversations:
-        return BoundedConversations(list(conversations), 0, 0)
+    if not conversations:
+        return BoundedConversations([], 0, 0)
+    if max_chars <= 0:
+        # A nonpositive budget used to return the whole day, i.e. it removed the
+        # only bound protecting the prompt from the context overflow this module
+        # exists for. Misconfiguration falls back to the bound, never past it.
+        logger.warning('daily_summary_budget_invalid_max_chars value=%s', max_chars)
+        max_chars = DEFAULT_MAX_HISTORY_CHARS
 
     render_one = render or _default_render
     original_order = {id(c): i for i, c in enumerate(conversations)}
@@ -106,21 +126,32 @@ def select_conversations_within_budget(
         try:
             size = len(render_one(conversation))
         except Exception as e:  # a single unrenderable conversation must not sink the recap
+            # Counting it as zero and keeping it only moved the failure into the
+            # summary render, where it costs the whole recap instead of one
+            # conversation. Drop it and report it as dropped.
             logger.warning('daily_summary_budget_render_failed error=%s', e)
-            size = 0
+            dropped += 1
+            continue
         if kept and used + size > max_chars:
             dropped += 1
             continue
         kept.append(conversation)
         used += size
 
+    if not kept:
+        # Every render failed, so the fault is in the renderer, not in any one
+        # conversation. Dropping the whole day would turn that into a silently
+        # missing recap; hand the material over and let the generator fail
+        # loudly on its own instead.
+        logger.warning('daily_summary_budget_all_renders_failed count=%d', len(conversations))
+        return BoundedConversations(list(conversations), 0, 0)
     kept.sort(key=lambda c: original_order[id(c)])
     return BoundedConversations(kept, dropped, used)
 
 
-def job_cursor_key(now_utc: datetime) -> str:
-    """Cursor key for the UTC hour currently being served."""
-    return f'daily_summary_job_cursor:{now_utc.strftime("%Y-%m-%dT%H")}'
+def job_cursor_key() -> str:
+    """Checkpoint key for the daily-summary job. Stable across hour rollovers."""
+    return JOB_CURSOR_KEY
 
 
 def make_cursor(target_hour: Optional[int], uid: Optional[str]) -> Dict[str, Any]:

@@ -150,7 +150,11 @@ export interface AppsSearchParams {
 
 // Filter types for the UI
 export type SortOption =
-  'installs_desc' | 'rating_desc' | 'rating_asc' | 'name_asc' | 'name_desc';
+  | 'installs_desc'
+  | 'rating_desc'
+  | 'rating_asc'
+  | 'name_asc'
+  | 'name_desc';
 
 export interface AppsFilters {
   category?: string;
@@ -237,6 +241,7 @@ export interface CreateAppRequest {
   };
   proactive_notification_scopes?: string[];
   source_code_url?: string;
+  thumbnails?: string[];
 }
 
 export interface UpdateAppRequest extends Partial<CreateAppRequest> {

@@ -59,6 +59,7 @@ struct ActivityHubTab: View {
             appState: appState,
             memoriesViewModel: memoriesViewModel,
             tasksStore: tasksStore,
+            searchSurface: .activity,
             onOpenConversation: onOpenConversation,
             onOpenMemory: onOpenMemory,
             onOpenBrainMap: onOpenBrainMap,
@@ -78,8 +79,9 @@ struct ActivityHubTab: View {
     QuerySearchBar(
       text: $searchText,
       accessibilityID: "activity-search-field",
-      placeholder: "Search activity…",
-      focus: nil
+      placeholder: "Search activity",
+      focus: nil,
+      searchSurface: .activity
     )
   }
 

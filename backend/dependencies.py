@@ -8,7 +8,7 @@ from firebase_admin import auth
 import database.mcp_api_key as mcp_api_key_db
 import database.dev_api_key as dev_api_key_db
 from utils.api_key_families import DEV_FAMILY, MCP_FAMILY, wrong_key_family_detail
-from utils.executors import critical_executor, db_executor, run_blocking
+from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
 from utils.log_sanitizer import sanitize
 from utils.observability.api_keys import record_api_key_repairs
 from utils.memory.product_authorization import ProductAuthorizationContext
@@ -19,6 +19,7 @@ from utils.mcp_memories import (
 )
 from utils.other import endpoints as auth_endpoints
 from utils.scopes import Scopes, has_scope
+from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,14 @@ async def _enforce_cutover_access(uid: str, request: Request | None) -> None:
     await run_blocking(db_executor, _enforce_cutover_http_if_request, uid, request)
 
 
+def _enforce_jit_qa_http_access(uid: str) -> None:
+    """Apply the isolated QA UID fence after every verified owner lookup."""
+    try:
+        enforce_jit_qa_uid(uid)
+    except JITQAAdmissionError as error:
+        raise HTTPException(status_code=403, detail="account is not admitted to the isolated JIT QA plane") from error
+
+
 async def get_current_user_id(
     credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
     request: Request = None,  # pyright: ignore[reportArgumentType]
@@ -61,10 +70,17 @@ async def get_current_user_id(
     try:
         id_token = credentials.credentials
         decoded_token = await run_blocking(critical_executor, auth.verify_id_token, id_token)
+    except ExecutorSaturatedError as error:
+        raise HTTPException(
+            status_code=503,
+            detail='Authentication temporarily unavailable. Try again shortly.',
+            headers={'Retry-After': '1'},
+        ) from error
     except Exception as e:
         logger.error(f"Error verifying Firebase ID token: {e}")
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
     uid = decoded_token["uid"]
+    _enforce_jit_qa_http_access(uid)
     await _enforce_account_deletion_access(uid)
     await _enforce_cutover_access(uid, request)
     return uid
@@ -93,6 +109,7 @@ async def get_uid_from_mcp_api_key(
     if not user_data:
         raise HTTPException(status_code=401, detail="Invalid API Key")
     user_id = user_data["user_id"]
+    _enforce_jit_qa_http_access(user_id)
     await _enforce_account_deletion_access(user_id)
     await _enforce_cutover_access(user_id, request)
     await _check_api_key_rate_limit_async(
@@ -131,6 +148,7 @@ async def get_mcp_api_key_auth(
     if not user_data:
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
+    _enforce_jit_qa_http_access(user_data["user_id"])
     await _enforce_account_deletion_access(user_data["user_id"])
     await _enforce_cutover_access(user_data["user_id"], request)
 
@@ -233,6 +251,7 @@ async def get_api_key_auth(
     if not user_data:
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
+    _enforce_jit_qa_http_access(user_data["user_id"])
     await _enforce_account_deletion_access(user_data["user_id"])
     await _enforce_cutover_access(user_data["user_id"], request)
 
@@ -424,6 +443,27 @@ async def get_uid_with_conversations_write(auth: ApiKeyAuth = Depends(get_api_ke
     return auth.uid
 
 
+async def get_uid_with_conversations_from_segments_write(
+    auth: ApiKeyAuth = Depends(get_auth_with_conversations_write),
+    request: Request = None,
+) -> str:
+    """conversations:write plus the dedicated from-segments budget for the dev route.
+
+    POST /v1/dev/user/conversations/from-segments mirrors the first-party
+    route's dedicated conversations:from-segments policy (30/hour) on top of
+    the shared dev:conversations write ceiling — the same shared-plus-per-route
+    composition as _check_conversation_read_budgets_async, so per-route tuning
+    can never raise the aggregate conversation-write limit. Failure logging
+    includes remote IP and user agent: this route is a scripted-abuse target.
+    """
+    await _check_dev_api_key_rate_limit_async(
+        request=request,
+        auth=auth,
+        policy_name="dev:conversations_from_segments",
+    )
+    return auth.uid
+
+
 async def get_auth_with_memories_read(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> ApiKeyAuth:
     if not has_scope(auth.scopes, Scopes.MEMORIES_READ):
         raise HTTPException(status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.MEMORIES_READ}")
@@ -608,6 +648,26 @@ async def get_developer_memory_default_memory_write_context(
         app_id=auth_context.app_id,
         key_id=auth_context.key_id,
         policy_name="dev:memories",
+    )
+    return auth_context
+
+
+async def get_developer_memory_default_memory_create_context(
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
+) -> ProductAuthorizationContext:
+    """POST-only memory-create context: shared hourly ceiling plus burst cap.
+
+    The per-minute ``dev:memories_write_burst`` ceiling exists to stop scripted
+    create bursts (the 2026-09-11 69/min shape), so it must ride only the POST
+    create route — PATCH/DELETE share the hourly write context and must not
+    drain a POST-specific bucket.
+    """
+    await _check_api_key_rate_limit_async(
+        prefix="dev",
+        uid=auth_context.uid,
+        app_id=auth_context.app_id,
+        key_id=auth_context.key_id,
+        policy_name="dev:memories_write_burst",
     )
     return auth_context
 

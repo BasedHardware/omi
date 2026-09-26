@@ -10,15 +10,11 @@ import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/memory_review.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/widgets/components/memory_review_card.dart';
 
-Memory _memory({
-  required String id,
-  String content = 'Prefers async standups',
-  bool? userReview,
-  bool edited = false,
-}) {
+Memory _memory({required String id, String content = 'Prefers async standups', bool? userReview, bool edited = false}) {
   return Memory(
     id: id,
     uid: 'review-card-user',
@@ -51,11 +47,26 @@ MemoriesProvider _provider({
   );
 }
 
+/// A provider whose next fetch reflects later mutations of [rows], so a test can
+/// model a refresh that carries another device's verdict or a ledger append.
+MemoriesProvider _mutableProvider(List<Memory> rows) {
+  return MemoriesProvider(
+    fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+        GetMemoriesResult(List<Memory>.from(rows), true),
+    fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+        const GetLedgerHistoryResult([], supported: true),
+    reviewMemoryRequest: (id, value) async => true,
+    editMemoryRequest: (id, value) async => const EditMemoryResult(persisted: true),
+  );
+}
+
 Widget _harness(MemoriesProvider provider, List<MemoryReviewItem> items) {
   return ChangeNotifierProvider<MemoriesProvider>.value(
     value: provider,
     child: MaterialApp(
       theme: ThemeData.dark(),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: const [Locale('en')],
       home: Scaffold(
         body: SingleChildScrollView(
           child: MemoryReviewCard(items: items, source: MemoryReviewSource.chatBlock),
@@ -74,7 +85,12 @@ void main() {
   });
 
   testWidgets('renders one row per learned memory with all three controls', (tester) async {
-    final provider = _provider(rows: [_memory(id: 'mem-1'), _memory(id: 'mem-2', content: 'Runs on Tuesdays')]);
+    final provider = _provider(
+      rows: [
+        _memory(id: 'mem-1'),
+        _memory(id: 'mem-2', content: 'Runs on Tuesdays'),
+      ],
+    );
     addTearDown(provider.dispose);
     await provider.loadMemories();
 
@@ -251,8 +267,88 @@ void main() {
     expect(find.byKey(const Key('memory_review_editor_mem-1')), findsOneWidget);
   });
 
-  testWidgets('an unresolved memory still shows its content with the controls disabled', (tester) async {
-    final provider = _provider(rows: const []);
+  testWidgets('loads the memories itself when the provider was never initialised', (tester) async {
+    // Nothing in app start-up calls MemoriesProvider.init(); only the memories
+    // page does. Chat and the daily summary are usually the first memory
+    // surface a session opens, and a never-loaded provider reports
+    // `loading == true` forever, so the card must not read that as "a fetch is
+    // already in flight".
+    final provider = _provider(rows: [_memory(id: 'mem-cold')]);
+    addTearDown(provider.dispose);
+    expect(provider.loading, isTrue, reason: 'a provider that has never loaded still reports loading');
+
+    await tester.pumpWidget(_harness(provider, [_item('mem-cold')]));
+    await tester.pumpAndSettle();
+
+    expect(provider.memories.single.id, 'mem-cold');
+    final accept = tester.widget<InkWell>(find.byKey(const Key('memory_review_accept_mem-cold')));
+    expect(accept.onTap, isNotNull);
+  });
+
+  testWidgets('a correction that replaced the referenced row shows the corrected text', (tester) async {
+    // A knowledge-ledger correction appends a replacement under a new id, so
+    // the id this card references stops resolving. The row must not fall back
+    // to the original learned text while saying "Updated."
+    final rows = <Memory>[_memory(id: 'mem-ledger')];
+    final provider = _mutableProvider(rows);
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    await tester.pumpWidget(_harness(provider, [_item('mem-ledger')]));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('memory_review_fix_mem-ledger')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('memory_review_editor_mem-ledger')), 'Prefers written standups');
+    await tester.tap(find.byKey(const Key('memory_review_save_mem-ledger')));
+    await tester.pumpAndSettle();
+
+    // The ledger append: the referenced id is gone on the next refresh.
+    rows.clear();
+    await provider.loadMemories();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Updated.'), findsOneWidget);
+    expect(find.text('Prefers written standups'), findsOneWidget);
+    expect(find.text('Prefers async standups'), findsNothing);
+  });
+
+  testWidgets('a verdict cast elsewhere after a correction still wins', (tester) async {
+    // The optimistic paint is not a permanent override: once the write has
+    // persisted the row is derived from live memory state again.
+    final row = _memory(id: 'mem-live');
+    final provider = _mutableProvider([row]);
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    await tester.pumpWidget(_harness(provider, [_item('mem-live')]));
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('memory_review_fix_mem-live')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('memory_review_editor_mem-live')), 'Prefers written standups');
+    await tester.tap(find.byKey(const Key('memory_review_save_mem-live')));
+    await tester.pumpAndSettle();
+    expect(find.text('Updated.'), findsOneWidget);
+
+    // A verdict cast on another device arrives on the next refresh.
+    row.userReview = true;
+    await provider.loadMemories();
+    await tester.pumpAndSettle();
+
+    expect(find.text("Confirmed. I'll act on this."), findsOneWidget);
+    expect(find.text('Updated.'), findsNothing);
+  });
+
+  testWidgets('a known memory outside the provider list is still fully tappable', (tester) async {
+    final reviews = <String, bool>{};
+    final provider = _provider(
+      rows: const [],
+      reviewMemoryRequest: (id, value) async {
+        reviews[id] = value;
+        return true;
+      },
+    );
     addTearDown(provider.dispose);
     await provider.loadMemories();
 
@@ -260,8 +356,175 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Prefers async standups'), findsOneWidget);
-    final accept = tester.widget<InkWell>(find.byKey(const Key('memory_review_accept_mem-missing')));
-    expect(accept.onTap, isNull);
-    expect(find.byKey(const Key('memory_review_status_mem-missing')), findsNothing);
+    // Identity is enough: a row the bulk list never contained must not render
+    // dead control chrome.
+    for (final key in [
+      const Key('memory_review_accept_mem-missing'),
+      const Key('memory_review_reject_mem-missing'),
+      const Key('memory_review_fix_mem-missing'),
+    ]) {
+      expect(tester.widget<InkWell>(find.byKey(key)).onTap, isNotNull);
+    }
+
+    await tester.tap(find.byKey(const Key('memory_review_accept_mem-missing')));
+    await tester.pumpAndSettle();
+    // The verdict reached the server by id even though the row never loaded,
+    // and the row says so instead of falling back to tappable controls.
+    expect(reviews, {'mem-missing': true});
+    expect(find.text("Confirmed. I'll act on this."), findsOneWidget);
+  });
+
+  testWidgets('a fix on an unresolved row edits by id and records the correction', (tester) async {
+    final edits = <String, String>{};
+    final provider = _provider(
+      rows: const [],
+      editMemoryRequest: (id, value) async {
+        edits[id] = value;
+        return const EditMemoryResult(persisted: true);
+      },
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    await tester.pumpWidget(_harness(provider, [_item('mem-missing')]));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('memory_review_fix_mem-missing')));
+    await tester.pumpAndSettle();
+
+    // The editor is seeded from the recap text when no live row exists.
+    final editor = tester.widget<TextField>(find.byKey(const Key('memory_review_editor_mem-missing')));
+    expect(editor.controller?.text, 'Prefers async standups');
+
+    await tester.enterText(find.byKey(const Key('memory_review_editor_mem-missing')), 'Prefers written standups');
+    await tester.tap(find.byKey(const Key('memory_review_save_mem-missing')));
+    await tester.pumpAndSettle();
+
+    expect(edits, {'mem-missing': 'Prefers written standups'});
+    expect(find.text('Updated.'), findsOneWidget);
+    expect(find.text('Prefers written standups'), findsOneWidget);
+    expect(find.byKey(const Key('memory_review_editor_mem-missing')), findsNothing);
+  });
+
+  testWidgets('a failed review on an unresolved row reverts and shows the error line', (tester) async {
+    final provider = _provider(rows: const [], reviewMemoryRequest: (id, value) async => false);
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    await tester.pumpWidget(_harness(provider, [_item('mem-missing')]));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('memory_review_reject_mem-missing')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('memory_review_error_mem-missing')), findsOneWidget);
+    expect(find.text("Dropped. I'll avoid facts like this."), findsNothing);
+    // The controls come back so the user can try again.
+    final reject = tester.widget<InkWell>(find.byKey(const Key('memory_review_reject_mem-missing')));
+    expect(reject.onTap, isNotNull);
+  });
+
+  testWidgets('a truncated bulk list does not disable the recap rows', (tester) async {
+    // GET /v3/memories can return X-Omi-List-Truncated; the provider stops
+    // paging there, so the recap ids can be permanently absent from the list.
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          const GetMemoriesResult([], true, truncated: true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
+      reviewMemoryRequest: (id, value) async => true,
+      editMemoryRequest: (id, value) async => const EditMemoryResult(persisted: true),
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    await tester.pumpWidget(_harness(provider, [_item('mem-beyond')]));
+    await tester.pumpAndSettle();
+
+    expect(provider.memories, isEmpty);
+    final accept = tester.widget<InkWell>(find.byKey(const Key('memory_review_accept_mem-beyond')));
+    expect(accept.onTap, isNotNull);
+  });
+
+  testWidgets('a persisted verdict on an unresolved row survives card State recreation', (tester) async {
+    // A chat-list card scrolled out and back rebuilds its State; the settled
+    // verdict lives on the provider, so the recreated card must not re-offer
+    // a vote the server already recorded.
+    final provider = _provider(rows: const [], reviewMemoryRequest: (id, value) async => true);
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    await tester.pumpWidget(_harness(provider, [_item('mem-missing')]));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('memory_review_accept_mem-missing')));
+    await tester.pumpAndSettle();
+    expect(find.text("Confirmed. I'll act on this."), findsOneWidget);
+
+    // Recreate the State exactly as scrolling away and back does.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+    await tester.pumpWidget(_harness(provider, [_item('mem-missing')]));
+    await tester.pumpAndSettle();
+
+    expect(find.text("Confirmed. I'll act on this."), findsOneWidget);
+    expect(find.byKey(const Key('memory_review_accept_mem-missing')), findsNothing);
+  });
+
+  testWidgets('a failed hydration load is retried and resolves once the backend recovers', (tester) async {
+    var fetches = 0;
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+        fetches++;
+        if (fetches == 1) {
+          return const GetMemoriesResult(
+            [],
+            true,
+            statusCode: 503,
+            failureReason: MemoriesFetchFailureReason.httpError,
+          );
+        }
+        return GetMemoriesResult([_memory(id: 'mem-flaky')], true);
+      },
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
+      reviewMemoryRequest: (id, value) async => true,
+      editMemoryRequest: (id, value) async => const EditMemoryResult(persisted: true),
+    );
+    addTearDown(provider.dispose);
+
+    await tester.pumpWidget(_harness(provider, [_item('mem-flaky')]));
+    await tester.pumpAndSettle();
+
+    // The first ask failed; the card observed the settled failure on rebuild
+    // and spent its capped retry, which resolved the row.
+    expect(fetches, 2);
+    expect(provider.loadFailed, isFalse);
+    expect(provider.memories.single.id, 'mem-flaky');
+  });
+
+  testWidgets('a persistently failing backend is not retried past the cap', (tester) async {
+    var fetches = 0;
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+        fetches++;
+        return const GetMemoriesResult([], true, statusCode: 503, failureReason: MemoriesFetchFailureReason.httpError);
+      },
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
+      reviewMemoryRequest: (id, value) async => true,
+      editMemoryRequest: (id, value) async => const EditMemoryResult(persisted: true),
+    );
+    addTearDown(provider.dispose);
+
+    await tester.pumpWidget(_harness(provider, [_item('mem-down')]));
+    await tester.pumpAndSettle();
+
+    // First ask plus one capped retry; the budget is spent and the row stays
+    // actionable by id instead of fetching forever.
+    expect(fetches, 2);
+    expect(provider.loadFailed, isTrue);
+    final accept = tester.widget<InkWell>(find.byKey(const Key('memory_review_accept_mem-down')));
+    expect(accept.onTap, isNotNull);
   });
 }

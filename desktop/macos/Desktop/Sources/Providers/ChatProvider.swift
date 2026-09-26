@@ -159,67 +159,15 @@ private struct ChatJournalTerminalTarget {
 // MARK: - UserDefaults Extension for KVO
 
 extension UserDefaults {
-  @objc dynamic var multiChatEnabled: Bool {
-    return bool(forKey: "multiChatEnabled")
-  }
   @objc dynamic var playwrightUseExtension: Bool {
     return bool(forKey: "playwrightUseExtension")
-  }
-}
-
-// MARK: - Chat Session Model
-
-/// A chat session that groups related messages
-struct ChatSession: Identifiable, Codable, Equatable {
-  let id: String
-  var title: String
-  var preview: String?
-  let createdAt: Date
-  var updatedAt: Date
-  let appId: String?
-  var messageCount: Int
-  var starred: Bool
-
-  enum CodingKeys: String, CodingKey {
-    case id, title, preview, starred
-    case createdAt = "created_at"
-    case updatedAt = "updated_at"
-    case appId = "app_id"
-    case messageCount = "message_count"
-  }
-
-  init(
-    id: String = UUID().uuidString, title: String = "New Chat", preview: String? = nil,
-    createdAt: Date = Date(), updatedAt: Date = Date(), appId: String? = nil,
-    messageCount: Int = 0, starred: Bool = false
-  ) {
-    self.id = id
-    self.title = title
-    self.preview = preview
-    self.createdAt = createdAt
-    self.updatedAt = updatedAt
-    self.appId = appId
-    self.messageCount = messageCount
-    self.starred = starred
-  }
-
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    id = try container.decode(String.self, forKey: .id)
-    title = try container.decodeIfPresent(String.self, forKey: .title) ?? "New Chat"
-    preview = try container.decodeIfPresent(String.self, forKey: .preview)
-    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
-    appId = try container.decodeIfPresent(String.self, forKey: .appId)
-    messageCount = try container.decodeIfPresent(Int.self, forKey: .messageCount) ?? 0
-    starred = try container.decodeIfPresent(Bool.self, forKey: .starred) ?? false
   }
 }
 
 // MARK: - Content Block Model
 
 /// Structured tool input for inline display
-struct ToolCallInput {
+struct ToolCallInput: Equatable {
   /// Short summary for inline display (e.g., file path, command)
   let summary: String
   /// Full JSON details for expanded view
@@ -715,6 +663,7 @@ struct ChatMessage: Identifiable {
   /// Kernel journal lifecycle when this message was projected from a journal
   /// row. Failed turns get a light visual treatment so they don't look completed.
   var journalStatus: KernelJournalTurnStatus?
+  var failureCode: AgentRuntimeFailureCode? = nil
   /// A journal-first continuation can reserve its assistant row before the
   /// query begins. It stays out of the transcript until real output arrives.
   var hidesEmptyStreamingPlaceholder: Bool
@@ -815,6 +764,15 @@ extension ChatMessage {
 
   var copyableText: String {
     visibleAnswerText
+  }
+
+  /// `!copyableText.isEmpty` without deriving the text.
+  var hasCopyableText: Bool {
+    ChatAssistantAnswerText.hasVisible(
+      contentBlocks: contentBlocks,
+      fallback: text,
+      isStreaming: isStreaming
+    )
   }
 
   var displayResources: [ChatResource] {
@@ -1114,12 +1072,7 @@ class ChatProvider: ObservableObject {
   /// accepted or the user removes them.
   @Published var pendingComposerReferences: [ChatComposerReference] = []
   @Published var messages: [ChatMessage] = []
-  @Published var sessions: [ChatSession] = []
-  @Published var currentSession: ChatSession? {
-    didSet { restoreDraftForCurrentContextIfNeeded() }
-  }
   @Published var isLoading = false
-  @Published var isLoadingSessions = true  // Start true since we load sessions on init
   /// Root-only prompt materialization waits for the current main-chat journal
   /// replay, never for an unrelated legacy session load.
   @Published private(set) var isMainChatJournalFirstPageReady = false
@@ -1222,20 +1175,13 @@ class ChatProvider: ObservableObject {
   @Published var selectedAppId: String? {
     didSet { restoreDraftForCurrentContextIfNeeded() }
   }
+  private(set) var selectedChatAppContext: ChatAppContext?
   @Published var hasMoreMessages = false
   @Published var isLoadingMoreMessages = false
-  @Published var showStarredOnly = false
-  @Published var searchQuery = ""
-  /// Pre-computed grouped sessions for sidebar display.
-  /// Updated reactively via Combine instead of recomputed on every SwiftUI render pass.
-  @Published private(set) var groupedSessions: [(String, [ChatSession])] = []
 
   /// Triggered when a browser tool is called but the extension token isn't configured.
   /// The UI should observe this and present BrowserExtensionSetup.
   @Published var needsBrowserExtensionSetup = false
-
-  /// Whether the user is currently viewing the default chat (syncs with Flutter app)
-  @Published var isInDefaultChat = true
 
   /// Working directory for Claude Agent SDK file-system tools (Read, Write, Bash, etc.)
   /// Set by TaskChatCoordinator to point at the user's project directory.
@@ -1259,10 +1205,6 @@ class ChatProvider: ObservableObject {
     bridgeHarnessOverride != nil
   }
 
-  /// Multi-chat mode setting - when false, only default chat is shown (syncs with Flutter)
-  /// When true, user can create multiple chat sessions
-  @AppStorage("multiChatEnabled") var multiChatEnabled = false
-
   // MARK: - Agent client
   // NOTE: initialized lazily so it reads the persisted bridgeMode from UserDefaults,
   // not always defaulting to Omi mode on cold start.
@@ -1271,6 +1213,8 @@ class ChatProvider: ObservableObject {
     if let agentClient { return agentClient }
     let harness = resolvedHarnessMode()
     activeBridgeHarness = harness
+    activeBridgeMode =
+      UserDefaults.standard.string(forKey: .chatBridgeMode) ?? BridgeMode.piMono.rawValue
     let session = AgentClient.makeSession(harnessMode: harness)
     agentClient = session
     return session
@@ -1290,9 +1234,19 @@ class ChatProvider: ObservableObject {
   private let journalWriteCoordinator = ChatJournalWriteCoordinator()
   private var journalOwnerByMessageID: [String: String] = [:]
   var pendingMessageRatings = ChatMessageRatingQueue()
+
+  /// The in-flight rating write for each message, so the next one can chain
+  /// behind it instead of racing it.
+  ///
+  /// A thumbs-down sends twice by design: the bare rating the instant the user
+  /// taps (so walking away still counts), then the same rating carrying the
+  /// reason once they pick a chip. Those are two independent PATCHes, and the
+  /// backend stores the rating with `.set()` — so if the bare one lands second
+  /// it overwrites the reason the user just gave with nothing.
+  var messageRatingWriteChain: [String: Task<Void, Never>] = [:]
   var persistMessageRatingHandler: ((String, Int?) async throws -> Void)?
   private var journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
-  private var agentBridgeStarted = false
+  var agentBridgeStarted = false
   /// The root shell supplies one server-authoritative sample before this
   /// provider resolves Main Chat. This is process-local only: a different
   /// owner, a failed sample, and every non-main surface receive no extension.
@@ -1303,6 +1257,8 @@ class ChatProvider: ObservableObject {
   /// @AppStorage("chatBridgeMode") can be updated by other views sharing the same key,
   /// so comparing against it in switchBridgeMode() would always match → no-op.
   private var activeBridgeHarness: String = "piMono"
+  /// Persisted bridge mode the runtime last configured (not only harness).
+  private var activeBridgeMode: String = BridgeMode.piMono.rawValue
   /// Orders rapid preference changes without treating them as runtime lifecycle.
   /// The kernel applies each preference only when creating future sessions.
   private var profilePreferenceChangeGeneration: UInt64 = 0
@@ -1311,6 +1267,8 @@ class ChatProvider: ObservableObject {
     case omiAI = "agentSDK"  // Legacy, auto-migrated to piMono
     case userClaude = "claudeCode"
     case piMono = "piMono"
+    /// Local LM server via pi-mono; adapter owns the configured model id.
+    case local = "local"
     case hermes = "hermes"
     case openClaw = "openclaw"
   }
@@ -1374,47 +1332,30 @@ class ChatProvider: ObservableObject {
   private var messagesPaginationOffset = 0
 
   /// Reset history-pagination state. Must accompany every clear/replace of
-  /// `messages` outside the two loaders (`selectSession`,
-  /// `loadDefaultChatMessages`), which set both fields from a fresh fetch.
+  /// `messages` outside `loadDefaultChatMessages`, which sets both fields from a
+  /// fresh fetch.
   func resetMessagesPagination() {
     messagesPaginationOffset = 0
     hasMoreMessages = false
   }
 
-  private var multiChatObserver: AnyCancellable?
   private var playwrightExtensionObserver: AnyCancellable?
-  private var sessionGroupingObserver: AnyCancellable?
   private var activationObserver: AnyCancellable?
   private var runtimeOwnerObserver: AnyCancellable?
   private var signOutObserver: AnyCancellable?
   private var sessionInvalidateObserver: AnyCancellable?
+  var authSessionNotificationChain: Task<Void, Never>?
 
   private var refreshAllObserver: AnyCancellable?
+  private var userSkillsObserver: AnyCancellable?
+  private var userMcpObserver: AnyCancellable?
 
   // MARK: - Streaming Buffer
   /// Accumulates text and thinking deltas during streaming and flushes them to
   /// the published messages array in batches, reducing SwiftUI re-render frequency.
-  private let streamingBuffer = ChatStreamingBuffer(flushInterval: 0.035)
-
-  // MARK: - Filtered Sessions
-  var filteredSessions: [ChatSession] {
-    // Filter out "empty" sessions (only AI greeting, no user messages)
-    // These have messageCount <= 1 and default "New Chat" title
-    // Always keep the currently selected session visible
-    let nonEmptySessions = sessions.filter { session in
-      // Always show the current session (so user can continue working)
-      if session.id == currentSession?.id { return true }
-      // Keep sessions that have user messages (more than just AI greeting)
-      // or have been renamed (user intentionally kept them)
-      return session.messageCount > 1 || session.title != "New Chat"
-    }
-
-    guard !searchQuery.isEmpty else { return nonEmptySessions }
-    let query = searchQuery.lowercased()
-    return nonEmptySessions.filter { session in
-      session.title.lowercased().contains(query) || (session.preview?.lowercased().contains(query) ?? false)
-    }
-  }
+  // Not private: the journal projection extension releases the turn's raw
+  // accumulator when the authoritative answer lands.
+  let streamingBuffer = ChatStreamingBuffer(flushInterval: 0.035)
 
   // MARK: - Cached Context for Prompts
   private var cachedMemories: [ServerMemory] = []
@@ -1453,8 +1394,10 @@ class ChatProvider: ObservableObject {
         do {
           _ = try await self.resolvedAgentClient().configureDefaultExecutionProfile(
             adapterId: adapterId,
-            modelProfile: self.activeBridgeHarness == "hermes" || self.activeBridgeHarness == "openclaw"
-              ? nil : ModelQoS.Claude.chat,
+            modelProfile: AgentRuntimeRouting.defaultModelProfile(
+              harnessMode: self.activeBridgeHarness,
+              chatBridgeMode: self.bridgeMode
+            ),
             workingDirectory: directory
           )
         } catch {
@@ -1471,11 +1414,6 @@ class ChatProvider: ObservableObject {
   // MARK: - Dev Mode
   @AppStorage("devModeEnabled") var devModeEnabled = false
   private var devModeContext: String?
-
-  // MARK: - Current Session ID
-  var currentSessionId: String? {
-    currentSession?.id
-  }
 
   // MARK: - Current Model
   var currentModel: String {
@@ -1500,15 +1438,8 @@ class ChatProvider: ObservableObject {
       log("ChatProvider: migrated legacy agentSDK bridgeMode -> piMono")
     }
 
-    // Observe changes to multiChatEnabled setting
-    multiChatObserver = UserDefaults.standard.publisher(for: \.multiChatEnabled)
-      .dropFirst()  // Skip initial value
-      .receive(on: DispatchQueue.main)
-      .sink { [weak self] _ in
-        Task { @MainActor in
-          await self?.reinitialize()
-        }
-      }
+    // "Multiple Chat Sessions" was retired; drop the stale toggle value.
+    UserDefaults.standard.removeObject(forKey: .multiChatEnabled)
 
     // Refresh messages when app becomes active
     activationObserver = NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
@@ -1542,34 +1473,54 @@ class ChatProvider: ObservableObject {
         Task { @MainActor in
           guard let self = self else { return }
           log("ChatProvider: userDidSignOut — clearing chat state so the next user gets fresh context")
-          if self.agentBridgeStarted {
-            await self.resolvedAgentClient().stop()
-            self.agentBridgeStarted = false
-          }
+          await self.stopAgentBridgeIfStarted()
           self.resetSessionStateForAuthChange()
           self.resetDraftAfterSignOut()
           AgentRuntimeStatusStore.shared.reset()
         }
       }
 
-    // Light session invalidation (expired creds) — stop bridge only; preserve chat draft/state.
-    sessionInvalidateObserver = NotificationCenter.default.publisher(for: .sessionDidInvalidate)
-      .sink { [weak self] _ in
-        Task { @MainActor in
-          guard let self else { return }
-          log("ChatProvider: sessionDidInvalidate — stopping agent bridge")
-          if self.agentBridgeStarted {
-            await self.resolvedAgentClient().stop()
-            self.agentBridgeStarted = false
-          }
-        }
-      }
+    sessionInvalidateObserver = makeAuthSessionNotificationObserver()
 
     // Cmd+R: refresh messages on demand
     refreshAllObserver = NotificationCenter.default.publisher(for: .refreshAllData)
       .sink { [weak self] _ in
         Task { @MainActor in
           await self?.refreshJournalProjection()
+        }
+      }
+
+    // A skill saved or toggled in the Apps page changed the on-disk catalog;
+    // re-discover so the next message's compact catalog includes it.
+    userSkillsObserver = NotificationCenter.default.publisher(for: .omiUserSkillsDidChange)
+      .receive(on: DispatchQueue.main)
+      .sink { [weak self] _ in
+        Task { @MainActor in
+          await self?.discoverClaudeConfig()
+        }
+      }
+
+    // Applies ~/.omi/mcp.json changes to the shared runtime — debounced and
+    // never mid-turn. The pi-mono extension registers its MCP proxy tools once
+    // per process spawn, so unlike skills a file change needs a respawn. The
+    // coordinator is process-wide (task chat consumes it at its own boundary)
+    // and is bound here to this provider's bridge state.
+    UserMcpRuntimeRefresh.shared.bindRuntime(
+      isTurnActive: { [weak self] in self?.isSending ?? false },
+      isRuntimeStarted: { [weak self] in self?.agentBridgeStarted ?? false },
+      respawn: { [weak self] in
+        guard let self else { throw BridgeError.stopped }
+        try await self.respawnBridgeForUserMcpChange()
+      })
+
+    // A server was added, removed, or re-authed in ~/.omi/mcp.json. The runtime
+    // reads the file once per process spawn, so the shared bridge respawns
+    // (debounced, never mid-turn — see UserMcpRuntimeRefresh).
+    userMcpObserver = NotificationCenter.default.publisher(for: .omiUserMcpDidChange)
+      .receive(on: DispatchQueue.main)
+      .sink { _ in
+        Task { @MainActor in
+          UserMcpRuntimeRefresh.shared.changeDetected()
         }
       }
 
@@ -1598,14 +1549,6 @@ class ChatProvider: ObservableObject {
         }
       }
 
-    // Keep groupedSessions in sync — runs off the hot path so SwiftUI body never recomputes it
-    sessionGroupingObserver = Publishers.CombineLatest3($sessions, $searchQuery, $currentSession)
-      .receive(on: RunLoop.main)
-      .sink { [weak self] _, _, _ in
-        guard let self else { return }
-        self.groupedSessions = self.computeGroupedSessions()
-      }
-
     // Kill agent bridge subprocess on app quit to prevent orphaned Node.js processes
     terminationObserver = NotificationCenter.default.addObserver(
       forName: NSApplication.willTerminateNotification,
@@ -1628,8 +1571,7 @@ class ChatProvider: ObservableObject {
 
   private var currentDraftKey: ChatDraftKey {
     let appContext = selectedAppId?.isEmpty == false ? selectedAppId! : "omi"
-    let chatContext = currentSession?.id ?? "default"
-    return .mainChat(contextID: "\(appContext):\(chatContext)")
+    return .mainChat(contextID: "\(appContext):default")
   }
 
   private func restoreDraftForCurrentContextIfNeeded() {
@@ -1690,6 +1632,11 @@ class ChatProvider: ObservableObject {
   private func ensureBridgeStarted(
     authoritativeGeneration: Int? = nil
   ) async -> Bool {
+    // Apply a pending ~/.omi/mcp.json change here — the safe point between
+    // turns: this turn has issued no runtime work yet, and the runtime's
+    // restart still refuses while some other surface's requests are active.
+    // Task chat applies the same pending state at its own boundary.
+    await UserMcpRuntimeRefresh.shared.applyAtTurnBoundary()
     guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
       await presentBridgeStartupFailure(
         BridgeError.authMissing, authoritativeGeneration: authoritativeGeneration)
@@ -1704,6 +1651,29 @@ class ChatProvider: ObservableObject {
       await presentBridgeStartupFailure(error, authoritativeGeneration: authoritativeGeneration)
       return false
     }
+  }
+
+  /// Respawns the shared runtime so a ~/.omi/mcp.json change reaches the
+  /// pi-mono extension, which registers its MCP proxy tools once per spawn.
+  /// Mirrors the Playwright-setting restart: mark the warm bridge stale,
+  /// restart the process, and rebuild readiness. A refused restart (requests
+  /// active elsewhere) leaves the old process alive and serving, so it keeps
+  /// counting as started and the caller's pending change retries later.
+  private func respawnBridgeForUserMcpChange() async throws {
+    log("ChatProvider: user MCP servers changed — restarting agent bridge")
+    agentBridgeStarted = false
+    do {
+      try await resolvedAgentClient().restart()
+    } catch {
+      if await resolvedAgentClient().isAlive {
+        agentBridgeStarted = true
+      }
+      throw error
+    }
+    guard await ensureBridgeStarted() else {
+      throw BridgeError.stopped
+    }
+    log("ChatProvider: agent bridge restarted with current user MCP servers")
   }
 
   private func performBridgeReadinessStartup() async throws -> Bool {
@@ -1739,13 +1709,15 @@ class ChatProvider: ObservableObject {
     // Preferences are kernel-owned defaults for future sessions. Existing
     // sessions keep their immutable execution profile and the shared
     // daemon stays alive when this preference changes.
-    let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
     guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: activeBridgeHarness) else {
       throw BridgeError.agentError("Unknown AI runtime mode: \(activeBridgeHarness)")
     }
     _ = try await resolvedAgentClient().configureDefaultExecutionProfile(
       adapterId: adapterId,
-      modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
+      modelProfile: AgentRuntimeRouting.defaultModelProfile(
+        harnessMode: activeBridgeHarness,
+        chatBridgeMode: bridgeMode
+      ),
       workingDirectory: effectiveAgentWorkingDirectory()
     )
     // Onboarding can start the shared runtime before the root shell has
@@ -1796,6 +1768,7 @@ class ChatProvider: ObservableObject {
     journalWriteCoordinator.cancelAll()
     journalOwnerByMessageID.removeAll()
     pendingMessageRatings.removeAll()
+    messageRatingWriteChain.removeAll()
     journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
     // A ChatErrorCard belongs to the session that produced it. Retaining an
     // auth-required card after a successful account switch incorrectly asks
@@ -1805,10 +1778,12 @@ class ChatProvider: ObservableObject {
     lastFailedPrompt = nil
     messages.removeAll()
     resetMessagesPagination()
+    // Dropped-without-sending staged frames take their app-owned files with them.
+    RecentFrameStagingLifecycle.discardAppOwnedFiles(pendingAttachments)
     pendingAttachments.removeAll()
     pendingComposerReferences.removeAll()
-    sessions.removeAll()
-    currentSession = nil
+    selectedAppId = nil
+    selectedChatAppContext = nil
     cachedMemories = []
     cachedLedgerPromptProjection = nil
     memoriesLoaded = false
@@ -1826,19 +1801,15 @@ class ChatProvider: ObservableObject {
     RuntimeOwnerIdentity.currentOwnerId()
   }
 
-  func mainChatRuntimeChatId(sessionId: String?) -> String {
-    guard let sessionId, !sessionId.isEmpty else {
-      if let appId = selectedAppId, !appId.isEmpty {
-        return "default|\(appId)"
-      }
-      return "default"
+  func mainChatRuntimeChatId() -> String {
+    if let appId = selectedAppId, !appId.isEmpty {
+      return "default|\(appId)"
     }
-    return sessionId
+    return "default"
   }
 
   private func querySurface(
     surfaceRef: AgentSurfaceReference?,
-    sessionId: String?,
     systemPromptStyle: ChatSystemPromptStyle
   ) -> AgentSurfaceReference {
     switch Self.querySurfaceChoice(
@@ -1846,9 +1817,9 @@ class ChatProvider: ObservableObject {
       isFloating: systemPromptStyle == .floating)
     {
     case .onboarding: return .onboarding()
-    case .explicit: return surfaceRef ?? .mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
+    case .explicit: return surfaceRef ?? .mainChat(chatId: mainChatRuntimeChatId())
     case .floatingMain: return mainChatSurfaceReference()
-    case .defaultMain: return .mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
+    case .defaultMain: return .mainChat(chatId: mainChatRuntimeChatId())
     }
   }
 
@@ -1888,13 +1859,15 @@ class ChatProvider: ObservableObject {
     guard let requestedAdapter = AgentRuntimeProcess.adapterId(forHarnessMode: requestedHarness) else {
       throw BridgeError.agentError("Unknown AI runtime mode: \(requestedHarness)")
     }
-    let usesNativeModelChoice = requestedHarness == "hermes" || requestedHarness == "openclaw"
     return try await resolveAgentSurfaceSession(
       surface,
       creationProfile: AgentSessionCreationProfile(
         adapterId: requestedAdapter,
         modelProfile: requestedModelProfile ?? modelOverride
-          ?? (usesNativeModelChoice ? nil : ModelQoS.Claude.chat),
+          ?? AgentRuntimeRouting.defaultModelProfile(
+            harnessMode: requestedHarness,
+            chatBridgeMode: bridgeMode
+          ),
         workingDirectory: effectiveAgentWorkingDirectory()
       )
     )
@@ -1913,6 +1886,12 @@ class ChatProvider: ObservableObject {
       for: surface,
       ownerID: ownerID
     )
+    if surface.surfaceKind == "main_chat" {
+      log(
+        "ChatProvider: resolving main_chat session chatFirstCapability="
+          + (projection == nil ? "absent" : "present")
+          + " gateConfigured=\(chatFirstMainChatProjectionGate.isConfigured(for: ownerID))")
+    }
     let session = try await resolvedAgentClient().resolveSurfaceSession(
       surface,
       creationProfile: creationProfile,
@@ -1930,6 +1909,7 @@ class ChatProvider: ObservableObject {
     notificationContext: String?,
     screenPayload: [String: Any]?,
     includeScreenSource: Bool = true,
+    includeSkillCatalog: Bool = true,
     includePromptCitations: Bool = true,
     requestedModelProfile: String? = nil,
     pinnedSession: AgentSurfaceSession? = nil,
@@ -1969,8 +1949,13 @@ class ChatProvider: ObservableObject {
       "presentation": systemPromptStyle == .floating ? "floating" : "main",
       "onboarding": isOnboarding,
     ]
-    if let systemPromptPrefix, !systemPromptPrefix.isEmpty {
-      surfacePayload["experienceContext"] = systemPromptPrefix
+    let scopedExperienceContext = ChatAppContext.scopedExperienceContext(
+      selectedApp: selectedChatAppContext,
+      surfaceKind: surface.surfaceKind,
+      baseContext: systemPromptPrefix
+    )
+    if let scopedExperienceContext, !scopedExperienceContext.isEmpty {
+      surfacePayload["experienceContext"] = scopedExperienceContext
     }
     let responseContext = [
       systemPromptSuffix?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -2023,6 +2008,15 @@ class ChatProvider: ObservableObject {
     }
     let capturedAtMs = Int(Date().timeIntervalSince1970 * 1_000)
     let screenOutcome: AgentContextSourceOutcome = screenPayload == nil ? .empty : .available
+    // One catalog per lane: the ACP lane's user-skills plugin already indexes the
+    // same skills natively, so the compact catalog would reach the model twice.
+    var workspacePayload: [String: Any] = [
+      "workingDirectory": workspacePath,
+      "databaseSchema": cachedDatabaseSchema,
+    ]
+    if includeSkillCatalog, Self.shouldInjectSkillCatalog(adapterId: session.profile.adapterId) {
+      workspacePayload["skillCatalog"] = skillContextProjection()
+    }
     var sources: [(AgentContextSource, AgentContextSourceOutcome, [String: Any], Int?)] = [
       (
         .identity,
@@ -2048,16 +2042,7 @@ class ChatProvider: ObservableObject {
         taskText.isEmpty ? [:] : ["content": taskText],
         nil
       ),
-      (
-        .workspace,
-        .available,
-        [
-          "workingDirectory": workspacePath,
-          "databaseSchema": cachedDatabaseSchema,
-          "skillCatalog": skillContextProjection(),
-        ],
-        nil
-      ),
+      (.workspace, .available, workspacePayload, nil),
       (.surface, .available, surfacePayload, nil),
     ]
     if includeScreenSource {
@@ -2119,6 +2104,9 @@ class ChatProvider: ObservableObject {
         notificationContext: nil,
         screenPayload: nil,
         includeScreenSource: false,
+        // The realtime renderer drops the workspace source entirely, so building
+        // and uploading a skill catalog here is dead work the model never sees.
+        includeSkillCatalog: false,
         includePromptCitations: false
       )
       return KernelTurnProjection.voiceContextSnapshot(
@@ -2236,11 +2224,13 @@ class ChatProvider: ObservableObject {
     let resolvedMode: BridgeMode = (mode == .omiAI) ? .piMono : mode
     let newHarness = Self.harnessMode(for: resolvedMode)
     let previousHarness = activeBridgeHarness
-    guard newHarness != previousHarness else { return }
+    let previousBridgeMode = activeBridgeMode
+    guard newHarness != previousHarness || resolvedMode.rawValue != previousBridgeMode else { return }
     log("ChatProvider: Updating future-session profile from \(previousHarness) to \(resolvedMode.rawValue)")
     profilePreferenceChangeGeneration &+= 1
     let preferenceChange = profilePreferenceChangeGeneration
     activeBridgeHarness = newHarness
+    activeBridgeMode = resolvedMode.rawValue
     bridgeMode = resolvedMode.rawValue
     AnalyticsManager.shared.chatBridgeModeChanged(from: previousHarness, to: resolvedMode.rawValue)
 
@@ -2252,10 +2242,12 @@ class ChatProvider: ObservableObject {
       guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: newHarness) else {
         throw BridgeError.agentError("Unknown AI runtime mode: \(newHarness)")
       }
-      let usesNativeModelChoice = newHarness == "hermes" || newHarness == "openclaw"
       let configured = try await resolvedAgentClient().configureDefaultExecutionProfile(
         adapterId: adapterId,
-        modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
+        modelProfile: AgentRuntimeRouting.defaultModelProfile(
+          harnessMode: newHarness,
+          chatBridgeMode: bridgeMode
+        ),
         workingDirectory: effectiveAgentWorkingDirectory()
       )
       guard preferenceChange == profilePreferenceChangeGeneration else { return }
@@ -2463,182 +2455,7 @@ class ChatProvider: ObservableObject {
     await switchBridgeMode(to: .piMono)
   }
 
-  // MARK: - Session Management
-
-  /// Fetch all chat sessions for the current app (retries up to 3 times on failure)
-  func fetchSessions() async {
-    isLoadingSessions = true
-    defer { isLoadingSessions = false }
-
-    let maxAttempts = 3
-    let delays: [UInt64] = [1_000_000_000, 2_000_000_000]  // 1s, 2s
-    var lastError: Error?
-
-    for attempt in 1...maxAttempts {
-      do {
-        sessions = try await APIClient.shared.getChatSessions(
-          appId: selectedAppId,
-          starred: showStarredOnly ? true : nil
-        )
-        log("ChatProvider loaded \(sessions.count) sessions (starred filter: \(showStarredOnly))")
-        sessionsLoadError = nil
-
-        // If we have sessions and no current session, select the most recent
-        if currentSession == nil, let mostRecent = sessions.first {
-          await selectSession(mostRecent)
-        }
-        return
-      } catch {
-        lastError = error
-        logError("Failed to load chat sessions (attempt \(attempt)/\(maxAttempts))", error: error)
-        if attempt < maxAttempts {
-          try? await Task.sleep(nanoseconds: delays[attempt - 1])
-        }
-      }
-    }
-
-    sessions = []
-    sessionsLoadError = lastError?.localizedDescription ?? "Failed to load chats. Check your connection and try again."
-  }
-
-  /// Toggle the starred filter and reload sessions
-  func toggleStarredFilter() async {
-    showStarredOnly.toggle()
-    log("Toggled starred filter: \(showStarredOnly)")
-    AnalyticsManager.shared.chatStarredFilterToggled(enabled: showStarredOnly)
-    await fetchSessions()
-  }
-
-  /// Create a new chat session
-  /// - Parameters:
-  ///   - title: Optional session title
-  ///   - skipGreeting: Skip the initial AI greeting message
-  ///   - appId: Override app ID (e.g. "task-chat" to isolate task sessions from default chat)
-  func createNewSession(
-    title: String? = nil,
-    skipGreeting: Bool = false,
-    appId: String? = nil,
-    authoritativeSendGeneration: Int? = nil
-  ) async -> ChatSession? {
-    do {
-      let session = try await APIClient.shared.createChatSession(title: title, appId: appId ?? selectedAppId)
-      guard authoritativeSendGeneration.map({ sendGeneration == $0 }) ?? true else { return nil }
-      sessions.insert(session, at: 0)
-      currentSession = session
-      isInDefaultChat = false
-      messages = []
-      resetMessagesPagination()
-      log("Created new chat session: \(session.id)")
-      AnalyticsManager.shared.chatSessionCreated()
-
-      // Generate initial greeting message (skip for task chats that send their own context)
-      if !skipGreeting {
-        await fetchInitialMessage(for: session, authoritativeSendGeneration: authoritativeSendGeneration)
-      }
-
-      return session
-    } catch {
-      logError("Failed to create chat session", error: error)
-      if authoritativeSendGeneration.map({ sendGeneration == $0 }) ?? true {
-        errorMessage = "Failed to create new chat"
-      }
-      return nil
-    }
-  }
-
-  /// Fetch an initial greeting for a new session, then admit it through the
-  /// canonical journal before it can appear in any visible projection.
-  private func fetchInitialMessage(
-    for session: ChatSession,
-    authoritativeSendGeneration: Int? = nil
-  ) async {
-    do {
-      guard let ownerId = runtimeOwnerId else {
-        log("ChatProvider: initial greeting skipped because owner is unavailable")
-        return
-      }
-      let response = try await APIClient.shared.getInitialMessage(
-        sessionId: session.id,
-        appId: selectedAppId,
-        expectedOwnerId: ownerId
-      )
-      guard authoritativeSendGeneration.map({ sendGeneration == $0 }) ?? true else { return }
-
-      let surface = AgentSurfaceReference.mainChat(
-        chatId: mainChatRuntimeChatId(sessionId: session.id)
-      )
-      let accepted = await kernelTurnProjection.importRemoteTurn(
-        surface: surface,
-        turn: KernelJournalRemoteTurn(
-          remoteId: response.messageId,
-          canonicalTurnId: response.messageId,
-          role: "assistant",
-          content: response.message,
-          contentBlocksJSON: "[]",
-          resourcesJSON: "[]",
-          metadataJSON: "{}",
-          createdAtMs: Int(Date().timeIntervalSince1970 * 1_000)
-        ),
-        ownerID: ownerId
-      )
-      guard accepted else {
-        log("ChatProvider: initial greeting journal admission failed")
-        return
-      }
-      await kernelTurnProjection.refresh(surface: surface)
-
-      // Preview is also downstream of canonical journal acceptance.
-      if let index = sessions.firstIndex(where: { $0.id == session.id }) {
-        sessions[index].preview = response.message
-      }
-
-      // Track analytics
-      AnalyticsManager.shared.initialMessageGenerated(hasApp: selectedAppId != nil)
-
-      log("Added initial greeting message for session \(session.id)")
-    } catch {
-      // Non-fatal: session still works without greeting
-      logError("Failed to fetch initial message", error: error)
-    }
-  }
-
-  /// Select a session and load its messages
-  func selectSession(_ session: ChatSession, force: Bool = false) async {
-    guard force || currentSession?.id != session.id || isInDefaultChat else { return }
-
-    // This replaces the transcript, so it is a transcript reset and must go
-    // through the one revocation authority — same as `selectApp`/`reinitialize`.
-    // Without it a turn still in flight for the previous session stays
-    // generation-current, and its late result (including the reconstructed
-    // failure notice) is accepted into *this* session's transcript.
-    revokeActiveTurn(reason: .superseded)
-
-    currentSession = session
-    isInDefaultChat = false
-    isLoading = true
-    isMainChatJournalFirstPageReady = false
-    errorMessage = nil
-    hasMoreMessages = false
-
-    let surface = mainChatSurfaceReference()
-    guard await ensureBridgeStartedForKernel() else {
-      messages = []
-      resetMessagesPagination()
-      isLoading = false
-      return
-    }
-    await importLegacyBackendMessagesIfNeeded(surface: surface, sessionId: session.id)
-    await kernelTurnProjection.reload(surface: surface)
-    await rehydrateMissingArtifactResourcesFromKernel()
-    messagesPaginationOffset = messages.count
-    hasMoreMessages = false
-    log("ChatProvider loaded \(messages.count) kernel journal messages for session \(session.id)")
-    isMainChatJournalFirstPageReady = true
-
-    isLoading = false
-  }
-
-  /// Load more (older) messages for the current session
+  /// Load more (older) messages for the main chat
   func loadMoreMessages() async {
     guard !isLoadingMoreMessages else { return }
 
@@ -2649,84 +2466,6 @@ class ChatProvider: ObservableObject {
     hasMoreMessages = false
 
     isLoadingMoreMessages = false
-  }
-
-  /// Track which sessions are currently being deleted
-  @Published var deletingSessionIds: Set<String> = []
-
-  /// Delete a chat session
-  func deleteSession(_ session: ChatSession) async {
-    deletingSessionIds.insert(session.id)
-    let surface = AgentSurfaceReference.mainChat(chatId: session.id)
-    guard await kernelTurnProjection.clear(surface: surface) else {
-      deletingSessionIds.remove(session.id)
-      errorMessage = "Failed to delete chat"
-      return
-    }
-    deletingSessionIds.remove(session.id)
-    sessions.removeAll { $0.id == session.id }
-
-    if currentSession?.id == session.id {
-      if let nextSession = sessions.first {
-        await selectSession(nextSession)
-      } else {
-        currentSession = nil
-        messages = []
-        resetMessagesPagination()
-      }
-    }
-
-    log("Deleted kernel chat session projection: \(session.id)")
-    AnalyticsManager.shared.chatSessionDeleted()
-  }
-
-  /// Toggle starred status for a session
-  func toggleStarred(_ session: ChatSession) async {
-    do {
-      let updated = try await APIClient.shared.updateChatSession(
-        sessionId: session.id,
-        starred: !session.starred
-      )
-
-      // Update in sessions list
-      if let index = sessions.firstIndex(where: { $0.id == session.id }) {
-        sessions[index] = updated
-      }
-
-      // Update current session if it's the same
-      if currentSession?.id == session.id {
-        currentSession = updated
-      }
-
-      log("Toggled starred for session \(session.id): \(updated.starred)")
-    } catch {
-      logError("Failed to toggle starred", error: error)
-    }
-  }
-
-  /// Update session title (user-initiated rename)
-  func updateSessionTitle(_ session: ChatSession, title: String) async {
-    do {
-      let updated = try await APIClient.shared.updateChatSession(
-        sessionId: session.id,
-        title: title
-      )
-
-      // Update in sessions list
-      if let index = sessions.firstIndex(where: { $0.id == session.id }) {
-        sessions[index] = updated
-      }
-
-      // Update current session if it's the same
-      if currentSession?.id == session.id {
-        currentSession = updated
-      }
-
-      log("Updated title for session \(session.id): \(title)")
-      AnalyticsManager.shared.sessionRenamed()
-    } catch {
-      logError("Failed to update session title", error: error)
-    }
   }
 
   // MARK: - Load Context (Memories)
@@ -3172,7 +2911,7 @@ class ChatProvider: ObservableObject {
     }
   }
 
-  /// Initialize chat: fetch sessions and load messages
+  /// Initialize chat: load the main chat messages
   func initialize() async {
     await initializeVisibleMessages()
     await warmupPromptContext()
@@ -3202,16 +2941,7 @@ class ChatProvider: ObservableObject {
       }
     }
 
-    if multiChatEnabled {
-      // Multi-chat mode: load sessions, default to default chat
-      await fetchSessions()
-      // Start in default chat mode
-      await switchToDefaultChat()
-    } else {
-      // Single chat mode: just load default chat messages (syncs with Flutter)
-      isLoadingSessions = false
-      await loadDefaultChatMessages()
-    }
+    await loadDefaultChatMessages()
   }
 
   /// Warm local prompt context used by first send / bridge startup.
@@ -3242,19 +2972,6 @@ class ChatProvider: ObservableObject {
     return artifactsDirectory
   }
 
-  /// Reinitialize after settings change
-  func reinitialize() async {
-    // The `multiChatEnabled` observer fires on any write to the key, so this
-    // can land mid-turn. Revoke before the transcript goes away.
-    revokeActiveTurn(reason: .superseded)
-    sessions = []
-    messages = []
-    resetMessagesPagination()
-    currentSession = nil
-    isInDefaultChat = true
-    await initialize()
-  }
-
   /// Retry loading after a failure — clears error state and re-runs initialize
   func retryLoad() async {
     sessionsLoadError = nil
@@ -3264,7 +2981,7 @@ class ChatProvider: ObservableObject {
   // MARK: - CLAUDE.md & Skills Discovery
 
   /// Results from background Claude config discovery
-  private struct ClaudeConfigResult: Sendable {
+  struct ClaudeConfigResult: Sendable {
     let claudeMdContent: String?
     let claudeMdPath: String?
     let skills: [(name: String, description: String, path: String)]
@@ -3275,7 +2992,7 @@ class ChatProvider: ObservableObject {
   }
 
   /// Perform all file I/O for Claude config discovery off the main thread
-  private nonisolated static func loadClaudeConfigFromDisk(workspace: String) -> ClaudeConfigResult {
+  nonisolated static func loadClaudeConfigFromDisk(workspace: String) -> ClaudeConfigResult {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
     let claudeDir = "\(home)/.claude"
     let fm = FileManager.default
@@ -3297,6 +3014,21 @@ class ChatProvider: ObservableObject {
     if let skillDirs = try? fm.contentsOfDirectory(atPath: skillsDir) {
       for dir in skillDirs.sorted() {
         let skillPath = "\(skillsDir)/\(dir)/SKILL.md"
+        if fm.fileExists(atPath: skillPath),
+          let content = try? String(contentsOfFile: skillPath, encoding: .utf8)
+        {
+          let desc = extractSkillDescription(from: content)
+          skills.append((name: dir, description: desc, path: skillPath))
+        }
+      }
+    }
+
+    // Skills the user created in Omi's Apps page, stored locally at
+    // ~/.omi/skills. Same layout as ~/.claude/skills.
+    let userSkillsDir = LocalSkillsStore.skillsDirURL.path
+    if let skillDirs = try? fm.contentsOfDirectory(atPath: userSkillsDir) {
+      for dir in skillDirs.sorted() where !skills.contains(where: { $0.name == dir }) {
+        let skillPath = "\(userSkillsDir)/\(dir)/SKILL.md"
         if fm.fileExists(atPath: skillPath),
           let content = try? String(contentsOfFile: skillPath, encoding: .utf8)
         {
@@ -3425,12 +3157,7 @@ class ChatProvider: ObservableObject {
 
   /// Get the set of explicitly disabled skill names from UserDefaults
   func getDisabledSkillNames() -> Set<String> {
-    guard let data = disabledSkillsJSON.data(using: .utf8),
-      let names = try? JSONDecoder().decode([String].self, from: data)
-    else {
-      return []  // Default: nothing disabled = all enabled
-    }
-    return Set(names)
+    Self.disabledSkillNamesFromDefaults()
   }
 
   /// Save the set of disabled skill names to UserDefaults
@@ -3440,14 +3167,6 @@ class ChatProvider: ObservableObject {
     {
       disabledSkillsJSON = json
     }
-  }
-
-  /// Switch to the default chat (messages without session_id, syncs with Flutter app)
-  func switchToDefaultChat() async {
-    currentSession = nil
-    isInDefaultChat = true
-    await loadDefaultChatMessages()
-    log("Switched to default chat")
   }
 
   /// Load the kernel-owned default-chat journal. The backend is consulted only
@@ -3466,7 +3185,7 @@ class ChatProvider: ObservableObject {
       isLoading = false
       return
     }
-    await importLegacyBackendMessagesIfNeeded(surface: surface, sessionId: nil)
+    await importLegacyBackendMessagesIfNeeded(surface: surface)
     await kernelTurnProjection.reload(surface: surface)
     await rehydrateMissingArtifactResourcesFromKernel()
     messagesPaginationOffset = messages.count
@@ -3480,33 +3199,18 @@ class ChatProvider: ObservableObject {
   /// One-release compatibility import. The checkpoint is written only after
   /// every bounded row is idempotently accepted by the kernel; normal refresh
   /// never reads backend history again.
-  private func importLegacyBackendMessagesIfNeeded(
-    surface: AgentSurfaceReference,
-    sessionId: String?
-  ) async {
+  private func importLegacyBackendMessagesIfNeeded(surface: AgentSurfaceReference) async {
     guard let ownerId = runtimeOwnerId else { return }
     let checkpointKey = "kernelJournal.legacyBackendImport.v1|\(ownerId)|\(surface.key)"
     guard !UserDefaults.standard.bool(forKey: checkpointKey) else { return }
     do {
-      let legacy: [ChatMessageDB]
-      if let sessionId {
-        legacy = try await ChatLegacyPageCollector.all { limit, offset in
-          try await APIClient.shared.getMessages(
-            sessionId: sessionId,
-            limit: limit,
-            offset: offset,
-            expectedOwnerId: ownerId
-          )
-        }
-      } else {
-        legacy = try await ChatLegacyPageCollector.all { [selectedAppId] limit, offset in
-          try await APIClient.shared.getMessages(
-            appId: selectedAppId,
-            limit: limit,
-            offset: offset,
-            expectedOwnerId: ownerId
-          )
-        }
+      let legacy: [ChatMessageDB] = try await ChatLegacyPageCollector.all { [selectedAppId] limit, offset in
+        try await APIClient.shared.getMessages(
+          appId: selectedAppId,
+          limit: limit,
+          offset: offset,
+          expectedOwnerId: ownerId
+        )
       }
       let importPlan = ChatLegacyImportChronology.plan(
         legacy,
@@ -3543,9 +3247,20 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Kernel Journal Refresh
 
+  func stopAgentBridgeIfStarted() async {
+    guard agentBridgeStarted else { return }
+    await resolvedAgentClient().stop()
+    agentBridgeStarted = false
+  }
+
+  func stopAgentBridgeAfterSessionInvalidation() async {
+    log("ChatProvider: sessionDidInvalidate — stopping agent bridge")
+    await stopAgentBridgeIfStarted()
+  }
+
   /// Activation/notification is only a wakeup. Ordered range replay in
   /// KernelTurnProjection is the sole source of new or updated messages.
-  private func refreshJournalProjection() async {
+  func refreshJournalProjection() async {
     guard await ensureBridgeStartedForKernel() else { return }
     await kernelTurnProjection.refresh(surface: mainChatSurfaceReference())
   }
@@ -3750,7 +3465,20 @@ class ChatProvider: ObservableObject {
       .init(message: userMessage, status: .completed),
       .init(message: assistantMessage, status: .streaming),
     ]
-    return await recordCanonicalExchange(turns) != nil
+    guard await recordCanonicalExchange(turns) != nil else { return false }
+    // The journal publishes this user row without the attachment bytes it
+    // never persists, so a first publication renders its tile from the picked
+    // file's path — blank once that path is an app-owned temp export the OS or
+    // a Quick Look purge removes. Put the just-sent bytes back on the row;
+    // later echoes keep them through `carryingLocalOnlyFields`.
+    if let index = messages.firstIndex(where: { $0.id == userMessage.id }) {
+      let carried = ChatResource.carryingImageData(
+        messages[index].resources, from: userMessage.resources)
+      if carried != messages[index].resources {
+        messages[index].resources = carried
+      }
+    }
+    return true
   }
 
   /// Behavioral seam for the journal-first admission contract. Tests inject a
@@ -3785,7 +3513,7 @@ class ChatProvider: ObservableObject {
   }
 
   func mainChatSurfaceReference() -> AgentSurfaceReference {
-    .mainChat(chatId: mainChatRuntimeChatId(sessionId: isInDefaultChat ? nil : currentSessionId))
+    .mainChat(chatId: mainChatRuntimeChatId())
   }
 
   /// PTT is a realtime projection of the selected main chat, never a second
@@ -3795,37 +3523,11 @@ class ChatProvider: ObservableObject {
     mainChatSurfaceReference().realtimeVoiceCompanion()
   }
 
-  /// Upsert by canonical turn ID only. Text equality is deliberately ignored:
-  /// two identical messages with distinct turn IDs are distinct journal rows.
-  /// Some `ChatMessage` fields live only in the in-memory row and are never
-  /// written to the kernel journal, so `KernelJournalTurn.chatMessage()` cannot
-  /// reconstruct them and a journal projection can never be their authority:
-  /// `rating` (user-set), `metadata` (model/token/cost stats attached at
-  /// completion, rendered in the message footer), `notificationScreenshot`,
-  /// and in-memory kind-only citation rewrites until the journal catches up.
-  /// Replacing a row wholesale with the projection would drop them, so carry
-  /// them forward from the row being replaced. A field the projection *does*
-  /// carry (non-nil) wins, so this stays correct if the journal schema later
-  /// starts persisting one of them.
-  static func carryingLocalOnlyFields(_ projected: ChatMessage, from existing: ChatMessage) -> ChatMessage {
-    var merged = projected
-    if merged.rating == nil { merged.rating = existing.rating }
-    if merged.metadata == nil { merged.metadata = existing.metadata }
-    if merged.notificationScreenshot == nil { merged.notificationScreenshot = existing.notificationScreenshot }
-    // Kind-only binding rewrites markers and appends citation blocks in memory.
-    // A stale journal echo still has `[memory]` and no citation blocks; keep the
-    // already-bound row so chips do not vanish between hydrate and the next bind.
-    if existing.hasPersistedCitationBlocks, !projected.hasPersistedCitationBlocks {
-      merged.text = existing.text
-      merged.contentBlocks = existing.contentBlocks
-    }
-    return merged
-  }
-
   func resetJournalProjection(surface: AgentSurfaceReference) {
     guard surface == mainChatSurfaceReference() else { return }
     messages = []
     pendingMessageRatings.removeAll()
+    messageRatingWriteChain.removeAll()
     resetMessagesPagination()
   }
 
@@ -3841,9 +3543,13 @@ class ChatProvider: ObservableObject {
     // would regress the turn back to streaming), so it stays gated by
     // terminalization. Every other update is a durable, non-regressing content
     // mutation and must remain journalable after the turn terminalizes.
+    // A streaming flush is a snapshot the next flush supersedes: coalesced,
+    // so a slow kernel round trip leaves the newest row waiting rather than
+    // every flush since. Durable mutations keep their own place in line.
     journalWriteCoordinator.schedule(
       messageID: messageId,
-      supersededByTerminalization: status == .streaming
+      supersededByTerminalization: status == .streaming,
+      coalescing: status == .streaming
     ) { @MainActor [weak self] in
       guard let self else { return }
       _ = await self.kernelTurnProjection.updateTurn(
@@ -3974,6 +3680,9 @@ class ChatProvider: ObservableObject {
   }
 
   func removePendingAttachment(id: String) {
+    // An app-owned staged frame the user removed was never sent; its file goes
+    // with it. User-picked files (`appOwnedFileURL == nil`) are never touched.
+    RecentFrameStagingLifecycle.discardAppOwnedFile(id: id, in: pendingAttachments)
     pendingAttachments.removeAll { $0.id == id }
   }
 
@@ -4072,6 +3781,10 @@ class ChatProvider: ObservableObject {
     return str
   }
 
+  /// Send-time gate for in-flight frame stagings; see
+  /// `ChatProvider+RecentFrameStaging.swift`.
+  let recentFrameStagingGate = RecentFrameStagingGate()
+
   /// Block until all currently-uploading attachments either succeed or fail.
   /// Returns `false` if any failed — caller surfaces an error and aborts.
   private func awaitPendingUploads() async -> Bool {
@@ -4098,7 +3811,7 @@ class ChatProvider: ObservableObject {
     let plural = attachments.count == 1 ? "file" : "files"
     var lines: [String] = [
       "[Attached Files]",
-      "The user attached \(attachments.count) \(plural) to this exact message. Treat references like \"this\", \"the file\", \"the attachment\", or \"what do you think of this\" as referring to these attachment(s). If the answer depends on file contents, inspect the local_path with file-reading tools before asking for clarification.",
+      "The user attached \(attachments.count) \(plural) to this exact message. They are the primary subject of the message: treat references like \"this\", \"look\", \"the file\", \"the attachment\", or \"what do you think of this\" as referring to these attachment(s), and inspect them before consulting screen, work, or memory context. If the answer depends on file contents, inspect the local_path with file-reading tools before asking for clarification. Do not describe the screen unless the user asks about the screen explicitly.",
     ]
     for (index, attachment) in attachments.enumerated() {
       lines.append("")
@@ -4130,6 +3843,15 @@ class ChatProvider: ObservableObject {
 
   /// Question-card controls are only live on a completed assistant turn at
   /// the conversation tail. A later user response retires its choices.
+  /// Whether the server-owned chat-first capability is currently projected for
+  /// main chat. A question card renders its options either way; this decides
+  /// whether they are pressable or dimmed (`QuestionCardView.isCapabilityAvailable`).
+  func hasChatFirstMainChatCapability() -> Bool {
+    guard let ownerID = runtimeOwnerId else { return false }
+    return chatFirstMainChatProjectionGate.capability(
+      for: mainChatSurfaceReference(), ownerID: ownerID) != nil
+  }
+
   func isQuestionCardActionable(
     messageID: String,
     questionID: String,
@@ -4305,7 +4027,7 @@ class ChatProvider: ObservableObject {
         assistantMessage: assistantMessage,
         origin: journalOrigin(for: session.surface),
         appId: overrideAppId ?? selectedAppId,
-        sessionId: isInDefaultChat ? nil : currentSessionId,
+        sessionId: nil,
         messageSource: journalOrigin(for: session.surface)
       )
     else {
@@ -4396,10 +4118,20 @@ class ChatProvider: ObservableObject {
     questionInteraction: ChatQuestionCardSelection? = nil,
     questionContinuation: ChatQuestionCardContinuation? = nil,
     onAccepted: (@MainActor () -> Void)? = nil,
+    onAcceptedWithAttemptID: (@MainActor (_ attemptID: String) -> Void)? = nil,
     onJournalFinalized: (@MainActor (_ accepted: Bool) -> Void)? = nil
   ) async -> String? {
     let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedText.isEmpty || questionInteraction != nil || questionContinuation != nil else { return nil }
+    // A file or conversation staged with no words is a message in its own right; its caption and
+    // model prompt are resolved once the staged items are settled below.
+    let isAttachmentOnlySend =
+      trimmedText.isEmpty
+      && Self.hasSendableSubject(
+        text: trimmedText,
+        attachmentCount: pendingAttachments.count,
+        referenceCount: pendingComposerReferences.count)
+    guard !trimmedText.isEmpty || isAttachmentOnlySend || questionInteraction != nil || questionContinuation != nil
+    else { return nil }
     var effectivePrompt = trimmedText
 
     // Guard against concurrent sendMessage calls.
@@ -4488,33 +4220,6 @@ class ChatProvider: ObservableObject {
     }
     tracer?.end("bridge_ensure", metadata: ["status": "ok"])
 
-    // Determine session ID based on mode
-    // In default chat mode (isInDefaultChat=true): no session ID (compatible with Flutter)
-    // In session mode: require session ID
-    var sessionId: String? = nil
-    if !isInDefaultChat {
-      // Session mode - require a session
-      if currentSession == nil {
-        _ = await createNewSession(authoritativeSendGeneration: sendGen)
-      }
-      guard sendGeneration == sendGen, turnLifecycle.acceptsResult else {
-        tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
-        telemetryAttempt.finish(stopReason: turnLifecycle.stopReason ?? stopReason(for: sendGen))
-        clearChatTelemetryState(for: sendGen)
-        releaseSendLock(sendGeneration: sendGen)
-
-        return nil
-      }
-      guard let sid = currentSessionId else {
-        errorMessage = "Failed to create chat session"
-        tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
-        telemetryAttempt.fail(errorClass: .sessionSetup)
-        clearChatTelemetryState(for: sendGen)
-        releaseSendLock(sendGeneration: sendGen)
-        return nil
-      }
-      sessionId = sid
-    }
     guard sendGeneration == sendGen else {
       tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
       telemetryAttempt.finish(stopReason: stopReason(for: sendGen))
@@ -4523,11 +4228,7 @@ class ChatProvider: ObservableObject {
       return nil
     }
 
-    let resolvedSurface = querySurface(
-      surfaceRef: surfaceRef,
-      sessionId: sessionId,
-      systemPromptStyle: systemPromptStyle
-    )
+    let resolvedSurface = querySurface(surfaceRef: surfaceRef, systemPromptStyle: systemPromptStyle)
     let pinnedSession: AgentSurfaceSession
     do {
       pinnedSession = try await resolveKernelQuerySession(
@@ -4724,6 +4425,9 @@ class ChatProvider: ObservableObject {
     // settles so persistence stays consistent across sessions.
     var attachmentsForMessage: [ChatAttachment] = []
     let composerReferencesForMessage = pendingComposerReferences
+    // Wait — bounded — for in-flight frame staging to land before the snapshot
+    // below decides what this message carries (picked-frame-then-send race).
+    await recentFrameStagingGate.settle()
     if !pendingAttachments.isEmpty {
       let ok = await awaitPendingUploads()
       guard
@@ -4749,6 +4453,15 @@ class ChatProvider: ObservableObject {
       }
       attachmentsForMessage = pendingAttachments
       pendingAttachments.removeAll()
+    }
+    // Deletion waits for function exit — the turn may still read `local_path`.
+    defer { RecentFrameStagingLifecycle.discardAppOwnedFiles(attachmentsForMessage) }
+    // The row and the journal carry a caption (both require non-empty user text); the model is told
+    // separately that the attachments are the whole message — see `modelPrompt` at the query.
+    if isAttachmentOnlySend {
+      effectivePrompt = Self.attachmentOnlyCaption(
+        attachmentCount: attachmentsForMessage.count,
+        referenceCount: composerReferencesForMessage.count)
     }
     if turnUsesOmiAccount {
       usageLimiter.recordQuery()
@@ -4815,19 +4528,23 @@ class ChatProvider: ObservableObject {
     // second writer identity.
     let turnMessageIds = Self.messageIds(forAttemptId: turnAttemptId)
     let userMessageId = turnMessageIds.user
-    let isFirstMessage = messages.isEmpty
-    let capturedSessionId = sessionId
     let capturedAppId = overrideAppId ?? selectedAppId
     let journalOrigin = journalOrigin(for: resolvedSurface)
     let userMessageResources = ChatResource.userMessageResources(
       attachments: attachmentsForMessage,
       references: composerReferencesForMessage
     )
+    let attachmentEvidence = await ChatAttachmentEvidence.capture(
+      attachments: attachmentsForMessage
+    )
     let userMessage = ChatMessage(
       id: userMessageId,
       clientTurnId: turnAttemptId,
       text: effectivePrompt,
       sender: .user,
+      metadata: attachmentEvidence.isEmpty
+        ? nil
+        : MessageMetadata(evidence: attachmentEvidence),
       attachments: attachmentsForMessage,
       resources: userMessageResources,
       turnOwner: turnOwner
@@ -4856,7 +4573,7 @@ class ChatProvider: ObservableObject {
         assistantMessage: aiMessage,
         origin: journalOrigin,
         appId: capturedAppId,
-        sessionId: capturedSessionId,
+        sessionId: nil,
         messageSource: journalOrigin
       )
     }
@@ -4901,7 +4618,11 @@ class ChatProvider: ObservableObject {
     // turn. Clearing composer state keeps it out of the next draft without
     // removing the pill from this message or a later journal replay.
     pendingComposerReferences.removeAll()
-    onAccepted?()
+    Self.notifyAccepted(
+      telemetryAttempt: telemetryAttempt,
+      onAccepted: onAccepted,
+      onAcceptedWithAttemptID: onAcceptedWithAttemptID
+    )
 
     // Track onboarding user-message shape without content.
     if isOnboarding {
@@ -4939,12 +4660,17 @@ class ChatProvider: ObservableObject {
         }
       }
       var screenPayload: [String: Any]?
+      // Files and referenced conversations the user attached are the turn's subject; they
+      // must not be crowded out by an ambient desktop snapshot or a capture that a bare
+      // "look at this" would otherwise trigger.
+      let hasAttachments = !attachmentsForMessage.isEmpty || !composerReferencesForMessage.isEmpty
       if effectiveImageData == nil,
         let screenContextReason = ScreenContextAutoIncludePolicy.reason(
           userText: effectivePrompt,
           systemPromptStyle: systemPromptStyle,
           turnOwner: turnOwner,
-          onboardingActive: !UserDefaults.standard.bool(forKey: DefaultsKey.hasCompletedOnboarding)
+          onboardingActive: !UserDefaults.standard.bool(forKey: DefaultsKey.hasCompletedOnboarding),
+          hasAttachments: hasAttachments
         )
       {
         let screenRecordingGranted = CGPreflightScreenCaptureAccess()
@@ -4965,18 +4691,17 @@ class ChatProvider: ObservableObject {
           screenContextEligibleForTurn = true
           let screenContextPayload: [String: Any]
           if screenContextReason.isExplicitScreenRequest {
-            // An explicit current-screen question gets one capture
-            // scoped to this exact turn. Never let a Rewind frame or
-            // OCR summary impersonate the image the model receives.
-            if screenRecordingGranted {
-              effectiveImageData = await Task.detached(priority: .userInitiated) {
-                ScreenCaptureManager.captureScreenData()
-              }.value
-            }
-            screenContextPayload = ScreenContextWorkContextBuilder.explicitCurrentScreenPayload(
-              screenRecordingGranted: screenRecordingGranted,
-              imageAttached: effectiveImageData != nil
+            // The policy decides what "my screen" is (see
+            // `ScreenContextFallbackPolicy`): on the main chat the composer is
+            // Omi's own window, so the most recent non-Omi frame stands in;
+            // everywhere else the subject is live and a turn-scoped capture
+            // wins. Never let a Rewind frame or OCR summary impersonate the
+            // image the model receives.
+            let evidence = await ScreenContextWorkContextBuilder.explicitScreenEvidence(
+              turnOwner: turnOwner
             )
+            effectiveImageData = evidence.imageData
+            screenContextPayload = evidence.payload
           } else {
             let rawScreenContextPayloadBox = await ScreenContextWorkContextBuilder.payloadBox(
               arguments: RuntimeJSONPayloadBox(["minutes": 10])
@@ -5296,9 +5021,15 @@ class ChatProvider: ObservableObject {
       activeBridgeSendGeneration = sendGen
       agentQueryStarted = true
       let queryResult: AgentClient.QueryResult
+      let modelPrompt =
+        isAttachmentOnlySend
+        ? Self.attachmentOnlyModelPrompt(
+          attachmentCount: attachmentsForMessage.count,
+          referenceCount: composerReferencesForMessage.count)
+        : effectivePrompt
       do {
         queryResult = try await resolvedAgentClient().query(
-          prompt: ChatPromptBuilder.currentTimePrompt(for: effectivePrompt),
+          prompt: ChatPromptBuilder.currentTimePrompt(for: modelPrompt),
           session: kernelContext.session,
           surface: resolvedSurface,
           mode: chatMode.rawValue,
@@ -5480,7 +5211,8 @@ class ChatProvider: ObservableObject {
             toolNames: toolTiming.toolNames,
             sqlRowsReturned: metricsSnapshot.sqlRowsReturned,
             sqlQueryCount: metricsSnapshot.sqlQueryCount,
-            modelsUsed: queryResult.modelsUsed
+            modelsUsed: queryResult.modelsUsed,
+            providerTargets: queryResult.providerTargets
           )
           completeRemainingToolCalls(
             messageId: aiMessageId,
@@ -5570,11 +5302,6 @@ class ChatProvider: ObservableObject {
       // The durable outbox may retry independently after this point.
       releaseSendLock(sendGeneration: sendGen)
 
-      // Auto-generate title after first exchange (user message + AI response)
-      if isFirstMessage, let sid = capturedSessionId {
-        await generateSessionTitle(sessionId: sid)
-      }
-
       log("Chat response complete")
 
       // Track onboarding response shape and bounded tool dimensions without content.
@@ -5622,10 +5349,13 @@ class ChatProvider: ObservableObject {
         }
       }
 
-      // Fire-and-forget: check if user's message mentions goal progress
-      let chatText = effectivePrompt
-      Task.detached(priority: .background) {
-        await GoalsAIService.shared.extractProgressFromAllGoals(text: chatText)
+      // Fire-and-forget: check if user's message mentions goal progress.
+      // An attachment-only caption ("1 file attached") has none to find.
+      if !isAttachmentOnlySend {
+        let chatText = effectivePrompt
+        Task.detached(priority: .background) {
+          await GoalsAIService.shared.extractProgressFromAllGoals(text: chatText)
+        }
       }
       completedResponseText = messageText
     } catch {
@@ -5888,7 +5618,12 @@ class ChatProvider: ObservableObject {
         // replaces the prompt with a canned answer the reader picked rather
         // than typed, and that has no business landing in their composer.
         restoreComposerAfterFailedTurn(trimmedText, turnOwner: turnOwner)
-        lastFailedPrompt = failureNotice.retryable ? effectivePrompt : nil
+        // The retry must ask about the same pixels: staged frames went back in
+        // the composer, not just the text. See the staging extension.
+        restoreFailedTurnAttachments(attachmentsForMessage, turnOwner: turnOwner)
+        // An attachment-only turn has no retryable prompt: the send consumed the attachments, and
+        // re-sending the caption alone would ask about files that are no longer there.
+        lastFailedPrompt = failureNotice.retryable && !isAttachmentOnlySend ? effectivePrompt : nil
       } else if let bridgeError = error as? BridgeError, case .stopped = bridgeError,
         stopReason(for: sendGen) == .userStop, hadPartialResponse
       {
@@ -5996,7 +5731,11 @@ class ChatProvider: ObservableObject {
   /// was accepted into the timeline. Preflight failures leave it untouched,
   /// and typing a new draft while acceptance is pending is never overwritten.
   @discardableResult
-  func sendMainDraft(_ text: String, onAccepted: (@MainActor () -> Void)? = nil) async -> String? {
+  func sendMainDraft(
+    _ text: String,
+    onAccepted: (@MainActor () -> Void)? = nil,
+    onAcceptedWithAttemptID: (@MainActor (_ attemptID: String) -> Void)? = nil
+  ) async -> String? {
     let submittedRevision = composerDraft.revision
     return await sendMessage(
       text,
@@ -6007,6 +5746,9 @@ class ChatProvider: ObservableObject {
           self.draftText == text
         else { return }
         self.draftText = ""
+      },
+      onAcceptedWithAttemptID: { attemptID in
+        onAcceptedWithAttemptID?(attemptID)
       })
   }
 
@@ -6031,6 +5773,18 @@ class ChatProvider: ObservableObject {
     stagedImageAttachmentPresent: Bool
   ) -> Bool {
     explicitImagePresent || stagedImageAttachmentPresent
+  }
+
+  /// Runs acceptance callbacks from the same attempt object that emits the
+  /// terminal `question_answered` event. Keeping the ID lookup here prevents
+  /// an acceptance caller from accidentally substituting a second turn ID.
+  static func notifyAccepted(
+    telemetryAttempt: ChatQueryTelemetryAttempt,
+    onAccepted: (@MainActor () -> Void)?,
+    onAcceptedWithAttemptID: (@MainActor (_ attemptID: String) -> Void)?
+  ) {
+    onAccepted?()
+    onAcceptedWithAttemptID?(telemetryAttempt.context.attemptId)
   }
 
   nonisolated static func messageIds(forAttemptId attemptId: String) -> (
@@ -6081,6 +5835,7 @@ class ChatProvider: ObservableObject {
     fallbackAssistantMessage: ChatMessage? = nil
   ) -> ChatMessage? {
     if let index = messages.firstIndex(where: { $0.id == messageID }) {
+      messages[index].failureCode = notice.failureCode
       messages[index].text = notice.transcriptContent(partialText: messages[index].text)
       messages[index].isStreaming = false
       messages[index].journalStatus = .failed
@@ -6096,6 +5851,7 @@ class ChatProvider: ObservableObject {
       fallback.id == messageID,
       fallback.sender == .ai
     else { return nil }
+    fallback.failureCode = notice.failureCode
     fallback.text = notice.transcriptContent(partialText: fallback.text)
     fallback.isStreaming = false
     fallback.journalStatus = .failed
@@ -6195,43 +5951,6 @@ class ChatProvider: ObservableObject {
     }
   }
 
-  /// Generate a title for the session using LLM
-  private func generateSessionTitle(sessionId: String) async {
-    // Need at least 2 messages (user + AI) for meaningful title
-    guard messages.count >= 2 else {
-      log("Not enough messages for title generation")
-      return
-    }
-
-    // Convert messages to the format expected by the API
-    let messageTuples: [(text: String, sender: String)] = messages.map { msg in
-      (text: msg.text, sender: msg.sender == .user ? "human" : "ai")
-    }
-
-    do {
-      let response = try await APIClient.shared.generateSessionTitle(
-        sessionId: sessionId,
-        messages: messageTuples
-      )
-
-      // Update session in list
-      if let index = sessions.firstIndex(where: { $0.id == sessionId }) {
-        sessions[index].title = response.title
-      }
-
-      // Update current session
-      if currentSession?.id == sessionId {
-        currentSession?.title = response.title
-      }
-
-      log("Generated session title (\(response.title.count) chars)")
-      AnalyticsManager.shared.sessionTitleGenerated()
-    } catch {
-      logError("Failed to generate session title", error: error)
-      // Non-fatal - session continues with default title
-    }
-  }
-
   /// Update message text (replaces entire text)
   private func updateMessage(id: String, text: String) {
     if let index = messages.firstIndex(where: { $0.id == id }) {
@@ -6243,96 +5962,41 @@ class ChatProvider: ObservableObject {
     }
   }
 
-  /// What a streaming assistant message shows right now.
-  ///
-  /// The grounded follow-up tail streams in like any other token, so without
-  /// stripping it here the chip's words appear in the prose first and are
-  /// removed only when the turn finalizes. Composed with sentence spacing
-  /// because both are projections of the same accumulated text.
-  static func normalizeStreamingAssistantText(_ text: String) -> String {
-    normalizeAssistantSentenceSpacing(ChatFollowUpTail.strippingPendingTail(text))
-  }
-
-  /// Normalize missing spaces after sentence punctuation in assistant messages.
-  /// Example: "Hello.World" -> "Hello. World", "Great!Lets go" -> "Great! Lets go"
-  ///
-  /// Code spans are preserved verbatim so identifiers, file paths, and method
-  /// chains like `pd.DataFrame`, `System.IO`, or `foo.Bar()` are never mangled
-  /// into `pd. DataFrame`. Both fenced code blocks (``` / ~~~) and inline
-  /// backtick spans are skipped. Applied on every streaming flush, so it must
-  /// treat an unterminated span (fence or backtick still open mid-stream) as
-  /// code to avoid corrupting code that is still arriving.
-  static func normalizeAssistantSentenceSpacing(_ text: String) -> String {
-    let lines = text.components(separatedBy: "\n")
-    var output: [String] = []
-    output.reserveCapacity(lines.count)
-    var inFencedBlock = false
-
-    for line in lines {
-      let trimmed = line.trimmingCharacters(in: .whitespaces)
-      if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
-        inFencedBlock.toggle()
-        output.append(line)  // fence marker line, verbatim
-      } else if inFencedBlock {
-        output.append(line)  // code content, verbatim
-      } else {
-        output.append(normalizeInlinePreservingCode(line))
-      }
-    }
-
-    return output.joined(separator: "\n")
-  }
-
-  /// Apply sentence-spacing normalization to a single line, leaving inline
-  /// backtick code spans untouched. An odd number of backticks (an unterminated
-  /// span) leaves its trailing content treated as code.
-  private static func normalizeInlinePreservingCode(_ line: String) -> String {
-    guard line.contains("`") else { return applySentenceSpacing(line) }
-
-    let parts = line.split(separator: "`", omittingEmptySubsequences: false)
-    let normalizedParts = parts.enumerated().map { index, part -> String in
-      // Even segments are outside inline code; odd segments are inside.
-      index.isMultiple(of: 2) ? applySentenceSpacing(String(part)) : String(part)
-    }
-    return normalizedParts.joined(separator: "`")
-  }
-
-  private static func applySentenceSpacing(_ text: String) -> String {
-    var normalized = text
-
-    if let punctuationUpper = try? NSRegularExpression(pattern: #"([.!?])(?=[A-Z])"#) {
-      let range = NSRange(normalized.startIndex..., in: normalized)
-      normalized = punctuationUpper.stringByReplacingMatches(
-        in: normalized, options: [], range: range, withTemplate: "$1 ")
-    }
-
-    if let punctuationQuotedUpper = try? NSRegularExpression(pattern: #"([.!?])(?=[\"“'‘][A-Z])"#) {
-      let range = NSRange(normalized.startIndex..., in: normalized)
-      normalized = punctuationQuotedUpper.stringByReplacingMatches(
-        in: normalized, options: [], range: range, withTemplate: "$1 ")
-    }
-
-    return normalized
-  }
-
-  /// Append text to a streaming message via a buffer that flushes at ~100ms intervals.
-  /// This reduces SwiftUI re-renders from once-per-token to ~10 times/second.
+  /// Append text to a streaming message via a buffer that flushes at ~35ms intervals.
+  /// This reduces SwiftUI re-renders from once-per-token to ~28 times/second,
+  /// and each of those flushes reveals a paced slice rather than the whole
+  /// backlog (`ChatStreamingReveal`), so a burst from the wire reads as flow.
   private func appendToMessage(id: String, text: String) {
     streamingBuffer.appendText(messageId: id, text: text) { [weak self] in
-      self?.flushStreamingBuffer()
+      self?.flushStreamingBuffer(paced: true)
     }
   }
 
   /// Flush accumulated text and thinking deltas to the published messages array.
-  private func flushStreamingBuffer() {
-    streamingBuffer.flush(messages: &messages) { message, text in
+  ///
+  /// `paced` is the timer's flush: it lets a bounded slice of text through and
+  /// re-arms itself while any remains. The un-paced flush is for boundaries —
+  /// a tool call, the turn settling — where everything must land at once.
+  private func flushStreamingBuffer(paced: Bool = false) {
+    let normalize: (ChatMessage, String) -> String = { message, text in
       if message.sender == .ai {
         return Self.normalizeStreamingAssistantText(text)
       }
       return text
     }
+    var remaining = false
+    if paced {
+      remaining = streamingBuffer.flushPaced(messages: &messages, normalizeText: normalize)
+    } else {
+      streamingBuffer.flush(messages: &messages, normalizeText: normalize)
+    }
     for message in messages where message.isStreaming {
       scheduleJournalUpdate(messageId: message.id, status: .streaming)
+    }
+    if remaining {
+      streamingBuffer.scheduleFlush { [weak self] in
+        self?.flushStreamingBuffer(paced: true)
+      }
     }
   }
 
@@ -6926,7 +6590,7 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Clear Chat
 
-  /// Clear current session messages (delete and create new)
+  /// Clear the main chat's messages
   func clearChat() async {
     isClearing = true
     defer { isClearing = false }
@@ -6937,39 +6601,19 @@ class ChatProvider: ObservableObject {
     // the transcript the user just cleared.
     revokeActiveTurn(reason: .superseded)
     pendingComposerReferences.removeAll()
+    // The daily summary renders above the thread as chrome, so the journal
+    // clear below cannot reach it — and a summary left sitting alone in a chat
+    // the reader just emptied reads as a clear that did not work.
+    ChatDailySummaryCoordinator.shared.noteChatCleared()
 
-    if isInDefaultChat {
-      let runtimeChatId = mainChatRuntimeChatId(sessionId: nil)
-      let surface = AgentSurfaceReference.mainChat(chatId: runtimeChatId)
-      AgentRuntimeStatusStore.shared.clear(surface: surface)
-      guard await kernelTurnProjection.clear(surface: surface) else {
-        errorMessage = "Failed to clear chat"
-        return
-      }
-      log("Cleared default chat messages")
-    } else {
-      // Session mode: clear UI immediately, delete old session in background, create new
-      let sessionToDelete = currentSession
-      if let session = sessionToDelete {
-        let surface = AgentSurfaceReference.mainChat(chatId: session.id)
-        AgentRuntimeStatusStore.shared.clear(surface: surface)
-        guard await kernelTurnProjection.clear(surface: surface) else {
-          errorMessage = "Failed to clear chat"
-          return
-        }
-      }
-
-      // Immediately clear UI state
-      if let session = sessionToDelete {
-        sessions.removeAll { $0.id == session.id }
-      }
-      currentSession = nil
-      messages = []
-      resetMessagesPagination()
-
-      // Create a fresh session immediately
-      _ = await createNewSession()
+    let runtimeChatId = mainChatRuntimeChatId()
+    let surface = AgentSurfaceReference.mainChat(chatId: runtimeChatId)
+    AgentRuntimeStatusStore.shared.clear(surface: surface)
+    guard await kernelTurnProjection.clear(surface: surface) else {
+      errorMessage = "Failed to clear chat"
+      return
     }
+    log("Cleared default chat messages")
 
     log("Chat cleared")
     AnalyticsManager.shared.chatCleared()
@@ -6977,61 +6621,23 @@ class ChatProvider: ObservableObject {
 
   // MARK: - App Selection
 
-  /// Select a chat app and load its sessions
+  /// Select a chat app and load its main chat
   func selectApp(_ appId: String?) async {
-    guard selectedAppId != appId else { return }
-    revokeActiveTurn(reason: .superseded)
-    selectedAppId = appId
-    currentSession = nil
-    messages = []
-    resetMessagesPagination()
-    sessions = []
-    errorMessage = nil
-    isInDefaultChat = true
-
-    if multiChatEnabled {
-      // Multi-chat mode: load sessions, then switch to default chat
-      await fetchSessions()
-      await switchToDefaultChat()
-    } else {
-      // Single chat mode: just load default chat messages
-      await loadDefaultChatMessages()
-    }
+    await selectApp(appId, name: nil, chatPrompt: nil)
   }
 
-  // MARK: - Session Grouping Helpers
-
-  /// Group sessions by date — called by the Combine observer, not on every SwiftUI render pass.
-  private func computeGroupedSessions() -> [(String, [ChatSession])] {
-    let calendar = Calendar.current
-    let now = Date()
-
-    var today: [ChatSession] = []
-    var yesterday: [ChatSession] = []
-    var thisWeek: [ChatSession] = []
-    var older: [ChatSession] = []
-
-    for session in filteredSessions {
-      if calendar.isDateInToday(session.updatedAt) {
-        today.append(session)
-      } else if calendar.isDateInYesterday(session.updatedAt) {
-        yesterday.append(session)
-      } else if let weekAgo = calendar.date(byAdding: .day, value: -7, to: now),
-        session.updatedAt > weekAgo
-      {
-        thisWeek.append(session)
-      } else {
-        older.append(session)
-      }
-    }
-
-    var groups: [(String, [ChatSession])] = []
-    if !today.isEmpty { groups.append(("Today", today)) }
-    if !yesterday.isEmpty { groups.append(("Yesterday", yesterday)) }
-    if !thisWeek.isEmpty { groups.append(("This Week", thisWeek)) }
-    if !older.isEmpty { groups.append(("Older", older)) }
-
-    return groups
+  /// Opens an app-owned Main Chat and binds the app's decoded `chat_prompt`
+  /// to that conversation's local kernel context.
+  func selectApp(_ appId: String?, name: String?, chatPrompt: String?) async {
+    let appContext = appId.map { ChatAppContext(appId: $0, appName: name, chatPrompt: chatPrompt) }
+    guard selectedAppId != appId || selectedChatAppContext != appContext else { return }
+    revokeActiveTurn(reason: .superseded)
+    selectedAppId = appId
+    selectedChatAppContext = appContext
+    messages = []
+    resetMessagesPagination()
+    errorMessage = nil
+    await loadDefaultChatMessages()
   }
 
   // MARK: - Local automation (continuity gauntlet)

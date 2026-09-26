@@ -64,7 +64,14 @@ def cleanup(saved):
     for name in [k for k in sys.modules if k not in saved]:
         del sys.modules[name]
     for name, module in saved.items():
-        sys.modules[name] = module
+        if module is None:
+            # The module was never imported before this suite stubbed it.
+            # Writing None back into sys.modules poisons every later import of
+            # that package for the rest of the shard process ( ImportModuleError
+            # "No module named 'database.read_boundary'" in unrelated files).
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = module
 
 
 def wire_common_stubs(install) -> SimpleNamespace:
@@ -77,6 +84,13 @@ def wire_common_stubs(install) -> SimpleNamespace:
     handles a suite layers extra attributes onto.
     """
     load_real_module('models.chat', BACKEND_DIR / 'models' / 'chat.py')
+
+    notification_db = install('database.notifications')
+    notification_db.get_user_time_zone = MagicMock(return_value=None)
+    notification_db.set_user_time_zone = MagicMock()
+    notification_db.sync_user_time_zone_from_client = MagicMock(
+        side_effect=lambda _uid, request_tz: request_tz or 'UTC'
+    )
 
     chat_db = install('database.chat')
     chat_db.get_chat_session = MagicMock(return_value=None)
@@ -91,6 +105,18 @@ def wire_common_stubs(install) -> SimpleNamespace:
     llm_usage_db.record_chat_quota_question = MagicMock(return_value=True)
     users_db = install('database.users')
     users_db.set_chat_message_rating_score = MagicMock()
+    # The feedback ledger reaches Firestore for real. Importing it inside a
+    # process that has stubbed google.cloud.firestore_v1 makes protobuf reject
+    # the duplicate descriptor registration, so stub it like its siblings.
+    feedback_utils = install('utils.feedback', ModuleType('utils.feedback'))
+    feedback_utils.record_chat_message_feedback = MagicMock()
+    # product_metrics reaches Firestore through its account-cutover/journeys
+    # import chain. Importing it inside a process that has stubbed
+    # google.cloud.firestore_v1 makes protobuf reject the duplicate descriptor
+    # registration (document.proto), so stub it like utils.feedback above.
+    product_metrics = install('utils.product_metrics', ModuleType('utils.product_metrics'))
+    product_metrics.extract_app_build = MagicMock(return_value='unknown')
+    product_metrics.record_product_event = MagicMock()
     redis_db = install('database.redis_db')
     redis_db.try_acquire_goal_extraction_lock = MagicMock(return_value=False)
     redis_db.check_rate_limit = MagicMock(return_value=(True, 99, 0))
@@ -130,6 +156,8 @@ def wire_common_stubs(install) -> SimpleNamespace:
     gateway_client.get_file_chat_gateway_async_client = MagicMock()
     gateway_client.get_file_chat_gateway_sync_client = MagicMock()
     gateway_client.is_gateway_model_not_found = MagicMock(return_value=False)
+    # chat_file imports LUNA_MODEL from model_config, which imports this name.
+    gateway_client.is_auto_lane_id = MagicMock(return_value=False)
     users = install('utils.users', ModuleType('utils.users'))
     users.get_user_display_name = MagicMock(return_value='Test User')
     sanitizer = install('utils.log_sanitizer', ModuleType('utils.log_sanitizer'))
@@ -166,9 +194,10 @@ def wire_common_stubs(install) -> SimpleNamespace:
 
         instances = []
 
-        def __init__(self, journey, client_kind):
+        def __init__(self, journey, client_kind, app_build='unknown'):
             self.journey = journey
             self.client_kind = client_kind
+            self.app_build = app_build
             self.finished = False
             self.outcome = None
             self.issue_class = None
@@ -273,11 +302,15 @@ def wire_common_stubs(install) -> SimpleNamespace:
     usage_tracker.Features = Features
 
     limiter = install('utils.voice_duration_limiter', ModuleType('utils.voice_duration_limiter'))
+    limiter.MAX_SESSION_DURATION_S = 120
     limiter.compute_pcm_duration_ms = MagicMock(return_value=1000)
     limiter.read_wav_duration_ms = MagicMock(return_value=1000)
     limiter.try_consume_budget = MagicMock(return_value=(True, 1000, 7199000))
     limiter.check_budget = MagicMock(return_value=(True, 0, 7200000))
+    limiter.try_reserve_session_budget = MagicMock(return_value=(True, 120000, 120000, 7080000))
+    limiter.settle_reserved_duration = MagicMock()
     limiter.record_actual_duration = MagicMock()
+    limiter.MAX_SESSION_DURATION_S = 120
 
     multipart = install('multipart', ModuleType('multipart'))
     multipart.__version__ = '0.0.20'

@@ -1,0 +1,7 @@
+{
+  "version": "0.12.301",
+  "date": "2026-09-06",
+  "changes": [
+    "Named test bundles now inherit shortcuts and settings from your installed Omi app — production first, Omi Dev when production is absent — instead of always mirroring a stale Omi Dev; the launch log warns and names the effective hotkey default when the source app has none set, and auth seeding falls back to your production session when Omi Dev's has expired"
+  ]
+}

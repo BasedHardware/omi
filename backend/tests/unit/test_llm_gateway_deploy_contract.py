@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
+import tempfile
 from typing import Any, cast
 
 import yaml
@@ -267,7 +269,7 @@ def test_gateway_auto_deploy_is_folded_into_the_admitted_backend_lifecycle():
     assert build < deploy < serving < smoke < vpc_probe < caller_render
     gateway_image = 'gcr.io/${{ inputs.project_id }}/llm-gateway:${{ steps.image-tag.outputs.short_sha }}'
     assert f'gateway_image="{gateway_image}"' in workflow
-    assert f'--image "{gateway_image}"' in workflow
+    assert f'image: {gateway_image}' in workflow
     assert 'runtime_image_contracts.py" smoke' in workflow
     assert (
         'IMAGE_TAG="${{ steps.image-tag.outputs.short_sha }}" "$DEPLOY_CONTROL_SCRIPTS/deploy-llm-gateway.sh"'
@@ -279,6 +281,114 @@ def test_gateway_auto_deploy_is_folded_into_the_admitted_backend_lifecycle():
     )
     assert '--lane omi:auto:public-shared-conversation-chat' in workflow
     assert '--check-metrics' in workflow
+
+
+def test_combined_gateway_smoke_allows_cold_pull_and_keeps_failure_diagnostics():
+    action = yaml.safe_load(DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8'))
+    assert isinstance(action, dict)
+    steps = action['runs']['steps']
+    smoke_step = next(step for step in steps if step.get('name') == 'Smoke LLM Gateway')
+    smoke = str(smoke_step['run'])
+
+    # The pod startup budget covers scheduling and image pulls. The smoke
+    # client's own HTTP/retry deadline starts only after the pod is Running.
+    assert 'SMOKE_STARTUP_BUDGET_SECONDS=300' in smoke
+    assert 'SMOKE_PROBE_BUDGET_SECONDS=180' in smoke
+    assert 'startup_deadline=$((SECONDS + SMOKE_STARTUP_BUDGET_SECONDS))' in smoke
+    assert 'while (( SECONDS < startup_deadline )); do' in smoke
+    assert 'probe_deadline=$((SECONDS + SMOKE_PROBE_BUDGET_SECONDS))' in smoke
+    assert 'while (( SECONDS < probe_deadline )); do' in smoke
+    assert 'kubectl --request-timeout=10s -n "$NAMESPACE" get pod "$SMOKE_POD"' in smoke
+    assert 'kubectl --request-timeout=30s -n "$NAMESPACE" apply -f -' in smoke
+    assert 'LLM gateway smoke pod could not be created' in smoke
+    assert '--rm -i' not in smoke
+
+    # Diagnostics must run before the EXIT cleanup removes the pod, including
+    # the Pending/ImagePullBackOff case that caused the original one-minute
+    # kubectl run timeout to erase the evidence.
+    assert 'trap cleanup_smoke_pod EXIT' in smoke
+    assert 'kubectl --request-timeout=30s -n "$NAMESPACE" describe pod "$SMOKE_POD" || true' in smoke
+    assert 'kubectl --request-timeout=30s -n "$NAMESPACE" logs "$SMOKE_POD" --all-containers=true || true' in smoke
+    assert (
+        'kubectl --request-timeout=30s -n "$NAMESPACE" get events --field-selector "involvedObject.name=$SMOKE_POD"'
+        in smoke
+    )
+    assert 'LLM gateway smoke pod did not start within' in smoke
+    assert 'LLM gateway smoke probe did not complete within' in smoke
+
+
+def test_combined_gateway_smoke_rendered_script_handles_pod_phases_and_preserves_env_literals():
+    action = yaml.safe_load(DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8'))
+    assert isinstance(action, dict)
+    smoke_step = next(step for step in action['runs']['steps'] if step.get('name') == 'Smoke LLM Gateway')
+    smoke = re.sub(r'\$\{\{[^}]+\}\}', 'placeholder', str(smoke_step['run']))
+
+    fake_kubectl = '''#!/usr/bin/env python3
+import os
+import sys
+from pathlib import Path
+
+args = sys.argv[1:]
+with Path(os.environ["FAKE_CALLS"]).open("a", encoding="utf-8") as handle:
+    handle.write(" ".join(args) + "\\n")
+if "apply" in args:
+    Path(os.environ["FAKE_MANIFEST"]).write_text(sys.stdin.read(), encoding="utf-8")
+elif "get" in args and "pod" in args:
+    print(os.environ["FAKE_PHASE"])
+'''
+
+    def run_case(phase: str, expected_code: int, *, startup_budget: int | None = None) -> tuple[str, str]:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            kubectl = root / 'kubectl'
+            kubectl.write_text(fake_kubectl, encoding='utf-8')
+            kubectl.chmod(0o755)
+            rendered = smoke
+            if startup_budget is not None:
+                rendered = rendered.replace(
+                    'SMOKE_STARTUP_BUDGET_SECONDS=300',
+                    f'SMOKE_STARTUP_BUDGET_SECONDS={startup_budget}',
+                )
+            env = {
+                **os.environ,
+                'PATH': f'{root}{os.pathsep}{os.environ["PATH"]}',
+                'GITHUB_RUN_ID': '42',
+                'GITHUB_RUN_ATTEMPT': '1',
+                'FAKE_PHASE': phase,
+                'FAKE_MANIFEST': str(root / 'manifest.yaml'),
+                'FAKE_CALLS': str(root / 'calls.txt'),
+            }
+            result = subprocess.run(
+                ['bash', '-euo', 'pipefail', '-c', rendered],
+                check=False,
+                capture_output=True,
+                env=env,
+                text=True,
+            )
+            assert result.returncode == expected_code, result.stderr
+            return (root / 'manifest.yaml').read_text(encoding='utf-8'), (root / 'calls.txt').read_text(
+                encoding='utf-8'
+            )
+
+    manifest, succeeded_calls = run_case('Succeeded', 0)
+    assert r'--url \"$SMOKE_URL\" --token \"$SMOKE_TOKEN\"' in manifest
+    assert '--request-timeout=10s' in succeeded_calls
+    assert 'describe pod' in succeeded_calls
+    assert 'logs' in succeeded_calls
+    assert 'get events' in succeeded_calls
+    assert 'delete pod' in succeeded_calls
+
+    _, failed_calls = run_case('Failed', 1)
+    assert 'describe pod' in failed_calls
+    assert 'logs' in failed_calls
+    assert 'get events' in failed_calls
+    assert 'delete pod' in failed_calls
+
+    _, pending_calls = run_case('Pending', 1, startup_budget=1)
+    assert 'describe pod' in pending_calls
+    assert 'logs' in pending_calls
+    assert 'get events' in pending_calls
+    assert 'delete pod' in pending_calls
 
 
 def test_backend_deploy_requires_serving_and_cloud_run_vpc_gates_before_gateway_promotion():

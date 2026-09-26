@@ -123,7 +123,7 @@ def _historical(service_mod, memory_id, *, content=None):
 
 @pytest.fixture
 def service_mod(monkeypatch):
-    monkeypatch.setenv("MEMORY_MODE", "read")
+    monkeypatch.setenv("MEMORY_ENABLED", "on")
     module = _load_memory_service(monkeypatch)
 
     @contextmanager
@@ -152,7 +152,7 @@ def test_global_write_pause_blocks_intake_but_not_reads_or_privacy_delete(servic
     review_cleanup = MagicMock()
     monkeypatch.setattr(service_mod, "purge_stale_review_conflicts_for_memories", review_cleanup)
     monkeypatch.setattr(service_mod.HistoricalMemoryAdapter, "cleanup", MagicMock())
-    monkeypatch.setenv("MEMORY_MODE", "off")
+    monkeypatch.setenv("MEMORY_ENABLED", "off")
 
     assert service.read("uid-test") == []
     with pytest.raises(service_mod.HTTPException) as exc_info:
@@ -361,6 +361,39 @@ def test_ledger_history_page_reports_partial_provider_window_and_filters_privacy
     complete = service_mod.MemoryService(db_client=_Db()).read_ledger_history_page("uid-test", limit=10)
     assert [memory.id for memory in complete.memories] == ["legacy"]
     assert complete.truncated is False
+
+
+def test_ledger_history_page_sentinel_row_is_not_skipped_by_continuation(service_mod, monkeypatch):
+    """A full 501-row provider window must sign the continuation BEFORE the
+    sentinel row. A cursor after the sentinel would skip that row forever:
+    the next keyset page starts strictly after it."""
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    rows = [_ledger_item(service_mod, f"row-{index:03d}", updated_at=now, user_review=False) for index in range(502)]
+    calls = {}
+
+    def provider(uid, *, limit, **kwargs):
+        calls["start_after"] = kwargs.get("start_after")
+        start = 0
+        if calls["start_after"] is not None:
+            start = int(calls["start_after"][1].split("-")[1]) + 1
+        return iter(rows[start : start + limit])
+
+    monkeypatch.setattr(service_mod, "iter_authoritative_product_memory_items_newest_first", provider)
+
+    first = service_mod.MemoryService(db_client=_Db()).read_ledger_history_page("uid-test", limit=500)
+
+    assert first.truncated is True
+    assert first.scanned_count == 501
+    assert len(first.memories) == 500
+    assert first.next_start_after == (now, "row-499")
+
+    second = service_mod.MemoryService(db_client=_Db()).read_ledger_history_page(
+        "uid-test", limit=500, start_after=first.next_start_after
+    )
+
+    assert calls["start_after"] == (now, "row-499")
+    assert [memory.id for memory in second.memories] == ["row-500", "row-501"]
+    assert second.truncated is False
 
 
 def test_ledger_history_excludes_locked_rows(service_mod, monkeypatch):
@@ -677,13 +710,67 @@ def test_mixed_read_batches_canonical_suppression_status_lookups(service_mod, mo
     result = service.read("uid-test", limit=10)
 
     assert {item.id for item in result} == {"legacy-a", "legacy-b"}
-    assert len(db.get_all_calls) == 1
-    assert db.get_all_calls[0] == [
-        "users/uid-test/memory_items/legacy-a",
-        "users/uid-test/memory_items/legacy-b",
-        "users/uid-test/memory_historical_overrides/legacy-a",
-        "users/uid-test/memory_historical_overrides/legacy-b",
+    assert db.get_all_calls == [
+        [
+            "users/uid-test/memory_items/legacy-a",
+            "users/uid-test/memory_items/legacy-b",
+        ],
+        [
+            "users/uid-test/memory_historical_overrides/legacy-a",
+            "users/uid-test/memory_historical_overrides/legacy-b",
+        ],
     ]
+
+
+def test_canonical_statuses_skips_override_when_item_has_valid_status(service_mod):
+    db = _BatchStatusDb(
+        {
+            "users/uid-test/memory_items/live": {"status": "active"},
+            "users/uid-test/memory_historical_overrides/live": {"status": "tombstoned"},
+        }
+    )
+    service = service_mod.MemoryService(db_client=db)
+
+    statuses = service.canonical_statuses("uid-test", ["live"])
+
+    assert statuses["live"] == service_mod.MemoryItemStatus.active
+    assert db.get_all_calls == [["users/uid-test/memory_items/live"]]
+
+
+def test_canonical_statuses_override_only_tombstone_is_suppressed_not_503(service_mod):
+    db = _BatchStatusDb({"users/uid-test/memory_historical_overrides/gone": {"status": "tombstoned"}})
+    service = service_mod.MemoryService(db_client=db)
+
+    statuses = service.canonical_statuses("uid-test", ["gone"])
+
+    assert statuses["gone"] == service_mod.MemoryItemStatus.tombstoned
+    assert db.get_all_calls == [
+        ["users/uid-test/memory_items/gone"],
+        ["users/uid-test/memory_historical_overrides/gone"],
+    ]
+
+
+def test_canonical_statuses_malformed_item_is_503_even_with_valid_override(service_mod):
+    db = _BatchStatusDb(
+        {
+            "users/uid-test/memory_items/bad": {"status": "not-a-status"},
+            "users/uid-test/memory_historical_overrides/bad": {"status": "tombstoned"},
+        }
+    )
+    service = service_mod.MemoryService(db_client=db)
+
+    with pytest.raises(service_mod.HTTPException) as exc_info:
+        service.canonical_statuses("uid-test", ["bad"])
+
+    assert exc_info.value.status_code == 503
+    assert db.get_all_calls == [["users/uid-test/memory_items/bad"]]
+
+
+def test_canonical_statuses_both_absent_admits_historical(service_mod):
+    db = _BatchStatusDb()
+    service = service_mod.MemoryService(db_client=db)
+
+    assert service.canonical_statuses("uid-test", ["ghost"]) == {}
 
 
 def test_mixed_read_maps_unordered_batch_snapshots_by_reference_path(service_mod):
@@ -742,6 +829,41 @@ def test_default_product_search_includes_historical_rows_without_materializing(s
         now=None,
     )
     service._canonical.write.assert_not_called()
+
+
+def test_temporal_product_search_uses_bounded_pages_and_retains_history(service_mod, monkeypatch):
+    """Beta product search reaches dated/superseded rows without full ``read``."""
+    now = datetime(2026, 8, 23, tzinfo=timezone.utc)
+    current = _memory(service_mod, 'current', content='coffee current').model_copy(
+        update={'belief_class': 'stable', 'half_life_days': 365.0}
+    )
+    dated = _memory(service_mod, 'dated', content='coffee dated').model_copy(
+        update={'invalid_at': now - timedelta(days=1), 'belief_class': 'stable', 'half_life_days': 365.0}
+    )
+    superseded = _memory(service_mod, 'superseded', content='coffee superseded').model_copy(
+        update={
+            'ledger_status': MemoryItemStatus.superseded,
+            'superseded_by': 'current',
+            'invalid_at': now - timedelta(days=2),
+            'belief_class': 'stable',
+            'half_life_days': 365.0,
+        }
+    )
+    page = service_mod.UniversalMemoryListPage(memories=[current, dated, superseded], next_cursor=None, truncated=False)
+    service = service_mod.MemoryService(db_client=_Db())
+    service.read = MagicMock()
+    service.read_page = MagicMock(return_value=page)
+    monkeypatch.setenv('MEMORY_BELIEF_MODEL_ENABLED', 'true')
+
+    result = service.default_product_search(
+        'uid-test', 'coffee', policy=service_mod.MemoryAccessPolicy.for_omi_chat(), now=now, view='history'
+    )
+
+    assert [item['memory_id'] for item in result['items']] == ['dated', 'superseded']
+    assert result['truncated'] is False
+    assert result['has_more'] is False
+    service.read.assert_not_called()
+    service.read_page.assert_called_once()
 
 
 def test_offset_merge_fetches_a_complete_bounded_prefix(service_mod):
@@ -1875,6 +1997,27 @@ def test_search_deduplicates_canonical_and_historical_candidates(service_mod):
     service.history.search.assert_called_once()
 
 
+def test_search_batches_historical_suppression_lookups(service_mod):
+    db = _BatchStatusDb()
+    service = service_mod.MemoryService(db_client=db)
+    service._canonical.search = MagicMock(return_value=[])
+    service.history.search = MagicMock(
+        return_value=[
+            service_mod.MemorySearchMatch(_memory(service_mod, "legacy-a"), 0.8),
+            service_mod.MemorySearchMatch(_memory(service_mod, "legacy-b"), 0.7),
+        ]
+    )
+
+    result = service.search("uid-test", "query", limit=10)
+
+    assert [match.memory.id for match in result] == ["legacy-a", "legacy-b"]
+    assert db.get_all_calls[0] == [
+        "users/uid-test/memory_items/legacy-a",
+        "users/uid-test/memory_items/legacy-b",
+    ]
+    assert all("memory_historical_overrides" not in path for path in db.get_all_calls[0])
+
+
 def test_search_applies_result_filter_before_final_limit(service_mod):
     service = service_mod.MemoryService(db_client=_Db())
     service._canonical.search = MagicMock(
@@ -2209,24 +2352,32 @@ def test_required_historical_cleanup_keeps_content_when_vector_delete_fails(serv
     delete_content.assert_not_called()
 
 
-def test_required_historical_cleanup_requires_initialized_vector_authority(service_mod, monkeypatch):
+def test_required_historical_cleanup_completes_when_vector_store_unconfigured(service_mod, monkeypatch):
+    """Deletion must stay available on deployments with no vector store.
+
+    ``delete_memory_vector`` no-ops when Pinecone is not configured, so there is
+    no vector copy to purge and the desired absence is trivially confirmed. The
+    production backend and prod desktop-backend deployments run without
+    ``PINECONE_API_KEY`` (see ``backend/deploy/runtime_env.yaml`` and
+    ``desktop_backend_prod.yml``'s ``--remove-secrets=PINECONE_API_KEY``), so
+    requiring an initialized index here made every explicit delete 503 forever
+    (#10446 recurrence: desktop delete errors, mobile silently re-adds).
+    """
     delete_content = MagicMock()
-    delete_vector = MagicMock()
     monkeypatch.setattr(service_mod.vector_db, "index", None)
+    delete_vector = MagicMock()
     monkeypatch.setattr(service_mod, "delete_memory_vector", delete_vector)
     monkeypatch.setattr(service_mod.memories_db, "delete_memory", delete_content)
 
-    with pytest.raises(service_mod.HTTPException) as exc_info:
-        service_mod.HistoricalMemoryAdapter.cleanup(
-            "uid-test",
-            "legacy",
-            db_client=_Db(),
-            required=True,
-        )
+    service_mod.HistoricalMemoryAdapter.cleanup(
+        "uid-test",
+        "legacy",
+        db_client=_Db(),
+        required=True,
+    )
 
-    assert exc_info.value.status_code == 503
-    delete_vector.assert_not_called()
-    delete_content.assert_not_called()
+    delete_vector.assert_called_once()
+    delete_content.assert_called_once()
 
 
 def test_required_historical_cleanup_deletes_vector_before_content(service_mod, monkeypatch):

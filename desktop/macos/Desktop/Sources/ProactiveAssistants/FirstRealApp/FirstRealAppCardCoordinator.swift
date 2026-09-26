@@ -74,6 +74,17 @@ final class FirstRealAppCardCoordinator {
   /// Takes the card down, if it is still ours.
   typealias Dismisser = @MainActor (_ kind: NotificationDismissalKind) -> Void
 
+  /// Asks push-to-talk to have a microphone capture running before the press
+  /// this card is about to invite. Injected so the test suite observes the
+  /// request without opening a real device.
+  ///
+  /// The card is the one moment in a fresh install where the next press is
+  /// predictable, and the press it invites is the one measured failing:
+  /// `capture_never_operational` is the largest PTT failure class among users
+  /// who just completed onboarding. This claims no voice lifecycle (INV-VOICE-1)
+  /// — it parks a capture, it does not start a turn.
+  typealias WarmCaptureRequest = @MainActor () -> Void
+
   /// Installs an observation of "a push-to-talk turn started" and returns the
   /// teardown. The card claims no voice lifecycle of its own — INV-VOICE-1
   /// allows exactly one owner and that is `VoiceTurnCoordinator` — so this only
@@ -108,6 +119,7 @@ final class FirstRealAppCardCoordinator {
   private let presenter: Presenter
   private let dismisser: Dismisser
   private let pttObserver: PTTObserver
+  private let warmCapture: WarmCaptureRequest
   private let openChat: @MainActor (_ prompt: String) -> Void
   private let scheduler: any FirstRealAppCardScheduling
 
@@ -131,11 +143,54 @@ final class FirstRealAppCardCoordinator {
     presenter: @escaping Presenter = FirstRealAppCardCoordinator.notificationServicePresenter,
     dismisser: @escaping Dismisser = FirstRealAppCardCoordinator.floatingBarDismisser,
     pttObserver: @escaping PTTObserver = FirstRealAppCardCoordinator.voiceTurnPTTObserver,
+    warmCapture: @escaping WarmCaptureRequest = {
+      PushToTalkManager.shared.prewarmMicCapture(trigger: .firstRealAppCard)
+    },
     openChat: @escaping @MainActor (String) -> Void = { prompt in
       // The seam every prefill already uses. `MainChatNavigationRequestStore`
       // holds the draft until a composer mounts, so this works whether or not
       // the main window exists yet — and it never sends.
-      AppDelegate.summonWindowTarget()?.openMainAppChat(prefilledDraft: prompt)
+      //
+      // **The window opens now.** The tap is the activation moment, and an
+      // order that captures and encodes a full-screen JPEG *before* summoning
+      // leaves the user staring at a dead click for hundreds of milliseconds.
+      // The summon itself records the boundary capture — the pre-summon
+      // pixels, which is exactly the named app's screen — so the referent
+      // comes from that boundary instead of a second capture this tap would
+      // otherwise race against its own opening window.
+      //
+      // The reservation is taken synchronously at tap time: the boundary
+      // encode below can be overtaken by any other open-chat request
+      // (floating bar, a second card), and a stale handoff must not attach
+      // its frame to the newer request's composer.
+      let generation = MainChatNavigationRequestStore.shared.reserve()
+      let tappedAt = Date()
+      guard let target = AppDelegate.summonWindowTarget() else { return }
+      target.openMainAppChat(prefilledDraft: prompt, attachedFrame: nil)
+      Task { @MainActor in
+        // The boundary's JPEG encode runs detached; wait for it to publish.
+        // If Omi was already frontmost when the card was tapped, no boundary
+        // was recorded for this tap — fall back to the newest stored frame,
+        // whose loader excludes Omi and capture-excluded apps, so the
+        // referent can never be Omi's own window either way.
+        var frame = await RewindFrameLoader.shared.awaitSummonBoundary(recordedAfter: tappedAt)
+        if frame == nil {
+          frame = await RewindFrameLoader.shared.loadLatestAttachableFrame(
+            maxAgeSeconds: ScreenContextFallbackPolicy.maxFallbackFrameAgeSeconds
+          )
+        }
+        guard let frame,
+          generation == MainChatNavigationRequestStore.shared.currentGeneration
+        else { return }
+        guard
+          let attachment = RecentScreenFrameStaging.attachment(
+            appName: frame.appName,
+            jpegData: frame.data,
+            capturedAt: frame.timestamp
+          )
+        else { return }
+        ChatProvider.mainInstance?.addAttachments([attachment])
+      }
     },
     scheduler: any FirstRealAppCardScheduling = FirstRealAppCardMainQueueScheduler()
   ) {
@@ -145,6 +200,7 @@ final class FirstRealAppCardCoordinator {
     self.presenter = presenter
     self.dismisser = dismisser
     self.pttObserver = pttObserver
+    self.warmCapture = warmCapture
     self.openChat = openChat
     self.scheduler = scheduler
   }
@@ -349,6 +405,9 @@ final class FirstRealAppCardCoordinator {
       FirstRealAppCardPolicy.body(pttChordTokens: environment.pttChordTokens)
     )
     AnalyticsManager.shared.firstRealAppCard(phase: .shown)
+    // The card says "Hold ⌥ and ask me anything". Have the microphone running
+    // before they do, so the first hold is not the one that gets discarded.
+    warmCapture()
 
     stopObservingPTT = pttObserver { [weak self] in
       self?.handlePushToTalkStarted()

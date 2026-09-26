@@ -188,6 +188,10 @@ enum DesktopCapabilityRegistry {
       "Create/update tasks -> \(toolList(taskWriteTools)); use execute_sql only for exact local inspection or legacy local writes.",
       when: !available(taskWriteTools).isEmpty
     )
+    let contextReminderGuidance =
+      "Remind the user next time they return to the current app or document -> create_context_reminder."
+      + (has("create_action_item") ? " Timed reminders stay on create_action_item." : "")
+    append(contextReminderGuidance, when: has("create_context_reminder"))
     append(
       "User explicitly asks to remember/save -> create_memory with a clean standalone fact.",
       when: has("create_memory")

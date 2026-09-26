@@ -1,0 +1,32 @@
+{
+  "entries": [
+    {
+      "path": "desktop/windows/src/main/agentKernel/toolInstructionCoverage.ts",
+      "reason": "intentional test infrastructure"
+    },
+    {
+      "path": "desktop/windows/src/main/codingAgent/acp.testkit.ts",
+      "reason": "intentional test infrastructure"
+    },
+    {
+      "path": "desktop/windows/src/main/codingAgent/fixtures/fakeAcpSubprocess.mjs",
+      "reason": "intentional test infrastructure"
+    },
+    {
+      "path": "desktop/windows/src/main/codingAgent/fixtures/fakeAcpAuthSubprocess.mjs",
+      "reason": "intentional test infrastructure"
+    },
+    {
+      "path": "desktop/windows/src/main/codingAgent/pi-mono-extension/index.ts",
+      "reason": "shipped pi-mono payload entry: piMono.ts jiti-loads it at runtime via the constructed path resources/app.asar.unpacked/out/main/pi-mono-extension/index.ts (piMono.ts:404-407); the scanner only matches literal sibling .js/.mjs strings, so that edge is invisible to it"
+    },
+    {
+      "path": "desktop/windows/src/main/codingAgent/pi-mono-extension/node-tools.ts",
+      "reason": "static import of the pi-mono payload entry (pi-mono-extension/index.ts) and referenced by its comment contract; lives or dies with that allowlisted entry"
+    },
+    {
+      "path": "desktop/windows/src/shared/agentControlTools.ts",
+      "reason": "test-only contract module (AGENT_CONTROL_TOOL_NAMES assertions); the live IPC handler is self-contained in src/main/ipc/agentControl.ts"
+    }
+  ]
+}

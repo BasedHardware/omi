@@ -24,6 +24,11 @@ enum ChatFirstPromptMaterializationPolicy {
 /// state remain on the backend/kernel respectively.
 @MainActor
 final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
+  /// The one coordinator. Auxiliary Chat surfaces bind it so they cannot start a
+  /// second materialization lane; only the mounted main transcript ever reports
+  /// its first page to it.
+  static let shared = ChatFirstPromptMaterializationCoordinator()
+
   private var driver: (any ChatFirstPromptMaterializationDriving)?
   private var didLoadTranscriptFirstPage = false
   private var lastAttemptAt: Date?

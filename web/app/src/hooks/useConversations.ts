@@ -24,7 +24,7 @@ function getCacheKey(folderId?: string, startDate?: Date, endDate?: Date): strin
   return cacheKeys.conversations(
     folderId,
     startDate?.toISOString().split('T')[0],
-    endDate?.toISOString().split('T')[0]
+    endDate?.toISOString().split('T')[0],
   );
 }
 
@@ -38,7 +38,12 @@ function isCacheStale(key: string): boolean {
   return cached ? cached.isStale : true;
 }
 
-function setToCache(key: string, conversations: Conversation[], offset: number, hasMore: boolean): void {
+function setToCache(
+  key: string,
+  conversations: Conversation[],
+  offset: number,
+  hasMore: boolean,
+): void {
   setCache<CacheEntry>(key, { conversations, offset, hasMore }, CACHE_TTL.MEDIUM);
 }
 
@@ -60,7 +65,7 @@ interface UseConversationsReturn {
  * Hook to fetch and manage conversations
  */
 export function useConversations(
-  options: UseConversationsOptions = {}
+  options: UseConversationsOptions = {},
 ): UseConversationsReturn {
   const { enabled = true, limit = 50, ...params } = options;
 
@@ -68,7 +73,9 @@ export function useConversations(
   const cacheKey = getCacheKey(params.folderId, params.startDate, params.endDate);
   const cachedEntry = getFromCache(cacheKey);
 
-  const [conversations, setConversations] = useState<Conversation[]>(cachedEntry?.conversations || []);
+  const [conversations, setConversations] = useState<Conversation[]>(
+    cachedEntry?.conversations || [],
+  );
   const [loading, setLoading] = useState(!cachedEntry); // Only show loading if no cache
   const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState(cachedEntry?.offset || 0);
@@ -85,25 +92,26 @@ export function useConversations(
 
   // Group conversations by date - memoized for performance
   const groupedConversations = useMemo<GroupedConversations>(() => {
-    return conversations.reduce(
-      (groups, conversation) => {
-        const date = new Date(conversation.started_at || conversation.created_at);
-        const dateKey = formatRelativeDate(date);
+    return conversations.reduce((groups, conversation) => {
+      const date = new Date(conversation.started_at || conversation.created_at);
+      const dateKey = formatRelativeDate(date);
 
-        if (!groups[dateKey]) {
-          groups[dateKey] = [];
-        }
-        groups[dateKey].push(conversation);
+      if (!groups[dateKey]) {
+        groups[dateKey] = [];
+      }
+      groups[dateKey].push(conversation);
 
-        return groups;
-      },
-      {} as GroupedConversations
-    );
+      return groups;
+    }, {} as GroupedConversations);
   }, [conversations]);
 
   // Fetch conversations
   const fetchConversations = useCallback(
-    async (currentOffset: number, append: boolean = false, backgroundRefresh: boolean = false) => {
+    async (
+      currentOffset: number,
+      append: boolean = false,
+      backgroundRefresh: boolean = false,
+    ) => {
       if (!enabled) return;
 
       // Prevent concurrent fetches
@@ -139,8 +147,9 @@ export function useConversations(
         // Use functional update to avoid conversations in dependency array
         const hasMoreData = data.length === limit;
         setHasMore(hasMoreData);
+        setOffset(currentOffset);
 
-        setConversations(prev => {
+        setConversations((prev) => {
           const newConversations = append ? [...prev, ...sorted] : sorted;
           // Save to cache
           setToCache(key, newConversations, currentOffset, hasMoreData);
@@ -155,7 +164,15 @@ export function useConversations(
       }
     },
     // Only depend on primitive values, not objects
-    [enabled, limit, params.statuses, params.includeDiscarded, params.startDate, params.endDate, params.folderId]
+    [
+      enabled,
+      limit,
+      params.statuses,
+      params.includeDiscarded,
+      params.startDate,
+      params.endDate,
+      params.folderId,
+    ],
   );
 
   // Initial fetch and refetch when filter params change
@@ -215,7 +232,7 @@ export function useConversations(
 
   // Track if any conversations are processing
   useEffect(() => {
-    const processing = conversations.some(c => c.status === 'processing');
+    const processing = conversations.some((c) => c.status === 'processing');
     setHasProcessing(processing);
   }, [conversations]);
 
@@ -245,9 +262,7 @@ export function useConversations(
   const loadMore = useCallback(async () => {
     if (loading || !hasMore) return;
 
-    const newOffset = offset + limit;
-    setOffset(newOffset);
-    await fetchConversations(newOffset, true);
+    await fetchConversations(offset + limit, true);
   }, [loading, hasMore, offset, limit, fetchConversations]);
 
   // Refresh conversations (reset and reload)

@@ -30,6 +30,7 @@ import 'package:omi/services/integrations/google_tasks_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/integrations/todoist_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -73,7 +74,7 @@ class _AppShellState extends State<AppShell> {
         if (app != null) {
           PlatformManager.instance.analytics.track('App Opened From DeepLink', properties: {'appId': app.id});
           if (mounted) {
-            Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
+            routeToPage(context, AppDetailPage(app: app));
           }
         } else {
           Logger.debug('App not found: ${uri.pathSegments[1]}');
@@ -85,7 +86,7 @@ class _AppShellState extends State<AppShell> {
     } else if (uri.pathSegments.first == 'wrapped') {
       if (mounted) {
         PlatformManager.instance.analytics.track('Wrapped Opened From DeepLink');
-        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const Wrapped2025Page()));
+        routeToPage(context, const Wrapped2025Page());
       }
     } else if (uri.pathSegments.first == 'tasks' && uri.pathSegments.length > 1) {
       if (mounted) {
@@ -97,7 +98,7 @@ class _AppShellState extends State<AppShell> {
       if (mounted) {
         if (!context.read<UsageProvider>().showSubscriptionUI) return;
         PlatformManager.instance.analytics.track('Plans Opened From DeepLink');
-        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const UsagePage(showUpgradeDialog: true)));
+        routeToPage(context, const UsagePage(showUpgradeDialog: true));
       }
     } else if (uri.host == 'todoist' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle Todoist OAuth callback
@@ -199,7 +200,7 @@ class _AppShellState extends State<AppShell> {
     if (!mounted) return;
 
     if (data == null) {
-      AppSnackbar.showSnackbarError('Shared tasks not found or link expired');
+      AppSnackbar.showSnackbarError(context.l10n.sharedTasksLinkExpired);
       return;
     }
 
@@ -209,7 +210,7 @@ class _AppShellState extends State<AppShell> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => AcceptSharedTasksSheet(
         token: token,
-        senderName: data['sender_name'] ?? 'Someone',
+        senderName: data['sender_name'] ?? context.l10n.sharedTasksUnknownSender,
         tasks: (data['tasks'] as List<dynamic>? ?? [])
             .map((t) => {'description': t['description'] ?? '', 'due_at': t['due_at']})
             .toList(),
@@ -261,7 +262,7 @@ class _AppShellState extends State<AppShell> {
 
       // Auto-open settings page for configuration
       if (requiresSetup && mounted) {
-        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AsanaSettingsPage()));
+        routeToPage(context, const AsanaSettingsPage());
       }
     } else {
       PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'asana');
@@ -308,7 +309,7 @@ class _AppShellState extends State<AppShell> {
 
       // Auto-open settings page for configuration
       if (requiresSetup && mounted) {
-        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ClickUpSettingsPage()));
+        routeToPage(context, const ClickUpSettingsPage());
       }
     } else {
       PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'clickup');

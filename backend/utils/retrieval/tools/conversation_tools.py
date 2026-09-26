@@ -16,7 +16,7 @@ import database.users as users_db
 import database.vector_db as vector_db
 from models.other import Person
 from utils.conversations.factory import deserialize_conversation
-from utils.conversations.render import conversations_to_string
+from utils.conversations.render import conversation_to_citation_card, conversations_to_string
 from utils.conversations.search import (
     conversation_matches_date_range,
     keyword_search_conversation_ids,
@@ -397,15 +397,10 @@ def get_conversations_tool(
 
         logger.info(f"🔍 get_conversations_tool - Converted {len(conversations)} conversation objects")
 
-        # Store conversations in config for citation tracking (as lightweight dicts)
+        # Store conversations in config for citation tracking (allowlisted cards)
         conversations_collected = configurable.get('conversations_collected', [])
         for conv in conversations:
-            conv_dict = conv.model_dump()
-            # Remove heavy fields to reduce memory usage
-            conv_dict.pop('transcript_segments', None)
-            conv_dict.pop('photos', None)
-            conv_dict.pop('audio_files', None)
-            conversations_collected.append(conv_dict)
+            conversations_collected.append(conversation_to_citation_card(conv))
         logger.info(
             f"📚 get_conversations_tool - Added {len(conversations)} conversations to collection (total: {len(conversations_collected)})"
         )
@@ -701,15 +696,10 @@ def search_conversations_tool(
 
         logger.info(f"🔍 search_conversations_tool - Converted {len(conversations)} conversation objects")
 
-        # Store conversations in config for citation tracking (as lightweight dicts)
+        # Store conversations in config for citation tracking (allowlisted cards)
         conversations_collected = configurable.get('conversations_collected', [])
         for conv in conversations:
-            conv_dict = conv.model_dump()
-            # Remove heavy fields to reduce memory usage
-            conv_dict.pop('transcript_segments', None)
-            conv_dict.pop('photos', None)
-            conv_dict.pop('audio_files', None)
-            conversations_collected.append(conv_dict)
+            conversations_collected.append(conversation_to_citation_card(conv))
         logger.info(
             f"📚 search_conversations_tool - Added {len(conversations)} conversations to collection (total: {len(conversations_collected)})"
         )

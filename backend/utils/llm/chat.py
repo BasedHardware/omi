@@ -27,6 +27,7 @@ from utils.llm.usage_tracker import track_usage, Features
 from utils.llm.temporal import MAX_EXTRACTED_DATE_LOOKAHEAD_DAYS, date_in_tz, normalize_extracted_dates
 
 from .clients import get_llm
+from utils.llm.prompt_cache import with_cache_write_opt_out
 import logging
 
 logger = logging.getLogger(__name__)
@@ -241,7 +242,6 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
     '''.replace('    ', '').strip()
 
     # print(prompt)
-    # print(get_llm('chat_extraction').invoke(prompt).content)
     with_parser = get_llm('chat_extraction').with_structured_output(DatesContext)
     response = cast(DatesContext, with_parser.invoke(prompt))
     return response.dates_range
@@ -520,6 +520,8 @@ def get_current_datetime_block(uid: str, tz: Optional[str] = None, location: Opt
         "<current_datetime>\n"
         f"Current date time in {tz}: {current_datetime_str}\n"
         f"Current date time ISO format: {current_datetime_iso}\n"
+        "When describing events or using relative time words (morning, afternoon, evening, "
+        f"tonight), interpret timestamps and the user's language in {tz}.\n"
         f"{location_line}"
         "</current_datetime>"
     )
@@ -598,7 +600,7 @@ When you see [Files attached: X file(s), IDs: ...], you can reference those file
 """
 
     # Get user's current goals
-    user_goals = goals_db.get_user_goals(uid)
+    user_goals = goals_db.get_user_goals(uid, limit=100)
     goal_section = ""
     if user_goals:
         goals_lines: List[str] = []
@@ -1249,10 +1251,8 @@ def retrieve_metadata_fields_from_transcript(
     '''.replace('    ', '')
     try:
         with track_usage(uid, Features.CONVERSATION_PROCESSING):
-            result = cast(
-                ExtractedInformation,
-                get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt),
-            )
+            structured = get_llm('chat_extraction').with_structured_output(ExtractedInformation)
+            result = cast(ExtractedInformation, with_cache_write_opt_out(structured).invoke(prompt))
     except Exception as e:
         logger.error(f'e {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
@@ -1367,10 +1367,8 @@ def _process_extracted_metadata(uid: str, prompt: str, reference_date: str) -> d
     """Process the extracted metadata from any source"""
     try:
         with track_usage(uid, Features.CONVERSATION_PROCESSING):
-            result = cast(
-                ExtractedInformation,
-                get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt),
-            )
+            structured = get_llm('chat_extraction').with_structured_output(ExtractedInformation)
+            result = cast(ExtractedInformation, with_cache_write_opt_out(structured).invoke(prompt))
     except Exception as e:
         logger.error(f'Error extracting metadata: {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}

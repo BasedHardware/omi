@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "id": "FC-provenance-gate-blocks-feature-reuse",
+  "violated_contract": "A gate that grants special provenance for one specific claim (e.g. onboarding admission) must not also govern access to an unrelated feature that reuses the same underlying mechanism without making that claim. Conflating the two silently blocks the reused feature for every account that already satisfies the gate's own exclusion condition.",
+  "canonical_prevention": "Give a feature that reuses a provenance-gated mechanism its own explicit request-level signal, and let the gate admit that signal unconditionally instead of routing it through the provenance check meant for a different claim.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_listen_runtime_regressions.py"
+  ],
+  "evidence_prs": [12531],
+  "scope_hints": ["backend/routers/listen/**", "backend/utils/stt/**"],
+  "status": "open"
+}

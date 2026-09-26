@@ -10,7 +10,7 @@ context for a safe answer return ``triage`` instead of guessing.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from enum import Enum
 import hashlib
 import json
@@ -31,6 +31,7 @@ from models.jit_proactivity import (
 )
 from models.memory_evidence import SourceState
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryKind, MemorySubjectScope
+from utils.memory.belief_model import belief_model_enabled, record_passes_proactive_bar
 
 TRIGGER_SCHEMA_VERSION = "jit_trigger.v1"
 TRIGGER_POLICY_VERSION = "jit_trigger_policy.v1"
@@ -720,6 +721,14 @@ def evaluate_memory_item_trigger(
             reason="trigger_not_intent_authoritative",
             observation_fingerprint=_observation_fingerprint(observation),
         )
+    if belief_model_enabled():
+        at = observation.occurred_at or datetime.now(timezone.utc)
+        if not record_passes_proactive_bar(item, now=at):
+            return TriggerDecision(
+                status=TriggerDecisionStatus.no_match,
+                reason="trigger_not_current_belief",
+                observation_fingerprint=_observation_fingerprint(observation),
+            )
     if item.status != MemoryItemStatus.active:
         return TriggerDecision(
             status=TriggerDecisionStatus.no_match,

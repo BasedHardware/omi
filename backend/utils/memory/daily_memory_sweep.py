@@ -33,14 +33,18 @@ from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
 from dataclasses import dataclass, field
 import atexit
+import hashlib
 import importlib
 import logging
 import os
 import re
 import threading
-from typing import Any, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, Tuple, cast
+import time as _time_mod
+from typing import Any, Callable, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, Tuple, cast
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from models.daily_sweep_dispatch import SweepDispatchScope
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +52,11 @@ from google.cloud.firestore_v1 import FieldFilter
 from google.cloud import firestore
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
+from utils.conversations.transcript_for_llm import memory_transcript_from_segments
+
+from database.auth import get_user_name
+from database.read_boundary import parse_snapshot_or_none
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.account_deletion_projection_fence import read_account_deletion_projection_fence
 from database.firestore_index_registry import (
@@ -62,7 +71,7 @@ from database.firestore_index_registry import (
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import cleanup_expired_memory_deletion_receipts
 from models.memory_apply import MemoryControlState, WriterMode
-from models.memory_contracts import deterministic_contract_id
+from models.memory_contracts import MemoryExtractionError, deterministic_contract_id
 from models.product_memory import (
     LedgerWriteReason,
     MemoryItem,
@@ -71,7 +80,14 @@ from models.product_memory import (
     MemorySubjectScope,
     normalized_memory_content_key,
 )
+from utils.free_tier_memory_policy import (
+    free_tier_memory_suppression_enabled,
+    memory_formation_verdict,
+)
+from utils.memory.belief_model import belief_automation_enabled, belief_model_enabled
+from utils.managed_compute import authorize_managed_compute
 from utils.memory.canonical_memory_adapter import read_canonical_memory_item
+from utils.memory.daily_memory_sweep_queue import ProcessOutcome, drain_sweep_uids
 from utils.memory.knowledge_ledger import (
     LedgerProvenance,
     LedgerWrite,
@@ -82,6 +98,10 @@ from utils.memory.knowledge_ledger import (
 from utils.memory.memory_system import ensure_canonical_apply_control_state
 from utils.memory.memory_authority import validate_uid_for_memory_path
 from utils.memory.jit_trigger_contract import compile_trigger_condition
+from utils.memory.decision_path_telemetry import emit_memory_sweep_decision
+from utils.llm.model_config import LUNA_MODEL
+from utils.llm.usage_tracker import Features, track_usage
+from utils.observability.fallback import record_fallback
 
 # These budgets are deliberately separate from the canonical write budget.  A
 # completed-day producer must prove that it read the whole bounded source
@@ -89,12 +109,20 @@ from utils.memory.jit_trigger_contract import compile_trigger_condition
 # into an empty day.
 MAX_COMPLETED_DAY_CONVERSATIONS = 32
 MAX_COMPLETED_DAY_INPUT_CHARACTERS = 48_000
-# The summary spine bounds the whole-day agent pass.  Summaries are two orders
-# of magnitude smaller than transcripts, so these ceilings are effectively
-# unreachable for real days; they exist so an over-budget page is still a
-# provable incomplete source rather than a silent truncation.
+# The summary spine bounds the whole-day agent pass.  An over-count or
+# over-character day is processed as a deterministic truncated subset rather
+# than stalling the cursor; eligibility incompleteness (a row still
+# processing or unfinished) still fails closed.  The fetch cap is 2x the
+# admitted spine, hard-capped so Firestore reads stay bounded even when a day
+# has far more rows than the spine budget.
 MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS = 200
 MAX_COMPLETED_DAY_SUMMARY_INPUT_CHARACTERS = 120_000
+COMPLETED_DAY_SOURCE_PAGE_CAP = 400
+COMPLETED_DAY_ELIGIBILITY_CAP = 2_000
+COMPLETED_DAY_SCAN_CAP = 100_000
+WINDOW_ADMISSION_COLLECTION = "daily_memory_sweep_window_admissions"
+PRE_LOCK_PREFLIGHT_CAP = 10_000
+MAX_HISTORICAL_WINDOW_CLAIMS = 100
 MAX_DAILY_TRANSCRIPT_FETCHES = 8
 MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS = 8_000
 MAX_DAILY_MEMORY_LOOKUPS = 4
@@ -120,7 +148,7 @@ ONBOARDING_PERMANENT_RECEIPT_PREFIX = "onboarding_source_"
 ONBOARDING_SOURCE_RECEIPT_PATH = "daily_memory_sweep_onboarding_sources"
 ONBOARDING_STAGED_CANDIDATE_PATH = "daily_memory_sweep_onboarding_staged"
 DAILY_SUMMARY_STAGED_CANDIDATE_PATH = "daily_memory_sweep_daily_summary_staged"
-DAILY_SUMMARY_STAGE_SCHEMA_VERSION = "daily_memory_sweep_daily_summary_stage.v2"
+DAILY_SUMMARY_STAGE_SCHEMA_VERSION = "daily_memory_sweep_daily_summary_stage.v3"
 MODEL_INVOCATION_PATH = "daily_memory_sweep_model_invocations"
 # This collection is intentionally outside ``users/{uid}``.  Account deletion
 # recursively removes every user subcollection, but an in-flight provider call
@@ -128,6 +156,16 @@ MODEL_INVOCATION_PATH = "daily_memory_sweep_model_invocations"
 # same logical invocation again.
 MODEL_INVOCATION_FENCE_COLLECTION = "daily_memory_sweep_model_invocation_fences"
 MODEL_INVOCATION_SCHEMA_VERSION = "daily_memory_sweep_model_invocation.v1"
+MAX_PRE_DISPATCH_RELEASES = 3
+MODEL_INVOCATION_REPAIR_MARGIN = timedelta(minutes=2)
+SKIP_WINDOW_ATTESTATION_CONFIRMATION = "ATTEST_WORKER_TERMINATED_AND_ABANDON_WINDOW"
+NO_DISPATCH_ATTESTATION_CONFIRMATION = "ATTEST_NO_PROVIDER_DISPATCH_AND_WORKER_TERMINATED"
+# An explicit operator repair for a tombstoned model invocation.  Pending,
+# indeterminate, and payload-expired fences are closed forever by design; this
+# user-scoped receipt is the one sanctioned way to reopen exactly one retry
+# after the operator proves what the provider accounting recorded.
+MODEL_INVOCATION_REPAIR_PATH = "daily_memory_sweep_model_invocation_repairs"
+MODEL_INVOCATION_REPAIR_SCHEMA_VERSION = "daily_memory_sweep_model_invocation_repair.v1"
 
 SCHEMA_VERSION = "daily_memory_sweep.v1"
 CURSOR_SCHEMA_VERSION = "daily_memory_sweep_cursor.v1"
@@ -154,6 +192,56 @@ DAILY_MEMORY_SWEEP_COHORT_NAME_ENV = "MEMORY_DAILY_MEMORY_SWEEP_COHORT_NAME"
 DAILY_MEMORY_SWEEP_COHORT_FLAG_ENV = "MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG"
 DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_ENV = "MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS"
 DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENV = "MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED"
+DAILY_MEMORY_SWEEP_STAGGER_SECONDS_ENV = "MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS"
+
+# The QA run seam is intentionally separate from the ordinary scheduler
+# controls.  A caller must provide every QA-only gate below; setting a run id
+# alone can never open the production sweep or its cohort.
+QA_SWEEP_RUN_ID_ENV = "OMI_JIT_QA_SWEEP_RUN_ID"
+QA_SWEEP_ADMISSION_ENV = "OMI_JIT_QA_SWEEP_ADMISSION"
+QA_SWEEP_PROJECT = "based-hardware-dev"
+QA_SWEEP_DATABASE = "jit-qa"
+QA_SWEEP_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+QA_SWEEP_COHORT = "jit-qa-sweep-v1"
+QA_SWEEP_MODEL_NAME = LUNA_MODEL
+QA_SWEEP_MAX_MODEL_CANDIDATES = 3
+QA_SWEEP_MAX_MODEL_COST_USD = 0.05
+# Qualification uses the same completed-day producer with an explicit tighter
+# envelope.  Zero phase-B requests/lookups makes one provider call the real
+# maximum for one completed day, instead of pricing the production envelope as
+# if it were a cheap single call.
+QA_SWEEP_MAX_CATCH_UP_DAYS = 1
+# A real desktop day is six 4-hour conversations; 8 rows hold that day
+# without forcing truncation on the qualification account.
+QA_SWEEP_MAX_SUMMARY_CONVERSATIONS = 8
+QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS = 8_000
+QA_SWEEP_MAX_TRANSCRIPT_FETCHES = 0
+QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS = 0
+QA_SWEEP_MAX_MEMORY_LOOKUPS = 0
+QA_SWEEP_MAX_SDK_RETRIES = 0
+QA_SWEEP_MAX_GATEWAY_ATTEMPTS = 1
+QA_SWEEP_MAX_PROVIDER_CALLS = 1
+# The deployed memories route is gpt-x-luna at $0.10/M input and $0.60/M
+# output (half of 5.6-luna, David Zhang 2026-09-23). The parser instructions alone are about 9.6K UTF-8 bytes and the
+# profile context adds up to ~3.2K, so the earlier 12K cap rejected any QA day
+# with a real profile before dispatch (sweep-verify 2026-09-15 stalled on it),
+# and 256 completion tokens cannot hold a reasoning model's structured output.
+# Gateway ceiling is 32_768.  24_576 input leaves room for parser ~9.6K +
+# profile ~3.2K + 8K spine + envelope.  Worst-case reserve at Luna rates:
+#   24_576 * $0.10 / 1e6 + 2_048 * $0.60 / 1e6
+#   = $0.0024576 + $0.0012288 = $0.0036864
+# still under the $0.05 run envelope (QA_SWEEP_MAX_SPEND_MICRO_USD).  The
+# gateway enforces these same headers against the provider request and
+# settles usage.
+QA_SWEEP_MAX_INPUT_TOKENS = 24_576
+QA_SWEEP_MAX_OUTPUT_TOKENS = 2_048
+QA_SWEEP_MAX_SPEND_MICRO_USD = 50_000
+QA_SWEEP_JIT_CONTRACT_VERSION = "jit-cloud-qa-v1"
+QA_SWEEP_RECEIPT_SCHEMA_VERSION = "omi.jit.qa.daily-memory-sweep-run.v1"
+QA_SWEEP_OUTPUT_SCHEMA_VERSION = "omi.jit.qa.daily-memory-sweep-output.v1"
+QA_SWEEP_RUN_COLLECTION = "jit_qa_sweep_runs"
+QA_SWEEP_OUTPUT_SUBCOLLECTION = "outputs"
+QA_SWEEP_RUN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,47}$")
 
 RECEIPT_LEASE = timedelta(minutes=10)
 MODEL_INVOCATION_LEASE = timedelta(minutes=15)
@@ -169,6 +257,44 @@ _POSTHOG_CLIENTS_LOCK = threading.RLock()
 _MODEL_INVOCATION_LOCK = threading.RLock()
 
 _ID_RE = re.compile(r"[a-z0-9][a-z0-9._:-]{0,127}")
+SOURCE_REASON_CODES = frozenset(
+    {
+        "source_incomplete",
+        "pre_lock_claim_live",
+        "pre_lock_scan_over_budget",
+        "window_admission_busy",
+        "invocation_input_changed",
+        "invocation_output_unavailable",
+        "historical_invocation_unresolved",
+        "invocation_pending",
+        "invocation_indeterminate",
+        "invocation_payload_expired",
+        "invocation_pre_dispatch_exhausted",
+        "source_locked_before_dispatch",
+        "source_lock_check_unavailable",
+        "source_scan_over_budget",
+        "contentless_rows_omitted",
+        "unknown_reason",
+        "query_failed",
+        "row_not_eligible",
+        "row_undecodable",
+        "eligibility_scan_over_budget",
+        "source_row_changed",
+        "conversation_page_over_budget",
+        "summary_characters_over_budget",
+        "qa_cached_summary_rejected",
+        "cached_summary_missing_candidates",
+        "cached_summary_identity_mismatch",
+        "cached_summary_not_attested",
+        "model_route_not_budgeted",
+        "model_name_not_configured",
+        "qa_rate_card_unavailable",
+        "model_cost_over_budget",
+        "daily_summary_stage_unavailable",
+        "daily_sweep_summary_input_budget",
+        "daily_sweep_summary_agent",
+    }
+)
 _FORBIDDEN_SOURCE_MARKERS = (
     "base64",
     "data:image",
@@ -431,6 +557,70 @@ def daily_memory_sweep_model_authority_from_environment() -> DailySweepModelAuth
     )
 
 
+def validate_qa_sweep_run_id(run_id: str) -> str:
+    normalized = (run_id or "").strip()
+    if not QA_SWEEP_RUN_ID_RE.fullmatch(normalized):
+        raise ValueError("QA sweep run id must match [a-z0-9][a-z0-9_-]{0,47}")
+    return normalized
+
+
+def qa_sweep_run_id_from_environment(environ: Optional[Mapping[str, str]] = None) -> Optional[str]:
+    env = environ if environ is not None else os.environ
+    raw = env.get(QA_SWEEP_RUN_ID_ENV, "").strip()
+    return validate_qa_sweep_run_id(raw) if raw else None
+
+
+def validate_qa_sweep_environment(environ: Optional[Mapping[str, str]] = None) -> str:
+    """Require the complete, closed-world override set for one QA sweep run."""
+
+    env = environ if environ is not None else os.environ
+    run_id = qa_sweep_run_id_from_environment(env)
+    if not run_id:
+        raise ValueError(f"{QA_SWEEP_RUN_ID_ENV} is required for a QA sweep run")
+    required = {
+        "OMI_ENV_STAGE": "dev",
+        "GOOGLE_CLOUD_PROJECT": QA_SWEEP_PROJECT,
+        "GCLOUD_PROJECT": QA_SWEEP_PROJECT,
+        "OMI_FIRESTORE_DATA_PLANE_PROJECT": QA_SWEEP_PROJECT,
+        "FIRESTORE_DATABASE_ID": QA_SWEEP_DATABASE,
+        "FIREBASE_AUTH_PROJECT_ID": "based-hardware",
+        "MEMORY_ENABLED": "on",
+        "OMI_JIT_QA_AUTH_ONLY": "true",
+        "OMI_JIT_QA_UID_ALLOWLIST": QA_SWEEP_UID,
+        QA_SWEEP_ADMISSION_ENV: "true",
+        DAILY_MEMORY_SWEEP_ENABLED_ENV: "true",
+        DAILY_MEMORY_SWEEP_KILL_SWITCH_ENV: "false",
+        DAILY_MEMORY_SWEEP_MODEL_ENABLED_ENV: "true",
+        DAILY_MEMORY_SWEEP_MODEL_NAME_ENV: QA_SWEEP_MODEL_NAME,
+        DAILY_MEMORY_SWEEP_MAX_MODEL_CANDIDATES_ENV: str(QA_SWEEP_MAX_MODEL_CANDIDATES),
+        DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD_ENV: f"{QA_SWEEP_MAX_MODEL_COST_USD:g}",
+        DAILY_MEMORY_SWEEP_COHORT_ENABLED_ENV: "true",
+        DAILY_MEMORY_SWEEP_COHORT_FLAG_ENV: QA_SWEEP_COHORT,
+        DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENV: "false",
+    }
+    for name, expected in required.items():
+        if env.get(name, "").strip().casefold() != expected.casefold():
+            raise ValueError(f"QA sweep requires {name}={expected!r}")
+    if env.get("FIRESTORE_EMULATOR_HOST", "").strip():
+        raise ValueError("QA sweep proof must use named Cloud Firestore")
+    customer_selectors = ("SERVICE_ACCOUNT_JSON", "FIREBASE_AUTH_CREDENTIALS_PATH", "OMI_CUSTOMER_DATA_PROJECT")
+    if any(env.get(name, "").strip() for name in customer_selectors):
+        raise ValueError("QA sweep proof cannot select customer Firebase credentials")
+    return run_id
+
+
+def qa_sweep_cohort_authorizer(uid: str, cohort_name: str = "") -> DailySweepCohortDecision:
+    """Admit only the fixed QA account under the explicit QA capability gate."""
+
+    try:
+        validate_qa_sweep_environment()
+    except ValueError:
+        return DailySweepCohortDecision.unavailable
+    if uid != QA_SWEEP_UID or cohort_name != QA_SWEEP_COHORT:
+        return DailySweepCohortDecision.unavailable
+    return DailySweepCohortDecision.enabled
+
+
 class SweepFenceBlocked(RuntimeError):
     """A durable deletion or generation fence closed during a transaction."""
 
@@ -479,6 +669,7 @@ class DailySweepCandidate(BaseModel):
     slot: Optional[str] = None
     subject_scope: MemorySubjectScope = MemorySubjectScope.primary_user
     subject_entity_id: Optional[str] = None
+    arguments: Dict[str, Any] = Field(default_factory=dict)
     trigger_condition: Dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("candidate_id", "target_memory_id", "subject_entity_id")
@@ -546,6 +737,19 @@ class DailySweepCandidate(BaseModel):
         if len(value) > MAX_TRIGGER_CONDITION_KEYS:
             raise ValueError("trigger condition exceeds the daily sweep budget")
         return value
+
+    @field_validator("arguments", mode="before")
+    @classmethod
+    def validate_arguments(cls, value: Any, info) -> Dict[str, Any]:
+        # Keep the canonical argument vocabulary shared with conversation
+        # extraction without importing the LLM stack while this scheduler
+        # module is being initialized.
+        from utils.llm.working_observations import normalize_scoped_claim_arguments
+
+        basis = None
+        if info.data:
+            basis = info.data.get("basis")
+        return normalize_scoped_claim_arguments(value, basis=basis)
 
     @model_validator(mode="after")
     def validate_semantics(self) -> "DailySweepCandidate":
@@ -1090,6 +1294,12 @@ def _model_invocation_fence_ref(db_client: Any, invocation_id: str) -> Any:
     return db_client.document(f"{MODEL_INVOCATION_FENCE_COLLECTION}/{invocation_id}")
 
 
+def _model_invocation_repair_ref(db_client: Any, uid: str, invocation_id: str) -> Any:
+    """Return the user-scoped explicit repair receipt for one invocation."""
+
+    return db_client.document(f"users/{uid}/{MODEL_INVOCATION_REPAIR_PATH}/{invocation_id}")
+
+
 def cleanup_expired_daily_memory_sweep_stages(
     uid: str,
     *,
@@ -1395,7 +1605,187 @@ def _invoke_model_once_legacy(
             return None
 
 
+def assert_no_live_pre_lock_claims(db_client: Any, *, now: datetime, uids: Optional[Iterable[str]] = None) -> None:
+    """Bounded rollout tripwire; draining pre-lock workers is still required.
+
+    A pre-claim old worker has no observable document. This assertion cannot
+    replace the operator's scheduler pause and zero-running-executions proof.
+    Recent claims use the existing single-field claimed_at index, not a composite.
+    Pre-lock claim writers always persist claimed_at and never renew that lease.
+    """
+    scope = set(uids) if uids is not None else None
+    rows = list(
+        db_client.collection(MODEL_INVOCATION_FENCE_COLLECTION)
+        .where(filter=FieldFilter("claimed_at", ">", now - MODEL_INVOCATION_LEASE))
+        .select(("uid", "state", "claimed_at", "admission_id"))
+        .limit(PRE_LOCK_PREFLIGHT_CAP + 1)
+        .stream()
+    )
+    if len(rows) > PRE_LOCK_PREFLIGHT_CAP:
+        raise RuntimeError("pre_lock_scan_over_budget")
+    for row in rows:
+        payload = row.to_dict() or {}
+        if scope is not None and payload.get("uid") not in scope:
+            continue
+        if payload.get("state") != "pending" or payload.get("admission_id"):
+            continue
+        claimed = payload.get("claimed_at")
+        if not isinstance(claimed, datetime) or claimed.tzinfo is None or claimed + MODEL_INVOCATION_LEASE > now:
+            raise RuntimeError("pre_lock_claim_live")
+
+
+@dataclass(frozen=True)
+class WindowAdmissionGrant:
+    invocation_id: Optional[str]
+
+
 def _invoke_model_once(
+    db_client: Any,
+    uid: str,
+    invocation_id: Any,
+    *,
+    candidate_builder: Any,
+    account_generation: Optional[int] = None,
+    source_generation: Optional[int] = None,
+    sweep_generation: Optional[int] = None,
+    window_id: Optional[str] = None,
+    input_digest: Optional[str] = None,
+    now: Optional[datetime] = None,
+    invocation_evidence: Optional[Dict[str, Any]] = None,
+    before_provider_dispatch: Optional[Callable[[], None]] = None,
+) -> Optional[Tuple[dict[str, Any], ...]]:
+    """Admit the window before evaluating its version-specific identity factory.
+
+    Lease expiry permits another holder, never another identity. The binding
+    survives payload deletion and must be retained like the invocation fence.
+    """
+    evidence = invocation_evidence if invocation_evidence is not None else {}
+    if any(value is None for value in (account_generation, source_generation, sweep_generation, window_id)):
+        resolved = invocation_id() if callable(invocation_id) else invocation_id
+        if not isinstance(resolved, str) or not resolved:
+            raise ValueError("invocation identity must be a nonempty string")
+        evidence["invocation_id"] = resolved
+        return _invoke_model_once_legacy(db_client, uid, resolved, candidate_builder=candidate_builder, now=now)
+    assert account_generation is not None and source_generation is not None
+    claimed_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    identity = dict(
+        uid=uid,
+        account_generation=account_generation,
+        source_generation=source_generation,
+        sweep_generation=sweep_generation,
+        window_id=window_id,
+    )
+    admission_id = deterministic_contract_id("daily-sweep-window-admission.v1", identity)
+    ref = db_client.document(f"{WINDOW_ADMISSION_COLLECTION}/{admission_id}")
+    deletion_ref, control_ref = _live_fence_refs(db_client, uid)
+    holder = uuid4().hex
+
+    def admit(transaction: Any) -> Optional[WindowAdmissionGrant]:
+        if not _transaction_fence_open(
+            transaction,
+            deletion_ref,
+            control_ref,
+            uid=uid,
+            account_generation=account_generation,
+            source_generation=source_generation,
+        ):
+            return None
+        snapshot = ref.get(transaction=transaction)
+        prior = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
+        if prior is not None:
+            if not all(prior.get(key) == value for key, value in identity.items()):
+                return None
+            deadline = prior.get("lease_expires_at")
+            if not isinstance(deadline, datetime) or deadline.tzinfo is None or deadline > claimed_now:
+                evidence["failure_reason"] = "window_admission_busy"
+                return None
+            resolved = prior.get("invocation_id")
+            if resolved is not None and (not isinstance(resolved, str) or not resolved):
+                return None
+        else:
+            resolved = None
+        transaction.set(
+            ref,
+            {
+                **identity,
+                "invocation_id": resolved,
+                "holder": holder,
+                "lease_expires_at": claimed_now + MODEL_INVOCATION_LEASE,
+            },
+        )
+        return WindowAdmissionGrant(invocation_id=resolved)
+
+    try:
+        grant = firestore.transactional(admit)(db_client.transaction())
+    except Exception:
+        return None
+    if grant is None:
+        return None
+    try:
+        resolved = grant.invocation_id
+        if resolved is None:
+            # The admission lease has COMMITTED before the identity factory
+            # runs. A losing/retried acquisition never computes an identity.
+            resolved = invocation_id() if callable(invocation_id) else invocation_id
+            if not isinstance(resolved, str) or not resolved:
+                raise ValueError("invocation identity must be a nonempty string")
+
+            def bind(transaction: Any) -> bool:
+                if not _transaction_fence_open(
+                    transaction,
+                    deletion_ref,
+                    control_ref,
+                    uid=uid,
+                    account_generation=account_generation,
+                    source_generation=source_generation,
+                ):
+                    return False
+                snapshot = ref.get(transaction=transaction)
+                payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
+                binding_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+                if (
+                    not isinstance(payload, dict)
+                    or payload.get("holder") != holder
+                    or payload.get("invocation_id") is not None
+                    or payload.get("lease_expires_at", binding_now) <= binding_now
+                ):
+                    return False
+                transaction.set(ref, {**payload, "invocation_id": resolved})
+                return True
+
+            if not firestore.transactional(bind)(db_client.transaction()):
+                return None
+        evidence["invocation_id"] = resolved
+        return _invoke_model_once_claimed(
+            db_client,
+            uid,
+            resolved,
+            candidate_builder=candidate_builder,
+            account_generation=account_generation,
+            source_generation=source_generation,
+            sweep_generation=sweep_generation,
+            window_id=window_id,
+            input_digest=input_digest,
+            now=now,
+            admission_id=admission_id,
+            invocation_evidence=evidence,
+            before_provider_dispatch=before_provider_dispatch,
+        )
+    finally:
+
+        def release(transaction: Any) -> None:
+            snapshot = ref.get(transaction=transaction)
+            payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
+            if isinstance(payload, dict) and payload.get("holder") == holder:
+                transaction.set(ref, {**payload, "lease_expires_at": claimed_now})
+
+        try:
+            firestore.transactional(release)(db_client.transaction())
+        except Exception:
+            pass  # A failed release waits for the bounded lease; binding survives.
+
+
+def _invoke_model_once_claimed(
     db_client: Any,
     uid: str,
     invocation_id: str,
@@ -1405,7 +1795,11 @@ def _invoke_model_once(
     source_generation: Optional[int] = None,
     sweep_generation: Optional[int] = None,
     window_id: Optional[str] = None,
+    input_digest: Optional[str] = None,
     now: Optional[datetime] = None,
+    admission_id: Optional[str] = None,
+    invocation_evidence: Optional[Dict[str, Any]] = None,
+    before_provider_dispatch: Optional[Callable[[], None]] = None,
 ) -> Optional[Tuple[dict[str, Any], ...]]:
     """Run one fenced provider call with a durable cross-account-delete claim.
 
@@ -1414,7 +1808,8 @@ def _invoke_model_once(
     that deletion, so a worker that loses its payload after a provider call
     cannot recreate the logical invocation and pay twice.  ``pending`` and
     ``indeterminate`` are manual-repair-only states; lease expiry never
-    reopens them.
+    reopens them. Certified preparation failures alone may release the exact
+    pending claim up to MAX_PRE_DISPATCH_RELEASES times.
 
     The optional identity arguments exist solely for old hermetic unit callers
     that predate generation fencing. Every production scheduler path supplies
@@ -1442,6 +1837,7 @@ def _invoke_model_once(
     sweep_generation = int(cast(int, sweep_generation))
     claim_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     invocation_ref = _model_invocation_ref(db_client, uid, invocation_id)
+    repair_ref = _model_invocation_repair_ref(db_client, uid, invocation_id)
     fence_ref = _model_invocation_fence_ref(db_client, invocation_id)
     deletion_ref, control_ref = _live_fence_refs(db_client, uid)
     identity = {
@@ -1452,6 +1848,9 @@ def _invoke_model_once(
         "sweep_generation": sweep_generation,
         "window_id": window_id,
     }
+
+    evidence = invocation_evidence if invocation_evidence is not None else {}
+    claim_id = uuid4().hex
 
     def _identity_matches(payload: Any) -> bool:
         return isinstance(payload, dict) and all(payload.get(key) == value for key, value in identity.items())
@@ -1508,21 +1907,101 @@ def _invoke_model_once(
         if fence_payload is not None:
             if not _identity_matches(fence_payload):
                 return "blocked", None
+            if fence_payload.get("state") == "window_skipped":
+                return "returned", ()
+            released = fence_payload.get("state") == "pre_dispatch_released"
+            # The window owns the invocation. Only a certified no-dispatch
+            # release may bind different inputs; returned/uncertain output
+            # must never be staged against a freshly selected source digest.
+            if (
+                not released
+                and input_digest is not None
+                and (
+                    fence_payload.get("input_digest") != input_digest
+                    or not isinstance(user_payload, dict)
+                    or user_payload.get("input_digest") != input_digest
+                )
+            ):
+                evidence["failure_reason"] = {
+                    "payload_expired": "invocation_payload_expired",
+                    "pre_dispatch_exhausted": "invocation_pre_dispatch_exhausted",
+                    "indeterminate": "invocation_indeterminate",
+                }.get(fence_payload.get("state"), "invocation_input_changed")
+                return "blocked", None
             if fence_payload.get("state") == "returned":
+                if _validated_output(user_payload) is None:
+                    evidence["failure_reason"] = "invocation_output_unavailable"
                 return "returned", _validated_output(user_payload)
-            # Existing pending, indeterminate, and payload-expired fences are
-            # deliberately closed forever without an explicit repair receipt.
-            return "blocked", None
+            if not released:
+                repair_snapshot = _read(repair_ref, transaction)
+                repair_payload = repair_snapshot.to_dict() if getattr(repair_snapshot, "exists", False) else None
+                if not _valid_model_invocation_repair(repair_payload, identity, fence_payload, claim_now):
+                    evidence["failure_reason"] = {
+                        "pending": "invocation_pending",
+                        "indeterminate": "invocation_indeterminate",
+                        "payload_expired": "invocation_payload_expired",
+                        "pre_dispatch_exhausted": "invocation_pre_dispatch_exhausted",
+                    }.get(fence_payload.get("state"), "unknown_reason")
+                    return "blocked", None
+                assert isinstance(repair_payload, dict)
+                if repair_payload.get("provider_outcome_summary") == "operator_attested_skip_window":
+                    return "blocked", None
+                transaction.set(repair_ref, {**repair_payload, "consumed": True, "consumed_at": claim_now})
+            elif (
+                not isinstance(user_payload, dict)
+                or not _identity_matches(user_payload)
+                or user_payload.get("state") != "pre_dispatch_released"
+                or user_payload.get("claim_id") != fence_payload.get("claim_id")
+                or type(fence_payload.get("pre_dispatch_releases")) is not int
+                or not 1 <= fence_payload["pre_dispatch_releases"] <= MAX_PRE_DISPATCH_RELEASES
+            ):
+                return "blocked", None
+            repaired_pending = {
+                **identity,
+                "input_digest": input_digest,
+                "admission_id": admission_id,
+                "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
+                "state": "pending",
+                "at_most_once_tombstone": True,
+                "claimed_at": claim_now,
+                "claim_id": claim_id,
+                "pre_dispatch_releases": fence_payload.get("pre_dispatch_releases", 0),
+                "failure_reason": fence_payload.get("failure_reason"),
+                "repaired_from_state": fence_payload.get("state"),
+            }
+            transaction.set(fence_ref, repaired_pending)
+            transaction.set(
+                invocation_ref,
+                {**repaired_pending, "lease_expires_at": claim_now + MODEL_INVOCATION_LEASE},
+            )
+            return "claimed", None
+        if input_digest is not None:
+            # Earlier deployments keyed completed-day invocations by mutable
+            # text. Refuse a fresh window identity if any such durable fence
+            # already exists, including after its user payload was deleted.
+            # Equality-only filters use single-field index merging; at most
+            # one document id is read. Old workers must be drained at rollout.
+            prior_query = db_client.collection(MODEL_INVOCATION_FENCE_COLLECTION)
+            for key, value in identity.items():
+                if key != "invocation_id":
+                    prior_query = prior_query.where(filter=FieldFilter(key, "==", value))
+            if next(iter(prior_query.select(()).limit(1).stream(transaction=transaction)), None) is not None:
+                evidence["failure_reason"] = "historical_invocation_unresolved"
+                return "blocked", None
         # A user payload without its top-level identity fence is an orphan,
         # usually the result of an interrupted account wipe. Never recreate it.
         if user_payload is not None:
             return "blocked", None
         pending = {
             **identity,
+            "input_digest": input_digest,
+            "admission_id": admission_id,
             "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
             "state": "pending",
             "at_most_once_tombstone": True,
             "claimed_at": claim_now,
+            "claim_id": claim_id,
+            "pre_dispatch_releases": 0,
         }
         _create_or_set(transaction, fence_ref, pending)
         transaction.set(
@@ -1545,49 +2024,87 @@ def _invoke_model_once(
         if claim_state != "claimed":
             return None
 
+        dispatch_scope = SweepDispatchScope(before_provider_dispatch=before_provider_dispatch)
         try:
-            built = tuple(candidate_builder())
+            with dispatch_scope:
+                built = tuple(candidate_builder())
             if any(not isinstance(item, dict) for item in built):
                 raise ValueError("model invocation candidate output is malformed")
-        except Exception:
-            # The fence is top-level and therefore still writable after a
-            # recursive account wipe. Do not recreate the user payload.
-            def mark_indeterminate(transaction: Any) -> bool:
+        except Exception as error:
+            if isinstance(error, MemoryExtractionError) and error.extractor in {
+                "source_locked_before_dispatch",
+                "source_lock_check_unavailable",
+            }:
+                evidence["failure_reason"] = error.extractor
+            reason = dispatch_scope.pre_dispatch_reason(error)
+            pre_dispatch = reason is not None
+
+            def record_failure(transaction: Any) -> bool:
+                # Complete every read before writes, including the live fences.
+                live = _transaction_fence_open(
+                    transaction,
+                    deletion_ref,
+                    control_ref,
+                    uid=uid,
+                    account_generation=account_generation,
+                    source_generation=source_generation,
+                )
                 snapshot = _read(fence_ref, transaction)
                 payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
-                if not _identity_matches(payload):
-                    return False
-                assert isinstance(payload, dict)
-                if payload.get("state") != "pending":
-                    return False
-                transaction.set(
-                    fence_ref,
-                    {
-                        **identity,
-                        "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
-                        "state": "indeterminate",
-                        "at_most_once_tombstone": True,
-                        "indeterminate_at": claim_now,
-                    },
-                    merge=True,
-                )
                 user_snapshot = _read(invocation_ref, transaction)
-                if getattr(user_snapshot, "exists", False):
-                    transaction.set(
-                        invocation_ref,
-                        {"state": "indeterminate", "at_most_once_tombstone": True, "indeterminate_at": claim_now},
-                        merge=True,
+                user_payload = user_snapshot.to_dict() if getattr(user_snapshot, "exists", False) else None
+                if not isinstance(payload, dict) or not _identity_matches(payload):
+                    return False
+                if payload.get("state") != "pending" or payload.get("claim_id") != claim_id:
+                    return False
+                releases = payload.get("pre_dispatch_releases", 0)
+                if type(releases) is not int or releases < 0:
+                    return False
+                can_release = (
+                    pre_dispatch
+                    and live
+                    and isinstance(user_payload, dict)
+                    and _identity_matches(user_payload)
+                    and user_payload.get("state") == "pending"
+                    and user_payload.get("claim_id") == claim_id
+                )
+                state = "indeterminate"
+                if can_release:
+                    state = (
+                        "pre_dispatch_released" if releases < MAX_PRE_DISPATCH_RELEASES else "pre_dispatch_exhausted"
                     )
+                update = {
+                    "state": state,
+                    "at_most_once_tombstone": state != "pre_dispatch_released",
+                    "failure_at": claim_now,
+                    "pre_dispatch_releases": releases + (1 if state == "pre_dispatch_released" else 0),
+                }
+                if state == "indeterminate":
+                    update["indeterminate_at"] = claim_now
+                if reason is not None:
+                    update["failure_reason"] = reason
+                if state == "pre_dispatch_exhausted":
+                    update["blocked_reason"] = "pre_dispatch_release_limit"
+                transaction.set(fence_ref, {**payload, **update})
+                # Never recreate or overwrite a deleted/foreign user payload.
+                if (
+                    isinstance(user_payload, dict)
+                    and _identity_matches(user_payload)
+                    and user_payload.get("claim_id") == claim_id
+                ):
+                    transaction.set(invocation_ref, {**user_payload, **update})
                 return True
 
             try:
-                run_transaction(mark_indeterminate)
+                run_transaction(record_failure)
             except Exception:
                 pass
             return None
 
         returned_payload = {
             **identity,
+            "input_digest": input_digest,
+            "admission_id": admission_id,
             "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
             "state": "returned",
             "at_most_once_tombstone": True,
@@ -1617,16 +2134,30 @@ def _invoke_model_once(
             # the deletion marker is briefly unavailable to this transaction.
             if not _identity_matches(fence_payload):
                 return False
-            if not isinstance(fence_payload, dict) or fence_payload.get("state") != "pending":
+            if (
+                not isinstance(fence_payload, dict)
+                or fence_payload.get("state") != "pending"
+                or fence_payload.get("claim_id") != claim_id
+            ):
                 return False
             if not _identity_matches(user_payload):
                 return False
-            if not isinstance(user_payload, dict) or user_payload.get("state") != "pending":
+            if (
+                not isinstance(user_payload, dict)
+                or user_payload.get("state") != "pending"
+                or user_payload.get("claim_id") != claim_id
+            ):
                 return False
             transaction.set(
                 fence_ref,
-                {key: value for key, value in returned_payload.items() if key not in {"candidate_page", "expires_at"}},
-                merge=True,
+                {
+                    **fence_payload,
+                    **{
+                        key: value
+                        for key, value in returned_payload.items()
+                        if key not in {"candidate_page", "expires_at"}
+                    },
+                },
             )
             transaction.set(invocation_ref, returned_payload)
             return True
@@ -1641,18 +2172,21 @@ def _invoke_model_once(
                     payload = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
                     if not _identity_matches(payload):
                         return False
-                    if not isinstance(payload, dict) or payload.get("state") != "pending":
+                    if (
+                        not isinstance(payload, dict)
+                        or payload.get("state") != "pending"
+                        or payload.get("claim_id") != claim_id
+                    ):
                         return False
                     transaction.set(
                         fence_ref,
                         {
-                            **identity,
+                            **payload,
                             "schema_version": MODEL_INVOCATION_SCHEMA_VERSION,
                             "state": "indeterminate",
                             "at_most_once_tombstone": True,
                             "indeterminate_at": claim_now,
                         },
-                        merge=True,
                     )
                     return True
 
@@ -1664,6 +2198,341 @@ def _invoke_model_once(
         except Exception:
             return None
         return built
+
+
+def valid_no_dispatch_attestation(
+    evidence: Mapping[str, Any],
+    *,
+    identity: Mapping[str, Any],
+    claimed_at: Any,
+    claim_id: Any,
+    authority: Any,
+    now: datetime,
+) -> bool:
+    """Validate a human assertion, never infer non-dispatch from ledger absence.
+
+    Both assertions require worker termination. Only no-dispatch asserts that
+    no call happened; abandonment accepts lost output and possible spend.
+    The reference identifies the operator's independent evidence;
+    this validator checks attribution and claim binding, not that assertion's truth.
+    """
+    if (
+        evidence.get("provider_outcome") not in {"operator_attested_no_dispatch", "operator_attested_skip_window"}
+        or (
+            (
+                "attempts" in evidence
+                or evidence.get("window_disposition") != "abandoned"
+                or evidence.get("provider_dispatch_status") != "not_attested"
+                or evidence.get("accounting_checked") is not False
+            )
+            if evidence.get("provider_outcome") == "operator_attested_skip_window"
+            else evidence.get("attempts") != []
+        )
+        or "jit_run_id" in evidence
+        or evidence.get("confirmation")
+        != (
+            SKIP_WINDOW_ATTESTATION_CONFIRMATION
+            if evidence.get("provider_outcome") == "operator_attested_skip_window"
+            else NO_DISPATCH_ATTESTATION_CONFIRMATION
+        )
+        or any(
+            identity.get(key) is None
+            for key in (
+                "uid",
+                "invocation_id",
+                "account_generation",
+                "source_generation",
+                "sweep_generation",
+                "window_id",
+            )
+        )
+        or evidence.get("claim_identity") != dict(identity)
+        or evidence.get("claim_id") != claim_id
+        or not isinstance(authority, str)
+        or not authority.strip()
+        or len(authority) > 128
+        or evidence.get("attested_by") != authority
+        or not isinstance(evidence.get("evidence_reference"), str)
+        or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/#@-]{0,255}", evidence["evidence_reference"])
+        or not isinstance(claimed_at, datetime)
+        or claimed_at.tzinfo is None
+        or now.tzinfo is None
+    ):
+        return False
+    try:
+        attested_at = datetime.fromisoformat(evidence["attested_at"])
+        evidence_claim = datetime.fromisoformat(evidence["claimed_at"])
+        return (
+            evidence_claim == claimed_at
+            and claimed_at + MODEL_INVOCATION_LEASE + MODEL_INVOCATION_REPAIR_MARGIN < attested_at <= now
+        )
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def _valid_model_invocation_repair(
+    payload: Any,
+    identity: Mapping[str, Any],
+    fence: Mapping[str, Any],
+    now: datetime,
+) -> bool:
+    """Require recorded attempts or an explicit claim-bound operator attestation."""
+    if not isinstance(payload, Mapping):
+        return False
+    if payload.get("schema_version") != MODEL_INVOCATION_REPAIR_SCHEMA_VERSION or payload.get("consumed") is not False:
+        return False
+    if not all(payload.get(key) == value for key, value in identity.items()):
+        return False
+    evidence = payload.get("provider_outcome_evidence")
+    if not isinstance(evidence, Mapping):
+        return False
+    outcome = evidence.get("provider_outcome")
+    if outcome in {"operator_attested_no_dispatch", "operator_attested_skip_window"}:
+        if payload.get("provider_outcome_summary") != outcome:
+            return False
+        return valid_no_dispatch_attestation(
+            evidence,
+            identity=identity,
+            claimed_at=fence.get("claimed_at"),
+            claim_id=fence.get("claim_id"),
+            authority=payload.get("repair_authority"),
+            now=now,
+        )
+    # Reject previously issued absence receipts even if somebody appends a run id.
+    if outcome not in {None, "recorded_attempt"}:
+        return False
+    return bool(evidence.get("jit_run_id") and evidence.get("attempts"))
+
+
+def repair_daily_sweep_model_invocation(
+    db_client: Any,
+    *,
+    uid: str,
+    invocation_id: str,
+    provider_outcome_evidence: Mapping[str, Any],
+    repair_authority: str,
+    now: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Write the one explicit repair receipt for a tombstoned invocation.
+
+    Pending, indeterminate, and payload-expired fences never reopen on their
+    own: their provider outcome cannot be proven, so an implicit retry could
+    charge the same logical invocation twice.  This function is the sanctioned
+    operator path.  It is fail-closed: the fence must exist in a tombstoned
+    state, its lease must have expired, the caller must supply content-free
+    recorded provider attempts or an explicit operator attestation, and at most
+    one receipt may ever exist per
+    invocation.  The next claim consumes the receipt transactionally and
+    rewrites the fence as a fresh ``pending`` claim, so exactly one further
+    bounded attempt becomes possible — never an automatic second charge.
+    The abandonment assertion instead consumes to ``window_skipped`` without
+    another dispatch; it makes no claim about past provider activity.
+    """
+
+    repaired_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    authority = str(repair_authority or "").strip()
+    if not authority or len(authority) > 128:
+        raise ValueError("daily sweep invocation repair requires a bounded repair authority")
+    normalized_invocation_id = str(invocation_id or "").strip()
+    if not normalized_invocation_id or len(normalized_invocation_id) > 128:
+        raise ValueError("daily sweep invocation repair requires a bounded invocation id")
+    evidence = dict(provider_outcome_evidence or {})
+    skip_window = evidence.get("provider_outcome") == "operator_attested_skip_window"
+    recorded_attempts = [] if skip_window else evidence.get("attempts")
+    attested = evidence.get("provider_outcome") in {"operator_attested_no_dispatch", "operator_attested_skip_window"}
+    if evidence.get("provider_outcome") not in {
+        None,
+        "recorded_attempt",
+        "operator_attested_no_dispatch",
+        "operator_attested_skip_window",
+    }:
+        raise ValueError("accounting absence is not proof of no dispatch; explicit operator attestation required")
+    if not attested and (not isinstance(evidence.get("jit_run_id"), str) or not evidence["jit_run_id"].strip()):
+        raise ValueError("daily sweep invocation repair requires the owning run id in its provider evidence")
+    if not isinstance(recorded_attempts, list) or len(recorded_attempts) > 4:
+        raise ValueError("daily sweep invocation repair requires a bounded provider attempt page")
+    if not attested and not recorded_attempts:
+        raise ValueError("daily sweep invocation repair requires recorded attempts or explicit operator attestation")
+    for attempt in recorded_attempts:
+        if not isinstance(attempt, Mapping) or not isinstance(attempt.get("request_id"), str):
+            raise ValueError("daily sweep invocation repair evidence attempts must carry request ids")
+
+    fence_ref = _model_invocation_fence_ref(db_client, normalized_invocation_id)
+    repair_ref = _model_invocation_repair_ref(db_client, uid, normalized_invocation_id)
+    fence_snapshot = fence_ref.get()
+    fence_payload = fence_snapshot.to_dict() if getattr(fence_snapshot, "exists", False) else None
+    if not isinstance(fence_payload, dict):
+        raise ValueError("daily sweep invocation repair requires an existing invocation fence")
+    identity = {
+        "uid": uid,
+        "invocation_id": normalized_invocation_id,
+        "account_generation": fence_payload.get("account_generation"),
+        "source_generation": fence_payload.get("source_generation"),
+        "sweep_generation": fence_payload.get("sweep_generation"),
+        "window_id": fence_payload.get("window_id"),
+    }
+    if any(
+        value is None
+        for value in (
+            identity["account_generation"],
+            identity["source_generation"],
+            identity["sweep_generation"],
+            identity["window_id"],
+        )
+    ):
+        raise ValueError("daily sweep invocation repair requires a complete fence identity")
+    prior_state = fence_payload.get("state")
+    if prior_state not in {"pending", "indeterminate", "payload_expired", "pre_dispatch_exhausted"} and not (
+        skip_window and prior_state == "returned"
+    ):
+        raise ValueError(f"daily sweep invocation in state {prior_state!r} is not repairable")
+
+    user_snapshot = _model_invocation_ref(db_client, uid, normalized_invocation_id).get()
+    user_payload = user_snapshot.to_dict() if getattr(user_snapshot, "exists", False) else None
+    lease_deadline: Optional[datetime] = None
+    for candidate_deadline in (
+        (user_payload or {}).get("lease_expires_at"),
+        fence_payload.get("lease_expires_at"),
+    ):
+        if isinstance(candidate_deadline, datetime):
+            lease_deadline = candidate_deadline if lease_deadline is None else min(lease_deadline, candidate_deadline)
+    if lease_deadline is None:
+        claimed_at = fence_payload.get("claimed_at")
+        lease_deadline = claimed_at + MODEL_INVOCATION_LEASE if isinstance(claimed_at, datetime) else None
+    if lease_deadline is None or lease_deadline.tzinfo is None or lease_deadline > repaired_now:
+        raise ValueError("daily sweep invocation repair requires an expired invocation lease")
+    if attested and not valid_no_dispatch_attestation(
+        evidence,
+        identity=identity,
+        claimed_at=fence_payload.get("claimed_at"),
+        claim_id=fence_payload.get("claim_id"),
+        authority=authority,
+        now=repaired_now,
+    ):
+        raise ValueError(
+            "daily sweep invocation repair requires valid claim-bound operator attestation after lease plus margin"
+        )
+    existing_repair = repair_ref.get()
+    if getattr(existing_repair, "exists", False):
+        raise ValueError("daily sweep invocation already has a repair receipt")
+
+    outcome_summary = str(evidence["provider_outcome"]) if attested else "recorded_attempt"
+    for attempt in recorded_attempts:
+        outcome = attempt.get("outcome")
+        if outcome == "success" and attempt.get("total_tokens") not in (None, 0):
+            outcome_summary = "success_usage_recorded"
+            break
+        if outcome in {"error", "timeout"}:
+            outcome_summary = "error_recorded"
+    receipt = {
+        "schema_version": MODEL_INVOCATION_REPAIR_SCHEMA_VERSION,
+        **identity,
+        "prior_state": prior_state,
+        "prior_claimed_at": fence_payload.get("claimed_at"),
+        "prior_claim_id": fence_payload.get("claim_id"),
+        "repaired_at": repaired_now,
+        "repair_authority": authority,
+        "provider_outcome_summary": outcome_summary,
+        "provider_outcome_evidence": evidence,
+        "consumed": False,
+    }
+
+    if skip_window:
+        receipt["window_disposition"] = "abandoned"
+        receipt["provider_dispatch_status"] = "not_attested"
+        receipt["accounting_checked"] = False
+
+    def write_repair(transaction: Any) -> None:
+        current = fence_ref.get(transaction=transaction)
+        existing = repair_ref.get(transaction=transaction)
+        if not getattr(current, "exists", False) or current.to_dict() != fence_payload:
+            raise ValueError("daily sweep invocation claim changed during repair")
+        if getattr(existing, "exists", False):
+            raise ValueError("daily sweep invocation already has a repair receipt")
+        if fence_payload.get("uid") != uid:
+            raise ValueError("daily sweep invocation repair identity differs")
+        transaction.set(repair_ref, receipt)
+
+    firestore.transactional(write_repair)(db_client.transaction())
+    return receipt
+
+
+def _consume_attested_window_skip(
+    db_client: Any,
+    uid: str,
+    *,
+    account_generation: int,
+    source_generation: int,
+    sweep_generation: int,
+    window_id: str,
+) -> bool:
+    """Consume the existing repair receipt as an empty, exact-window result.
+
+    No provider call, no reconstructed output, and no direct cursor write:
+    the scheduler still completes its normal generation-fenced packet/cursor.
+    """
+    identity = dict(
+        uid=uid,
+        account_generation=account_generation,
+        source_generation=source_generation,
+        sweep_generation=sweep_generation,
+        window_id=window_id,
+    )
+    deletion_ref, control_ref = _live_fence_refs(db_client, uid)
+    now = datetime.now(timezone.utc)
+
+    def consume(transaction: Any) -> bool:
+        if not _transaction_fence_open(
+            transaction,
+            deletion_ref,
+            control_ref,
+            uid=uid,
+            account_generation=account_generation,
+            source_generation=source_generation,
+        ):
+            return False
+        query = db_client.collection(MODEL_INVOCATION_FENCE_COLLECTION)
+        for key, value in identity.items():
+            query = query.where(filter=FieldFilter(key, "==", value))
+        matches = list(query.select(()).limit(MAX_HISTORICAL_WINDOW_CLAIMS + 1).stream(transaction=transaction))
+        if not matches or len(matches) > MAX_HISTORICAL_WINDOW_CLAIMS:
+            return False
+        # Historical digest-keyed code could already have created multiple
+        # owners. Each exact claim must be attested; consume all in one commit.
+        writes: List[Tuple[Any, Dict[str, Any]]] = []
+        for match in matches:
+            fence_ref = match.reference
+            fence = fence_ref.get(transaction=transaction).to_dict() or {}
+            if fence.get("state") == "window_skipped":
+                continue
+            invocation_id = fence.get("invocation_id")
+            if not isinstance(invocation_id, str):
+                return False
+            repair_ref = _model_invocation_repair_ref(db_client, uid, invocation_id)
+            repair = repair_ref.get(transaction=transaction).to_dict()
+            if (
+                not isinstance(repair, dict)
+                or repair.get("provider_outcome_summary") != "operator_attested_skip_window"
+                or not _valid_model_invocation_repair(repair, {**identity, "invocation_id": invocation_id}, fence, now)
+            ):
+                return False
+            writes.append((repair_ref, {**repair, "consumed": True, "consumed_at": now}))
+            writes.append((fence_ref, {**fence, "state": "window_skipped", "skipped_at": now}))
+        for reference, payload in writes:
+            transaction.set(reference, payload)
+        return True
+
+    skipped = firestore.transactional(consume)(db_client.transaction())
+    if skipped:
+        record_fallback(
+            component="daily_summary",
+            from_mode="model_invocation",
+            to_mode="attested_skip",
+            reason="policy",
+            outcome="degraded",
+            log=logger,
+        )
+    return skipped
 
 
 def _receipt_id(
@@ -2138,6 +3007,7 @@ def _claim_receipt(
     claim_now: datetime,
     window: CompletedLocalDayWindow,
     sweep_generation: int = 1,
+    qa_run_id: Optional[str] = None,
 ) -> Literal["claimed", "idempotent", "conflict"]:
     receipt_ref = _receipt_ref(
         db_client,
@@ -2175,6 +3045,15 @@ def _claim_receipt(
                 or int(existing.get("account_generation", -1)) != account_generation
                 or int(existing.get("source_generation", -1)) != source_generation
                 or int(existing.get("sweep_generation", 1)) != sweep_generation
+                or existing.get("qa_run_id") != qa_run_id
+                or (
+                    qa_run_id is not None
+                    and (
+                        existing.get("source_id") != candidate.source_id
+                        or existing.get("source_type") != candidate.source_type
+                        or existing.get("source_version") != candidate.source_version
+                    )
+                )
                 or existing.get("local_timezone_window_id") != window.window_id
                 or existing.get("window_start_utc") != window.start_utc
                 or existing.get("window_end_utc") != window.end_utc
@@ -2211,26 +3090,34 @@ def _claim_receipt(
                 merge=True,
             )
             return "claimed"
-        transaction.set(
-            receipt_ref,
-            {
-                "schema_version": RECEIPT_SCHEMA_VERSION,
-                "uid": uid,
-                "local_date": local_date.isoformat(),
-                "source_key": candidate.source_key,
-                "candidate_digest": digest,
-                "account_generation": account_generation,
-                "source_generation": source_generation,
-                "sweep_generation": sweep_generation,
-                "claimant": claimant,
-                "receipt_state": "pending",
-                "local_timezone_window_id": window.window_id,
-                "window_start_utc": window.start_utc,
-                "window_end_utc": window.end_utc,
-                "claimed_at": normalized_now,
-                "claim_expires_at": normalized_now + RECEIPT_LEASE,
-            },
-        )
+        payload: dict[str, Any] = {
+            "schema_version": RECEIPT_SCHEMA_VERSION,
+            "uid": uid,
+            "local_date": local_date.isoformat(),
+            "source_key": candidate.source_key,
+            "candidate_digest": digest,
+            "account_generation": account_generation,
+            "source_generation": source_generation,
+            "sweep_generation": sweep_generation,
+            "claimant": claimant,
+            "receipt_state": "pending",
+            "local_timezone_window_id": window.window_id,
+            "window_start_utc": window.start_utc,
+            "window_end_utc": window.end_utc,
+            "claimed_at": normalized_now,
+            "claim_expires_at": normalized_now + RECEIPT_LEASE,
+        }
+        if qa_run_id is not None:
+            payload.update(
+                {
+                    "qa_run_id": qa_run_id,
+                    "source_id": candidate.source_id,
+                    "source_type": candidate.source_type,
+                    "source_version": candidate.source_version,
+                    "source_refs": list(candidate.source_refs),
+                }
+            )
+        transaction.set(receipt_ref, payload)
         return "claimed"
 
     transaction = db_client.transaction()
@@ -2252,6 +3139,7 @@ def _finish_receipt(
     claimant: str,
     window: CompletedLocalDayWindow,
     sweep_generation: int = 1,
+    qa_run_id: Optional[str] = None,
 ) -> None:
     receipt_ref = _receipt_ref(
         db_client,
@@ -2288,6 +3176,15 @@ def _finish_receipt(
             or int(existing.get("account_generation", -1)) != account_generation
             or int(existing.get("source_generation", -1)) != source_generation
             or int(existing.get("sweep_generation", 1)) != sweep_generation
+            or existing.get("qa_run_id") != qa_run_id
+            or (
+                qa_run_id is not None
+                and (
+                    existing.get("source_id") != candidate.source_id
+                    or existing.get("source_type") != candidate.source_type
+                    or existing.get("source_version") != candidate.source_version
+                )
+            )
             or existing.get("claimant") != claimant
             or existing.get("local_timezone_window_id") != window.window_id
             or existing.get("window_start_utc") != window.start_utc
@@ -2306,10 +3203,21 @@ def _finish_receipt(
             "window_end_utc": window.end_utc,
             "completed_at": datetime.now(timezone.utc),
         }
+        if qa_run_id is not None:
+            payload.update(
+                {
+                    "source_id": candidate.source_id,
+                    "source_type": candidate.source_type,
+                    "source_version": candidate.source_version,
+                    "source_refs": list(candidate.source_refs),
+                }
+            )
         if memory_id:
             payload["memory_id"] = memory_id
         if skip_reason:
             payload["skip_reason"] = skip_reason
+        if qa_run_id is not None:
+            payload["qa_run_id"] = qa_run_id
         transaction.set(receipt_ref, payload, merge=True)
 
     transaction = db_client.transaction()
@@ -2759,16 +3667,40 @@ def _apply_candidate(
     if effective_operation == "amend":
         assert target is not None
         try:
-            memory_id = amend_fact(
+            if not candidate.arguments:
+                memory_id = amend_fact(
+                    uid,
+                    target.memory_id,
+                    candidate.content,
+                    provenance=provenance,
+                    write_reason=reason,
+                    slot=candidate.slot,
+                    subject_scope=candidate.subject_scope,
+                    subject_entity_id=candidate.subject_entity_id,
+                    valid_from=datetime.combine(local_date, time.min, tzinfo=timezone.utc),
+                    db_client=db_client,
+                    required_source_item=target,
+                )
+                return memory_id, None
+            # Use the same canonical append path as a new fact so scoped
+            # object/decision arguments survive an amendment.  ``supersedes``
+            # keeps replacement and validity semantics identical to
+            # ``amend_fact`` while avoiding a second task/action path.
+            memory_id = save_ledger_write(
                 uid,
-                target.memory_id,
-                candidate.content,
-                provenance=provenance,
-                write_reason=reason,
-                slot=candidate.slot,
-                subject_scope=candidate.subject_scope,
-                subject_entity_id=candidate.subject_entity_id,
-                valid_from=datetime.combine(local_date, time.min, tzinfo=timezone.utc),
+                LedgerWrite(
+                    kind=MemoryKind.fact,
+                    content=candidate.content,
+                    provenance=provenance,
+                    write_reason=reason,
+                    slot=candidate.slot,
+                    subject_scope=candidate.subject_scope,
+                    subject_entity_id=candidate.subject_entity_id,
+                    arguments=dict(candidate.arguments or {}),
+                    valid_from=datetime.combine(local_date, time.min, tzinfo=timezone.utc),
+                    user_asserted=candidate.authority == SweepAuthority.direct_user_statement,
+                    supersedes=[target.memory_id],
+                ),
                 db_client=db_client,
                 required_source_item=target,
             )
@@ -2788,6 +3720,7 @@ def _apply_candidate(
             subject_entity_id=candidate.subject_entity_id,
             slot=candidate.slot,
             trigger_condition=candidate.trigger_condition,
+            arguments=dict(candidate.arguments or {}),
             # A completed-day replay must derive identical mutation metadata.  The
             # ledger otherwise defaults ``valid_from`` to wall-clock ``now`` and a
             # crash after canonical apply would produce a different operation ID.
@@ -2824,6 +3757,7 @@ def run_daily_memory_sweep(
     authority: SweepAuthorityState = SweepAuthorityState(),
     max_catch_up_days: int = MAX_CATCH_UP_DAYS,
     claimant: Optional[str] = None,
+    qa_run_id: Optional[str] = None,
 ) -> DailySweepOutput:
     """Run bounded completed local days with durable cursor and source receipts.
 
@@ -2836,8 +3770,16 @@ def run_daily_memory_sweep(
 
     normalized_uid = (uid or "").strip()
     validate_uid_for_memory_path(normalized_uid)
+    if qa_run_id is not None:
+        qa_run_id = validate_qa_sweep_run_id(qa_run_id)
     if not authority.may_write:
         return _blocked_output(normalized_uid, "authority_closed", status="disabled")
+    # Belief automation is independently pausable once the Beta read/write
+    # contract is enabled. Keep the legacy sweep fully available while the
+    # belief model flag is off: this guard only pauses the new automated
+    # formation path and never changes stable flag-off synthesis semantics.
+    if belief_model_enabled() and not belief_automation_enabled():
+        return _blocked_output(normalized_uid, "belief_automation_paused", status="disabled")
     if max_catch_up_days < 1 or max_catch_up_days > MAX_CATCH_UP_DAYS:
         raise ValueError("max_catch_up_days must be between 1 and the bounded maximum")
     if now.tzinfo is None or now.utcoffset() is None:
@@ -2958,6 +3900,7 @@ def run_daily_memory_sweep(
                 claim_now=now,
                 window=expected_window,
                 sweep_generation=current_cursor.sweep_generation,
+                qa_run_id=qa_run_id,
             )
             if claim == "conflict":
                 return _blocked_output(normalized_uid, "source_idempotency_conflict")
@@ -2993,6 +3936,7 @@ def run_daily_memory_sweep(
                         claimant=receipt_claimant,
                         window=expected_window,
                         sweep_generation=current_cursor.sweep_generation,
+                        qa_run_id=qa_run_id,
                     )
                 except SweepFenceBlocked:
                     return _blocked_output(normalized_uid, "receipt_completion_fence_closed")
@@ -3011,6 +3955,7 @@ def run_daily_memory_sweep(
                     claimant=receipt_claimant,
                     window=expected_window,
                     sweep_generation=current_cursor.sweep_generation,
+                    qa_run_id=qa_run_id,
                 )
             except SweepFenceBlocked:
                 return _blocked_output(normalized_uid, "receipt_completion_fence_closed")
@@ -3109,6 +4054,8 @@ class DailySweepRuntimeSources:
     # Content-free accounting used to enforce the model budget.  It is never
     # emitted as a user-facing telemetry payload.
     model_cost_usd: float = 0.0
+    # Content-free provider dispatch and usage evidence for qualification.
+    model_dispatch_evidence: Mapping[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_iterables(
@@ -3123,6 +4070,7 @@ class DailySweepRuntimeSources:
         onboarding_source_progress: Optional[Mapping[str, int]] = None,
         eligibility_proof: Literal["completed_transcript_v1", "none"] = "none",
         model_cost_usd: float = 0.0,
+        model_dispatch_evidence: Optional[Mapping[str, Any]] = None,
     ) -> "DailySweepRuntimeSources":
         summary_values = tuple(daily_summary)
         onboarding_values = tuple(onboarding_cold_start)
@@ -3142,6 +4090,7 @@ class DailySweepRuntimeSources:
             onboarding_source_progress=dict(onboarding_source_progress or {}),
             eligibility_proof=eligibility_proof,
             model_cost_usd=model_cost_usd,
+            model_dispatch_evidence=dict(model_dispatch_evidence or {}),
         )
 
     def candidates(self) -> Tuple[DailySweepCandidate, ...]:
@@ -3240,6 +4189,173 @@ class CompletedDayConversationSource:
     summary_text: str
     transcript_text: str
     needs_folder: bool
+    owner_evidence: OwnerAttributionEvidence
+    started_at: Optional[datetime] = None
+    has_structured_summary: bool = False
+
+
+@dataclass(frozen=True)
+class CompletedDaySourceRead:
+    """Bounded completed-day conversation page, including truncation evidence."""
+
+    rows: Tuple[CompletedDayConversationSource, ...] = ()
+    status: Literal["complete", "incomplete"] = "incomplete"
+    reason: str = ""
+    truncated: bool = False
+    locked_rows_excluded: int = 0
+    contentless_rows_omitted: int = 0
+    rows_seen: int = 0
+    rows_used: int = 0
+
+
+def _content_free_reason(reason: object) -> str:
+    """Accept only known codes, never arbitrary syntactically valid content."""
+
+    return reason if isinstance(reason, str) and reason in SOURCE_REASON_CODES else "unknown_reason"
+
+
+def _validated_source_evidence(evidence: Mapping[str, Any]) -> Dict[str, Any]:
+    result = dict(evidence)
+    for key in ("failure_reason", "truncation_reason"):
+        if key in result:
+            result[key] = _content_free_reason(result[key])
+    return result
+
+
+def _incomplete_runtime_sources(
+    reason: str,
+    *,
+    model_dispatch_evidence: Optional[Mapping[str, Any]] = None,
+) -> DailySweepRuntimeSources:
+    evidence = dict(model_dispatch_evidence or {})
+    evidence["failure_reason"] = _content_free_reason(reason)
+    return DailySweepRuntimeSources.from_iterables(
+        source_status="incomplete",
+        model_dispatch_evidence=evidence,
+    )
+
+
+def _completed_day_source_fetch_limit(max_conversations: int) -> int:
+    """How many conversation docs to read for one local day.
+
+    The query used to fetch ``max_conversations + 1`` only to detect overflow,
+    then discarded the whole day.  Ranking a meaningful subset needs more than
+    one extra row, but the read must stay bounded: 2x the admitted spine, hard
+    capped at ``COMPLETED_DAY_SOURCE_PAGE_CAP`` (400).  Production's 200-row
+    spine therefore reads at most 400 docs; QA's 8-row spine reads 16.  The
+    page is ordered by ``started_at`` ascending so the existing range index
+    still applies; ranking then prefers structured / longer / more recent rows
+    inside that page. A separate projection proves eligibility across the
+    whole window before these full documents are fetched.
+    """
+
+    admitted = max(int(max_conversations), 0)
+    if admitted <= 0:
+        return 1
+    return min(max(admitted * 2, admitted + 1), COMPLETED_DAY_SOURCE_PAGE_CAP)
+
+
+@dataclass(frozen=True, order=True)
+class CompletedDaySourceRank:
+    structured: int
+    negative_characters: int
+    negative_recency: float
+    conversation_id: str
+
+
+def _completed_day_source_rank_key(row: CompletedDayConversationSource) -> CompletedDaySourceRank:
+    """Deterministic rank: structured first, then longest, then most recent."""
+
+    structured_rank = 0 if row.has_structured_summary else 1
+    started = row.started_at
+    if started is None:
+        recency = float("-inf")
+    else:
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        recency = started.timestamp()
+    return CompletedDaySourceRank(structured_rank, -len(row.summary_text), -recency, row.conversation_id)
+
+
+@dataclass(frozen=True)
+class CompletedDaySourceSelection:
+    """The bounded subset of a day's eligible rows, and whether any were left out."""
+
+    rows: Tuple[CompletedDayConversationSource, ...]
+    truncated: bool
+    truncation_reason: str
+
+
+def _select_completed_day_source_rows(
+    rows: Sequence[CompletedDayConversationSource],
+    *,
+    max_conversations: int,
+    max_summary_characters: int,
+) -> CompletedDaySourceSelection:
+    """Take a deterministic prefix of ``rows`` that fits both budgets.
+
+    Rank is a function of the stored rows only (structured before unstructured
+    fallback, then longer summary, then later ``started_at``, then
+    ``conversation_id``), so two runs over the same page select the same set.
+    Invocation identity belongs to the window, independently of this mutable
+    selection. Selected rows are then ordered by ``conversation_id`` so the
+    transcript digest does not depend on rank order.
+
+    A single row whose summary exceeds the character budget is skipped rather
+    than emptying the day; walking then stops at the first remaining row that
+    does not fit, so the selected set is still a deterministic prefix of the
+    ranked list after dropping individually impossible rows.
+    """
+
+    ranked = sorted(rows, key=_completed_day_source_rank_key)
+    selected: List[CompletedDayConversationSource] = []
+    total_characters = 0
+    truncation_reason = ""
+    skipped_oversize = False
+    for row in ranked:
+        if len(selected) >= max_conversations:
+            truncation_reason = "conversation_page_over_budget"
+            break
+        row_characters = len(row.summary_text)
+        if row_characters > max_summary_characters:
+            skipped_oversize = True
+            continue
+        if total_characters + row_characters > max_summary_characters:
+            truncation_reason = "summary_characters_over_budget"
+            break
+        selected.append(row)
+        total_characters += row_characters
+    unused = len(selected) < len(rows)
+    truncated = bool(truncation_reason) or unused or skipped_oversize
+    if truncated and not truncation_reason:
+        truncation_reason = "summary_characters_over_budget" if skipped_oversize else "conversation_page_over_budget"
+    selected.sort(key=lambda item: item.conversation_id)
+    return CompletedDaySourceSelection(rows=tuple(selected), truncated=truncated, truncation_reason=truncation_reason)
+
+
+def _incomplete_day_read(reason: str) -> CompletedDaySourceRead:
+    return CompletedDaySourceRead(status="incomplete", reason=_content_free_reason(reason))
+
+
+def _owner_about_aliases(uid: str) -> frozenset[str]:
+    """Tokens that mean the account owner in model-authored ``about``.
+
+    The prompt asks for the literal ``user`` token and also hands the model the
+    owner's name, so a name-in-``about`` row must still hit the owner gate.
+    Aliases are the prompt token plus the profile name the sweep already
+    loads; they are not guessed from first-person words like "me".
+    """
+
+    aliases = {"user", "the user", "primary user"}
+    try:
+        name = get_user_name(uid, use_default=False)
+    except Exception:
+        name = None
+    if name:
+        normalized = " ".join(str(name).split()).casefold()
+        if normalized:
+            aliases.add(normalized)
+    return frozenset(aliases)
 
 
 def _read_completed_day_conversation_sources(
@@ -3249,20 +4365,25 @@ def _read_completed_day_conversation_sources(
     db_client: Any,
     max_conversations: int,
     max_summary_characters: int,
-) -> Tuple[Tuple[CompletedDayConversationSource, ...], Literal["complete", "incomplete"]]:
+) -> CompletedDaySourceRead:
     """Read bounded conversation summaries (plus transcripts) in one UTC window.
 
     The SUMMARY texts form the agent's spine and are what the character budget
     bounds; transcripts ride along only for the bounded verification lookup.
-    Photos and other media are stripped by construction.  A query failure, an
-    over-budget page, or an undecodable conversation is incomplete rather than
-    an empty source, so callers cannot move the cursor past unprocessed data.
+    Photos and other media are stripped by construction.  A query failure,
+    an undecodable row, or an ineligible (processing / in-progress /
+    unfinished) row is incomplete so callers cannot move the cursor past a
+    transcript that may still change.  A day that is merely too big is
+    truncated only after the eligibility projection observes every row, up to
+    COMPLETED_DAY_SCAN_CAP reads, with at most COMPLETED_DAY_ELIGIBILITY_CAP
+    eligible rows. Neither projection nor full reads freeze future mutations.
     """
 
     collection = db_client.collection(f"users/{uid}/conversations")
     where = getattr(collection, "where", None)
     if not callable(where):
-        return (), "incomplete"
+        return _incomplete_day_read("query_failed")
+    fetch_limit = _completed_day_source_fetch_limit(max_conversations)
     try:
         try:
             query: Any = where(filter=FieldFilter("started_at", ">=", window.start_utc))
@@ -3270,46 +4391,76 @@ def _read_completed_day_conversation_sources(
         except TypeError:
             query = where("started_at", ">=", window.start_utc)
             query = query.where("started_at", "<", window.end_utc)
-        try:
-            query = query.order_by("started_at")
-        except (AttributeError, TypeError):
-            # A small injected emulator fake may not implement ordering; the
-            # identity and bounded page still hold, and model output is sorted
-            # below by the stable document id.
-            pass
-        snapshots = list(query.limit(max_conversations + 1).stream())
+        # The started_at index already ends in ascending __name__. Project
+        # only eligibility fields; one overflow probe distinguishes exactly-cap
+        # windows from incomplete scans. No status/lock composite is needed.
+        query = query.order_by("started_at").order_by("__name__")
+        snapshots = list(
+            query.select(("started_at", "discarded", "is_locked", "status", "finished_at"))
+            .limit(COMPLETED_DAY_SCAN_CAP + 1)
+            .stream()
+        )
     except Exception:
-        return (), "incomplete"
-    if len(snapshots) > max_conversations:
-        return (), "incomplete"
+        return _incomplete_day_read("query_failed")
+    if len(snapshots) > COMPLETED_DAY_SCAN_CAP:
+        return _incomplete_day_read("source_scan_over_budget")
+    eligible_snapshots = []
+    locked_rows_excluded = 0
+    contentless_rows_omitted = 0
+    for snapshot in snapshots:
+        raw = snapshot.to_dict()
+        if not getattr(snapshot, "id", "") or not isinstance(raw, dict):
+            return _incomplete_day_read("row_undecodable")
+        if raw.get("is_locked") and not raw.get("discarded"):
+            locked_rows_excluded += 1
+        eligibility = _completed_day_row_eligibility(raw)
+        if eligibility == "unfinished":
+            return _incomplete_day_read("row_not_eligible")
+        if eligibility == "eligible":
+            eligible_snapshots.append(snapshot)
+            if len(eligible_snapshots) > COMPLETED_DAY_ELIGIBILITY_CAP:
+                return _incomplete_day_read("eligibility_scan_over_budget")
+    page_capped = len(eligible_snapshots) > fetch_limit
 
-    from database.conversations import (  # pyright: ignore[reportPrivateUsage]
-        _prepare_conversation_for_read as prepare_conversation_for_read,  # pyright: ignore[reportPrivateUsage]
+    from database.conversations import (
+        prepare_conversation_for_read,
     )
     from models.conversation import Conversation
 
-    rows: List[CompletedDayConversationSource] = []
-    total_characters = 0
-    for snapshot in snapshots:
-        conversation_id = str(getattr(snapshot, "id", "") or "")
-        raw = snapshot.to_dict() or {}
-        if not conversation_id or not isinstance(raw, dict):
-            return (), "incomplete"
+    decoded: List[CompletedDayConversationSource] = []
+    for projected in eligible_snapshots[:fetch_limit]:
+        conversation_id = str(projected.id)
+        try:
+            snapshot = projected.reference.get()
+            raw = snapshot.to_dict()
+        except Exception:
+            return _incomplete_day_read("query_failed")
+        if not isinstance(raw, dict) or raw.get("started_at") != projected.to_dict().get("started_at"):
+            return _incomplete_day_read("source_row_changed")
         # A timestamp range is not an eligibility proof.  Discarded rows are
         # intentionally excluded, while processing/in-progress/unfinished
         # rows keep the source incomplete so a later retry cannot advance the
         # cursor past a transcript that may still change.
         eligibility = _completed_day_row_eligibility(raw)
         if eligibility == "discarded":
+            if raw.get("is_locked") and not raw.get("discarded"):
+                locked_rows_excluded += 1
             continue
         if eligibility != "eligible":
-            return (), "incomplete"
+            return _incomplete_day_read("row_not_eligible")
         try:
-            prepared = prepare_conversation_for_read(raw, uid)  # pyright: ignore[reportPrivateUsage]
-            conversation = Conversation(**(prepared or {}))
-            # TranscriptSegment.segments_as_string is the canonical textual
-            # rendering.  It ignores photos by construction.
-            transcript = (conversation.get_transcript(include_timestamps=False) or "").strip()
+            conversation = parse_snapshot_or_none(
+                Conversation,
+                snapshot,
+                payload_from_snapshot=lambda _snapshot: prepare_conversation_for_read(raw, uid) or {},
+            )
+            if conversation is None:
+                return _incomplete_day_read("row_undecodable")
+            segments = cast(Conversation, conversation).transcript_segments
+            owner_evidence = OwnerAttributionEvidence.from_segments(segments)
+            transcript = (
+                memory_transcript_from_segments(segments) if any(segment.text.strip() for segment in segments) else ""
+            )
             structured = conversation.structured
             title = (getattr(structured, "title", "") or "").strip() if structured else ""
             overview = (getattr(structured, "overview", "") or "").strip() if structured else ""
@@ -3317,8 +4468,9 @@ def _read_completed_day_conversation_sources(
             started = getattr(conversation, "started_at", None)
             started_label = started.astimezone(timezone.utc).strftime("%H:%M") if started else ""
         except Exception:
-            return (), "incomplete"
-        if title or overview:
+            return _incomplete_day_read("row_undecodable")
+        has_structured_summary = bool(title or overview)
+        if has_structured_summary:
             summary = " ".join(
                 part for part in (started_label, f"({category})" if category else "", title, "—", overview) if part
             )
@@ -3332,26 +4484,44 @@ def _read_completed_day_conversation_sources(
             summary = f"{UNSTRUCTURED_SUMMARY_MARKER} {head}" if head else ""
         summary = summary.strip()
         if not summary and not transcript:
+            contentless_rows_omitted += 1
             continue
-        total_characters += len(summary)
-        if total_characters > max_summary_characters:
-            return (), "incomplete"
-        rows.append(
+        decoded.append(
             CompletedDayConversationSource(
                 conversation_id=conversation_id,
                 summary_text=summary,
                 transcript_text=transcript,
+                owner_evidence=owner_evidence,
                 needs_folder=not (raw.get("folder_id") or "") and isinstance(raw.get("jit_first_open"), Mapping),
+                started_at=started if isinstance(started, datetime) else None,
+                has_structured_summary=has_structured_summary,
             )
         )
-    rows.sort(key=lambda row: row.conversation_id)
-    return tuple(rows), "complete"
+    selection = _select_completed_day_source_rows(
+        decoded,
+        max_conversations=max_conversations,
+        max_summary_characters=max_summary_characters,
+    )
+    truncated = selection.truncated or page_capped or contentless_rows_omitted > 0
+    truncation_reason = selection.truncation_reason or ("conversation_page_over_budget" if page_capped else "")
+    if not truncation_reason and contentless_rows_omitted:
+        truncation_reason = "contentless_rows_omitted"
+    return CompletedDaySourceRead(
+        rows=selection.rows,
+        status="complete",
+        reason=truncation_reason if truncated else "",
+        truncated=truncated,
+        locked_rows_excluded=locked_rows_excluded,
+        contentless_rows_omitted=contentless_rows_omitted,
+        rows_seen=len(eligible_snapshots),
+        rows_used=len(selection.rows),
+    )
 
 
 def _completed_day_row_eligibility(raw: Mapping[str, Any]) -> Literal["eligible", "discarded", "unfinished"]:
     """Return the pre-extraction eligibility proof for one conversation row."""
 
-    if bool(raw.get("discarded", False)):
+    if bool(raw.get("discarded", False)) or bool(raw.get("is_locked", False)):
         return "discarded"
     raw_status = raw.get("status")
     status = getattr(raw_status, "value", raw_status)
@@ -3363,12 +4533,9 @@ def _completed_day_row_eligibility(raw: Mapping[str, Any]) -> Literal["eligible"
 def _onboarding_transcript_eligibility(raw: Mapping[str, Any]) -> Literal["eligible", "discarded", "unfinished"]:
     """Require an onboarding transcript to be terminal and finalized."""
 
-    if bool(raw.get("discarded", False)):
-        return "discarded"
-    raw_status = raw.get("status")
-    status = getattr(raw_status, "value", raw_status)
-    if status != "completed" or not isinstance(raw.get("finished_at"), datetime):
-        return "unfinished"
+    eligibility = _completed_day_row_eligibility(raw)
+    if eligibility != "eligible":
+        return eligibility
     finalization_status = raw.get("finalization_status")
     if getattr(finalization_status, "value", finalization_status) != "completed":
         return "unfinished"
@@ -3472,6 +4639,7 @@ class OnboardingSourceProduction:
     """Named result for the bounded onboarding producer contract."""
 
     candidates: Tuple[DailySweepCandidate, ...] = ()
+    failure_reason: Optional[str] = None
     complete: bool = False
     source_keys: Tuple[str, ...] = ()
     source_progress: Mapping[str, int] = field(default_factory=dict)
@@ -3489,6 +4657,7 @@ def _load_or_stage_onboarding_candidates(
     source_generation: Optional[int] = None,
     sweep_generation: Optional[int] = None,
     window_id: Optional[str] = None,
+    failure_evidence: Optional[Dict[str, Any]] = None,
 ) -> Optional[Tuple[DailySweepCandidate, ...]]:
     """Materialize one deterministic candidate page before continuation slicing.
 
@@ -3551,6 +4720,22 @@ def _load_or_stage_onboarding_candidates(
             return None
         return staged
 
+    if (
+        account_generation is not None
+        and source_generation is not None
+        and sweep_generation is not None
+        and window_id is not None
+        and _consume_attested_window_skip(
+            db_client,
+            uid,
+            account_generation=account_generation,
+            source_generation=source_generation,
+            sweep_generation=sweep_generation,
+            window_id=window_id,
+        )
+    ):
+        return ()
+
     try:
         staged_snapshot = stage_ref.get()
     except Exception:
@@ -3564,12 +4749,12 @@ def _load_or_stage_onboarding_candidates(
         except Exception:
             return None
 
-    invocation_id = deterministic_contract_id(
+    invocation_evidence = failure_evidence if failure_evidence is not None else {}
+    invocation_id = lambda: deterministic_contract_id(
         "daily-sweep-onboarding-model-invocation",
         {
             "uid": uid,
             "source_key": source_key,
-            "transcript_digest": transcript_digest,
             "account_generation": account_generation,
             "source_generation": source_generation,
             "sweep_generation": sweep_generation,
@@ -3618,6 +4803,8 @@ def _load_or_stage_onboarding_candidates(
             source_generation=source_generation,
             sweep_generation=sweep_generation,
             window_id=window_id,
+            input_digest=transcript_digest,
+            invocation_evidence=invocation_evidence,
         )
         if raw_staged is None:
             return None
@@ -3634,7 +4821,7 @@ def _load_or_stage_onboarding_candidates(
             "candidate_count": len(staged),
             "staged_at": datetime.now(timezone.utc),
             "expires_at": datetime.now(timezone.utc) + STAGED_CANDIDATE_RETENTION,
-            "model_invocation_id": invocation_id,
+            "model_invocation_id": invocation_evidence["invocation_id"],
         }
         if account_generation is not None:
             stage_payload["account_generation"] = account_generation
@@ -3770,8 +4957,8 @@ def _produce_onboarding_sources(
         for key, value in raw_progress.items()
         if isinstance(key, str) and key.startswith("onboarding:") and isinstance(value, int) and value >= 0
     }
-    from database.conversations import (  # pyright: ignore[reportPrivateUsage]
-        _prepare_conversation_for_read as prepare_conversation_for_read,  # pyright: ignore[reportPrivateUsage]
+    from database.conversations import (
+        prepare_conversation_for_read,
     )
     from models.conversation import Conversation
 
@@ -3807,7 +4994,7 @@ def _produce_onboarding_sources(
             continue
         source_keys.append(source_key)
         try:
-            prepared = prepare_conversation_for_read(raw, uid)  # pyright: ignore[reportPrivateUsage]
+            prepared = prepare_conversation_for_read(raw, uid)
             conversation = Conversation(**(prepared or {}))
             text = (conversation.get_transcript(include_timestamps=False) or "").strip()
         except Exception:
@@ -3843,6 +5030,7 @@ def _produce_onboarding_sources(
         for conversation_id, text in rows:
             source_key = f"onboarding:{conversation_id}"
             offset = candidate_offsets.get(source_key, 0)
+            failure_evidence: Dict[str, Any] = {}
             staged = _load_or_stage_onboarding_candidates(
                 uid,
                 source_key,
@@ -3850,13 +5038,18 @@ def _produce_onboarding_sources(
                 text,
                 db_client=db_client,
                 extractor=extractor,
+                failure_evidence=failure_evidence,
                 account_generation=account_generation,
                 source_generation=source_generation,
                 sweep_generation=sweep_generation,
                 window_id=f"onboarding:{source_key}" if source_generation is not None else None,
             )
             if staged is None or offset > len(staged):
-                return OnboardingSourceProduction()
+                return OnboardingSourceProduction(
+                    failure_reason=_content_free_reason(
+                        failure_evidence.get("failure_reason", "daily_summary_stage_unavailable")
+                    )
+                )
             available = max(0, max_candidates - len(candidates))
             row_candidates = list(staged[offset : offset + available])
             candidates.extend(row_candidates)
@@ -3905,6 +5098,20 @@ def _split_daily_summary_page(
     return tuple(candidates), tuple(assignments)
 
 
+def _assert_selected_sources_unlocked(db_client: Any, uid: str, conversation_ids: Sequence[str]) -> None:
+    """Recheck privacy at each provider boundary; never substitute different input."""
+    for conversation_id in conversation_ids:
+        try:
+            snapshot = db_client.document(f"users/{uid}/conversations/{conversation_id}").get(field_paths=["is_locked"])
+            if not snapshot.exists:
+                raise ValueError("source unavailable")
+            locked = (snapshot.to_dict() or {}).get("is_locked", False)
+        except Exception as error:
+            raise MemoryExtractionError("source_lock_check_unavailable") from error
+        if locked:
+            raise MemoryExtractionError("source_locked_before_dispatch")
+
+
 def _load_or_stage_daily_summary_candidates(
     uid: str,
     local_date: date,
@@ -3917,6 +5124,15 @@ def _load_or_stage_daily_summary_candidates(
     agent_runner: Any,
     folder_options: Sequence[Tuple[str, str]] = (),
     max_candidates: int,
+    max_transcript_fetches: int = MAX_DAILY_TRANSCRIPT_FETCHES,
+    max_fetch_characters: int = MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS,
+    max_memory_lookups: int = MAX_DAILY_MEMORY_LOOKUPS,
+    max_provider_retries: Optional[int] = None,
+    dispatch_evidence: Optional[Dict[str, Any]] = None,
+    max_input_tokens: Optional[int] = None,
+    max_output_tokens: Optional[int] = None,
+    jit_run_id: Optional[str] = None,
+    jit_max_spend_micro_usd: Optional[int] = None,
     sweep_generation: int = 1,
 ) -> Optional[Tuple[Tuple[DailySweepCandidate, ...], Tuple[Dict[str, str], ...]]]:
     """Stage the complete bounded daily-summary agent page before apply.
@@ -3941,7 +5157,17 @@ def _load_or_stage_daily_summary_candidates(
         {
             "uid": uid,
             "local_date": local_date.isoformat(),
-            "rows": [{"source": row.conversation_id, "text": row.summary_text} for row in conversation_rows],
+            "rows": [
+                {
+                    "source": row.conversation_id,
+                    "text": row.summary_text,
+                    "owner_evidence": {
+                        "trust": row.owner_evidence.trust,
+                        "owner_cluster_id": row.owner_evidence.owner_cluster_id,
+                    },
+                }
+                for row in conversation_rows
+            ],
         },
     )
 
@@ -4010,6 +5236,27 @@ def _load_or_stage_daily_summary_candidates(
         )
         if payload.get("candidate_digest") != expected_digest:
             return None
+        if jit_run_id is not None:
+            # A QA run may reuse only a stage created by this exact server run.
+            # A pre-existing stage has no trustworthy relationship to the
+            # current gateway request, so treating it as a cache hit would
+            # bypass the one-request QA proof and could double-apply stale
+            # candidates.
+            if payload.get("jit_run_id") != jit_run_id:
+                return None
+            staged_dispatch = payload.get("dispatch_evidence")
+            if not isinstance(staged_dispatch, Mapping):
+                return None
+            requests = staged_dispatch.get("requests")
+            if (
+                staged_dispatch.get("feature") != "memories"
+                or staged_dispatch.get("jit_run_id") != jit_run_id
+                or not isinstance(requests, list)
+                or len(requests) != 1
+            ):
+                return None
+        if dispatch_evidence is not None and isinstance(payload.get("dispatch_evidence"), Mapping):
+            dispatch_evidence.update(dict(payload["dispatch_evidence"]))
         return staged, assignments
 
     try:
@@ -4022,12 +5269,12 @@ def _load_or_stage_daily_summary_candidates(
         # created by the first attempt.
         return read_staged(staged_snapshot)
 
-    invocation_id = deterministic_contract_id(
+    invocation_evidence: Dict[str, Any] = {}
+    invocation_id = lambda: deterministic_contract_id(
         "daily-sweep-daily-summary-model-invocation",
         {
             "uid": uid,
             "local_date": local_date.isoformat(),
-            "transcript_digest": transcript_digest,
             "account_generation": control.account_generation,
             "source_generation": control.source_generation,
             "sweep_generation": sweep_generation,
@@ -4036,23 +5283,48 @@ def _load_or_stage_daily_summary_candidates(
     )[:96]
 
     def build_candidate_page() -> Tuple[dict[str, Any], ...]:
+        from utils.llm.working_observations import normalize_scoped_claim_arguments
+
         summary_rows = tuple((row.conversation_id, row.summary_text) for row in conversation_rows)
         transcript_lookup = {row.conversation_id: row.transcript_text for row in conversation_rows}
+        owner_lookup = {row.conversation_id: row.owner_evidence for row in conversation_rows}
         needs_folder_ids = tuple(row.conversation_id for row in conversation_rows if row.needs_folder)
-        output = agent_runner(
-            uid,
-            summary_rows,
-            transcript_lookup,
-            folder_options=tuple(folder_options) if needs_folder_ids else (),
-            needs_folder_ids=needs_folder_ids,
-            max_candidates=max_candidates,
-            max_transcript_fetches=MAX_DAILY_TRANSCRIPT_FETCHES,
-            max_fetch_characters=MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS,
-            memory_searcher=_daily_sweep_ledger_searcher(uid, db_client=db_client),
-            max_memory_lookups=MAX_DAILY_MEMORY_LOOKUPS,
-            cache_key=f"daily-sweep:{uid}",
-        )
+        # The server-owned UID must be in the context at the model boundary so
+        # GatewayContextChatOpenAI emits X-Omi-User-Uid and feature headers.
+        # Keep this around the actual runner call: QA and production adapters
+        # can supply different runners, and the context must not leak between
+        # scheduler users.
+        agent_evidence: Optional[Dict[str, Any]] = {} if dispatch_evidence is not None else None
+        try:
+            with track_usage(uid, Features.MEMORIES):
+                output = agent_runner(
+                    uid,
+                    summary_rows,
+                    transcript_lookup,
+                    folder_options=tuple(folder_options) if needs_folder_ids else (),
+                    needs_folder_ids=needs_folder_ids,
+                    max_candidates=max_candidates,
+                    max_transcript_fetches=max_transcript_fetches,
+                    max_fetch_characters=max_fetch_characters,
+                    memory_searcher=_daily_sweep_ledger_searcher(uid, db_client=db_client),
+                    max_memory_lookups=max_memory_lookups,
+                    cache_key=f"daily-sweep:{uid}",
+                    max_provider_retries=max_provider_retries,
+                    max_input_tokens=max_input_tokens,
+                    max_output_tokens=max_output_tokens,
+                    jit_run_id=jit_run_id,
+                    jit_max_spend_micro_usd=jit_max_spend_micro_usd,
+                    dispatch_evidence=agent_evidence,
+                )
+        finally:
+            if dispatch_evidence is not None and agent_evidence is not None:
+                dispatch_evidence.update(_validated_source_evidence(agent_evidence))
         candidates: List[DailySweepCandidate] = []
+        dropped_subjectless = 0
+        dropped_basis_proposed = 0
+        demoted_owner_untrusted = 0
+        skipped_duplicate_lookup = 0
+        owner_aliases = _owner_about_aliases(uid)
         for index, memory in enumerate(getattr(output, "memories", ()) or ()):
             content = str(getattr(memory, "content", "") or "").strip()[:MAX_CONTENT_CHARACTERS]
             cited = [
@@ -4060,10 +5332,55 @@ def _load_or_stage_daily_summary_candidates(
                 for conversation_id in (getattr(memory, "conversation_ids", ()) or ())
                 if str(conversation_id) in transcript_lookup
             ]
+            cited = list(dict.fromkeys(cited))[:MAX_SOURCE_REFS]
             if not content or not cited:
                 # A memory without provenance into this day's rows is dropped:
                 # candidates may never fabricate source references.
                 continue
+            duplicate_of = str(getattr(memory, "duplicate_of", "") or "").strip()
+            if duplicate_of:
+                # A lookup hit already holds this fact. Skip it here rather
+                # than staging a sibling the occupancy check would have to
+                # catch later — or miss, if the slot/subject keys diverge.
+                skipped_duplicate_lookup += 1
+                continue
+            about = " ".join(str(getattr(memory, "about", "") or "").split())
+            basis = str(getattr(memory, "basis", "") or "").strip().lower()
+            arguments = (
+                normalize_scoped_claim_arguments(getattr(memory, "arguments", {}), basis=basis)
+                if belief_model_enabled()
+                else {}
+            )
+            if about.casefold() in {"", "unknown", "unclear", "uncertain"}:
+                dropped_subjectless += 1
+                continue
+            if basis not in {"decided", "proposed", "observed"}:
+                continue
+            # Preserve proposed plans only when the model has explicitly
+            # represented them as proposals.  This keeps legacy model output
+            # conservative while allowing the typed decision contract through.
+            if basis == "proposed" and arguments.get("decision") != "proposed":
+                dropped_basis_proposed += 1
+                continue
+            if about.casefold() in owner_aliases:
+                if not any(may_attribute_to_owner(owner_lookup[conversation_id]) for conversation_id in cited):
+                    # The model supplied no named alternate subject. Do not
+                    # turn an untrusted user label into a relationship fact.
+                    demoted_owner_untrusted += 1
+                    continue
+                subject_scope = MemorySubjectScope.primary_user
+                subject_entity_id = "user"
+            else:
+                subject_scope = MemorySubjectScope.third_party
+                # A name alone is not a globally resolved contact identity.
+                # Keep it deterministic and local to this source set.
+                subject_entity_id = (
+                    "source:"
+                    + deterministic_contract_id(
+                        "daily-sweep-named-subject",
+                        {"uid": uid, "sources": sorted(set(cited)), "name": about.casefold()},
+                    )[:24]
+                )
             candidates.append(
                 DailySweepCandidate(
                     candidate_id=deterministic_contract_id(
@@ -4083,18 +5400,29 @@ def _load_or_stage_daily_summary_candidates(
                     source_version="daily-memory-agent.v1",
                     source_refs=tuple(f"conversation:{conversation_id}" for conversation_id in cited[:MAX_SOURCE_REFS]),
                     authority=SweepAuthority.sweep_inference,
-                    subject_scope=MemorySubjectScope.primary_user,
-                    subject_entity_id=getattr(memory, "subject_entity_id", None),
+                    subject_scope=subject_scope,
+                    subject_entity_id=subject_entity_id,
                     # A slot names a standing attribute; the canonical occupancy
                     # check turns an occupied-slot add into an amend, which is
-                    # how the daily run maintains the rendered profile.
-                    slot=(str(getattr(memory, "slot", "") or "").strip() or None),
+                    # how the daily run maintains the rendered profile. A
+                    # proposal or passive observation is always unslotted.
+                    slot=(str(getattr(memory, "slot", "") or "").strip() or None) if basis == "decided" else None,
+                    arguments=arguments,
                 )
             )
             if len(candidates) >= max_candidates:
                 break
         if len(candidates) > MAX_CANDIDATES_PER_DAY:
             raise ValueError("daily summary model candidate budget exceeded")
+        emit_memory_sweep_decision(
+            logger,
+            uid=uid,
+            local_date=local_date.isoformat(),
+            dropped_subjectless=dropped_subjectless,
+            dropped_basis_proposed=dropped_basis_proposed,
+            demoted_owner_untrusted=demoted_owner_untrusted,
+            skipped_duplicate_lookup=skipped_duplicate_lookup,
+        )
         valid_folder_ids = {folder_id for folder_id, _name in folder_options}
         assignment_rows = [
             {
@@ -4119,7 +5447,14 @@ def _load_or_stage_daily_summary_candidates(
             source_generation=control.source_generation,
             sweep_generation=sweep_generation,
             window_id=window.window_id,
+            input_digest=transcript_digest,
+            invocation_evidence=invocation_evidence,
+            before_provider_dispatch=lambda: _assert_selected_sources_unlocked(
+                db_client, uid, tuple(row.conversation_id for row in conversation_rows)
+            ),
         )
+        if dispatch_evidence is not None and "failure_reason" in invocation_evidence:
+            dispatch_evidence["failure_reason"] = invocation_evidence["failure_reason"]
         if raw_candidates is None:
             return None
         candidate_dicts, folder_assignments = _split_daily_summary_page(raw_candidates)
@@ -4148,8 +5483,11 @@ def _load_or_stage_daily_summary_candidates(
             "folder_assignments": list(folder_assignments),
             "staged_at": datetime.now(timezone.utc),
             "expires_at": datetime.now(timezone.utc) + STAGED_CANDIDATE_RETENTION,
-            "model_invocation_id": invocation_id,
+            "model_invocation_id": invocation_evidence["invocation_id"],
+            "dispatch_evidence": dict(dispatch_evidence or {}),
         }
+        if jit_run_id is not None:
+            stage_payload["jit_run_id"] = jit_run_id
 
         def stage_if_open(transaction: Any) -> bool:
             deletion_ref, control_ref = _live_fence_refs(db_client, uid)
@@ -4207,7 +5545,9 @@ def _daily_sweep_ledger_searcher(uid: str, *, db_client: Any) -> Any:
             if item is None or item.status != MemoryItemStatus.active:
                 continue
             slot_label = f" [slot: {item.slot}]" if getattr(item, "slot", None) else ""
-            results.append(f"{item.content}{slot_label}")
+            memory_id = str(getattr(item, "memory_id", "") or "").strip()
+            prefix = f"[{memory_id}] " if memory_id else ""
+            results.append(f"{prefix}{item.content}{slot_label}")
         return tuple(results)
 
     return search
@@ -4305,6 +5645,7 @@ def produce_completed_day_daily_summary_sources(
     agent_runner: Optional[Any] = None,
     window_override: Optional[CompletedLocalDayWindow] = None,
     sweep_generation: int = 1,
+    qa_run_id: Optional[str] = None,
 ) -> DailySweepRuntimeSources:
     """Produce the exact completed-day source, including its bounded agent run.
 
@@ -4320,6 +5661,15 @@ def produce_completed_day_daily_summary_sources(
     """
 
     window = window_override or completed_local_day_window(local_date, timezone_name)
+    if _consume_attested_window_skip(
+        db_client,
+        uid,
+        account_generation=control.account_generation,
+        source_generation=control.source_generation,
+        sweep_generation=sweep_generation,
+        window_id=window.window_id,
+    ):
+        return DailySweepRuntimeSources.from_iterables(complete=True, source_status="complete_zero")
     collection = db_client.collection(f"users/{uid}/daily_summaries")
     where = getattr(collection, "where", None)
     if not callable(where):
@@ -4349,25 +5699,33 @@ def produce_completed_day_daily_summary_sources(
 
     model = model_authority or daily_memory_sweep_model_authority_from_environment()
 
+    is_qa_run = qa_run_id is not None
     # A persisted candidate list is accepted only when the model authority is
     # open.  In particular, a missing key is not interpreted as []: older
     # summary writers did not produce this field and must not advance the new
     # cursor without a producer proof.
     if "memory_candidates" in payload:
+        if is_qa_run:
+            # QA must observe a fresh, bounded gateway request. A historical
+            # summary cache is a producer artifact from another run and cannot
+            # prove this run's request, usage, or spend.
+            return _incomplete_runtime_sources("qa_cached_summary_rejected")
         raw_candidates = payload.get("memory_candidates")
+        if raw_candidates is None:
+            return _incomplete_runtime_sources("cached_summary_missing_candidates")
         if (
-            raw_candidates is None
-            or payload.get("uid") != uid
+            payload.get("uid") != uid
             or payload.get("account_generation") != control.account_generation
             or payload.get("source_generation") != control.source_generation
             or payload.get("timezone_name") != timezone_name
-            or not _cached_summary_eligibility_attested(
-                payload, local_date=local_date, window=window, timezone_name=timezone_name
-            )
         ):
-            return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+            return _incomplete_runtime_sources("cached_summary_identity_mismatch")
+        if not _cached_summary_eligibility_attested(
+            payload, local_date=local_date, window=window, timezone_name=timezone_name
+        ):
+            return _incomplete_runtime_sources("cached_summary_not_attested")
         if not model.route_is_budgeted:
-            return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+            return _incomplete_runtime_sources("model_route_not_budgeted")
         persisted_candidates = _bounded_candidate_channel(
             raw_candidates,
             source_type="daily_summary",
@@ -4381,15 +5739,47 @@ def produce_completed_day_daily_summary_sources(
             model_cost_usd=0.0,
         )
 
-    conversation_rows, conversation_status = _read_completed_day_conversation_sources(
+    max_summary_conversations = (
+        QA_SWEEP_MAX_SUMMARY_CONVERSATIONS if is_qa_run else MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS
+    )
+    max_summary_characters = (
+        QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS if is_qa_run else MAX_COMPLETED_DAY_SUMMARY_INPUT_CHARACTERS
+    )
+    max_transcript_fetches = QA_SWEEP_MAX_TRANSCRIPT_FETCHES if is_qa_run else MAX_DAILY_TRANSCRIPT_FETCHES
+    max_fetch_characters = (
+        QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS if is_qa_run else MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS
+    )
+    max_memory_lookups = QA_SWEEP_MAX_MEMORY_LOOKUPS if is_qa_run else MAX_DAILY_MEMORY_LOOKUPS
+    source_read = _read_completed_day_conversation_sources(
         uid,
         window,
         db_client=db_client,
-        max_conversations=MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS,
-        max_summary_characters=MAX_COMPLETED_DAY_SUMMARY_INPUT_CHARACTERS,
+        max_conversations=max_summary_conversations,
+        max_summary_characters=max_summary_characters,
     )
-    if conversation_status == "incomplete":
-        return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+    if source_read.status == "incomplete":
+        return _incomplete_runtime_sources(source_read.reason or "source_incomplete")
+    conversation_rows = source_read.rows
+    dispatch_evidence: Dict[str, Any] = {
+        "locked_rows_excluded": source_read.locked_rows_excluded,
+        "contentless_rows_omitted": source_read.contentless_rows_omitted,
+        "rows_seen": source_read.rows_seen,
+        "rows_used": source_read.rows_used,
+    }
+    if source_read.truncated:
+        dispatch_evidence["truncated"] = True
+        dispatch_evidence["rows_seen"] = source_read.rows_seen
+        dispatch_evidence["rows_used"] = source_read.rows_used
+        if source_read.reason:
+            dispatch_evidence["truncation_reason"] = _content_free_reason(source_read.reason)
+        record_fallback(
+            component="daily_summary",
+            from_mode="full_source",
+            to_mode="truncated_source",
+            reason="capacity_full",
+            outcome="degraded",
+            log=logger,
+        )
     if not conversation_rows:
         # The query itself is the producer's complete-zero attestation.  A
         # missing summary is therefore safe only after this proof, never from
@@ -4398,9 +5788,10 @@ def produce_completed_day_daily_summary_sources(
             complete=True,
             source_status="complete_zero",
             eligibility_proof="completed_transcript_v1",
+            model_dispatch_evidence=dispatch_evidence or None,
         )
     if not model.route_is_budgeted:
-        return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+        return _incomplete_runtime_sources("model_route_not_budgeted")
 
     runner = agent_runner
     if runner is None:
@@ -4410,7 +5801,7 @@ def produce_completed_day_daily_summary_sources(
         from utils.llm.model_config import get_model
 
         if model.model_name != get_model("memories"):
-            return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+            return _incomplete_runtime_sources("model_name_not_configured")
         from utils.llm.memories import run_daily_sweep_summary_agent
 
         runner = run_daily_sweep_summary_agent
@@ -4425,13 +5816,40 @@ def produce_completed_day_daily_summary_sources(
     estimated_cost = (
         (
             2 * spine_characters
-            + MAX_DAILY_TRANSCRIPT_FETCHES * MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS
-            + daily_sweep_phase_b_overhead_characters(MAX_DAILY_MEMORY_LOOKUPS)
+            + max_transcript_fetches * max_fetch_characters
+            + (
+                daily_sweep_phase_b_overhead_characters(
+                    max_memory_lookups,
+                    max_candidate_rows=model.max_candidates,
+                )
+                if is_qa_run
+                else daily_sweep_phase_b_overhead_characters(max_memory_lookups)
+            )
         )
         / 1000.0
     ) * MODEL_COST_PER_1K_INPUT_CHARACTERS_USD
+    if is_qa_run:
+        # The character heuristic above prices only the source spine.  The
+        # gateway reservation is the final authority, but the producer should
+        # also refuse a QA run whose configured worst-case input/output
+        # envelope would exceed its own model budget.  Read the checked-in
+        # gateway card instead of duplicating its rates here.
+        from llm_gateway.gateway.accounting import rate_card_for, rounded_micro_usd
+
+        rate_card = rate_card_for("openai", QA_SWEEP_MODEL_NAME)
+        if rate_card is None:
+            return _incomplete_runtime_sources("qa_rate_card_unavailable")
+        rates = rate_card.effective_rates(QA_SWEEP_MAX_INPUT_TOKENS)
+        envelope_cost_usd = (
+            rounded_micro_usd(
+                QA_SWEEP_MAX_INPUT_TOKENS * rates.input_micro_usd_per_million
+                + QA_SWEEP_MAX_OUTPUT_TOKENS * rates.output_micro_usd_per_million
+            )
+            / 1_000_000
+        )
+        estimated_cost = max(estimated_cost, envelope_cost_usd)
     if estimated_cost > model.max_cost_usd:
-        return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+        return _incomplete_runtime_sources("model_cost_over_budget")
     folder_options = (
         _read_daily_sweep_folder_options(uid, db_client=db_client)
         if any(row.needs_folder for row in conversation_rows)
@@ -4448,12 +5866,29 @@ def produce_completed_day_daily_summary_sources(
         agent_runner=runner,
         folder_options=folder_options,
         max_candidates=model.max_candidates,
+        max_transcript_fetches=max_transcript_fetches,
+        max_fetch_characters=max_fetch_characters,
+        max_memory_lookups=max_memory_lookups,
+        max_provider_retries=QA_SWEEP_MAX_SDK_RETRIES if is_qa_run else None,
+        dispatch_evidence=dispatch_evidence,
+        max_input_tokens=QA_SWEEP_MAX_INPUT_TOKENS if is_qa_run else None,
+        max_output_tokens=QA_SWEEP_MAX_OUTPUT_TOKENS if is_qa_run else None,
+        jit_run_id=qa_run_id,
+        jit_max_spend_micro_usd=QA_SWEEP_MAX_SPEND_MICRO_USD if is_qa_run else None,
         sweep_generation=sweep_generation,
     )
     if staged is None:
         # Model/provider failures and malformed existing stages are source
-        # incompleteness, never permission to re-extract or advance.
-        return DailySweepRuntimeSources.from_iterables(source_status="incomplete")
+        # incompleteness, never permission to re-extract or advance.  The
+        # dispatch evidence still carries the admitted request identities and
+        # any observed usage: a consumed gateway attempt must stay joinable to
+        # this run even when its output never staged.
+        if not dispatch_evidence.get("failure_reason"):
+            dispatch_evidence["failure_reason"] = "daily_summary_stage_unavailable"
+        return DailySweepRuntimeSources.from_iterables(
+            source_status="incomplete",
+            model_dispatch_evidence=dispatch_evidence,
+        )
     candidates, folder_assignments = staged
     if folder_assignments:
         # Folder assignment is cosmetic and idempotent; a partial failure here
@@ -4470,6 +5905,7 @@ def produce_completed_day_daily_summary_sources(
         source_status="complete" if candidates else "complete_zero",
         eligibility_proof="completed_transcript_v1",
         model_cost_usd=estimated_cost,
+        model_dispatch_evidence=dispatch_evidence,
     )
 
 
@@ -4548,6 +5984,7 @@ def firestore_daily_sweep_source_provider(
     db_client: Any,
     timezone_name: str = "UTC",
     window_override: Optional[CompletedLocalDayWindow] = None,
+    qa_run_id: Optional[str] = None,
 ) -> DailySweepRuntimeSources:
     """Read one bounded backend-produced source packet for the scheduler.
 
@@ -4573,7 +6010,13 @@ def firestore_daily_sweep_source_provider(
             db_client=db_client,
             window_override=window_override,
             sweep_generation=current_cursor.sweep_generation,
+            qa_run_id=qa_run_id,
         )
+        if qa_run_id is not None:
+            # Onboarding is a separate producer path and may add another model
+            # invocation.  QA input must come from an eligible completed
+            # recorded conversation source, so stop at the summary producer.
+            return summary_sources
         model_authority = daily_memory_sweep_model_authority_from_environment()
         onboarding_production = _produce_onboarding_sources(
             uid,
@@ -4599,7 +6042,21 @@ def firestore_daily_sweep_source_provider(
             ),
             eligibility_proof=summary_sources.eligibility_proof,
             model_cost_usd=summary_sources.model_cost_usd,
+            model_dispatch_evidence={
+                **summary_sources.model_dispatch_evidence,
+                **(
+                    {"failure_reason": onboarding_production.failure_reason}
+                    if onboarding_production.failure_reason
+                    else {}
+                ),
+            },
         )
+    if qa_run_id is not None:
+        # The QA producer must read the completed conversation source and make
+        # its bounded gateway request in this run. A pre-existing adapter
+        # packet can contain ordinary production-sized candidates and has no
+        # trustworthy request/usage join, even when its generations match.
+        raise ValueError("QA sweep cannot reuse a pre-existing source packet")
     raw_payload = snapshot.to_dict() or {}
     payload: Dict[str, Any] = raw_payload if isinstance(raw_payload, dict) else {}
     # A staged packet is an immutable producer artifact.  Missing identity is
@@ -4700,13 +6157,17 @@ def firestore_daily_sweep_source_provider(
         # the scheduler must not advance its cursor.
         raise
     parsed_daily_summary = parse("daily_summary", source_type="daily_summary", authority=SweepAuthority.sweep_inference)
-    parsed_onboarding = parse(
-        "onboarding_cold_start",
-        source_type="onboarding",
-        authority=SweepAuthority.direct_user_statement,
-        trusted_direct=True,
+    parsed_onboarding = (
+        parse(
+            "onboarding_cold_start",
+            source_type="onboarding",
+            authority=SweepAuthority.direct_user_statement,
+            trusted_direct=True,
+        )
+        if qa_run_id is None
+        else ()
     )
-    raw_onboarding_source_keys = payload.get("onboarding_source_keys", ())
+    raw_onboarding_source_keys = payload.get("onboarding_source_keys", ()) if qa_run_id is None else ()
     if not isinstance(raw_onboarding_source_keys, (list, tuple)):
         raise ValueError("daily sweep onboarding source keys must be a list")
     onboarding_source_keys = tuple(
@@ -4716,7 +6177,7 @@ def firestore_daily_sweep_source_provider(
         not item.startswith("onboarding:") for item in onboarding_source_keys
     ):
         raise ValueError("daily sweep onboarding source keys are invalid")
-    raw_onboarding_progress = payload.get("onboarding_source_progress", {})
+    raw_onboarding_progress = payload.get("onboarding_source_progress", {}) if qa_run_id is None else {}
     if not isinstance(raw_onboarding_progress, Mapping):
         raise ValueError("daily sweep onboarding source progress is invalid")
     onboarding_source_progress = {
@@ -4767,6 +6228,115 @@ class DailySweepSchedulerSummary:
     # account therefore stays eligible without imposing head-of-line blocking.
     completed_uids: Tuple[str, ...] = ()
     failed_uids: Tuple[str, ...] = ()
+    model_dispatch_evidence: Tuple[Mapping[str, Any], ...] = ()
+
+
+def _qa_sweep_run_ref(db_client: Any, run_id: str) -> Any:
+    return db_client.document(f"{QA_SWEEP_RUN_COLLECTION}/{run_id}")
+
+
+def _qa_sweep_output_ref(db_client: Any, run_id: str) -> Any:
+    return db_client.document(f"{QA_SWEEP_RUN_COLLECTION}/{run_id}/{QA_SWEEP_OUTPUT_SUBCOLLECTION}/{QA_SWEEP_UID}")
+
+
+def _create_or_verify_qa_sweep_document(db_client: Any, ref: Any, payload: Mapping[str, Any], *, label: str) -> None:
+    create = getattr(ref, "create", None)
+    if not callable(create):
+        raise RuntimeError(f"QA sweep {label} requires create-only Firestore writes")
+    try:
+        create(dict(payload))
+        return
+    except Exception as exc:
+        snapshot = ref.get()
+        existing = snapshot.to_dict() if getattr(snapshot, "exists", False) else None
+        if isinstance(existing, Mapping) and dict(existing) == dict(payload):
+            return
+        raise RuntimeError(f"QA sweep {label} already exists with a different run result") from exc
+
+
+def write_qa_sweep_run_receipt(
+    db_client: Any,
+    *,
+    run_id: str,
+    summary: DailySweepSchedulerSummary,
+) -> None:
+    """Persist the content-free producer receipt after one QA scheduler run.
+
+    Candidate receipts carry ``qa_run_id`` and remain the durable output rows;
+    this run-level document only records bounded counters and the exact
+    consumer join path. It is create-only so a retry cannot rewrite a prior
+    run's evidence.
+    """
+
+    run_id = validate_run_id_for_qa_receipt(run_id)
+    status = "failed" if summary.errors else "completed"
+    policy = {
+        "model_name": QA_SWEEP_MODEL_NAME,
+        "max_model_candidates": QA_SWEEP_MAX_MODEL_CANDIDATES,
+        "max_model_cost_usd": QA_SWEEP_MAX_MODEL_COST_USD,
+        "max_catch_up_days": QA_SWEEP_MAX_CATCH_UP_DAYS,
+        "max_summary_conversations": QA_SWEEP_MAX_SUMMARY_CONVERSATIONS,
+        "max_summary_input_characters": QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS,
+        "max_transcript_fetches": QA_SWEEP_MAX_TRANSCRIPT_FETCHES,
+        "max_transcript_fetch_characters": QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS,
+        "max_memory_lookups": QA_SWEEP_MAX_MEMORY_LOOKUPS,
+        "sdk_max_retries": QA_SWEEP_MAX_SDK_RETRIES,
+        "gateway_max_attempts": QA_SWEEP_MAX_GATEWAY_ATTEMPTS,
+        "provider_calls_allowed": QA_SWEEP_MAX_PROVIDER_CALLS,
+        "max_input_tokens": QA_SWEEP_MAX_INPUT_TOKENS,
+        "max_output_tokens": QA_SWEEP_MAX_OUTPUT_TOKENS,
+        "max_spend_micro_usd": QA_SWEEP_MAX_SPEND_MICRO_USD,
+        "jit_contract_version": QA_SWEEP_JIT_CONTRACT_VERSION,
+    }
+    output_path = f"users/{QA_SWEEP_UID}/daily_memory_sweep_receipts"
+    output_payload = {
+        "schema_version": QA_SWEEP_OUTPUT_SCHEMA_VERSION,
+        "run_id": run_id,
+        "uid": QA_SWEEP_UID,
+        "project": QA_SWEEP_PROJECT,
+        "database": QA_SWEEP_DATABASE,
+        "status": status,
+        "attempted_users": summary.attempted_users,
+        "committed_users": summary.committed_users,
+        "blocked_users": summary.blocked_users,
+        "committed_candidates": summary.committed_candidates,
+        "idempotent_candidates": summary.idempotent_candidates,
+        "skipped_candidates": summary.skipped_candidates,
+        "error_count": len(summary.errors),
+        "model_policy": policy,
+        "model_dispatch_evidence": [_validated_source_evidence(item) for item in summary.model_dispatch_evidence],
+        "candidate_receipt_collection": output_path,
+        "candidate_receipt_join_field": "qa_run_id",
+    }
+    _create_or_verify_qa_sweep_document(
+        db_client,
+        _qa_sweep_output_ref(db_client, run_id),
+        output_payload,
+        label="output row",
+    )
+    run_payload = {
+        "schema_version": QA_SWEEP_RECEIPT_SCHEMA_VERSION,
+        "run_id": run_id,
+        "uid": QA_SWEEP_UID,
+        "project": QA_SWEEP_PROJECT,
+        "database": QA_SWEEP_DATABASE,
+        "status": status,
+        "output_row_path": f"{QA_SWEEP_RUN_COLLECTION}/{run_id}/{QA_SWEEP_OUTPUT_SUBCOLLECTION}/{QA_SWEEP_UID}",
+        "candidate_receipt_collection": output_path,
+        "candidate_receipt_join_field": "qa_run_id",
+        "model_policy": policy,
+        "model_dispatch_evidence": [_validated_source_evidence(item) for item in summary.model_dispatch_evidence],
+        "error_count": len(summary.errors),
+    }
+    _create_or_verify_qa_sweep_document(
+        db_client, _qa_sweep_run_ref(db_client, run_id), run_payload, label="run receipt"
+    )
+
+
+def validate_run_id_for_qa_receipt(run_id: str) -> str:
+    """Keep receipt validation local to this module's public QA seam."""
+
+    return validate_qa_sweep_run_id(run_id)
 
 
 def _pending_completed_dates(
@@ -4794,6 +6364,64 @@ def _pending_completed_dates(
     )
 
 
+def daily_memory_sweep_stagger_spread_seconds(environ: Optional[Mapping[str, str]] = None) -> int:
+    """Read the per-user stagger window. ``0`` and any non-integer keep today's pileup."""
+
+    source = os.environ if environ is None else environ
+    raw = str(source.get(DAILY_MEMORY_SWEEP_STAGGER_SECONDS_ENV, "0") or "0").strip()
+    try:
+        parsed = int(raw)
+    except ValueError:
+        return 0
+    return parsed if parsed > 0 else 0
+
+
+def daily_memory_sweep_stagger_delay_seconds(uid: str, spread_seconds: int) -> int:
+    """Stable slot in ``[0, spread_seconds)`` for one uid. Disabled at ``0``.
+
+    Uses SHA-256 so the slot does not change across processes (``hash()`` is
+    salted per interpreter).
+    """
+
+    if spread_seconds <= 0:
+        return 0
+    normalized = (uid or "").strip()
+    if not normalized:
+        return 0
+    digest = hashlib.sha256(normalized.encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], "big") % spread_seconds
+
+
+def _sweep_monotonic() -> float:
+    return _time_mod.monotonic()
+
+
+def _sweep_sleep(seconds: float) -> None:
+    _time_mod.sleep(seconds)
+
+
+def _sleep_until_sweep_stagger_slot(
+    uid: str,
+    *,
+    spread_seconds: int,
+    started_monotonic: float,
+) -> None:
+    """Wait until this uid's slot, measured from the scheduler start.
+
+    A sequential drain must not sleep ``hash(uid) % spread`` in full for every
+    user. The slot is an offset from ``started_monotonic``, so added wait stays
+    inside one spread window. Receipts make a late or replayed start an exact
+    no-op when that uid's day already committed.
+    """
+
+    delay = daily_memory_sweep_stagger_delay_seconds(uid, spread_seconds)
+    if delay <= 0:
+        return
+    remaining = delay - (_sweep_monotonic() - started_monotonic)
+    if remaining > 0:
+        _sweep_sleep(remaining)
+
+
 def run_daily_memory_sweep_scheduler(
     *,
     db_client: Any,
@@ -4806,6 +6434,8 @@ def run_daily_memory_sweep_scheduler(
     cohort_authorizer: Optional[Any] = None,
     timezone_reconciler: Optional[Any] = None,
     max_users: int = 400,
+    qa_run_id: Optional[str] = None,
+    max_catch_up_days: Optional[int] = None,
 ) -> DailySweepSchedulerSummary:
     """Runtime producer/scheduler/adaptor behind the closed backend authority.
 
@@ -4819,70 +6449,62 @@ def run_daily_memory_sweep_scheduler(
 
     if now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("now must be timezone-aware")
+    if qa_run_id is not None:
+        qa_run_id = validate_qa_sweep_run_id(qa_run_id)
+    catch_up_days = (
+        QA_SWEEP_MAX_CATCH_UP_DAYS
+        if qa_run_id is not None
+        else (MAX_CATCH_UP_DAYS if max_catch_up_days is None else max_catch_up_days)
+    )
+    if catch_up_days < 1 or catch_up_days > MAX_CATCH_UP_DAYS:
+        raise ValueError("max_catch_up_days must be between 1 and the bounded maximum")
     bounded_uids = tuple(sorted({uid.strip() for uid in uid_inventory if uid.strip()}))[: max(1, min(400, max_users))]
-    # Crash-recovery cleanup is a privacy lifecycle operation, not a rollout
-    # decision. Run it before authority, kill-switch, and cohort gates so a
-    # disabled/skipped account cannot retain transcript-derived pages forever.
-    for uid in bounded_uids:
-        try:
-            cleanup_expired_daily_memory_sweep_stages(uid, db_client=db_client, now=now)
-            cleanup_expired_memory_deletion_receipts(uid, db_client=db_client, now=now)
-        except Exception:
-            # Cleanup is fail-closed for each row; a transient janitor error
-            # must not open writes or alter the rollout result.
-            continue
 
+    # Crash-recovery cleanup is a privacy lifecycle operation, not a rollout
+    # decision. Run it before authority or automation gates so a disabled or
+    # paused account cannot retain transcript-derived pages forever.
+    drain_sweep_uids(bounded_uids, lambda uid: (cleanup_expired_daily_memory_sweep_stages(uid, db_client=db_client, now=now), cleanup_expired_memory_deletion_receipts(uid, db_client=db_client, now=now), ProcessOutcome.ack())[-1])  # fmt: skip
     resolved_authority = authority or daily_memory_sweep_authority_from_environment()
     if not resolved_authority.may_write:
         return DailySweepSchedulerSummary()
-    resolved_cohort = cohort_authority or daily_memory_sweep_cohort_authority_from_environment()
-    # A write-enabled scheduler must always have an explicit backend cohort
-    # gate.  A disabled/missing cohort is not an unrestricted all-user mode;
-    # it is a closed rollout.  The flag name is deployment-fixed and supplied
-    # only by the server-owned authority seam.
-    if not resolved_cohort.enabled:
-        return DailySweepSchedulerSummary(errors=("cohort_disabled",))
-    if not resolved_cohort.cohort_name:
-        return DailySweepSchedulerSummary(errors=("cohort_name_missing",))
+    # The product Beta authority is all-user. Keep the old arguments in the
+    # callable for deployment/test compatibility, but do not consult a
+    # per-user flag or fail closed when its resolver/configuration is absent.
+    # ``qa_run_id`` remains the explicit, bounded qualification path.
+    _ = cohort_authority, cohort_authorizer
+    if belief_model_enabled() and not belief_automation_enabled():
+        return DailySweepSchedulerSummary(errors=("belief_automation_paused",))
+    stagger_spread_seconds = daily_memory_sweep_stagger_spread_seconds()
+    stagger_started = _sweep_monotonic()
+    scheduled_uids = bounded_uids
+    if stagger_spread_seconds > 0:
+        logger.info(
+            "daily-memory-sweep staggering %s users across %ss",
+            len(bounded_uids),
+            stagger_spread_seconds,
+        )
+        scheduled_uids = tuple(
+            sorted(
+                bounded_uids,
+                key=lambda uid: (daily_memory_sweep_stagger_delay_seconds(uid, stagger_spread_seconds), uid),
+            )
+        )
     attempted = committed_users = blocked_users = 0
     committed = idempotent = skipped = 0
     errors: List[str] = []
     completed_uids: List[str] = []
     failed_uids: List[str] = []
-    for uid in bounded_uids:
+    model_dispatch_evidence: List[Mapping[str, Any]] = []
+
+    def process_one(uid: str) -> ProcessOutcome:
+        nonlocal attempted, committed_users, blocked_users, committed, idempotent, skipped
+        _sleep_until_sweep_stagger_slot(
+            uid,
+            spread_seconds=stagger_spread_seconds,
+            started_monotonic=stagger_started,
+        )
         attempted += 1
         try:
-            # This callback is intentionally read-only.  A PostHog client can
-            # be supplied by the maintenance deployment, but no
-            # identify/flag mutation is performed by this scheduler.
-            if not callable(cohort_authorizer):
-                blocked_users += 1
-                failed_uids.append(uid)
-                errors.append(f"uid={uid}:cohort_unavailable")
-                continue
-            try:
-                enrolled = cohort_authorizer(uid, resolved_cohort.cohort_name)
-            except TypeError:
-                enrolled = cohort_authorizer(uid)
-            if isinstance(enrolled, DailySweepCohortDecision):
-                cohort_decision = enrolled
-            elif enrolled is True:
-                cohort_decision = DailySweepCohortDecision.enabled
-            elif enrolled is False:
-                cohort_decision = DailySweepCohortDecision.disabled
-            else:
-                cohort_decision = DailySweepCohortDecision.unavailable
-            if cohort_decision is DailySweepCohortDecision.disabled:
-                # A definite false assignment is a successful bounded
-                # decision and may advance the fair page cursor.
-                blocked_users += 1
-                completed_uids.append(uid)
-                continue
-            if cohort_decision is not DailySweepCohortDecision.enabled:
-                blocked_users += 1
-                failed_uids.append(uid)
-                errors.append(f"uid={uid}:cohort_unavailable")
-                continue
             control = ensure_canonical_apply_control_state(uid, db_client=db_client)
             if control.writer_mode is not WriterMode.ledger:
                 # An enrolled account that has not completed ledger cutover
@@ -4901,7 +6523,28 @@ def run_daily_memory_sweep_scheduler(
                 )
                 blocked_users += 1
                 completed_uids.append(uid)
-                continue
+                return ProcessOutcome.ack()
+            if free_tier_memory_suppression_enabled(uid):
+                # §1.8: a basic account is not admitted to the sweep at all, so
+                # an account that downgrades stops being swept rather than
+                # having its already-claimed day fail late. Ack like the
+                # disabled-cohort branch above: a definite plan answer is a
+                # successful bounded decision and may advance the fair page
+                # cursor. Rejecting instead would burn receipt leases and
+                # strand the tail. The sweep is a cron with no request, so the
+                # funding owner is always the platform.
+                verdict = memory_formation_verdict(
+                    decision_for=lambda feature: authorize_managed_compute(uid, feature, "omi")
+                )
+                if verdict.suppressed:
+                    logger.info(
+                        "daily-memory-sweep skipping uid=%s: plan denies managed formation reason=%s",
+                        uid,
+                        verdict.reason,
+                    )
+                    blocked_users += 1
+                    completed_uids.append(uid)
+                    return ProcessOutcome.ack()
             timezone_name = str(timezone_resolver(uid) or "UTC")
             cursor = _read_cursor(db_client, uid, control)
             if cursor.last_completed_local_date is not None and cursor.timezone_name != timezone_name:
@@ -4913,10 +6556,15 @@ def run_daily_memory_sweep_scheduler(
                 if not callable(timezone_reconciler) or not timezone_reconciler(uid, timezone_name):
                     raise ValueError("timezone_changed_requires_reconciliation")
                 cursor = _read_cursor(db_client, uid, control)
-            pending_dates = _pending_completed_dates(cursor, timezone_name=timezone_name, now=now)
+            pending_dates = _pending_completed_dates(
+                cursor,
+                timezone_name=timezone_name,
+                now=now,
+                max_days=catch_up_days,
+            )
             if not pending_dates:
                 completed_uids.append(uid)
-                continue
+                return ProcessOutcome.ack()
             packets: Dict[date, DailySweepInput] = {}
             for local_date in pending_dates:
                 transition_window = None
@@ -4935,6 +6583,7 @@ def run_daily_memory_sweep_scheduler(
                         control,
                         timezone_name=timezone_name,
                         window_override=transition_window,
+                        qa_run_id=qa_run_id,
                     )
                 except TypeError:
                     # Preserve the narrow three-argument provider contract for
@@ -4942,6 +6591,24 @@ def run_daily_memory_sweep_scheduler(
                     sources = source_provider(uid, local_date, control)
                 if not isinstance(sources, DailySweepRuntimeSources):
                     raise ValueError("daily sweep source provider returned an invalid source bundle")
+                if sources.model_dispatch_evidence:
+                    model_dispatch_evidence.append(dict(sources.model_dispatch_evidence))
+                if not sources.complete:
+                    # An incomplete source is the provider's documented
+                    # fail-closed outcome (model gate closed, fenced invocation
+                    # blocked, malformed stage, or budget refusal).  The cursor
+                    # must not advance, and the day must surface as a named
+                    # blocked outcome instead of the opaque ``ValidationError``
+                    # that ``build_daily_sweep_input`` raises on incomplete
+                    # packets.
+                    blocked_users += 1
+                    failed_uids.append(uid)
+                    incomplete_error = f"uid={uid}:source_incomplete:{local_date.isoformat()}"
+                    failure_reason = sources.model_dispatch_evidence.get("failure_reason")
+                    if "failure_reason" in sources.model_dispatch_evidence:
+                        incomplete_error = f"{incomplete_error}:{_content_free_reason(failure_reason)}"
+                    errors.append(incomplete_error)
+                    return ProcessOutcome.reject("source_incomplete", reason="source_incomplete")
                 packets[local_date] = build_daily_sweep_input(
                     uid,
                     local_date,
@@ -4960,6 +6627,8 @@ def run_daily_memory_sweep_scheduler(
                 db_client=db_client,
                 authority=resolved_authority,
                 claimant=f"scheduler:{uuid4().hex}",
+                qa_run_id=qa_run_id,
+                max_catch_up_days=catch_up_days,
             )
             committed += output.committed_count
             idempotent += output.idempotent_count
@@ -4967,14 +6636,18 @@ def run_daily_memory_sweep_scheduler(
             if output.status == "committed":
                 committed_users += 1
                 completed_uids.append(uid)
-            else:
-                blocked_users += 1
-                failed_uids.append(uid)
-                errors.append(f"uid={uid}:{output.blocked_reason or output.status}")
+                return ProcessOutcome.ack()
+            blocked_users += 1
+            failed_uids.append(uid)
+            errors.append(f"uid={uid}:{output.blocked_reason or output.status}")
+            return ProcessOutcome.reject(output.blocked_reason or output.status, reason="sweep_blocked")
         except Exception as exc:
             blocked_users += 1
             failed_uids.append(uid)
             errors.append(f"uid={uid}:{type(exc).__name__}")
+            return ProcessOutcome.reject(type(exc).__name__, reason="processor_exception")
+
+    drain_sweep_uids(scheduled_uids, process_one)
     return DailySweepSchedulerSummary(
         attempted_users=attempted,
         committed_users=committed_users,
@@ -4985,6 +6658,7 @@ def run_daily_memory_sweep_scheduler(
         errors=tuple(errors[:16]),
         completed_uids=tuple(completed_uids),
         failed_uids=tuple(failed_uids),
+        model_dispatch_evidence=tuple(model_dispatch_evidence),
     )
 
 
@@ -5006,9 +6680,11 @@ __all__ = [
     "MAX_COMPLETED_DAY_INPUT_CHARACTERS",
     "MAX_COMPLETED_DAY_SUMMARY_CONVERSATIONS",
     "MAX_COMPLETED_DAY_SUMMARY_INPUT_CHARACTERS",
+    "COMPLETED_DAY_SOURCE_PAGE_CAP",
     "MAX_DAILY_TRANSCRIPT_FETCHES",
     "MAX_DAILY_TRANSCRIPT_FETCH_CHARACTERS",
     "CompletedDayConversationSource",
+    "CompletedDaySourceRead",
     "MAX_ONBOARDING_CONVERSATIONS",
     "MAX_ONBOARDING_RECEIPT_KEYS",
     "MAX_ONBOARDING_SOURCE_KEYS_PER_PACKET",
@@ -5024,12 +6700,44 @@ __all__ = [
     "DAILY_MEMORY_SWEEP_COHORT_NAME_ENV",
     "DAILY_MEMORY_SWEEP_COHORT_FLAG_ENV",
     "DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENV",
+    "DAILY_MEMORY_SWEEP_STAGGER_SECONDS_ENV",
+    "QA_SWEEP_RUN_ID_ENV",
+    "QA_SWEEP_ADMISSION_ENV",
+    "QA_SWEEP_PROJECT",
+    "QA_SWEEP_DATABASE",
+    "QA_SWEEP_UID",
+    "QA_SWEEP_COHORT",
+    "QA_SWEEP_MODEL_NAME",
+    "QA_SWEEP_MAX_MODEL_CANDIDATES",
+    "QA_SWEEP_MAX_MODEL_COST_USD",
+    "QA_SWEEP_MAX_CATCH_UP_DAYS",
+    "QA_SWEEP_MAX_SUMMARY_CONVERSATIONS",
+    "QA_SWEEP_MAX_SUMMARY_INPUT_CHARACTERS",
+    "QA_SWEEP_MAX_TRANSCRIPT_FETCHES",
+    "QA_SWEEP_MAX_TRANSCRIPT_FETCH_CHARACTERS",
+    "QA_SWEEP_MAX_MEMORY_LOOKUPS",
+    "QA_SWEEP_MAX_SDK_RETRIES",
+    "QA_SWEEP_MAX_GATEWAY_ATTEMPTS",
+    "QA_SWEEP_MAX_PROVIDER_CALLS",
+    "QA_SWEEP_MAX_INPUT_TOKENS",
+    "QA_SWEEP_MAX_OUTPUT_TOKENS",
+    "QA_SWEEP_MAX_SPEND_MICRO_USD",
+    "QA_SWEEP_JIT_CONTRACT_VERSION",
+    "QA_SWEEP_RECEIPT_SCHEMA_VERSION",
+    "QA_SWEEP_OUTPUT_SCHEMA_VERSION",
+    "QA_SWEEP_RUN_COLLECTION",
+    "QA_SWEEP_OUTPUT_SUBCOLLECTION",
     "SCHEMA_VERSION",
     "SweepAuthority",
     "SweepAuthorityState",
     "DailySweepModelAuthority",
     "DailySweepCohortAuthority",
     "daily_memory_sweep_model_authority_from_environment",
+    "validate_qa_sweep_run_id",
+    "qa_sweep_run_id_from_environment",
+    "validate_qa_sweep_environment",
+    "qa_sweep_cohort_authorizer",
+    "write_qa_sweep_run_receipt",
     "daily_memory_sweep_cohort_authority_from_environment",
     "read_daily_memory_sweep_cohort_assignment",
     "close_daily_memory_sweep_cohort_clients",

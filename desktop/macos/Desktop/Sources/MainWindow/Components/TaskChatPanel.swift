@@ -29,7 +29,7 @@ struct TaskChatPanel: View {
           Spacer()
           ProgressView()
             .scaleEffect(0.8)
-          Text("Setting up chat...")
+          Text("Setting up chat…")
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
           Spacer()
@@ -62,8 +62,17 @@ struct TaskChatPanel: View {
           isLoadingInitial: false,
           app: nil,
           onLoadMore: {},
-          onRate: { _, _ in },
+          onRate: { _, _, _ in },
           localSendToken: taskState.localSendToken,
+          // The task panel renders the same interactable content blocks as the
+          // main window; taps route the one shell (`ChatFirstRichBlockContext.auxiliary`).
+          chatFirstRichBlockContext: .auxiliary(chatProvider: coordinator.chatProvider),
+          // The compact window, like the main chat's host: without it this panel
+          // mounts the 500-row default eagerly, which measured 910 ms and 607
+          // native views for 400 messages against 114 ms and 84 compact (see the
+          // comment on QueryAnswerThread's host). "Show older messages" is the
+          // way back to the rest of a long thread.
+          transcriptWindowPolicy: .compactHome,
           enablesPromptTimeline: false,
           // This thread is about one task; the day's summary belongs in the main chat.
           showsDailySummary: false,
@@ -82,14 +91,9 @@ struct TaskChatPanel: View {
                   .scaledFont(size: OmiType.body)
                   .foregroundColor(Ink.secondary)
                 Spacer()
-                Button {
-                  taskState.errorMessage = nil
-                } label: {
-                  Image(systemName: "xmark")
-                    .scaledFont(size: OmiType.caption)
-                    .foregroundColor(Ink.secondary)
-                }
-                .buttonStyle(.plain)
+                DismissButton(
+                  action: { taskState.errorMessage = nil }, showBackground: false,
+                  accessibilityLabel: "Dismiss Error", size: .compact)
               }
               .padding(.horizontal, OmiSpacing.lg)
               .padding(.vertical, OmiSpacing.sm)
@@ -103,9 +107,9 @@ struct TaskChatPanel: View {
                   await taskState.sendMessage(
                     text,
                     taskContext: coordinator.activeContextPacket,
-                    onAccepted: {
+                    onAcceptedWithAttemptID: { attemptID in
                       AnalyticsManager.shared.chatMessageSent(
-                        messageLength: text.count, source: "task_chat")
+                        messageLength: text.count, source: "task_chat", attemptID: attemptID)
                     }
                   )
                   await coordinator.refreshActiveThread()
@@ -116,7 +120,7 @@ struct TaskChatPanel: View {
               },
               isSending: taskState.isSending,
               isStopping: taskState.isStopping,
-              placeholder: "Continue this work...",
+              placeholder: "Continue this work…",
               mode: $taskState.chatMode,
               pendingText: $coordinator.pendingInputText,
               inputText: $taskState.draftText,
@@ -160,14 +164,7 @@ struct TaskChatPanel: View {
 
         Spacer()
 
-        Button(action: onClose) {
-          Image(systemName: "xmark")
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(Ink.secondary)
-            .frame(width: 20, height: 20)
-        }
-        .buttonStyle(.plain)
-        .help("Close chat panel")
+        DismissButton(action: onClose, accessibilityLabel: "Close Chat Panel")
       }
 
       // Workspace path indicator (only when a task is active)
@@ -400,14 +397,7 @@ struct TaskChatPanelPlaceholder: View {
           .scaledFont(size: OmiType.body, weight: .semibold)
           .foregroundColor(Ink.primary)
         Spacer()
-        Button(action: onClose) {
-          Image(systemName: "xmark")
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(Ink.secondary)
-            .frame(width: 20, height: 20)
-        }
-        .buttonStyle(.plain)
-        .help("Close chat panel")
+        DismissButton(action: onClose, accessibilityLabel: "Close Chat Panel")
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "prefixes": [
+    {
+      "path": "app/lib/utils/analytics/analytics_manager.dart",
+      "prefix": "export 'registry/typed_events.dart';\n\n",
+      "scaffold_sha256": "ec370c889eea4d228581ff3d128911da1caa33930a5168813a9568f0224c6a16"
+    }
+  ]
+}

@@ -48,6 +48,7 @@ echo "- bash setup.sh ios"
 echo "- bash setup.sh android"
 echo "- bash setup.sh ios beta   # explicit production-data dogfood build"
 echo "- bash setup.sh android beta   # explicit production-data dogfood build"
+echo "- OMI_MOBILE_BUILD_MODE=profile bash setup.sh ios   # AOT build that opens from the Home Screen without flutter run"
 echo ""
 
 LOCAL_DEV_HOST="${OMI_DEV_HOST:-127.0.0.1}"
@@ -56,10 +57,46 @@ ANDROID_DEV_HOST="${OMI_ANDROID_DEV_HOST:-${OMI_DEV_HOST:-10.0.2.2}}"
 ANDROID_LOCAL_API_BASE_URL="${OMI_LOCAL_API_BASE_URL:-http://${ANDROID_DEV_HOST}:8000/}"
 BETA_API_BASE_URL="${OMI_BETA_API_BASE_URL:-https://api.omiapi.com/}"
 
+# Maps OMI_MOBILE_BUILD_MODE (debug|profile|release, default debug) to the
+# `flutter run` flag. Debug builds are JIT, and iOS 14+ only lets Flutter
+# tooling start a JIT Dart VM on a physical device: FlutterEngine init returns
+# nil, the storyboard FlutterViewController has no engine, and the first Swift
+# plugin crashes on a nil registrar the moment the app is opened from the Home
+# Screen with `flutter run` gone. profile/release builds are AOT and open on
+# their own, at the cost of hot reload.
+function mobile_build_mode_flag() {
+  local mode="${OMI_MOBILE_BUILD_MODE:-debug}"
+  case "$mode" in
+    debug) ;;
+    profile) echo "--profile" ;;
+    release) echo "--release" ;;
+    *)
+      echo "ERROR: OMI_MOBILE_BUILD_MODE must be debug, profile, or release (got '${mode}')." >&2
+      return 1
+      ;;
+  esac
+}
+
+# Printed when a dev debug build is about to land on a physical iPhone, so the
+# "works under flutter run, dead from the Home Screen" symptom is explained
+# before the developer walks away from the Mac with it.
+function warn_ios_debug_build_untethered() {
+  echo "⚠️  Installing a DEBUG build on a physical iPhone. iOS only lets Flutter tooling" >&2
+  echo "   start a debug (JIT) Dart VM, so this build runs while flutter run is attached;" >&2
+  echo "   opened from the Home Screen without it, it shows an engine-unavailable notice" >&2
+  echo "   instead of running. For a build that opens on its own (no hot reload):" >&2
+  echo "     OMI_MOBILE_BUILD_MODE=profile bash setup.sh ios" >&2
+}
+
 ######################################
 # Generate device suffix from hostname
-######################################
 function generate_device_suffix() {
+  # Use hostname or a hash of it as suffix; a session harness (or two
+  # checkouts on one host) can inject a unique per-session suffix instead.
+  if [[ -n "${OMI_DEVICE_SUFFIX:-}" ]]; then
+    echo "${OMI_DEVICE_SUFFIX}"
+    return
+  fi
   # Use hostname or a hash of it as suffix
   HOSTNAME=$(hostname -s | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]')
   echo "${HOSTNAME}"
@@ -247,6 +284,18 @@ function prepare_mobile_build_env() {
   scripts/validate_mobile_build_config.sh --flavor "$flavor" --profile "$profile" || return 1
 }
 
+# Bake git SHA + build number into the binary. Missing dart-defines become
+# 'unknown' in Dart; local dirty trees get OMI_GIT_DIRTY=true.
+# Prints one --dart-define per line. Bash 3.2 (macOS /bin/bash) has no namerefs.
+function build_provenance_define_lines() {
+  local script_dir script
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  script="$script_dir/scripts/build_provenance_dart_defines.sh"
+  if [[ -x "$script" ]]; then
+    "$script"
+  fi
+}
+
 # #######################
 # Set up Android Keystore
 # #######################
@@ -275,6 +324,8 @@ function run_build_android() {
       ;;
   esac
   prepare_mobile_build_env "$flavor" "$api_base_url"
+  local mode_flag
+  mode_flag=$(mobile_build_mode_flag) || return 1
   local flutter_args=(
     --flavor "$flavor"
     "--dart-define=OMI_APP_PROFILE=$profile"
@@ -283,6 +334,13 @@ function run_build_android() {
   if [[ -n "$emulator_host" ]]; then
     flutter_args+=("--dart-define=OMI_FIREBASE_AUTH_EMULATOR_HOST=$emulator_host")
   fi
+  if [[ -n "$mode_flag" ]]; then
+    flutter_args+=("$mode_flag")
+  fi
+  local provenance_def
+  while IFS= read -r provenance_def; do
+    [[ -n "$provenance_def" ]] && flutter_args+=("$provenance_def")
+  done < <(build_provenance_define_lines)
   flutter pub get \
     && dart run build_runner build \
     && flutter run "${flutter_args[@]}"
@@ -372,6 +430,21 @@ function select_ios_device() {
   local count
   count=$(echo "$ios_devices" | jq 'length')
 
+  # Explicit non-interactive selection (mobile-session harnesses, CI, nested
+  # agents): pin the exact device id instead of enumerating and prompting.
+  # Fails precisely when the pinned device is absent rather than falling back
+  # to another destination.
+  local pinned="${OMI_IOS_DEVICE_ID:-}"
+  if [[ -n "$pinned" ]]; then
+    if echo "$ios_devices" | jq -e --arg id "$pinned" 'any(.[]; .id == $id)' >/dev/null; then
+      echo "$pinned"
+      return 0
+    fi
+    echo "❌ OMI_IOS_DEVICE_ID='$pinned' matches no connected iOS device or simulator." >&2
+    echo "   Available: $(echo "$ios_devices" | jq -r 'map("\(.id) \(.name)") | join(", ")')" >&2
+    return 1
+  fi
+
   if [[ "$count" -eq 0 ]]; then
     echo "❌ No iOS device or simulator found." >&2
     echo "   Boot a simulator (open -a Simulator) or connect a physical device, then retry." >&2
@@ -450,14 +523,30 @@ function run_build_ios() {
     flutter_args+=("$arg")
   done
   check_ios_prerequisites || return 1
+  local mode_flag
+  mode_flag=$(mobile_build_mode_flag) || return 1
+  if [[ -n "$mode_flag" ]]; then
+    flutter_args+=("$mode_flag")
+  fi
+  local provenance_def
+  while IFS= read -r provenance_def; do
+    [[ -n "$provenance_def" ]] && flutter_args+=("$provenance_def")
+  done < <(build_provenance_define_lines)
   local device_id
   device_id=$(select_ios_device) || return 1
-  if [[ "$flavor" == "dev" && -z "${OMI_DEV_HOST:-}" ]] && _ios_device_is_physical "$device_id"; then
+  local physical_device=0
+  if _ios_device_is_physical "$device_id"; then
+    physical_device=1
+  fi
+  if [[ "$flavor" == "dev" && -z "${OMI_DEV_HOST:-}" && "$physical_device" == 1 ]]; then
     echo "⚠️  Building for a physical device with OMI_DEV_HOST unset — the dev backend" >&2
     echo "   will default to 127.0.0.1, which on the device is itself, not this Mac." >&2
     echo "   Set OMI_DEV_HOST to this Mac's LAN or Tailscale address before running" >&2
     echo "   both setup.sh and make dev-up, or the app will hang waiting for the" >&2
     echo "   backend. See the physical-device tip in docs/doc/developer/AppSetup.mdx." >&2
+  fi
+  if [[ "$flavor" == "dev" && -z "$mode_flag" && "$physical_device" == 1 ]]; then
+    warn_ios_debug_build_untethered
   fi
   flutter pub get \
     && pushd ios && pod install --repo-update && popd \

@@ -175,7 +175,14 @@ extension RealtimeHubController {
     externalRunAuthorityState = .init(
       ownerID: capturedOwnerID,
       turnID: turnID,
-      task: task)
+      task: task,
+      // Seeded with what the provider has already streamed this turn. A tool can be
+      // requested mid-answer, and starting empty dropped everything said before it.
+      // The success path hides that -- `hubDidFinishTurn` replaces the whole text --
+      // but failed and cancelled turns read `snapshot` directly, so their diagnostic
+      // text was empty precisely when it mattered. The spawn and speculative
+      // slow-tool paths still clear explicitly; those clears are deliberate.
+      answer: RealtimeExternalRunAnswerAccumulator(seed: assistantText))
     return task
   }
 
@@ -366,6 +373,10 @@ extension RealtimeHubController {
             // Cancel any streaming projection that may have started before the
             // spawn receipt arrived; the spawn owns the canonical exchange now.
             self.cancelStreamingJournalWrites(forContinuityKey: receipt.continuityKey)
+            self.bindNativeTurnEvidenceToProducingRow(
+              turnID: turnID,
+              journalUserTurnID: KernelTurnProjection.stableTurnID(
+                continuityKey: receipt.continuityKey, role: "user"))
             self.lastTurnDiagnostics = [
               "provider": self.providerTag,
               "provider_transcript": self.turnTranscript,
@@ -384,6 +395,7 @@ extension RealtimeHubController {
             // pre-tool speculation keeps it out of the visible reply without
             // interrupting native provider audio or changing voices.
             self.assistantText = ""
+            self.externalRunAuthorityState?.answer.replace(with: receipt.assistantText)
             if let failedProvider = self.spawnFailureContinuationPolicy.takeFailedProvider(
               turnID: turnID.rawValue)
             {
@@ -563,12 +575,14 @@ extension RealtimeHubController {
     case .thinkDeeper:
       let query = (command.input["query"] as? String) ?? turnTranscript
       let toolContext = (command.input["context"] as? String) ?? ""
+      let thinkingLevel = RealtimeHubTools.EscalationThinkingLevel.fromToolInput(command.input["thinking"])
       return await escalateToHigherModel(
         query,
         toolContext: toolContext,
+        thinkingLevel: thinkingLevel,
+        invocationTurnID: invocation.turnID,
         invocationID: command.invocationID,
-        ownerID: command.ownerID,
-        turnID: invocation.turnID)
+        ownerID: command.ownerID)
 
     case .webSearch:
       let scope = RealtimePublicWebSearchScope(toolValue: command.input["scope"])
@@ -825,6 +839,7 @@ extension RealtimeHubController {
     else { return }
     if !text.isEmpty {
       assistantText += text
+      externalRunAuthorityState?.answer.append(text)
       beginStreamingRealtimeProjectionIfNeeded()
       scheduleStreamingRealtimeProjectionFlush(continuityKey: turnIdempotencyKey)
       if let turnID = VoiceTurnCoordinator.shared.activeTurnID,
@@ -928,6 +943,14 @@ extension RealtimeHubController {
         turnID: turnID,
         callId: callId,
         reportIdentity: toolIdentity,
+        arguments: arguments,
+        expectedTurnEpoch: toolTurnEpoch)
+      return
+    }
+    if name == HubTool.recordInterjectFeedback.rawValue {
+      handleInterjectFeedbackReport(
+        source: source,
+        callId: callId,
         arguments: arguments,
         expectedTurnEpoch: toolTurnEpoch)
       return
@@ -1094,6 +1117,7 @@ extension RealtimeHubController {
     let reply =
       acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey]?.receipt.assistantText
       ?? providerReply
+    externalRunAuthorityState?.answer.replace(with: reply)
     log(
       "RealtimeHub[\(providerTag)]: turn done — transcript_chars=\(heard.count) audio=\(audioReceivedThisTurn)"
     )
@@ -1112,6 +1136,17 @@ extension RealtimeHubController {
       let candidates = AssistantSettings.shared.voiceBaseLanguages
       let fullTask = fullLIDTask
       let provider = providerTag
+      // The optimistic `.success` seal is scheduled now, so its revision marker
+      // is registered synchronously now: the persist closure below first
+      // awaits transcript resolution (bounded by the 20s LID deadline), and a
+      // playback failure or barge-in terminalizing in that window must find
+      // the marker, or the `.completed` seal becomes permanent (#12743).
+      registerSealedCompletedVoiceJournalRow(
+        ownerID: completedTurnOwnerID,
+        assistantText: reply,
+        terminal: .success,
+        acceptedSpawnOwnerID: acceptedSpawnOwnerID,
+        idempotencyKey: completedTurnIdempotencyKey)
       enqueueTurnPersistence(
         idempotencyKey: completedTurnIdempotencyKey,
         retainingReceipt: true
@@ -1133,6 +1168,10 @@ extension RealtimeHubController {
             terminal: .success,
             idempotencyKey: completedTurnIdempotencyKey,
             acceptedSpawnOwnerID: acceptedSpawnOwnerID) ?? false
+        if accepted, !resolution.userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+          let repliedToCard = FloatingControlBarManager.shared.recentNotchCardVoiceContext() != nil
+          DesktopUsageDailyReporter.shared.recordCompletedPTTTurn(repliedToCard: repliedToCard)
+        }
         self?.lastTurnDiagnostics = [
           "provider": provider,
           "provider_transcript": heard,
@@ -1476,6 +1515,12 @@ extension RealtimeHubController {
           recoveryResult: .started)
         return
       }
+      if RealtimeHubUsageLimitPresentation.shouldPresent(
+        category: closeCategory, failoverStarted: false)
+      {
+        NotificationCenter.default.post(
+          name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "realtime"])
+      }
       teardownSession()
       recordCloseResolution(
         turnOutcome: turnOutcome,
@@ -1494,28 +1539,11 @@ extension RealtimeHubController {
       fallbackProvider = nil
       pendingFailoverReason = nil
     }
-    if deferIdleRewarmIfUserAway(closeCategory: closeCategory) {
-      recordCloseResolution(
-        turnOutcome: turnOutcome,
-        recoveryAction: .sessionRewarm,
-        recoveryResult: .deferredUserAway)
-      return
-    }
-    guard !reconnectPending, hubReconnectStrikes < Self.maxReconnectStrikes else {
-      teardownSession()
-      recordCloseResolution(
-        turnOutcome: turnOutcome,
-        recoveryAction: .sessionRewarm,
-        recoveryResult: .exhausted)
-      return
-    }
-    hubReconnectStrikes += 1
-    reconnectPending = true
-    replaceSessionAfterDrain(reconnectDelayNanoseconds: 1_500_000_000)
+    let recovery = continueWarmAfterLifecycleClose(closeCategory: closeCategory)
     recordCloseResolution(
       turnOutcome: turnOutcome,
       recoveryAction: .sessionRewarm,
-      recoveryResult: .started)
+      recoveryResult: recovery)
   }
 
   /// A warm background socket must never terminate a Deepgram/Omni fallback

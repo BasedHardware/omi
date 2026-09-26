@@ -249,15 +249,16 @@ extension SettingsContentView {
       return
 
     case .validateAndActivate:
+      let candidateSnapshot = APIKeyService.byokActivationCandidateSnapshot
       // The badge state the UI has always been able to draw but never reached:
       // say a provider is being checked while it is being checked.
       var checking: [BYOKProvider: BYOKValidator.Status] = [:]
-      for provider in APIKeyService.activeBYOKSnapshot.keys { checking[provider] = .checking }
+      for provider in candidateSnapshot.keys { checking[provider] = .checking }
       byokKeyStatuses = checking
 
       // Validate before flipping the backend flag — otherwise we'd put the
       // user on the free plan with dead keys and every chat would 401.
-      let snapshot = APIKeyService.activeBYOKSnapshot.reduce(into: [BYOKProvider: String]()) {
+      let snapshot = candidateSnapshot.reduce(into: [BYOKProvider: String]()) {
         acc, entry in acc[entry.key] = entry.value.key
       }
       let results = await BYOKValidator.validateAll(snapshot)
@@ -268,7 +269,7 @@ extension SettingsContentView {
           return false
         } ?? false
       if selectedLLMValid {
-        let fingerprints = APIKeyService.activeBYOKSnapshot.reduce(into: [String: String]()) { acc, entry in
+        let fingerprints = candidateSnapshot.reduce(into: [String: String]()) { acc, entry in
           if let status = results[entry.key], case .ok = status {
             acc[entry.key.rawValue] = entry.value.fingerprint
           }

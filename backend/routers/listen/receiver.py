@@ -8,8 +8,14 @@ import json
 import logging
 import time
 import uuid
-from collections import OrderedDict
+
+from utils.manual_speaker_assignments import acknowledged_teaching
+from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
+
+from config.audio_timeline import audio_timeline_v2_enabled, live_speaker_capture_clock_enabled
+from routers.listen.contracts import ConversationCaptureOrigin
+from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 
 lc3: Any = None
 lc3_import_error: Optional[BaseException] = None
@@ -37,17 +43,20 @@ from models.transcript_segment import SpeakerIdentityStatus
 from utils.aac import AACDecoder
 from utils.llm.openglass import describe_image
 from utils.request_validation import ImageChunkEnvelope
-from utils.speaker_assignment import update_speaker_assignment_maps
 from utils.stt.live_failure import (
     MAX_STT_FAILOVERS,
+    PendingLiveFailover,
     flush_live_stt_buffer,
     live_stt_initialization_failure,
     live_stt_socket_is_dead,
+    live_stt_terminal_reason,
     live_stt_upstream_failure,
+    note_typed_provider_death,
     send_live_stt_audio,
     terminate_live_stt_session,
 )
 from config.stt_provider_policy import provider_for_service
+from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
 from utils.stt.streaming import (
     STTService,
@@ -78,9 +87,14 @@ from utils.log_sanitizer import sanitize
 from utils.listen_audio import ChannelConfig, mix_n_channel_buffers, resample_pcm
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import (
+    emit_listen_vad_gate_metrics,
     record_listen_audio_outcome,
+    record_listen_realtime_demand,
     record_listen_unknown_channel_prefix,
+    record_listen_zero_byte_session,
+    record_live_stt_failover_accepted,
 )
+from utils.metrics import OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL
 from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
@@ -95,6 +109,15 @@ OPUS_MAX_FRAME_MS = 120
 # Consecutive undecodable frames that mean the session's whole stream is unusable rather
 # than one corrupt packet: 1 s of audio at the 20 ms cadence omi clients encode with.
 DECODE_FAILURE_STREAK_ALERT = 50
+
+# How much capture history keeps its conversation ownership for late provider
+# callbacks; older mapped segments fail closed as late_owner_dropped.
+CAPTURE_RANGE_RETENTION_SECONDS = 120.0
+
+# Hard cap on retained ownership *runs*. Runs are contiguous same-conversation
+# ranges (one per conversation switch inside the retention window), so this is
+# a pathological-case bound, not the working retention limit.
+CAPTURE_RANGE_MAX_RUNS = 512
 
 
 def opus_decode_capacity(sample_rate: int) -> int:
@@ -130,8 +153,10 @@ class ListenReceiver:
         # Providers whose socket already died this session; a failover must not
         # reselect one, or a dead primary would be chosen again immediately.
         self._stt_failed_providers: set[str] = set()
-        self._stt_rebuild: Optional[Tuple[Any, Any, int]] = None
+        # (callback factory, sample rate): each rebuild mints fresh epoch callbacks.
+        self._stt_rebuild: Optional[Tuple[Any, int]] = None
         self._stt_failover_lock = asyncio.Lock()
+        self._pending_live_failover: Optional[PendingLiveFailover] = None
         self.stt_sockets_multi: List[Any] = [None] * len(channel_configs)
         self.multi_opus_decoders: List[Any] = [None] * len(channel_configs)
         self.channel_mix_buffers: List[bytearray] = [bytearray() for _ in channel_configs]
@@ -145,6 +170,324 @@ class ListenReceiver:
         self.decode_stream_reported = False
         self._unknown_prefix_streak = 0
         self.speaker_provider_epoch = SpeakerProviderEpoch()
+        # The capture sample clock runs for EVERY single-channel server-STT
+        # session: it is internal to this listen socket (sample cursor,
+        # per-provider-epoch translators, capture-positioned ring buffer,
+        # speaker-ID window location) and changes no persisted field, wire
+        # format or client-visible coordinate. Only the v2 *persistence*
+        # (projected times, started_at pin, marker, pusher projection) is
+        # admitted separately by the flag. Multi-channel mixes only the
+        # minimum available channel buffers, and custom-STT segments carry a
+        # client clock; both stay without the clock entirely.
+        self.capture_timeline: Any = None
+        self.capture_timeline_v2 = False
+        if (
+            not host.is_multi_channel
+            and not host.use_custom_stt
+            and int(getattr(host.request, 'sample_rate', 0) or 0) > 0
+        ):
+            self.capture_timeline = CaptureTimeline(sample_rate=int(host.request.sample_rate))
+            # Pin the persistence mode for the recording's life; the flag is
+            # never re-read per message or per callback.
+            self.capture_timeline_v2 = audio_timeline_v2_enabled()
+            host.state.capture_timeline = self.capture_timeline
+            host.state.capture_timeline_v2 = self.capture_timeline_v2
+            # Conversation ownership of recent capture ranges. Entries are
+            # *runs* (contiguous samples under one conversation), coalesced by
+            # `_note_accepted_frame`, so retention is time-based (120 s) and a
+            # hard entry cap counts conversation switches, not frames.
+            host.state.conversation_sample_ranges = deque(maxlen=CAPTURE_RANGE_MAX_RUNS)
+        # The loop this receiver serves. Deepgram's SDK delivers transcripts on
+        # its own thread; those callbacks hop back onto this loop (see
+        # `_run_on_listen_loop`) so timeline/send-map state is only ever
+        # mutated from one thread.
+        try:
+            self._listen_loop: Optional[asyncio.AbstractEventLoop] = asyncio.get_running_loop()
+        except RuntimeError:
+            self._listen_loop = None
+        # Capture start sample of the STT buffer's first byte; the buffer is
+        # one contiguous run of accepted decoded audio.
+        self._stt_buffer_start_sample: Optional[int] = None
+
+    def _owner_for_sample(self, sample: int) -> Optional[str]:
+        """The conversation that owned a capture sample at acceptance time."""
+        ranges = self.host.state.conversation_sample_ranges
+        if not ranges:
+            return self.host.state.current_conversation_id
+        for start, end, conversation_id in reversed(ranges):
+            if start <= sample < end:
+                return conversation_id
+        # Outside every retained run. A sample below the oldest retained run
+        # fails closed: retention may have evicted the run — and every
+        # boundary — that owned it, so a single retained conversation is not
+        # evidence (the evicted runs could have been a different conversation
+        # trimmed by the 120 s window). A sample past the newest run belongs
+        # to whatever the session is recording now. Between two retained runs
+        # the history is provably complete inside the retention horizon — no
+        # run covering the sample was eligible for eviction — so a single
+        # retained conversation fails open there; anything else is ambiguous.
+        oldest_start = ranges[0][0]
+        newest_end = ranges[-1][1]
+        if sample < oldest_start:
+            return None
+        if sample >= newest_end:
+            return self.host.state.current_conversation_id
+        if newest_end - sample <= CAPTURE_RANGE_RETENTION_SECONDS * self.capture_timeline.sample_rate:
+            owners = {conversation_id for _, _, conversation_id in ranges}
+            if len(owners) == 1:
+                return next(iter(owners))
+        return None
+
+    def _note_accepted_frame(self, start_sample: int, end_sample: int) -> None:
+        """Record ownership and pin the conversation's first-audio origin."""
+        state = self.host.state
+        conversation_id = state.current_conversation_id
+        if state.conversation_sample_ranges is not None:
+            ranges = state.conversation_sample_ranges
+            # Coalesce into the previous run while the audio is contiguous and
+            # the owner unchanged, so the deque counts runs (conversation
+            # switches), never per-frame entries a maxlen would evict after
+            # ~10 s of 20 ms frames.
+            if ranges and ranges[-1][2] == conversation_id and ranges[-1][1] == start_sample:
+                ranges[-1] = (ranges[-1][0], end_sample, conversation_id)
+            else:
+                ranges.append((start_sample, end_sample, conversation_id))
+            retention_samples = CAPTURE_RANGE_RETENTION_SECONDS * self.capture_timeline.sample_rate
+            while len(ranges) > 1 and end_sample - ranges[0][1] > retention_samples:
+                ranges.popleft()
+        if conversation_id and conversation_id in state.conversations_awaiting_capture_origin:
+            state.conversations_awaiting_capture_origin.discard(conversation_id)
+            # Fresh conversation created by this session: the origin is pinned
+            # from its first accepted audio and may carry the v2 marker.
+            state.conversation_capture_origins[conversation_id] = ConversationCaptureOrigin(
+                self.capture_timeline.wall(start_sample), pinnable=True
+            )
+
+    def _write_ring_buffer_frame(self, decoded: bytes, now: float, start_sample: int) -> None:
+        """Position one accepted decoded frame in the speaker-ID ring buffer.
+
+        v2 speaker queries project capture samples onto the wall axis
+        (``started_at + capture offset``) for the whole recording, so a v2
+        session keeps ``write_positioned`` even when the kill switch is off:
+        arrival-timestamped spans under capture-clock queries would feed every
+        speaker window the wrong bytes for the entire session, not just one
+        buffer length. The switch may only revert the legacy (clock-only)
+        session, whose matcher formula is ``first_audio + provider time``.
+        """
+        ring = self.host.state.audio_ring_buffer
+        if ring is None:
+            return
+        if self.capture_timeline_v2 or live_speaker_capture_clock_enabled():
+            ring.write_positioned(decoded, self.capture_timeline.wall(start_sample))
+        else:
+            ring.write(decoded, now)
+
+    def _enqueue_translated_segments(self, segments: List[Dict[str, Any]], provider: Optional[str] = None) -> None:
+        """Owner-resolve epoch-translated segments before they enter the buffer.
+
+        Segments arrive with absolute projected wall start/end plus the private
+        capture sample interval the translator mapped them onto. The owner is
+        resolved from that capture span, never from current_conversation_id at
+        callback time. A segment straddling two recording generations is
+        dropped: without word-to-audio alignment its text cannot be split, and
+        assigning all of it to one conversation would guess.
+        """
+        kept: List[Dict[str, Any]] = []
+        for segment in segments:
+            start_sample = segment.pop('_capture_start_sample', None)
+            end_sample = segment.pop('_capture_end_sample', None)
+            if start_sample is None or end_sample is None:
+                continue
+            start_owner = self._owner_for_sample(start_sample)
+            end_owner = self._owner_for_sample(max(start_sample, end_sample - 1))
+            if start_owner is None or end_owner is None:
+                OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='late_owner_dropped').inc()
+                continue
+            if start_owner != end_owner:
+                OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='straddled').inc()
+                continue
+            segment['_conversation_id'] = start_owner
+            kept.append(segment)
+            OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='mapped').inc()
+        if kept:
+            self._enqueue_stt_segments(kept, provider=provider)
+
+    def _enqueue_clock_positioned_segments(self, segments: List[Dict[str, Any]]) -> None:
+        """Attach each segment's capture-projected window for speaker ID only.
+
+        Clock-only mode (capture clock on, v2 persistence off): the transcript
+        keeps exactly the legacy pipeline — provider-native times, current
+        conversation, no owner fencing — so persisted fields and WebSocket
+        output stay byte-identical to the flag-off baseline. The only addition
+        is the private absolute window the ring buffer can actually locate,
+        which survives provider failovers whose timestamps restart at zero.
+
+        LIVE_SPEAKER_CAPTURE_CLOCK is the runtime kill switch for that
+        addition (read here, at the call boundary): falsy reverts speaker-ID
+        windows to the legacy first-audio + provider-time formula without a
+        deploy. It never touches the transcript itself.
+        """
+        if not live_speaker_capture_clock_enabled():
+            for segment in segments:
+                segment.pop('_capture_start_sample', None)
+                segment.pop('_capture_end_sample', None)
+            self._enqueue_stt_segments(segments)
+            return
+        for segment in segments:
+            start_sample = segment.pop('_capture_start_sample', None)
+            end_sample = segment.pop('_capture_end_sample', None)
+            if start_sample is not None and end_sample is not None and end_sample >= start_sample:
+                abs_start = self.capture_timeline.wall_strict(start_sample)
+                abs_end = self.capture_timeline.wall_strict(end_sample)
+                if abs_start is not None and abs_end is not None:
+                    segment['_capture_abs_start'] = abs_start
+                    segment['_capture_abs_end'] = abs_end
+        self._enqueue_stt_segments(segments)
+
+    def _run_on_listen_loop(self, action, segments: List[Dict[str, Any]]) -> None:
+        """Run a provider callback on the listen event loop.
+
+        Deepgram's SDK invokes its message handlers on its own thread; every
+        other provider's receive loop is an asyncio task on this loop. Timeline
+        and send-map state is unsynchronized, so an off-loop caller defers
+        here instead of mutating it concurrently; ``call_soon_threadsafe``
+        preserves cross-thread FIFO order.
+
+        The deferred action runs on the hop's own copy of the segment list (a
+        provider may reuse its buffer after the callback returns) and is
+        wrapped so a failure is observable — counted in the rejected counter
+        with a bounded log — instead of dying as a bare asyncio callback error
+        that silently loses the batch. A closed loop still drops quietly.
+        """
+        loop = self._listen_loop
+        if loop is None:
+            action(segments)
+            return
+        try:
+            current = asyncio.get_running_loop()
+        except RuntimeError:
+            current = None
+        if current is loop:
+            action(segments)
+            return
+        hop_segments = list(segments)
+
+        def deferred() -> None:
+            try:
+                action(hop_segments)
+            except Exception as error:
+                OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(
+                    mode='v2' if self.capture_timeline_v2 else 'legacy', outcome='rejected'
+                ).inc()
+                logger.warning(
+                    'Listen STT callback failed on the listen loop type=%s segments=%d',
+                    type(error).__name__,
+                    len(hop_segments),
+                )
+
+        try:
+            loop.call_soon_threadsafe(deferred)
+        except RuntimeError:
+            logger.warning('Listen STT callback arrived after loop shutdown; dropped %d segments', len(segments))
+
+    def _enqueue_epoch_segments(self, segments: List[Dict[str, Any]], provider: Optional[str] = None) -> None:
+        """Owner-resolve epoch-translated segments by the pinned persistence mode.
+
+        The managed live chain routes its callbacks through here so it uses
+        the same enqueue the receiver's own callbacks chose: v2 owner-fencing
+        when admitted, clock-only (legacy pipeline, capture window attached)
+        when not.
+        """
+        if self.capture_timeline_v2:
+            self._enqueue_translated_segments(segments, provider=provider)
+        else:
+            self._enqueue_clock_positioned_segments(segments)
+
+    def _build_stt_callbacks(self) -> Tuple[Any, Any, Optional[ProviderEpochTranslator]]:
+        """Fresh legacy callbacks bound to one provider epoch's translator.
+
+        Every selected socket — initial fallback and send-path failover — gets
+        its own epoch translator created at callback-creation time, so a late
+        callback from an obsolete epoch can never be mapped through a later
+        epoch's accepted send spans. Without a capture timeline the callbacks
+        keep today's gate-remapping behavior exactly.
+
+        With the clock on and v2 persistence off (flag-off prod), the
+        non-passthrough callback keeps today's ``make_stream_callback``
+        semantics: the active gate's ``remap_segments`` runs on provider
+        timestamps before anything is persisted or emitted, and the epoch
+        translation only *attaches* the capture window (it never rewrites
+        ``start``/``end``), so stored and WebSocket times are byte-identical
+        to the flag-off baseline. With v2 on, the send-map translation
+        replaces the gate mapper — both must never apply.
+        """
+        timeline = self.capture_timeline
+        if timeline is None:
+            base = self._enqueue_stt_segments
+
+            def plain(segments: List[Dict[str, Any]]) -> None:
+                base(segments)
+
+            return (
+                make_stream_callback(plain, self.vad_gate, False),
+                make_stream_callback(plain, self.vad_gate, True),
+                None,
+            )
+
+        def record_reject(reason: str) -> None:
+            OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(
+                mode='v2' if self.capture_timeline_v2 else 'legacy', outcome='rejected'
+            ).inc()
+
+        epoch = ProviderEpochTranslator(
+            timeline,
+            int(self.host.request.sample_rate),
+            on_reject=record_reject,
+            project_times=self.capture_timeline_v2,
+        )
+
+        if self.capture_timeline_v2:
+            # v2: the translation projects start/end onto the capture wall
+            # axis; the gate's provider-time mapper must not also apply.
+            def translate_and_enqueue(segments: List[Dict[str, Any]]) -> None:
+                translated = epoch.translate(segments)
+                if translated:
+                    self._enqueue_translated_segments(translated)
+
+            return (
+                self._loop_hop(translate_and_enqueue),
+                self._loop_hop(translate_and_enqueue),
+                epoch,
+            )
+
+        def clock_only(passthrough: bool):
+            def translate_remap_enqueue(segments: List[Dict[str, Any]]) -> None:
+                # Attach the capture window from the *provider* timestamps
+                # (they index the accepted send spans); start/end are not
+                # rewritten, so the gate remap below sees exactly the values
+                # origin/main's make_stream_callback saw.
+                translated = epoch.translate(segments)
+                if not translated:
+                    return
+                if self.vad_gate is not None and not passthrough:
+                    self.vad_gate.remap_segments(translated)
+                self._enqueue_clock_positioned_segments(translated)
+
+            return translate_remap_enqueue
+
+        return (
+            self._loop_hop(clock_only(False)),
+            self._loop_hop(clock_only(True)),
+            epoch,
+        )
+
+    def _loop_hop(self, callback):
+        """Bind a provider callback to the listen loop (see `_run_on_listen_loop`)."""
+
+        def hopped(segments: List[Dict[str, Any]]) -> None:
+            self._run_on_listen_loop(callback, segments)
+
+        return hopped
 
     def _capture(self, method: str, *args: Any) -> None:
         """Keep optional dev capture out of the production audio failure domain."""
@@ -190,19 +533,60 @@ class ListenReceiver:
         )
 
     def _serving_provider(self) -> str:
-        """Resolve the provider actually serving this session, read at use time.
-
-        ``_create_stt_socket`` can fall back from Parakeet to Modulate, so a
-        value snapshotted before the socket exists attributes a Modulate
-        failure to Parakeet (#11306).
-        """
+        """Read the actual provider after connection fallback, never the initial selection."""
         return getattr(self.host.stt_service, 'value', self.host.stt_service)
 
     def _enqueue_stt_segments(self, segments: List[Dict[str, Any]], provider: Optional[str] = None) -> None:
         """Persist the provider epoch before local speaker numbers enter the conversation."""
+        pending = self._pending_live_failover
+        if pending is not None:
+            pending.note_transcript(segments)
+            if pending.settled:
+                self._pending_live_failover = None
         self._capture('capture_inbound_stt', segments)
         self.speaker_provider_epoch.stamp(segments, provider or self._serving_provider())
         self.host.transcripts.enqueue(segments)
+
+    def _settle_pending_live_failover_failure(self, socket: Any = None) -> None:
+        pending = self._pending_live_failover
+        if pending is None:
+            return
+        self._pending_live_failover = None
+        target = socket if socket is not None else self.stt_socket
+        typed = getattr(target, 'typed_death_reason', None) if target is not None else None
+        pending.note_failure(typed if isinstance(typed, str) else None)
+
+    def _emit_realtime_demand(self, request: Any, decoded_audio_bytes: int) -> None:
+        """Report who could have watched this session live. Telemetry only; never raises."""
+
+        try:
+            tracker = self.host.state.realtime_demand
+            seconds = tracker.totals()
+            source = getattr(request, 'source', None)
+            platform = self._telemetry_platform()
+            record_listen_realtime_demand(source=source, platform=platform, seconds=seconds)
+            sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
+            emit_product_event(
+                uid=str(getattr(request, 'uid', '') or ''),
+                event='Listen Session Realtime Demand',
+                properties={
+                    'recording_id': getattr(self.host, 'recording_session_id', None),
+                    'conversation_id': getattr(self.host.state, 'current_conversation_id', None),
+                    'source': str(source) if source is not None else None,
+                    'client_platform': str(platform) if platform is not None else None,
+                    'conversation_role': getattr(request, 'conversation_role', None),
+                    'audio_seconds': decoded_audio_bytes / (sample_rate * 2),
+                    'client_state_reported': tracker.reported,
+                    'client_state_reports': tracker.reports,
+                    'visible_seconds': seconds['visible'],
+                    'foreground_seconds': seconds['foreground'],
+                    'background_seconds': seconds['background'],
+                    'unreported_seconds': seconds['unreported'],
+                    'live_translation': bool(getattr(self.host, 'translation_language', None)),
+                },
+            )
+        except Exception as error:
+            logger.warning('Realtime demand telemetry failed type=%s', type(error).__name__)
 
     def _telemetry_platform(self) -> Any:
         """Platform label for listen funnel counters; never part of the audio failure domain."""
@@ -252,10 +636,23 @@ class ListenReceiver:
         elif request.codec == 'lc3':
             self.lc3_decoder = _get_lc3().Decoder(self.host.lc3_frame_duration_us, request.sample_rate)
 
-    async def _create_stt_socket(self, callback: Any, sample_rate: int, modulate_callback: Any = None) -> Any:
+    async def _create_stt_socket(
+        self,
+        callback: Any,
+        sample_rate: int,
+        modulate_callback: Any = None,
+        epoch: Optional[ProviderEpochTranslator] = None,
+    ) -> Any:
+        if managed_chain_enabled(self.host):
+            from utils.stt.live_session import LiveChainSession
+
+            if not hasattr(self, '_managed_live_chain'):
+                self._managed_live_chain = LiveChainSession(self)
+            return await self._managed_live_chain.connect(sample_rate, epoch=epoch)
         keywords = self.host.vocabulary[:100] if self.host.vocabulary else []
         if self.host.stt_service == STTService.parakeet:
             socket, actual_service = await connect_stt_socket_with_fallback(
+                use_config=False,
                 primary_service=STTService.parakeet,
                 connect_primary=lambda: process_audio_parakeet(
                     callback,
@@ -293,6 +690,7 @@ class ListenReceiver:
                 )
 
             socket, actual_service = await connect_stt_socket_with_fallback(
+                use_config=False,
                 primary_service=STTService.soniox,
                 connect_primary=lambda: process_audio_soniox(
                     modulate_callback or callback,
@@ -346,6 +744,7 @@ class ListenReceiver:
                 )
 
             socket, actual_service = await connect_stt_socket_with_fallback(
+                use_config=False,
                 primary_service=STTService.modulate,
                 connect_primary=lambda: process_audio_modulate(
                     modulate_callback or callback,
@@ -377,6 +776,10 @@ class ListenReceiver:
                 )
 
             if not modulate_is_configured_fallback(self.host.stt_language):
+                # No leg to walk: Deepgram's own typed connection errors
+                # surface after a single attempt instead of a three-attempt
+                # ladder, and initialize_stt's terminal path handles them
+                # exactly like the exhaustion raise it replaces.
                 return await connect_deepgram()
 
             def connect_parakeet() -> Any:
@@ -391,6 +794,7 @@ class ListenReceiver:
                 )
 
             socket, actual_service = await connect_stt_socket_with_fallback(
+                use_config=False,
                 primary_service=STTService.deepgram,
                 connect_primary=connect_deepgram,
                 connect_modulate=lambda: process_audio_modulate(
@@ -463,7 +867,9 @@ class ListenReceiver:
                         return False
                     self.stt_sockets_multi[index] = socket
                 return True
-            if should_initialize_vad_gate(override=request.vad_gate_override, global_gate_enabled=is_gate_enabled()):
+            if not managed_chain_enabled(self.host) and should_initialize_vad_gate(
+                override=request.vad_gate_override, global_gate_enabled=is_gate_enabled()
+            ):
                 try:
                     self.vad_gate = VADStreamingGate(
                         sample_rate=request.sample_rate,
@@ -475,15 +881,12 @@ class ListenReceiver:
                 except Exception:
                     logger.exception('VAD gate initialization failed; continuing without it')
 
-            def capture_and_enqueue(segments: List[Dict[str, Any]]) -> None:
-                self._enqueue_stt_segments(segments)
-
-            parakeet_callback = make_stream_callback(capture_and_enqueue, self.vad_gate, False)
-            modulate_callback = make_stream_callback(capture_and_enqueue, self.vad_gate, True)
+            parakeet_callback, modulate_callback, epoch = self._build_stt_callbacks()
             raw = await self._create_stt_socket(
                 parakeet_callback,
                 request.sample_rate,
                 modulate_callback=modulate_callback,
+                epoch=epoch,
             )
             if raw is None:
                 await self._drain_stt_sockets()
@@ -497,11 +900,13 @@ class ListenReceiver:
                 return False
             passthrough = self.host.stt_service == STTService.modulate
             self.stt_socket = (
-                GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough) if self.vad_gate else raw
+                GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough, send_tracker=epoch)
+                if self.vad_gate and not getattr(raw, 'manages_vad', False)
+                else raw
             )
             # Retained so a mid-session failover can rebuild the socket against the
             # next provider without re-deriving the callbacks or the gate.
-            self._stt_rebuild = (parakeet_callback, modulate_callback, request.sample_rate)
+            self._stt_rebuild = (self._build_stt_callbacks, request.sample_rate)
             self.host.spawn(self._monitor_stt_death(), name='stt_death_monitor')
             return True
         except Exception as error:
@@ -516,22 +921,7 @@ class ListenReceiver:
             return False
 
     async def _failover_stt_socket(self) -> bool:
-        """Move a live session onto the next provider after its socket died.
-
-        Modulate accepts the WebSocket and only then sends an error frame, so its
-        outages land mid-session where ``connect_stt_socket_with_fallback`` — which
-        only runs at connect time — cannot help. Without this the chain is inert
-        against the failure it exists for: during the 2026-08-30 outage Velma failed
-        82% of sessions while Soniox and Deepgram served zero.
-
-        Single-channel only. Multi-channel holds several sockets whose segments are
-        stitched by channel, so swapping one mid-stream needs its own design.
-
-        Serialized: the death monitor and the audio send path can observe the same
-        death within milliseconds of each other, and the loser of the lock must
-        adopt the winner's replacement instead of burning another chain slot on a
-        second rebuild.
-        """
+        """Serialize monitor/send-path failover so only one replacement is adopted."""
         async with self._stt_failover_lock:
             if self.stt_socket is not None and not live_stt_socket_is_dead(self.stt_socket):
                 return True
@@ -544,53 +934,72 @@ class ListenReceiver:
         if not self.host.state.active or self.host.state.stt_terminal_failure:
             return False
 
+        # The hop we adopted last has now died without a transcript (or is
+        # about to be replaced). Settle it as a failed failover before the
+        # next provider is tried, otherwise connect-time recovered hid a
+        # 100% dead Soniox budget-exhaustion leg for 27.5h.
+        self._settle_pending_live_failover_failure()
+
         dead_provider = provider_for_service(self.host.stt_service)
         if dead_provider:
             self._stt_failed_providers.add(dead_provider)
-        if len(self._stt_failed_providers) > MAX_STT_FAILOVERS:
+        if len(self._stt_failed_providers) > (3 if managed_chain_enabled(self.host) else MAX_STT_FAILOVERS):
             return False
+        # Feed account/serve deaths even when failover prevents a terminal event.
+        note_typed_provider_death(self.stt_socket, dead_provider)
 
         service, language, model = get_stt_service_for_language(
             self.host.language,
             multi_lang_enabled=self.host.multi_lang_enabled,
             exclude=frozenset(self._stt_failed_providers),
+            **window_selection_kwargs(self.host, self.host.request.uid),
         )
         if service is None:
             return False
 
-        parakeet_callback, modulate_callback, sample_rate = rebuild
+        parakeet_callback, modulate_callback, epoch = rebuild[0]()
+        sample_rate = rebuild[1]
         previous = self.stt_socket
+        previous_selection = (self.host.stt_service, self.host.stt_language, self.host.stt_model)
         self.host.stt_service, self.host.stt_language, self.host.stt_model = service, language, model
+        hop = PendingLiveFailover(from_mode=dead_provider or 'unknown', to_mode=service.value)
         try:
             raw = await self._create_stt_socket(
                 parakeet_callback,
                 sample_rate,
                 modulate_callback=modulate_callback,
+                epoch=epoch,
             )
         except Exception:
+            if managed_chain_enabled(self.host):
+                self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
             logger.exception('STT failover connect raised')
+            hop.note_failure(None)
             return False
         if raw is None:
+            hop.note_failure(None)
+            if managed_chain_enabled(self.host):
+                self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
             return False
-        # A provider can accept the upgrade and reject the stream ~150ms later;
-        # treating that as a heal would report recovery for a session that is
-        # already dead again.
+        hop.to_mode = self.host.stt_service.value
+        # A provider can reject shortly after upgrade; never adopt a dead leg.
         if not await fallback_socket_is_serving(raw):
+            raw_typed = getattr(raw, 'typed_death_reason', None)
+            hop.note_failure(raw_typed if isinstance(raw_typed, str) else None)
             close_rejected_socket(raw)
+            if managed_chain_enabled(self.host):
+                self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
             return False
 
         passthrough = self.host.stt_service == STTService.modulate
         self.stt_socket = (
-            GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough) if self.vad_gate else raw
+            GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough, send_tracker=epoch)
+            if self.vad_gate and not getattr(raw, 'manages_vad', False)
+            else raw
         )
-        record_fallback(
-            component='stt_live_session',
-            from_mode=dead_provider or 'unknown',
-            to_mode=service.value,
-            reason='connection_lost',
-            outcome='recovered',
-        )
-        logger.info(f'STT failover mid-session: {dead_provider} -> {service.value}')
+        self._pending_live_failover = hop
+        record_live_stt_failover_accepted(provider=self.host.stt_service.value, platform=self._telemetry_platform())
+        logger.info(f'STT failover mid-session: {dead_provider} -> {self.host.stt_service.value}')
         if previous is not None:
             try:
                 previous.finish()
@@ -617,7 +1026,7 @@ class ListenReceiver:
                     self.host.request.websocket,
                     self.host.state,
                     failure=live_stt_upstream_failure(self._serving_provider()),
-                    reason='connection_lost',
+                    reason=live_stt_terminal_reason(socket, 'connection_lost'),
                     platform=self.host.client_device_context.platform,
                 )
                 return
@@ -694,6 +1103,10 @@ class ListenReceiver:
                 return
             if self.host.state.fair_use_dg_budget_exhausted:
                 buffer.clear()
+                # Fair use cleared queued STT bytes: the capture samples they
+                # carried were never sent, so the next buffer starts at the
+                # cursor and those samples simply have no provider mapping.
+                self._stt_buffer_start_sample = None
                 return
             outbound_audio = bytes(buffer)
             sent = await flush_live_stt_buffer(
@@ -704,10 +1117,12 @@ class ListenReceiver:
                 provider=self._serving_provider(),
                 platform=self.host.client_device_context.platform,
                 attempt_failover=self._failover_stt_socket,
+                start_sample=self._stt_buffer_start_sample,
             )
             if sent:
                 self._capture('capture_outbound_stt', outbound_audio)
                 self.host.state.dg_usage_ms_pending += decision.dg_usage_ms
+                self._stt_buffer_start_sample = None
                 return
             if self.host.state.stt_terminal_failure:
                 return
@@ -818,6 +1233,9 @@ class ListenReceiver:
             self._enqueue_stt_segments(segments, provider=provider or 'custom')
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)
+        elif kind == 'client_state':
+            if not self.host.state.realtime_demand.observe(payload):
+                logger.debug('Ignored malformed or over-budget client_state')
         elif kind == 'finalization_reason':
             reason = payload.get('reason')
             if reason in {
@@ -833,29 +1251,43 @@ class ListenReceiver:
 
     async def _handle_speaker_assigned(self, payload: Dict[str, Any]) -> None:
         segment_ids = payload.get('segment_ids', [])
-        speaker = self.host.speakers
-        updated = update_speaker_assignment_maps(
-            cast(int, payload.get('speaker_id')),
-            cast(str, payload.get('person_id')),
-            cast(str, payload.get('person_name')),
-            segment_ids,
-            speaker.speaker_to_person,
-            speaker.segment_assignments,
-        )
-        if not updated:
+        conversation_id = self.host.state.current_conversation_id
+        if not conversation_id or not isinstance(segment_ids, list) or not all(isinstance(s, str) for s in segment_ids):
             return
+        # REST owns the mutation. A socket payload only wakes the persisted edit;
+        # it cannot expand a selected edit into a speaker-wide inference map.
+        conversation = await self.host.transcripts.cache.get(conversation_id, force_refresh=True)
+        if not conversation:
+            return
+        receipt = conversation.get('manual_speaker_assignments') or {}
+        if not isinstance(receipt, dict):
+            receipt = {}
+        by_id = {segment.get('id'): segment for segment in conversation.get('transcript_segments') or []}
+        speakers = receipt.get('speakers') or {}
+        overrides = receipt.get('segments') or {}
+        for sid in segment_ids:
+            segment = by_id.get(sid) or {}
+            override = overrides.get(sid)
+            covering = speakers.get(str(segment.get('speaker_id')))
+            decisions = [value for value in (override, covering) if value]
+            if not decisions:
+                continue
+            decision = max(decisions, key=lambda value: value.get('generation', 0))
+            self.host.speakers.segment_assignments[sid] = 'user' if decision['is_user'] else decision['person_id']
+        self.host.state.speaker_map_dirty = True
+        person_id = payload.get('person_id')
         if (
-            payload.get('person_id')
-            and payload.get('person_id') != 'user'
+            isinstance(person_id, str)
+            and person_id
+            and person_id != 'user'
+            and acknowledged_teaching(conversation, person_id, segment_ids)
             and self.host.private_cloud_sync_enabled
             and self.host.send_speaker_sample_request
-            and self.host.state.current_conversation_id
-            and any(self.host.transcripts.current_session_segments.get(segment_id) for segment_id in segment_ids)
         ):
             self.host.spawn(
                 self.host.send_speaker_sample_request(
-                    person_id=payload['person_id'],
-                    conv_id=self.host.state.current_conversation_id,
+                    person_id=person_id,
+                    conv_id=conversation_id,
                     segment_ids=segment_ids,
                 ),
                 name='speaker_sample_request',
@@ -884,7 +1316,15 @@ class ListenReceiver:
                     if len(data) <= 2:
                         continue
                     now = time.time()
+                    prev_audio_received = self.host.state.last_audio_received_time
                     self.host.state.last_audio_received_time = now
+                    # A usage flush that fired while no audio was arriving moved the billing
+                    # window start past the last byte; without a floor the next flush bills
+                    # that silent gap. This byte is a resume exactly when the window start
+                    # outran the previous audio timestamp.
+                    usage_record_ts = self.host.state.last_usage_record_timestamp
+                    if usage_record_ts is not None and prev_audio_received < usage_record_ts:
+                        self.host.state.last_audio_resume_time = now
                     if self.host.is_multi_channel:
                         # `_handle_multi_channel_audio` marks first audio only
                         # after the channel prefix is known-good (and an opus
@@ -913,6 +1353,31 @@ class ListenReceiver:
                     self._mark_first_audio(now)
                     decoded_audio_bytes += len(decoded)
                     self._capture('capture_client_audio', decoded)
+                    if self.capture_timeline is not None:
+                        # The decoded frame occupies an exact capture sample
+                        # range; ring buffer, STT buffer and pusher runs all
+                        # carry that position forward. The pusher projection
+                        # (opcode-101 start) is v2-only: with the flag off the
+                        # wire must stay byte-identical to the legacy session.
+                        start_sample, end_sample, _ = self.capture_timeline.accept(decoded, now, time.monotonic())
+                        self._note_accepted_frame(start_sample, end_sample)
+                        self._write_ring_buffer_frame(decoded, now, start_sample)
+                        if not self.host.use_custom_stt:
+                            if not buffer:
+                                self._stt_buffer_start_sample = start_sample
+                            buffer.extend(decoded)
+                            await self._flush_stt_buffer(buffer)
+                        if self.host.audio_bytes_send is not None:
+                            if self.capture_timeline_v2:
+                                self.host.audio_bytes_send(
+                                    decoded,
+                                    now,
+                                    conversation_id=self.host.state.current_conversation_id,
+                                    start_wall=self.capture_timeline.wall(start_sample),
+                                )
+                            else:
+                                self.host.audio_bytes_send(decoded, now)
+                        continue
                     if self.host.state.audio_ring_buffer is not None:
                         self.host.state.audio_ring_buffer.write(decoded, now)
                     if not self.host.use_custom_stt:
@@ -929,6 +1394,7 @@ class ListenReceiver:
             self.host.state.close_code = 1011
         finally:
             if decoded_audio_bytes:
+                self._emit_realtime_demand(request, decoded_audio_bytes)
                 sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
                 emit_product_event(
                     uid=str(getattr(request, 'uid', '') or ''),
@@ -943,7 +1409,26 @@ class ListenReceiver:
                 )
             if self.vad_gate is not None:
                 vad_metrics = self.vad_gate.get_metrics()
-                logger.info(json.dumps(self.vad_gate.to_json_log()))
+                vad_payload = self.vad_gate.to_json_log()
+                onboarding_session_id = getattr(self.host, 'onboarding_session_id', None)
+                if onboarding_session_id:
+                    vad_payload['onboarding_session_id'] = onboarding_session_id
+                if self.host.is_multi_channel:
+                    vad_payload['multi_channel'] = True
+                vad_log = emit_listen_vad_gate_metrics(
+                    vad_payload,
+                    source=getattr(request, 'source', None),
+                    platform=self._telemetry_platform(),
+                )
+                if (
+                    vad_metrics.get('bytes_received') == 0
+                    and vad_metrics.get('chunks_total') == 0
+                    and vad_log.get('session_duration_sec') == 0.0
+                ):
+                    record_listen_zero_byte_session(
+                        source=getattr(request, 'source', None),
+                        platform=self._telemetry_platform(),
+                    )
                 speech_ms = max(0, int(vad_metrics.get('speech_ms_total') or 0))
                 if speech_ms:
                     emit_product_event(

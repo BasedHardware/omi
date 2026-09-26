@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 from database import conversation_finalization_jobs as jobs_db
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from models.conversation_enums import ConversationStatus
+from utils.conversations.processing_trigger import ProcessingTrigger
 from routers.conversation_finalization import _parse_task_payload
 import routers.conversation_finalization as finalization_router
 import routers.pusher as pusher_router
@@ -66,8 +67,9 @@ def prod_backend_sync_runtime_env(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _isolate_keyframe_outbox(monkeypatch):
-    """Keyframe lifecycle behavior is covered by its focused service tests."""
+def _isolate_optional_capture_metadata(monkeypatch):
+    """Keyframe and overlap behavior have focused service/transaction tests."""
+    monkeypatch.setattr(persisted_finalizer.conversations_db, "get_conversations_finished_after", lambda *a, **kw: [])
 
     async def disabled(*_args, **_kwargs):
         return SimpleNamespace(enabled=False, account_generation=None)
@@ -238,7 +240,7 @@ def test_durable_finalization_acceptance_counts_only_a_new_outbox_job(monkeypatc
 
     assert result['route'] == 'pusher'
     accepted.assert_called_once_with('capture_finalization')
-    client_accepted.assert_called_once_with('conversation_finalization', 'mobile_android')
+    client_accepted.assert_called_once_with('conversation_finalization', 'mobile_android', 'unknown')
 
 
 def test_durable_finalization_redelivery_does_not_count_as_new_traffic(monkeypatch):
@@ -289,6 +291,38 @@ def test_required_cloud_tasks_rejects_rest_admission_before_outbox_mutation(monk
         )
 
     create.assert_not_called()
+
+
+def test_required_cloud_tasks_rejects_disabled_dispatch_before_outbox_mutation(monkeypatch):
+    """A configured-but-disabled worker has no owning pusher for a REST caller."""
+    create = MagicMock()
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'create_or_get_finalization_intent', create)
+    monkeypatch.setattr(lifecycle_service, 'is_listen_finalization_dispatch_configured', lambda: True)
+    monkeypatch.setattr(lifecycle_service, 'is_listen_finalization_dispatch_enabled', lambda: False)
+
+    with pytest.raises(lifecycle_service.FinalizationDispatchUnavailable):
+        lifecycle_service.request_finalization(
+            'uid-1',
+            'conversation-1',
+            has_byok_keys=False,
+            require_cloud_tasks=True,
+        )
+
+    create.assert_not_called()
+
+
+def test_non_required_caller_keeps_pusher_route_when_dispatch_disabled(monkeypatch):
+    intent = {'job_id': 'job-1', 'status': 'queued', 'dispatch_generation': 2, 'requires_byok': False}
+    _mock_lifecycle_conversation(monkeypatch)
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'create_or_get_finalization_intent', MagicMock(return_value=intent))
+    monkeypatch.setattr(lifecycle_service, 'is_listen_finalization_dispatch_configured', lambda: True)
+    monkeypatch.setattr(lifecycle_service, 'is_listen_finalization_dispatch_enabled', lambda: False)
+
+    result = lifecycle_service.request_finalization(
+        'uid-1', 'conversation-1', has_byok_keys=False, require_cloud_tasks=False
+    )
+
+    assert result['route'] == 'pusher'
 
 
 def test_durable_finalization_maps_exhausted_firestore_contention_to_retryable_admission_failure(monkeypatch):
@@ -712,7 +746,7 @@ async def test_worker_forwards_rest_force_processing_mode_from_the_durable_job(m
         finalization_job_id='job-1',
         dispatch_generation=1,
         lease_epoch=1,
-        force_process=True,
+        trigger=ProcessingTrigger.CLIENT_FINALIZE,
         final_attempt=False,
     )
 
@@ -1012,13 +1046,15 @@ async def test_pusher_replays_a_terminal_fenced_job_without_completed_signal(mon
 async def test_pusher_requeues_an_unexpected_failure_after_claim(monkeypatch):
     websocket = _PusherWebSocket()
     retryable = MagicMock(return_value=True)
+    retries = MagicMock()
     monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(
         jobs_db,
         'claim_finalization_job',
-        lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 4, 'attempt_count': 1},
+        lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 4, 'attempt_count': 0},
     )
     monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
+    monkeypatch.setattr(pusher_finalization.LISTEN_FINALIZATION_RETRIES_TOTAL, 'inc', retries)
     monkeypatch.setattr(pusher_finalization, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
     monkeypatch.setattr(
         pusher_finalization, 'finalize_persisted_conversation', AsyncMock(side_effect=RuntimeError('raw transcript'))
@@ -1029,6 +1065,44 @@ async def test_pusher_requeues_an_unexpected_failure_after_claim(monkeypatch):
     )
 
     retryable.assert_called_once_with('job-1', 3, 4, 'worker_failed')
+    retries.assert_called_once_with()
+    assert json.loads(websocket.sent[0][4:]) == {
+        'conversation_id': 'conversation-1',
+        'error': 'processing_failed',
+        'terminal': False,
+    }
+
+
+@pytest.mark.anyio
+async def test_pusher_does_not_dead_letter_a_job_whose_only_claims_were_session_handoffs(monkeypatch):
+    """Reconnect re-claims must not consume the processing attempt budget.
+
+    Production MIC dead-letters tracked lease handoffs, not failed processing.
+    """
+    websocket = _PusherWebSocket()
+    retryable = MagicMock(return_value=True)
+    dead_letter = MagicMock(return_value=True)
+    monkeypatch.setattr(pusher_finalization, 'run_blocking', _inline_run_blocking)
+    monkeypatch.setattr(
+        jobs_db,
+        'claim_finalization_job',
+        lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 9, 'attempt_count': 0},
+    )
+    monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
+    monkeypatch.setattr(pusher_finalization, 'final_attempt_failed', dead_letter)
+    monkeypatch.setattr(pusher_finalization, 'get_listen_finalization_tasks_max_attempts', lambda: 5)
+    monkeypatch.setattr(
+        pusher_finalization,
+        'finalize_persisted_conversation',
+        AsyncMock(side_effect=ConversationFinalizationError('processing_failed')),
+    )
+
+    await pusher_finalization.process_conversation_task(
+        'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
+    )
+
+    retryable.assert_called_once_with('job-1', 3, 9, 'processing_failed')
+    dead_letter.assert_not_called()
     assert json.loads(websocket.sent[0][4:]) == {
         'conversation_id': 'conversation-1',
         'error': 'processing_failed',
@@ -1050,7 +1124,7 @@ async def test_pusher_dead_letters_a_job_that_exhausted_its_attempt_budget(monke
     monkeypatch.setattr(
         jobs_db,
         'claim_finalization_job',
-        lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 4, 'attempt_count': 5},
+        lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 4, 'attempt_count': 4},
     )
     monkeypatch.setattr(jobs_db, 'mark_finalization_retryable', retryable)
     monkeypatch.setattr(pusher_finalization, 'final_attempt_failed', dead_letter)
@@ -1082,7 +1156,7 @@ async def test_pusher_lease_loss_never_terminalizes_a_newer_finalization_owner(m
     monkeypatch.setattr(
         jobs_db,
         'claim_finalization_job',
-        lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 4, 'attempt_count': 5},
+        lambda *args, **kwargs: {'status': 'claimed', 'lease_epoch': 4, 'attempt_count': 4},
     )
     monkeypatch.setattr(pusher_finalization, 'final_attempt_failed', dead_letter)
     monkeypatch.setattr(pusher_finalization, 'get_listen_finalization_tasks_max_attempts', lambda: 5)

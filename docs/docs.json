@@ -30,6 +30,7 @@
             "pages": [
               "doc/developer/AppSetup",
               "doc/developer/Cursor",
+              "doc/developer/memory-clients",
               {
                 "group": "Backend",
                 "pages": [
@@ -195,6 +196,7 @@
               "doc/hardware/OmiConsumer",
               "doc/hardware/DevKit2",
               "doc/hardware/DevKit1",
+              "doc/hardware/SpeakerMod",
               "doc/hardware/PaintingOMI"
             ]
           },

@@ -1,11 +1,13 @@
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/device_guide.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
+/// How to pair one device from the connection guide. Shown in the shared sheet shell
+/// (docs/ux-contract.md §2); "Done" closes this sheet and the guide.
 class DevicePairingSheet extends StatelessWidget {
   final DeviceGuideProduct product;
   final VoidCallback onDismissAll;
@@ -14,97 +16,49 @@ class DevicePairingSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary,
-        borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
-      ),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.xl),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          // Handle bar
-          Container(
-            margin: const EdgeInsets.only(top: 12),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(color: ResponsiveHelper.textTertiary, borderRadius: BorderRadius.circular(2)),
-          ),
-
-          Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              children: [
-                // Device image
-                if (product.localImagePath != null)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
+          ExcludeSemantics(
+            child: product.localImagePath != null
+                ? ClipRRect(
+                    borderRadius: OmiRadius.lgAll,
                     child: Image.asset(product.localImagePath!, height: 180, width: 180, fit: BoxFit.contain),
                   )
-                else
-                  const SizedBox(
+                : const SizedBox(
                     height: 180,
                     width: 180,
-                    child: Icon(Icons.bluetooth_searching, size: 64, color: ResponsiveHelper.purplePrimary),
+                    child: Icon(Icons.bluetooth_searching, size: 64, color: OmiColors.textSecondary),
                   ),
-                const SizedBox(height: 24),
-
-                // Title
-                Text(
-                  product.pairingTitle.isNotEmpty ? product.pairingTitle : product.name,
-                  style: const TextStyle(
-                    color: ResponsiveHelper.textPrimary,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 12),
-
-                // Description
-                if (product.pairingDescription.isNotEmpty)
-                  Text(
-                    product.pairingDescription,
-                    style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 15, height: 1.4),
-                    textAlign: TextAlign.center,
-                  ),
-                const SizedBox(height: 32),
-
-                // "I've done this" button
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: onDismissAll,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: ResponsiveHelper.purplePrimary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      context.l10n.iveDoneThis,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Report an issue
-                GestureDetector(
-                  onTap: () async {
-                    PlatformManager.instance.analytics.connectionGuideReportIssue(product.id);
-                    onDismissAll();
-                    await IntercomManager.instance.intercom.displayMessenger();
-                  },
-                  child: Text(
-                    context.l10n.reportAnIssue,
-                    style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 14),
-                  ),
-                ),
-
-                SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
-              ],
+          ),
+          const SizedBox(height: OmiSpacing.xl),
+          Semantics(
+            header: true,
+            child: Text(
+              product.pairingTitle.isNotEmpty ? product.pairingTitle : product.name,
+              style: OmiType.title2,
+              textAlign: TextAlign.center,
             ),
+          ),
+          const SizedBox(height: OmiSpacing.sm),
+          if (product.pairingDescription.isNotEmpty)
+            Text(
+              product.pairingDescription,
+              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4),
+              textAlign: TextAlign.center,
+            ),
+          const SizedBox(height: OmiSpacing.xxl),
+          OmiButton(label: context.l10n.done, expand: true, onPressed: onDismissAll),
+          const SizedBox(height: OmiSpacing.xs),
+          OmiButton.tertiary(
+            label: context.l10n.reportAnIssue,
+            expand: true,
+            onPressed: () async {
+              PlatformManager.instance.analytics.connectionGuideReportIssue(product.id);
+              onDismissAll();
+              await IntercomManager.instance.intercom.displayMessenger();
+            },
           ),
         ],
       ),

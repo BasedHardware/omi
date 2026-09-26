@@ -174,6 +174,10 @@ fallback_stub = _stub_module("utils.observability.fallback")
 fallback_stub.record_fallback = MagicMock()
 utils_sub_stub = _stub_module("utils.subscription")
 utils_sub_stub.get_default_basic_subscription = MagicMock()
+feedback_stub = _stub_module("utils.feedback")
+feedback_stub.record_chat_message_feedback = MagicMock()
+feedback_stub.record_conversation_summary_feedback = MagicMock()
+feedback_stub.record_memory_feedback = MagicMock()
 utils_enc_stub = _stub_module("utils.encryption")
 utils_enc_stub.encrypt = MagicMock(return_value="encrypted")
 utils_enc_stub.decrypt = MagicMock(return_value="decrypted")
@@ -203,9 +207,6 @@ task_intelligence_stub.candidate_service = candidate_service_stub
 staged_migration_stub = _stub_module("utils.task_intelligence.staged_migration")
 staged_migration_stub.proposal_from_legacy_staged = MagicMock()
 staged_migration_stub.migrate_staged_tasks = MagicMock()
-rollout_stub = _stub_module("utils.task_intelligence.rollout")
-setattr(rollout_stub, "effective_task_workflow_control", lambda control, rollout: control)
-setattr(rollout_stub, "resolve_task_intelligence_for_user", MagicMock())
 request_validation_stub = _stub_module("utils.request_validation")
 request_validation_stub.validate_calendar_date = lambda value, field_name='date': value
 redis_stub = _stub_module("database.redis_db")
@@ -228,15 +229,17 @@ import database.staged_tasks as staged_tasks_db  # noqa: E402
 # ---------------------------------------------------------------------------
 from pydantic import BaseModel, Field, ValidationError  # noqa: E402
 
+# routers.chat_sessions imports utils.chat_rating_triage and utils.other.endpoints
+# at module scope, so the real utils package must be resolvable before it loads.
+_ensure_package_path("models", BACKEND_DIR / "models")
+_ensure_package_path("utils", BACKEND_DIR / "utils")
+_ensure_package_path("utils.other", BACKEND_DIR / "utils" / "other")
+
 from routers.chat_sessions import SaveMessageRequest, RateMessageRequest  # noqa: E402
 from routers.focus_sessions import CreateFocusSessionRequest  # noqa: E402
 from routers.advice import CreateAdviceRequest  # noqa: E402
 from routers.staged_tasks import BatchUpdateScoresRequest, BatchScoreEntry  # noqa: E402
 import routers.staged_tasks as staged_router  # noqa: E402
-
-_ensure_package_path("models", BACKEND_DIR / "models")
-_ensure_package_path("utils", BACKEND_DIR / "utils")
-_ensure_package_path("utils.other", BACKEND_DIR / "utils" / "other")
 
 # Cannot import routers.users directly — it pulls in database.conversations → utils.other.hume
 # which has heavy deps. Mirror the models here and verify parity via AST test below.
@@ -2429,12 +2432,12 @@ class TestFocusStatsDurationBoundary:
     """Verify duration_seconds=0 and missing duration behavior."""
 
     def test_distracted_zero_duration_treated_as_default(self):
-        """duration_seconds=0 is treated as 60 via `or 60` in get_focus_stats."""
+        """Explicit duration_seconds=0 is preserved as 0 seconds in get_focus_stats."""
         sessions = [{'status': 'distracted', 'app_or_site': 'Twitter', 'duration_seconds': 0}]
         with patch.object(focus_sessions_db, 'get_focus_sessions', return_value=sessions):
             result = focus_sessions_db.get_focus_stats('uid', '2026-04-06')
-        # duration_seconds=0 is falsy, so `or 60` defaults to 60
-        assert result['distracted_minutes'] == 1  # 60 seconds = 1 minute
+        assert result['distracted_minutes'] == 0
+        assert result['top_distractions'][0]['total_seconds'] == 0
 
     def test_distracted_missing_duration_treated_as_default(self):
         """Missing duration_seconds defaults to 60 via `or 60`."""
