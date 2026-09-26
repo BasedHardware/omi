@@ -97,6 +97,18 @@ def _edit_annotations(title: str) -> Dict[str, Any]:
     }
 
 
+def _destructive_annotations(title: str) -> Dict[str, Any]:
+    # Idempotent but destructive: dismissal is reversible in storage yet removes the
+    # record from normal People reads, so clients must see the destructive hint.
+    return {
+        "title": title,
+        "readOnlyHint": False,
+        "destructiveHint": True,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    }
+
+
 def _create_annotations(title: str, *, idempotent: bool) -> Dict[str, Any]:
     return {
         "title": title,
@@ -126,6 +138,8 @@ GOALS_READ_SECURITY = [{"type": "oauth2", "scopes": ["goals.read"]}]
 CHAT_READ_SECURITY = [{"type": "oauth2", "scopes": ["chat.read"]}]
 SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.read"]}]
 PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
+PEOPLE_RENAME_SECURITY = [{"type": "oauth2", "scopes": ["people.rename"]}]
+PEOPLE_CLEANUP_SECURITY = [{"type": "oauth2", "scopes": ["people.cleanup"]}]
 
 _SECURITY_BY_SCOPE = {
     entry["scopes"][0]: [{"type": "oauth2", "scopes": list(entry["scopes"])}]
@@ -139,6 +153,8 @@ _SECURITY_BY_SCOPE = {
         CHAT_READ_SECURITY,
         SCREEN_ACTIVITY_READ_SECURITY,
         PEOPLE_READ_SECURITY,
+        PEOPLE_RENAME_SECURITY,
+        PEOPLE_CLEANUP_SECURITY,
     )
     for entry in security
 }
@@ -193,6 +209,8 @@ _ACTION_ITEM_CREATE = "action_item_create"
 _ACTION_ITEM_COMPLETE = "action_item_complete"
 _ACTION_ITEM_UPDATE = "action_item_update"
 _ACTION_ITEM_DELETE = "action_item_delete"
+_PEOPLE_RENAME = "people_rename"
+_PEOPLE_DISMISS = "people_dismiss"
 
 TOOL_SPECS: Tuple[ToolSpec, ...] = (
     ToolSpec(
@@ -994,6 +1012,62 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         write_operation=_READ,
         rate_bucket=None,
         handler=other.get_people,
+    ),
+    ToolSpec(
+        name="rename_person",
+        title="Rename person",
+        description=(
+            "Correct the display name of a person Omi has recognized. The previous name is retained "
+            "as an alias so earlier references still resolve. Returns only the person id and the "
+            "corrected name -- no transcript samples."
+        ),
+        annotations=_edit_annotations("Rename person"),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "person_id": {"type": "string", "description": "Id of the person to rename."},
+                "name": {"type": "string", "description": "Corrected display name, 1 to 128 characters."},
+            },
+            "required": ["person_id", "name"],
+        },
+        output_schema=_output_schema(
+            _object_schema(["success", "person"], success={"type": "boolean"}, person={"type": "object"})
+        ),
+        scope="people.rename",
+        operation="people_rename",
+        write_operation=_PEOPLE_RENAME,
+        rate_bucket=None,
+        handler=other.rename_person,
+    ),
+    ToolSpec(
+        name="dismiss_person",
+        title="Dismiss person",
+        description=(
+            "Dismiss a false-positive person so it stops appearing in People. This is a soft cleanup: "
+            "the record, its aliases, history and speech data are preserved and still included in data "
+            "exports. Requires the opt-in people.cleanup scope."
+        ),
+        annotations=_destructive_annotations("Dismiss person"),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "person_id": {"type": "string", "description": "Id of the person to dismiss."},
+            },
+            "required": ["person_id"],
+        },
+        output_schema=_output_schema(
+            _object_schema(
+                ["success", "person_id", "dismissed"],
+                success={"type": "boolean"},
+                person_id={"type": "string"},
+                dismissed={"type": "boolean"},
+            )
+        ),
+        scope="people.cleanup",
+        operation="people_dismiss",
+        write_operation=_PEOPLE_DISMISS,
+        rate_bucket=None,
+        handler=other.dismiss_person,
     ),
     ToolSpec(
         name="get_screen_activity",

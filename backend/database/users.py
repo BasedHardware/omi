@@ -19,7 +19,12 @@ from database.account_deletion_transitions import (
 )
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
 from database.firestore_tier_context import invalidate_subscription, observe_subscription
-from database.person_aliases import rename_person_retaining_aliases
+from database.person_aliases import (
+    dismiss_person_soft,
+    find_person_by_name,
+    list_people,
+    rename_person_retaining_aliases,
+)
 from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from database.redis_db import (
     delete_cached_user_geolocation,
@@ -894,25 +899,12 @@ def get_person(uid: str, person_id: str):
     return person_data
 
 
-def get_people(uid: str):
-    people_ref = db.collection('users').document(uid).collection('people')
-    result = []
-    for person in people_ref.stream():
-        data = person.to_dict()
-        data.setdefault('id', person.id)
-        result.append(data)
-    return result
+def get_people(uid: str, *, include_dismissed: bool = False):
+    return list_people(db, uid, include_dismissed=include_dismissed)
 
 
 def get_person_by_name(uid: str, name: str):
-    people_ref = db.collection('users').document(uid).collection('people')
-    query = people_ref.where(filter=FieldFilter('name', '==', name)).limit(1)
-    docs = list(query.stream())
-    if docs:
-        data = docs[0].to_dict()
-        data.setdefault('id', docs[0].id)
-        return data
-    return None
+    return find_person_by_name(db, uid, name)
 
 
 def get_people_by_ids(uid: str, person_ids: list[str]):
@@ -941,6 +933,10 @@ def update_person(uid: str, person_id: str, name: str) -> bool:
     """Rename a stable person and retain old names as owner-scoped aliases."""
 
     return rename_person_retaining_aliases(db, uid, person_id, name)
+
+
+def dismiss_person(uid: str, person_id: str) -> bool:
+    return dismiss_person_soft(db, uid, person_id)
 
 
 def delete_person(uid: str, person_id: str):

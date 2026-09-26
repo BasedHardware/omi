@@ -250,6 +250,45 @@ def test_auth_repair_metadata_is_emitted_from_the_dependency_layer() -> None:
         ]
 
 
+def test_mcp_scope_dependency_enforces_scope_and_rate_limits_by_key_identity() -> None:
+    with _loaded_dependencies() as (dependencies, _firebase_auth, _mcp_db, _dev_db):
+        rate_limit_calls: list[dict[str, Any]] = []
+
+        async def record_rate_limit(**kwargs: Any) -> None:
+            rate_limit_calls.append(kwargs)
+
+        dependencies._check_api_key_rate_limit_async = record_rate_limit
+        require_cleanup = dependencies.require_mcp_api_key_scope('people.cleanup')
+        allowed = dependencies.ApiKeyAuth(
+            uid='user-1',
+            scopes=['people.cleanup'],
+            app_id='mcp-api',
+            key_id='key-1',
+        )
+        denied = dependencies.ApiKeyAuth(
+            uid='user-1',
+            scopes=['people.read', 'people.rename'],
+            app_id='mcp-api',
+            key_id='key-1',
+        )
+
+        assert asyncio.run(require_cleanup(allowed)) == 'user-1'
+        with pytest.raises(HTTPException) as caught:
+            asyncio.run(require_cleanup(denied))
+
+        assert caught.value.status_code == 403
+        assert caught.value.detail == 'Insufficient permissions. Required scope: people.cleanup'
+        assert rate_limit_calls == [
+            {
+                'prefix': 'mcp',
+                'uid': 'user-1',
+                'app_id': 'mcp-api',
+                'key_id': 'key-1',
+                'policy_name': 'mcp:read',
+            }
+        ]
+
+
 def test_all_api_key_scope_dependencies_route_rate_limits_through_the_critical_executor() -> None:
     with _loaded_dependencies() as (dependencies, _firebase_auth, _mcp_db, _dev_db):
         executor_calls: list[tuple[Any, Any]] = []

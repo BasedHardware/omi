@@ -143,6 +143,9 @@ if not isinstance(getattr(sys.modules['database._client'], '__file__', None), st
     sys.modules['database._client'].document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
 sys.modules['dependencies'].get_uid_from_mcp_api_key = MagicMock(return_value='user-1')
 sys.modules['dependencies'].get_current_user_id = MagicMock(return_value='user-1')
+sys.modules['dependencies'].require_mcp_api_key_scope = MagicMock(
+    side_effect=lambda scope: MagicMock(name=f"require_{scope}")
+)
 sys.modules['utils.other.endpoints'].with_rate_limit = MagicMock(side_effect=lambda dependency, _policy: dependency)
 sys.modules['utils.other.endpoints'].with_rate_limit_context = MagicMock(
     side_effect=lambda dependency, _policy: dependency
@@ -167,6 +170,7 @@ if not (isinstance(_existing_fp, type) and issubclass(_existing_fp, BaseExceptio
 
 from routers import mcp as rest  # noqa: E402
 from routers import mcp_sse as sse  # noqa: E402
+from utils.mcp_server import registry  # noqa: E402
 from utils.mcp_server import auth as sse_auth  # noqa: E402
 from utils.mcp_server import oauth as sse_oauth  # noqa: E402
 from utils.mcp_server import transport as sse_transport  # noqa: E402
@@ -262,6 +266,28 @@ def test_sse_tools_list_filters_by_oauth_scopes():
     assert 'search_memories' in names
     assert 'create_memory' not in names
     assert 'get_conversations' not in names
+
+
+def test_sse_tools_list_hides_people_cleanup_without_opt_in_scope():
+    default_context = sse.MCPAuthContext(
+        uid=UID,
+        auth_type='legacy_mcp_key',
+        scopes=['people.read', 'people.rename'],
+    )
+    default_response = sse.handle_mcp_message(default_context, {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})
+    default_names = {tool['name'] for tool in default_response['result']['tools']}
+
+    opted_in_context = sse.MCPAuthContext(
+        uid=UID,
+        auth_type='legacy_mcp_key',
+        scopes=['people.read', 'people.rename', 'people.cleanup'],
+    )
+    opted_in_response = sse.handle_mcp_message(opted_in_context, {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'})
+    opted_in_names = {tool['name'] for tool in opted_in_response['result']['tools']}
+
+    assert {'get_people', 'rename_person'}.issubset(default_names)
+    assert 'dismiss_person' not in default_names
+    assert 'dismiss_person' in opted_in_names
 
 
 def test_oauth_authentication_carries_memory_identity_into_advertised_memory_tools():
@@ -912,6 +938,135 @@ class TestPeople:
         assert result['people'][0]['id'] == 'p1'
         assert 'speech_samples' not in result['people'][0]
 
+    @patch('utils.mcp_server.handlers.other.users_db')
+    def test_rename_tool_returns_no_read_only_person_data(self, mock_db):
+        mock_db.update_person.return_value = True
+
+        result = sse.execute_tool(UID, 'rename_person', {'person_id': 'p1', 'name': '  Robert   Jones  '})
+
+        assert result == {'success': True, 'person': {'id': 'p1', 'name': 'Robert Jones'}}
+        assert 'speech_sample_transcripts' not in result['person']
+        mock_db.update_person.assert_called_once_with(UID, 'p1', 'Robert Jones')
+
+    @patch('utils.mcp_server.handlers.other.users_db')
+    def test_dismiss_tool_is_soft_and_minimal(self, mock_db):
+        mock_db.dismiss_person.return_value = True
+
+        result = sse.execute_tool(UID, 'dismiss_person', {'person_id': 'p1'})
+
+        assert result == {'success': True, 'person_id': 'p1', 'dismissed': True}
+        mock_db.dismiss_person.assert_called_once_with(UID, 'p1')
+        mock_db.delete_person.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ('tool_name', 'arguments'),
+        [
+            ('rename_person', {'person_id': '', 'name': 'Alice'}),
+            ('rename_person', {'person_id': 'p1', 'name': '   '}),
+            ('dismiss_person', {'person_id': ''}),
+        ],
+    )
+    def test_people_write_tools_reject_invalid_arguments(self, tool_name, arguments):
+        with pytest.raises(sse.ToolExecutionError) as caught:
+            sse.execute_tool(UID, tool_name, arguments)
+        assert caught.value.code == -32602
+
+    @patch('utils.mcp_server.handlers.other.users_db')
+    def test_people_write_tools_report_missing_person(self, mock_db):
+        mock_db.update_person.return_value = False
+        mock_db.dismiss_person.return_value = False
+
+        for tool_name, arguments in (
+            ('rename_person', {'person_id': 'missing', 'name': 'Alice'}),
+            ('dismiss_person', {'person_id': 'missing'}),
+        ):
+            with pytest.raises(sse.ToolExecutionError) as caught:
+                sse.execute_tool(UID, tool_name, arguments)
+            assert caught.value.code == -32001
+
+    @patch('routers.mcp.users_db')
+    def test_rest_people_writes_match_tool_contract(self, mock_db):
+        mock_db.update_person.return_value = True
+        mock_db.dismiss_person.return_value = True
+
+        renamed = rest.rename_person(
+            'p1',
+            rest.McpPersonRenameRequest(name='  Robert   Jones '),
+            uid=UID,
+        )
+        dismissed = rest.dismiss_person('p1', uid=UID)
+
+        assert renamed == {'success': True, 'person_id': 'p1', 'name': 'Robert Jones'}
+        assert dismissed == {'success': True, 'person_id': 'p1', 'dismissed': True}
+        mock_db.update_person.assert_called_once_with(UID, 'p1', 'Robert Jones')
+        mock_db.dismiss_person.assert_called_once_with(UID, 'p1')
+
+    def test_rest_people_routes_use_matching_scope_dependencies(self):
+        expected = {
+            ('/v1/mcp/people', 'GET'): rest.get_mcp_people_read_uid,
+            ('/v1/mcp/people/{person_id}/name', 'PATCH'): rest.get_mcp_people_rename_uid,
+            ('/v1/mcp/people/{person_id}/dismiss', 'POST'): rest.get_mcp_people_cleanup_uid,
+        }
+        actual = {}
+        for route in rest.router.routes:
+            key = (getattr(route, 'path', ''), next(iter(getattr(route, 'methods', set())), ''))
+            if key in expected:
+                actual[key] = route.dependant.dependencies[0].call
+
+        assert actual == expected
+
+    def test_people_write_descriptors_match_safety_contract(self):
+        tools = {tool['name']: tool for tool in sse.MCP_TOOLS}
+
+        assert tools['rename_person']['securitySchemes'] == registry.PEOPLE_RENAME_SECURITY
+        assert tools['rename_person']['annotations']['readOnlyHint'] is False
+        assert tools['rename_person']['annotations']['destructiveHint'] is False
+        assert tools['dismiss_person']['securitySchemes'] == registry.PEOPLE_CLEANUP_SECURITY
+        # Dismissal is idempotent but must still advertise the destructive hint.
+        assert tools['dismiss_person']['annotations']['readOnlyHint'] is False
+        assert tools['dismiss_person']['annotations']['destructiveHint'] is True
+        assert tools['dismiss_person']['annotations']['idempotentHint'] is True
+
+
+def test_sse_people_write_scope_gate_allows_only_matching_capability():
+    rename_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['people.rename'])
+    cleanup_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['people.cleanup'])
+
+    with patch.object(sse.users_db, 'update_person', return_value=True):
+        response = sse.handle_mcp_message(
+            rename_context,
+            {
+                'jsonrpc': '2.0',
+                'id': 1,
+                'method': 'tools/call',
+                'params': {'name': 'rename_person', 'arguments': {'person_id': 'p1', 'name': 'Alice'}},
+            },
+        )
+    denied = sse.handle_mcp_message(
+        rename_context,
+        {
+            'jsonrpc': '2.0',
+            'id': 2,
+            'method': 'tools/call',
+            'params': {'name': 'dismiss_person', 'arguments': {'person_id': 'p1'}},
+        },
+    )
+    with patch.object(sse.users_db, 'dismiss_person', return_value=True):
+        cleanup_response = sse.handle_mcp_message(
+            cleanup_context,
+            {
+                'jsonrpc': '2.0',
+                'id': 3,
+                'method': 'tools/call',
+                'params': {'name': 'dismiss_person', 'arguments': {'person_id': 'p1'}},
+            },
+        )
+
+    assert 'result' in response
+    assert denied['error']['code'] == -32003
+    assert 'people.cleanup' in denied['error']['data']['_meta']['mcp/www_authenticate']
+    assert 'result' in cleanup_response
+
 
 class TestScreenActivity:
     def test_summary_coverage_survives_rest_serialization_and_sse_dispatch(self, monkeypatch):
@@ -1026,6 +1181,8 @@ class TestToolRegistry:
             'get_goals',
             'get_chat_messages',
             'get_people',
+            'rename_person',
+            'dismiss_person',
             'get_screen_activity',
             'get_daily_summaries',
         ]:

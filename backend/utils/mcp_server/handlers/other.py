@@ -11,6 +11,7 @@ import database.daily_summaries as daily_summaries_db
 import database.goals as goals_db
 import database.screen_activity as screen_activity_db
 import database.users as users_db
+from database.person_aliases import normalized_person_alias
 import database.vector_db as vector_db
 import database.x_posts as x_posts_db
 from utils.memory.product_authorization import ProductAuthorizationContext
@@ -128,6 +129,45 @@ def get_people(
     auth_context: Optional[ProductAuthorizationContext] = None,
 ) -> Dict[str, Any]:
     return {"people": [clean_person(p) for p in users_db.get_people(uid)]}
+
+
+def _required_person_id(arguments: Dict[str, Any]) -> str:
+    person_id = arguments.get("person_id")
+    if not isinstance(person_id, str) or not person_id.strip():
+        raise ToolExecutionError("person_id is required", code=-32602)
+    return person_id.strip()
+
+
+def rename_person(
+    uid: str,
+    arguments: Dict[str, Any],
+    auth_context: Optional[ProductAuthorizationContext] = None,
+) -> Dict[str, Any]:
+    """Correct a recognised person's display name, retaining the prior one as an alias."""
+    person_id = _required_person_id(arguments)
+    name = arguments.get("name")
+    if not isinstance(name, str):
+        raise ToolExecutionError("name is required", code=-32602)
+    normalized_name = normalized_person_alias(name)
+    if normalized_name is None:
+        raise ToolExecutionError("name must contain 1 to 128 characters", code=-32602)
+    if not users_db.update_person(uid, person_id, normalized_name):
+        raise ToolExecutionError("Person not found", code=-32001, http_status=404)
+    # Deliberately no transcript samples in the response: a correction does not
+    # need them and returning them would widen what this scope discloses.
+    return {"success": True, "person": {"id": person_id, "name": normalized_name}}
+
+
+def dismiss_person(
+    uid: str,
+    arguments: Dict[str, Any],
+    auth_context: Optional[ProductAuthorizationContext] = None,
+) -> Dict[str, Any]:
+    """Soft-dismiss a false-positive person: preserved in storage and in exports."""
+    person_id = _required_person_id(arguments)
+    if not users_db.dismiss_person(uid, person_id):
+        raise ToolExecutionError("Person not found", code=-32001, http_status=404)
+    return {"success": True, "person_id": person_id, "dismissed": True}
 
 
 _SCREEN_ACTIVITY_GROUP_BY = frozenset({"none", "app", "hour", "day"})

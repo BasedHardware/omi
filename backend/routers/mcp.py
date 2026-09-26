@@ -6,7 +6,7 @@ from utils.mcp_data import end_of_day_utc, parse_date_only_utc
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Response
 from fastapi.routing import APIRoute
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import database.users as users_db
 from database._client import db
@@ -29,7 +29,9 @@ from dependencies import (
     get_current_user_id,
     get_mcp_memory_default_memory_read_context,
     get_mcp_memory_default_memory_write_context,
+    require_mcp_api_key_scope,
 )
+from database.person_aliases import normalized_person_alias
 from utils.other.endpoints import with_rate_limit, with_rate_limit_context
 from utils.log_sanitizer import sanitize_pii
 from utils.memory.product_authorization import (
@@ -168,6 +170,11 @@ def _call_tool_handler(
         return spec.handler(uid, arguments, auth_context)
     except ToolExecutionError as e:
         raise _http_error_from_tool_error(e)
+
+
+get_mcp_people_read_uid = require_mcp_api_key_scope("people.read")
+get_mcp_people_rename_uid = require_mcp_api_key_scope("people.rename")
+get_mcp_people_cleanup_uid = require_mcp_api_key_scope("people.cleanup")
 
 
 class McpStatusResponse(BaseModel):
@@ -923,14 +930,60 @@ class SimplePerson(BaseModel):
     speech_sample_transcripts: List[str] = []
 
 
+class McpPersonRenameRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+
+
+class McpPersonMutationResponse(BaseModel):
+    success: bool
+    person_id: str
+    name: Optional[str] = None
+    dismissed: Optional[bool] = None
+
+
 @router.get("/v1/mcp/people", response_model=List[SimplePerson], tags=["mcp"])
-def get_people(uid: str = Depends(get_uid_from_mcp_api_key)):
+def get_people(uid: str = Depends(get_mcp_people_read_uid)):
     logger.info(f"get_people {uid}")
     # Shared with the hosted MCP tool of the same name; identical privacy
     # cleaning via utils.mcp_data.clean_person, unwrapped to the REST list.
     spec = spec_for_tool("get_people")
     assert spec is not None
     return spec.handler(uid, {}, None)["people"]
+
+
+@router.patch(
+    "/v1/mcp/people/{person_id}/name",
+    response_model=McpPersonMutationResponse,
+    tags=["mcp"],
+)
+def rename_person(
+    person_id: str,
+    request: McpPersonRenameRequest,
+    uid: str = Depends(get_mcp_people_rename_uid),
+):
+    person_id = person_id.strip()
+    if not person_id:
+        raise HTTPException(status_code=422, detail="person_id is required")
+    normalized_name = normalized_person_alias(request.name)
+    if normalized_name is None:
+        raise HTTPException(status_code=422, detail="name must contain 1 to 128 characters")
+    if not users_db.update_person(uid, person_id, normalized_name):
+        raise HTTPException(status_code=404, detail="Person not found")
+    return {"success": True, "person_id": person_id, "name": normalized_name}
+
+
+@router.post(
+    "/v1/mcp/people/{person_id}/dismiss",
+    response_model=McpPersonMutationResponse,
+    tags=["mcp"],
+)
+def dismiss_person(person_id: str, uid: str = Depends(get_mcp_people_cleanup_uid)):
+    person_id = person_id.strip()
+    if not person_id:
+        raise HTTPException(status_code=422, detail="person_id is required")
+    if not users_db.dismiss_person(uid, person_id):
+        raise HTTPException(status_code=404, detail="Person not found")
+    return {"success": True, "person_id": person_id, "dismissed": True}
 
 
 # ---------------------------------------------------------------------------

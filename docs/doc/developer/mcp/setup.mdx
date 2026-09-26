@@ -16,7 +16,9 @@ Omi supports four setup paths:
 | Local stdio server | An MCP key passed to `mcp-server-omi` | Clients that require a local process or a self-hosted backend |
 
 OAuth and MCP keys grant access to the same hosted endpoint. OAuth is the default for the
-new cloud-connector UI; manual MCP keys remain available as a fallback.
+new cloud-connector UI; manual MCP keys remain available as a fallback. Cleanup capabilities
+that hide retained data, such as `people.cleanup`, are never added to a default or legacy MCP
+key. They must be requested explicitly when the OAuth grant or key is created.
 
 ## Connect from the Omi macOS app (Recommended)
 

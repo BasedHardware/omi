@@ -393,3 +393,25 @@ def test_create_mcp_key_explicit_none_scopes_mints_legacy_key(monkeypatch):
     assert 'memories.read' in api_key_data.scopes
     assert fake_db.set_calls[0]['scopes'] == api_key_data.scopes
     assert fake_db.grant_sets
+
+
+def test_default_mcp_key_can_rename_but_cannot_cleanup_people(monkeypatch):
+    monkeypatch.setattr(mcp_api_key_db, 'generate_api_key', lambda: ('raw', 'hashed', 'omi_mcp_xxxx'))
+    fake_db = _CreateDB()
+    monkeypatch.setattr(mcp_api_key_db, '_db', lambda: fake_db)
+
+    _raw_key, api_key_data = mcp_api_key_db.create_mcp_key('u1', 'default-key')
+
+    assert 'people.rename' in api_key_data.scopes
+    assert 'people.cleanup' not in api_key_data.scopes
+
+
+def test_mcp_key_people_cleanup_requires_explicit_scope(monkeypatch):
+    monkeypatch.setattr(mcp_api_key_db, 'generate_api_key', lambda: ('raw', 'hashed', 'omi_mcp_xxxx'))
+    fake_db = _CreateDB()
+    monkeypatch.setattr(mcp_api_key_db, '_db', lambda: fake_db)
+
+    _raw_key, api_key_data = mcp_api_key_db.create_mcp_key('u1', 'cleanup-key', scopes=['people.cleanup'])
+
+    assert 'people.cleanup' in api_key_data.scopes
+    assert fake_db.set_calls[0]['scopes'] == api_key_data.scopes

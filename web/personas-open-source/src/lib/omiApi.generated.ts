@@ -2839,6 +2839,7 @@ export interface McpApiKey {
 
 export interface McpApiKeyCreate {
   name: string;
+  scopes?: Array<string> | null;
 }
 
 export interface McpApiKeyCreated {
@@ -2860,6 +2861,17 @@ export interface McpCreateActionItem {
 
 export interface McpOauthGrantsResponse {
   grants?: Array<Record<string, unknown>>;
+}
+
+export interface McpPersonMutationResponse {
+  dismissed?: boolean | null;
+  name?: string | null;
+  person_id: string;
+  success: boolean;
+}
+
+export interface McpPersonRenameRequest {
+  name: string;
 }
 
 export interface McpRefreshToolsResponse {
@@ -5491,6 +5503,8 @@ export interface OmiApiSchemas {
   "McpApiKeyCreated": McpApiKeyCreated;
   "McpCreateActionItem": McpCreateActionItem;
   "McpOauthGrantsResponse": McpOauthGrantsResponse;
+  "McpPersonMutationResponse": McpPersonMutationResponse;
+  "McpPersonRenameRequest": McpPersonRenameRequest;
   "McpRefreshToolsResponse": McpRefreshToolsResponse;
   "McpScreenActivityAppSummary": McpScreenActivityAppSummary;
   "McpScreenActivityRow": McpScreenActivityRow;
@@ -8384,6 +8398,27 @@ export interface OmiApiPaths {
       responses: {
         "200": Array<SimplePerson>;
         "401": void;
+      };
+    };
+  };
+  "/v1/mcp/people/{person_id}/dismiss": {
+    post: {
+      operationId: "dismiss_person_v1_mcp_people__person_id__dismiss_post";
+      responses: {
+        "200": McpPersonMutationResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp/people/{person_id}/name": {
+    patch: {
+      operationId: "rename_person_v1_mcp_people__person_id__name_patch";
+      responses: {
+        "200": McpPersonMutationResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
       };
     };
   };
@@ -15393,6 +15428,38 @@ export async function get_people_v1_mcp_people_get(init?: OmiApiClientInit): Pro
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function dismiss_person_v1_mcp_people__person_id__dismiss_post(path: { person_id: string }, init?: OmiApiClientInit): Promise<McpPersonMutationResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/people/${path.person_id}/dismiss`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function rename_person_v1_mcp_people__person_id__name_patch(path: { person_id: string }, body: McpPersonRenameRequest, init?: OmiApiClientInit): Promise<McpPersonMutationResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp/people/${path.person_id}/name`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_user_profile_v1_mcp_profile_get(init?: OmiApiClientInit): Promise<UserProfile> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/profile`;
@@ -19396,4 +19463,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 454 client methods generated.
+// Total: 456 client methods generated.

@@ -979,6 +979,8 @@ def test_default_clients_can_request_all_supported_tool_scopes():
             'chat.read',
             'screen_activity.read',
             'people.read',
+            'people.rename',
+            'people.cleanup',
         ]
     )
 

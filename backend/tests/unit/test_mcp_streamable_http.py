@@ -25,7 +25,7 @@ import utils.mcp_server.transport as mcp_transport
 from database import mcp_oauth as mcp_oauth_db
 from routers import mcp as rest_mcp
 from routers import mcp_sse
-from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
+from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES, MCP_SUPPORTED_SCOPES
 from utils.mcp_server.auth import MCPAuthContext
 from utils.mcp_server.errors import ToolExecutionError, authorization_denied_error
 from utils.mcp_server.metadata import (
@@ -47,7 +47,7 @@ from utils.mcp_server.versions import (
     TOOLS_LIST_TTL_MS,
 )
 
-ALL_SCOPES = list(MCP_FULL_ACCESS_SCOPES)
+ALL_SCOPES = list(MCP_SUPPORTED_SCOPES)
 
 EXPECTED_TOOL_ORDER = [
     "get_user_profile",
@@ -72,6 +72,8 @@ EXPECTED_TOOL_ORDER = [
     "get_goals",
     "get_chat_messages",
     "get_people",
+    "rename_person",
+    "dismiss_person",
     "get_screen_activity",
     "get_daily_summaries",
 ]
@@ -108,6 +110,8 @@ FAKE_SUCCESS = {
     "get_goals": {"goals": []},
     "get_chat_messages": {"messages": []},
     "get_people": {"people": []},
+    "rename_person": {"success": True, "person": {"id": "p1", "name": "Ada"}},
+    "dismiss_person": {"success": True, "person_id": "p1", "dismissed": True},
     "get_screen_activity": {"screen_activity": []},
     "get_daily_summaries": {"daily_summaries": []},
 }
@@ -1144,7 +1148,10 @@ class TestOAuthResourceCanonicalization:
         import config.mcp_scopes as config_scopes
         import utils.mcp_scopes as util_scopes
 
-        assert mcp_oauth_db.SUPPORTED_SCOPES is config_scopes.MCP_FULL_ACCESS_SCOPES
+        # The OAuth server advertises everything requestable, which includes the
+        # opt-in cleanup scope; the default grant deliberately does not.
+        assert mcp_oauth_db.SUPPORTED_SCOPES is config_scopes.MCP_SUPPORTED_SCOPES
+        assert util_scopes.MCP_SUPPORTED_SCOPES is config_scopes.MCP_SUPPORTED_SCOPES
         assert util_scopes.MCP_FULL_ACCESS_SCOPES is config_scopes.MCP_FULL_ACCESS_SCOPES
         assert util_scopes.MCP_FULL_ACCESS_SCOPES == [
             "memories.read",
@@ -1156,7 +1163,10 @@ class TestOAuthResourceCanonicalization:
             "chat.read",
             "screen_activity.read",
             "people.read",
+            "people.rename",
         ]
+        assert config_scopes.MCP_OPT_IN_SCOPES == ["people.cleanup"]
+        assert "people.cleanup" not in util_scopes.MCP_FULL_ACCESS_SCOPES
 
     def test_sse_suffixed_env_resource_is_canonicalized(self, monkeypatch):
         """A stale ``/v1/mcp/sse`` MCP_RESOURCE_URL must still advertise the
