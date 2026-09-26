@@ -478,6 +478,21 @@ async def test_photo_only_drain_writes_photos(monkeypatch):
     assert 'audio_timeline' not in row, 'photos alone never pin the marker'
 
 
+async def test_load_conversation_coerces_a_null_transcript_segments_field(monkeypatch):
+    """A row persisted with `transcript_segments: None` (not merely absent) must come
+    back out of `_load_conversation` as `[]`: every caller downstream treats it as a
+    list (`Conversation` model validation, `ConversationSpeakerIdAllocator.hydrate`,
+    which iterates its argument directly and raises `TypeError` on `None`)."""
+    store = StrictFirestore()
+    row = _seed_row(store, 'conv-null', started_at=datetime.fromtimestamp(T0 - 5, tz=timezone.utc))
+    row['transcript_segments'] = None
+    processor, _sent = _processor(monkeypatch, store, current='conv-null')
+
+    data = await processor._load_conversation('conv-null')
+
+    assert data['transcript_segments'] == []
+
+
 async def test_late_owner_drain_still_writes_current_photos(monkeypatch):
     from models.conversation_photo import ConversationPhoto
     from routers.listen.contracts import ConversationCaptureOrigin
