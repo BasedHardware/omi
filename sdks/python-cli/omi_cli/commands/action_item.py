@@ -109,12 +109,21 @@ def create_action_item(
     due_at: Optional[datetime] = typer.Option(None, "--due-at", formats=ISO_DATETIME_FORMATS, help="ISO datetime."),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    body: dict[str, object] = {"description": description, "completed": completed}
+    cleaned_desc = description.strip()
+    if not cleaned_desc:
+        raise UsageError(message="Invalid description", detail="Description cannot be empty or whitespace.")
+    if len(cleaned_desc) > 500:
+        raise UsageError(
+            message="Description too long",
+            detail=f"Description must be 500 characters or fewer (got {len(cleaned_desc)}).",
+        )
+    body: dict[str, object] = {"description": cleaned_desc, "completed": completed}
     if due_at is not None:
         body["due_at"] = due_at.isoformat()
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/action-items", json_body=body)
-    ctx.renderer.success(f"Action item created: [bold]{result.get('id')}[/bold]")
+    item_id = escape(str(result.get("id") or ""))
+    ctx.renderer.success(f"Action item created: [bold]{item_id}[/bold]")
     ctx.renderer.emit(result)
 
 
@@ -132,7 +141,15 @@ def update_action_item(
         raise UsageError(message="Conflicting options", detail="--due-at and --clear-due-at are mutually exclusive.")
     body: dict[str, object] = {}
     if description is not None:
-        body["description"] = description
+        cleaned_desc = description.strip()
+        if not cleaned_desc:
+            raise UsageError(message="Invalid description", detail="Description cannot be empty or whitespace.")
+        if len(cleaned_desc) > 500:
+            raise UsageError(
+                message="Description too long",
+                detail=f"Description must be 500 characters or fewer (got {len(cleaned_desc)}).",
+            )
+        body["description"] = cleaned_desc
     if completed is not None:
         body["completed"] = completed
     if clear_due_at:
