@@ -343,6 +343,26 @@ final class SiriSnapshotStore {
         return validOwnerLocked() && snapshot.ownerUid == uid
     }
 
+    /// Open intents remain usable with indexing OFF, but a stale entity must
+    /// never navigate under a different owner or after leaving index scope.
+    func containsCurrentEntity(type: String, id: String) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard !id.isEmpty, accountOwnerLocked(), transitionGeneration == nil,
+              (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty else { return false }
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        switch type {
+        case "conversation":
+            return snapshot.conversations[id].map { $0.startedAtMs > now - 180 * 86_400_000 } ?? false
+        case "memory":
+            return snapshot.memories[id].map { $0.expiresAtMs == nil || $0.expiresAtMs! > now } ?? false
+        case "task":
+            return snapshot.tasks[id].map {
+                !$0.completed || ($0.completedAtMs ?? 0) > now - 30 * 86_400_000
+            } ?? false
+        default: return false
+        }
+    }
+
     @available(iOS 27.0, *)
     func conversations(ids: [String]?) -> [ConversationEntity] {
         lock.lock(); defer { lock.unlock() }

@@ -1,6 +1,6 @@
 # Siri and App Intents contract
 
-This is the shared contract for the macOS and iOS implementations. Both clients use backend IDs as entity IDs. Local-only rows without a backend ID are not indexed. Siri behavior is English-first. The iOS deployment floor remains 15.0 and the macOS floor remains 14.0; APIs introduced later need availability gates and a usable older-system path.
+This is the shared contract for the macOS and iOS implementations. Both clients use backend IDs as entity IDs. Local-only rows without a backend ID are not indexed. Siri behavior is English-first. The iOS deployment floor remains 15.0 and the macOS floor remains 14.0. Classic Remember and Start/Stop listening shortcuts work on iOS 16+ and macOS 14+. Personal Spotlight entity indexing and schema intents require iOS 27+ or macOS 27+; older systems retain the custom shortcuts without those entities.
 
 ## Entities and index
 
@@ -12,7 +12,7 @@ This is the shared contract for the macOS and iOS implementations. Both clients 
 | `OmiFolderEntity` | `.notes.folder` | `conversations` or `memories` | Conversations or Memories | corresponding collection |
 | `OmiListEntity` | `.reminders.list` | `omi` | Omi | task collection |
 
-The Xcode 27 metadata processor rejects two entity types conforming to `.notes.note`; the memory type must stay custom. The index includes completed, retained conversations from the last 180 days (newest 2,000), active unexpired memories (newest 5,000), all open tasks and tasks completed in the last 30 days. An account gets its own named Core Spotlight index. Delete indexed items in each local delete/expiry path. On sign-out or UID change, wipe before indexing another account. The setting **Use Omi with Siri & Apple Intelligence** defaults ON; OFF wipes the index and suppresses future indexing and donations, while explicit intents still work.
+The Xcode 27 metadata processor rejects two entity types conforming to `.notes.note`; the memory type must stay custom. Although `IndexedEntity` and `indexAppEntities` exist on iOS 18, the note, reminder, folder and list schema entities and `IndexedEntityQuery` reindex API used here require iOS 27. Supporting iOS 18–26 indexing would require separate entity types and queries for the same private objects, with a second mapping and reindex path. This PR keeps one owner, eligibility and wipe path and limits indexing to iOS 27+/macOS 27+. The index includes completed, retained conversations from the last 180 days (newest 2,000), active unexpired memories (newest 5,000), all open tasks and tasks completed in the last 30 days. An account gets its own named Core Spotlight index. Delete indexed items in each local delete/expiry path. On sign-out or UID change, wipe before indexing another account. The setting **Use Omi with Siri & Apple Intelligence** defaults ON; OFF wipes the index and suppresses future indexing and donations, while explicit intents still work.
 
 ## Intents and phrases
 

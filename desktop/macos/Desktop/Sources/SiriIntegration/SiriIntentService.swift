@@ -31,7 +31,11 @@ enum SiriFailure: Error, Equatable {
     case .unsupported:
       return action == "open"
         ? "That item is no longer available in Omi."
-        : action == "complete" ? "Omi can only change task completion through Siri." : "Tell Omi what to save."
+        : action == "create_note_fields"
+          ? "Omi can only save note text to Memories."
+          : action == "create_task_fields"
+            ? "Omi can only create tasks with a title, due date, and the Omi list."
+            : action == "complete" ? "Omi can only change task completion through Siri." : "Tell Omi what to save."
     }
   }
 

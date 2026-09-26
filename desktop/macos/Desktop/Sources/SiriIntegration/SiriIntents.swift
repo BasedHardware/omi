@@ -36,6 +36,7 @@ struct RememberIntent: AppIntent {
   static let title: LocalizedStringResource = "Remember in Omi"
   static let description = IntentDescription("Save a personal memory in Omi.")
   static let authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
+  static let openAppWhenRun = false
 
   @Parameter(title: "What should Omi remember?") var text: String
 
@@ -72,7 +73,10 @@ struct OmiCreateNoteIntent {
   func perform() async throws -> some ReturnsValue<ConversationEntity> {
     let value = String(content?.characters ?? AttributedString(name).characters)
     let saved = try await SiriIntentTelemetry.perform("create_note") {
-      try await SiriIntentService.remember(value)
+      guard folder == nil || folder?.id == "memories", attachments.isEmpty,
+        tags.isEmpty, !isPinned
+      else { throw SiriActionFailure(action: "create_note_fields", failure: .unsupported) }
+      return try await SiriIntentService.remember(value)
     }
     return .result(value: ConversationEntity(saved))
   }
@@ -95,13 +99,30 @@ struct OmiCreateTaskIntent {
   var locationTrigger: OmiLocationTriggerEntity?
   var section: OmiSectionEntity?
 
+  init() {
+    title = ""
+    list = nil
+    note = nil
+    isFlagged = nil
+    images = []
+    tags = []
+    urls = []
+    dueDate = nil
+    recurrence = nil
+    locationTrigger = nil
+    section = nil
+  }
+
   func perform() async throws -> some ReturnsValue<TaskEntity> {
-    guard list == nil || list?.id == "omi" else {
-      throw SiriActionFailure(action: "create", failure: .unsupported)
-    }
     let due = dueDate.flatMap { Calendar.current.date(from: $0) }
     let created = try await SiriIntentTelemetry.perform("create_task") {
-      try await SiriIntentService.createTask(title: title, dueDate: due)
+      guard list == nil || list?.id == "omi",
+        note.map({ String($0.characters).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) ?? true,
+        isFlagged != true, images.isEmpty, tags.isEmpty, urls.isEmpty,
+        recurrence == nil, locationTrigger == nil, section == nil,
+        dueDate == nil || due != nil
+      else { throw SiriActionFailure(action: "create_task_fields", failure: .unsupported) }
+      return try await SiriIntentService.createTask(title: title, dueDate: due)
     }
     // The backend receipt is authoritative. A subsequent sync populates the
     // local cache; use the receipt to return a schema entity immediately.
@@ -155,6 +176,7 @@ struct OmiSectionQuery: EntityQuery {
 
 struct StartListeningIntent: AppIntent {
   static let title: LocalizedStringResource = "Start Listening in Omi"
+  static let openAppWhenRun = true
 
   @MainActor
   func perform() async throws -> some IntentResult & ProvidesDialog {
@@ -169,6 +191,7 @@ struct StartListeningIntent: AppIntent {
 
 struct StopListeningIntent: AppIntent {
   static let title: LocalizedStringResource = "Stop Listening in Omi"
+  static let openAppWhenRun = true
 
   @MainActor
   func perform() async throws -> some IntentResult & ProvidesDialog {

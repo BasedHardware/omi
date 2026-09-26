@@ -60,6 +60,13 @@ final class SiriIntentServiceTests: XCTestCase {
     XCTAssertEqual(SiriIntentService.normalizedMemory("that\twe should meet"), "that\twe should meet")
   }
 
+  func testClassicShortcutsUseTheCorrectExecutionProcess() {
+    XCTAssertFalse(RememberIntent.openAppWhenRun)
+    XCTAssertTrue(StartListeningIntent.openAppWhenRun)
+    XCTAssertTrue(StopListeningIntent.openAppWhenRun)
+    XCTAssertEqual(OmiAppShortcuts.appShortcuts.count, 3)
+  }
+
   func testBackendFailuresHaveTypedSpokenOutcomes() {
     let cases: [(Error, SiriFailure, String)] = [
       (APIError.unauthorized, .auth, "Open Omi and sign in first."),
@@ -319,6 +326,46 @@ final class SiriIntentServiceTests: XCTestCase {
         XCTAssertEqual(error.action, "create")
         XCTAssertEqual(error.errorDescription, stub.spokenMessage(for: "create"))
       } catch { XCTFail("Unexpected \(stub) failure: \(error)") }
+    }
+  }
+
+  @available(macOS 27, *)
+  func testCreateNoteRejectsOtherFolderBeforeWriting() async {
+    let intent = OmiCreateNoteIntent()
+    intent.name = "Private text"
+    intent.folder = .conversations
+    do {
+      _ = try await SiriIntentService.$memoryWriter.withValue({ _ in
+        XCTFail("A note outside Memories must not be written")
+        throw APIError.invalidResponse
+      }) { try await intent.perform() }
+      XCTFail("The folder must be rejected")
+    } catch let error as SiriActionFailure {
+      XCTAssertEqual(error.errorDescription, "Omi can only save note text to Memories.")
+    } catch { XCTFail("Unexpected error: \(error)") }
+  }
+
+  @available(macOS 27, *)
+  func testCreateTaskRejectsUnsupportedFieldsBeforeWriting() async {
+    let variants: [(inout OmiCreateTaskIntent) -> Void] = [
+      { $0.note = AttributedString("Keep this note") },
+      { $0.tags = ["urgent"] },
+      { $0.isFlagged = true },
+      { $0.urls = [URL(string: "https://example.invalid")!] },
+    ]
+    for mutate in variants {
+      var intent = OmiCreateTaskIntent()
+      intent.title = "Private task"
+      mutate(&intent)
+      do {
+        _ = try await SiriIntentService.$taskCreationWriter.withValue({ _, _ in
+          XCTFail("Unsupported task fields must not be written")
+          throw APIError.invalidResponse
+        }) { try await intent.perform() }
+        XCTFail("Unsupported task field must be rejected")
+      } catch let error as SiriActionFailure {
+        XCTAssertEqual(error.errorDescription, "Omi can only create tasks with a title, due date, and the Omi list.")
+      } catch { XCTFail("Unexpected error: \(error)") }
     }
   }
 

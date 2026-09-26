@@ -29,12 +29,25 @@ struct SiriSpokenError: LocalizedError {
     }
 }
 
-@available(iOS 26.0, *)
+private struct SiriUnsupportedInput: LocalizedError {
+    enum Kind { case note, createTask, completeTask, open }
+    let kind: Kind
+    var errorDescription: String? {
+        switch kind {
+        case .note: "Omi can only save note text to Memories."
+        case .createTask: "Omi can only create tasks with a title, due date, and the Omi list."
+        case .completeTask: "Omi can only change task completion through Siri."
+        case .open: "That item is no longer available in Omi."
+        }
+    }
+}
+
+@available(iOS 16.0, *)
 struct RememberIntent: AppIntent {
     static var title: LocalizedStringResource = "Remember in Omi"
     static var description = IntentDescription("Save a private memory in Omi.")
     static var authenticationPolicy: IntentAuthenticationPolicy = .requiresLocalDeviceAuthentication
-    static var supportedModes: IntentModes = .background
+    static var openAppWhenRun: Bool = false
     @Parameter(title: "What should Omi remember?") var content: String
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
@@ -83,7 +96,10 @@ struct OmiCreateNoteIntent {
         do {
         let raw = content.map { String($0.characters) } ?? name
         let value = cleanedMemory(raw)
-        guard !value.isEmpty, folder == nil || folder?.id == "memories" else { throw SiriSession.Failure.server }
+        guard !value.isEmpty, folder == nil || folder?.id == "memories",
+              attachments.isEmpty, tags.isEmpty, !isPinned else {
+            throw SiriUnsupportedInput(kind: .note)
+        }
         let response = try await OmiNativeAPI().request(method: "POST", path: "/v3/memories", body: [
             "content": value, "category": "manual", "visibility": "private", "tags": ["siri"]
         ])
@@ -93,6 +109,7 @@ struct OmiCreateNoteIntent {
         return .result(value: ConversationEntity(memoryId: id, content: value, creationDate: Date()), dialog: "Saved to Omi")
         } catch {
             SiriTelemetry.intent("createNote", outcome: SiriTelemetry.outcome(error), started: started)
+            if let unsupported = error as? SiriUnsupportedInput { throw unsupported }
             throw SiriSpokenError(error, action: "the memory wasn't saved", serverAction: "save the memory")
         }
     }
@@ -107,6 +124,9 @@ struct OpenOmiIntent: OpenIntent {
     func perform() async throws -> some IntentResult {
         let started = Date()
         let kind = target.folder?.id == "memories" ? "memory" : "conversation"
+        guard SiriSnapshotStore.shared.containsCurrentEntity(type: kind, id: target.id) else {
+            throw SiriUnsupportedInput(kind: .open)
+        }
         SiriBridge.shared.navigate("omi://\(kind)/\(target.id)")
         SiriTelemetry.intent("open", outcome: "ok", started: started)
         return .result()
@@ -121,6 +141,9 @@ struct OpenOmiMemoryIntent: OpenIntent {
     @Parameter(title: "Memory") var target: MemoryEntity
     func perform() async throws -> some IntentResult {
         let started = Date()
+        guard SiriSnapshotStore.shared.containsCurrentEntity(type: "memory", id: target.id) else {
+            throw SiriUnsupportedInput(kind: .open)
+        }
         SiriBridge.shared.navigate("omi://memory/\(target.id)")
         SiriTelemetry.intent("open", outcome: "ok", started: started)
         return .result()
@@ -135,6 +158,9 @@ struct OpenOmiTaskIntent: OpenIntent {
     @Parameter(title: "Task") var target: TaskEntity
     func perform() async throws -> some IntentResult {
         let started = Date()
+        guard SiriSnapshotStore.shared.containsCurrentEntity(type: "task", id: target.id) else {
+            throw SiriUnsupportedInput(kind: .open)
+        }
         SiriBridge.shared.navigate("omi://task/\(target.id)")
         SiriTelemetry.intent("open", outcome: "ok", started: started)
         return .result()
@@ -149,6 +175,9 @@ struct OpenOmiFolderIntent: OpenIntent {
     @Parameter(title: "Folder") var target: OmiFolderEntity
     func perform() async throws -> some IntentResult {
         let started = Date()
+        guard target.id == "memories" || target.id == "conversations" else {
+            throw SiriUnsupportedInput(kind: .open)
+        }
         SiriBridge.shared.navigate(target.id == "memories" ? "omi://memories" : "omi://conversations")
         SiriTelemetry.intent("open", outcome: "ok", started: started)
         return .result()
@@ -163,6 +192,7 @@ struct OpenOmiListIntent: OpenIntent {
     @Parameter(title: "List") var target: OmiListEntity
     func perform() async throws -> some IntentResult {
         let started = Date()
+        guard target.id == "omi" else { throw SiriUnsupportedInput(kind: .open) }
         SiriBridge.shared.navigate("omi://action-items")
         SiriTelemetry.intent("open", outcome: "ok", started: started)
         return .result()
@@ -212,7 +242,7 @@ struct CompleteOmiTaskIntent {
         do {
         guard isCompleted == true, title == nil, note == nil, tags == nil, urls == nil,
               dueDate == nil, recurrence == nil, isFlagged == nil, list == nil, locationTrigger == nil
-        else { throw SiriSession.Failure.server }
+        else { throw SiriUnsupportedInput(kind: .completeTask) }
         let id = target.id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? target.id
         let response = try await OmiNativeAPI().request(method: "PATCH", path: "/v1/action-items/\(id)", body: ["completed": true])
         guard let returnedId = response["id"] as? String, returnedId == target.id else { throw SiriSession.Failure.server }
@@ -225,6 +255,7 @@ struct CompleteOmiTaskIntent {
         return .result(value: entity, dialog: "Marked the task done in Omi.")
         } catch {
             SiriTelemetry.intent("completeTask", outcome: SiriTelemetry.outcome(error), started: started)
+            if let unsupported = error as? SiriUnsupportedInput { throw unsupported }
             throw SiriSpokenError(error, action: "the task wasn't completed", serverAction: "complete the task")
         }
     }
@@ -255,29 +286,37 @@ struct CreateOmiTaskIntent {
         let started = Date()
         do {
         let value = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty, list == nil || list?.id == "omi" else { throw SiriSession.Failure.server }
+        guard !value.isEmpty, list == nil || list?.id == "omi",
+              note.map({ String($0.characters).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) ?? true,
+              isFlagged != true, images.isEmpty, tags.isEmpty, urls.isEmpty,
+              recurrence == nil, locationTrigger == nil, section == nil else {
+            throw SiriUnsupportedInput(kind: .createTask)
+        }
+        let due = dueDate.flatMap { Calendar.current.date(from: $0) }
+        guard dueDate == nil || due != nil else { throw SiriUnsupportedInput(kind: .createTask) }
         var body: [String: Any] = ["description": value]
-        if let due = dueDate.flatMap({ Calendar.current.date(from: $0) }) {
+        if let due {
             body["due_at"] = ISO8601DateFormatter().string(from: due)
         }
         let response = try await OmiNativeAPI().request(method: "POST", path: "/v1/action-items", body: body)
         guard let id = response["id"] as? String, !id.isEmpty else { throw SiriSession.Failure.server }
         SiriBridge.shared.taskChanged(id)
         let entity = TaskEntity(id: id, title: value, isCompleted: false, creationDate: Date(),
-                                dueDate: dueDate.flatMap { Calendar.current.date(from: $0) }, completionDate: nil)
+                                dueDate: due, completionDate: nil)
         SiriTelemetry.intent("createTask", outcome: "ok", started: started)
         return .result(value: entity, dialog: "Added the task to Omi.")
         } catch {
             SiriTelemetry.intent("createTask", outcome: SiriTelemetry.outcome(error), started: started)
+            if let unsupported = error as? SiriUnsupportedInput { throw unsupported }
             throw SiriSpokenError(error, action: "the task wasn't created", serverAction: "create the task")
         }
     }
 }
 
-@available(iOS 26.0, *)
+@available(iOS 16.0, *)
 struct StartOmiListeningIntent: AppIntent {
     static var title: LocalizedStringResource = "Start listening with Omi"
-    static var supportedModes: IntentModes = .foreground(.dynamic)
+    static var openAppWhenRun: Bool = true
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let started = Date()
         do {
@@ -294,10 +333,10 @@ struct StartOmiListeningIntent: AppIntent {
     }
 }
 
-@available(iOS 26.0, *)
+@available(iOS 16.0, *)
 struct StopOmiListeningIntent: AppIntent {
     static var title: LocalizedStringResource = "Stop listening with Omi"
-    static var supportedModes: IntentModes = .foreground(.dynamic)
+    static var openAppWhenRun: Bool = true
     func perform() async throws -> some IntentResult & ProvidesDialog {
         let started = Date()
         do {
@@ -320,8 +359,8 @@ struct OmiUiActivityIntent: AppIntent {
     @Parameter(title: "Item ID") var id: String
 
     func perform() async throws -> some IntentResult {
-        guard ["conversation", "memory", "task"].contains(kind), !id.isEmpty else {
-            throw SiriSession.Failure.server
+        guard SiriSnapshotStore.shared.containsCurrentEntity(type: kind, id: id) else {
+            throw SiriUnsupportedInput(kind: .open)
         }
         let route = kind == "conversation" ? "omi://conversation/\(id)" :
             (kind == "memory" ? "omi://memory/\(id)" : "omi://task/\(id)")
@@ -330,7 +369,7 @@ struct OmiUiActivityIntent: AppIntent {
     }
 }
 
-@available(iOS 26.0, *)
+@available(iOS 16.0, *)
 struct OmiAppShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(intent: RememberIntent(), phrases: [
@@ -343,4 +382,19 @@ struct OmiAppShortcuts: AppShortcutsProvider {
         AppShortcut(intent: StopOmiListeningIntent(), phrases: ["Stop \(.applicationName)"],
                     shortTitle: "Stop listening", systemImageName: "stop.fill")
     }
+}
+
+@available(iOS 26.0, *)
+extension RememberIntent {
+    static var supportedModes: IntentModes { .background }
+}
+
+@available(iOS 26.0, *)
+extension StartOmiListeningIntent {
+    static var supportedModes: IntentModes { .foreground(.dynamic) }
+}
+
+@available(iOS 26.0, *)
+extension StopOmiListeningIntent {
+    static var supportedModes: IntentModes { .foreground(.dynamic) }
 }

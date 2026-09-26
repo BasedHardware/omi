@@ -10,12 +10,25 @@ import ObjectiveC.runtime
 /// Simulator-only, opt-in probe for a Runner launch that has no Dart engine.
 /// It accepts only loopback, and uses a fake token against a local stub.
 enum SiriDebugProbe {
+    /// Compiles from the iOS 16 API floor; a 26-only intent or provider breaks
+    /// the opt-in probe build before it can reach the simulator.
+    @available(iOS 16.0, *)
+    private static func classicShortcutAvailability() -> Bool {
+        let shortcuts = OmiAppShortcuts.appShortcuts
+        _ = RememberIntent()
+        _ = StartOmiListeningIntent()
+        _ = StopOmiListeningIntent()
+        return shortcuts.count == 3 && !RememberIntent.openAppWhenRun &&
+            StartOmiListeningIntent.openAppWhenRun && StopOmiListeningIntent.openAppWhenRun
+    }
+
     @available(iOS 26.0, *)
     static func runIfRequested() {
         guard ProcessInfo.processInfo.arguments.contains("-omi-siri-probe") else { return }
         Task {
             if FirebaseApp.app() == nil { FirebaseApp.configure() }
             NSLog("[SiriProbe] engine=absent firebaseUser=%@", Auth.auth().currentUser?.uid ?? "nil")
+            NSLog("[SiriProbe] classicShortcuts=%@", classicShortcutAvailability() ? "PASS" : "FAIL")
             let backgroundModes = Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String] ?? []
             NSLog("[SiriProbe] backgroundAudioBLEModes=%@",
                   backgroundModes.contains("audio") && backgroundModes.contains("bluetooth-central") ? "PASS" : "FAIL")
@@ -68,12 +81,45 @@ enum SiriDebugProbe {
                 let result = try await intent.perform()
                 NSLog("[SiriProbe] rememberPerform=returned result=%@", String(reflecting: result))
                 if #available(iOS 27.0, *) {
+                    try await SiriSnapshotStore.shared.upsert([
+                        SiriMemory(id: "stub-memory-1", content: "probe memory",
+                                   createdAtMs: Int64(Date().timeIntervalSince1970 * 1000),
+                                   expiresAtMs: nil)
+                    ], uid: config.uid)
                     var open = OpenOmiIntent()
                     open.target = ConversationEntity(memoryId: "stub-memory-1", content: "",
                                                      creationDate: Date())
                     _ = try await open.perform()
                     NSLog("[SiriProbe] memoryNoteOpenRoute=%@",
                           SiriSnapshotStore.shared.pendingRoute() ?? "nil")
+                    var invalidFolder = OpenOmiFolderIntent()
+                    invalidFolder.target = OmiFolderEntity(id: "other", name: "Other")
+                    do {
+                        _ = try await invalidFolder.perform()
+                        NSLog("[SiriProbe] invalidFolderOpen=FAIL success")
+                    } catch {
+                        NSLog("[SiriProbe] invalidFolderOpen=%@",
+                              SiriSnapshotStore.shared.pendingRoute() == nil ? "PASS" : "FAIL routed")
+                    }
+                    var invalidList = OpenOmiListIntent()
+                    invalidList.target = OmiListEntity(id: "other", name: "Other")
+                    do {
+                        _ = try await invalidList.perform()
+                        NSLog("[SiriProbe] invalidListOpen=FAIL success")
+                    } catch {
+                        NSLog("[SiriProbe] invalidListOpen=%@",
+                              SiriSnapshotStore.shared.pendingRoute() == nil ? "PASS" : "FAIL routed")
+                    }
+                    var staleMemory = OpenOmiMemoryIntent()
+                    staleMemory.target = MemoryEntity(id: "missing-memory", content: "Private",
+                                                      creationDate: Date())
+                    do {
+                        _ = try await staleMemory.perform()
+                        NSLog("[SiriProbe] staleMemoryOpen=FAIL success")
+                    } catch {
+                        NSLog("[SiriProbe] staleMemoryOpen=%@",
+                              SiriSnapshotStore.shared.pendingRoute() == nil ? "PASS" : "FAIL routed")
+                    }
                     SiriBridge.shared.routeDeliveryProbe = { _, completion in completion(true) }
                     SiriBridge.shared.navigate("/task/live-delivery")
                     NSLog("[SiriProbe] liveRouteCleared=%@",
@@ -273,6 +319,34 @@ enum SiriDebugProbe {
                     }
                     SiriSession.shared.beforeTokenLookup = nil
                     try SiriSession.shared.publish(next)
+                    SiriProbeURLProtocol.status = 200
+                    let beforeUnsupported = SiriProbeURLProtocol.requestCount
+                    var wrongFolder = OmiCreateNoteIntent()
+                    wrongFolder.name = "private note"
+                    wrongFolder.folder = .conversations
+                    do {
+                        _ = try await wrongFolder.perform()
+                        NSLog("[SiriProbe] unsupportedNoteFolder=FAIL success")
+                    } catch {
+                        NSLog("[SiriProbe] unsupportedNoteFolder=%@ spoken=%@",
+                              SiriProbeURLProtocol.requestCount == beforeUnsupported &&
+                              (error as? LocalizedError)?.errorDescription ==
+                              "Omi can only save note text to Memories." ? "PASS" : "FAIL",
+                              (error as? LocalizedError)?.errorDescription ?? "nil")
+                    }
+                    var extraTask = CreateOmiTaskIntent()
+                    extraTask.title = "private task"
+                    extraTask.note = AttributedString("Don't drop this")
+                    do {
+                        _ = try await extraTask.perform()
+                        NSLog("[SiriProbe] unsupportedTaskFields=FAIL success")
+                    } catch {
+                        NSLog("[SiriProbe] unsupportedTaskFields=%@ spoken=%@",
+                              SiriProbeURLProtocol.requestCount == beforeUnsupported &&
+                              (error as? LocalizedError)?.errorDescription ==
+                              "Omi can only create tasks with a title, due date, and the Omi list." ? "PASS" : "FAIL",
+                              (error as? LocalizedError)?.errorDescription ?? "nil")
+                    }
                     for status in [401, 402, 429, 500, 200, 0] {
                         SiriProbeURLProtocol.status = status
                         do {
