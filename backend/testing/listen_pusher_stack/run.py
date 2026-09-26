@@ -223,7 +223,6 @@ class Stack:
                 'HOSTED_PUSHER_API_URL': f'http://127.0.0.1:{self.pusher_port}',
                 'HOSTED_PARAKEET_API_URL': f'http://127.0.0.1:{self.parakeet_port}',
                 'STT_SERVICE_MODELS': 'parakeet',
-                'TRIAL_PAYWALL_ENABLED': 'false',
                 'CONVERSATION_APPS_OPT_IN_ONLY': 'true',
                 'LISTEN_FINALIZATION_DISPATCH_MODE': self.finalization_mode,
                 'RECORDING_SESSION_MODE': self.recording_session_mode,
