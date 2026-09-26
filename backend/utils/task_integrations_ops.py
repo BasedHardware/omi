@@ -151,7 +151,7 @@ async def refresh_oauth_token(
         raise
     except Exception as e:
         logger.error(f'{app_key}: Error refreshing token: {e}')
-        raise HTTPException(status_code=500, detail=f"Error refreshing token: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error refreshing token")
 
 
 async def ensure_valid_oauth_token(
