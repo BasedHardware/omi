@@ -2494,12 +2494,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get detailedDiagnosticMessages => 'تفصیلی تشخیصی پیغامات';
 
   @override
-  String get autoCreateSpeakers => 'خود کار طور پر بولنے والے بنائیں';
-
-  @override
-  String get autoCreateWhenNameDetected => 'جب نام پایا جائے تو خود کار طور پر بنائیں';
-
-  @override
   String get followUpQuestions => 'فالو اپ سوالات';
 
   @override
@@ -11182,9 +11176,6 @@ class AppLocalizationsUr extends AppLocalizations {
       'ٹرانسکرپشن دستیاب نہیں، ریکارڈنگ ڈیوائس پر جاری ہے اور بعد میں پروسیس ہوگی';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'ٹرانسکرپشن دستیاب نہیں · ڈیوائس پر محفوظ ہو رہی ہے';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'زیرِ التوا ٹرانسکرپشن $pending/$total';
   }
@@ -11243,6 +11234,48 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'پینڈنٹ کی آواز ایپ تک نہیں پہنچ رہی — درست کرنے کے لیے ٹیپ کریں';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'فون سے ریکارڈ کرنے سے پہلے اپنے لاکٹ پر Transcribe Later بند کریں۔';
+
+  @override
+  String get captureNotTranscribing => 'ٹرانسکرپشن نہیں ہو رہی';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'آڈیو محفوظ، بعد میں ٹرانسکرائب ہوگی';
+
+  @override
+  String get captureStillRecording => 'ریکارڈنگ جاری ہے';
+
+  @override
+  String get captureMicInUseElsewhere => 'مائیک کسی اور ایپ کے استعمال میں ہے';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'کسی کال یا دوسری ایپ نے مائیکروفون لے لیا ہے، اس لیے Omi ابھی سن نہیں سکتا۔ مائیکروفون خالی ہوتے ہی Omi خود دوبارہ شروع ہو جائے گا۔ اس سے پہلے ریکارڈ ہونے والی ہر چیز محفوظ ہے۔';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'آپ کی کسٹم اسپیچ ٹو ٹیکسٹ سروس تک رسائی نہیں ہو رہی۔ Omi آڈیو اسی فون پر رکھتا ہے اور سروس واپس آنے پر بھیج دے گا۔ کچھ ضائع نہیں ہوگا۔';
+
+  @override
+  String get captureStarting => 'شروع ہو رہا ہے…';
+
+  @override
+  String get capturePhoneStorageFull => 'فون اسٹوریج بھر گئی';
+
+  @override
+  String get captureStorageAlmostFull => 'اسٹوریج تقریباً بھر گئی';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'آپ کے پینڈنٹ کا اس فون سے رابطہ ٹوٹ گیا۔ پینڈنٹ آن اور قریب ہونے پر Omi خود دوبارہ جڑ جائے گا۔ اس سے پہلے ریکارڈ ہونے والی ہر چیز محفوظ ہے۔';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name اور دیگر';
+  }
 
   @override
   String get showOnLockScreen => 'لاک اسکرین پر دکھائیں';

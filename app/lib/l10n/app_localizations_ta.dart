@@ -2508,12 +2508,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get detailedDiagnosticMessages => 'விস்தாரமான நோயறிதல் செய்திகள்';
 
   @override
-  String get autoCreateSpeakers => 'தானாக பேசுநர்களை உருவாக்கு';
-
-  @override
-  String get autoCreateWhenNameDetected => 'பெயர் கண்டறியப்படும் போது தானாக உருவாக்கு';
-
-  @override
   String get followUpQuestions => 'தொடர்ந்த கேள்விகள்';
 
   @override
@@ -11249,9 +11243,6 @@ class AppLocalizationsTa extends AppLocalizations {
       'நகலெடுப்புகள் கிடைக்கவில்லை, பதிவு சாதனத்தில் தொடர்கிறது, பின்னர் செயலாக்கப்படும்';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'நகலெடுப்பு இல்லை · சாதனத்தில் சேமிக்கப்படுகிறது';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'நிலுவையில் உள்ள நகலெடுப்புகள் $pending/$total';
   }
@@ -11310,6 +11301,48 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'பென்டன்ட் ஆடியோ செயலியை அடையவில்லை — சரிசெய்ய தட்டவும்';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'உங்கள் தொலைபேசியில் பதிவு செய்வதற்கு முன் உங்கள் பெண்டன்டில் Transcribe Later ஐ நிறுத்தவும்.';
+
+  @override
+  String get captureNotTranscribing => 'எழுத்தாக்கம் இல்லை';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'ஆடியோ சேமிக்கப்பட்டது, பின்னர் எழுத்தாக்கம்';
+
+  @override
+  String get captureStillRecording => 'இன்னும் பதிவாகிறது';
+
+  @override
+  String get captureMicInUseElsewhere => 'மைக்கை வேறு ஆப் பயன்படுத்துகிறது';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'ஒரு அழைப்பு அல்லது வேறு ஆப் மைக்ரோஃபோனை எடுத்துக்கொண்டதால் Omi இப்போது கேட்க முடியாது. மைக்ரோஃபோன் காலியானதும் Omi தானாகவே தொடரும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'உங்கள் தனிப்பயன் பேச்சு-உரை சேவையை அடைய முடியவில்லை. Omi ஆடியோவை இந்த ஃபோனில் வைத்திருந்து சேவை திரும்பியதும் அனுப்பும். எதுவும் இழக்கப்படாது.';
+
+  @override
+  String get captureStarting => 'தொடங்குகிறது…';
+
+  @override
+  String get capturePhoneStorageFull => 'ஃபோன் சேமிப்பகம் நிரம்பியது';
+
+  @override
+  String get captureStorageAlmostFull => 'சேமிப்பகம் கிட்டத்தட்ட நிரம்பியது';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது. பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name மற்றும் மற்றவர்கள்';
+  }
 
   @override
   String get showOnLockScreen => 'பூட்டுத் திரையில் காட்டு';

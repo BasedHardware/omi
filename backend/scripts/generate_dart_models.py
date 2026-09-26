@@ -50,6 +50,7 @@ SCHEMA_GROUPS = {
             'Structured',
             'Geolocation',
             'ConversationPhoto',
+            'ChunkSpan',
             'AudioFile',
             'ConversationAudioSpan',
             'ConversationAudio',
@@ -58,6 +59,8 @@ SCHEMA_GROUPS = {
             'TranscriptMatchSnippet',
             'CaptureGroupMember',
             'CaptureGroup',
+            'ConversationSpeakers',
+            'AudioTimelineProvenance',
             'Conversation',
             'ProjectedActionItem',
             'ProjectedSection',
@@ -76,7 +79,6 @@ SCHEMA_GROUPS = {
             'SyncCaptureManifestFile',
             'SyncCaptureManifestRequest',
             'SyncCaptureManifestResponse',
-            'StatusResponse',
         ),
     },
     'messages': {
@@ -258,6 +260,7 @@ SCHEMA_GROUPS = {
             'KnowledgeGraphResponse',
             'RebuildResponse',
             'ErrorResponse',
+            'StatusResponse',
         ),
     },
     'wrapped_task_integrations': {

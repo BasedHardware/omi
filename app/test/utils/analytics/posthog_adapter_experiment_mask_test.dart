@@ -9,7 +9,7 @@ void main() {
   const channel = MethodChannel('posthog_flutter');
   late List<MethodCall> calls;
   late PostHogAnalyticsAdapter adapter;
-  final featureKey = '\$feature/${MobileExperiments.summaryFeedbackLayout.key}';
+  const featureKey = '\$feature/mobile-summary-feedback-layout-v1';
 
   setUp(() async {
     calls = [];
@@ -46,7 +46,7 @@ void main() {
 
   test('rendered exposure and retained outcome override native-cache mask', () async {
     await adapter.deliver(eventName: 'experiment_exposed', properties: {
-      'experiment_key': MobileExperiments.summaryFeedbackLayout.key,
+      'experiment_key': 'mobile-summary-feedback-layout-v1',
       'variant': 'compact',
       featureKey: 'compact',
     });
@@ -58,7 +58,7 @@ void main() {
     expect(captures().map((capture) => (capture['properties'] as Map)[featureKey]), ['compact', 'compact']);
   });
 
-  test('legacy track is masked and snapshots caller properties before serialized capture', () async {
+  test('legacy track snapshots caller properties before serialized capture', () async {
     final properties = <String, Object>{featureKey: 'compact', 'count': 1};
     adapter.track(eventName: 'explicit', properties: properties);
     properties[featureKey] = 'control';
@@ -67,14 +67,14 @@ void main() {
     await adapter.deliver(eventName: 'barrier', properties: {});
     final events = captures();
     expect((events[0]['properties'] as Map)[featureKey], 'compact');
-    expect((events[1]['properties'] as Map)[featureKey], false);
-    expect((events[2]['properties'] as Map)[featureKey], false);
+    expect((events[1]['properties'] as Map).containsKey(featureKey), false);
+    expect((events[2]['properties'] as Map).containsKey(featureKey), false);
     expect((events[0]['properties'] as Map)['count'], 1);
   });
 
   test('later unexposed capture does not inherit preceding exposed variant', () async {
     await adapter.deliver(eventName: 'Product Value', properties: {featureKey: 'compact'});
     await adapter.deliver(eventName: 'Product Value', properties: {});
-    expect((captures().last['properties'] as Map)[featureKey], false);
+    expect((captures().last['properties'] as Map).containsKey(featureKey), false);
   });
 }

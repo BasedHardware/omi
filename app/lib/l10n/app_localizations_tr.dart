@@ -2495,12 +2495,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Ayrıntılı tanılama mesajları';
 
   @override
-  String get autoCreateSpeakers => 'Konuşmacıları Otomatik Oluştur';
-
-  @override
-  String get autoCreateWhenNameDetected => 'İsim algılandığında otomatik oluştur';
-
-  @override
   String get followUpQuestions => 'Takip Soruları';
 
   @override
@@ -11184,9 +11178,6 @@ class AppLocalizationsTr extends AppLocalizations {
       'Transkriptler kullanılamıyor, kayıt cihazda devam ediyor ve daha sonra işlenecek';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transkript kullanılamıyor · cihaza kaydediliyor';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Bekleyen transkriptler $pending/$total';
   }
@@ -11245,6 +11236,48 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Kolye sesi uygulamaya ulaşmıyor — onarmak için dokunun';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Telefonunuzla kaydetmeden önce kolyenizdeki Transcribe Later\'ı durdurun.';
+
+  @override
+  String get captureNotTranscribing => 'Metne dökülmüyor';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Ses kaydedildi, sonra metne dökülecek';
+
+  @override
+  String get captureStillRecording => 'Kayıt sürüyor';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofon başka bir uygulamada';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Bir arama veya başka bir uygulama mikrofonu aldı, bu yüzden Omi şu an duyamıyor. Mikrofon boşalınca Omi kendiliğinden devam eder. Bundan önce kaydedilen her şey güvende.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Özel konuşmadan metne hizmetine ulaşılamıyor. Omi sesi bu telefonda tutar ve hizmet geri geldiğinde gönderir. Hiçbir şey kaybolmaz.';
+
+  @override
+  String get captureStarting => 'Başlatılıyor…';
+
+  @override
+  String get capturePhoneStorageFull => 'Telefon depolama alanı dolu';
+
+  @override
+  String get captureStorageAlmostFull => 'Depolama neredeyse dolu';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name ve diğerleri';
+  }
 
   @override
   String get showOnLockScreen => 'Kilit ekranında göster';

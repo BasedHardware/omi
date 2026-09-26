@@ -44,6 +44,7 @@ from models.conversation_enums import ConversationSource
 from models.sync_contract import SYNC_LOCAL_FILES_V2_RESPONSES
 from models.geolocation import geolocation_from_private_header
 from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
+from routers.listen.contracts import persisted_started_seconds
 from utils.analytics import record_usage
 from utils.other import endpoints as auth
 from utils.account_cutover.access import should_skip_background_account_mutation
@@ -1433,6 +1434,14 @@ async def sync_local_files_v2(
         _cleanup_files(paths)
 
 
+def _sync_finalization_retrying() -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail='Sync recovery finalization is retrying; local audio remains available.',
+        headers={'Retry-After': '10'},
+    )
+
+
 @router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
 def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Poll for the status of an async sync job."""
@@ -1502,10 +1511,8 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
                                 type(error).__name__,
                             )
             except SyncJobRunLeaseLost:
-                # A newer epoch owns the durable ledger. Polling is a
-                # read-side recovery path, so it must leave that owner's
-                # retry material and Redis state untouched rather than turn
-                # the ownership handoff into a client-visible 500.
+                # A newer epoch owns the durable ledger; polling must leave its
+                # retry material and Redis state untouched rather than 500.
                 logger.warning('event=sync_stale_finalize outcome=lease_lost retry_material=preserved')
             finally:
                 release_job_run_lock(job_id, stale_lock_token)
@@ -1515,24 +1522,14 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         and sync_job_uses_ledger_fence(job)
         and isinstance(job.get('content_id'), str)
     ):
-        # A fenced terminal write can land before its exact-job ledger release
-        # transiently fails (notably for inline/stale recovery, which has no
-        # Cloud Tasks duplicate delivery). Do not expose an ACKable terminal
-        # result until the retry claim is recoverable again: otherwise a WAL
-        # re-upload receives ``busy`` for the ledger stale window and looks
-        # permanently stuck to the client.
+        # Do not expose an ACKable terminal result until the retry claim is
+        # recoverable again: otherwise a WAL re-upload receives ``busy`` for
+        # the ledger stale window and looks permanently stuck to the client.
         try:
             release_sync_content_claim_after_job_retired(uid, job['content_id'], job_id)
         except Exception as error:
-            logger.error(
-                'event=sync_terminal_cleanup outcome=retrying exception_type=%s',
-                type(error).__name__,
-            )
-            raise HTTPException(
-                status_code=503,
-                detail='Sync recovery finalization is retrying; local audio remains available.',
-                headers={'Retry-After': '10'},
-            )
+            logger.error('event=sync_terminal_cleanup outcome=retrying exception_type=%s', type(error).__name__)
+            raise _sync_finalization_retrying()
         # Retaining an epoch counter after the durable claim is recoverable is
         # safe; never keep a client WAL pending solely for that optimization.
         delete_sync_job_run_lock_epoch(job_id)
@@ -1541,21 +1538,40 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         try:
             dead_letter = sync_dead_letters.get_dead_letter(job_id)
         except Exception as error:
-            logger.error(
-                'event=sync_dead_letter_check outcome=read_failed exception_type=%s',
-                type(error).__name__,
-            )
-            dead_letter = None
+            logger.error('event=sync_dead_letter_check outcome=read_failed exception_type=%s', type(error).__name__)
+            raise _sync_finalization_retrying()
+        if dead_letter is None:
+            # Every current terminal publisher writes the pending record before
+            # Redis turns terminal, so a missing record means the job failed
+            # before the ledger shipped and nothing else will ever write it.
+            # Record it here (pending only: no confirmed-cohort event, and no
+            # reader replays pending rows) instead of 503-looping forever.
+            try:
+                dead_letter = sync_dead_letters.record_dead_letter_pending(
+                    job_id=job_id,
+                    uid=uid,
+                    conversation_id=job.get('conversation_id'),
+                    failure_code=sync_dead_letters.dead_letter_failure_code(job.get('reason_code')),
+                )
+            except Exception as error:
+                logger.error(
+                    'event=sync_dead_letter_check outcome=legacy_record_failed exception_type=%s',
+                    type(error).__name__,
+                )
+                raise _sync_finalization_retrying()
+            logger.warning('event=sync_dead_letter_check outcome=legacy_recorded')
         if (
-            dead_letter is None
-            or dead_letter.get('job_id') != job_id
+            dead_letter.get('job_id') != job_id
             or dead_letter.get('uid') != uid
             or dead_letter.get('status') not in ('pending', 'dead_letter')
         ):
-            raise HTTPException(
-                status_code=503,
-                detail='Sync recovery finalization is retrying; local audio remains available.',
-                headers={'Retry-After': '10'},
+            raise _sync_finalization_retrying()
+        try:
+            release_backfill_slot(uid, job_id)
+        except Exception as error:
+            logger.error(
+                'event=sync_stale_finalize outcome=release_slot_failed exception_type=%s',
+                type(error).__name__,
             )
 
     # Build response — include result only when terminal
@@ -2096,8 +2112,12 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             if existing:
                 return JSONResponse(status_code=200, content={'status': 'exists'})
 
-        started_at = conversation.get('started_at') or conversation.get('created_at')
-        started_at_ts = started_at.timestamp()
+        started_at_ts = persisted_started_seconds(conversation.get('started_at') or conversation.get('created_at'))
+        if started_at_ts is None:
+            chunk_starts = [
+                min(af['chunk_timestamps']) for af in audio_files if isinstance(af, dict) and af.get('chunk_timestamps')
+            ]
+            started_at_ts = min(chunk_starts) if chunk_starts else 0.0
 
         try:
             mp3_data, spans = await run_blocking(

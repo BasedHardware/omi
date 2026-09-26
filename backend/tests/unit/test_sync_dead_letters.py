@@ -3,8 +3,9 @@
 ``sync_dead_letters/{job_id}`` records bounded diagnosis for terminal backfill
 failures. The pending record must exist *before* Redis publishes
 ``failed``/``partial_failure``, confirmation flips it to ``dead_letter`` once,
-the status poll refuses terminal backfill answers without a record, and the
-terminal-delivery path confirms before ACK/cleanup. Client compatibility: the
+the status poll records a missing (pre-ledger) record as pending before serving
+a terminal backfill answer and 503s only when the ledger read/write fails, and
+the terminal-delivery path confirms before ACK/cleanup. Client compatibility: the
 app only ever sees the existing ``failed``/``partial_failure`` statuses and
 only ACKs ``completed`` — verified here against the Dart terminal policy.
 """
@@ -424,14 +425,76 @@ def _client_terminal_policy(status, is_terminal):
     return 'acknowledge' if status == 'completed' else 'retry'
 
 
-def test_poll_failed_backfill_without_ledger_is_503_not_ack(monkeypatch):
+def _poll_with_ledger(job, firestore, monkeypatch):
+    """Poll against the real ledger module backed by the in-memory Firestore."""
+    released = []
+    monkeypatch.setattr(ledger, 'get_firestore_client', lambda: firestore)
+    monkeypatch.setattr(sync_router, 'get_sync_job', lambda _job_id: deepcopy(job))
+    monkeypatch.setattr(sync_router, 'get_sync_ledger_fence_mode', lambda: sync_router.SyncLedgerFenceMode.LEGACY)
+    monkeypatch.setattr(sync_router, 'is_sync_job_stale', lambda _job, **kw: False)
+    monkeypatch.setattr(sync_router, 'release_backfill_slot', lambda uid, jid: released.append((uid, jid)))
+    return released, lambda: sync_router.get_sync_job_status('job-1', uid='u1')
+
+
+@pytest.mark.parametrize('status', ['failed', 'partial_failure'])
+def test_poll_legacy_backfill_without_ledger_records_pending_and_serves_terminal(
+    monkeypatch, firestore, capsys, status
+):
+    # Terminal before the ledger shipped: no record exists and no publisher
+    # will ever write one, so the poll must not 503 forever.
+    job = _backfill_job(status=status, reason_code='stt_failed', failed_segments=1, total_segments=3)
+    released, poll = _poll_with_ledger(job, firestore, monkeypatch)
+
+    resp = poll()
+
+    assert resp['status'] == status
+    assert _client_terminal_policy(resp['status'], is_terminal=True) == 'retry'
+    doc = firestore.doc('job-1')
+    assert doc['status'] == 'pending'
+    assert (doc['job_id'], doc['uid'], doc['conversation_id']) == ('job-1', 'u1', 'conv-1')
+    assert doc['failure_code'] == 'stt_failed'
+    assert doc['attempt_count'] == 1
+    assert released == [('u1', 'job-1')]
+    # Pending only: the confirmed-cohort metric event must not fire for legacy jobs.
+    assert 'sync_backfill_dead_letter' not in capsys.readouterr().out
+
+
+def test_poll_legacy_backfill_bounds_raw_reason_code(monkeypatch, firestore):
     job = _backfill_job(status='failed', reason_code='sync_decode_failed')
+    _, poll = _poll_with_ledger(job, firestore, monkeypatch)
+
+    assert poll()['status'] == 'failed'
+    assert firestore.doc('job-1')['failure_code'] == 'unknown'
+
+
+def test_poll_legacy_backfill_second_poll_reads_recorded_doc(monkeypatch, firestore):
+    job = _backfill_job(status='failed')
+    released, poll = _poll_with_ledger(job, firestore, monkeypatch)
+    poll()
+    record = MagicMock(side_effect=AssertionError('must not rewrite an existing record'))
+    monkeypatch.setattr(sync_router.sync_dead_letters, 'record_dead_letter_pending', record)
+
+    assert poll()['status'] == 'failed'
+    assert firestore.doc('job-1')['attempt_count'] == 1
+    assert released == [('u1', 'job-1'), ('u1', 'job-1')]
+
+
+def test_poll_legacy_backfill_record_write_error_is_503(monkeypatch, firestore):
+    job = _backfill_job(status='failed')
+    released, poll = _poll_with_ledger(job, firestore, monkeypatch)
+    monkeypatch.setattr(
+        sync_router.sync_dead_letters,
+        'record_dead_letter_pending',
+        MagicMock(side_effect=ConnectionError('firestore down')),
+    )
 
     with pytest.raises(HTTPException) as excinfo:
-        _poll(job, None, monkeypatch)
+        poll()
 
     assert excinfo.value.status_code == 503
     assert excinfo.value.headers['Retry-After'] == '10'
+    assert firestore.doc('job-1') is None
+    assert released == []
 
 
 def _ledger_doc(**overrides):
@@ -456,6 +519,35 @@ def test_poll_terminal_backfill_with_confirmed_ledger_serves_status(monkeypatch)
     assert _client_terminal_policy(resp['status'], is_terminal=True) == 'retry'
 
 
+def test_poll_stale_self_healed_backfill_releases_inflight_slot(monkeypatch):
+    stale_job = _backfill_job(status='processing', updated_at=time.time() - 700, created_at=time.time() - 800)
+    fake_redis, _, _ = _hook_harness(monkeypatch, stale_job)
+    released = []
+    monkeypatch.setattr(sync_router, 'get_sync_job', sync_jobs.get_sync_job)
+    monkeypatch.setattr(sync_router, 'get_sync_ledger_fence_mode', lambda: sync_router.SyncLedgerFenceMode.LEGACY)
+    monkeypatch.setattr(sync_router.sync_dead_letters, 'get_dead_letter', MagicMock(return_value=_ledger_doc()))
+    monkeypatch.setattr(sync_router, 'release_backfill_slot', lambda uid, jid: released.append((uid, jid)))
+
+    resp = sync_router.get_sync_job_status('job-1', uid='u1')
+
+    assert resp['status'] == 'failed'
+    assert json.loads(fake_redis.raw)['status'] == 'failed'
+    assert released == [('u1', 'job-1')]
+
+
+@pytest.mark.parametrize('status', ['pending', 'dead_letter'])
+def test_poll_existing_ledger_doc_is_not_rewritten(monkeypatch, firestore, status):
+    firestore.rows[(ledger.DEAD_LETTERS_COLLECTION, 'job-1')] = _ledger_doc(status=status, attempt_count=2)
+    job = _backfill_job(status='failed')
+    released, poll = _poll_with_ledger(job, firestore, monkeypatch)
+    record = MagicMock(side_effect=AssertionError('must not rewrite an existing record'))
+    monkeypatch.setattr(sync_router.sync_dead_letters, 'record_dead_letter_pending', record)
+
+    assert poll()['status'] == 'failed'
+    assert firestore.doc('job-1') == _ledger_doc(status=status, attempt_count=2)
+    assert released == [('u1', 'job-1')]
+
+
 @pytest.mark.parametrize(
     'doc',
     [
@@ -468,11 +560,17 @@ def test_poll_terminal_backfill_with_confirmed_ledger_serves_status(monkeypatch)
 )
 def test_poll_failed_backfill_with_mismatched_ledger_is_503(monkeypatch, doc):
     job = _backfill_job(status='failed')
+    released = []
+    record = MagicMock()
+    monkeypatch.setattr(sync_router, 'release_backfill_slot', lambda uid, jid: released.append((uid, jid)))
+    monkeypatch.setattr(sync_router.sync_dead_letters, 'record_dead_letter_pending', record)
 
     with pytest.raises(HTTPException) as excinfo:
         _poll(job, doc, monkeypatch)
 
     assert excinfo.value.status_code == 503
+    record.assert_not_called()
+    assert released == []
 
 
 def test_poll_failed_fresh_lane_needs_no_ledger(monkeypatch):
@@ -491,11 +589,18 @@ def test_poll_ledger_read_error_fails_closed(monkeypatch):
         'get_dead_letter',
         MagicMock(side_effect=RuntimeError('firestore down')),
     )
+    record = MagicMock()
+    released = []
+    monkeypatch.setattr(sync_router.sync_dead_letters, 'record_dead_letter_pending', record)
+    monkeypatch.setattr(sync_router, 'release_backfill_slot', lambda uid, jid: released.append((uid, jid)))
 
     with pytest.raises(HTTPException) as excinfo:
         sync_router.get_sync_job_status('job-1', uid='u1')
 
     assert excinfo.value.status_code == 503
+    # A transient read failure must not be mistaken for a missing record.
+    record.assert_not_called()
+    assert released == []
 
 
 class _FakeRequest:

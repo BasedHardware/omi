@@ -2510,12 +2510,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Messages de diagnostic détaillés';
 
   @override
-  String get autoCreateSpeakers => 'Créer automatiquement les locuteurs';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Créer automatiquement quand un nom est détecté';
-
-  @override
   String get followUpQuestions => 'Questions de suivi';
 
   @override
@@ -11268,9 +11262,6 @@ class AppLocalizationsFr extends AppLocalizations {
       'Les transcriptions sont indisponibles, l\'enregistrement continue sur l\'appareil et sera traité plus tard';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transcription indisponible · enregistrement sur l\'appareil';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Transcriptions en attente $pending/$total';
   }
@@ -11329,6 +11320,48 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Le son du pendentif n\'arrive pas à l\'application — touchez pour réparer';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Arrêtez Transcribe Later sur votre pendentif avant d\'enregistrer avec votre téléphone.';
+
+  @override
+  String get captureNotTranscribing => 'Pas de transcription';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio enregistré, transcrit plus tard';
+
+  @override
+  String get captureStillRecording => 'Enregistrement en cours';
+
+  @override
+  String get captureMicInUseElsewhere => 'Micro utilisé par une autre app';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Un appel ou une autre app utilise le micro, Omi ne peut donc pas écouter pour le moment. Omi reprendra tout seul dès que le micro sera libre. Tout ce qui a été enregistré avant est en sécurité.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Votre service de reconnaissance vocale personnalisé est injoignable. Omi garde l\'audio sur ce téléphone et l\'enverra quand le service sera de retour. Rien n\'est perdu.';
+
+  @override
+  String get captureStarting => 'Démarrage…';
+
+  @override
+  String get capturePhoneStorageFull => 'Stockage du téléphone plein';
+
+  @override
+  String get captureStorageAlmostFull => 'Stockage presque plein';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Votre pendentif a perdu la connexion avec ce téléphone. Omi se reconnectera tout seul quand le pendentif sera allumé et à proximité. Tout ce qui a été enregistré avant est en sécurité.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name et d\'autres';
+  }
 
   @override
   String get showOnLockScreen => 'Afficher sur l’écran verrouillé';
