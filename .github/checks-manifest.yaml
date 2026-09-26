@@ -129,6 +129,11 @@ checks:
     triggers: ["plugins/omi-arxiv-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#14181: arXiv paper search and detail endpoints require typed request validation, defensive Atom XML parsing, and hermetic CI coverage"
+  - id: arxiv-limit-and-author-coercion-tests
+    command: ["python3", "plugins/omi-arxiv-app/test_limit_and_author_coercion.py"]
+    triggers: ["plugins/omi-arxiv-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "arXiv app must guard boolean values in limit and author search parameters and safely handle empty inputs"
   - id: public-holidays-app-tests
     command: ["python3", "plugins/omi-public-holidays-app/test_main.py"]
     triggers: ["plugins/omi-public-holidays-app/**", ".github/checks-manifest.yaml"]
