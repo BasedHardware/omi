@@ -3700,5 +3700,7 @@
     "greetingEvening": "こんばんは",
     "unlimitedBadge": "無制限",
     "voiceSetupTaskSubline": "Omiがあなたの声を覚えます · 約1分",
-    "audioPartiallySaved": "保存された音声：{saved}（全{total}）"
+    "audioPartiallySaved": "保存された音声：{saved}（全{total}）",
+    "voiceIntroTitle": "自己紹介しましょう",
+    "memoryLabel": "記憶"
 }

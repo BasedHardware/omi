@@ -3700,5 +3700,7 @@
     "greetingEvening": "God kveld",
     "unlimitedBadge": "Ubegrenset",
     "voiceSetupTaskSubline": "Så Omi vet at det er deg · omtrent ett minutt",
-    "audioPartiallySaved": "{saved} av {total} lyd lagret"
+    "audioPartiallySaved": "{saved} av {total} lyd lagret",
+    "voiceIntroTitle": "Presenter deg",
+    "memoryLabel": "Minne"
 }

@@ -11781,4 +11781,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return '$saved van $total audio bewaard';
   }
+
+  @override
+  String get voiceIntroTitle => 'Stel jezelf voor';
+
+  @override
+  String get memoryLabel => 'Herinnering';
 }

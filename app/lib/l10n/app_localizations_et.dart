@@ -11741,4 +11741,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return 'Salvestatud heli: $saved / $total';
   }
+
+  @override
+  String get voiceIntroTitle => 'Tutvusta end';
+
+  @override
+  String get memoryLabel => 'Mälestus';
 }

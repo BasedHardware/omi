@@ -11826,4 +11826,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return '$saved ஆடியோ சேமிக்கப்பட்டது ($total இல்)';
   }
+
+  @override
+  String get voiceIntroTitle => 'உங்களை அறிமுகப்படுத்துங்கள்';
+
+  @override
+  String get memoryLabel => 'நினைவு';
 }

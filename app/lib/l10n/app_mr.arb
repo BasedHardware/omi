@@ -11230,5 +11230,7 @@
     "greetingEvening": "शुभ संध्याकाळ",
     "unlimitedBadge": "अमर्यादित",
     "voiceSetupTaskSubline": "हे तुम्हीच आहात हे Omi ला कळावे म्हणून · सुमारे एक मिनिट",
-    "audioPartiallySaved": "{saved} ऑडिओ जतन केला ({total} पैकी)"
+    "audioPartiallySaved": "{saved} ऑडिओ जतन केला ({total} पैकी)",
+    "voiceIntroTitle": "तुमची ओळख करून द्या",
+    "memoryLabel": "स्मृती"
 }

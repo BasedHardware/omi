@@ -3700,5 +3700,7 @@
     "greetingEvening": "Καλησπέρα",
     "unlimitedBadge": "Απεριόριστο",
     "voiceSetupTaskSubline": "Για να ξέρει το Omi ότι είστε εσείς · περίπου ένα λεπτό",
-    "audioPartiallySaved": "Αποθηκεύτηκαν {saved} από {total} ήχου"
+    "audioPartiallySaved": "Αποθηκεύτηκαν {saved} από {total} ήχου",
+    "voiceIntroTitle": "Συστηθείτε",
+    "memoryLabel": "Ανάμνηση"
 }

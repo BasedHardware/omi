@@ -21392,6 +21392,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{saved} of {total} audio saved'**
   String audioPartiallySaved(String saved, String total);
+
+  /// Title of the guided voice introduction (say a few sentences so Omi learns your voice and what matters to you)
+  ///
+  /// In en, this message translates to:
+  /// **'Introduce yourself'**
+  String get voiceIntroTitle;
+
+  /// Label above one remembered fact (singular of Memories), e.g. on the voice introduction review
+  ///
+  /// In en, this message translates to:
+  /// **'Memory'**
+  String get memoryLabel;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

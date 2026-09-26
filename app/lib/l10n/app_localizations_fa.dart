@@ -11742,4 +11742,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return '$saved از $total صدا ذخیره شد';
   }
+
+  @override
+  String get voiceIntroTitle => 'خودتان را معرفی کنید';
+
+  @override
+  String get memoryLabel => 'یادداشت';
 }

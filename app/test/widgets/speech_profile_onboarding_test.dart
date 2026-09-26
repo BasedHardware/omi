@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/pages/action_items/widgets/task_row_parts.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/guided_voice_controller.dart';
@@ -36,7 +37,7 @@ void main() {
     addTearDown(flow.dispose);
     var skipped = false;
     await pump(tester, flow, skip: () => skipped = true);
-    expect(find.text('Let Omi get to know you'), findsOneWidget);
+    expect(find.text('Introduce yourself'), findsOneWidget);
     expect(io.audio, isNull);
     expect(find.textContaining('My name is'), findsOneWidget);
     await tester.tap(find.byKey(const Key('introduction_another')));
@@ -69,7 +70,16 @@ void main() {
     await flow.skipPrompt();
     await tester.pumpAndSettle();
     expect(find.text('Here is what I heard'), findsOneWidget);
+    expect(find.text('Introduce yourself'), findsNothing, reason: 'one title per stage');
     expect(find.byType(TextFormField), findsOneWidget);
+    // Each answer is drawn as a task in To do: the round tick, not a square checkbox.
+    expect(find.byType(Checkbox), findsNothing);
+    expect(find.byType(TaskCompletionMark), findsOneWidget);
+    expect(tester.widget<TaskCompletionMark>(find.byType(TaskCompletionMark)).completed, isTrue);
+    await tester.tap(find.byType(TaskCompletionMark));
+    await tester.pump();
+    expect(flow.answers.single.keep, isFalse, reason: 'the tick leaves the answer out');
+    expect(tester.widget<TaskCompletionMark>(find.byType(TaskCompletionMark)).completed, isFalse);
     expect(find.text('Voice profile saved'), findsNothing);
     expect(io.remembered, isEmpty);
   });

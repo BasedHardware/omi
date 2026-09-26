@@ -3735,5 +3735,7 @@
     "greetingEvening": "Selamat malam",
     "unlimitedBadge": "Tanpa Batas",
     "voiceSetupTaskSubline": "Agar Omi tahu itu Anda · sekitar satu menit",
-    "audioPartiallySaved": "{saved} dari {total} audio tersimpan"
+    "audioPartiallySaved": "{saved} dari {total} audio tersimpan",
+    "voiceIntroTitle": "Perkenalkan diri Anda",
+    "memoryLabel": "Kenangan"
 }

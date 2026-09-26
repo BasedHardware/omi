@@ -3700,5 +3700,7 @@
     "greetingEvening": "Chào buổi tối",
     "unlimitedBadge": "Không giới hạn",
     "voiceSetupTaskSubline": "Để Omi biết đó là bạn · khoảng một phút",
-    "audioPartiallySaved": "Đã lưu {saved} trên {total} âm thanh"
+    "audioPartiallySaved": "Đã lưu {saved} trên {total} âm thanh",
+    "voiceIntroTitle": "Giới thiệu bản thân",
+    "memoryLabel": "Kỷ niệm"
 }

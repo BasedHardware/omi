@@ -11789,4 +11789,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return 'Запазено аудио: $saved от $total';
   }
+
+  @override
+  String get voiceIntroTitle => 'Представете се';
+
+  @override
+  String get memoryLabel => 'Спомен';
 }

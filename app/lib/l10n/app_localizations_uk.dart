@@ -11765,4 +11765,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return 'Збережено $saved аудіо з $total';
   }
+
+  @override
+  String get voiceIntroTitle => 'Представтеся';
+
+  @override
+  String get memoryLabel => 'Спогад';
 }

@@ -11756,4 +11756,10 @@ class AppLocalizationsMr extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return '$saved ऑडिओ जतन केला ($total पैकी)';
   }
+
+  @override
+  String get voiceIntroTitle => 'तुमची ओळख करून द्या';
+
+  @override
+  String get memoryLabel => 'स्मृती';
 }

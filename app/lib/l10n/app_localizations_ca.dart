@@ -11809,4 +11809,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return 'Àudio desat: $saved de $total';
   }
+
+  @override
+  String get voiceIntroTitle => 'Presenta’t';
+
+  @override
+  String get memoryLabel => 'Record';
 }

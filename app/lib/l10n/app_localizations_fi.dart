@@ -11747,4 +11747,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return 'Ääntä tallennettu $saved/$total';
   }
+
+  @override
+  String get voiceIntroTitle => 'Esittele itsesi';
+
+  @override
+  String get memoryLabel => 'Muisto';
 }

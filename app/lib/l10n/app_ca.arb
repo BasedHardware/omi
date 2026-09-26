@@ -3700,5 +3700,7 @@
     "greetingEvening": "Bona nit",
     "unlimitedBadge": "Il·limitat",
     "voiceSetupTaskSubline": "Perquè Omi sàpiga que ets tu · un minut, més o menys",
-    "audioPartiallySaved": "Àudio desat: {saved} de {total}"
+    "audioPartiallySaved": "Àudio desat: {saved} de {total}",
+    "voiceIntroTitle": "Presenta’t",
+    "memoryLabel": "Record"
 }

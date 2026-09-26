@@ -3700,5 +3700,7 @@
     "greetingEvening": "Dobrý večer",
     "unlimitedBadge": "Neobmedzený",
     "voiceSetupTaskSubline": "Aby Omi vedel, že ste to vy · asi minúta",
-    "audioPartiallySaved": "Uložené {saved} z {total} zvuku"
+    "audioPartiallySaved": "Uložené {saved} z {total} zvuku",
+    "voiceIntroTitle": "Predstavte sa",
+    "memoryLabel": "Spomienka"
 }

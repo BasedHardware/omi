@@ -11728,4 +11728,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return '$saved ऑडियो सहेजा गया ($total में से)';
   }
+
+  @override
+  String get voiceIntroTitle => 'अपना परिचय दें';
+
+  @override
+  String get memoryLabel => 'याद';
 }

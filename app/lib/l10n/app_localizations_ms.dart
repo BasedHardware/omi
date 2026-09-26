@@ -11779,4 +11779,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return '$saved daripada $total audio disimpan';
   }
+
+  @override
+  String get voiceIntroTitle => 'Perkenalkan diri anda';
+
+  @override
+  String get memoryLabel => 'Kenangan';
 }

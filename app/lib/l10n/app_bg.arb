@@ -3700,5 +3700,7 @@
     "greetingEvening": "Добър вечер",
     "unlimitedBadge": "Неограничен",
     "voiceSetupTaskSubline": "За да знае Omi, че сте вие · около минута",
-    "audioPartiallySaved": "Запазено аудио: {saved} от {total}"
+    "audioPartiallySaved": "Запазено аудио: {saved} от {total}",
+    "voiceIntroTitle": "Представете се",
+    "memoryLabel": "Спомен"
 }

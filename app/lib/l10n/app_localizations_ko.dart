@@ -11556,4 +11556,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return '오디오 $saved 저장됨 (전체 $total)';
   }
+
+  @override
+  String get voiceIntroTitle => '자기소개하기';
+
+  @override
+  String get memoryLabel => '추억';
 }

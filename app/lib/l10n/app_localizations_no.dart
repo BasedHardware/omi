@@ -11747,4 +11747,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return '$saved av $total lyd lagret';
   }
+
+  @override
+  String get voiceIntroTitle => 'Presenter deg';
+
+  @override
+  String get memoryLabel => 'Minne';
 }

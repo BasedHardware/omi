@@ -11824,4 +11824,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return 'Αποθηκεύτηκαν $saved από $total ήχου';
   }
+
+  @override
+  String get voiceIntroTitle => 'Συστηθείτε';
+
+  @override
+  String get memoryLabel => 'Ανάμνηση';
 }

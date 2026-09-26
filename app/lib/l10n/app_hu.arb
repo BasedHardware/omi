@@ -3796,5 +3796,7 @@
     "greetingEvening": "Jó estét",
     "unlimitedBadge": "Korlátlan",
     "voiceSetupTaskSubline": "Hogy az Omi tudja, hogy te vagy az · kb. egy perc",
-    "audioPartiallySaved": "Mentett hang: {saved} / {total}"
+    "audioPartiallySaved": "Mentett hang: {saved} / {total}",
+    "voiceIntroTitle": "Mutatkozz be",
+    "memoryLabel": "Emlék"
 }

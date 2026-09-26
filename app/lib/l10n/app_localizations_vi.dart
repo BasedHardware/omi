@@ -11743,4 +11743,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return 'Đã lưu $saved trên $total âm thanh';
   }
+
+  @override
+  String get voiceIntroTitle => 'Giới thiệu bản thân';
+
+  @override
+  String get memoryLabel => 'Kỷ niệm';
 }

@@ -3700,5 +3700,7 @@
     "greetingEvening": "مساء الخير",
     "unlimitedBadge": "غير محدود",
     "voiceSetupTaskSubline": "حتى يعرف Omi أنك أنت · دقيقة تقريبًا",
-    "audioPartiallySaved": "تم حفظ {saved} من {total} من الصوت"
+    "audioPartiallySaved": "تم حفظ {saved} من {total} من الصوت",
+    "voiceIntroTitle": "عرّف بنفسك",
+    "memoryLabel": "ذكرى"
 }

@@ -3700,5 +3700,7 @@
     "greetingEvening": "Tere õhtust",
     "unlimitedBadge": "Piiramatu",
     "voiceSetupTaskSubline": "Et Omi teaks, et see oled sina · umbes minut",
-    "audioPartiallySaved": "Salvestatud heli: {saved} / {total}"
+    "audioPartiallySaved": "Salvestatud heli: {saved} / {total}",
+    "voiceIntroTitle": "Tutvusta end",
+    "memoryLabel": "Mälestus"
 }
