@@ -125,7 +125,7 @@ def _duration(segment: TranscriptSegment) -> float:
     return max(0.0, float(segment.end) - float(segment.start))
 
 
-def _load_voiceprints(uid: str) -> Dict[str, np.ndarray]:
+def load_voiceprints_for_resolution(uid: str) -> Dict[str, np.ndarray]:
     prints: Dict[str, np.ndarray] = {}
     owner = users_db.get_user_speaker_embedding(uid)
     if owner:
@@ -260,7 +260,9 @@ def _without_resolution(conversation: Conversation, outcome: str) -> None:
     OMI_CONVERSATION_SPEAKER_RESOLUTION_TOTAL.labels(outcome=outcome).inc()
 
 
-def _apply(conversation: Conversation, speaker_ids: Mapping[str, int], identities: Mapping[int, Identity]) -> None:
+def apply_speaker_resolution(
+    conversation: Conversation, speaker_ids: Mapping[str, int], identities: Mapping[int, Identity]
+) -> None:
     scope = f'conversation:{conversation.id}'
     for segment in conversation.transcript_segments:
         new_id = speaker_ids.get(segment.id) if segment.id else None
@@ -340,13 +342,13 @@ def _resolve(uid: str, conversation: Conversation, *, deadline: float) -> None:
         segments,
         {sid: vector for sid, (_, vector) in cache.items()},
         manual_speakers=_manual_speakers(receipt),
-        voiceprints=_load_voiceprints(uid),
+        voiceprints=load_voiceprints_for_resolution(uid),
     )
     if resolution is None:
         _without_resolution(conversation, 'no_embeddings')
         return
 
-    _apply(conversation, resolution.speaker_ids, resolution.voice_identities)
+    apply_speaker_resolution(conversation, resolution.speaker_ids, resolution.voice_identities)
     if resolution.coverage >= MIN_RESOLVED_COVERAGE:
         conversation.speaker_resolution = ConversationSpeakers(
             status='resolved', version=RESOLUTION_VERSION, participant_speaker_ids=resolution.significant_speaker_ids

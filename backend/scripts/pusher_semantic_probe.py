@@ -486,6 +486,8 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
     marker_ok: bool | None = None
     speaker_identity_ok: bool | None = None
     live_owner_segment: bool | None = None
+    candidate_pusher_observed: bool | None = None
+    conversation_id: str | None = None
     try:
         token = _read_token(args.bearer_token_file)
         fixture = load_fixture()
@@ -493,6 +495,14 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
         if not isinstance(deployment_receipt, dict) or not deployment_receipt.get("source_sha"):
             raise ProbeError("deployment_receipt")
         base = args.api_url.rstrip("/")
+        parsed_base = urllib.parse.urlparse(base)
+        local_test = (
+            args.allow_local_http
+            and parsed_base.scheme == "http"
+            and parsed_base.hostname in {"127.0.0.1", "localhost"}
+        )
+        if base != "https://api.omiapi.com" and not local_test:
+            raise ProbeError("dev_api_url")
         status, sync_state = await asyncio.to_thread(_http_json_method, f"{base}/v1/users/private-cloud-sync", token)
         enabled = bool(sync_state and sync_state.get("private_cloud_sync_enabled"))
         if status != 200:
@@ -518,6 +528,10 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
         finally:
             hold.set()
         live_segments = await listen_task
+        await _observe_candidate_pusher(
+            deployment_receipt, conversation_id=conversation_id, project=args.project, namespace=args.namespace
+        )
+        candidate_pusher_observed = True
         quoted = urllib.parse.quote(conversation_id, safe="")
         coverage_deadline = time.monotonic() + ALIGNMENT_COVERAGE_WAIT_SECONDS
         while True:
@@ -526,6 +540,8 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
             )
             if status != 200 or not conversation or conversation.get("id") != conversation_id:
                 raise ProbeError("consumer_readback")
+            if conversation.get("private_cloud_sync_enabled") is not True:
+                raise ProbeError("private_cloud_conversation_flag")
             marker_ok = (conversation.get("audio_timeline") or {}).get("version") == 2
             if not marker_ok:
                 raise ProbeError("audio_timeline_marker")
@@ -634,6 +650,8 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
             clip_phrase_match=clip_phrase_match,
             speaker_identity_ok=speaker_identity_ok,
             live_owner_segment=live_owner_segment,
+            candidate_pusher_observed=candidate_pusher_observed,
+            conversation_id=conversation_id,
         ),
         passed,
     )
@@ -650,6 +668,8 @@ def _alignment_receipt(
     clip_phrase_match: bool | None = None,
     speaker_identity_ok: bool | None = None,
     live_owner_segment: bool | None = None,
+    candidate_pusher_observed: bool | None = None,
+    conversation_id: str | None = None,
 ) -> dict[str, Any]:
     """Receipt without transcript, audio, token, or endpoint data.
 
@@ -669,11 +689,14 @@ def _alignment_receipt(
             "clip_phrase_match_auxiliary": clip_phrase_match,
             "speaker_identity": speaker_identity_ok,
             "live_owner_segment": live_owner_segment,
+            "candidate_pusher_observed": candidate_pusher_observed,
         },
         "synthetic_uid_class": SYNTHETIC_UID_CLASS,
     }
     if failure_stage is not None:
         receipt["failure_stage"] = failure_stage
+    if conversation_id is not None:
+        receipt["conversation_id"] = conversation_id
     return receipt
 
 

@@ -462,8 +462,16 @@ class LiveConversationController:
                 now + timedelta(minutes=2),
             )
             if meetings:
-                closest = min(meetings, key=lambda meeting: abs((meeting['start_time'] - now).total_seconds()))
-                await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, closest['id'])
+                now_ts = now.timestamp()
+                candidates = []
+                for meeting in meetings:
+                    meeting_id = meeting.get('id')
+                    started_seconds = persisted_started_seconds(meeting.get('start_time'))
+                    if meeting_id and started_seconds is not None:
+                        candidates.append((meeting_id, started_seconds))
+                if candidates:
+                    closest_id, _ = min(candidates, key=lambda candidate: abs(candidate[1] - now_ts))
+                    await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, closest_id)
         self.host.state.current_conversation_id = conversation_id
         # Fresh v2 generation: the origin is pinned by the receiver at the
         # first accepted audio frame associated with this conversation.
