@@ -50,51 +50,38 @@ def _escape(text: str) -> str:
 
 
 def _fold(line: str) -> str:
-    """RFC 5545 §3.1 line folding at 75 octets, UTF-8-safe."""
+    """RFC 5545 §3.1 line folding at 75 octets, UTF-8-safe.
+
+    Folds on character boundaries by working with the decoded string and
+    greedily taking as many characters as fit within the octet budget.
+    """
     encoded = line.encode("utf-8")
     if len(encoded) <= 75:
         return line
-    chunks = []
-    pos = 0
+    chunks: list[str] = []
+    pos = 0  # character position in *line*
     first = True
-    while pos < len(encoded):
+    while pos < len(line):
         limit = 75 if first else 74  # continuation lines begin with a space
-        chunk = encoded[pos : pos + limit]
-        # Walk back while the last byte is a UTF-8 continuation byte (10xxxxxx)
-        # or the start byte of an incomplete multi-byte sequence so we never
-        # split inside a character.  A byte is a continuation byte when its
-        # two high bits are 10 (0x80–0xBF).  A lead byte followed by nothing
-        # more in the chunk is also incomplete and must be retried in the next
-        # chunk, so we keep stepping back until the last byte is either ASCII
-        # (< 0x80) or the start byte of a sequence that fits completely.
-        while len(chunk) > 1:
-            last = chunk[-1]
-            # Continuation byte — definitely not a character boundary.
-            if (last & 0xC0) == 0x80:
-                chunk = chunk[:-1]
-                continue
-            # Lead byte — check whether the sequence it starts is complete.
-            if last & 0x80:
-                if (last & 0xE0) == 0xC0:   # 2-byte sequence needs 1 more
-                    needed = 2
-                elif (last & 0xF0) == 0xE0: # 3-byte sequence needs 2 more
-                    needed = 3
-                elif (last & 0xF8) == 0xF0: # 4-byte sequence needs 3 more
-                    needed = 4
-                else:
-                    needed = 1  # shouldn't happen in valid UTF-8
-                available = len(encoded) - (pos + len(chunk) - 1)
-                if available < needed:
-                    chunk = chunk[:-1]
-                    continue
-            break
-        if not chunk:
-            # Safety fallback: take at least one byte.
-            chunk = encoded[pos : pos + 1]
-        chunks.append((b"" if first else b" ") + chunk)
-        pos += len(chunk)
+        # Greedily extend the current chunk one character at a time until
+        # adding the next character would exceed the octet budget.
+        end = pos
+        budget = 0
+        while end < len(line):
+            char_octets = len(line[end].encode("utf-8"))
+            if budget + char_octets > limit:
+                break
+            budget += char_octets
+            end += 1
+        if end == pos:
+            # Single character wider than the budget (should never happen for
+            # valid limit values, but guard against an infinite loop).
+            end = pos + 1
+        chunk = line[pos:end]
+        chunks.append(("" if first else " ") + chunk)
+        pos = end
         first = False
-    return "\r\n".join(c.decode("utf-8") for c in chunks)
+    return "\r\n".join(chunks)
 
 
 def _vcal_line(name: str, value: str) -> str:
@@ -276,7 +263,7 @@ open memories.ics
 |---|---|
 | Event duration | 15 minutes (memories have no inherent end time) |
 | Timestamp parsing | Handles both `Z` suffix and `+HH:MM` offsets |
-| Line folding | RFC 5545 §3.1 — 75-octet limit, walks back at multi-byte boundaries |
+| Line folding | RFC 5545 §3.1 — 75-octet limit, folds on character boundaries by measuring UTF-8 octet width per character |
 | Paging | Fetches up to 200 memories per request; pages until the API returns an empty list |
 | Output mode | `open(..., "xb")` — refuses to overwrite an existing file |
 | Categories | Reads `category` field (singular string) from the API response |
