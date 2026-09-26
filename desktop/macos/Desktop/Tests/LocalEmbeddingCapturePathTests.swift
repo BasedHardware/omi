@@ -171,7 +171,7 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
       headline: nil)
     do {
       try await LocalEmbeddingCallBound.run(.milliseconds(400)) {
-        try await MemoryStorage.shared.syncServerMemories([memory])
+        _ = try await MemoryStorage.shared.syncServerMemories([memory])
       }
     } catch is LocalEmbeddingTimeoutError {
       XCTFail("batch memory sync awaited embedding")

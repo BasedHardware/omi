@@ -39,7 +39,10 @@ final class MemoryAuthoritativeTierSyncTests: XCTestCase {
       updatedAt: localUpdatedAt
     )
 
-    try await MemoryStorage.shared.syncServerMemories([serverMemory])
+    let changed = try await MemoryStorage.shared.syncServerMemories([serverMemory])
+    XCTAssertEqual(changed, [backendId], "Authoritative tier changes must refresh Siri")
+    let skipped = try await MemoryStorage.shared.syncServerMemories([serverMemory])
+    XCTAssertTrue(skipped.isEmpty, "Unchanged newer local rows must not enter a Siri index batch")
 
     let record = try await MemoryStorage.shared.getMemoryByBackendId(backendId)
     XCTAssertEqual(record?.tier, MemoryLayer.shortTerm.rawValue)

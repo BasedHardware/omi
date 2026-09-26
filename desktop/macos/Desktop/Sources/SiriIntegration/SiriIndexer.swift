@@ -26,10 +26,15 @@ actor SiriIndexer {
     indexedOwner = UserDefaults.standard.string(forKey: ownerKey)
   }
 
-  nonisolated private func index(for owner: String) -> CSSearchableIndex {
+  nonisolated static func indexName(bundleID: String, owner: String) -> String {
     let digest = SHA256.hash(data: Data(owner.utf8))
     let suffix = digest.prefix(16).map { String(format: "%02x", $0) }.joined()
-    return CSSearchableIndex(name: "omi.siri.\(suffix)")
+    return "omi.siri.\(bundleID).\(suffix)"
+  }
+
+  nonisolated private func index(for owner: String) -> CSSearchableIndex {
+    CSSearchableIndex(
+      name: Self.indexName(bundleID: Bundle.main.bundleIdentifier ?? "com.omi.desktop.unknown", owner: owner))
   }
 
   private func awaitTransition() async {
@@ -178,6 +183,15 @@ actor SiriIndexer {
     guard let index = try await operationIndex(expectedOwner: expectedOwner), #available(macOS 27, *) else { return }
     defer { finishOperation() }
     try await index.deleteAppEntities(identifiedBy: [id], ofType: ConversationEntity.self)
+  }
+
+  func deleteConversations(ids: [String], expectedOwner: String) async throws {
+    guard !ids.isEmpty, let index = try await operationIndex(expectedOwner: expectedOwner), #available(macOS 27, *)
+    else { return }
+    defer { finishOperation() }
+    for chunk in ids.chunkedSiriIndex(200) {
+      try await index.deleteAppEntities(identifiedBy: chunk, ofType: ConversationEntity.self)
+    }
   }
 
   func deleteMemory(id: String, expectedOwner: String) async throws {

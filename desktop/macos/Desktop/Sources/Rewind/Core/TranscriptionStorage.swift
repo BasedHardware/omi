@@ -1022,7 +1022,8 @@ actor TranscriptionStorage {
   func syncServerConversation(
     _ conversation: ServerConversation,
     cacheScope: ConversationCacheWriteScope? = nil,
-    cacheGeneration: Int? = nil
+    cacheGeneration: Int? = nil,
+    notifySiri: Bool = true
   ) async throws -> Int64 {
     // First upsert the session
     let (sessionId, changed) = try await upsertFromServerConversation(
@@ -1042,7 +1043,7 @@ actor TranscriptionStorage {
       )
     }
 
-    SiriIndexHooks.conversationChanged(conversation.id)
+    if notifySiri { SiriIndexHooks.conversationChanged(conversation.id) }
     return sessionId
   }
 

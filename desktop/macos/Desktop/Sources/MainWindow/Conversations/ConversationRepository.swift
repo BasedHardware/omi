@@ -89,11 +89,24 @@ protocol ConversationLocalDataSource: Sendable {
     scope: ConversationCacheWriteScope,
     generation: Int
   ) async throws
+  func storeMany(
+    _ conversations: [ServerConversation],
+    scope: ConversationCacheWriteScope,
+    generation: Int
+  ) async throws
   func delete(
     id: String,
     scope: ConversationCacheWriteScope,
     generation: Int
   ) async throws
+}
+
+extension ConversationLocalDataSource {
+  func storeMany(
+    _ conversations: [ServerConversation], scope: ConversationCacheWriteScope, generation: Int
+  ) async throws {
+    for conversation in conversations { try? await store(conversation, scope: scope, generation: generation) }
+  }
 }
 
 struct LiveConversationRemoteDataSource: ConversationRemoteDataSource {
@@ -185,6 +198,20 @@ struct LiveConversationLocalDataSource: ConversationLocalDataSource {
       cacheScope: scope,
       cacheGeneration: generation
     )
+  }
+
+  func storeMany(
+    _ conversations: [ServerConversation], scope: ConversationCacheWriteScope, generation: Int
+  ) async throws {
+    var committed: [String] = []
+    for conversation in conversations {
+      do {
+        _ = try await TranscriptionStorage.shared.syncServerConversation(
+          conversation, cacheScope: scope, cacheGeneration: generation, notifySiri: false)
+        committed.append(conversation.id)
+      } catch { log("Conversation cache sync deferred: \(error.localizedDescription)") }
+    }
+    if scope.isCurrent(generation) { SiriIndexHooks.conversationsChanged(committed) }
   }
 
   func delete(
@@ -774,9 +801,7 @@ final class ConversationRepository {
   }
 
   private func storeInBackground(_ server: [ServerConversation], session: Int) async {
-    for conversation in server {
-      try? await local.store(conversation, scope: cacheWriteScope, generation: session)
-    }
+    try? await local.storeMany(server, scope: cacheWriteScope, generation: session)
   }
 
   private func emit(_ source: ConversationSnapshotSource) {

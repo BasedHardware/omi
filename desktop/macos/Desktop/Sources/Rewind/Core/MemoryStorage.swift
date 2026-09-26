@@ -624,10 +624,10 @@ actor MemoryStorage {
   }
   /// Sync multiple ServerMemory objects to local storage (batch upsert)
   /// Used for efficient background sync after API fetch
-  func syncServerMemories(_ memories: [ServerMemory]) async throws {
+  @discardableResult
+  func syncServerMemories(_ memories: [ServerMemory]) async throws -> [String] {
     let db = try await ensureInitialized()
-
-    let (skipped, adopted, inserted, index) = try await db.write { database -> (Int, Int, Int, [(Int64, String)]) in
+    let (skipped, adopted, inserted, index, changed) = try await db.write { database in
       try Self.reconcileServerMemories(memories, in: database)
     }
 
@@ -642,7 +642,8 @@ actor MemoryStorage {
       HomeKnowledgeCountInvalidation.post()
     }
     LocalEmbeddingIndexer.scheduleMemoryIndex(items: index)
-    for memory in memories { SiriIndexHooks.memoryChanged(memory.id) }
+    SiriIndexHooks.memoriesChanged(changed)
+    return changed
   }
   /// Upsert a server snapshot, then tombstone synced locals whose backendId is absent.
   /// Local-only rows (backendId NULL) are preserved. No-op when the snapshot is empty.
@@ -683,7 +684,7 @@ actor MemoryStorage {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
         throw KnowledgeLedgerMirrorSyncError.ownerChanged
       }
-      let (_, _, inserted, _) = try Self.reconcileServerMemories(memories, in: database)
+      let (_, _, inserted, _, _) = try Self.reconcileServerMemories(memories, in: database)
       // Throwing from this GRDB write closure rolls back every upsert above,
       // so an owner transition can never commit a prefix.
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
@@ -694,7 +695,6 @@ actor MemoryStorage {
     if inserted > 0 { HomeKnowledgeCountInvalidation.post() }
     return inserted
   }
-
   /// Atomically activates a complete, server-fenced mirror epoch. General
   /// memory-cache rows are only upserted; absence and privacy tombstones live
   /// in dedicated membership so compatibility rollback never loses history.
@@ -802,7 +802,6 @@ actor MemoryStorage {
       page.projectedCount - priorProjected == page.rows.count,
       page.scannedCount - priorScanned >= page.rows.count
     else { throw KnowledgeLedgerMirrorSyncError.invalidSnapshot }
-
     let encoder = JSONEncoder()
     for row in page.rows {
       guard
@@ -892,7 +891,6 @@ actor MemoryStorage {
         nextCursorHash, page.nextCursor, contentRevision, page.chainRevision, page.scannedCount,
         page.projectedCount, now, ownerID,
       ])
-
     guard page.finalPage else {
       guard let nextCursor = page.nextCursor else {
         throw KnowledgeLedgerMirrorSyncError.invalidSnapshot
@@ -985,7 +983,6 @@ actor MemoryStorage {
       in: database,
       now: now)
   }
-
   private static func validateKnowledgeLedgerMirrorPage(_ page: KnowledgeLedgerMirrorPage) throws {
     let statuses: Set<String> = ["active", "superseded", "hidden", "tombstoned"]
     let sourceStates: Set<String> = ["active", "missing", "tombstoned", "purged"]
@@ -1027,7 +1024,6 @@ actor MemoryStorage {
       else { throw KnowledgeLedgerMirrorSyncError.invalidSnapshot }
     }
   }
-
   private static func validateKnowledgeLedgerMirrorAliases(
     _ aliases: [KnowledgeLedgerMirrorAlias], rowIDs: Set<String>
   ) throws {
@@ -1060,7 +1056,6 @@ actor MemoryStorage {
       try database.execute(sql: "DELETE FROM \(table) WHERE ownerID = ?", arguments: [ownerID])
     }
   }
-
   func stagedKnowledgeLedgerMirrorCursor(ownerID: String) async throws -> String? {
     let db = try await ensureInitialized()
     return try await db.read { database in
@@ -1096,7 +1091,6 @@ actor MemoryStorage {
         epochID: row["epochID"])
     }
   }
-
   func authoritativeKnowledgeLedgerMirrorIsFresh(
     ownerID: String,
     accountGeneration: Int,
@@ -1144,7 +1138,6 @@ actor MemoryStorage {
         aliasCount: row["aliasCount"])
     }
   }
-
   /// Re-reads the active receipt's complete authority after activation. This
   /// is intentionally separate from the freshness fast path so callers can
   /// prove that the epoch they just activated is still the known server head.
@@ -1180,7 +1173,6 @@ actor MemoryStorage {
       try Self.clearKnowledgeLedgerMirrorStaging(ownerID: ownerID, in: database)
     }
   }
-
   private static func cursorDigest(_ cursor: String) -> String {
     SHA256.hash(data: Data(cursor.utf8)).map { String(format: "%02x", $0) }.joined()
   }
@@ -1361,11 +1353,12 @@ actor MemoryStorage {
   private static func reconcileServerMemories(
     _ memories: [ServerMemory],
     in database: Database
-  ) throws -> (skipped: Int, adopted: Int, inserted: Int, index: [(Int64, String)]) {
+  ) throws -> (skipped: Int, adopted: Int, inserted: Int, index: [(Int64, String)], changed: [String]) {
     var skipped = 0
     var adopted = 0
     var inserted = 0
     var index: [(Int64, String)] = []
+    var changed: [String] = []
     for memory in memories {
       if var existingRecord =
         try MemoryRecord
@@ -1380,12 +1373,16 @@ actor MemoryStorage {
           if existingRecord.mergeAuthoritativeLedgerEvidenceFrom(memory) {
             authoritativeFieldsChanged = true
           }
-          if authoritativeFieldsChanged { try existingRecord.update(database) }
+          if authoritativeFieldsChanged {
+            try existingRecord.update(database)
+            changed.append(memory.id)
+          }
           skipped += 1
           continue
         }
         existingRecord.updateFrom(memory)
         try existingRecord.update(database)
+        changed.append(memory.id)
         Self.appendIndexable(existingRecord, into: &index)
       } else if var orphan =
         try MemoryRecord
@@ -1398,17 +1395,20 @@ actor MemoryStorage {
         orphan.backendSynced = true
         orphan.updateFrom(memory)
         try orphan.update(database)
+        changed.append(memory.id)
         adopted += 1
         Self.appendIndexable(orphan, into: &index)
       } else {
         do {
           let insertedRecord = try MemoryRecord.from(memory).inserted(database)
           inserted += 1
+          changed.append(memory.id)
           Self.appendIndexable(insertedRecord, into: &index)
         } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
           if var record = try MemoryRecord.filter(Column("backendId") == memory.id).fetchOne(database) {
             record.updateFrom(memory)
             try record.update(database)
+            changed.append(memory.id)
             Self.appendIndexable(record, into: &index)
           } else {
             throw dbError
@@ -1416,7 +1416,7 @@ actor MemoryStorage {
         }
       }
     }
-    return (skipped, adopted, inserted, index)
+    return (skipped, adopted, inserted, index, changed)
   }
 
   private static func appendIndexable(_ record: MemoryRecord, into index: inout [(Int64, String)]) {

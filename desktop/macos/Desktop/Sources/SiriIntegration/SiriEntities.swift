@@ -308,16 +308,11 @@ struct MemoryEntityQuery: IndexedEntityQuery {
   func entities(for identifiers: [String]) async throws -> [MemoryEntity] {
     guard let owner = RuntimeOwnerIdentity.currentOwnerId() else { return [] }
     let records = try await MemoryStorage.shared.getMemories(backendIds: identifiers)
-    var found: [MemoryEntity] = []
-    for memory in records {
-      guard let record = try await MemoryStorage.shared.getMemoryByBackendId(memory.id),
-        SiriIndexScope.memory(
-          backendId: record.backendId, deleted: record.deleted,
-          dismissed: record.isDismissed, tier: record.tier,
-          expiresAt: record.expiresAt, now: Date())
-      else { continue }
-      found.append(MemoryEntity(record))
-    }
+    let found = records.filter {
+      SiriIndexScope.memory(
+        backendId: $0.id, deleted: false, dismissed: $0.isDismissed,
+        tier: $0.tier.rawValue, expiresAt: $0.expiresAt, now: Date())
+    }.map(MemoryEntity.init)
     return RuntimeOwnerIdentity.currentOwnerId() == owner ? found : []
   }
 

@@ -4,6 +4,40 @@ import XCTest
 @testable import Omi_Computer
 
 final class SiriIntentServiceTests: XCTestCase {
+  func testSpotlightIndexIsIsolatedByBundleAndOwner() {
+    guard #available(macOS 15.4, *) else { return }
+    let production = SiriIndexer.indexName(bundleID: "com.omi.desktop", owner: "same-user")
+    let beta = SiriIndexer.indexName(bundleID: "com.omi.desktop.beta", owner: "same-user")
+    let named = SiriIndexer.indexName(bundleID: "com.omi.desktop.dev.siri-probe", owner: "same-user")
+    XCTAssertEqual(Set([production, beta, named]).count, 3)
+    XCTAssertNotEqual(production, SiriIndexer.indexName(bundleID: "com.omi.desktop", owner: "other-user"))
+  }
+
+  func testSyncIndexChangesAreBoundedAndSerializedPerAccount() async {
+    actor Calls {
+      var sizes: [Int] = []
+      var inFlight = 0
+      var peak = 0
+      func run(_ ids: [String]) async {
+        inFlight += 1
+        peak = max(peak, inFlight)
+        sizes.append(ids.count)
+        await Task.yield()
+        inFlight -= 1
+      }
+      func result() -> ([Int], Int) { (sizes, peak) }
+    }
+    let calls = Calls()
+    let batcher = SiriIndexBatcher { _, _, ids in await calls.run(ids) }
+    await batcher.enqueue(owner: "owner-a", kind: .memory, ids: (0..<1_000).map(String.init))
+    await batcher.waitUntilIdle(owner: "owner-a")
+    let (sizes, peak) = await calls.result()
+    XCTAssertEqual(sizes.reduce(0, +), 1_000)
+    XCTAssertLessThanOrEqual(sizes.count, 5)
+    XCTAssertTrue(sizes.allSatisfy { $0 <= 200 })
+    XCTAssertEqual(peak, 1)
+  }
+
   private enum BackendStub: CaseIterable, Sendable {
     case auth, network, quota, rateLimited, server
 
