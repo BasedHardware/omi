@@ -3698,5 +3698,6 @@
     "greetingAfternoon": "สวัสดีตอนบ่าย",
     "greetingHomeStretch": "ช่วงท้ายวัน",
     "greetingEvening": "สวัสดีตอนเย็น",
-    "unlimitedBadge": "ไม่จำกัด"
+    "unlimitedBadge": "ไม่จำกัด",
+    "voiceSetupTaskSubline": "ให้ Omi รู้ว่าเป็นคุณ · ประมาณหนึ่งนาที"
 }

@@ -3698,5 +3698,6 @@
     "greetingAfternoon": "नमस्कार",
     "greetingHomeStretch": "दिन का आखिरी पहर",
     "greetingEvening": "शुभ संध्या",
-    "unlimitedBadge": "असीमित"
+    "unlimitedBadge": "असीमित",
+    "voiceSetupTaskSubline": "ताकि Omi जाने कि यह आप हैं · लगभग एक मिनट"
 }

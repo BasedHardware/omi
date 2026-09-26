@@ -11749,4 +11749,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Tanpa Batas';
+
+  @override
+  String get voiceSetupTaskSubline => 'Agar Omi tahu itu Anda · sekitar satu menit';
 }

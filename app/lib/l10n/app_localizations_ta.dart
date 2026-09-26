@@ -11818,4 +11818,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'வரம்பற்றது';
+
+  @override
+  String get voiceSetupTaskSubline => 'நீங்கள்தான் என்று Omi அறிய · சுமார் ஒரு நிமிடம்';
 }

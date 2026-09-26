@@ -11734,4 +11734,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'نامحدود';
+
+  @override
+  String get voiceSetupTaskSubline => 'تا Omi بداند که شما هستید · حدود یک دقیقه';
 }

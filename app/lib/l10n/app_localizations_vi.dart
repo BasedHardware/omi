@@ -11735,4 +11735,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Không giới hạn';
+
+  @override
+  String get voiceSetupTaskSubline => 'Để Omi biết đó là bạn · khoảng một phút';
 }

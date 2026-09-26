@@ -11739,4 +11739,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'আনলিমিটেড';
+
+  @override
+  String get voiceSetupTaskSubline => 'যাতে Omi জানে এটা আপনি · প্রায় এক মিনিট';
 }

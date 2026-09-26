@@ -11749,4 +11749,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'غیر محدود';
+
+  @override
+  String get voiceSetupTaskSubline => 'تاکہ Omi جانے کہ یہ آپ ہیں · تقریباً ایک منٹ';
 }

@@ -3698,5 +3698,6 @@
     "greetingAfternoon": "Добър ден",
     "greetingHomeStretch": "Финална права",
     "greetingEvening": "Добър вечер",
-    "unlimitedBadge": "Неограничен"
+    "unlimitedBadge": "Неограничен",
+    "voiceSetupTaskSubline": "За да знае Omi, че сте вие · около минута"
 }

@@ -11769,4 +11769,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Ilimitado';
+
+  @override
+  String get voiceSetupTaskSubline => 'Para que Omi sepa que eres tú · un minuto, más o menos';
 }

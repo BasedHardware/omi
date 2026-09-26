@@ -11663,4 +11663,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'غير محدود';
+
+  @override
+  String get voiceSetupTaskSubline => 'حتى يعرف Omi أنك أنت · دقيقة تقريبًا';
 }

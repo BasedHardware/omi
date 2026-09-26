@@ -11771,4 +11771,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Tanpa Had';
+
+  @override
+  String get voiceSetupTaskSubline => 'Supaya Omi tahu itu anda · kira-kira seminit';
 }

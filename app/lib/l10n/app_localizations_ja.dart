@@ -11544,4 +11544,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get unlimitedBadge => '無制限';
+
+  @override
+  String get voiceSetupTaskSubline => 'Omiがあなたの声を覚えます · 約1分';
 }

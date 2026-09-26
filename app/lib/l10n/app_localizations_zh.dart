@@ -11522,4 +11522,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get unlimitedBadge => '无限';
+
+  @override
+  String get voiceSetupTaskSubline => '让 Omi 认出你的声音 · 大约一分钟';
 }

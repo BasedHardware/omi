@@ -11733,4 +11733,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Neomezený';
+
+  @override
+  String get voiceSetupTaskSubline => 'Aby Omi věděl, že jste to vy · asi minuta';
 }

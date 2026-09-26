@@ -3698,5 +3698,6 @@
     "greetingAfternoon": "Tere päevast",
     "greetingHomeStretch": "Lõpusirge",
     "greetingEvening": "Tere õhtust",
-    "unlimitedBadge": "Piiramatu"
+    "unlimitedBadge": "Piiramatu",
+    "voiceSetupTaskSubline": "Et Omi teaks, et see oled sina · umbes minut"
 }

@@ -11784,4 +11784,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Korlátlan';
+
+  @override
+  String get voiceSetupTaskSubline => 'Hogy az Omi tudja, hogy te vagy az · kb. egy perc';
 }

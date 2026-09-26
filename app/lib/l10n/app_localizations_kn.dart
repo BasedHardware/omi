@@ -11774,4 +11774,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'ಸೀಮಾ ರಹಿತ';
+
+  @override
+  String get voiceSetupTaskSubline => 'ನೀವೇ ಎಂದು Omi ತಿಳಿಯಲು · ಸುಮಾರು ಒಂದು ನಿಮಿಷ';
 }

@@ -11766,4 +11766,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Neomejeno';
+
+  @override
+  String get voiceSetupTaskSubline => 'Da Omi ve, da ste to vi · približno minuta';
 }

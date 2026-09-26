@@ -11757,4 +11757,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Безліміт';
+
+  @override
+  String get voiceSetupTaskSubline => 'Щоб Omi знав, що це ви · близько хвилини';
 }

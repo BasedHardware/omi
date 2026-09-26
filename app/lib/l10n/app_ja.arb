@@ -3698,5 +3698,6 @@
     "greetingAfternoon": "こんにちは",
     "greetingHomeStretch": "あと少し",
     "greetingEvening": "こんばんは",
-    "unlimitedBadge": "無制限"
+    "unlimitedBadge": "無制限",
+    "voiceSetupTaskSubline": "Omiがあなたの声を覚えます · 約1分"
 }

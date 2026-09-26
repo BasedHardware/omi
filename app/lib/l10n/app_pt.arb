@@ -3733,5 +3733,6 @@
     "greetingAfternoon": "Boa tarde",
     "greetingHomeStretch": "Reta final",
     "greetingEvening": "Boa noite",
-    "unlimitedBadge": "Ilimitado"
+    "unlimitedBadge": "Ilimitado",
+    "voiceSetupTaskSubline": "Para o Omi saber que é você · cerca de um minuto"
 }

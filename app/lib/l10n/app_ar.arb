@@ -3698,5 +3698,6 @@
     "greetingAfternoon": "نهارك سعيد",
     "greetingHomeStretch": "آخر النهار",
     "greetingEvening": "مساء الخير",
-    "unlimitedBadge": "غير محدود"
+    "unlimitedBadge": "غير محدود",
+    "voiceSetupTaskSubline": "حتى يعرف Omi أنك أنت · دقيقة تقريبًا"
 }

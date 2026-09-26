@@ -11773,4 +11773,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Onbeperkt';
+
+  @override
+  String get voiceSetupTaskSubline => 'Zodat Omi weet dat jij het bent · ongeveer een minuut';
 }

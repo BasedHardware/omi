@@ -17,6 +17,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 import 'package:omi/pages/action_items/widgets/tasks_page_chrome.dart';
+import 'package:omi/pages/action_items/widgets/voice_setup_task.dart';
 
 import 'task_categorization.dart';
 import 'task_delete_undo.dart';
@@ -539,6 +540,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         SliverToBoxAdapter(child: _buildPageHeader(provider)),
         SliverToBoxAdapter(child: _buildGoalsRow()),
         const SliverPadding(padding: EdgeInsets.only(top: 8)),
+        const SliverToBoxAdapter(child: VoiceSetupTask()),
         SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
       ],
     );
@@ -603,6 +605,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ] else ...[
           SliverToBoxAdapter(child: _buildGoalsRow()),
           const SliverPadding(padding: EdgeInsets.only(top: 6)),
+          // A new account's first task: teach Omi your voice (gone once the profile exists).
+          const SliverToBoxAdapter(child: VoiceSetupTask()),
 
           // Overdue first, expanded by default (canvas Tasks), then each other non-empty section.
           if ((categorizedItems[TaskCategory.overdue] ?? []).isNotEmpty)

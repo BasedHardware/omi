@@ -11670,4 +11670,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'ไม่จำกัด';
+
+  @override
+  String get voiceSetupTaskSubline => 'ให้ Omi รู้ว่าเป็นคุณ · ประมาณหนึ่งนาที';
 }

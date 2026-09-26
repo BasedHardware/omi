@@ -604,7 +604,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 ),
               ),
               // Header widgets (unchanged)
-              const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               const SliverToBoxAdapter(child: ActiveCallBanner()),
               const SliverToBoxAdapter(child: SpeakerTagPromptCard()),

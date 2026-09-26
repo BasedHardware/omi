@@ -11733,4 +11733,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Piiramatu';
+
+  @override
+  String get voiceSetupTaskSubline => 'Et Omi teaks, et see oled sina · umbes minut';
 }

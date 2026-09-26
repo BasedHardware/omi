@@ -21380,6 +21380,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unlimited'**
   String get unlimitedBadge;
+
+  /// Subline of the To do setup task "Teach Omi your voice": why it helps and how long it takes
+  ///
+  /// In en, this message translates to:
+  /// **'So Omi knows it’s you · about a minute'**
+  String get voiceSetupTaskSubline;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

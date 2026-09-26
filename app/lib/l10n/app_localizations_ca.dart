@@ -11801,4 +11801,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Il·limitat';
+
+  @override
+  String get voiceSetupTaskSubline => 'Perquè Omi sàpiga que ets tu · un minut, més o menys';
 }

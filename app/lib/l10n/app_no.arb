@@ -3698,5 +3698,6 @@
     "greetingAfternoon": "God ettermiddag",
     "greetingHomeStretch": "Innspurten",
     "greetingEvening": "God kveld",
-    "unlimitedBadge": "Ubegrenset"
+    "unlimitedBadge": "Ubegrenset",
+    "voiceSetupTaskSubline": "Så Omi vet at det er deg · omtrent ett minutt"
 }

@@ -11726,4 +11726,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'Neobmedzený';
+
+  @override
+  String get voiceSetupTaskSubline => 'Aby Omi vedel, že ste to vy · asi minúta';
 }

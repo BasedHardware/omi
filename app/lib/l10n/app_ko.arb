@@ -3698,5 +3698,6 @@
     "greetingAfternoon": "좋은 오후예요",
     "greetingHomeStretch": "마무리 시간",
     "greetingEvening": "좋은 저녁이에요",
-    "unlimitedBadge": "무제한"
+    "unlimitedBadge": "무제한",
+    "voiceSetupTaskSubline": "Omi가 내 목소리를 알아보도록 · 약 1분"
 }

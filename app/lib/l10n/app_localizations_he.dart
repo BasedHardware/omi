@@ -11643,4 +11643,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get unlimitedBadge => 'בלתי מוגבל';
+
+  @override
+  String get voiceSetupTaskSubline => 'כדי ש-Omi ידע שזה אתם · בערך דקה';
 }
