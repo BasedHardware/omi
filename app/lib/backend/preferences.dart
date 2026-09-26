@@ -515,6 +515,19 @@ class SharedPreferencesUtil {
 
   String get deviceName => getString('deviceName');
 
+  // deviceAlias:<id> is the source of truth for the app-local device alias.
+  static const int maxDeviceAliasLength = 40;
+
+  String deviceAlias(String deviceId) => getString('deviceAlias:');
+
+  Future<bool> saveDeviceAlias(String deviceId, String alias) async {
+    final normalized = alias.trim();
+    if (deviceId.isEmpty || normalized.isEmpty || normalized.length > maxDeviceAliasLength) {
+      return false;
+    }
+    return saveString('deviceAlias:', normalized);
+  }
+
   bool get deviceIsV2 => getBool('deviceIsV2');
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
