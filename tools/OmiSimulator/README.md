@@ -21,9 +21,10 @@ tools/OmiSimulator/          ← Rust Crepuscularity GPUI app (this tree)
   src/audio.rs               ← cpal mic → 8 kHz PCM16 notify frames (best-effort)
 ```
 
-Dependencies are **git pins** in `Cargo.toml` (no absolute machine paths):
+Dependencies are **registry crates** (crates.io, since crepuscularity 0.9.19 / crepuscularity-gpui 0.5.10):
 
-- `crepuscularity-gpui` → `https://github.com/tschk/crepuscularity` @ `afaabfc9…` (`pin/gpui-ce-c738623`, which pins transitive `gpui-ce` to `c738623…`)
+- `crepuscularity-gpui` = `0.5.10` (desktop deps moved to publishable registry packages)
+- `gpui-ce` = `0.2.2` and `gpui_ce_platform` = `0.1.0` (lib names `gpui` / `gpui_platform`)
 
 Optional machine-local path overrides: copy `tools/OmiSimulator/.cargo/config.toml.example` → `config.toml` (gitignored). Do **not** commit `config.toml`.
 
