@@ -169,7 +169,7 @@ void main() {
     ]);
     // The search field and close button stay in the header.
     expect(find.byType(OmiCloseButton), findsOneWidget);
-    expect(find.bySemanticsLabel(en.search), findsOneWidget);
+    expect(find.byKey(const Key('settings_search_field')), findsOneWidget);
   });
 
   testWidgets('every row that was on the sheet or on Profile is still reachable at the same depth or less',
@@ -329,9 +329,37 @@ void main() {
     expect(pageTitles['settings_page_help'], [en.helpCenter, en.whatsNew]);
   });
 
+  // IMG_1147: starting a search swapped the whole header, so the rows jumped and the field sat 4 pt
+  // off the cards. The field now stays put and only Cancel slides in beside it.
+  testWidgets('starting a search moves nothing: the field stays put, lined up with the rows', (tester) async {
+    await pumpSheet(tester);
+    final field = find.byKey(const Key('settings_search_field'));
+    final account = find.byKey(const ValueKey('settings_account'));
+    final group = find.ancestor(of: account, matching: find.byType(OmiSettingsGroup));
+    final fieldAt = tester.getTopLeft(field);
+    final accountAt = tester.getTopLeft(account);
+    expect(fieldAt.dx, tester.getTopLeft(group).dx, reason: 'the field lines up with the cards');
+    expect(find.byKey(const Key('settings_search_cancel')), findsNothing);
+
+    await tester.tap(field);
+    await tester.pump();
+    for (var frame = 0; frame < 12; frame++) {
+      await tester.pump(const Duration(milliseconds: 25));
+      expect(tester.getTopLeft(account), accountAt, reason: 'the rows never move');
+      expect(tester.getTopLeft(field), fieldAt, reason: 'the field stays where it was');
+    }
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settings_search_cancel')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('settings_search_cancel')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('settings_search_cancel')), findsNothing);
+    expect(tester.getTopLeft(account), accountAt);
+  });
+
   testWidgets('search still finds a moved row and opens the page that holds it', (tester) async {
     await pumpSheet(tester);
-    await tester.tap(find.bySemanticsLabel(en.search));
+    await tester.tap(find.byKey(const Key('settings_search_field')));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), en.voiceResponseMode);
     await tester.pumpAndSettle();

@@ -67,9 +67,16 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     if (mounted) setState(() {});
   }
 
-  void _startSearch() {
-    setState(() => _isSearching = true);
-    Future.microtask(() => _searchFocusNode.requestFocus());
+  @override
+  void initState() {
+    super.initState();
+    _searchFocusNode.addListener(_syncSearching);
+  }
+
+  /// Searching while the field has focus or holds text; Cancel shows only then.
+  void _syncSearching() {
+    final searching = _searchFocusNode.hasFocus || _searchController.text.isNotEmpty;
+    if (searching != _isSearching) setState(() => _isSearching = searching);
   }
 
   void _stopSearch() {
@@ -227,33 +234,12 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   // ---------------------------------------------------------------------------------------------
   // Header
 
+  /// v2: a large title with the close X on its trailing edge (UX contract §1), then the search
+  /// field. The field stays where it is while searching — only Cancel slides in beside it — so the
+  /// list under it never moves (IMG_1147); its edges line up with the cards'.
   Widget _buildHeader(BuildContext context) {
     final l10n = context.l10n;
-    if (_isSearching) {
-      return Padding(
-        key: const ValueKey('search-header'),
-        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.xs, OmiSpacing.xs),
-        child: Row(
-          children: [
-            Expanded(
-              child: OmiSearchField(
-                placeholder: l10n.searchSettings,
-                controller: _searchController,
-                focusNode: _searchFocusNode,
-                autofocus: true,
-                onChanged: (value) => setState(() => _searchQuery = value),
-              ),
-            ),
-            OmiButton.tertiary(label: l10n.cancel, size: OmiButtonSize.compact, onPressed: _stopSearch),
-          ],
-        ),
-      );
-    }
-    // v2: a large title with the close X on its trailing edge (UX contract §1), then a search
-    // capsule that opens the search header. The capsule is a button named "Search", so the
-    // search entry point reads the same to a screen reader as before.
     return Padding(
-      key: const ValueKey('normal-header'),
       padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, 0, OmiSpacing.xxs, 0),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -271,37 +257,41 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
             ],
           ),
           const SizedBox(height: OmiSpacing.sm),
-          Padding(
-            padding: const EdgeInsets.only(right: OmiSpacing.md),
-            child: Semantics(
-              button: true,
-              label: l10n.search,
-              onTap: _startSearch,
-              excludeSemantics: true,
-              child: GestureDetector(
-                key: const Key('settings_search_launcher'),
-                behavior: HitTestBehavior.opaque,
-                onTap: _startSearch,
-                child: Container(
-                  constraints: const BoxConstraints(minHeight: OmiSize.minTap),
-                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
-                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
-                  child: Row(
-                    children: [
-                      Icon(Icons.search, size: 20, color: OmiColors.textTertiary),
-                      const SizedBox(width: OmiSpacing.xs),
-                      Expanded(
-                        child: Text(
-                          l10n.searchSettings,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-                        ),
-                      ),
-                    ],
+          // One height whether or not Cancel shows, so the rows below never shift.
+          Container(
+            height: OmiSize.minTap,
+            padding: const EdgeInsets.only(right: OmiSpacing.lg - OmiSpacing.xxs),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OmiSearchField(
+                    key: const Key('settings_search_field'),
+                    placeholder: l10n.searchSettings,
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    onChanged: (value) {
+                      setState(() => _searchQuery = value);
+                      _syncSearching();
+                    },
                   ),
                 ),
-              ),
+                AnimatedSize(
+                  duration: OmiMotion.of(context).quick,
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.centerLeft,
+                  child: _isSearching
+                      ? Padding(
+                          padding: const EdgeInsets.only(left: OmiSpacing.xs),
+                          child: OmiButton.tertiary(
+                            key: const Key('settings_search_cancel'),
+                            label: l10n.cancel,
+                            size: OmiButtonSize.compact,
+                            onPressed: _stopSearch,
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
             ),
           ),
         ],
@@ -311,14 +301,14 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
 
   @override
   Widget build(BuildContext context) {
-    final motion = OmiMotion.of(context);
     return Column(
       children: [
-        AnimatedSwitcher(duration: motion.quick, child: _buildHeader(context)),
+        _buildHeader(context),
         const SizedBox(height: OmiSpacing.xs),
         Expanded(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
+            // Room to scroll the last results above the keyboard; nothing above moves.
+            padding: EdgeInsets.fromLTRB(OmiSpacing.lg, 0, OmiSpacing.lg, MediaQuery.viewInsetsOf(context).bottom),
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             child:
                 _isSearching && _searchQuery.trim().isNotEmpty ? _buildSearchResults(context) : _buildSettings(context),
