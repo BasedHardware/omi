@@ -56,7 +56,9 @@ def test_states_kpis_and_qualitative() -> None:
     ({"type": "boolean", "current": 2, "target": 1}, "Boolean values must be 0 or 1", False),
     ({"type": "numeric", "current": 15, "target": 10}, "150% progress", True),
     ({"type": "scale", "current": -2, "target": 10}, "-20% progress", True),
-    ({"type": "numeric", "current": 1, "target": 0}, "Target must be positive", False),
+    ({"type": "numeric", "current": 1, "target": 0}, "Progress unavailable", False),
+    ({"type": "scale", "current": 5, "target": 0, "min": 0, "max": 10}, "50% progress", True),
+    ({"type": "numeric", "current": 10, "target": None, "min": 5, "max": 15}, "50% progress", True),
     ({"type": "scale", "current": 2, "target": None}, "Progress unavailable", False),
     ({"type": "scale", "current": float("inf"), "target": 10}, "Progress unavailable", False),
     ({"type": "scale", "current": 1e308, "target": 1e-308}, "Percentage exceeds supported range", False),
@@ -82,6 +84,33 @@ def test_untrusted_unicode_and_markup() -> None:
     assert rendered.count("<script>") == 1
 
 
+def test_flat_cli_goals_wrappers_and_qualitative_aliases() -> None:
+    flat = {"title": '<img src=x onerror=alert(1)>', "goal_type": "scale",
+            "current_value": 5, "target_value": 0, "min_value": 0, "max_value": 10,
+            "unit": '<script>alert(2)</script>', "is_active": True}
+    goals = exporter.load_json(json.dumps({"goals": [flat], "count": 1}))
+    rendered = exporter.render(goals, "file")
+    assert "50% progress" in rendered
+    assert "5 in range 0–10" in rendered
+    assert "&lt;img src=x onerror=alert(1)&gt;" in rendered
+    assert "&lt;script&gt;alert(2)&lt;/script&gt;" in rendered
+    assert "<img src=x" not in rendered
+    assert exporter.load_json(json.dumps({"data": [flat]})) == [flat]
+
+    cli_goal = {"title": "Read books", "goal_type": "numeric", "current_value": 3,
+                "target_value": 10, "min_value": 0, "max_value": 10, "unit": "books"}
+    rendered = exporter.render([cli_goal], "live")
+    assert "3 / 10 books" in rendered
+    assert "30% progress" in rendered
+    assert 'data-type="numeric"' in rendered
+
+    qualitative = {"title": "Reflect", "metric": None, "goal_type": "scale",
+                   "current_value": 0, "target_value": 0, "min_value": 0, "max_value": 10}
+    rendered = exporter.render([qualitative], "file")
+    assert "Qualitative goal" in rendered
+    assert 'role="progressbar"' not in rendered
+
+
 def test_expandable_card_only_shows_present_details() -> None:
     goal = {"title": "Learn Arabic", "status": "focused", "is_active": True,
             "desired_outcome": "Read a story", "success_criteria": ["Finish chapter <one>", ""],
@@ -99,7 +128,8 @@ def test_expandable_card_only_shows_present_details() -> None:
     assert ".goal-disclosure:not([open])>.goal-details{display:block!important}" in rendered
 
 
-@pytest.mark.parametrize("payload", [{}, [None], [{"title": ""}], [{"title": "x", "metric": []}],
+@pytest.mark.parametrize("payload", [{}, {"goals": {}}, [None], [{"title": ""}],
+                                     [{"title": "x", "metric": []}], [{"title": "x", "goal_type": "unknown"}],
                                      [{"title": "x", "status": []}], [{"title": "x", "is_active": "yes"}]])
 def test_bad_structure(payload) -> None:
     with pytest.raises(exporter.ExportError):

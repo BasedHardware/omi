@@ -34,8 +34,10 @@ class ExportError(Exception):
 
 
 def parse_goals(payload: object) -> list[dict]:
+    if isinstance(payload, dict):
+        payload = payload.get("goals", payload.get("data", payload))
     if not isinstance(payload, list):
-        raise ExportError("Goal response must be a JSON array.")
+        raise ExportError("Goal response must be a JSON array or a goals/data array wrapper.")
     goals = []
     for index, item in enumerate(payload, 1):
         if not isinstance(item, dict):
@@ -50,6 +52,8 @@ def parse_goals(payload: object) -> list[dict]:
             metric = item["metric"]
             if not isinstance(metric, dict) or not isinstance(metric.get("type"), str) or metric["type"] not in METRIC_TYPES:
                 raise ExportError(f"Goal {index} has an invalid metric.")
+        elif "metric" not in item and item.get("goal_type") is not None and item["goal_type"] not in METRIC_TYPES:
+            raise ExportError(f"Goal {index} has an invalid goal_type.")
         goals.append(item)
     return goals
 
@@ -105,24 +109,40 @@ def formatted(value: float) -> str:
     return f"{value:,.6f}".rstrip("0").rstrip(".") if value % 1 else f"{value:,.0f}"
 
 
+def goal_metric(goal: dict) -> dict | None:
+    # Canonical metric=null means qualitative, even when released-client aliases
+    # contain placeholder scale values. Older exports have only the flat aliases.
+    if "metric" in goal:
+        return goal["metric"]
+    if goal.get("goal_type") not in METRIC_TYPES:
+        return None
+    return {"type": goal["goal_type"], "current": goal.get("current_value"),
+            "target": goal.get("target_value"), "min": goal.get("min_value"),
+            "max": goal.get("max_value"), "unit": goal.get("unit")}
+
+
 def progress(goal: dict) -> tuple[str, float | None]:
-    metric = goal.get("metric")
+    metric = goal_metric(goal)
     if metric is None:
         return "Qualitative goal — no numeric progress", None
     current, target = number(metric.get("current")), number(metric.get("target"))
-    if current is None or target is None:
+    if current is None:
         return "Progress unavailable: missing or invalid value", None
     unit = metric.get("unit") if isinstance(metric.get("unit"), str) else ""
-    values = f"{formatted(current)} / {formatted(target)}" + (f" {unit}" if unit else "")
+    values = f"{formatted(current)} / {formatted(target)}" if target is not None else formatted(current)
+    values += f" {unit}" if unit else ""
     if metric["type"] == "boolean":
-        if target not in (0, 1) or current not in (0, 1):
+        if current not in (0, 1) or (target is not None and target not in (0, 1)):
             return values + " · Boolean values must be 0 or 1", None
-        if target == 0:
-            return values + " · Zero target has no percentage", None
-        return values, current * 100
-    if target <= 0:
-        return values + " · Target must be positive for percentage", None
-    percentage = current / target * 100
+    if target is not None and target > 0:
+        percentage = current / target * 100
+    else:
+        low, high = number(metric.get("min")), number(metric.get("max"))
+        if low is None or high is None or high <= low:
+            return values + " · Progress unavailable: positive target or valid range required", None
+        values = f"{formatted(current)} in range {formatted(low)}–{formatted(high)}"
+        values += f" {unit}" if unit else ""
+        percentage = (current - low) / (high - low) * 100
     if not math.isfinite(percentage):
         return values + " · Percentage exceeds supported range", None
     return values, percentage
@@ -152,7 +172,7 @@ def card(goal: dict) -> str:
     active = goal.get("is_active")
     if active is None:
         active = status not in {"achieved", "abandoned"} if status != "unknown" else False
-    metric = goal.get("metric")
+    metric = goal_metric(goal)
     metric_type = metric["type"] if metric else "qualitative"
     label, percent = progress(goal)
     meter = ""

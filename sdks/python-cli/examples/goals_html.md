@@ -48,7 +48,7 @@ If the CLI executable is elsewhere on Windows, specify it explicitly:
 
 The exporter first looks beside the running Python interpreter for `omi.exe` or `omi`, then falls back to `omi` on `PATH`. `--omi-executable` overrides that choice. It does not ask you to log in or inspect your credentials.
 
-You can export a saved JSON array from `omi --json goal list --include-inactive`, or pass JSON on standard input. PowerShell examples:
+You can export a saved JSON array from `omi --json goal list --include-inactive`, or pass JSON on standard input. Saved exports wrapped as `{"goals": [...]}` or `{"data": [...]}` also work. PowerShell examples:
 
 ```powershell
 .\.venv\Scripts\python.exe sdks/python-cli/examples/goals_to_html.py --input goals.json --output dashboard.html
@@ -68,7 +68,7 @@ UTF-8 files with a BOM are accepted. `--demo` and `--input` cannot be combined. 
 
 The summary cards count the full exported dataset, even when filters hide cards. **Active** follows `is_active`; a `background` or `paused` goal can still be active. **Completed** means status `achieved`. `abandoned` is not completed, and reaching a numeric target does not change completion status. Completion rate is achieved goals divided by exported goals, or 0% when there are none.
 
-For scale and numeric goals, the dashboard shows `current / target` and, when the target is positive and both numbers are finite, computes `current ÷ target × 100`. Boolean goals use 0 and 1 for current and target; a target of 1 produces 0% or 100%. Invalid boolean values, zero or negative targets, missing numbers, and non-finite numbers have an explanation instead of a percentage. The visual bar stays between 0% and 100%; the displayed numbers and calculated percentage can exceed the target or be negative. Qualitative goals show no invented metric or progress bar.
+For metric goals, the dashboard shows `current / target` and, when the target is positive and both numbers are finite, computes `current ÷ target × 100`. If the target is zero or missing but a valid `min`–`max` range exists, it shows `(current − min) ÷ (max − min) × 100` and labels the range. Boolean goals use 0 and 1 for current and target; a target of 1 produces 0% or 100%. Invalid boolean values, missing current values, non-finite numbers, and goals without a usable target or range have an explanation instead of a percentage. The visual bar stays between 0% and 100%; the displayed numbers and calculated percentage can exceed the target or be negative. Qualitative goals show no invented metric or progress bar. The exporter accepts the canonical `metric` object and older flat CLI fields such as `goal_type`, `current_value`, and `target_value`. A canonical `metric: null` remains qualitative even when compatibility fields contain placeholders.
 
 Goals have statuses `background`, `focused`, `paused`, `achieved`, and `abandoned`, plus metric types `boolean`, `scale`, and `numeric`. The CLI goal response does not provide an OKR hierarchy, so this recipe exports goals as individual cards.
 
@@ -82,6 +82,6 @@ The exported HTML contains personal goal titles and descriptions. Keep it privat
 
 - **CLI not found:** install `omi-cli` in the active Python environment, add it to `PATH`, or use `--omi-executable`.
 - **CLI failed:** run `omi --json goal list --include-inactive --limit 100` directly to see the CLI diagnostic. For a named profile, place `--profile NAME` before `goal list`.
-- **Invalid JSON or response:** supply a JSON array of goal objects with nonempty titles. The exporter reports malformed shapes instead of producing a partial page.
+- **Invalid JSON or response:** supply a JSON array of goal objects with nonempty titles, or a `goals`/`data` array wrapper. The exporter reports malformed shapes instead of producing a partial page.
 - **Cannot write output:** choose a writable destination directory. The exporter will not replace an existing output after a failed export.
 - **Search or filters unavailable:** enable JavaScript in the browser. The goal cards remain readable without it.
