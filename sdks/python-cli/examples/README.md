@@ -16,6 +16,8 @@
   (Malay agent guide).
 * [`agent_quickstart.cy.md`](agent_quickstart.cy.md) — canllaw omi-cli ar gyfer
   asiantau (Welsh agent guide).
+* [`agent_quickstart.it.md`](agent_quickstart.it.md) — guida a omi-cli per
+  agenti IA (Italian agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_ics.md`](conversations_ics.md) — put conversation history on a
