@@ -2491,12 +2491,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Detailed diagnostic messages';
 
   @override
-  String get autoCreateSpeakers => 'Auto-create Speakers';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Auto-create when name detected';
-
-  @override
   String get followUpQuestions => 'Follow-up Questions';
 
   @override
@@ -11161,9 +11155,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Transcriptions are unavailable, recording continues on device and will process later';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transcription unavailable · saving on device';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Transcriptions pending $pending/$total';
   }
@@ -11222,4 +11213,46 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Pendant audio is not reaching the app — tap to repair';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Stop Transcribe Later on your pendant before recording with your phone.';
+
+  @override
+  String get captureNotTranscribing => 'Not transcribing';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio saved, transcribes later';
+
+  @override
+  String get captureStillRecording => 'Still recording';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mic in use by another app';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'A call or another app took the microphone, so Omi can\'t hear right now. Omi resumes on its own when the microphone is free. Everything recorded before this is safe.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Your custom speech-to-text service can\'t be reached. Omi keeps your audio on this phone and sends it when the service is back. Nothing is lost.';
+
+  @override
+  String get captureStarting => 'Starting…';
+
+  @override
+  String get capturePhoneStorageFull => 'Phone storage full';
+
+  @override
+  String get captureStorageAlmostFull => 'Storage almost full';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name + others';
+  }
 }

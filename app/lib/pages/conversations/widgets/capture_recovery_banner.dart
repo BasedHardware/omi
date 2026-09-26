@@ -20,6 +20,9 @@ class CaptureRecoveryBanner extends StatelessWidget {
       builder: (context, _) {
         final episode = wedge.visiblePrompt;
         if (episode == null) return const SizedBox.shrink();
+        final isTransferRecovery = episode.trigger == CaptureWedgeMonitor.triggerUploadSilence ||
+            episode.trigger == CaptureWedgeMonitor.triggerStorageAtRisk ||
+            episode.trigger == CaptureWedgeMonitor.triggerBytesSentNoTranscript;
         if (TickerMode.valuesOf(context).enabled) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (context.mounted) wedge.markPromptShown();
@@ -33,7 +36,11 @@ class CaptureRecoveryBanner extends StatelessWidget {
               behavior: HitTestBehavior.opaque,
               onTap: () {
                 wedge.onRecoveryActioned(surface: 'banner');
-                unawaited(HomeNavigation.openRoute('/settings/device'));
+                if (isTransferRecovery) {
+                  wedge.retryVisibleEpisode();
+                } else {
+                  unawaited(HomeNavigation.openRoute('/settings/device'));
+                }
               },
               child: Container(
                 key: const Key('capture_recovery_banner'),
@@ -49,7 +56,11 @@ class CaptureRecoveryBanner extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        context.l10n.captureRecoveryBanner,
+                        episode.trigger == CaptureWedgeMonitor.triggerStorageAtRisk
+                            ? '${context.l10n.phoneStorage}: ${context.l10n.recordingsNotSynced}'
+                            : episode.trigger == CaptureWedgeMonitor.triggerUploadSilence
+                                ? context.l10n.recordingsNotSynced
+                                : context.l10n.captureRecoveryBanner,
                         style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
                       ),
                     ),

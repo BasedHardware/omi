@@ -75,6 +75,8 @@ class WalListItem extends StatelessWidget {
         return (Colors.redAccent, l.syncStatusTooOld);
       case WalSyncDisplayState.unsupportedAudio:
         return (Colors.redAccent, l.syncStatusUnsupportedAudio);
+      case WalSyncDisplayState.uploadRejected:
+        return (Colors.redAccent, l.failedStatus);
       case WalSyncDisplayState.waiting:
       case WalSyncDisplayState.syncing:
         return (Colors.grey.shade500, l.syncStatusWaiting);
@@ -97,7 +99,8 @@ class WalListItem extends StatelessWidget {
     // leads to a detail page with nothing actionable on it.
     if (state == WalSyncDisplayState.corrupted ||
         state == WalSyncDisplayState.outsideRecoveryWindow ||
-        state == WalSyncDisplayState.unsupportedAudio) {
+        state == WalSyncDisplayState.unsupportedAudio ||
+        state == WalSyncDisplayState.uploadRejected) {
       return OmiButton.destructive(
         label: context.l10n.delete,
         size: OmiButtonSize.compact,

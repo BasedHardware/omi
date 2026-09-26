@@ -141,12 +141,83 @@ class RegistryFixture(unittest.TestCase):
         empty = next(line for line in output.splitlines() if line.startswith("| `EMPTY_ENABLED` |"))
         self.assertIn("''", empty)
 
+    def test_experiment_requires_prereg(self) -> None:
+        self.write("config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment")]))
+        self.assertIn("prereg is required for experiments", "\n".join(self.errors()))
+
+    def test_kill_decision_experiment_is_exempt_from_prereg(self) -> None:
+        self.write("config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", decision="kill")]))
+        self.assertEqual(self.errors(), [])
+
+    def test_experiment_still_requires_review_by(self) -> None:
+        self.write("docs/prereg/example.md", "# prereg\n")
+        entry = flag(lifecycle="experiment", prereg="docs/prereg/example.md")
+        del entry["review_by"]
+        self.write("config/feature-flags.yaml", self.yaml([entry]))
+        self.assertIn("review_by is required for experiment/rollout", "\n".join(self.errors()))
+
+    def test_null_or_empty_prereg_fails_validation(self) -> None:
+        for value in (None, ""):
+            with self.subTest(prereg=value):
+                self.write("config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", prereg=value)]))
+                self.assertIn("prereg must be a nonempty repo-relative path", "\n".join(self.errors()))
+        self.write("config/feature-flags.yaml", self.yaml([flag(prereg=None)]))
+        self.assertIn("prereg must be a nonempty repo-relative path", "\n".join(self.errors()))
+
+    def test_prereg_must_be_relative_inside_root_and_exist(self) -> None:
+        self.write("docs/prereg/example.md", "# prereg\n")
+        self.write("config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", prereg="docs/prereg/missing.md")]))
+        self.assertIn("prereg file does not exist", "\n".join(self.errors()))
+        self.write("config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", prereg="/etc/passwd")]))
+        self.assertIn("prereg must be a repo-relative path", "\n".join(self.errors()))
+        self.write("config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", prereg="../outside.md")]))
+        self.assertIn("prereg escapes the repository root", "\n".join(self.errors()))
+        self.write("config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", prereg="docs/prereg/example.md")]))
+        self.assertEqual(self.errors(), [])
+
+    def test_running_experiments_table_links_prereg_and_marks_overdue(self) -> None:
+        running = flag(lifecycle="experiment", prereg="docs/prereg/example.md", review_by="2026-10-15")
+        killed = flag("KILLED_EXPERIMENT_ENABLED", lifecycle="experiment", decision="kill", prereg="docs/prereg/killed.md")
+        registry = {"flags": [running, killed], "ignore": [], "retired": []}
+        early = render(self.root, registry, date(2026, 9, 24))
+        late = render(self.root, registry, date(2026, 11, 1))
+        self.assertLess(early.index("## Running experiments"), early.index("## Overdue for a decision"))
+        section = early.split("## Running experiments", 1)[1].split("## Overdue for a decision", 1)[0]
+        self.assertIn(
+            "| `EXAMPLE_ENABLED` | unowned | [docs/prereg/example.md](../../docs/prereg/example.md) | 2026-10-15 |",
+            section,
+        )
+        self.assertNotIn("KILLED_EXPERIMENT_ENABLED", section)
+        late_section = late.split("## Running experiments", 1)[1].split("## Overdue for a decision", 1)[0]
+        self.assertIn("2026-10-15 OVERDUE", late_section)
+
+    def test_fresh_render_with_running_experiments_has_no_drift(self) -> None:
+        self.write("docs/prereg/example.md", "# prereg\n")
+        self.write("config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", prereg="docs/prereg/example.md")]))
+        registry = load_registry(self.root / "config/feature-flags.yaml")
+        self.write("backend/docs/feature-flag-registry.md", render(self.root, registry, date(2026, 9, 24)))
+        self.assertEqual(check(self.root)[0], [])
+
     def test_retired_name_must_not_be_read_and_is_exempt_from_stale(self) -> None:
         old = {"key": "old-kill-v1", "kind": "posthog", "retired": "2026-09-24", "reason": "Superseded", "posthog": {"row": "delete"}}
         self.write("config/feature-flags.yaml", self.yaml([flag()], retired=[old]))
         self.assertEqual(self.errors(), [])
         self.write("backend/other.py", "OLD_FLAG_KEY = 'old-kill-v1'\n")
         self.assertIn("retired name reintroduced: old-kill-v1", "\n".join(self.errors()))
+
+    def test_retired_hardcoded_omits_posthog_and_duplicates_fail(self) -> None:
+        hardcoded = {"key": "oldPrefKey", "kind": "hardcoded", "retired": "2026-09-26", "reason": "Removed"}
+        self.write("config/feature-flags.yaml", self.yaml([flag()], retired=[hardcoded]))
+        self.assertEqual(self.errors(), [])
+        with_posthog = dict(hardcoded, posthog={"row": "delete"})
+        self.write("config/feature-flags.yaml", self.yaml([flag()], retired=[with_posthog]))
+        self.assertIn("retired hardcoded entries must omit posthog", "\n".join(self.errors()))
+        bad_kind = {"key": "old-env-v1", "kind": "env", "retired": "2026-09-26", "reason": "Removed"}
+        self.write("config/feature-flags.yaml", self.yaml([flag()], retired=[bad_kind]))
+        self.assertIn("retired requires kind: posthog or hardcoded", "\n".join(self.errors()))
+        duplicate = dict(hardcoded, key="EXAMPLE_ENABLED")
+        self.write("config/feature-flags.yaml", self.yaml([flag()], retired=[duplicate]))
+        self.assertIn("duplicate key or alias: EXAMPLE_ENABLED", "\n".join(self.errors()))
 
 
 if __name__ == "__main__":
