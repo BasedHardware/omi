@@ -3,7 +3,13 @@ import hashlib
 
 import pytest
 
-from utils.external_oauth.admission import AdmissionDenied, DeploymentFacts, admit_connector
+from utils.external_oauth.admission import (
+    AdmissionDenied,
+    DeploymentFacts,
+    _EVIDENCE_DOMAIN,
+    _digest as _evidence_digest,
+    admit_connector,
+)
 from utils.external_oauth.contracts import Connector
 from utils.external_oauth.scopes import GRANT_FAMILIES, SCOPE_REGISTRY_REVISION, scope_digest
 
@@ -13,8 +19,8 @@ def _entry(connector: Connector) -> dict:
         'enabled': True,
         'project_alias': GRANT_FAMILIES[connector].client_alias,
         'client_alias': GRANT_FAMILIES[connector].client_alias,
-        'project_number_sha256': hashlib.sha256(b'1234').hexdigest(),
-        'client_id_sha256': hashlib.sha256(b'client-id').hexdigest(),
+        'project_number_sha256': _evidence_digest('1234'),
+        'client_id_sha256': _evidence_digest('client-id'),
         'redirect_uri': f'https://api.omi.me/v2/external-oauth/{connector.value}/callback',
         'scope_digest': scope_digest(GRANT_FAMILIES[connector].scopes),
         'verification': {'approved': True, 'evidence_id': 'verification-123', 'valid_through': '2027-01-01'},

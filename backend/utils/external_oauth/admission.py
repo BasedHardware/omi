@@ -8,6 +8,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
+# Domain-separation salt for evidence binding. This is NOT a secret: the digest is a
+# tamper-evidence fingerprint of non-secret deployment identifiers (GCP project
+# number, OAuth client id), not password storage. PBKDF2-HMAC-SHA256 is used so the
+# derivation is computationally expensive (CodeQL py/weak-sensitive-data-hashing)
+# while remaining deterministic for manifest comparison.
+_EVIDENCE_DOMAIN = b'omi.external_oauth.admission-evidence.v1'
+_EVIDENCE_ITERATIONS = 200_000
+
+
+def _digest(value: str) -> str:
+    return hashlib.pbkdf2_hmac('sha256', value.encode('utf-8'), _EVIDENCE_DOMAIN, _EVIDENCE_ITERATIONS).hex()
+
+
 from utils.external_oauth.contracts import Connector
 from utils.external_oauth.scopes import GRANT_FAMILIES, SCOPE_REGISTRY_REVISION, scope_digest
 
@@ -30,10 +43,6 @@ class AdmittedClient:
     project_alias: str
     client_alias: str
     redirect_uri: str
-
-
-def _digest(value: str) -> str:
-    return hashlib.sha256(value.encode()).hexdigest()
 
 
 def load_manifest(path: Path) -> Mapping[str, object]:
