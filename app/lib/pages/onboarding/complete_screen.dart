@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
 import 'package:omi/ui/ui.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
@@ -63,7 +64,9 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
               Positioned.fill(
                 child: SafeArea(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 0, OmiSpacing.xl, OmiSpacing.xs),
+                    // The step layout's insets: Start using Omi sits exactly where Continue does on
+                    // every other step (16pt sides, 8pt above the bottom safe area).
+                    padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.xs),
                     child: AnimatedBuilder(
                       animation: _fade,
                       builder: (context, child) => Opacity(
@@ -76,6 +79,7 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
                           SizedBox(height: textTop),
                           Expanded(
                             child: SingleChildScrollView(
+                              padding: OnboardingCard.textInset,
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
@@ -110,7 +114,6 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
                               widget.onComplete();
                             },
                           ),
-                          const SizedBox(height: OmiSpacing.sm),
                         ],
                       ),
                     ),

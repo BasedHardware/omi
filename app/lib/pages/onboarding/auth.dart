@@ -61,12 +61,15 @@ class _AuthComponentState extends State<AuthComponent> {
                               : null,
                         ),
                         Expanded(
+                          // A square brand card, like an app icon (IMG_1153): up to 220pt on Welcome and
+                          // 150pt on Sign in, and never taller than the room a short phone leaves. (No
+                          // LayoutBuilder: the page's fill-remaining sliver measures this first.)
                           child: Center(
                             child: AnimatedContainer(
                               duration: OmiMotion.of(context).emphasized,
                               curve: OmiMotion.springCurve,
-                              height: _showSignIn ? 150 : 220,
-                              child: _BrandCard(compact: _showSignIn),
+                              constraints: BoxConstraints.loose(Size.square(_showSignIn ? 150 : 220)),
+                              child: AspectRatio(aspectRatio: 1, child: _BrandCard(compact: _showSignIn)),
                             ),
                           ),
                         ),
@@ -259,7 +262,8 @@ class _AuthComponentState extends State<AuthComponent> {
   }
 }
 
-/// The brand on a card (Rev 3 Welcome): the Omi mark turning once and the wordmark, no device.
+/// The brand on a square card (Rev 3 Welcome, IMG_1153): the Omi mark turning once above the
+/// wordmark, rounded like an app icon, no device.
 class _BrandCard extends StatelessWidget {
   const _BrandCard({required this.compact});
 
@@ -268,16 +272,20 @@ class _BrandCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return OmiCard(
-      radius: OmiRadius.cardLarge,
+      radius: compact ? 34 : 48,
+      padding: const EdgeInsets.all(OmiSpacing.md),
       child: Center(
         child: ExcludeSemantics(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              OmiRingLogo(size: compact ? 36 : 48, mode: OmiRingMode.orbit, loops: 1),
-              const SizedBox(width: OmiSpacing.sm),
-              Image.asset(Assets.images.logoTextWhite.path, height: compact ? 28 : 38, color: OmiColors.textPrimary),
-            ],
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                OmiRingLogo(size: compact ? 44 : 64, mode: OmiRingMode.orbit, loops: 1),
+                SizedBox(height: compact ? OmiSpacing.sm : OmiSpacing.md),
+                Image.asset(Assets.images.logoTextWhite.path, height: compact ? 22 : 30, color: OmiColors.textPrimary),
+              ],
+            ),
           ),
         ),
       ),

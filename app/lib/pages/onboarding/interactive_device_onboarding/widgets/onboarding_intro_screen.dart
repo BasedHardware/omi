@@ -39,7 +39,8 @@ class _OnboardingIntroScreenState extends State<OnboardingIntroScreen> with Sing
       children: [
         Positioned.fill(child: _buildAnimatedBackground()),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          // The step layout's side inset: Get Started sits where Continue does on every step.
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
           child: Column(
             children: [
               // The tutorial floats over the app: it leaves by a trailing close X.

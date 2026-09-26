@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/pages/onboarding/ai_consent_widget.dart';
 import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
+import 'package:omi/pages/onboarding/knowledge_graph_step.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
 import 'package:omi/pages/onboarding/pick_device_step.dart';
 import 'package:omi/pages/capture/connect.dart';
@@ -43,6 +44,17 @@ final onboardingScenarios = <AuditScenario>[
     run: (a) async {
       await a.pump(OnboardingCompleteScreen(onComplete: () {}));
       await a.shot('Complete: pendant and Start Using Omi');
+    },
+  ),
+  AuditScenario(
+    id: 'onboarding-knows',
+    title: 'Here is what I know about you: the sample map',
+    page: 'lib/pages/onboarding/knowledge_graph_step.dart (OnboardingKnowledgeGraphStep)',
+    state: 'A new account named Ashwin: no memories yet, so the step shows a sample map',
+    prefs: const {'givenName': 'Ashwin'},
+    run: (a) async {
+      await a.pump(OnboardingKnowledgeGraphStep(onContinue: () {}));
+      await a.shot('Knows: the reader at the centre, four topics, Continue');
     },
   ),
   AuditScenario(

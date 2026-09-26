@@ -504,7 +504,9 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
                     key: const Key('introduction_scroll'),
                     controller: _scrollController,
                     keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
+                    // Text at the step layout's 20pt inset, as on every other step; in first run it
+                    // starts under the progress bar and back button, where every step's content does.
+                    padding: EdgeInsets.fromLTRB(20, widget.flowSource == 'first_run' ? 64 : 20, 20, 20),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                       Semantics(header: true, child: Text(copy('title'), style: OmiType.title1)),
                       if (flow.promptIndex == 0 && flow.stage == IntroductionStage.ready) ...[
@@ -528,8 +530,10 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
                         _recording(),
                     ]),
                   )),
+                  // The step layout's footer: 16pt sides, 8pt above the bottom safe area, so the
+                  // buttons sit where Continue does on every other step.
                   Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+                      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xs),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,

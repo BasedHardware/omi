@@ -336,6 +336,25 @@ class AuditRun {
     }
 
     visit(tester.renderObject(find.byKey(_surface)));
+    // Full-width buttons and where they sit, so a journey's primary buttons can be compared: every
+    // step's Continue should share one bottom gap and side inset. Matched by name: this harness
+    // imports nothing from the app.
+    final surface = tester.getRect(find.byKey(_surface));
+    for (final element in find.byWidgetPredicate((w) => w.runtimeType.toString() == 'OmiButton').evaluate()) {
+      final box = element.renderObject;
+      if (box is! RenderBox || !box.attached || !box.hasSize) continue;
+      final rect = box.localToGlobal(Offset.zero) & box.size;
+      if (rect.width < surface.width * 0.8) continue;
+      final label = find.descendant(of: find.byWidget(element.widget), matching: find.byType(RichText)).evaluate();
+      _layoutFindings.add({
+        ...base,
+        'kind': 'button',
+        'text': label.isEmpty ? '' : (label.first.widget as RichText).text.toPlainText(),
+        'bottomGap': (surface.bottom - rect.bottom).roundToDouble(),
+        'left': (rect.left - surface.left).roundToDouble(),
+        'right': (surface.right - rect.right).roundToDouble(),
+      });
+    }
     final dir = _outputDir;
     if (dir != null) {
       File('${dir.path}/layout.json').writeAsStringSync(const JsonEncoder.withIndent('  ').convert(_layoutFindings));
