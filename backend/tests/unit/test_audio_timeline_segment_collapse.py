@@ -253,6 +253,85 @@ async def test_window_drifted_timestamps_do_not_collapse_clock_only(monkeypatch)
         assert segment['end'] - segment['start'] >= 0.5
 
 
+def _window_drops(reason: str) -> float:
+    from prometheus_client import REGISTRY
+
+    return REGISTRY.get_sample_value('omi_stt_window_emission_drops_total', {'reason': reason}) or 0.0
+
+
+async def _drive_beyond_window_session(monkeypatch, *, v2: bool):
+    """A later window whose ONLY phrase is timestamped past the posted dur.
+
+    Audio: 6 s speech, 1 s silence, 3 s speech, 1 s silence, 3 s speech (0.5 s
+    chunks). The gate re-sends its pre-roll when speech resumes, so the
+    forwarded stream is contiguous with capture time 1:1. Post sequence:
+    pause post over [0, 7.5] emits 'One.' (anchor 4.5); pause post over
+    [4.5, 11.5] whose only response segment is drifted past the 7 s duration;
+    drain post over [4.5, 13]. With the anchor held after the drift drop the
+    drain re-posts the dropped audio and the phrase is located in-window;
+    without the hold the pause post's decision consumed the audio at 11.5 s
+    and the drain's own response then fell beyond ITS window — the text was
+    gone for good and the drop metric counted twice.
+    """
+    receiver = _receiver(monkeypatch, v2=v2)
+    monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '600')
+    # A lone segment starting past the duration also looks like TDT skipping
+    # its leading utterance; head recovery has its own tests, so keep this
+    # repro on the anchor decision under test.
+    monkeypatch.setattr(window, 'HEAD_RECOVERY_MIN_GAP_SECONDS', 600.0)
+    client = SeqClient(
+        [
+            {'segments': [{'text': 'One.', 'start': 0.3, 'end': 4.5}]},
+            # Window [4.5, 11.5], dur 7: the only phrase is drifted past dur.
+            {'segments': [{'text': 'Three.', 'start': 7.5, 'end': 9.0}]},
+            # Drain post over the re-posted window: the phrase is located
+            # window-relative [2.5, 3.4] -> stream [7.0, 7.9].
+            {'segments': [{'text': 'Three.', 'start': 2.5, 'end': 3.4}]},
+        ]
+    )
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
+    assert await receiver.initialize_stt()
+    socket = receiver.stt_socket
+    assert isinstance(socket.raw, window.WindowedParakeetSocket)
+    await _feed(receiver, socket, [(6, True), (1, False), (3, True), (1, False), (3, True)])
+    await _wait_posts(client, 2)
+    await socket.drain_and_close()
+    assert len(client.requests) == 3
+    return receiver
+
+
+@pytest.mark.asyncio
+async def test_window_beyond_window_phrase_is_reposted_not_lost(monkeypatch):
+    """P2-1: text timestamped at/beyond the posted window must not vanish.
+
+    Before the anchor hold, the pause post dropped the drifted segment
+    (metric counted) AND advanced the anchor past its audio, so the phrase
+    was never re-posted: silence with ``span_coverage`` still red. The hold
+    re-posts the window once; the drain response then locates the phrase and
+    it is emitted exactly once, at the correct capture samples.
+    """
+    drops_before = _window_drops('timestamp_beyond_window')
+    receiver = await _drive_beyond_window_session(monkeypatch, v2=True)
+
+    assert [segment['text'] for segment in receiver.collected] == ['One.', 'Three.']
+    for segment in receiver.collected:
+        assert segment['end'] > segment['start'], f'zero-length segment collapsed: {segment}'
+        assert segment.get('_conversation_id') == 'conv-collapse'
+    timeline = receiver.capture_timeline
+    first = receiver.collected[0]
+    assert first['start'] == pytest.approx(timeline.wall(int(0.3 * RATE)))
+    assert first['end'] == pytest.approx(timeline.wall(int(4.5 * RATE)))
+    # The drain response locates the phrase at stream [7.0, 7.9]; the gate's
+    # pre-roll re-sends keep the forwarded stream contiguous with capture.
+    phrase = receiver.collected[1]
+    assert phrase['start'] == pytest.approx(timeline.wall(int(7.0 * RATE)))
+    assert phrase['end'] == pytest.approx(timeline.wall(int(7.9 * RATE)))
+    # The drop stays counted: the hold recovers the text, it does not hide
+    # the decoder drift.
+    assert _window_drops('timestamp_beyond_window') == drops_before + 1
+
+
 # ---------------------------------------------------------------------------
 # Translator hardening: never clamp two provider times onto one point
 # ---------------------------------------------------------------------------

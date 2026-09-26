@@ -261,6 +261,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._anchor_bytes = 0
         self._now_bytes = 0
         self._last_emitted_end = 0.0
+        # Anchor bytes of the one window whose beyond-window drops are being
+        # re-posted (see `_run_job`): bounded to a single retry per anchor.
+        self._beyond_window_repost: int | None = None
         self._agc_peak = 0.0
         self._agc_last_gain = 1.0
 
@@ -458,7 +461,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         )
         if decision.forced_cut:
             WINDOW_FORCED_CUTS.inc()
-        emitted = await self._materialize(decision.emit, job.pcm, job.start, job.duration)
+        emitted, beyond_window = await self._materialize(decision.emit, job.pcm, job.start, job.duration)
         if emitted and not self._dead:
             # Snapshot the emission boundary in this socket's stream seconds
             # BEFORE the callback: downstream rewrites start/end in place onto
@@ -471,9 +474,33 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._now_bytes = job.end_bytes
         self._last_post_anchor = job.start_bytes
         self._last_post_end = job.end_bytes
+        new_anchor_bytes: int | None = None
         if decision.new_anchor is not None:
             rel_bytes = min(job.end_bytes - job.start_bytes, max(0, self._to_bytes(decision.new_anchor)))
-            self._advance_anchor(job.start_bytes + rel_bytes)
+            new_anchor_bytes = job.start_bytes + rel_bytes
+        if beyond_window:
+            # TDT timestamps at/beyond the posted duration are drift on
+            # re-posted audio, not silence: the dropped segments are that
+            # audio's only text, so never silently consume it. When nothing
+            # was emitted, hold the anchor and re-post the window once (the
+            # retry bound keeps a persistently drifting decoder from stalling
+            # the buffer into a capacity shed); when something was emitted,
+            # still stop the anchor at the last sample actually emitted. The
+            # drop metric keeps counting either way.
+            if emitted:
+                self._beyond_window_repost = None
+                if new_anchor_bytes is not None:
+                    emitted_end = job.start_bytes + self._to_bytes(max(float(item['end']) for item in emitted))
+                    new_anchor_bytes = min(new_anchor_bytes, emitted_end)
+            elif self._beyond_window_repost != job.start_bytes:
+                self._beyond_window_repost = job.start_bytes
+                new_anchor_bytes = None
+            else:
+                self._beyond_window_repost = None
+        elif emitted:
+            self._beyond_window_repost = None
+        if new_anchor_bytes is not None:
+            self._advance_anchor(new_anchor_bytes)
 
     async def _recover_skipped_head(self, job: _WindowJob, segments: list[RawSegment]) -> list[RawSegment]:
         if not segments or segments[0].start < HEAD_RECOVERY_MIN_GAP_SECONDS:
@@ -716,7 +743,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
 
     async def _materialize(
         self, segments: tuple[RawSegment, ...] | list[RawSegment], pcm: bytes, start: float, dur: float
-    ) -> list[dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], bool]:
         """Convert window-relative TDT segments to stream positions, honestly.
 
         Every emitted position is ``start + rel``: an endpoint never moves to
@@ -727,15 +754,21 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         re-detection of already-emitted audio; both are dropped and counted
         instead of being collapsed onto the window/anchor edge as a
         zero-length segment (dev 2026-09-26 v2 collapse).
+
+        Returns the emitted segments plus whether any segment was dropped for
+        timestamps at/beyond the window duration, so the caller can refuse to
+        consume audio whose only text was dropped that way.
         """
         self._embedded_this_window = False
         out: list[dict[str, Any]] = []
+        beyond_window = False
         for segment in segments:
             if not math.isfinite(segment.start) or not math.isfinite(segment.end):
                 self.fail('provider_5xx')
                 raise ValueError('Invalid TDT timestamps')
             if segment.start >= dur:
                 WINDOW_EMISSION_DROPS.labels(reason='timestamp_beyond_window').inc()
+                beyond_window = True
                 continue
             rel_start = max(0.0, segment.start)
             rel_end = min(dur, max(segment.start, segment.end))
@@ -760,13 +793,14 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     'person_id': None,
                 }
             )
-        return out
+        return out, beyond_window
 
     async def _transcribe_chunk(self, pcm: bytes, start: float, dur: float) -> list[dict[str, Any]]:
         segments = await self._post_and_parse(pcm, dur)
         if self._dead:
             return []
-        return await self._materialize(segments, pcm, start, dur)
+        emitted, _beyond_window = await self._materialize(segments, pcm, start, dur)
+        return emitted
 
 
 def connect_window(callback: Callable[[list[dict[str, Any]]], None], sample_rate: int) -> WindowedParakeetSocket:
