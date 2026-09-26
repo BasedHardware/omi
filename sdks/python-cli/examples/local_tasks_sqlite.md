@@ -12,11 +12,19 @@ The companion script [`local_tasks_to_sqlite.py`](local_tasks_to_sqlite.py) runs
 
 ### Method A: Full snapshot via Desktop SQL (Recommended)
 
-Export all open and completed tasks directly from the Desktop SQLite store:
+Export all open and completed tasks directly from the Desktop SQLite store (`action_items` table):
 
 ```sh
-omi --json local sql "SELECT id, title, description, completed, created_at, updated_at, due_at, category FROM tasks" > tasks.json
+omi --json local sql "SELECT id, description, completed, created_at, due_at FROM action_items WHERE deleted = 0" > tasks.json
 ```
+
+> **Note on Desktop Action Items Schema**:
+> - Tasks are stored in the `action_items` table (where `deleted = 0`).
+> - **Windows Desktop**: Timestamp columns use snake_case (`created_at`, `due_at`):
+>   `omi --json local sql "SELECT id, description, completed, created_at, due_at FROM action_items WHERE deleted = 0" > tasks.json`
+> - **macOS Desktop**: Timestamp columns use camelCase (`createdAt`, `dueAt`):
+>   `omi --json local sql "SELECT id, description, completed, createdAt AS created_at, dueAt AS due_at FROM action_items WHERE deleted = 0" > tasks.json`
+> - **Cross-Platform Core**: `SELECT id, description, completed FROM action_items WHERE deleted = 0` works identically across all desktop platforms. The converter automatically maps `description` to `title` and natively recognizes both camelCase (`createdAt`/`dueAt`) and snake_case (`created_at`/`due_at`) timestamps.
 
 ### Method B: Semantic task search
 
@@ -26,7 +34,7 @@ Export tasks relevant to a specific topic or keyword:
 omi --json local task search "meeting" --include-completed > meeting_tasks.json
 ```
 
-> **Note on Task Search**: `omi local task search` performs semantic similarity matching and returns up to 10 top results formatted as checklist items with similarity scores and IDs (e.g. `1. [x] Review spec (similarity: 0.91, id: abc, source: action_items)`). The converter natively parses both structured JSON arrays from SQL exports and search text output. When IDs are omitted, deterministic SHA-256 hashes are derived from task descriptions to prevent collisions across imports.
+> **Note on Task Search**: `omi local task search` performs semantic similarity matching and returns up to 10 top results formatted as checklist items with similarity scores and IDs (e.g. `1. [x] Review spec [high] (similarity: 0.91, id: abc, source: action_items)`). The converter natively parses both structured JSON arrays from SQL exports and search text output. Priority tags (e.g. `[high]`, `[medium]`) are cleanly extracted into record metadata without cluttering task titles. When IDs are omitted, deterministic SHA-256 hashes are derived from task descriptions to prevent collisions across imports.
 
 ## 2. Import into SQLite database
 
@@ -39,7 +47,7 @@ python local_tasks_to_sqlite.py tasks.json -o tasks.db
 Or pipe directly from `omi-cli`:
 
 ```sh
-omi --json local sql "SELECT id, title, description, completed, created_at, updated_at, due_at, category FROM tasks" | python local_tasks_to_sqlite.py - -o tasks.db
+omi --json local sql "SELECT id, description, completed FROM action_items WHERE deleted = 0" | python local_tasks_to_sqlite.py - -o tasks.db
 ```
 
 Or pipe semantic search results:
@@ -79,7 +87,7 @@ sqlite3 tasks.db "SELECT category, COUNT(*) as total, SUM(completed) as complete
 
 ## Database schema
 
-The converter initializes the `local_tasks` table and supporting indexes:
+The script creates the `local_tasks` table with the following schema:
 
 ```sql
 CREATE TABLE IF NOT EXISTS local_tasks (
@@ -93,8 +101,6 @@ CREATE TABLE IF NOT EXISTS local_tasks (
     category TEXT,
     raw_json TEXT
 );
-
-CREATE INDEX IF NOT EXISTS idx_local_tasks_completed ON local_tasks(completed);
-CREATE INDEX IF NOT EXISTS idx_local_tasks_due_at ON local_tasks(due_at);
-CREATE INDEX IF NOT EXISTS idx_local_tasks_category ON local_tasks(category);
 ```
+
+Indexes are automatically created on `completed`, `due_at`, and `category` for fast filtering.

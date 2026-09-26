@@ -61,10 +61,7 @@ class TestLocalTasksToSqlite(unittest.TestCase):
         self.assertEqual(parsed[1]["category"], "work")
 
     def test_parse_json_encoded_prose_string(self):
-        raw_output = (
-            "1. [x] Buy groceries (id: task_g1)\n"
-            "2. [ ] Book flight (id: task_f2)\n"
-        )
+        raw_output = "1. [x] Buy groceries (id: task_g1)\n" "2. [ ] Book flight (id: task_f2)\n"
         json_wrapped = json.dumps(raw_output)
         parsed = parse_tasks_data(json_wrapped)
         self.assertEqual(len(parsed), 2)
@@ -198,6 +195,34 @@ class TestLocalTasksToSqlite(unittest.TestCase):
                 self.assertTrue(db_path.exists())
         finally:
             sys.stdin = old_stdin
+
+    def test_normalize_task_record_camel_case_timestamps(self):
+        item = {
+            "id": "t_macos_01",
+            "description": "macOS Desktop Action Item",
+            "completed": 1,
+            "createdAt": "2026-09-24T10:00:00Z",
+            "updatedAt": "2026-09-24T11:00:00Z",
+            "dueAt": "2026-09-25T12:00:00Z",
+        }
+        rec = normalize_task_record(item, 0)
+        self.assertEqual(rec[0], "t_macos_01")
+        self.assertEqual(rec[1], "macOS Desktop Action Item")
+        self.assertEqual(rec[2], "macOS Desktop Action Item")
+        self.assertEqual(rec[3], 1)
+        self.assertEqual(rec[4], "2026-09-24T10:00:00Z")
+        self.assertEqual(rec[5], "2026-09-24T11:00:00Z")
+        self.assertEqual(rec[6], "2026-09-25T12:00:00Z")
+
+    def test_parse_prose_line_priority_tag_cleaned(self):
+        line = "1. [x] Review spec [high] (similarity: 0.91, id: 42, source: action_items)"
+        item = parse_prose_line(line, 0)
+        self.assertIsNotNone(item)
+        self.assertEqual(item["id"], "42")
+        self.assertEqual(item["title"], "Review spec")
+        self.assertEqual(item["priority"], "high")
+        self.assertTrue(item["completed"])
+        self.assertEqual(item["category"], "action_items")
 
 
 if __name__ == "__main__":

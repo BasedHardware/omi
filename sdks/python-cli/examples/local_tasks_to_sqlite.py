@@ -73,6 +73,13 @@ def parse_prose_line(line: str, idx: int) -> Optional[Dict[str, Any]]:
     completed = comp_char.lower() == "x"
     description = text.strip()
 
+    # Clean priority tags if present, e.g. "Review spec [high]"
+    priority_match = re.search(r"\s*\[(high|medium|low|urgent|none)\]\s*", description, re.IGNORECASE)
+    priority = None
+    if priority_match:
+        priority = priority_match.group(1).lower()
+        description = (description[: priority_match.start()] + " " + description[priority_match.end() :]).strip()
+
     meta_dict: Dict[str, str] = {}
     if meta_str:
         for part in meta_str.split(","):
@@ -93,6 +100,8 @@ def parse_prose_line(line: str, idx: int) -> Optional[Dict[str, Any]]:
         "completed": completed,
         "category": category,
     }
+    if priority:
+        item["priority"] = priority
 
     similarity = meta_dict.get("similarity")
     if similarity:
@@ -180,9 +189,9 @@ def normalize_task_record(
     else:
         completed = 0
 
-    created_at = str(item.get("created_at") or "").strip() or None
-    updated_at = str(item.get("updated_at") or "").strip() or None
-    due_at = str(item.get("due_at") or item.get("due_date") or "").strip() or None
+    created_at = str(item.get("created_at") or item.get("createdAt") or "").strip() or None
+    updated_at = str(item.get("updated_at") or item.get("updatedAt") or "").strip() or None
+    due_at = str(item.get("due_at") or item.get("dueAt") or item.get("due_date") or "").strip() or None
     category = str(item.get("category") or item.get("source") or "general").strip() or None
     raw_json = json.dumps(item, ensure_ascii=False)
 
@@ -289,7 +298,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     try:
         total, completed = import_tasks_to_db(args.output, tasks)
         open_tasks = total - completed
-        print(f"Imported {len(tasks)} task(s) into '{args.output}'. Total in DB: {total} ({completed} completed, {open_tasks} open).")
+        print(
+            f"Imported {len(tasks)} task(s) into '{args.output}'. Total in DB: {total} ({completed} completed, {open_tasks} open)."
+        )
     except Exception as exc:
         sys.stderr.write(f"Error writing to SQLite database: {exc}\n")
         return 1
