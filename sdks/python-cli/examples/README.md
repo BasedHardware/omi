@@ -18,6 +18,8 @@
   asiantau (Welsh agent guide).
 * [`agent_quickstart.th.md`](agent_quickstart.th.md) — คู่มือ omi-cli สำหรับ
   AI agent (Thai agent guide).
+* [`agent_quickstart.sm.md`](agent_quickstart.sm.md) — omi-cli mo sui
+  (Samoan agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_ics.md`](conversations_ics.md) — put conversation history on a
