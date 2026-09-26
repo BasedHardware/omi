@@ -16,6 +16,10 @@ import 'package:omi/pages/conversations/daily_recaps_page.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/wals/wal.dart';
 
 import '../fakes.dart';
 import '../harness.dart';
@@ -43,6 +47,38 @@ const _twoSourceGroup = CaptureGroup(id: 'group-1', primaryId: 'grouped-a', memb
 ]);
 
 final conversationsScenarios = <AuditScenario>[
+  AuditScenario(
+    id: 'conversations-locked',
+    title: 'Out of free minutes: locked rows',
+    page: _page,
+    state: 'The plan ran out: two locked conversations (one with no summary sent) above an unlocked one',
+    prefs: {'showGoalTrackerEnabled': false},
+    run: (a) async {
+      final items = [
+        ServerConversation(
+          id: 'l1',
+          createdAt: DateTime(2026, 9, 26, 9, 40),
+          startedAt: DateTime(2026, 9, 26, 9, 40),
+          finishedAt: DateTime(2026, 9, 26, 9, 49),
+          structured: Structured('Standup with the hardware team',
+              'Firmware 2.3 ships Friday; the LED brightness fix is in and QA signs off tomorrow.',
+              category: 'work'),
+          isLocked: true,
+        ),
+        ServerConversation(
+          id: 'l2',
+          createdAt: DateTime(2026, 9, 26, 8, 15),
+          startedAt: DateTime(2026, 9, 26, 8, 15),
+          finishedAt: DateTime(2026, 9, 26, 8, 39),
+          structured: Structured('Coffee with Priya', '', category: 'personal'),
+          isLocked: true,
+        ),
+        auditConversation('u1', title: 'Design catch-up with Alex'),
+      ];
+      await a.pump(const ConversationsPage(requestInitialLoad: false), providers: _listProviders(items));
+      await a.shot('Locked rows keep title, time and length; the summary blurs under an Unlimited badge');
+    },
+  ),
   AuditScenario(
     id: 'conversations-list',
     title: 'Conversations list, row menu and swipe to delete',
@@ -74,6 +110,33 @@ final conversationsScenarios = <AuditScenario>[
       await a.settle();
       expect(find.text('Delete Conversation?'), findsOneWidget);
       await a.shot('Swipe the first row to delete: the delete confirmation', step: 'swipe-delete');
+    },
+  ),
+  AuditScenario(
+    id: 'conversations-source-filter',
+    title: 'Source chips: All, Starred, Pendant, Glasses, Phone, Imported',
+    page: _page,
+    state: 'Three conversations on one day from the pendant, the phone and glasses',
+    prefs: {'showGoalTrackerEnabled': false},
+    run: (a) async {
+      ServerConversation from(String id, String title, ConversationSource source, int hour) => ServerConversation(
+            id: id,
+            createdAt: DateTime(2026, 9, 20, hour),
+            structured: Structured(title, 'Overview', emoji: '', category: 'work'),
+            status: ConversationStatus.completed,
+            source: source,
+          );
+      final items = [
+        from('p', 'Call Chitapa reminder', ConversationSource.omi, 15),
+        from('h', 'Subscription concerns', ConversationSource.phone, 14),
+        from('g', 'Pricing review', ConversationSource.openglass, 11),
+      ];
+      await a.pump(const ConversationsPage(requestInitialLoad: false), providers: _listProviders(items));
+      expect(find.byKey(const ValueKey('conversation_source_glasses')), findsOneWidget);
+      await a.shot('All conversations, with the source chips after Starred', step: 'all');
+      await a.tap(find.byKey(const ValueKey('conversation_source_glasses')));
+      expect(find.byType(ConversationListItem), findsOneWidget);
+      await a.shot('Tap Glasses: only conversations recorded by glasses', step: 'glasses');
     },
   ),
   AuditScenario(
@@ -122,4 +185,66 @@ final conversationsScenarios = <AuditScenario>[
       await a.shot('Open Offline Sync with no pending recordings');
     },
   ),
+  AuditScenario(
+    id: 'conversations-offline-sync-pending',
+    title: 'Offline Sync with recordings waiting, one failed, and two synced',
+    page: 'lib/pages/conversations/auto_sync_page.dart (AutoSyncPage)',
+    state: 'A connected Omi pendant; four offline recordings (waiting, failed after retries, two synced)',
+    run: (a) async {
+      int at(int day, int hour, int minute) => DateTime(2026, 9, day, hour, minute).millisecondsSinceEpoch ~/ 1000;
+      Wal wal(int start, int seconds, WalStatus status, {int retries = 0, String? conversationId}) => Wal(
+            timerStart: start,
+            codec: BleAudioCodec.opus,
+            seconds: seconds,
+            status: status,
+            storage: WalStorage.sdcard,
+            device: 'omi',
+            retryCount: retries,
+            conversationId: conversationId,
+          );
+      final wals = [
+        wal(at(20, 11, 20), 18 * 60, WalStatus.miss),
+        wal(at(20, 9, 2), 6 * 60, WalStatus.miss, retries: walMaxAutoRetries),
+        wal(at(19, 18, 5), 18 * 60, WalStatus.synced, conversationId: 'c1'),
+        wal(at(19, 11, 40), 42 * 60, WalStatus.synced, conversationId: 'c2'),
+      ];
+      final pendant = BtDevice(id: 'D1:A2:B3:C4:D5:E6', name: 'Omi', type: DeviceType.omi, rssi: -40);
+      await a.pump(const AutoSyncPage(), providers: [
+        ChangeNotifierProvider<SyncProvider>.value(value: _SeededSyncProvider(wals)),
+        ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider(connected: true, device: pendant)),
+      ]);
+      await a.shot('Open Offline Sync: the pending recordings first', step: 'pending');
+      await a.tap(find.text('All'));
+      await a.shot('Tap All: every recording, then Storage', step: 'all');
+    },
+  ),
 ];
+
+/// Offline recordings for the Sync page, grouped the way [SyncProvider] groups them.
+class _SeededSyncProvider extends InertSyncProvider {
+  _SeededSyncProvider(this.wals);
+
+  final List<Wal> wals;
+
+  bool _pending(Wal w) => switch (w.syncDisplayState) {
+        WalSyncDisplayState.waiting || WalSyncDisplayState.retrying || WalSyncDisplayState.failed => true,
+        _ => false,
+      };
+
+  @override
+  List<Wal> get allWals => wals;
+  @override
+  List<Wal> get displaySortedWals => wals;
+  @override
+  List<Wal> walsForDisplayFilter(WalDisplayFilter filter) => switch (filter) {
+        WalDisplayFilter.pending => wals.where(_pending).toList(),
+        WalDisplayFilter.synced => wals.where((w) => w.syncDisplayState == WalSyncDisplayState.synced).toList(),
+        _ => wals,
+      };
+  @override
+  int get needsAttentionWalsCount => wals.where((w) => w.syncDisplayState == WalSyncDisplayState.failed).length;
+  @override
+  int get clearableWalsCount => wals.length;
+  @override
+  int get missingWalsInSeconds => wals.where(_pending).fold(0, (sum, w) => sum + w.seconds);
+}

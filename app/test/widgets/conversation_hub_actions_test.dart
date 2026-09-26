@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -124,6 +125,36 @@ void main() {
     });
   });
 
+  testWidgets('the menu reads as the design: Merge With…, Copy Summary, and Delete last in red', (tester) async {
+    final a = _conversation('a');
+    provider.conversations = [a];
+    await pump(tester, ConversationListItem(conversation: a, date: DateTime(2026, 9, 20), conversationIdx: 0));
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.setData') copied = (call.arguments as Map)['text'] as String?;
+      if (call.method == 'Clipboard.hasStrings') return {'value': true};
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+
+    await tester.longPress(find.byType(ConversationListItem));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('omi_context_menu')), findsOneWidget);
+    expect(find.text('Merge With…'), findsOneWidget);
+    expect(find.text('Open'), findsNothing, reason: 'a tap on the row opens it');
+    final labels = tester
+        .widgetList<Text>(
+            find.descendant(of: find.byKey(const ValueKey('omi_context_menu')), matching: find.byType(Text)))
+        .map((t) => t.data)
+        .toList();
+    expect(labels.last, 'Delete');
+
+    await tester.tap(find.byKey(const ValueKey('conversation_action_copySummary')));
+    await tester.pumpAndSettle();
+    expect(copied, isNotNull);
+    expect(copied, contains('Overview'));
+  });
+
   testWidgets('long-press opens one context menu with multi-select as an entry', (tester) async {
     final a = _conversation('a');
     provider.conversations = [a];
@@ -206,17 +237,20 @@ void main() {
     expect(separated, ['b'], reason: 'the other recording, never the row itself');
   });
 
-  testWidgets('Share on a private row asks before making it public', (tester) async {
+  // IMG_1146: Share goes straight to the system share sheet; the link is made for it and goes back
+  // to private if the sheet is dismissed. No "Share Conversation?" question first.
+  testWidgets('Share on a private row asks nothing first', (tester) async {
     final a = _conversation('a');
     provider.conversations = [a];
     await pump(tester, ConversationListItem(conversation: a, date: DateTime(2026, 9, 20), conversationIdx: 0));
     await tester.longPress(find.byType(ConversationListItem));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('conversation_action_share')));
+    await tester.pump();
+    expect(find.text('Anyone with the link can view'), findsNothing);
+    expect(find.text('Share Conversation?'), findsNothing);
     await tester.pumpAndSettle();
-    expect(find.text('Anyone with the link can view'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
+    // No server here, so the link is never made and the row stays private.
     expect(a.visibility, isNot(ConversationVisibility.shared));
   });
 

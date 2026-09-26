@@ -105,7 +105,7 @@ final settingsScenarios = <AuditScenario>[
     state: _account,
     run: (a) async {
       await a.pump(const SettingsDrawer());
-      await a.tap(find.bySemanticsLabel('Search'));
+      await a.tap(find.byKey(const Key('settings_search_field')));
       for (final query in ['vocab', 'sign', 'profile', 'permissions']) {
         await a.enterText(find.byType(TextField).first, query);
         await a.shot('Search Settings for "$query"', step: query);

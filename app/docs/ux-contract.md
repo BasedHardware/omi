@@ -24,7 +24,7 @@ There are exactly two ways out, and they mean different things.
 
 | The surface… | Control | Where | Primitive |
 |---|---|---|---|
-| **replaced** the page you were on (pushed page, detail, settings page) | back | leading edge of its app bar | `OmiBackButton()` (`OmiBackButton.circled()` when the header floats over content) |
+| **replaced** the page you were on (pushed page, detail, settings page) | back | leading edge of its app bar | `OmiBackButton()`: the v2 44 pt header circle, in an app bar or a floating header (`.circled(fillColor:)` to recolour it) |
 | **floats over** the page (sheet, full-screen modal, viewer, tutorial) | close (X) | trailing edge of its header | `OmiCloseButton()`, plus swipe-down where the platform offers it |
 
 - One glyph family: `OmiBackButton` draws the platform's back glyph (iOS chevron, Android arrow).
@@ -37,7 +37,7 @@ There are exactly two ways out, and they mean different things.
 - Push with `routeToPage(context, page)`, or `omiPageRoute(builder)` when you need a `Route`
   (`pushReplacement`). Never `PageRouteBuilder` for a push: it has no iOS back swipe
   (`page-route-builder`).
-- **Chat is a normal pushed page everywhere** (D1): no `fullscreenDialog`, leading
+- **Chat is a normal pushed page everywhere** (D1), and like every pushed page it shows no tab bar: no `fullscreenDialog`, leading
   `OmiBackButton`, from every entry point (home chat bar, mic, deep link, app detail, quick
   action, "Ask Omi").
 - **Conversation detail has no body-wide horizontal swipe to another conversation** (D2).
@@ -53,7 +53,7 @@ There are exactly two ways out, and they mean different things.
 ## 2. Sheets
 
 - Every bottom sheet is `showOmiSheet(...)`, or `OmiSheetScaffold` around content that is already a
-  widget. It owns the top radius (`OmiRadius.xl`), the 36×4 drag handle, the optional title row
+  widget. It owns the top radius (`OmiRadius.sheetTopFor(platform)`: 40 on iOS, 28 on Android), the 36×4 drag handle, the optional title row
   with a trailing `OmiCloseButton`, safe-area and keyboard insets, and `isScrollControlled`. Never
   a raw `showModalBottomSheet` (`raw-bottom-sheet`) and never a hand-drawn handle.
 - A sheet that edits something is `showOmiEditSheet(...)` / `OmiEditSheet(isDirty:, ...)`, with
@@ -69,12 +69,16 @@ There are exactly two ways out, and they mean different things.
 
 | Need | Use | Not |
 |---|---|---|
-| Text action | `OmiButton` — `.primary` (white fill, black label), `.secondary`, `.destructive`, `.tertiary`; size regular (48) or compact (36 visual, 44 target); `isLoading` | `ElevatedButton.styleFrom(...)` with a local colour, height or radius |
+| Text action | `OmiButton` — `.primary` (off-white fill, ink label), `.secondary`, `.destructive`, `.tertiary`; size regular (50 capsule) or compact (36 visual, 44 target); `isLoading` | `ElevatedButton.styleFrom(...)` with a local colour, height or radius |
 | Icon-only action | `OmiIconButton(icon, label: …)` — `label` is required and is the tooltip and the screen-reader name | a bare `GestureDetector`/`InkWell` around an `Icon`, an `IconButton` with no tooltip |
-| Header circle button | `OmiIconButton` filled-circle style (`HeaderCircleButton` is an alias) | a 36 pt circle with a 36 pt target |
+| Header circle button | `OmiIconButton` filled-circle style (`HeaderCircleButton` is an alias): a 44 pt circle | a 36 pt circle with a 36 pt target |
 | On/off setting | `OmiSwitch` in an `OmiSettingsRow` | a checkbox, a purple/green/indigo switch |
 | Settings list | `OmiSettingsGroup` of `OmiSettingsRow`s under an `OmiSectionHeader` | a hand-built row per page |
 | Search | `OmiSearchField(placeholder: l10n.searchConversations)` | a styled `TextField` per page |
+| Pushed page header | `OmiAppBar(leading: const OmiBackButton(), title: Text(...))`: round back button, 34 pt large title | a centred 17 pt `AppBar` title |
+| One-of-N view switch | `OmiSegmentedControl(segments:, selected:, onChanged:)` | a row of hand-drawn tabs |
+| Filter chip | `OmiChip(label:, selected:, onTap:)` | a local pill `Container` |
+| The Omi pendant (onboarding, pairing, device) | `OmiPendant(lit:)` / `OmiPendantHero` | a device photo of the Omi pendant |
 | Loading indicator | `OmiSpinner` (small / regular / large) | `CircularProgressIndicator(` with a local colour and stroke (`raw-spinner`) |
 
 - Every tappable control is at least **44×44 pt** (48 dp on Android is fine), including the label
@@ -82,7 +86,7 @@ There are exactly two ways out, and they mean different things.
 - A button label is a verb in Title Case ("Save", "Delete Task", "Try Again"). A button that is
   busy keeps its size and shows a spinner in place of or beside its label.
 - A disabled control looks disabled. A Send that cannot send is not white.
-- The accent is white/neutral (INV-UI-1, no purple). Colour is for state (danger, success), not
+- The accent is neutral off-white (INV-UI-1, no purple). Colour is for state (danger, success), not
   decoration.
 
 ## 4. Destructive actions
@@ -195,19 +199,33 @@ participant lists, the speaker filter and every copied, shared or exported trans
 `lib/ui/omi_tokens.dart`, dark only. Where you touch code, replace literals with tokens
 (`color-literal`, `font-size-literal`, `radius-literal`); new code has none.
 
-- **Colour** `OmiColors`: `surface0` (page black), `surface1/2/3` (card / elevated / pressed),
-  `border`, `textPrimary` / `textSecondary` / `textTertiary` (tertiary no darker than ~#8E8E93, ≥ 4.5:1
-  on surface1), `accent` (white — INV-UI-1) / `onAccent`, `success`, `warning`, `danger`,
-  `dangerSurface`. `AppStyles` and `ResponsiveHelper` palettes are legacy.
+- **Colour** `OmiColors` (v2 "Midnight Graphite"): `surface0` (page, midnight ink), `surface1/2/3`
+  (card / control / pressed), `sheet`, `border`, `textPrimary` / `textSecondary` / `textTertiary`
+  (tertiary ≥ 4.5:1 on surface0 and surface1; never a darker grey), `accent` (off-white — INV-UI-1) /
+  `onAccent`, `selection` (a switch that is on, a selected segment), `live` (**only** while audio is
+  really being captured — never decoration), `success`, `warning`, `danger`, `dangerSurface`.
+  `AppStyles` and `ResponsiveHelper` palettes are legacy.
 - **Type** `OmiType`: an iOS-like ramp (11 / 13 / 15 / 17 / 20 / 24 / 28 / 34) as `TextStyle`s.
-- **Radius** `OmiRadius`: sm 8 · md 12 · lg 16 · xl 24 · pill. **Spacing** `OmiSpacing`: 4 · 8 · 12 · 16 · 20 · 24 · 32.
+- **Radius** `OmiRadius`: sm 8 · md 12 · lg 16 · xl 24 · pill; v2 row 22 · card 26 · cardLarge 28 ·
+  tabBar 32 · sheet 40 (iOS) / sheetMaterial 28 (Android). Nested corners are concentric (inner =
+  outer − padding). **Spacing** `OmiSpacing`: 4 · 8 · 12 · 16 · 20 · 24 · 32. **Sizes** `OmiSize`:
+  minTap 44, primaryButton 50, navButton 44, tabBar 64, askButton 64, rowMinHeight 52.
 - **Motion** `OmiMotion`: quick 150 ms (a control answering a press), standard 250 ms (content
-  changing in place), emphasized 400 ms (a surface arriving or leaving). Read durations through
-  `OmiMotion.of(context)`, which is zero under Reduce Motion.
+  changing in place), emphasized 400 ms (a surface arriving or leaving); v2 press 180 ms, sheet
+  450 ms and navigation 500 ms with `OmiMotion.springCurve` (`bouncyCurve` for success moments only).
+  Read durations through `OmiMotion.of(context)`, which is zero under Reduce Motion.
 - **Haptics** `OmiHaptics`: `selection()` for tabs, segments and navigation, `light()` for
   toggles, `medium()` for record start/stop and completions, `success()` / `error()` for outcomes.
-- The theme (`buildOmiTheme()`) sets the app bar (black, centred title, white icons), the spinner,
-  snackbar, dialog and switch colours, so an unstyled widget already looks right.
+- The theme (`buildOmiTheme()`) sets the app bar (page colour, centred title, light icons), the
+  spinner, snackbar, dialog, sheet and switch colours, so an unstyled widget already looks right.
+- The Omi mark is `OmiRingLogo(size:, mode:)`: `still`, `breathe`, `chase` or `orbit`, and still
+  under Reduce Motion. An idle control plays a few `loops:` and rests; only a state that ends on
+  its own (Omi thinking) loops while shown.
+- v2 icons are `OmiGlyph(OmiGlyphs.x)` (SVG, identical on iOS and Android; `-fill` for a selected
+  tab). Floating chrome (tab bar, Ask) is `OmiGlass`: blur on Apple platforms, solid `surface1` on
+  Android and under high contrast.
+- The tab bar is a floating capsule with labelled tabs and a round Ask Omi button beside it; Ask
+  pushes Chat (it is not a tab).
 
 ## 11. Words
 

@@ -1,5 +1,7 @@
 // Apps: the store, filters, app detail and data-access consent, submitting and managing an app,
 // MCP servers and the AI app generator.
+import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/app.dart';
@@ -13,6 +15,7 @@ import 'package:omi/pages/apps/widgets/app_actions.dart';
 import 'package:omi/pages/apps/widgets/filter_sheet.dart';
 import 'package:omi/pages/settings/ai_app_generator_page.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/ui/ui.dart';
 
 import '../../journeys/support/fixture_backend.dart';
 import '../fakes.dart';
@@ -60,7 +63,11 @@ final appsScenarios = <AuditScenario>[
         ChangeNotifierProvider<AppProvider>.value(value: _catalog(apps)),
         ChangeNotifierProvider<AddAppProvider>(create: (_) => InertAddAppProvider()),
       ]);
-      await a.shot('Open the Apps tab');
+      await a.shot('Open the Apps tab', step: 'explore');
+      expect(find.byKey(const Key('apps_scope')), findsOneWidget);
+      await a.tap(find.descendant(of: find.byKey(const Key('apps_scope')), matching: find.text('Installed')));
+      expect(a.tester.widget<OmiSegmentedControl<bool>>(find.byKey(const Key('apps_scope'))).selected, isTrue);
+      await a.shot('Tap Installed: only the apps you have', step: 'installed');
     },
   ),
   AuditScenario(

@@ -43,6 +43,38 @@
     {
       "path": "app/lib/services/capture/capture_lifetime.dart",
       "reason": "Spine A/C1 compiling ownership contract, intentionally unreachable until App core implements composition; exercised by protected spine tests. Remove on wiring."
+    },
+    {
+      "path": "app/lib/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart",
+      "reason": "#19236: the CV1 device tutorial no longer auto-opens or appears in Device settings; kept until maintainers decide to retire it or bring it back on demand"
+    },
+    {
+      "path": "app/lib/pages/onboarding/interactive_device_onboarding/steps/double_press_config_step.dart",
+      "reason": "#19236: the CV1 device tutorial no longer auto-opens or appears in Device settings; kept until maintainers decide to retire it or bring it back on demand"
+    },
+    {
+      "path": "app/lib/pages/onboarding/interactive_device_onboarding/steps/power_cycle_step.dart",
+      "reason": "#19236: the CV1 device tutorial no longer auto-opens or appears in Device settings; kept until maintainers decide to retire it or bring it back on demand"
+    },
+    {
+      "path": "app/lib/pages/onboarding/interactive_device_onboarding/steps/single_press_step.dart",
+      "reason": "#19236: the CV1 device tutorial no longer auto-opens or appears in Device settings; kept until maintainers decide to retire it or bring it back on demand"
+    },
+    {
+      "path": "app/lib/pages/onboarding/interactive_device_onboarding/steps/transcription_demo_step.dart",
+      "reason": "#19236: the CV1 device tutorial no longer auto-opens or appears in Device settings; kept until maintainers decide to retire it or bring it back on demand"
+    },
+    {
+      "path": "app/lib/pages/onboarding/interactive_device_onboarding/widgets/double_tap_demo_animation.dart",
+      "reason": "#19236: the CV1 device tutorial no longer auto-opens or appears in Device settings; kept until maintainers decide to retire it or bring it back on demand"
+    },
+    {
+      "path": "app/lib/pages/onboarding/interactive_device_onboarding/widgets/onboarding_intro_screen.dart",
+      "reason": "#19236: the CV1 device tutorial no longer auto-opens or appears in Device settings; kept until maintainers decide to retire it or bring it back on demand"
+    },
+    {
+      "path": "app/lib/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart",
+      "reason": "#19236: the CV1 device tutorial no longer auto-opens or appears in Device settings; kept until maintainers decide to retire it or bring it back on demand"
     }
 ]
 }

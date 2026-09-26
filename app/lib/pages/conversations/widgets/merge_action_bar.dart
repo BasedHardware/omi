@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 
@@ -72,7 +71,7 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
                         label: context.l10n.cancel,
                         size: OmiButtonSize.compact,
                         onPressed: () {
-                          HapticFeedback.lightImpact();
+                          OmiHaptics.light();
                           provider.exitSelectionMode();
                         },
                       ),
@@ -123,7 +122,7 @@ class _MergeActionBarState extends State<MergeActionBar> with SingleTickerProvid
   }
 
   Future<void> _handleMerge(BuildContext context, ConversationProvider provider) async {
-    HapticFeedback.mediumImpact();
+    OmiHaptics.medium();
     final confirmed = await MergeConfirmationDialog.show(context, provider.selectedConversations);
     if (confirmed && context.mounted) {
       final idsToMerge = provider.markSelectedAsMergingAndExit();

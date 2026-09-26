@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import 'package:provider/provider.dart';
 
@@ -7,6 +8,8 @@ import 'package:omi/backend/schema/person.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/pages/settings/widgets/voice_profile_settings_section.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/settings/settings_destinations.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/extensions/functions.dart';
@@ -42,10 +45,10 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
             color: Colors.transparent,
             child: Theme(
               data: ThemeData(
-                textSelectionTheme: const TextSelectionThemeData(
-                  cursorColor: Colors.white,
-                  selectionColor: Colors.white24,
-                  selectionHandleColor: Colors.white,
+                textSelectionTheme: TextSelectionThemeData(
+                  cursorColor: OmiColors.textPrimary,
+                  selectionColor: OmiColors.textDisabled,
+                  selectionHandleColor: OmiColors.textPrimary,
                 ),
               ),
               child: Form(
@@ -56,8 +59,8 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                   placeholder: context.l10n.name,
                   keyboardType: TextInputType.name,
                   textCapitalization: TextCapitalization.words,
-                  placeholderStyle: const TextStyle(color: OmiColors.textTertiary),
-                  style: const TextStyle(color: Colors.white),
+                  placeholderStyle: TextStyle(color: OmiColors.textTertiary),
+                  style: TextStyle(color: OmiColors.textPrimary),
                   validator: _nameValidator(context),
                 ),
               ),
@@ -71,9 +74,9 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
               textCapitalization: TextCapitalization.words,
               decoration: InputDecoration(
                 labelText: context.l10n.name,
-                labelStyle: const TextStyle(color: Colors.white),
-                focusColor: Colors.white,
-                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade300)),
+                labelStyle: TextStyle(color: OmiColors.textPrimary),
+                focusColor: OmiColors.textPrimary,
+                focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: OmiColors.border)),
               ),
               validator: _nameValidator(context),
             ),
@@ -170,7 +173,7 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
         final l10n = context.l10n;
         return Scaffold(
           backgroundColor: OmiColors.surface0,
-          appBar: AppBar(
+          appBar: OmiAppBar(
             leading: const OmiBackButton(),
             title: Text(l10n.people),
             actions: [
@@ -192,81 +195,167 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
               ),
             ],
           ),
-          body: Column(
-            children: [
-              const VoiceProfileSettingsSection(),
-              Expanded(
-                child: provider.loading
-                    ? const OmiLoadingState()
-                    : provider.people.isEmpty
-                        ? OmiEmptyState(
-                            icon: Icons.people_outline,
-                            title: l10n.noPeopleYet,
-                            message: l10n.createPersonHint,
-                            action: OmiButton(
-                              label: l10n.addPerson,
-                              icon: Icons.add,
-                              size: OmiButtonSize.compact,
-                              onPressed: () {
-                                _showPersonDialog(context, provider);
-                              },
-                            ),
-                          )
-                        : ListView.separated(
-                            itemCount: provider.people.length,
-                            separatorBuilder: (context, index) => const Divider(height: 1, color: OmiColors.border),
-                            itemBuilder: (context, index) {
-                              final person = provider.people[index];
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                                    title: Text(person.name, style: OmiType.body.copyWith(fontWeight: FontWeight.w500)),
-                                    subtitle: Text(
-                                      l10n.voiceRecognitionStatus(person.voiceReadiness),
-                                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                                    ),
-                                    onTap: () => _showPersonDialog(context, provider, person: person),
-                                    trailing: OmiIconButton(
-                                      icon: const Icon(Icons.delete_outline, size: 20),
-                                      label: l10n.deletePersonLabel,
-                                      color: OmiColors.textSecondary,
-                                      onPressed: () => _confirmDeletePerson(person, provider),
-                                    ),
-                                  ),
-                                  if (person.speechSamples != null && person.speechSamples!.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(left: 6, right: 16, bottom: 8),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          for (final (j, sample) in person.speechSamples!.indexed)
-                                            _SampleRow(
-                                              title: l10n.sampleNumber(j + 1),
-                                              transcript: person.speechSampleTranscripts != null &&
-                                                      j < person.speechSampleTranscripts!.length
-                                                  ? person.speechSampleTranscripts![j]
-                                                  : null,
-                                              playing: provider.currentPlayingPersonIndex == index &&
-                                                  provider.currentPlayingIndex == j &&
-                                                  provider.isPlaying,
-                                              // The row plays: a tap no longer deletes (it used to).
-                                              onPlayPause: () => provider.playPause(index, j, sample),
-                                              onDelete: () => _confirmDeleteSample(index, person, j, provider),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                ],
-                              );
-                            },
+          // v2 People: who Omi can recognize — you first, then everyone you named, then how it
+          // learns voices.
+          body: provider.loading
+              ? const OmiLoadingState()
+              : ListView(
+                  padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, 48),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
+                      child: Text(l10n.peopleSubtitle, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                    ),
+                    const SizedBox(height: 22),
+                    OmiSettingsGroup(
+                      children: [
+                        OmiSettingsRow(
+                          key: const Key('people_you_row'),
+                          leading: OmiInitialAvatar(
+                            name: SharedPreferencesUtil().givenName.trim().isNotEmpty
+                                ? SharedPreferencesUtil().givenName
+                                : l10n.you,
+                            size: 36,
                           ),
-              ),
-            ],
-          ),
+                          title: l10n.you,
+                          subtitle: l10n.speechProfile,
+                          onTap: () => openVoiceProfile(context),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 22),
+                    if (provider.people.isEmpty)
+                      OmiEmptyState(
+                        icon: Icons.people_outline,
+                        title: l10n.noPeopleYet,
+                        message: l10n.createPersonHint,
+                        action: OmiButton(
+                          label: l10n.addPerson,
+                          icon: Icons.add,
+                          size: OmiButtonSize.compact,
+                          onPressed: () => _showPersonDialog(context, provider),
+                        ),
+                      )
+                    else
+                      OmiSettingsGroup(
+                        header: l10n.people,
+                        children: [
+                          for (final (index, person) in provider.people.indexed)
+                            _PersonEntry(
+                              key: ValueKey('person_${person.id}'),
+                              person: person,
+                              onRename: () => _showPersonDialog(context, provider, person: person),
+                              onDelete: () => _confirmDeletePerson(person, provider),
+                              samples: [
+                                for (final (j, sample) in (person.speechSamples ?? const <String>[]).indexed)
+                                  _SampleRow(
+                                    title: l10n.sampleNumber(j + 1),
+                                    transcript: person.speechSampleTranscripts != null &&
+                                            j < person.speechSampleTranscripts!.length
+                                        ? person.speechSampleTranscripts![j]
+                                        : null,
+                                    playing: provider.currentPlayingPersonIndex == index &&
+                                        provider.currentPlayingIndex == j &&
+                                        provider.isPlaying,
+                                    // The row plays: a tap never deletes.
+                                    onPlayPause: () => provider.playPause(index, j, sample),
+                                    onDelete: () => _confirmDeleteSample(index, person, j, provider),
+                                  ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    const SizedBox(height: 22),
+                    const VoiceProfileSettingsSection(),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, 0),
+                      child:
+                          Text(l10n.howPeopleWorks, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                    ),
+                  ],
+                ),
         );
       },
+    );
+  }
+}
+
+/// One person (v2 People): their initial, name and voice status. A tap shows or hides their voice
+/// samples; Rename and Delete are on long-press (and in the accessibility actions).
+class _PersonEntry extends StatefulWidget {
+  const _PersonEntry({
+    super.key,
+    required this.person,
+    required this.samples,
+    required this.onRename,
+    required this.onDelete,
+  });
+
+  final Person person;
+  final List<Widget> samples;
+  final VoidCallback onRename;
+  final VoidCallback onDelete;
+
+  @override
+  State<_PersonEntry> createState() => _PersonEntryState();
+}
+
+class _PersonEntryState extends State<_PersonEntry> {
+  bool _expanded = false;
+
+  void _showMenu() {
+    final l10n = context.l10n;
+    showOmiRowMenu(context, title: widget.person.name, actions: [
+      OmiMenuAction(icon: Icons.edit_outlined, label: l10n.editPerson, onSelected: widget.onRename),
+      OmiMenuAction(
+        icon: Icons.delete_outline,
+        label: l10n.deletePersonLabel,
+        onSelected: widget.onDelete,
+        isDestructive: true,
+      ),
+    ]);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final person = widget.person;
+    final hasSamples = widget.samples.isNotEmpty;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          expanded: hasSamples ? _expanded : null,
+          customSemanticsActions: {
+            CustomSemanticsAction(label: l10n.editPerson): widget.onRename,
+            CustomSemanticsAction(label: l10n.deletePersonLabel): widget.onDelete,
+          },
+          child: GestureDetector(
+            onLongPress: _showMenu,
+            child: OmiSettingsRow(
+              leading: OmiInitialAvatar(name: person.name, size: 36),
+              title: person.name,
+              subtitle: l10n.voiceRecognitionStatus(person.voiceReadiness),
+              showChevron: false,
+              trailing: hasSamples
+                  ? AnimatedRotation(
+                      turns: _expanded ? 0.5 : 0,
+                      duration: OmiMotion.of(context).quick,
+                      child: Icon(Icons.expand_more_rounded, color: OmiColors.textTertiary),
+                    )
+                  : null,
+              // Without samples there is nothing to show, so a tap renames.
+              onTap: hasSamples ? () => setState(() => _expanded = !_expanded) : widget.onRename,
+            ),
+          ),
+        ),
+        if (_expanded)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(40, 0, OmiSpacing.xs, OmiSpacing.xs),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: widget.samples),
+          ),
+      ],
     );
   }
 }

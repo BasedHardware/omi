@@ -67,6 +67,442 @@ class $AssetsFontsGen {
       ];
 }
 
+class $AssetsIconsGen {
+  const $AssetsIconsGen();
+
+  /// File path: assets/icons/applewatch.svg
+  String get applewatch => 'assets/icons/applewatch.svg';
+
+  /// File path: assets/icons/archive.svg
+  String get archive => 'assets/icons/archive.svg';
+
+  /// File path: assets/icons/arrow-down.svg
+  String get arrowDown => 'assets/icons/arrow-down.svg';
+
+  /// File path: assets/icons/arrow-up.svg
+  String get arrowUp => 'assets/icons/arrow-up.svg';
+
+  /// File path: assets/icons/bell.svg
+  String get bell => 'assets/icons/bell.svg';
+
+  /// File path: assets/icons/bluetooth.svg
+  String get bluetooth => 'assets/icons/bluetooth.svg';
+
+  /// File path: assets/icons/bolt.svg
+  String get bolt => 'assets/icons/bolt.svg';
+
+  /// File path: assets/icons/bookmark.svg
+  String get bookmark => 'assets/icons/bookmark.svg';
+
+  /// File path: assets/icons/briefcase.svg
+  String get briefcase => 'assets/icons/briefcase.svg';
+
+  /// File path: assets/icons/bubbles-fill.svg
+  String get bubblesFill => 'assets/icons/bubbles-fill.svg';
+
+  /// File path: assets/icons/bubbles.svg
+  String get bubbles => 'assets/icons/bubbles.svg';
+
+  /// File path: assets/icons/calendar-clock.svg
+  String get calendarClock => 'assets/icons/calendar-clock.svg';
+
+  /// File path: assets/icons/calendar.svg
+  String get calendar => 'assets/icons/calendar.svg';
+
+  /// File path: assets/icons/camera.svg
+  String get camera => 'assets/icons/camera.svg';
+
+  /// File path: assets/icons/captions.svg
+  String get captions => 'assets/icons/captions.svg';
+
+  /// File path: assets/icons/chart.svg
+  String get chart => 'assets/icons/chart.svg';
+
+  /// File path: assets/icons/checklist.svg
+  String get checklist => 'assets/icons/checklist.svg';
+
+  /// File path: assets/icons/checkmark.svg
+  String get checkmark => 'assets/icons/checkmark.svg';
+
+  /// File path: assets/icons/chevron-down.svg
+  String get chevronDown => 'assets/icons/chevron-down.svg';
+
+  /// File path: assets/icons/chevron-left.svg
+  String get chevronLeft => 'assets/icons/chevron-left.svg';
+
+  /// File path: assets/icons/chevron-right.svg
+  String get chevronRight => 'assets/icons/chevron-right.svg';
+
+  /// File path: assets/icons/chevron-up.svg
+  String get chevronUp => 'assets/icons/chevron-up.svg';
+
+  /// File path: assets/icons/chevron-updown.svg
+  String get chevronUpdown => 'assets/icons/chevron-updown.svg';
+
+  /// File path: assets/icons/circle-fill.svg
+  String get circleFill => 'assets/icons/circle-fill.svg';
+
+  /// File path: assets/icons/clock.svg
+  String get clock => 'assets/icons/clock.svg';
+
+  /// File path: assets/icons/cloud.svg
+  String get cloud => 'assets/icons/cloud.svg';
+
+  /// File path: assets/icons/compose.svg
+  String get compose => 'assets/icons/compose.svg';
+
+  /// File path: assets/icons/copy.svg
+  String get copy => 'assets/icons/copy.svg';
+
+  /// File path: assets/icons/cpu.svg
+  String get cpu => 'assets/icons/cpu.svg';
+
+  /// File path: assets/icons/creditcard.svg
+  String get creditcard => 'assets/icons/creditcard.svg';
+
+  /// File path: assets/icons/devices.svg
+  String get devices => 'assets/icons/devices.svg';
+
+  /// File path: assets/icons/doc.svg
+  String get doc => 'assets/icons/doc.svg';
+
+  /// File path: assets/icons/ear.svg
+  String get ear => 'assets/icons/ear.svg';
+
+  /// File path: assets/icons/ellipsis.svg
+  String get ellipsis => 'assets/icons/ellipsis.svg';
+
+  /// File path: assets/icons/eye-slash.svg
+  String get eyeSlash => 'assets/icons/eye-slash.svg';
+
+  /// File path: assets/icons/filter.svg
+  String get filter => 'assets/icons/filter.svg';
+
+  /// File path: assets/icons/flashlight.svg
+  String get flashlight => 'assets/icons/flashlight.svg';
+
+  /// File path: assets/icons/folder.svg
+  String get folder => 'assets/icons/folder.svg';
+
+  /// File path: assets/icons/gift.svg
+  String get gift => 'assets/icons/gift.svg';
+
+  /// File path: assets/icons/glasses.svg
+  String get glasses => 'assets/icons/glasses.svg';
+
+  /// File path: assets/icons/globe.svg
+  String get globe => 'assets/icons/globe.svg';
+
+  /// File path: assets/icons/graph.svg
+  String get graph => 'assets/icons/graph.svg';
+
+  /// File path: assets/icons/grid-fill.svg
+  String get gridFill => 'assets/icons/grid-fill.svg';
+
+  /// File path: assets/icons/grid.svg
+  String get grid => 'assets/icons/grid.svg';
+
+  /// File path: assets/icons/hammer.svg
+  String get hammer => 'assets/icons/hammer.svg';
+
+  /// File path: assets/icons/hand.svg
+  String get hand => 'assets/icons/hand.svg';
+
+  /// File path: assets/icons/heart.svg
+  String get heart => 'assets/icons/heart.svg';
+
+  /// File path: assets/icons/history.svg
+  String get history => 'assets/icons/history.svg';
+
+  /// File path: assets/icons/house-fill.svg
+  String get houseFill => 'assets/icons/house-fill.svg';
+
+  /// File path: assets/icons/house.svg
+  String get house => 'assets/icons/house.svg';
+
+  /// File path: assets/icons/info.svg
+  String get info => 'assets/icons/info.svg';
+
+  /// File path: assets/icons/iphone.svg
+  String get iphone => 'assets/icons/iphone.svg';
+
+  /// File path: assets/icons/key.svg
+  String get key => 'assets/icons/key.svg';
+
+  /// File path: assets/icons/keypad.svg
+  String get keypad => 'assets/icons/keypad.svg';
+
+  /// File path: assets/icons/light.svg
+  String get light => 'assets/icons/light.svg';
+
+  /// File path: assets/icons/link.svg
+  String get link => 'assets/icons/link.svg';
+
+  /// File path: assets/icons/list.svg
+  String get list => 'assets/icons/list.svg';
+
+  /// File path: assets/icons/location.svg
+  String get location => 'assets/icons/location.svg';
+
+  /// File path: assets/icons/lock.svg
+  String get lock => 'assets/icons/lock.svg';
+
+  /// File path: assets/icons/magnifyingglass.svg
+  String get magnifyingglass => 'assets/icons/magnifyingglass.svg';
+
+  /// File path: assets/icons/map.svg
+  String get map => 'assets/icons/map.svg';
+
+  /// File path: assets/icons/mappin.svg
+  String get mappin => 'assets/icons/mappin.svg';
+
+  /// File path: assets/icons/merge.svg
+  String get merge => 'assets/icons/merge.svg';
+
+  /// File path: assets/icons/mic-slash.svg
+  String get micSlash => 'assets/icons/mic-slash.svg';
+
+  /// File path: assets/icons/mic.svg
+  String get mic => 'assets/icons/mic.svg';
+
+  /// File path: assets/icons/minus.svg
+  String get minus => 'assets/icons/minus.svg';
+
+  /// File path: assets/icons/moon.svg
+  String get moon => 'assets/icons/moon.svg';
+
+  /// File path: assets/icons/number.svg
+  String get number => 'assets/icons/number.svg';
+
+  /// File path: assets/icons/paperclip.svg
+  String get paperclip => 'assets/icons/paperclip.svg';
+
+  /// File path: assets/icons/pause-fill.svg
+  String get pauseFill => 'assets/icons/pause-fill.svg';
+
+  /// File path: assets/icons/pencil.svg
+  String get pencil => 'assets/icons/pencil.svg';
+
+  /// File path: assets/icons/person-add.svg
+  String get personAdd => 'assets/icons/person-add.svg';
+
+  /// File path: assets/icons/person.svg
+  String get person => 'assets/icons/person.svg';
+
+  /// File path: assets/icons/person2.svg
+  String get person2 => 'assets/icons/person2.svg';
+
+  /// File path: assets/icons/phone-down.svg
+  String get phoneDown => 'assets/icons/phone-down.svg';
+
+  /// File path: assets/icons/phone.svg
+  String get phone => 'assets/icons/phone.svg';
+
+  /// File path: assets/icons/pin.svg
+  String get pin => 'assets/icons/pin.svg';
+
+  /// File path: assets/icons/play-fill.svg
+  String get playFill => 'assets/icons/play-fill.svg';
+
+  /// File path: assets/icons/plus.svg
+  String get plus => 'assets/icons/plus.svg';
+
+  /// File path: assets/icons/power.svg
+  String get power => 'assets/icons/power.svg';
+
+  /// File path: assets/icons/question.svg
+  String get question => 'assets/icons/question.svg';
+
+  /// File path: assets/icons/quote.svg
+  String get quote => 'assets/icons/quote.svg';
+
+  /// File path: assets/icons/refresh.svg
+  String get refresh => 'assets/icons/refresh.svg';
+
+  /// File path: assets/icons/sdcard.svg
+  String get sdcard => 'assets/icons/sdcard.svg';
+
+  /// File path: assets/icons/seal.svg
+  String get seal => 'assets/icons/seal.svg';
+
+  /// File path: assets/icons/share.svg
+  String get share => 'assets/icons/share.svg';
+
+  /// File path: assets/icons/shield.svg
+  String get shield => 'assets/icons/shield.svg';
+
+  /// File path: assets/icons/signout.svg
+  String get signout => 'assets/icons/signout.svg';
+
+  /// File path: assets/icons/sliders.svg
+  String get sliders => 'assets/icons/sliders.svg';
+
+  /// File path: assets/icons/speaker.svg
+  String get speaker => 'assets/icons/speaker.svg';
+
+  /// File path: assets/icons/square-stop.svg
+  String get squareStop => 'assets/icons/square-stop.svg';
+
+  /// File path: assets/icons/star-fill.svg
+  String get starFill => 'assets/icons/star-fill.svg';
+
+  /// File path: assets/icons/star.svg
+  String get star => 'assets/icons/star.svg';
+
+  /// File path: assets/icons/stop-fill.svg
+  String get stopFill => 'assets/icons/stop-fill.svg';
+
+  /// File path: assets/icons/sun.svg
+  String get sun => 'assets/icons/sun.svg';
+
+  /// File path: assets/icons/tag.svg
+  String get tag => 'assets/icons/tag.svg';
+
+  /// File path: assets/icons/target.svg
+  String get target => 'assets/icons/target.svg';
+
+  /// File path: assets/icons/text.svg
+  String get text => 'assets/icons/text.svg';
+
+  /// File path: assets/icons/thumbsdown.svg
+  String get thumbsdown => 'assets/icons/thumbsdown.svg';
+
+  /// File path: assets/icons/thumbsup.svg
+  String get thumbsup => 'assets/icons/thumbsup.svg';
+
+  /// File path: assets/icons/trash.svg
+  String get trash => 'assets/icons/trash.svg';
+
+  /// File path: assets/icons/tray.svg
+  String get tray => 'assets/icons/tray.svg';
+
+  /// File path: assets/icons/warning.svg
+  String get warning => 'assets/icons/warning.svg';
+
+  /// File path: assets/icons/wave-dots.svg
+  String get waveDots => 'assets/icons/wave-dots.svg';
+
+  /// File path: assets/icons/waveform.svg
+  String get waveform => 'assets/icons/waveform.svg';
+
+  /// File path: assets/icons/wrench.svg
+  String get wrench => 'assets/icons/wrench.svg';
+
+  /// File path: assets/icons/xmark.svg
+  String get xmark => 'assets/icons/xmark.svg';
+
+  /// List of all assets
+  List<String> get values => [
+        applewatch,
+        archive,
+        arrowDown,
+        arrowUp,
+        bell,
+        bluetooth,
+        bolt,
+        bookmark,
+        briefcase,
+        bubblesFill,
+        bubbles,
+        calendarClock,
+        calendar,
+        camera,
+        captions,
+        chart,
+        checklist,
+        checkmark,
+        chevronDown,
+        chevronLeft,
+        chevronRight,
+        chevronUp,
+        chevronUpdown,
+        circleFill,
+        clock,
+        cloud,
+        compose,
+        copy,
+        cpu,
+        creditcard,
+        devices,
+        doc,
+        ear,
+        ellipsis,
+        eyeSlash,
+        filter,
+        flashlight,
+        folder,
+        gift,
+        glasses,
+        globe,
+        graph,
+        gridFill,
+        grid,
+        hammer,
+        hand,
+        heart,
+        history,
+        houseFill,
+        house,
+        info,
+        iphone,
+        key,
+        keypad,
+        light,
+        link,
+        list,
+        location,
+        lock,
+        magnifyingglass,
+        map,
+        mappin,
+        merge,
+        micSlash,
+        mic,
+        minus,
+        moon,
+        number,
+        paperclip,
+        pauseFill,
+        pencil,
+        personAdd,
+        person,
+        person2,
+        phoneDown,
+        phone,
+        pin,
+        playFill,
+        plus,
+        power,
+        question,
+        quote,
+        refresh,
+        sdcard,
+        seal,
+        share,
+        shield,
+        signout,
+        sliders,
+        speaker,
+        squareStop,
+        starFill,
+        star,
+        stopFill,
+        sun,
+        tag,
+        target,
+        text,
+        thumbsdown,
+        thumbsup,
+        trash,
+        tray,
+        warning,
+        waveDots,
+        waveform,
+        wrench,
+        xmark
+      ];
+}
+
 class $AssetsImagesGen {
   const $AssetsImagesGen();
 
@@ -249,34 +685,6 @@ class $AssetsImagesGen {
   AssetGenImage get omiWithoutRope =>
       const AssetGenImage('assets/images/omi-without-rope.webp');
 
-  /// File path: assets/images/onboarding-bg-1.webp
-  AssetGenImage get onboardingBg1 =>
-      const AssetGenImage('assets/images/onboarding-bg-1.webp');
-
-  /// File path: assets/images/onboarding-bg-2.webp
-  AssetGenImage get onboardingBg2 =>
-      const AssetGenImage('assets/images/onboarding-bg-2.webp');
-
-  /// File path: assets/images/onboarding-bg-3.webp
-  AssetGenImage get onboardingBg3 =>
-      const AssetGenImage('assets/images/onboarding-bg-3.webp');
-
-  /// File path: assets/images/onboarding-bg-4.webp
-  AssetGenImage get onboardingBg4 =>
-      const AssetGenImage('assets/images/onboarding-bg-4.webp');
-
-  /// File path: assets/images/onboarding-bg-5-1.webp
-  AssetGenImage get onboardingBg51 =>
-      const AssetGenImage('assets/images/onboarding-bg-5-1.webp');
-
-  /// File path: assets/images/onboarding-bg-5-2.webp
-  AssetGenImage get onboardingBg52 =>
-      const AssetGenImage('assets/images/onboarding-bg-5-2.webp');
-
-  /// File path: assets/images/onboarding-bg-6.webp
-  AssetGenImage get onboardingBg6 =>
-      const AssetGenImage('assets/images/onboarding-bg-6.webp');
-
   /// File path: assets/images/onboarding.mp4
   String get onboarding => 'assets/images/onboarding.mp4';
 
@@ -387,13 +795,6 @@ class $AssetsImagesGen {
         omiWithoutRopeGreenCharging,
         omiWithoutRopeTurnedOff,
         omiWithoutRope,
-        onboardingBg1,
-        onboardingBg2,
-        onboardingBg3,
-        onboardingBg4,
-        onboardingBg51,
-        onboardingBg52,
-        onboardingBg6,
         onboarding,
         plaudNotePin,
         raybanMeta,
@@ -489,6 +890,7 @@ abstract final class Assets {
   static const $AssetsCompetitorLogosGen competitorLogos =
       $AssetsCompetitorLogosGen();
   static const $AssetsFontsGen fonts = $AssetsFontsGen();
+  static const $AssetsIconsGen icons = $AssetsIconsGen();
   static const $AssetsImagesGen images = $AssetsImagesGen();
   static const $AssetsIntegrationAppLogosGen integrationAppLogos =
       $AssetsIntegrationAppLogosGen();

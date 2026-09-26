@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class ScanningRippleWidget extends StatefulWidget {
   final bool isScanning;
@@ -44,7 +45,7 @@ class _ScanningRippleWidgetState extends State<ScanningRippleWidget> with Single
         builder: (context, child) {
           return CustomPaint(
             size: Size(widget.size, widget.size),
-            painter: _RipplePainter(progress: _controller.value, color: Colors.white),
+            painter: _RipplePainter(progress: _controller.value, color: OmiColors.textPrimary),
           );
         },
       ),

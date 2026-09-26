@@ -47,11 +47,11 @@ void main() {
       expect(tester.widget<Text>(find.text('J')).style!.color, OmiColors.surface1);
     });
 
-    testWidgets('uses white initials on a dark background for contrast', (tester) async {
+    testWidgets('uses light initials on a dark background for contrast', (tester) async {
       await tester.pumpWidget(
         _wrap(const ReviewAvatar(seed: 'uid_1', username: 'jane', backgroundColor: Color(0xFF1F1F25))),
       );
-      expect(tester.widget<Text>(find.text('J')).style!.color, Colors.white);
+      expect(tester.widget<Text>(find.text('J')).style!.color, OmiColors.textPrimary);
     });
 
     testWidgets('honors explicit background and foreground colors', (tester) async {

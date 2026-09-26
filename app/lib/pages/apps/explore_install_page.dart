@@ -1,6 +1,5 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -213,26 +212,26 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
             Expanded(
               child: Container(
                 height: 48,
-                decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+                decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
               ),
             ),
             const SizedBox(width: OmiSpacing.xs),
             Container(
               width: 44,
               height: 48,
-              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
             ),
             const SizedBox(width: OmiSpacing.xs),
             Container(
               width: 44,
               height: 44,
-              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
             ),
             const SizedBox(width: OmiSpacing.xs),
             Container(
               width: 44,
               height: 44,
-              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
             ),
           ],
         ),
@@ -257,13 +256,13 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                   Container(
                     width: 140,
                     height: 20,
-                    decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
+                    decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
                   ),
                   const Spacer(),
                   Container(
                     width: 60,
                     height: 20,
-                    decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
+                    decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
                   ),
                 ],
               ),
@@ -289,7 +288,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                       Container(
                         width: 60,
                         height: 60,
-                        decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
+                        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
                       ),
                       const SizedBox(width: OmiSpacing.sm),
                       Expanded(
@@ -300,13 +299,13 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                             Container(
                               width: double.infinity,
                               height: 16,
-                              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
+                              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
                             ),
                             const SizedBox(height: OmiSpacing.xxs),
                             Container(
                               width: 80,
                               height: 12,
-                              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
+                              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
                             ),
                           ],
                         ),
@@ -315,7 +314,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                       Container(
                         width: 60,
                         height: 28,
-                        decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+                        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
                       ),
                     ],
                   ),
@@ -386,7 +385,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
         builder: (context, state, child) {
           return RefreshIndicator(
             onRefresh: () async {
-              HapticFeedback.mediumImpact();
+              OmiHaptics.medium();
               await context.read<AppProvider>().forceRefreshApps();
             },
             color: OmiColors.onAccent,
@@ -396,6 +395,22 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
               physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 const SliverToBoxAdapter(child: SizedBox(height: 4)),
+
+                // v2 Apps: the tab root's large title.
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      OmiSize.screenMargin,
+                      OmiSpacing.xs,
+                      OmiSize.screenMargin,
+                      OmiSpacing.sm,
+                    ),
+                    child: Semantics(
+                      header: true,
+                      child: Text(context.l10n.apps, style: OmiType.largeTitle, maxLines: 1),
+                    ),
+                  ),
+                ),
 
                 // Top bar with search and filters - show shimmer when loading
                 SliverToBoxAdapter(
@@ -410,17 +425,14 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                               AnimatedContainer(
                                 duration: const Duration(milliseconds: 200),
                                 curve: Curves.easeInOut,
-                                width: (!state.isSearchActive &&
-                                        (state.isInstalledSelected || state.visibleFilterCount > 0))
-                                    ? kOmiMinTapTarget
-                                    : null,
-                                child: (!state.isSearchActive &&
-                                        (state.isInstalledSelected || state.visibleFilterCount > 0))
+                                width:
+                                    (!state.isSearchActive && state.visibleFilterCount > 0) ? kOmiMinTapTarget : null,
+                                child: (!state.isSearchActive && state.visibleFilterCount > 0)
                                     ? SizedBox(
                                         height: kOmiMinTapTarget,
                                         child: Container(
-                                          decoration: const BoxDecoration(
-                                              color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+                                          decoration:
+                                              BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
                                           child: OmiIconButton(
                                             icon: const Icon(Icons.search, size: 20),
                                             color: OmiColors.textSecondary,
@@ -453,11 +465,11 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                               height: 44,
                                               child: SearchBar(
                                                 hintText: context.l10n.searchAppsPlaceholder,
-                                                leading: const Padding(
-                                                  padding: EdgeInsets.only(left: OmiSpacing.xs),
+                                                leading: Padding(
+                                                  padding: const EdgeInsets.only(left: OmiSpacing.xs),
                                                   child: Icon(Icons.search, color: OmiColors.textSecondary, size: 20),
                                                 ),
-                                                backgroundColor: WidgetStateProperty.all(OmiColors.surface1),
+                                                backgroundColor: WidgetStateProperty.all(OmiColors.surface2),
                                                 elevation: WidgetStateProperty.all(0),
                                                 padding: WidgetStateProperty.all(
                                                   const EdgeInsets.symmetric(
@@ -484,9 +496,7 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                                 textStyle: WidgetStateProperty.all(
                                                   OmiType.subhead.copyWith(color: OmiColors.textPrimary),
                                                 ),
-                                                shape: WidgetStateProperty.all(
-                                                  const RoundedRectangleBorder(borderRadius: OmiRadius.mdAll),
-                                                ),
+                                                shape: WidgetStateProperty.all(const StadiumBorder()),
                                                 onChanged: (value) {
                                                   debouncer.run(() {
                                                     context.read<AppProvider>().searchApps(value);
@@ -499,72 +509,6 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                       ),
                               ),
 
-                              // Installed Apps button - expands when selected
-                              state.isInstalledSelected
-                                  ? Expanded(
-                                      child: AnimatedContainer(
-                                        duration: const Duration(milliseconds: 200),
-                                        curve: Curves.easeInOut,
-                                        height: 44,
-                                        decoration: BoxDecoration(
-                                          color: OmiColors.textPrimary.withValues(alpha: 0.22),
-                                          borderRadius: OmiRadius.mdAll,
-                                        ),
-                                        child: TextButton.icon(
-                                          onPressed: () {
-                                            HapticFeedback.mediumImpact();
-                                            final provider = context.read<AppProvider>();
-                                            final wasSelected = provider.isFilterSelected('Installed Apps', 'Apps');
-                                            provider.addOrRemoveFilter('Installed Apps', 'Apps');
-                                            provider.applyFilters();
-                                            PlatformManager.instance.analytics.appsTypeFilter(
-                                              'Installed Apps',
-                                              !wasSelected,
-                                            );
-                                          },
-                                          icon: const FaIcon(
-                                            FontAwesomeIcons.download,
-                                            size: 16,
-                                            color: OmiColors.textPrimary,
-                                          ),
-                                          label: Text(
-                                            (state.visibleFilterCount > 0 && !state.isSearchActive)
-                                                ? context.l10n.installed
-                                                : context.l10n.installedApps,
-                                            style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
-                                          ),
-                                          style: TextButton.styleFrom(
-                                            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 0),
-                                          ),
-                                        ),
-                                      ),
-                                    )
-                                  : SizedBox(
-                                      width: 44,
-                                      height: 44,
-                                      child: AnimatedContainer(
-                                        duration: const Duration(milliseconds: 200),
-                                        curve: Curves.easeInOut,
-                                        decoration: const BoxDecoration(
-                                            color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
-                                        child: OmiIconButton(
-                                          icon: const FaIcon(FontAwesomeIcons.download, size: 16),
-                                          label: context.l10n.installedApps,
-                                          onPressed: () {
-                                            HapticFeedback.mediumImpact();
-                                            final provider = context.read<AppProvider>();
-                                            final wasSelected = provider.isFilterSelected('Installed Apps', 'Apps');
-                                            provider.addOrRemoveFilter('Installed Apps', 'Apps');
-                                            provider.applyFilters();
-                                            PlatformManager.instance.analytics.appsTypeFilter(
-                                              'Installed Apps',
-                                              !wasSelected,
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    ),
-
                               const SizedBox(width: OmiSpacing.xs),
 
                               // Filter button - expands when filters are active (but not when search is active)
@@ -575,22 +519,25 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                         curve: Curves.easeInOut,
                                         height: 44,
                                         decoration: BoxDecoration(
-                                          color: OmiColors.textPrimary.withValues(alpha: 0.22),
-                                          borderRadius: OmiRadius.mdAll,
+                                          color: OmiColors.accent,
+                                          borderRadius: OmiRadius.pillAll,
                                         ),
                                         child: TextButton.icon(
                                           onPressed: () {
-                                            HapticFeedback.mediumImpact();
+                                            OmiHaptics.medium();
                                             FilterBottomSheet.show(context);
                                           },
-                                          icon: const FaIcon(
+                                          icon: FaIcon(
                                             FontAwesomeIcons.filter,
                                             size: 16,
-                                            color: OmiColors.textPrimary,
+                                            color: OmiColors.onAccent,
                                           ),
                                           label: Text(
                                             context.l10n.filters,
-                                            style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
+                                            style: OmiType.subhead.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                              color: OmiColors.onAccent,
+                                            ),
                                           ),
                                           style: TextButton.styleFrom(
                                             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 0),
@@ -608,16 +555,17 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                                             duration: const Duration(milliseconds: 200),
                                             curve: Curves.easeInOut,
                                             decoration: BoxDecoration(
-                                              color: state.visibleFilterCount > 0
-                                                  ? OmiColors.textPrimary.withValues(alpha: 0.22)
-                                                  : OmiColors.surface1,
-                                              borderRadius: OmiRadius.mdAll,
+                                              color:
+                                                  state.visibleFilterCount > 0 ? OmiColors.accent : OmiColors.surface2,
+                                              borderRadius: OmiRadius.pillAll,
                                             ),
                                             child: OmiIconButton(
                                               icon: const FaIcon(FontAwesomeIcons.filter, size: 16),
+                                              // Dark glyph on the light "active" fill.
+                                              color: state.visibleFilterCount > 0 ? OmiColors.onAccent : null,
                                               label: context.l10n.filters,
                                               onPressed: () {
-                                                HapticFeedback.mediumImpact();
+                                                OmiHaptics.medium();
                                                 FilterBottomSheet.show(context);
                                               },
                                             ),
@@ -656,6 +604,29 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                             ],
                           ),
                         ),
+                ),
+
+                // v2 Apps: Explore everything, or only what is installed (the Installed Apps filter).
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, 0),
+                    child: OmiSegmentedControl<bool>(
+                      key: const Key('apps_scope'),
+                      segments: [
+                        OmiSegment(value: false, label: context.l10n.appsExplore),
+                        OmiSegment(value: true, label: context.l10n.installed),
+                      ],
+                      selected: state.isInstalledSelected,
+                      onChanged: (installed) {
+                        if (installed == state.isInstalledSelected) return;
+                        OmiHaptics.selection();
+                        final provider = context.read<AppProvider>();
+                        provider.addOrRemoveFilter('Installed Apps', 'Apps');
+                        provider.applyFilters();
+                        PlatformManager.instance.analytics.appsTypeFilter('Installed Apps', installed);
+                      },
+                    ),
+                  ),
                 ),
 
                 const SliverToBoxAdapter(child: SizedBox(height: 0)),

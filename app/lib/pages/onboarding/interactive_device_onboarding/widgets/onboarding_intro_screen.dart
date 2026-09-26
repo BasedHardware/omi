@@ -39,7 +39,8 @@ class _OnboardingIntroScreenState extends State<OnboardingIntroScreen> with Sing
       children: [
         Positioned.fill(child: _buildAnimatedBackground()),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          // The step layout's side inset: Get Started sits where Continue does on every step.
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
           child: Column(
             children: [
               // The tutorial floats over the app: it leaves by a trailing close X.
@@ -65,7 +66,8 @@ class _OnboardingIntroScreenState extends State<OnboardingIntroScreen> with Sing
                       height: 240,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        gradient: RadialGradient(colors: [Colors.white.withValues(alpha: 0.10), Colors.transparent]),
+                        gradient:
+                            RadialGradient(colors: [OmiColors.textPrimary.withValues(alpha: 0.10), Colors.transparent]),
                       ),
                     ),
                     Image.asset(
@@ -94,7 +96,7 @@ class _OnboardingIntroScreenState extends State<OnboardingIntroScreen> with Sing
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const ExcludeSemantics(child: Icon(Icons.schedule, color: OmiColors.textSecondary, size: 16)),
+                  ExcludeSemantics(child: Icon(Icons.schedule, color: OmiColors.textSecondary, size: 16)),
                   const SizedBox(width: 6),
                   Text(
                     context.l10n.deviceOnboardingIntroDuration,
@@ -146,7 +148,7 @@ class _OnboardingIntroScreenState extends State<OnboardingIntroScreen> with Sing
           shape: BoxShape.circle,
           gradient: RadialGradient(
             colors: [
-              Colors.white.withValues(alpha: alpha),
+              OmiColors.textPrimary.withValues(alpha: alpha),
               Colors.transparent,
             ],
           ),

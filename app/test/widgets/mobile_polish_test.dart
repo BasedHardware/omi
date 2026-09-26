@@ -65,11 +65,15 @@ void main() {
         data: const MediaQueryData(textScaler: TextScaler.linear(2)),
         child: ChatStarters(hasExistingData: hasData, isConnected: true, onSelected: (value) => selected = value),
       )));
-      final key = Key(hasData ? 'chat_starter_activity' : 'chat_starter_goal');
+      final key = Key(hasData ? 'chat_starter_open' : 'chat_starter_goal');
       await tester.ensureVisible(find.byKey(key));
       await tester.tap(find.byKey(key));
-      expect(selected, hasData ? 'Summarize my recent activity' : 'Help me set a goal');
-      expect(find.text(hasData ? 'What can you do for me?' : 'Summarize my recent activity'), findsNothing);
+      expect(selected, hasData ? "What's still open?" : 'Help me set a goal');
+      expect(find.text(hasData ? 'What can you do for me?' : 'Summarize today'), findsNothing);
+      if (hasData) {
+        expect(find.byKey(const Key('chat_starter_today')), findsOneWidget);
+        expect(find.byKey(const Key('chat_starter_people')), findsOneWidget);
+      }
       expect(tester.takeException(), isNull);
     }
     await tester.pumpWidget(_app(ChatStarters(hasExistingData: true, isConnected: false, onSelected: (_) {})));

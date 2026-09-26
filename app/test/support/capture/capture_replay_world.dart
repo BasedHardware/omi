@@ -270,6 +270,10 @@ class CaptureReplayWorld {
   final ValueNotifier<PhoneCallState> omiCall = ValueNotifier(PhoneCallState.idle);
   bool nextConnectFailsOnce = false;
 
+  /// Holds the next transcription socket open until completed: a server slow to answer, so a
+  /// reconnect holds the capture coordinator's line.
+  Completer<void>? holdNextSocketOpen;
+
   bool connected = true;
   bool signedIn = true;
   bool allowMic = true;
@@ -586,6 +590,9 @@ class _ReplayCaptureController extends CaptureController {
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
   }) async {
+    final hold = world.holdNextSocketOpen;
+    world.holdNextSocketOpen = null;
+    if (hold != null) await hold.future;
     final transport = ScriptedPureSocket();
     transport.connectAllowed = () => world.connected;
     if (world.nextConnectFailsOnce) {

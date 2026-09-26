@@ -46,12 +46,12 @@ class PhotosGridComponent extends StatelessWidget {
                     ),
                     if (photo.discarded)
                       Container(
-                        color: Colors.black.withValues(alpha: 0.5),
-                        child: const Icon(Icons.visibility_off_outlined, color: Colors.white70, size: 28),
+                        color: OmiColors.surface0.withValues(alpha: 0.5),
+                        child: Icon(Icons.visibility_off_outlined, color: OmiColors.textSecondary, size: 28),
                       ),
                     if (isProcessing)
                       Container(
-                        color: Colors.black.withValues(alpha: 0.5),
+                        color: OmiColors.surface0.withValues(alpha: 0.5),
                         child: const Center(child: OmiSpinner(size: OmiSpinnerSize.small)),
                       ),
                   ],

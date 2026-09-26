@@ -107,12 +107,10 @@ class _CategoryAppsPageState extends State<CategoryAppsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: OmiColors.surface0,
-      appBar: AppBar(
+      appBar: OmiAppBar(
         backgroundColor: OmiColors.surface0,
         leading: const OmiBackButton(),
         title: Text(widget.category.getLocalizedTitle(context)),
-        centerTitle: true,
-        elevation: 0,
       ),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

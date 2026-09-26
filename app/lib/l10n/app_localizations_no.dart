@@ -1857,9 +1857,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get openSettings => 'Åpne innstillinger';
 
   @override
-  String get whatsYourName => 'Hva heter du?';
-
-  @override
   String get speakTranscribeSummarize => 'Snakk. Transkriber. Sammenfatt.';
 
   @override
@@ -1873,12 +1870,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get termsOfUse => 'Bruksvilkår';
-
-  @override
-  String get omiYourAiCompanion => 'Omi – Din AI-følgesvenn';
-
-  @override
-  String get captureEveryMoment => 'Fang hvert øyeblikk. Få AI-drevne\nsammendrag. Aldri ta notater igjen.';
 
   @override
   String get appleWatchSetup => 'Apple Watch-oppsett';
@@ -1923,18 +1914,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String errorStartingRecording(String error) {
     return 'Feil ved oppstart av opptak: $error';
   }
-
-  @override
-  String get selectPrimaryLanguage => 'Velg hovedspråket ditt';
-
-  @override
-  String get languageBenefits => 'Angi språket ditt for skarpere transkripsjoner og en personlig opplevelse';
-
-  @override
-  String get whatsYourPrimaryLanguage => 'Hva er ditt hovedspråk?';
-
-  @override
-  String get selectYourLanguage => 'Velg språket ditt';
 
   @override
   String get personalGrowthJourney => 'Din personlige vekstreise med AI som lytter til hvert ord.';
@@ -3365,9 +3344,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get dataProtection => 'Databeskyttelse';
-
-  @override
-  String get yourDataIsProtected => 'Dataene dine er beskyttet og styres av vår ';
 
   @override
   String get pleaseSelectYourPrimaryLanguage => 'Vennligst velg ditt primære språk';
@@ -5048,10 +5024,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'Ekstra taleprøve fjernet';
-
-  @override
-  String get consentDataMessage =>
-      'Ved å fortsette vil samtalene, opptakene og den personlige informasjonen din bli lagret sikkert på våre servere. Lydopptakene og transkripsjonene dine behandles av tredjeparts AI-tjenester (inkludert Deepgram for transkripsjon og OpenAI for analyse) for å gi deg AI-drevne innsikter og aktivere alle appfunksjoner.';
 
   @override
   String get tasksEmptyStateMessage => 'Oppgaver fra samtalene dine vil vises her.\nTrykk på + for å opprette manuelt.';
@@ -7065,9 +7037,6 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi-påminnelse';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName frakoblet';
   }
@@ -7763,9 +7732,6 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get authorizingMcpServer => 'Autoriserer…';
-
-  @override
-  String get whereDidYouHearAboutOmi => 'Hvordan fant du oss?';
 
   @override
   String get tiktok => 'TikTok';
@@ -9950,9 +9916,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripsjon mottar ikke lyd';
 
   @override
-  String get tapPlusToStartRecording => 'Trykk på opptaksknappen for å starte opptaket';
-
-  @override
   String get chatBlockTask => 'Oppgave';
 
   @override
@@ -10672,9 +10635,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get deviceConnecting => 'Kobler til…';
 
   @override
-  String get recordOptionsTip => 'Tips: trykk på pilen på opptaksknappen for å ta opp en telefonsamtale.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Oppdateringen mislyktes';
 
   @override
@@ -11214,12 +11174,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get keepUsingPendant => 'Fortsett med anhenget';
 
   @override
-  String get recordWith => 'Ta opp med';
-
-  @override
-  String get moreWaysToRecord => 'Flere måter å ta opp på';
-
-  @override
   String get openCall => 'Åpne anrop';
 
   @override
@@ -11266,4 +11220,540 @@ class AppLocalizationsNo extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name og andre';
   }
+
+  @override
+  String get alreadyHaveAccount => 'Har du allerede en konto?';
+
+  @override
+  String get signInToOmi => 'Logg på Omi';
+
+  @override
+  String get signInSubtitle => 'Samtalene og minnene dine følger kontoen din på telefonen, Mac og nettet.';
+
+  @override
+  String onboardingAllSetName(String name) {
+    return 'Alt er klart, $name.';
+  }
+
+  @override
+  String get completeHomeBody => 'Dagen din, oppgaver og sammendrag på ett sted.';
+
+  @override
+  String get completeAskTitle => 'Spør';
+
+  @override
+  String get foundOmiOptionalHint => 'Valgfritt – det hjelper et lite team å vite hva som fungerer.';
+
+  @override
+  String get consentTitle => 'Dataene dine, forklart enkelt';
+
+  @override
+  String get consentSubtitle => 'Før Omi begynner å lytte, ser du her nøyaktig hva som skjer med det den hører.';
+
+  @override
+  String get consentStoredTitle => 'Hva som lagres';
+
+  @override
+  String get consentStoredBody => 'Lyden, transkripsjonene og det Omi lærer, lagres trygt på kontoen din.';
+
+  @override
+  String get consentProcessorsTitle => 'Hvem som behandler dem';
+
+  @override
+  String get consentProcessorsBody =>
+      'Tale transkriberes av Deepgram og analyseres av OpenAI for å skrive sammendrag, oppgaver og minner.';
+
+  @override
+  String get consentControlTitle => 'Hva du bestemmer over';
+
+  @override
+  String get consentControlBody => 'Slett en samtale, et minne eller hele kontoen din når du vil.';
+
+  @override
+  String get readPrivacyPolicy => 'Les personvernerklæringen';
+
+  @override
+  String get whatShouldOmiCallYou => 'Hva skal Omi kalle deg?';
+
+  @override
+  String get nameUsageHint => 'Omi bruker dette til å merke deg i transkripsjoner og eksporter.';
+
+  @override
+  String get yourNamePlaceholder => 'Navnet ditt';
+
+  @override
+  String get whatLanguageDoYouSpeakMost => 'Hvilket språk snakker du mest?';
+
+  @override
+  String get languageOnboardingSubtitle =>
+      'Omi transkriberer best når den kjenner språket. Du kan legge til flere senere.';
+
+  @override
+  String get permissionsFewTitle => 'Noen tillatelser';
+
+  @override
+  String get permissionsFewSubtitle =>
+      'Omi ber bare om det den bruker. Du kan endre dette når som helst i Innstillinger.';
+
+  @override
+  String get permissionsContinueNote =>
+      '«Fortsett» ber ikke om noe. Hver tillatelse blir bare bedt om når du trykker på «Tillat».';
+
+  @override
+  String get howDidYouHearAboutOmi => 'Hvordan hørte du om Omi?';
+
+  @override
+  String get showOnLockScreen => 'Vis på låseskjermen';
+
+  @override
+  String get seeAll => 'Se alle';
+
+  @override
+  String get upNext => 'Neste';
+
+  @override
+  String get allTasks => 'Alle oppgaver';
+
+  @override
+  String get thisWeek => 'Denne uken';
+
+  @override
+  String capturedDuration(String duration) {
+    return '$duration tatt opp';
+  }
+
+  @override
+  String newMemoriesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count nye minner',
+      one: '1 nytt minne',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncingFromPendant => 'Synkroniserer fra anhenget ditt';
+
+  @override
+  String get pendantRecordingsSynced => 'Opptak fra anhenget er synkronisert';
+
+  @override
+  String recordedOnPendantWhileAway(String duration) {
+    return '~$duration tatt opp på anhenget mens telefonen var borte';
+  }
+
+  @override
+  String dailyRecapOn(String day) {
+    return 'Daglig oppsummering · $day';
+  }
+
+  @override
+  String taskDueDayTime(String day, String time) {
+    return '$day, $time';
+  }
+
+  @override
+  String fromConversation(String title) {
+    return 'Fra $title';
+  }
+
+  @override
+  String get endCapture => 'Avslutt';
+
+  @override
+  String get toDo => 'Gjøremål';
+
+  @override
+  String get devices => 'Enheter';
+
+  @override
+  String get devicesSubtitle => 'Alt som lytter for deg. Én tar opp om gangen.';
+
+  @override
+  String get addADevice => 'Legg til en enhet';
+
+  @override
+  String get deviceReady => 'Klar';
+
+  @override
+  String get importFromOtherApps => 'Importer fra andre apper';
+
+  @override
+  String get whatWillYouWear => 'Hva skal du bruke?';
+
+  @override
+  String get pickDeviceSubtitle => 'Du kan legge til flere senere. Én tar opp om gangen.';
+
+  @override
+  String get alreadyHaveOne => 'Har du allerede en?';
+
+  @override
+  String get noDeviceHeader => 'Ingen enhet';
+
+  @override
+  String get omiPendantName => 'Omi-anheng';
+
+  @override
+  String get allDayConversations => 'Samtaler hele dagen';
+
+  @override
+  String get conversationsAndPhotos => 'Samtaler + bilder';
+
+  @override
+  String get wristMic => 'Mikrofon på håndleddet';
+
+  @override
+  String get glassesAudio => 'Lyd fra brillene';
+
+  @override
+  String get bringRecordingsIntoOmi => 'Ta med opptakene dine inn i Omi';
+
+  @override
+  String get useThisIphone => 'Bruk denne iPhonen';
+
+  @override
+  String get useThisPhone => 'Bruk denne telefonen';
+
+  @override
+  String get startInSeconds => 'Kom i gang på 10 sekunder';
+
+  @override
+  String get askAboutThisConversationPlaceholder => 'Spør om denne samtalen';
+
+  @override
+  String get summaryStyle => 'Oppsummeringsstil';
+
+  @override
+  String get summaryStyleSubtitle => 'Velg hvilken app som skriver denne oppsummeringen';
+
+  @override
+  String get appearance => 'Utseende';
+
+  @override
+  String get appearanceSystem => 'System';
+
+  @override
+  String get appearanceLight => 'Lys';
+
+  @override
+  String get appearanceDark => 'Mørk';
+
+  @override
+  String get feel => 'Følelse';
+
+  @override
+  String get haptics => 'Haptikk';
+
+  @override
+  String get hapticsSubtitle => 'Et lett trykk når du avslutter, stjernemerker eller fullfører noe';
+
+  @override
+  String get textSize => 'Tekststørrelse';
+
+  @override
+  String get textSizeSubtitle => 'Følger tekststørrelsen på telefonen';
+
+  @override
+  String get appearanceMotionNote =>
+      'Bevegelse følger Reduser bevegelse i telefoninnstillingene — alle løkker, også lyset på enheten, stopper.';
+
+  @override
+  String get signedInWithApple => 'Logget på med Apple';
+
+  @override
+  String get signedInWithGoogle => 'Logget på med Google';
+
+  @override
+  String premiumMinutesLeftThisMonth(String left, int limit) {
+    return '$left av $limit premiumminutter igjen denne måneden';
+  }
+
+  @override
+  String get recordingFrom => 'Tar opp fra';
+
+  @override
+  String get recordingFromSubtitle => 'Én kilde tar opp om gangen. Bytte avslutter den pågående samtalen.';
+
+  @override
+  String get manageDevices => 'Administrer enheter';
+
+  @override
+  String get notListeningTitle => 'Lytter ikke';
+
+  @override
+  String get notListeningSubtitle => 'Start med denne telefonen, eller koble til en enhet som lytter hele dagen.';
+
+  @override
+  String get startListening => 'Begynn å lytte';
+
+  @override
+  String get searchEverything => 'Søk i alt';
+
+  @override
+  String searchResultsCount(int count) {
+    return 'Resultater · $count';
+  }
+
+  @override
+  String get nothingFound => 'Fant ingenting';
+
+  @override
+  String get searchNothingFoundHint => 'Prøv et annet ord, eller spør Omi – den forstår mening, ikke bare ord.';
+
+  @override
+  String get askOmiInstead => 'Spør Omi i stedet';
+
+  @override
+  String get recentSearches => 'Nylige';
+
+  @override
+  String get searchAskSuggestion => 'Hva lovte jeg å gjøre denne uken?';
+
+  @override
+  String get welcomeRememberTitle => 'Husk hver samtale.';
+
+  @override
+  String get welcomeRememberSubtitle =>
+      'Bruk det du liker. Omi gjør det du hører om til notater, gjøremål og en oppsummering av dagen din.';
+
+  @override
+  String get memoriesSubtitle => 'Hva Omi vet, og hvor den lærte det';
+
+  @override
+  String get memoryTierLongTerm => 'Langsiktig';
+
+  @override
+  String get memoryTierShortTerm => 'Kortsiktig';
+
+  @override
+  String get memoriesTierNote =>
+      'Nye minner starter som kortsiktige. Omi flytter selv dem som fortsetter å bety noe, til langsiktige.';
+
+  @override
+  String get askEmptyTitle => 'Spør om alt du har hørt.';
+
+  @override
+  String get askEmptySubtitle => 'Omi svarer ut fra samtalene, minnene og oppgavene dine.';
+
+  @override
+  String get completeListeningTitle => 'Lytting';
+
+  @override
+  String get completeListeningBody =>
+      'Blått betyr at Omi hører deg – fra en enhet du har på deg eller denne telefonen.';
+
+  @override
+  String get completeAskAnyBody => 'Trykk på Spør for å spørre om alt du har hørt.';
+
+  @override
+  String get completeDevicesBody => 'Legg til en bærbar enhet når som helst, eller start med denne telefonen.';
+
+  @override
+  String get conversationSourceGlasses => 'Briller';
+
+  @override
+  String get conversationSourceImported => 'Importert';
+
+  @override
+  String get conversationSourceEmptyHint => 'Ingenting er tatt opp fra denne kilden ennå.';
+
+  @override
+  String get findMyPendant => 'Finn anhenget mitt';
+
+  @override
+  String get findMyPendantHint => 'Spiller av en lyd så du kan finne det';
+
+  @override
+  String get upToDate => 'Oppdatert';
+
+  @override
+  String get updateAvailable => 'Oppdatering tilgjengelig';
+
+  @override
+  String get storageTitle => 'Lagring';
+
+  @override
+  String get connectStepTurnOn => 'Slå den på og hold den nær';
+
+  @override
+  String get connectStepAllowBluetooth => 'Tillat Bluetooth';
+
+  @override
+  String get connectStepTest => 'Si noe for å teste';
+
+  @override
+  String get connectStepTestHint => 'Ordene vises her mens du snakker';
+
+  @override
+  String get setUpLater => 'Konfigurer senere';
+
+  @override
+  String recapPreviousDay(String day) {
+    return 'Oppsummering av dagen før: $day';
+  }
+
+  @override
+  String recapNextDay(String day) {
+    return 'Oppsummering av dagen etter: $day';
+  }
+
+  @override
+  String get askStarterToday => 'Oppsummer dagen i dag';
+
+  @override
+  String get askStarterPeople => 'Hvem møtte jeg?';
+
+  @override
+  String get askStarterOpen => 'Hva er fortsatt åpent?';
+
+  @override
+  String get peopleSubtitle => 'Stemmer Omi kjenner igjen i transkripsjoner';
+
+  @override
+  String get usageCurrentPlan => 'Nåværende abonnement';
+
+  @override
+  String get appsExplore => 'Utforsk';
+
+  @override
+  String get appOutOfFive => 'av 5';
+
+  @override
+  String get appStatUsers => 'Brukere';
+
+  @override
+  String homeWelcomeName(String name) {
+    return 'Velkommen, $name';
+  }
+
+  @override
+  String get homeWelcome => 'Velkommen';
+
+  @override
+  String get homeFirstDaySubtitle => 'Din første dag med Omi';
+
+  @override
+  String get homeListeningHeroTitle => 'Omi lytter';
+
+  @override
+  String get homeListeningHeroBody => 'Den første samtalen din vises her et minutt etter at den er ferdig.';
+
+  @override
+  String get homeGettingStarted => 'Kom i gang';
+
+  @override
+  String get gettingStartedConnect => 'Koble til en enhet';
+
+  @override
+  String get gettingStartedConversation => 'Ha en samtale';
+
+  @override
+  String get gettingStartedAsk => 'Spør Omi om den';
+
+  @override
+  String get homeGoodToKnow => 'Greit å vite';
+
+  @override
+  String get tipFinishTitle => 'Avslutt når du vil';
+
+  @override
+  String get tipFinishBody =>
+      'Trykk på Avslutt – eller trykk to ganger på anhenget – så starter oppsummeringen med en gang.';
+
+  @override
+  String get tipStarTitle => 'Stjernemerk det som betyr noe';
+
+  @override
+  String get tipStarBody => 'Stjernemerkede samtaler er lette å finne igjen.';
+
+  @override
+  String get tipPrivateTitle => 'Privat som standard';
+
+  @override
+  String get tipPrivateBody => 'Samtalene dine forblir private med mindre du deler dem.';
+
+  @override
+  String homeGettingStartedProgress(int done, int total) {
+    return '$done av $total';
+  }
+
+  @override
+  String get noFailedRecordings => 'Ingen mislykkede opptak';
+
+  @override
+  String get mapNoPlacesTitle => 'Ingen steder ennå';
+
+  @override
+  String get mapNoPlacesMessage => 'Samtaler vises her når Omi vet hvor de fant sted.';
+
+  @override
+  String get mergeWithEllipsis => 'Slå sammen med…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Fullfør oppsettet av $appName for å slå den på';
+  }
+
+  @override
+  String get greetingUpLate => 'Sent oppe';
+
+  @override
+  String get greetingLunchtime => 'Lunsjtid';
+
+  @override
+  String get greetingWindingDown => 'Tid for å slappe av';
+
+  @override
+  String get greetingGoodNight => 'God natt';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Fortsatt våken';
+
+  @override
+  String get greetingEarlyStart => 'Tidlig start';
+
+  @override
+  String get greetingNewDay => 'Ny dag';
+
+  @override
+  String get greetingMorning => 'God morgen';
+
+  @override
+  String get greetingBusyMorning => 'Travel formiddag';
+
+  @override
+  String get greetingAfternoon => 'God ettermiddag';
+
+  @override
+  String get greetingHomeStretch => 'Innspurten';
+
+  @override
+  String get greetingEvening => 'God kveld';
+
+  @override
+  String get unlimitedBadge => 'Ubegrenset';
+
+  @override
+  String get voiceSetupTaskSubline => 'Så Omi vet at det er deg · omtrent ett minutt';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '$saved av $total lyd lagret';
+  }
+
+  @override
+  String get voiceIntroTitle => 'Presenter deg';
+
+  @override
+  String get memoryLabel => 'Minne';
+
+  @override
+  String get idleReadyHint => 'Trykk på Start, så vises det du sier her.';
 }

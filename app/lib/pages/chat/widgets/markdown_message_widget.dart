@@ -12,16 +12,16 @@ Widget getMarkdownWidget(BuildContext context, String message, {Function(String)
     styleSheet: MarkdownStyleSheet(
       p: OmiType.callout.copyWith(height: 1.4),
       // Links are neutral (INV-UI-1): white and underlined, not a blue accent.
-      a: const TextStyle(color: OmiColors.textPrimary, decoration: TextDecoration.underline),
+      a: TextStyle(color: OmiColors.textPrimary, decoration: TextDecoration.underline),
       listBullet: OmiType.callout,
       blockquote: OmiType.callout.copyWith(height: 1.4, backgroundColor: Colors.transparent),
-      blockquoteDecoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-      code: const TextStyle(
+      blockquoteDecoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+      code: TextStyle(
         color: OmiColors.textPrimary,
         backgroundColor: Colors.transparent,
         fontFamily: 'monospace',
       ),
-      codeblockDecoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
+      codeblockDecoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.smAll),
     ),
     onTapLink: (text, href, title) {
       if (href != null) {

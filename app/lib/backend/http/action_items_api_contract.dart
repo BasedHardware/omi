@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/action_items.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 import 'api_presentation.dart';
@@ -62,7 +63,8 @@ class ActionItemsApiStatus extends StatelessWidget {
                 Text(
                   copy,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white),
+                  // Themed: plain white was invisible in the light appearance.
+                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
                 ),
                 if (view.problem?.retryable == true)
                   TextButton(

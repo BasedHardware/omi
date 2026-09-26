@@ -4,14 +4,15 @@
 // is a copy of HomePage._buildChatBar (private there).
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
+import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:nested/nested.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/message_event.dart';
-import 'package:omi/backend/schema/phone_call.dart';
-import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/home/home_content.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
@@ -27,14 +28,14 @@ import 'package:omi/widgets/header_circle_button.dart';
 import '../fakes.dart';
 import '../harness.dart';
 
-enum AuditLive { idle, pendant, pendantPaused, phone, phonePaused, phoneAfterPendant }
+enum AuditLive { idle, pendant, pendantPaused, pendantStopped, phone, phonePaused, phoneAfterPendant }
 
 /// A capture provider reporting one fixed live state, with a short transcript.
 class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   AuditCaptureProvider(this.live);
   final AuditLive live;
 
-  bool get _pendant => live == AuditLive.pendant || live == AuditLive.pendantPaused;
+  bool get _pendant => live == AuditLive.pendant || live == AuditLive.pendantPaused || live == AuditLive.pendantStopped;
   bool get _phone => !_pendant && live != AuditLive.idle;
 
   @override
@@ -43,7 +44,7 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   RecordingState get recordingState => switch (live) {
         AuditLive.idle => RecordingState.stop,
         AuditLive.pendant => RecordingState.deviceRecord,
-        AuditLive.pendantPaused || AuditLive.phonePaused => RecordingState.pause,
+        AuditLive.pendantPaused || AuditLive.pendantStopped || AuditLive.phonePaused => RecordingState.pause,
         _ => RecordingState.record,
       };
   @override
@@ -51,7 +52,17 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   @override
   BtDevice? get recordingDevice => havingRecordingDevice ? auditPendant : null;
   @override
-  bool get isPaused => live == AuditLive.pendantPaused || live == AuditLive.phonePaused;
+  bool get isPaused =>
+      live == AuditLive.pendantPaused || live == AuditLive.pendantStopped || live == AuditLive.phonePaused;
+  @override
+  bool get isCaptureStopped => live == AuditLive.pendantStopped;
+  @override
+  bool get isStopping => false;
+  @override
+  bool get canMuteLiveSource => true;
+  @override
+  Duration? get captureElapsed =>
+      live == AuditLive.idle || live == AuditLive.pendantStopped ? null : Duration(seconds: _phone ? 134 : 724);
   @override
   bool get isPhoneMicPaused => live == AuditLive.phonePaused;
   @override
@@ -129,6 +140,10 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   @override
   Future<void> resumeCapture() async {}
   @override
+  Future<bool> stopCapture() async => segments.isNotEmpty;
+  @override
+  Future<void> startCapture() async {}
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
@@ -155,10 +170,15 @@ class _CallInProgress extends ChangeNotifier implements PhoneCallProvider {
 
 final auditPendant = BtDevice(id: 'd1', name: 'Omi Device', type: DeviceType.omi, rssi: -40);
 
-/// Home as HomePage lays it out: header (device chip, settings), content, the tab bar, and the
-/// [Ask Omi | record] row floating above it.
+/// Home as HomePage lays it out (Rev 3): header (device chip; Search and Settings), content, and the
+/// dock with the round Ask button.
 class _HomeFrame extends StatelessWidget {
-  const _HomeFrame();
+  const _HomeFrame({this.fetchSummaries, this.askable = false});
+
+  final DailySummariesFetcher? fetchSummaries;
+
+  /// The dock's Ask opens its field (HomePage passes onAskSubmit) instead of going to Chat.
+  final bool askable;
 
   @override
   Widget build(BuildContext context) {
@@ -167,59 +187,34 @@ class _HomeFrame extends StatelessWidget {
       appBar: AppBar(
         automaticallyImplyLeading: false,
         backgroundColor: Theme.of(context).colorScheme.surface,
+        clipBehavior: Clip.none,
         titleSpacing: NavigationToolbar.kMiddleSpacing - (kMinTapTarget - kHeaderCircleDiameter) / 2,
         title: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           const Padding(
             padding: EdgeInsets.only(left: (kMinTapTarget - kHeaderCircleDiameter) / 2),
             child: BatteryInfoWidget(),
           ),
-          HeaderCircleButton(
-            semanticLabel: 'Settings',
-            onTap: () {},
-            icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
-          ),
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            HeaderCircleButton(
+              semanticLabel: 'Search',
+              onTap: () {},
+              icon: OmiGlyph(OmiGlyphs.magnifyingGlass, size: 20, color: OmiColors.textPrimary),
+            ),
+            const SizedBox(width: 2),
+            HeaderCircleButton(
+              semanticLabel: 'Settings',
+              onTap: () {},
+              icon: OmiGlyph(OmiGlyphs.person, size: 20, color: OmiColors.textPrimary),
+            ),
+          ]),
         ]),
       ),
       body: Stack(children: [
-        const HomeContentPage(),
-        BottomNavBar(onTabTap: (_, __) {}),
-        const HomeChatBarBackdrop(),
-        Positioned(
-          left: 16,
-          right: 16,
-          bottom: bottomNavChatBarOffset(context),
-          child: const Row(children: [Expanded(child: _AskOmiBar()), SizedBox(width: 10), HomeRecordButton()]),
-        ),
+        HomeContentPage(fetchSummaries: fetchSummaries),
+        BottomNavBar(onTabTap: (_, __) {}, onAskTap: () {}, onAskSubmit: askable ? (_) {} : null),
       ]),
     );
   }
-}
-
-/// Copy of HomePage._buildChatBar's look.
-class _AskOmiBar extends StatelessWidget {
-  const _AskOmiBar();
-
-  @override
-  Widget build(BuildContext context) => Container(
-        height: kHomeChatBarHeight,
-        decoration: BoxDecoration(
-          color: OmiColors.surface1,
-          borderRadius: OmiRadius.pillAll,
-          border: Border.all(color: OmiColors.border, width: 1),
-        ),
-        child: Row(children: [
-          const SizedBox(width: 18),
-          Expanded(child: Text('Ask Omi', style: OmiType.subhead.copyWith(color: OmiColors.textTertiary))),
-          Container(
-            width: 42,
-            height: 42,
-            margin: const EdgeInsets.only(right: 6),
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-            child: const FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
-          ),
-        ]),
-      );
 }
 
 Future<void> _runHome(
@@ -230,8 +225,13 @@ Future<void> _runHome(
   Finder? tap,
   Finder? longPress,
   String action = 'Home',
+  bool withData = false,
+  bool scroll = false,
+  bool askable = false,
 }) async {
-  await a.pump(const _HomeFrame(), scaffold: false, providers: [
+  await a
+      .pump(_HomeFrame(fetchSummaries: withData ? _seededRecap : null, askable: askable), scaffold: false, providers: [
+    if (withData) ...await _seededHomeData(a),
     ChangeNotifierProvider<DeviceProvider>.value(
         value: pendantConnected
             ? AuditDeviceProvider(connected: true, battery: 72, device: auditPendant)
@@ -241,20 +241,107 @@ Future<void> _runHome(
   ]);
   if (tap != null) await a.tap(tap);
   if (longPress != null) await a.longPress(longPress);
+  if (scroll) {
+    // The Home list, top to bottom (the page's own scroll view, not the header's).
+    await a.scrollSeries(action,
+        scrollable: find.descendant(of: find.byType(HomeContentPage), matching: find.byType(Scrollable)).first);
+    return;
+  }
   await a.shot(action);
 }
 
 Future<void> _runLivePage(AuditRun a, AuditLive live) async {
   await a.pump(const ConversationCapturingPage(), scaffold: false, providers: [
     ChangeNotifierProvider<CaptureProvider>.value(value: AuditCaptureProvider(live)),
-    if (live == AuditLive.pendant || live == AuditLive.pendantPaused)
+    if (live == AuditLive.pendant || live == AuditLive.pendantPaused || live == AuditLive.pendantStopped)
       ChangeNotifierProvider<DeviceProvider>.value(
           value: AuditDeviceProvider(connected: true, battery: 72, device: auditPendant)),
   ]);
   await a.shot('The live page');
 }
 
-const _home = 'lib/pages/home/page.dart (Home: live card, record button, device chip)';
+const _home = 'lib/pages/home/page.dart (Home: live or idle card, device chip, Search)';
+
+/// A day's worth of Home: five conversations, three open tasks (one due today) and yesterday's
+/// recap, as v2 Main shows them.
+Future<List<SingleChildWidget>> _seededHomeData(AuditRun a) async {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  ServerConversation conversation(
+          String id, String title, String overview, ConversationSource source, int hour, int minute) =>
+      ServerConversation(
+        id: id,
+        createdAt: today.add(Duration(hours: hour, minutes: minute)),
+        startedAt: today.add(Duration(hours: hour, minutes: minute)),
+        finishedAt: today.add(Duration(hours: hour, minutes: minute + 2)),
+        structured: Structured(title, overview, emoji: '', category: 'work'),
+        status: ConversationStatus.completed,
+        source: source,
+      );
+  final conversations = ConversationProvider(
+    conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+    isSignedIn: () => true,
+  )
+    ..conversations = [
+      conversation('c1', 'Call Chitapa reminder', 'A note to yourself to call Chitapa before the end of the day.',
+          ConversationSource.omi, 15, 14),
+      conversation('c2', 'App reliability and subscription concerns',
+          'Paying users are sometimes blocked; plan limits and failed payments.', ConversationSource.phone, 14, 43),
+      conversation('c3', 'App UX and battery', 'Users complain about battery drain after the update.',
+          ConversationSource.omi, 14, 42),
+      conversation('c4', 'Pricing review', 'Leaning annual with a free tier.', ConversationSource.openglass, 11, 5),
+      conversation('c5', 'iPhone roadmap', 'Capture and conversations first.', ConversationSource.omi, 9, 40),
+    ]
+    ..groupConversationsByDate();
+  Future<ActionItemsResponse?> tasks({
+    int limit = 100,
+    int offset = 0,
+    bool? completed,
+    String? conversationId,
+    DateTime? startDate,
+    DateTime? endDate,
+    DateTime? dueStartDate,
+    DateTime? dueEndDate,
+  }) async =>
+      ActionItemsResponse(actionItems: [
+        ActionItemWithMetadata(
+          id: 't1',
+          description: 'Call Chitapa',
+          completed: false,
+          dueAt: today.add(const Duration(hours: 17)),
+          conversationId: 'c1',
+        ),
+        const ActionItemWithMetadata(
+            id: 't2', description: 'Check the battery-drain reports', completed: false, conversationId: 'c3'),
+        const ActionItemWithMetadata(id: 't3', description: 'Send the pricing draft', completed: false),
+      ]);
+  final actionItems = ActionItemsProvider(getActionItems: tasks);
+  await a.tester.runAsync(actionItems.ensureLoaded);
+  return [
+    ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
+    ChangeNotifierProvider<ActionItemsProvider>.value(value: actionItems),
+  ];
+}
+
+Future<({List<DailySummary> items, bool ok})> _seededRecap({int limit = 20, int offset = 0}) async {
+  final yesterday = DateTime.now().subtract(const Duration(days: 1));
+  final date =
+      '${yesterday.year}-${yesterday.month.toString().padLeft(2, '0')}-${yesterday.day.toString().padLeft(2, '0')}';
+  return (
+    items: [
+      DailySummary(
+        id: 'recap-1',
+        date: date,
+        createdAt: yesterday,
+        headline: 'A planning day: pricing, the iPhone roadmap and two follow-ups.',
+        overview: 'Pricing is leaning annual; the iOS roadmap puts capture first.',
+        stats: DayStats(totalConversations: 6, totalDurationMinutes: 72, actionItemsCount: 5),
+      ),
+    ],
+    ok: true,
+  );
+}
+
 const _live = 'lib/pages/conversation_capturing/page.dart (ConversationCapturingPage)';
 
 final captureScenarios = <AuditScenario>[
@@ -263,66 +350,116 @@ final captureScenarios = <AuditScenario>[
     title: 'Home, nothing recording, pendant connected',
     page: _home,
     state: 'An Omi pendant connected at 72% battery; nothing recording',
-    run: (a) => _runHome(a, AuditLive.idle, pendantConnected: true),
+    run: (a) => _runHome(a, withData: true, AuditLive.idle, pendantConnected: true),
+  ),
+  AuditScenario(
+    id: 'home-ask-open',
+    title: 'Ask open over Home',
+    page: _home,
+    state: 'The Omi mark was tapped: everything but the question blurs and dims, the header included',
+    run: (a) => _runHome(
+        a,
+        withData: true,
+        AuditLive.pendant,
+        pendantConnected: true,
+        askable: true,
+        tap: find.byKey(const Key('bottom_nav_ask')),
+        action: 'Tap the Omi mark'),
+  ),
+  AuditScenario(
+    id: 'home-first-day',
+    title: 'Home on the first day: Welcome, Not listening, Getting started, Good to know',
+    page: _home,
+    state: 'A new account: no conversations, no device, nothing recording',
+    run: (a) => _runHome(a, AuditLive.idle, scroll: true, action: 'Open Home on the first day'),
+  ),
+  AuditScenario(
+    id: 'home-first-day-listening',
+    title: 'Home on the first day while Omi listens',
+    page: _home,
+    state: 'A new account: no conversations; the pendant is recording',
+    run: (a) => _runHome(a, AuditLive.pendant, pendantConnected: true, action: 'Omi is listening on the first day'),
+  ),
+  AuditScenario(
+    id: 'home-main',
+    title: 'Home with a day of conversations: live card, recap, conversations, up next',
+    page: _home,
+    state: 'The pendant recording at 72%; five conversations today, three open tasks, yesterday\'s recap',
+    run: (a) => _runHome(a, AuditLive.pendant,
+        pendantConnected: true, withData: true, scroll: true, action: 'Home on a normal day'),
   ),
   AuditScenario(
     id: 'home-capture-idle',
-    title: 'Home, nothing recording, no pendant',
+    title: 'Home, nothing recording, no device: Not listening, Start listening',
     page: _home,
     state: 'No device; nothing recording',
-    run: (a) => _runHome(a, AuditLive.idle),
+    run: (a) => _runHome(a, withData: true, AuditLive.idle),
+  ),
+  AuditScenario(
+    id: 'home-recording-from',
+    title: 'Recording from: the device chip opens the sources, one live at a time',
+    page: 'lib/pages/devices/recording_source_sheet.dart (showRecordingSourceSheet)',
+    state: 'An Omi pendant connected at 72% battery and recording; the device chip is tapped',
+    run: (a) => _runHome(
+        a,
+        withData: true,
+        AuditLive.pendant,
+        pendantConnected: true,
+        tap: find.byType(BatteryInfoWidget),
+        action: 'Tap the device chip'),
   ),
   AuditScenario(
     id: 'home-capture-pendant-live',
     title: 'Pendant recording',
     page: _home,
     state: 'The pendant streams; 12:04 in',
-    run: (a) => _runHome(a, AuditLive.pendant, pendantConnected: true),
+    run: (a) => _runHome(a, withData: true, AuditLive.pendant, pendantConnected: true),
   ),
   AuditScenario(
     id: 'home-capture-pendant-paused',
-    title: 'Pendant paused',
+    title: 'Pendant muted',
     page: _home,
-    state: 'The user paused the pendant',
-    run: (a) => _runHome(a, AuditLive.pendantPaused, pendantConnected: true),
+    state: 'The user muted the pendant mid-conversation: Unmute and Stop',
+    run: (a) => _runHome(a, withData: true, AuditLive.pendantPaused, pendantConnected: true),
+  ),
+  AuditScenario(
+    id: 'home-capture-pendant-stopped',
+    title: 'Pendant stopped',
+    page: _home,
+    state: 'The user pressed Stop: not listening, one Start that wakes the pendant',
+    run: (a) => _runHome(a, withData: true, AuditLive.pendantStopped, pendantConnected: true),
   ),
   AuditScenario(
     id: 'home-capture-pendant-tap',
-    title: 'Tap the record button while the pendant records',
+    title: 'Switch to this phone while the pendant records',
     page: _home,
-    state: 'The pendant streams; the record button is tapped',
-    run: (a) => _runHome(a, AuditLive.pendant,
-        pendantConnected: true, tap: find.byType(HomeRecordButton), action: 'Tap the record button'),
+    state: 'The pendant streams; Recording from → This phone is tapped (the pendant asks first)',
+    run: (a) async {
+      await _runHome(a, withData: true, AuditLive.pendant, pendantConnected: true, tap: find.byType(BatteryInfoWidget));
+      await a.tap(find.byKey(const Key('devices_this_phone')));
+      await a.shot('Tap This phone in Recording from', step: 'switch');
+    },
   ),
   AuditScenario(
     id: 'home-capture-phone-after-pendant',
     title: 'Phone recording after taking over from the pendant',
     page: _home,
     state: 'The phone records; the pendant waits for it',
-    run: (a) => _runHome(a, AuditLive.phoneAfterPendant, pendantConnected: true),
+    run: (a) => _runHome(a, withData: true, AuditLive.phoneAfterPendant, pendantConnected: true),
   ),
   AuditScenario(
     id: 'home-capture-phone-live',
     title: 'Phone recording, no pendant',
     page: _home,
     state: 'The phone records; 2:14 in',
-    run: (a) => _runHome(a, AuditLive.phone),
+    run: (a) => _runHome(a, withData: true, AuditLive.phone),
   ),
   AuditScenario(
     id: 'home-capture-call-live',
     title: 'Omi phone call',
     page: _home,
     state: 'An Omi call is active, 3:10 in',
-    run: (a) => _runHome(a, AuditLive.idle, call: true),
-  ),
-  AuditScenario(
-    id: 'home-capture-options',
-    title: 'Other ways to record',
-    page: _home,
-    state: 'Nothing recording; the record button is held (the ⌄ badge opens the same sheet)',
-    run: (a) async {
-      await _runHome(a, AuditLive.idle, longPress: find.byType(HomeRecordButton), action: 'Hold the record button');
-    },
+    run: (a) => _runHome(a, withData: true, AuditLive.idle, call: true),
   ),
   AuditScenario(
     id: 'conversation-live-pendant',

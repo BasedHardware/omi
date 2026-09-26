@@ -20,19 +20,25 @@ class BleDeviceSource implements AudioSource {
   @override
   final String deviceModel;
 
+  /// Observes audio for presentation only; it never alters frames.
+  final AudioTap? onAudio;
+
   BleDeviceSource({
     required this.codec,
     required this.deviceId,
     required this.deviceModel,
+    this.onAudio,
   });
 
   @override
   List<WalFrame> processBytes(List<int> rawBytes) {
     if (rawBytes.length <= headerSize) return [];
 
+    final payload = rawBytes.sublist(headerSize);
+    onAudio?.call(payload, codec);
     return [
       WalFrame(
-        payload: rawBytes.sublist(headerSize),
+        payload: payload,
         syncKey: FrameSyncKey.fromBleHeader(rawBytes),
       ),
     ];

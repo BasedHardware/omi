@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
 
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/capture_sources.dart';
 
-/// The one capture status and control surface on Home: what is recording now.
+/// Motion N3: the live card's orb flies into the Live page's (the card grows into the page).
+const String kLiveOrbHeroTag = 'omi-live-orb';
+
+/// The one capture status and control surface on Home: what is recording now (v2 `Main`).
 ///
-/// Leading: the source as a glyph in a circle (pendant, phone or call), named for screen readers
-/// but not in text. Then two lines: the short [status] ("Listening", "Paused", "Not
-/// transcribing"), and in a muted colour the elapsed time and the [detail] ("0:14 · Audio saved,
-/// transcribes later"). A problem ([explanation] set) carries an amber warning glyph instead of a
-/// status dot, and tapping the text opens a sheet that explains it. Trailing: Pause while live,
-/// Resume only when [paused] (a pause glyph, since mics belong to Ask Omi); a call shows a chevron
-/// because the call page owns the call's controls. Below: the latest transcript line and a [note].
+/// Row 1 is the short [status] ("Listening", "Muted", "Reconnecting…") over the source's name and
+/// the consequence of the state ([detail]: "Audio saved, transcribes later"), and the elapsed time.
+/// A problem ([explanation] set) carries an amber warning glyph, and tapping the text opens a sheet
+/// that explains it. Then the listening wave, the latest transcript, and at most two equal capsules:
+/// Mute (Unmute once the reader muted, [paused]) and Stop, which saves this conversation and stops
+/// listening until Start. The orb's LED and the wave move only while audio is really being captured
+/// ([live]). A call shows a chevron instead of controls: the call page owns them.
 class LiveCaptureCard extends StatelessWidget {
   const LiveCaptureCard({
     super.key,
@@ -22,49 +24,77 @@ class LiveCaptureCard extends StatelessWidget {
     this.detail,
     this.explanation,
     this.paused = false,
+    bool? live,
     this.elapsed,
     this.lastLine,
     this.note,
+    this.showsTranscript = true,
     this.onPauseToggle,
-  });
+    this.onFinish,
+  }) : live = live ?? !paused;
 
   /// A conversation source ('omi', 'phone', …) or [callSource].
   final String source;
 
-  /// Line 1: the short state name. Must fit one line at 320pt and 1.3x text in English.
+  /// The short state name. Must fit one line at 320pt and 1.3x text in English.
   final String status;
 
-  /// Line 2, after the timer: the consequence of the state, if any.
+  /// After the source's name: the consequence of the state, if any.
   final String? detail;
 
   /// For a problem state: what the details sheet says. Marks the card with a warning glyph.
   final String? explanation;
 
-  /// The reader (or the pendant) paused capture: the trailing control resumes.
+  /// The reader (or the pendant's double tap) muted capture: the Mute capsule unmutes.
   final bool paused;
+
+  /// Audio is being captured right now (the orb's LED, the moving wave). Defaults to not [paused].
+  final bool live;
   final Duration? elapsed;
   final String? lastLine;
   final String? note;
 
-  /// Null hides the Pause/Resume control.
+  /// The card has a transcript line (live capture, a call): its two lines' room is kept from the
+  /// start, so the card does not grow as words arrive. Transcribe Later has none.
+  final bool showsTranscript;
+
+  /// Null hides Mute/Unmute (glasses cannot mute).
   final VoidCallback? onPauseToggle;
 
+  /// Null hides Stop.
+  final VoidCallback? onFinish;
+
   static const String callSource = 'call';
-
-  /// Diameter of the leading source glyph's circle.
-  static const double sourceDiameter = 36;
-
-  /// Pausing means nothing to a photo-capture device (OmiGlass, Ray-Ban Meta): it keeps taking
-  /// photos. The live card and the live page use this one rule.
-  static bool canPause(BtDevice? device, {required String? source}) {
-    if (source == null || source == 'phone') return true;
-    final type = device?.type;
-    return type != DeviceType.openglass && type != DeviceType.raybanMeta;
-  }
 
   static String formatElapsed(Duration d) {
     final h = d.inHours, m = d.inMinutes % 60, s = (d.inSeconds % 60).toString().padLeft(2, '0');
     return h > 0 ? '$h:${m.toString().padLeft(2, '0')}:$s' : '$m:$s';
+  }
+
+  /// The transcript's older words and its newest sentence, so the card can grey the one and
+  /// keep the other bright ("…a quick update on the reports. Are they valid?").
+  static (String, String) splitLatest(String line) {
+    final text = line.trim();
+    final breaks = RegExp(r'[.!?…]\s+');
+    var cut = -1;
+    for (final match in breaks.allMatches(text)) {
+      if (match.end < text.length) cut = match.end;
+    }
+    if (cut <= 0) return ('', text);
+    return (text.substring(0, cut).trimRight(), text.substring(cut));
+  }
+
+  /// Two lines of the transcript's type at the reader's text size: the room the live card keeps
+  /// for the words, and the idle card for its hint, so the two cards are one height.
+  static double transcriptRoom(BuildContext context) {
+    final painter = TextPainter(
+      text: TextSpan(text: '\n', style: OmiType.callout),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final height = painter.height;
+    painter.dispose();
+    return height;
   }
 
   /// The details sheet for a problem state: what is happening and that the audio is safe.
@@ -96,46 +126,54 @@ class LiveCaptureCard extends StatelessWidget {
         : source == 'phone'
             ? l10n.phone
             : CaptureSources.label(context, source);
-    final secondary = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
     final problem = explanation != null;
-
-    final leading = Semantics(
-      label: sourceName,
-      excludeSemantics: true,
-      child: Container(
-        width: sourceDiameter,
-        height: sourceDiameter,
-        alignment: Alignment.center,
-        decoration: const BoxDecoration(color: OmiColors.surface2, shape: BoxShape.circle),
-        child: Icon(isCall ? Icons.call_rounded : CaptureSources.icon(source), size: 18, color: OmiColors.textPrimary),
-      ),
-    );
-
-    final line2 = [
-      if (elapsed != null) formatElapsed(elapsed!),
-      if (detail != null) detail!,
-    ].join('  ·  ');
-    Widget text = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        if (problem) ...[
-          const ExcludeSemantics(child: Icon(Icons.warning_amber_rounded, size: 18, color: OmiColors.warning)),
-          const SizedBox(width: OmiSpacing.xxs),
-        ],
-        // The short status always fits in English; a longer translation gives up its tail only.
-        Flexible(
-          child: Text(status,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
-        ),
-      ]),
-      if (line2.isNotEmpty)
+    // Liquid Dock: the orb (its LED breathes while audio is captured) for a wearable; the source's
+    // own mark in a circle for the phone or a call.
+    final Widget thumb = !isCall && source != 'phone'
+        ? Hero(tag: kLiveOrbHeroTag, child: OmiOrb(size: 44, live: live))
+        : Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(color: OmiColors.surface2, shape: BoxShape.circle),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Icon(isCall ? Icons.call_rounded : CaptureSources.icon(source), size: 20, color: OmiColors.textPrimary),
+                Positioned(
+                  right: 4,
+                  top: 4,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: live ? OmiColors.live : OmiColors.warning,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+    Widget text = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          if (problem) ...[
+            ExcludeSemantics(child: Icon(Icons.warning_amber_rounded, size: 18, color: OmiColors.warning)),
+            const SizedBox(width: OmiSpacing.xxs),
+          ],
+          // Long states (in a long language) take a second line.
+          Flexible(child: Text(status, maxLines: 2, overflow: TextOverflow.ellipsis, style: OmiType.headline)),
+        ]),
         // The consequence wraps rather than losing its meaning at large text sizes.
-        Text(line2,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: secondary.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
-    ]);
+        Text(
+          detail == null ? sourceName : '$sourceName · $detail',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+        ),
+      ],
+    );
     if (problem) {
       text = Semantics(
         button: true,
@@ -147,31 +185,59 @@ class LiveCaptureCard extends StatelessWidget {
         ),
       );
     }
-
-    final statusRow = Row(children: [
-      leading,
-      const SizedBox(width: OmiSpacing.xs),
-      Expanded(child: text),
-      if (isCall)
-        const SizedBox(
-          width: kOmiMinTapTarget,
-          child: Icon(Icons.chevron_right_rounded, size: 22, color: OmiColors.textTertiary),
-        )
-      else if (onPauseToggle != null)
-        OmiIconButton.filled(
-          icon: Icon(paused ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 22),
-          label: paused ? l10n.resume : l10n.pause,
-          diameter: 36,
-          fillColor: OmiColors.surface3,
-          onPressed: onPauseToggle,
-        ),
-    ]);
+    final statusRow = Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        ExcludeSemantics(child: thumb),
+        const SizedBox(width: OmiSpacing.sm),
+        Expanded(child: text),
+        if (elapsed != null) ...[
+          const SizedBox(width: OmiSpacing.xs),
+          Text(
+            formatElapsed(elapsed!),
+            style: OmiType.title3.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
+          ),
+        ],
+        const SizedBox(width: OmiSpacing.xs),
+        OmiGlyph(OmiGlyphs.chevronRight, size: 14, color: OmiColors.textTertiary),
+      ],
+    );
+    final showControls = !isCall && (onPauseToggle != null || onFinish != null);
+    final line = lastLine?.trim() ?? '';
+    final (older, latest) = splitLatest(line);
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
       statusRow,
-      if (lastLine != null && lastLine!.trim().isNotEmpty) ...[
-        const SizedBox(height: OmiSpacing.sm),
-        Text('… ${lastLine!.trim()}', maxLines: 1, overflow: TextOverflow.ellipsis, style: secondary),
-      ],
+      // The listening wave: ripples while audio is captured, still and dim otherwise.
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        child: OmiListeningWave(key: const Key('live_capture_wave'), live: live),
+      ),
+      // The transcript's room is there before the first word: the card keeps its height as words
+      // arrive, so Today does not shift during a recording.
+      if (showsTranscript)
+        ConstrainedBox(
+          constraints: BoxConstraints(minHeight: transcriptRoom(context), minWidth: double.infinity),
+          child: line.isEmpty
+              // Nothing heard yet: say where the words will go, never an empty band.
+              ? Text(
+                  l10n.connectStepTestHint,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: OmiType.callout.copyWith(color: OmiColors.textTertiary),
+                )
+              : Text.rich(
+                  TextSpan(children: [
+                    TextSpan(
+                      text: older.isEmpty ? '… ' : '…$older ',
+                      style: TextStyle(color: OmiColors.textTertiary),
+                    ),
+                    TextSpan(text: latest),
+                  ]),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: OmiType.callout,
+                ),
+        ),
       if (note != null) ...[
         const SizedBox(height: OmiSpacing.sm),
         Row(children: [
@@ -180,6 +246,88 @@ class LiveCaptureCard extends StatelessWidget {
           Flexible(child: Text(note!, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary))),
         ]),
       ],
+      if (showControls) ...[
+        const SizedBox(height: OmiSpacing.md),
+        Row(children: [
+          if (onPauseToggle != null)
+            Expanded(
+              child: LiveCaptureAction(
+                key: const Key('live_capture_mute'),
+                label: paused ? l10n.unmute : l10n.mute,
+                icon: paused ? Icons.mic_rounded : Icons.mic_off_rounded,
+                primary: false,
+                onPressed: onPauseToggle!,
+              ),
+            ),
+          if (onPauseToggle != null && onFinish != null) const SizedBox(width: 10),
+          if (onFinish != null)
+            Expanded(
+              child: LiveCaptureAction(
+                key: const Key('live_capture_stop'),
+                label: l10n.stop,
+                icon: Icons.stop_rounded,
+                primary: true,
+                onPressed: onFinish!,
+              ),
+            ),
+        ]),
+      ],
     ]);
+  }
+}
+
+/// One of the live card's two 48 pt capsules (Liquid Dock `.cap`, 17 pt semibold): [primary] is the
+/// accent (Stop, Start) with a soft shadow, the other the quiet fill (Mute, Manage devices).
+/// Dips when pressed.
+class LiveCaptureAction extends StatelessWidget {
+  const LiveCaptureAction({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.primary,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool primary;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = primary ? OmiColors.onAccent : OmiColors.textPrimary;
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      onTap: onPressed,
+      child: OmiPressable(
+        onTap: onPressed,
+        child: Container(
+          height: 48,
+          decoration: BoxDecoration(
+            color: primary ? OmiColors.accent : OmiColors.surface3,
+            borderRadius: OmiRadius.pillAll,
+            boxShadow:
+                primary ? [BoxShadow(color: OmiColors.shadowSoft, blurRadius: 8, offset: const Offset(0, 2))] : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 16, color: fg),
+              const SizedBox(width: OmiSpacing.xs),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: OmiType.headline.copyWith(color: fg),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

@@ -85,7 +85,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
           },
           child: Scaffold(
             backgroundColor: OmiColors.surface0,
-            appBar: AppBar(leading: const OmiBackButton()),
+            appBar: const OmiAppBar(leading: OmiBackButton()),
             body: SafeArea(
               child: LayoutBuilder(
                 builder: (context, constraints) {
@@ -126,18 +126,18 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
         const SizedBox(width: 18),
         Container(
           padding: const EdgeInsets.all(10),
-          decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+          decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
           child: Image.asset(Assets.images.herologo.path, width: 26, color: OmiColors.onAccent),
         ),
         Transform.translate(
           offset: const Offset(-18, 0),
           child: Container(
             padding: const EdgeInsets.all(14),
-            decoration: const BoxDecoration(color: OmiColors.surface2, shape: BoxShape.circle),
+            decoration: BoxDecoration(color: OmiColors.surface2, shape: BoxShape.circle),
             child: SvgPicture.asset(
               Assets.images.stripeLogo,
               width: 40,
-              colorFilter: const ColorFilter.mode(OmiColors.textPrimary, BlendMode.srcIn),
+              colorFilter: ColorFilter.mode(OmiColors.textPrimary, BlendMode.srcIn),
             ),
           ),
         ),
@@ -186,7 +186,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                       const SizedBox(width: OmiSpacing.xs),
                     ],
                     Expanded(child: Text(_selectedCountryName(provider), style: OmiType.callout)),
-                    const Icon(Icons.arrow_drop_down, color: OmiColors.textPrimary),
+                    Icon(Icons.arrow_drop_down, color: OmiColors.textPrimary),
                   ],
                 ),
               ),
@@ -198,10 +198,10 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
       if (notConnected)
         Container(
           padding: const EdgeInsets.all(OmiSpacing.sm),
-          decoration: const BoxDecoration(color: OmiColors.dangerSurface, borderRadius: OmiRadius.smAll),
+          decoration: BoxDecoration(color: OmiColors.dangerSurface, borderRadius: OmiRadius.smAll),
           child: Row(
             children: [
-              const Icon(Icons.warning_amber_rounded, color: OmiColors.danger, size: 20),
+              Icon(Icons.warning_amber_rounded, color: OmiColors.danger, size: 20),
               const SizedBox(width: OmiSpacing.xs),
               Expanded(
                 child: Text(
@@ -259,7 +259,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                 ),
               ],
             ),
-            child: const Center(child: Icon(Icons.sync, color: OmiColors.accent, size: 40)),
+            child: Center(child: Icon(Icons.sync, color: OmiColors.accent, size: 40)),
           );
         },
       ),
@@ -312,8 +312,8 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
           children: [
             Container(
               padding: const EdgeInsets.all(OmiSpacing.md),
-              decoration: const BoxDecoration(color: OmiColors.successSurface, shape: BoxShape.circle),
-              child: const Icon(Icons.check_circle_outline_rounded, color: OmiColors.success, size: 48),
+              decoration: BoxDecoration(color: OmiColors.successSurface, shape: BoxShape.circle),
+              child: Icon(Icons.check_circle_outline_rounded, color: OmiColors.success, size: 48),
             ),
             const SizedBox(height: OmiSpacing.xl),
             Text(
@@ -358,7 +358,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
       children: [
         Container(
           padding: const EdgeInsets.all(OmiSpacing.xs),
-          decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
           child: Icon(icon, color: OmiColors.textPrimary, size: 24),
         ),
         const SizedBox(width: OmiSpacing.md),

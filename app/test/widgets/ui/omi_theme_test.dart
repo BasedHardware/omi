@@ -31,10 +31,12 @@ void main() {
     expect(theme.appBarTheme.centerTitle, isTrue);
     expect(theme.appBarTheme.backgroundColor, OmiColors.surface0);
     expect(theme.snackBarTheme.behavior, SnackBarBehavior.floating);
+    expect(theme.bottomSheetTheme.modalBackgroundColor, OmiColors.sheet);
+    expect(theme.switchTheme.trackColor!.resolve({WidgetState.selected}), OmiColors.selection);
   });
 
   test('token contrast meets WCAG AA on cards', () {
-    for (final surface in [OmiColors.surface0, OmiColors.surface1]) {
+    for (final surface in [OmiColors.surface0, OmiColors.surface1, OmiColors.sheet]) {
       expect(_contrast(OmiColors.textTertiary, surface), greaterThanOrEqualTo(4.5));
       expect(_contrast(OmiColors.textSecondary, surface), greaterThanOrEqualTo(4.5));
       expect(_contrast(OmiColors.danger, surface), greaterThanOrEqualTo(4.5));
@@ -72,9 +74,15 @@ void main() {
     expect(reduced.quick, Duration.zero);
     expect(reduced.standard, Duration.zero);
     expect(reduced.emphasized, Duration.zero);
+    expect(reduced.press, Duration.zero);
+    expect(reduced.sheet, Duration.zero);
+    expect(reduced.navigation, Duration.zero);
     expect(full.quick, OmiMotion.quickDuration);
     expect(full.standard, const Duration(milliseconds: 250));
     expect(full.emphasized, const Duration(milliseconds: 400));
+    expect(full.press, OmiMotion.pressDuration);
+    expect(full.sheet, OmiMotion.sheetDuration);
+    expect(full.navigation, OmiMotion.navigationDuration);
   });
 
   test('syncIntlDefaultLocale follows the app locale and ignores locales without date data', () async {

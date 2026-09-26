@@ -49,11 +49,12 @@ class DeveloperMcpSection extends StatelessWidget {
       children: [
         OmiSectionHeader(
           l10n.mcp,
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
+          // The buttons wrap rather than overflow on a narrow phone at a large text size.
+          trailing: Wrap(
+            spacing: OmiSpacing.xs,
+            runSpacing: OmiSpacing.xs,
             children: [
               const DeveloperDocsButton(url: 'https://docs.omi.me/doc/developer/MCP', analyticsLabel: 'MCP'),
-              const SizedBox(width: OmiSpacing.xs),
               OmiButton.secondary(
                 label: l10n.createKey,
                 leading: const FaIcon(FontAwesomeIcons.plus),
@@ -156,8 +157,8 @@ class DeveloperMcpSection extends StatelessWidget {
             text: text,
             style: switch (kind) {
               McpJsonToken.plain => null,
-              McpJsonToken.key => const TextStyle(color: OmiColors.textSecondary),
-              McpJsonToken.string => const TextStyle(color: OmiColors.warning),
+              McpJsonToken.key => TextStyle(color: OmiColors.textSecondary),
+              McpJsonToken.string => TextStyle(color: OmiColors.warning),
             },
           ),
       ],
@@ -255,7 +256,7 @@ class _CopyableValue extends StatelessWidget {
             children: [
               Expanded(child: Text(value, style: OmiType.footnote.copyWith(fontFamily: _mono))),
               const SizedBox(width: OmiSpacing.xs),
-              const FaIcon(FontAwesomeIcons.copy, size: 14, color: OmiColors.textTertiary),
+              FaIcon(FontAwesomeIcons.copy, size: 14, color: OmiColors.textTertiary),
             ],
           ),
         ),

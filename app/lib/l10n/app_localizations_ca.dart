@@ -1873,9 +1873,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get openSettings => 'Obrir configuració';
 
   @override
-  String get whatsYourName => 'Com et dius?';
-
-  @override
   String get speakTranscribeSummarize => 'Parlar. Transcriure. Resumir.';
 
   @override
@@ -1889,12 +1886,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get termsOfUse => 'Condicions d\'ús';
-
-  @override
-  String get omiYourAiCompanion => 'Omi – El vostre company d\'IA';
-
-  @override
-  String get captureEveryMoment => 'Captureu cada moment. Obteniu resums\nimpulsats per IA. No prengueu més notes.';
 
   @override
   String get appleWatchSetup => 'Configuració de l\'Apple Watch';
@@ -1939,19 +1930,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String errorStartingRecording(String error) {
     return 'Error en iniciar l\'enregistrament: $error';
   }
-
-  @override
-  String get selectPrimaryLanguage => 'Seleccioneu el vostre idioma principal';
-
-  @override
-  String get languageBenefits =>
-      'Establiu el vostre idioma per a transcripcions més precises i una experiència personalitzada';
-
-  @override
-  String get whatsYourPrimaryLanguage => 'Quin és el vostre idioma principal?';
-
-  @override
-  String get selectYourLanguage => 'Seleccioneu el vostre idioma';
 
   @override
   String get personalGrowthJourney => 'El teu viatge de creixement personal amb IA que escolta cada paraula teva.';
@@ -3384,9 +3362,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get dataProtection => 'Protecció de dades';
-
-  @override
-  String get yourDataIsProtected => 'Les teves dades estan protegides i regides per la nostra ';
 
   @override
   String get pleaseSelectYourPrimaryLanguage => 'Si us plau, seleccioneu la vostra llengua principal';
@@ -5080,10 +5055,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'S\'ha eliminat la mostra de veu addicional';
-
-  @override
-  String get consentDataMessage =>
-      'Continuant, les vostres converses, enregistraments i informació personal s\'emmagatzemaran de manera segura als nostres servidors. Els vostres enregistraments d\'àudio i transcripcions són processats per serveis d\'IA de tercers (incloent Deepgram per a la transcripció i OpenAI per a l\'anàlisi) per proporcionar-vos informació impulsada per IA i habilitar totes les funcions de l\'aplicació.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -7108,9 +7079,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Recordatori d\'Omi';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName desconnectat';
   }
@@ -7814,9 +7782,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get authorizingMcpServer => 'Autoritzant…';
-
-  @override
-  String get whereDidYouHearAboutOmi => 'Com ens has trobat?';
 
   @override
   String get tiktok => 'TikTok';
@@ -10010,9 +9975,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get transcriptionNoAudio => 'La transcripció no rep àudio';
 
   @override
-  String get tapPlusToStartRecording => 'Toca el botó de gravació per començar a gravar';
-
-  @override
   String get chatBlockTask => 'Tasca';
 
   @override
@@ -10733,9 +10695,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get deviceConnecting => 'S\'està connectant…';
 
   @override
-  String get recordOptionsTip => 'Consell: toca la fletxa del botó de gravació per gravar una trucada.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'L\'actualització ha fallat';
 
   @override
@@ -11278,12 +11237,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get keepUsingPendant => 'Continua amb el penjoll';
 
   @override
-  String get recordWith => 'Grava amb';
-
-  @override
-  String get moreWaysToRecord => 'Més maneres de gravar';
-
-  @override
   String get openCall => 'Obre la trucada';
 
   @override
@@ -11330,4 +11283,539 @@ class AppLocalizationsCa extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name i altres';
   }
+
+  @override
+  String get alreadyHaveAccount => 'Ja tens un compte?';
+
+  @override
+  String get signInToOmi => 'Inicia sessió a l\'Omi';
+
+  @override
+  String get signInSubtitle => 'Les teves converses i records segueixen el teu compte al telèfon, al Mac i al web.';
+
+  @override
+  String onboardingAllSetName(String name) {
+    return 'Ja està tot a punt, $name.';
+  }
+
+  @override
+  String get completeHomeBody => 'El teu dia, tasques i resums en un sol lloc.';
+
+  @override
+  String get completeAskTitle => 'Pregunta';
+
+  @override
+  String get foundOmiOptionalHint => 'Opcional: ajuda un equip petit a saber què funciona.';
+
+  @override
+  String get consentTitle => 'Les teves dades, en paraules planeres';
+
+  @override
+  String get consentSubtitle => 'Abans que l\'Omi comenci a escoltar, això és exactament el que passa amb el que sent.';
+
+  @override
+  String get consentStoredTitle => 'Què es desa';
+
+  @override
+  String get consentStoredBody =>
+      'El teu àudio, les transcripcions i els detalls que l\'Omi aprèn es desen de manera segura al teu compte.';
+
+  @override
+  String get consentProcessorsTitle => 'Qui les processa';
+
+  @override
+  String get consentProcessorsBody =>
+      'Deepgram transcriu la veu i OpenAI l\'analitza per escriure resums, tasques i records.';
+
+  @override
+  String get consentControlTitle => 'Què controles tu';
+
+  @override
+  String get consentControlBody => 'Esborra qualsevol conversa, record o tot el teu compte quan vulguis.';
+
+  @override
+  String get readPrivacyPolicy => 'Llegeix la Política de privadesa';
+
+  @override
+  String get whatShouldOmiCallYou => 'Com t\'ha de dir l\'Omi?';
+
+  @override
+  String get nameUsageHint => 'L\'Omi ho fa servir per identificar-te a les transcripcions i exportacions.';
+
+  @override
+  String get yourNamePlaceholder => 'El teu nom';
+
+  @override
+  String get whatLanguageDoYouSpeakMost => 'Quina llengua parles més?';
+
+  @override
+  String get languageOnboardingSubtitle => 'L\'Omi transcriu millor quan sap la llengua. En pots afegir més després.';
+
+  @override
+  String get permissionsFewTitle => 'Uns quants permisos';
+
+  @override
+  String get permissionsFewSubtitle =>
+      'L\'Omi només demana el que fa servir. Pots canviar-ho quan vulguis a Configuració.';
+
+  @override
+  String get permissionsContinueNote => '«Continuar» no demana res. Cada permís només es demana quan toques «Permet».';
+
+  @override
+  String get howDidYouHearAboutOmi => 'Com has conegut l\'Omi?';
+
+  @override
+  String get showOnLockScreen => 'Mostra a la pantalla de bloqueig';
+
+  @override
+  String get seeAll => 'Mostra-ho tot';
+
+  @override
+  String get upNext => 'A continuació';
+
+  @override
+  String get allTasks => 'Totes les tasques';
+
+  @override
+  String get thisWeek => 'Aquesta setmana';
+
+  @override
+  String capturedDuration(String duration) {
+    return '$duration capturats';
+  }
+
+  @override
+  String newMemoriesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count records nous',
+      one: '1 record nou',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncingFromPendant => 'Sincronitzant des del teu penjoll';
+
+  @override
+  String get pendantRecordingsSynced => 'Gravacions del penjoll sincronitzades';
+
+  @override
+  String recordedOnPendantWhileAway(String duration) {
+    return '~$duration gravats al penjoll mentre el telèfon era lluny';
+  }
+
+  @override
+  String dailyRecapOn(String day) {
+    return 'Resum diari · $day';
+  }
+
+  @override
+  String taskDueDayTime(String day, String time) {
+    return '$day, $time';
+  }
+
+  @override
+  String fromConversation(String title) {
+    return 'De: $title';
+  }
+
+  @override
+  String get endCapture => 'Acaba';
+
+  @override
+  String get toDo => 'Per fer';
+
+  @override
+  String get devices => 'Dispositius';
+
+  @override
+  String get devicesSubtitle => 'Tot el que escolta per tu. Només en grava un alhora.';
+
+  @override
+  String get addADevice => 'Afegeix un dispositiu';
+
+  @override
+  String get deviceReady => 'A punt';
+
+  @override
+  String get importFromOtherApps => 'Importa d\'altres apps';
+
+  @override
+  String get whatWillYouWear => 'Què portaràs?';
+
+  @override
+  String get pickDeviceSubtitle => 'Pots afegir-ne més després. Només en grava un alhora.';
+
+  @override
+  String get alreadyHaveOne => 'Ja en tens un?';
+
+  @override
+  String get noDeviceHeader => 'Sense dispositiu';
+
+  @override
+  String get omiPendantName => 'Penjoll Omi';
+
+  @override
+  String get allDayConversations => 'Converses tot el dia';
+
+  @override
+  String get conversationsAndPhotos => 'Converses + fotos';
+
+  @override
+  String get wristMic => 'Micròfon al canell';
+
+  @override
+  String get glassesAudio => 'Àudio de les ulleres';
+
+  @override
+  String get bringRecordingsIntoOmi => 'Porta les teves gravacions a l\'Omi';
+
+  @override
+  String get useThisIphone => 'Fes servir aquest iPhone';
+
+  @override
+  String get useThisPhone => 'Fes servir aquest telèfon';
+
+  @override
+  String get startInSeconds => 'Comença en 10 segons';
+
+  @override
+  String get askAboutThisConversationPlaceholder => 'Pregunta sobre aquesta conversa';
+
+  @override
+  String get summaryStyle => 'Estil del resum';
+
+  @override
+  String get summaryStyleSubtitle => 'Tria quina app escriu aquest resum';
+
+  @override
+  String get appearance => 'Aparença';
+
+  @override
+  String get appearanceSystem => 'Sistema';
+
+  @override
+  String get appearanceLight => 'Clar';
+
+  @override
+  String get appearanceDark => 'Fosc';
+
+  @override
+  String get feel => 'Sensació';
+
+  @override
+  String get haptics => 'Hàptica';
+
+  @override
+  String get hapticsSubtitle => 'Un toc suau quan acabes, destaques o completes alguna cosa';
+
+  @override
+  String get textSize => 'Mida del text';
+
+  @override
+  String get textSizeSubtitle => 'Segueix la mida del text del telèfon';
+
+  @override
+  String get appearanceMotionNote =>
+      'El moviment segueix «Reduir el moviment» de la configuració del telèfon: s’aturen tots els bucles, inclosa la llum del dispositiu.';
+
+  @override
+  String get signedInWithApple => 'Sessió iniciada amb Apple';
+
+  @override
+  String get signedInWithGoogle => 'Sessió iniciada amb Google';
+
+  @override
+  String premiumMinutesLeftThisMonth(String left, int limit) {
+    return 'Queden $left de $limit minuts prèmium aquest mes';
+  }
+
+  @override
+  String get recordingFrom => 'Gravant des de';
+
+  @override
+  String get recordingFromSubtitle => 'Només grava una font alhora. Canviar-la acaba la conversa actual.';
+
+  @override
+  String get manageDevices => 'Gestiona els dispositius';
+
+  @override
+  String get notListeningTitle => 'No escolta';
+
+  @override
+  String get notListeningSubtitle => 'Comença amb aquest telèfon o connecta un dispositiu perquè escolti tot el dia.';
+
+  @override
+  String get startListening => 'Comença a escoltar';
+
+  @override
+  String get searchEverything => 'Cerca-ho tot';
+
+  @override
+  String searchResultsCount(int count) {
+    return 'Resultats · $count';
+  }
+
+  @override
+  String get nothingFound => 'No s’ha trobat res';
+
+  @override
+  String get searchNothingFoundHint =>
+      'Prova una altra paraula o pregunta-ho a Omi: entén el significat, no només les paraules.';
+
+  @override
+  String get askOmiInstead => 'Pregunta-ho a Omi';
+
+  @override
+  String get recentSearches => 'Recents';
+
+  @override
+  String get searchAskSuggestion => 'Què vaig prometre fer aquesta setmana?';
+
+  @override
+  String get welcomeRememberTitle => 'Recorda cada conversa.';
+
+  @override
+  String get welcomeRememberSubtitle =>
+      'Porta el que vulguis. Omi converteix el que sents en notes, tasques i un resum del teu dia.';
+
+  @override
+  String get memoriesSubtitle => 'Què sap Omi i d’on ho ha après';
+
+  @override
+  String get memoryTierLongTerm => 'A llarg termini';
+
+  @override
+  String get memoryTierShortTerm => 'A curt termini';
+
+  @override
+  String get memoriesTierNote =>
+      'Els records nous comencen a curt termini. Omi passa sol a llarg termini els que continuen sent importants.';
+
+  @override
+  String get askEmptyTitle => 'Pregunta sobre qualsevol cosa que hagis sentit.';
+
+  @override
+  String get askEmptySubtitle => 'Omi respon a partir de les teves converses, records i tasques.';
+
+  @override
+  String get completeListeningTitle => 'Escolta';
+
+  @override
+  String get completeListeningBody =>
+      'El blau vol dir que Omi t’escolta, des d’un dispositiu que portes o des d’aquest telèfon.';
+
+  @override
+  String get completeAskAnyBody => 'Toca Pregunta per preguntar sobre qualsevol cosa que hagis sentit.';
+
+  @override
+  String get completeDevicesBody => 'Afegeix un dispositiu per portar posat quan vulguis o comença amb aquest telèfon.';
+
+  @override
+  String get conversationSourceGlasses => 'Ulleres';
+
+  @override
+  String get conversationSourceImported => 'Importades';
+
+  @override
+  String get conversationSourceEmptyHint => 'Encara no s’ha enregistrat res d’aquesta font.';
+
+  @override
+  String get findMyPendant => 'Troba el meu penjoll';
+
+  @override
+  String get findMyPendantHint => 'Fa un so perquè el trobis';
+
+  @override
+  String get upToDate => 'Actualitzat';
+
+  @override
+  String get updateAvailable => 'Actualització disponible';
+
+  @override
+  String get storageTitle => 'Emmagatzematge';
+
+  @override
+  String get connectStepTurnOn => 'Encén-lo i apropa\'l';
+
+  @override
+  String get connectStepAllowBluetooth => 'Permet el Bluetooth';
+
+  @override
+  String get connectStepTest => 'Digues alguna cosa per provar';
+
+  @override
+  String get connectStepTestHint => 'Les paraules apareixen aquí mentre parles';
+
+  @override
+  String get setUpLater => 'Configura-ho més tard';
+
+  @override
+  String recapPreviousDay(String day) {
+    return 'Resum del dia anterior: $day';
+  }
+
+  @override
+  String recapNextDay(String day) {
+    return 'Resum del dia següent: $day';
+  }
+
+  @override
+  String get askStarterToday => 'Resumeix el dia d\'avui';
+
+  @override
+  String get askStarterPeople => 'Amb qui m\'he trobat?';
+
+  @override
+  String get askStarterOpen => 'Què queda pendent?';
+
+  @override
+  String get peopleSubtitle => 'Veus que Omi reconeix a les transcripcions';
+
+  @override
+  String get usageCurrentPlan => 'Pla actual';
+
+  @override
+  String get appsExplore => 'Explora';
+
+  @override
+  String get appOutOfFive => 'de 5';
+
+  @override
+  String get appStatUsers => 'Usuaris';
+
+  @override
+  String homeWelcomeName(String name) {
+    return 'Benvingut, $name';
+  }
+
+  @override
+  String get homeWelcome => 'Benvinguda';
+
+  @override
+  String get homeFirstDaySubtitle => 'El teu primer dia amb Omi';
+
+  @override
+  String get homeListeningHeroTitle => 'Omi t’escolta';
+
+  @override
+  String get homeListeningHeroBody => 'La teva primera conversa apareixerà aquí un minut després d’acabar.';
+
+  @override
+  String get homeGettingStarted => 'Primers passos';
+
+  @override
+  String get gettingStartedConnect => 'Connecta un dispositiu';
+
+  @override
+  String get gettingStartedConversation => 'Tingues una conversa';
+
+  @override
+  String get gettingStartedAsk => 'Pregunta-ho a Omi';
+
+  @override
+  String get homeGoodToKnow => 'Bo de saber';
+
+  @override
+  String get tipFinishTitle => 'Acaba quan vulguis';
+
+  @override
+  String get tipFinishBody => 'Toca Finalitza —o prem dues vegades el penjoll— i el resum comença de seguida.';
+
+  @override
+  String get tipStarTitle => 'Marca amb una estrella el que importa';
+
+  @override
+  String get tipStarBody => 'Les converses destacades són fàcils de trobar després.';
+
+  @override
+  String get tipPrivateTitle => 'Privat per defecte';
+
+  @override
+  String get tipPrivateBody => 'Les teves converses són privades tret que les comparteixis.';
+
+  @override
+  String homeGettingStartedProgress(int done, int total) {
+    return '$done de $total';
+  }
+
+  @override
+  String get noFailedRecordings => 'Cap enregistrament fallit';
+
+  @override
+  String get mapNoPlacesTitle => 'Encara no hi ha llocs';
+
+  @override
+  String get mapNoPlacesMessage => 'Les converses apareixen aquí quan l\'Omi sap on han tingut lloc.';
+
+  @override
+  String get mergeWithEllipsis => 'Combina amb…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Acaba de configurar $appName per activar-la';
+  }
+
+  @override
+  String get greetingUpLate => 'Fins tard';
+
+  @override
+  String get greetingLunchtime => 'Hora de dinar';
+
+  @override
+  String get greetingWindingDown => 'Hora de relaxar-se';
+
+  @override
+  String get greetingGoodNight => 'Que descansis';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Hores petites';
+
+  @override
+  String get greetingEarlyStart => 'Matinada';
+
+  @override
+  String get greetingNewDay => 'Nou dia';
+
+  @override
+  String get greetingMorning => 'Bon dia';
+
+  @override
+  String get greetingBusyMorning => 'Matí atrafegat';
+
+  @override
+  String get greetingAfternoon => 'Bona tarda';
+
+  @override
+  String get greetingHomeStretch => 'Recta final';
+
+  @override
+  String get greetingEvening => 'Bona nit';
+
+  @override
+  String get unlimitedBadge => 'Il·limitat';
+
+  @override
+  String get voiceSetupTaskSubline => 'Perquè Omi sàpiga que ets tu · un minut, més o menys';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Àudio desat: $saved de $total';
+  }
+
+  @override
+  String get voiceIntroTitle => 'Presenta’t';
+
+  @override
+  String get memoryLabel => 'Record';
+
+  @override
+  String get idleReadyHint => 'Toca Inicia i el que diguis apareixerà aquí.';
 }

@@ -58,7 +58,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
           child: Scaffold(
             backgroundColor: OmiColors.surface0,
             extendBody: true,
-            appBar: AppBar(
+            appBar: OmiAppBar(
               leading: const OmiBackButton(),
               title: Text(l10n.manageYourApp),
               backgroundColor: OmiColors.surface0,

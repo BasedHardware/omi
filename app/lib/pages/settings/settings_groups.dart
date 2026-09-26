@@ -9,6 +9,8 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/pages/devices/add_device_page.dart';
+import 'package:omi/pages/devices/devices_page.dart';
 import 'package:omi/pages/settings/data_export.dart';
 import 'package:omi/pages/settings/settings_destinations.dart';
 import 'package:omi/pages/settings/settings_search_index.dart';
@@ -16,6 +18,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
@@ -58,7 +61,7 @@ class _GroupPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       key: ValueKey(pageKey),
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(title)),
+      appBar: OmiAppBar(leading: const OmiBackButton(), title: Text(title)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.xxl),
         children: children,
@@ -96,7 +99,9 @@ mixin _GroupRows<T extends StatefulWidget> on State<T> {
 // -----------------------------------------------------------------------------------------------
 // Device
 
-/// Device: the connected device's settings (only while connected), Offline Sync and Phone Calls.
+/// Devices (Rev 3): what can listen for you — the paired wearable and this phone, with their live
+/// state — then the connected device's settings (only while connected), Offline Sync, Phone Calls,
+/// Permissions, and Add a device.
 class DeviceGroupPage extends StatefulWidget {
   const DeviceGroupPage({super.key});
 
@@ -111,8 +116,10 @@ class _DeviceGroupPageState extends State<DeviceGroupPage> with _GroupRows {
     final deviceConnected = context.select<DeviceProvider, bool>((p) => p.isConnected);
     return _GroupPage(
       pageKey: 'settings_page_device',
-      title: l10n.device,
+      title: l10n.devices,
       children: [
+        const DeviceSourcesGroup(),
+        const SizedBox(height: 22),
         OmiSettingsGroup(
           children: [
             if (deviceConnected)
@@ -122,6 +129,17 @@ class _DeviceGroupPageState extends State<DeviceGroupPage> with _GroupRows {
             // Most-opened Settings item: people come here to fix microphone, Bluetooth and notifications.
             row(SettingsDestination.permissions, icon: FontAwesomeIcons.shieldHalved, title: l10n.permissions),
           ],
+        ),
+        const SizedBox(height: 22),
+        OmiButton.secondary(
+          key: const Key('settings_devices_add'),
+          label: l10n.addADevice,
+          icon: Icons.add_rounded,
+          expand: true,
+          onPressed: () {
+            OmiHaptics.selection();
+            routeToPage(context, const AddDevicePage());
+          },
         ),
       ],
     );
@@ -169,7 +187,7 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
           for (final mode in const [0, 1, 2])
             OmiSettingsRow(
               title: _voiceResponseModeLabel(mode),
-              trailing: mode == current ? const Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
+              trailing: mode == current ? Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
               showChevron: false,
               onTap: () => Navigator.of(sheetContext).pop(mode),
             ),
@@ -187,7 +205,16 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
   }
 
   Future<void> _setTranscribeLater(bool value) async {
-    final accepted = await context.read<CaptureProvider>().setBatchMode(value);
+    final bool accepted;
+    try {
+      accepted = await context.read<CaptureProvider>().setBatchMode(value);
+    } catch (_) {
+      // The capture owner could not switch modes: the toggle stays as it was, and says so.
+      if (!mounted) return;
+      OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      setState(() {});
+      return;
+    }
     if (!mounted) return;
     if (!accepted) OmiFeedback.error(context, context.l10n.transcribeLaterNote);
     setState(() {});
@@ -272,7 +299,8 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
 // -----------------------------------------------------------------------------------------------
 // Notifications & Display
 
-/// Notifications & Display: notifications, the home screen and how conversations are listed.
+/// Notifications & Display: appearance (light, dark or the phone's), notifications, the home screen
+/// and how conversations are listed.
 class NotificationsDisplayGroupPage extends StatefulWidget {
   const NotificationsDisplayGroupPage({super.key});
 
@@ -290,6 +318,19 @@ class _NotificationsDisplayGroupPageState extends State<NotificationsDisplayGrou
       children: [
         OmiSettingsGroup(
           children: [
+            ValueListenableBuilder<OmiAppearanceMode>(
+              valueListenable: OmiAppearance.mode,
+              builder: (context, mode, _) => row(
+                SettingsDestination.appearance,
+                icon: FontAwesomeIcons.circleHalfStroke,
+                title: l10n.appearance,
+                value: switch (mode) {
+                  OmiAppearanceMode.system => l10n.appearanceSystem,
+                  OmiAppearanceMode.light => l10n.appearanceLight,
+                  OmiAppearanceMode.dark => l10n.appearanceDark,
+                },
+              ),
+            ),
             row(SettingsDestination.notifications, icon: FontAwesomeIcons.solidBell, title: l10n.notifications),
             row(SettingsDestination.homeScreen, icon: FontAwesomeIcons.house, title: l10n.homeScreen),
             row(SettingsDestination.conversationDisplay, icon: FontAwesomeIcons.list, title: l10n.conversationDisplay),
@@ -303,7 +344,7 @@ class _NotificationsDisplayGroupPageState extends State<NotificationsDisplayGrou
 // -----------------------------------------------------------------------------------------------
 // Privacy & Data
 
-/// Privacy & Data: data protection, memories, and exporting or importing data.
+/// Privacy & Data: data protection, memories, and exporting data (importing sits on the sheet).
 class PrivacyDataGroupPage extends StatefulWidget {
   const PrivacyDataGroupPage({super.key});
 
@@ -335,8 +376,6 @@ class _PrivacyDataGroupPageState extends State<PrivacyDataGroupPage> with _Group
                 onTap: exporting ? null : () => open(SettingsDestination.exportData),
               ),
             ),
-            row(SettingsDestination.importData,
-                icon: FontAwesomeIcons.fileImport, title: l10n.importData, subtitle: l10n.importDataFromOtherSources),
           ],
         ),
       ],

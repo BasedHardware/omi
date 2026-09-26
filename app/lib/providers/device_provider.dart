@@ -524,12 +524,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       isCharging = currentStatus;
       notifyListeners();
     }
+    BatteryWidgetService().updateChargingState(currentStatus);
 
     _bleChargingStatusListener = await connection.getChargingStatusListener(
       onChargingStatusChange: (bool charging) {
         if (!_isCurrent(generation)) return;
         if (isCharging != charging) {
           isCharging = charging;
+          BatteryWidgetService().updateChargingState(charging);
           if (!charging) {
             _hasFullyChargedAlerted = false;
           } else if (batteryLevel >= 100 && !_hasFullyChargedAlerted) {
@@ -728,6 +730,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     _firmwareUpdatePromptCoordinator.invalidatePresentation();
     _bleChargingStatusListener?.cancel();
     isCharging = false;
+    BatteryWidgetService().updateChargingState(false);
     unawaited(setConnectedDevice(null));
     unawaited(setisDeviceStorageSupport());
     setIsConnected(false);

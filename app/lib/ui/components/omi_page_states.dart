@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/components/omi_balanced_text.dart';
 import 'package:omi/ui/components/omi_button.dart';
 import 'package:omi/ui/components/omi_spinner.dart';
 import 'package:omi/ui/omi_tokens.dart';
@@ -110,7 +111,7 @@ class _StateLayout extends StatelessWidget {
           children: [
             ExcludeSemantics(
               child: IconTheme.merge(
-                data: const IconThemeData(size: 40, color: OmiColors.textTertiary),
+                data: IconThemeData(size: 40, color: OmiColors.textTertiary),
                 child: glyph,
               ),
             ),
@@ -118,12 +119,14 @@ class _StateLayout extends StatelessWidget {
               const SizedBox(height: OmiSpacing.md),
               Semantics(
                 header: true,
-                child: Text(title!, textAlign: TextAlign.center, style: OmiType.headline),
+                child: OmiBalancedText(title!, textAlign: TextAlign.center, style: OmiType.headline),
               ),
             ],
             if (message != null) ...[
               SizedBox(height: title != null ? OmiSpacing.xs : OmiSpacing.md),
-              Text(
+              // Centred copy breaks evenly: "Please check your connection / and try again", never
+              // one word alone.
+              OmiBalancedText(
                 message!,
                 textAlign: TextAlign.center,
                 style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),

@@ -1,34 +1,37 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/omi_tokens.dart';
+
 /// Legacy style constants. Superseded by the tokens in `lib/ui/omi_tokens.dart`: use `OmiColors`,
 /// `OmiType`, `OmiRadius` and `OmiSpacing` in new code, and migrate a file off `AppStyles` when you
-/// touch it. The values here are intentionally left as they were so existing screens do not shift.
+/// touch it. The colours and text styles point at the v2 tokens (and follow light and dark), so
+/// screens still on AppStyles restyle with the rest of the app.
 class AppStyles {
   // Text Styles
-  static const TextStyle title = TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white);
+  static TextStyle get title => TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: OmiColors.textPrimary);
 
-  static const TextStyle subtitle = TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.white);
+  static TextStyle get subtitle => TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: OmiColors.textPrimary);
 
-  static const TextStyle body = TextStyle(fontSize: 15, height: 1.4, color: Colors.white);
+  static TextStyle get body => TextStyle(fontSize: 15, height: 1.4, color: OmiColors.textPrimary);
 
-  static const TextStyle caption = TextStyle(fontSize: 14, color: Colors.white70);
+  static TextStyle get caption => TextStyle(fontSize: 14, color: OmiColors.textSecondary);
 
-  static const TextStyle small = TextStyle(fontSize: 12, color: Colors.white70);
+  static TextStyle get small => TextStyle(fontSize: 12, color: OmiColors.textSecondary);
 
-  static const TextStyle label = TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Colors.white70);
+  static TextStyle get label => TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: OmiColors.textSecondary);
 
   // Colors
-  static const Color backgroundPrimary = Colors.black;
-  static const Color backgroundSecondary = Color(0xFF1F1F25);
-  static const Color backgroundTertiary = Color(0xFF35343B);
+  static Color get backgroundPrimary => OmiColors.surface0;
+  static Color get backgroundSecondary => OmiColors.surface1;
+  static Color get backgroundTertiary => OmiColors.surface2;
 
-  static const Color textPrimary = Colors.white;
-  static final Color textSecondary = Colors.white.withValues(alpha: 0.8);
-  static final Color textTertiary = Colors.white.withValues(alpha: 0.6);
+  static Color get textPrimary => OmiColors.textPrimary;
+  static Color get textSecondary => OmiColors.textSecondary;
+  static Color get textTertiary => OmiColors.textTertiary;
 
   static const Color accent = Colors.blue;
-  static final Color error = Colors.red.shade800;
-  static final Color success = Colors.green.shade600;
+  static Color get error => OmiColors.danger;
+  static Color get success => OmiColors.success;
 
   // Spacing
   static const double spacingXS = 4.0;
@@ -45,23 +48,23 @@ class AppStyles {
   static const double radiusCircular = 100.0;
 
   // Widget specific
-  static final cardDecoration = BoxDecoration(
-    color: backgroundSecondary,
-    borderRadius: BorderRadius.circular(radiusLarge),
-    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2))],
-  );
+  static BoxDecoration get cardDecoration => BoxDecoration(
+        color: backgroundSecondary,
+        borderRadius: BorderRadius.circular(radiusLarge),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2))],
+      );
 
-  static final inputDecoration = InputDecoration(
-    filled: true,
-    fillColor: backgroundTertiary,
-    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-    border: OutlineInputBorder(borderRadius: BorderRadius.circular(radiusMedium), borderSide: BorderSide.none),
-  );
+  static InputDecoration get inputDecoration => InputDecoration(
+        filled: true,
+        fillColor: backgroundTertiary,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(radiusMedium), borderSide: BorderSide.none),
+      );
 
-  static final chipDecoration = BoxDecoration(
-    color: backgroundTertiary.withValues(alpha: 0.6),
-    borderRadius: BorderRadius.circular(radiusCircular),
-  );
+  static BoxDecoration get chipDecoration => BoxDecoration(
+        color: backgroundTertiary.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(radiusCircular),
+      );
 }
 
 /// Theme extension to provide app styles as part of the theme

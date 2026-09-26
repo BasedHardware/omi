@@ -1861,9 +1861,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get openSettings => 'Otvori Postavke';
 
   @override
-  String get whatsYourName => 'Koje je tvoje ime?';
-
-  @override
   String get speakTranscribeSummarize => 'Govori. Transkribiraj. Sažmi.';
 
   @override
@@ -1877,12 +1874,6 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get termsOfUse => 'Uvjetima Korištenja';
-
-  @override
-  String get omiYourAiCompanion => 'Omi – Tvoj AI Pratilac';
-
-  @override
-  String get captureEveryMoment => 'Uhvati svaki trenutak. Dobij AI-powered\nSažetke. Nikad više ne biraj bilješke.';
 
   @override
   String get appleWatchSetup => 'Postava Apple Watch';
@@ -1927,18 +1918,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String errorStartingRecording(String error) {
     return 'Greška pri pokretanju snimanja: $error';
   }
-
-  @override
-  String get selectPrimaryLanguage => 'Odaberite svoj primarni jezik';
-
-  @override
-  String get languageBenefits => 'Postavite svoj jezik za precizniju transkripciju i personalizirano iskustvo';
-
-  @override
-  String get whatsYourPrimaryLanguage => 'Koji je tvoj primarni jezik?';
-
-  @override
-  String get selectYourLanguage => 'Odaberite svoj jezik';
 
   @override
   String get personalGrowthJourney => 'Vaš put osobnog rasta sa AI koji sluša svaku vašu riječ.';
@@ -3377,9 +3356,6 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get dataProtection => 'Zaštita podataka';
-
-  @override
-  String get yourDataIsProtected => 'Vaši podaci su zaštićeni i uređeni prema našim ';
 
   @override
   String get pleaseSelectYourPrimaryLanguage => 'Molimo odaberite svoj primarni jezik';
@@ -5066,10 +5042,6 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'Dodatni uzorak govora je uklonjen';
-
-  @override
-  String get consentDataMessage =>
-      'Nastavljanjem, vaši razgovori, snimke i osobni podaci bit će sigurno pohranjeni na našim poslužiteljima. Vaši audio zapisi i transkripti obrađuju se od strane AI usluga trećih strana (uključujući Deepgram za transkripciju i OpenAI za analizu) kako bi vam pružili uvide pokretane umjetnom inteligencijom i omogućili sve značajke aplikacije.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -7092,9 +7064,6 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi Podsjetnik';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName Odspoj';
   }
@@ -7795,9 +7764,6 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get authorizingMcpServer => 'Autorizacija…';
-
-  @override
-  String get whereDidYouHearAboutOmi => 'Kako ste čuli za nas?';
 
   @override
   String get tiktok => 'TikTok';
@@ -9988,9 +9954,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripcija ne prima zvuk';
 
   @override
-  String get tapPlusToStartRecording => 'Dodirnite gumb za snimanje za početak snimanja';
-
-  @override
   String get chatBlockTask => 'Zadatak';
 
   @override
@@ -10708,9 +10671,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get deviceConnecting => 'Povezivanje…';
 
   @override
-  String get recordOptionsTip => 'Savjet: dodirnite strelicu na gumbu za snimanje da biste snimili telefonski poziv.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Ažuriranje nije uspjelo';
 
   @override
@@ -11251,12 +11211,6 @@ class AppLocalizationsHr extends AppLocalizations {
   String get keepUsingPendant => 'Nastavi s privjeskom';
 
   @override
-  String get recordWith => 'Snimaj pomoću';
-
-  @override
-  String get moreWaysToRecord => 'Više načina snimanja';
-
-  @override
   String get openCall => 'Otvori poziv';
 
   @override
@@ -11303,4 +11257,537 @@ class AppLocalizationsHr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name i drugi';
   }
+
+  @override
+  String get alreadyHaveAccount => 'Već imaš račun?';
+
+  @override
+  String get signInToOmi => 'Prijavi se u Omi';
+
+  @override
+  String get signInSubtitle => 'Tvoji razgovori i sjećanja prate tvoj račun na telefonu, Macu i webu.';
+
+  @override
+  String onboardingAllSetName(String name) {
+    return 'Sve je spremno, $name.';
+  }
+
+  @override
+  String get completeHomeBody => 'Tvoj dan, zadaci i sažeci na jednom mjestu.';
+
+  @override
+  String get completeAskTitle => 'Pitaj';
+
+  @override
+  String get foundOmiOptionalHint => 'Neobavezno — pomaže malom timu da zna što funkcionira.';
+
+  @override
+  String get consentTitle => 'Tvoji podaci, jednostavnim riječima';
+
+  @override
+  String get consentSubtitle => 'Prije nego što Omi počne slušati, evo što se točno događa s onim što čuje.';
+
+  @override
+  String get consentStoredTitle => 'Što se sprema';
+
+  @override
+  String get consentStoredBody =>
+      'Tvoj zvuk, transkripti i pojedinosti koje Omi sazna sigurno se spremaju uz tvoj račun.';
+
+  @override
+  String get consentProcessorsTitle => 'Tko ih obrađuje';
+
+  @override
+  String get consentProcessorsBody =>
+      'Govor transkribira Deepgram, a analizira OpenAI kako bi nastali sažeci, zadaci i sjećanja.';
+
+  @override
+  String get consentControlTitle => 'Što ti kontroliraš';
+
+  @override
+  String get consentControlBody => 'Izbriši bilo koji razgovor, sjećanje ili cijeli račun kad god želiš.';
+
+  @override
+  String get readPrivacyPolicy => 'Pročitaj Pravila privatnosti';
+
+  @override
+  String get whatShouldOmiCallYou => 'Kako da te Omi zove?';
+
+  @override
+  String get nameUsageHint => 'Omi ovo koristi da te označi u transkriptima i izvozima.';
+
+  @override
+  String get yourNamePlaceholder => 'Tvoje ime';
+
+  @override
+  String get whatLanguageDoYouSpeakMost => 'Kojim jezikom najčešće govoriš?';
+
+  @override
+  String get languageOnboardingSubtitle => 'Omi najbolje transkribira kad zna jezik. Više možeš dodati kasnije.';
+
+  @override
+  String get permissionsFewTitle => 'Nekoliko dopuštenja';
+
+  @override
+  String get permissionsFewSubtitle => 'Omi traži samo ono što koristi. To možeš promijeniti bilo kada u Postavkama.';
+
+  @override
+  String get permissionsContinueNote =>
+      '„Nastavi“ ništa ne traži. Svako dopuštenje traži se tek kad dodirneš „Dopusti“.';
+
+  @override
+  String get howDidYouHearAboutOmi => 'Odakle znaš za Omi?';
+
+  @override
+  String get showOnLockScreen => 'Prikaži na zaključanom zaslonu';
+
+  @override
+  String get seeAll => 'Prikaži sve';
+
+  @override
+  String get upNext => 'Sljedeće';
+
+  @override
+  String get allTasks => 'Svi zadaci';
+
+  @override
+  String get thisWeek => 'Ovaj tjedan';
+
+  @override
+  String capturedDuration(String duration) {
+    return 'Snimljeno $duration';
+  }
+
+  @override
+  String newMemoriesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Novih sjećanja: $count',
+      one: '1 novo sjećanje',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncingFromPendant => 'Sinkronizacija s tvog privjeska';
+
+  @override
+  String get pendantRecordingsSynced => 'Snimke s privjeska su sinkronizirane';
+
+  @override
+  String recordedOnPendantWhileAway(String duration) {
+    return '~$duration snimljeno na privjesku dok je mobitel bio daleko';
+  }
+
+  @override
+  String dailyRecapOn(String day) {
+    return 'Dnevni pregled · $day';
+  }
+
+  @override
+  String taskDueDayTime(String day, String time) {
+    return '$day, $time';
+  }
+
+  @override
+  String fromConversation(String title) {
+    return 'Iz: $title';
+  }
+
+  @override
+  String get endCapture => 'Završi';
+
+  @override
+  String get toDo => 'Za napraviti';
+
+  @override
+  String get devices => 'Uređaji';
+
+  @override
+  String get devicesSubtitle => 'Sve što sluša umjesto tebe. Snima jedan po jedan.';
+
+  @override
+  String get addADevice => 'Dodaj uređaj';
+
+  @override
+  String get deviceReady => 'Spremno';
+
+  @override
+  String get importFromOtherApps => 'Uvoz iz drugih aplikacija';
+
+  @override
+  String get whatWillYouWear => 'Što ćeš nositi?';
+
+  @override
+  String get pickDeviceSubtitle => 'Više možeš dodati kasnije. Snima jedan po jedan.';
+
+  @override
+  String get alreadyHaveOne => 'Već imaš jedan?';
+
+  @override
+  String get noDeviceHeader => 'Bez uređaja';
+
+  @override
+  String get omiPendantName => 'Omi privjesak';
+
+  @override
+  String get allDayConversations => 'Razgovori cijeli dan';
+
+  @override
+  String get conversationsAndPhotos => 'Razgovori + fotografije';
+
+  @override
+  String get wristMic => 'Mikrofon na zapešću';
+
+  @override
+  String get glassesAudio => 'Zvuk s naočala';
+
+  @override
+  String get bringRecordingsIntoOmi => 'Prenesi svoje snimke u Omi';
+
+  @override
+  String get useThisIphone => 'Koristi ovaj iPhone';
+
+  @override
+  String get useThisPhone => 'Koristi ovaj mobitel';
+
+  @override
+  String get startInSeconds => 'Počni za 10 sekundi';
+
+  @override
+  String get askAboutThisConversationPlaceholder => 'Pitaj o ovom razgovoru';
+
+  @override
+  String get summaryStyle => 'Stil sažetka';
+
+  @override
+  String get summaryStyleSubtitle => 'Odaberi aplikaciju koja piše ovaj sažetak';
+
+  @override
+  String get appearance => 'Izgled';
+
+  @override
+  String get appearanceSystem => 'Sustav';
+
+  @override
+  String get appearanceLight => 'Svijetli';
+
+  @override
+  String get appearanceDark => 'Tamni';
+
+  @override
+  String get feel => 'Osjećaj';
+
+  @override
+  String get haptics => 'Haptika';
+
+  @override
+  String get hapticsSubtitle => 'Lagani dodir kad nešto završiš, označiš zvjezdicom ili dovršiš';
+
+  @override
+  String get textSize => 'Veličina teksta';
+
+  @override
+  String get textSizeSubtitle => 'Prati veličinu teksta na tvom telefonu';
+
+  @override
+  String get appearanceMotionNote =>
+      'Pokret prati opciju „Smanji pokrete” u postavkama telefona — sve petlje, uključujući svjetlo uređaja, se zaustavljaju.';
+
+  @override
+  String get signedInWithApple => 'Prijavljen putem Applea';
+
+  @override
+  String get signedInWithGoogle => 'Prijavljen putem Googlea';
+
+  @override
+  String premiumMinutesLeftThisMonth(String left, int limit) {
+    return 'Ostalo je $left od $limit premium minuta ovog mjeseca';
+  }
+
+  @override
+  String get recordingFrom => 'Snima se s';
+
+  @override
+  String get recordingFromSubtitle => 'Istovremeno snima samo jedan izvor. Promjena završava trenutačni razgovor.';
+
+  @override
+  String get manageDevices => 'Upravljaj uređajima';
+
+  @override
+  String get notListeningTitle => 'Ne sluša';
+
+  @override
+  String get notListeningSubtitle => 'Počni s ovim telefonom ili poveži uređaj da sluša cijeli dan.';
+
+  @override
+  String get startListening => 'Počni slušati';
+
+  @override
+  String get searchEverything => 'Pretraži sve';
+
+  @override
+  String searchResultsCount(int count) {
+    return 'Rezultati · $count';
+  }
+
+  @override
+  String get nothingFound => 'Ništa nije pronađeno';
+
+  @override
+  String get searchNothingFoundHint => 'Pokušaj s drugom riječi ili pitaj Omi — razumije značenje, ne samo riječi.';
+
+  @override
+  String get askOmiInstead => 'Pitaj Omi';
+
+  @override
+  String get recentSearches => 'Nedavno';
+
+  @override
+  String get searchAskSuggestion => 'Što sam obećao napraviti ovaj tjedan?';
+
+  @override
+  String get welcomeRememberTitle => 'Zapamti svaki razgovor.';
+
+  @override
+  String get welcomeRememberSubtitle =>
+      'Nosi što ti odgovara. Omi pretvara ono što čuješ u bilješke, zadatke i pregled tvog dana.';
+
+  @override
+  String get memoriesSubtitle => 'Što Omi zna i odakle je to saznao';
+
+  @override
+  String get memoryTierLongTerm => 'Dugoročno';
+
+  @override
+  String get memoryTierShortTerm => 'Kratkoročno';
+
+  @override
+  String get memoriesTierNote =>
+      'Nove uspomene počinju kao kratkoročne. Omi sam premješta one koje ostaju važne u dugoročne.';
+
+  @override
+  String get askEmptyTitle => 'Pitaj o bilo čemu što si čuo.';
+
+  @override
+  String get askEmptySubtitle => 'Omi odgovara iz tvojih razgovora, uspomena i zadataka.';
+
+  @override
+  String get completeListeningTitle => 'Slušanje';
+
+  @override
+  String get completeListeningBody => 'Plavo znači da te Omi čuje — preko uređaja koji nosiš ili ovog telefona.';
+
+  @override
+  String get completeAskAnyBody => 'Dodirni Pitaj da pitaš o bilo čemu što si čuo.';
+
+  @override
+  String get completeDevicesBody => 'Dodaj nosivi uređaj bilo kada ili počni s ovim telefonom.';
+
+  @override
+  String get conversationSourceGlasses => 'Naočale';
+
+  @override
+  String get conversationSourceImported => 'Uvezeno';
+
+  @override
+  String get conversationSourceEmptyHint => 'Iz ovog izvora još ništa nije snimljeno.';
+
+  @override
+  String get findMyPendant => 'Pronađi moj privjesak';
+
+  @override
+  String get findMyPendantHint => 'Reproducira zvuk da ga lakše pronađeš';
+
+  @override
+  String get upToDate => 'Ažurirano';
+
+  @override
+  String get updateAvailable => 'Dostupno ažuriranje';
+
+  @override
+  String get storageTitle => 'Pohrana';
+
+  @override
+  String get connectStepTurnOn => 'Uključi ga i drži blizu';
+
+  @override
+  String get connectStepAllowBluetooth => 'Dopusti Bluetooth';
+
+  @override
+  String get connectStepTest => 'Reci nešto za test';
+
+  @override
+  String get connectStepTestHint => 'Riječi se pojavljuju ovdje dok govoriš';
+
+  @override
+  String get setUpLater => 'Postavi kasnije';
+
+  @override
+  String recapPreviousDay(String day) {
+    return 'Sažetak prethodnog dana: $day';
+  }
+
+  @override
+  String recapNextDay(String day) {
+    return 'Sažetak sljedećeg dana: $day';
+  }
+
+  @override
+  String get askStarterToday => 'Sažmi današnji dan';
+
+  @override
+  String get askStarterPeople => 'S kim sam se sreo?';
+
+  @override
+  String get askStarterOpen => 'Što je još otvoreno?';
+
+  @override
+  String get peopleSubtitle => 'Glasovi koje Omi prepoznaje u transkriptima';
+
+  @override
+  String get usageCurrentPlan => 'Trenutačni plan';
+
+  @override
+  String get appsExplore => 'Istraži';
+
+  @override
+  String get appOutOfFive => 'od 5';
+
+  @override
+  String get appStatUsers => 'Korisnici';
+
+  @override
+  String homeWelcomeName(String name) {
+    return 'Dobro došli, $name';
+  }
+
+  @override
+  String get homeWelcome => 'Dobro došli';
+
+  @override
+  String get homeFirstDaySubtitle => 'Tvoj prvi dan s Omijem';
+
+  @override
+  String get homeListeningHeroTitle => 'Omi sluša';
+
+  @override
+  String get homeListeningHeroBody => 'Tvoj prvi razgovor pojavit će se ovdje minutu nakon što završi.';
+
+  @override
+  String get homeGettingStarted => 'Prvi koraci';
+
+  @override
+  String get gettingStartedConnect => 'Poveži uređaj';
+
+  @override
+  String get gettingStartedConversation => 'Vodi razgovor';
+
+  @override
+  String get gettingStartedAsk => 'Pitaj Omija o tome';
+
+  @override
+  String get homeGoodToKnow => 'Dobro je znati';
+
+  @override
+  String get tipFinishTitle => 'Završi kad god želiš';
+
+  @override
+  String get tipFinishBody => 'Dodirni Završi — ili dvaput pritisni privjesak — i sažetak odmah počinje.';
+
+  @override
+  String get tipStarTitle => 'Označi zvjezdicom ono što je važno';
+
+  @override
+  String get tipStarBody => 'Razgovore sa zvjezdicom lako je kasnije pronaći.';
+
+  @override
+  String get tipPrivateTitle => 'Privatno prema zadanim postavkama';
+
+  @override
+  String get tipPrivateBody => 'Tvoji razgovori ostaju privatni osim ako ih ne podijeliš.';
+
+  @override
+  String homeGettingStartedProgress(int done, int total) {
+    return '$done od $total';
+  }
+
+  @override
+  String get noFailedRecordings => 'Nema neuspjelih snimaka';
+
+  @override
+  String get mapNoPlacesTitle => 'Još nema mjesta';
+
+  @override
+  String get mapNoPlacesMessage => 'Razgovori se ovdje prikazuju kada Omi zna gdje su se odvili.';
+
+  @override
+  String get mergeWithEllipsis => 'Spoji s…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Dovršite postavljanje aplikacije $appName da biste je uključili';
+  }
+
+  @override
+  String get greetingUpLate => 'Dugo budni';
+
+  @override
+  String get greetingLunchtime => 'Vrijeme za ručak';
+
+  @override
+  String get greetingWindingDown => 'Vrijeme za odmor';
+
+  @override
+  String get greetingGoodNight => 'Laku noć';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Još budni';
+
+  @override
+  String get greetingEarlyStart => 'Rani početak';
+
+  @override
+  String get greetingNewDay => 'Novi dan';
+
+  @override
+  String get greetingMorning => 'Dobro jutro';
+
+  @override
+  String get greetingBusyMorning => 'Užurbano jutro';
+
+  @override
+  String get greetingAfternoon => 'Dobar dan';
+
+  @override
+  String get greetingHomeStretch => 'Završnica dana';
+
+  @override
+  String get greetingEvening => 'Dobra večer';
+
+  @override
+  String get unlimitedBadge => 'Neograničeno';
+
+  @override
+  String get voiceSetupTaskSubline => 'Da Omi zna da ste to vi · oko minutu';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Spremljeno $saved od $total zvuka';
+  }
+
+  @override
+  String get voiceIntroTitle => 'Predstavite se';
+
+  @override
+  String get memoryLabel => 'Uspomena';
+
+  @override
+  String get idleReadyHint => 'Dodirnite Pokreni i ono što kažete pojavit će se ovdje.';
 }

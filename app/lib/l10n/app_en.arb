@@ -1799,10 +1799,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "whatsYourName": "What's your name?",
-    "@whatsYourName": {
-        "description": "Question asking for user's name"
-    },
     "@enterYourName": {
         "description": "Hint text for name input field"
     },
@@ -1825,14 +1821,6 @@
     "termsOfUse": "Terms of Use",
     "@termsOfUse": {
         "description": "Link text for Terms of Use"
-    },
-    "omiYourAiCompanion": "Omi – Your AI Companion",
-    "@omiYourAiCompanion": {
-        "description": "App title or branding on onboarding screen"
-    },
-    "captureEveryMoment": "Capture every moment. Get AI-powered\nsummaries. Never take notes again.",
-    "@captureEveryMoment": {
-        "description": "App value proposition or description"
     },
     "appleWatchSetup": "Apple Watch Setup",
     "@appleWatchSetup": {
@@ -1895,27 +1883,11 @@
             }
         }
     },
-    "selectPrimaryLanguage": "Select your primary language",
-    "@selectPrimaryLanguage": {
-        "description": "Title for language selection dialog"
-    },
-    "languageBenefits": "Set your language for sharper transcriptions and a personalized experience",
-    "@languageBenefits": {
-        "description": "Explanation of why language selection matters"
-    },
     "@searchLanguageHint": {
         "description": "Hint text for language search"
     },
     "@noLanguagesFound": {
         "description": "Text when search returns no results"
-    },
-    "whatsYourPrimaryLanguage": "What's your primary language?",
-    "@whatsYourPrimaryLanguage": {
-        "description": "Question asking for primary language"
-    },
-    "selectYourLanguage": "Select your language",
-    "@selectYourLanguage": {
-        "description": "Placeholder for selected language name"
     },
     "personalGrowthJourney": "Your personal growth journey with AI that listens to your every word.",
     "@personalGrowthJourney": {
@@ -3964,10 +3936,6 @@
     "@dataProtection": {
         "description": "Section title for data protection info"
     },
-    "yourDataIsProtected": "Your data is protected and governed by our ",
-    "@yourDataIsProtected": {
-        "description": "First part of data protection text"
-    },
     "pleaseSelectYourPrimaryLanguage": "Please select your primary language",
     "chooseYourLanguage": "Choose your language",
     "selectPreferredLanguageForBestExperience": "Select your preferred language for the best Omi experience",
@@ -5973,10 +5941,6 @@
     "additionalSpeechSampleRemoved": "Additional Speech Sample Removed",
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
-    },
-    "consentDataMessage": "By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services — Deepgram for transcription and OpenAI for analysis — to provide you with AI-powered insights and enable all app features.",
-    "@consentDataMessage": {
-        "description": "Consent message explaining how user data will be stored and used"
     },
     "tasksEmptyStateMessage": "Tasks from your conversations will appear here.\nTap + to create one manually.",
     "@tasksEmptyStateMessage": {
@@ -8737,10 +8701,6 @@
             }
         }
     },
-    "actionItemReminderTitle": "Omi Reminder",
-    "@actionItemReminderTitle": {
-        "description": "Title for action item reminder notifications"
-    },
     "deviceDisconnectedTitle": "{deviceName} Disconnected",
     "@deviceDisconnectedTitle": {
         "description": "Notification title when a device disconnects",
@@ -9544,7 +9504,6 @@
     },
     "mcpConnectionFailed": "Failed to connect to MCP server",
     "authorizingMcpServer": "Authorizing…",
-    "whereDidYouHearAboutOmi": "How did you find us?",
     "tiktok": "TikTok",
     "youtube": "YouTube",
     "instagram": "Instagram",
@@ -10928,7 +10887,7 @@
     "syncStatusBackingUp": "Syncing…",
     "syncStatusWaiting": "Waiting to sync",
     "syncStatusRetrying": "Couldn’t process — retrying",
-    "syncStatusFailed": "Failed — tap Retry",
+    "syncStatusFailed": "Failed — tap Try Again",
     "syncStatusFileUnavailable": "File unavailable",
     "noRecordingsYet": "No recordings yet",
     "syncInProgress": "Sync in progress",
@@ -10947,7 +10906,7 @@
     },
     "syncCardProcessing": "Processing on Omi…",
     "syncCardWaitingInternet": "Waiting for internet",
-    "syncCardNeedsAttention": "{count} recording{count, plural, =1{} other{s}} need attention",
+    "syncCardNeedsAttention": "{count, plural, =1{1 recording needs attention} other{{count} recordings need attention}}",
     "@syncCardNeedsAttention": {
         "description": "Status card: items that need user attention",
         "placeholders": {
@@ -11801,10 +11760,6 @@
     "@transcriptionNoAudio": {
         "description": "Status when an active call transcription socket receives no audio frames"
     },
-    "tapPlusToStartRecording": "Tap the record button to start recording",
-    "@tapPlusToStartRecording": {
-        "description": "Empty-home hint pointing at the round record button"
-    },
     "chatBlockTask": "Task",
     "@chatBlockTask": {
         "description": "Eyebrow label on a chat task card block"
@@ -12564,10 +12519,6 @@
     "@deviceConnecting": {
         "description": "Header device pill while a paired device reconnects"
     },
-    "recordOptionsTip": "Tip: tap the arrow on the record button to record a phone call.",
-    "@recordOptionsTip": {
-        "description": "One-time hint after the first phone-mic recording"
-    },
     "firmwareUpdateFailedTitle": "Update Failed",
     "@firmwareUpdateFailedTitle": {
         "description": "Title of the firmware update failed state"
@@ -13320,14 +13271,6 @@
     "@keepUsingPendant": {
         "description": "Button that dismisses the 'Your pendant is listening' sheet and keeps the pendant recording."
     },
-    "recordWith": "Record with",
-    "@recordWith": {
-        "description": "Title of the sheet listing ways to record (Phone mic, Phone call)."
-    },
-    "moreWaysToRecord": "More ways to record",
-    "@moreWaysToRecord": {
-        "description": "Accessibility label of the small arrow badge on the record button that opens the 'Record with' sheet."
-    },
     "openCall": "Open call",
     "@openCall": {
         "description": "Accessibility hint on the live card during a call; tapping opens the call screen."
@@ -13385,5 +13328,752 @@
                 "type": "String"
             }
         }
+    },
+    "alreadyHaveAccount": "Already have an account?",
+    "@alreadyHaveAccount": {
+        "description": "Welcome screen, before the Sign In link"
+    },
+    "signInToOmi": "Sign in to Omi",
+    "@signInToOmi": {
+        "description": "Sign-in screen title"
+    },
+    "signInSubtitle": "Your conversations and memories follow your account across your phone, Mac and the web.",
+    "@signInSubtitle": {
+        "description": "Sign-in screen line under the title"
+    },
+    "onboardingAllSetName": "You’re all set, {name}.",
+    "@onboardingAllSetName": {
+        "description": "Onboarding complete headline with the user's first name",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "completeHomeBody": "Your day, tasks and recaps in one place.",
+    "@completeHomeBody": {
+        "description": "Onboarding complete: what the Home tab is"
+    },
+    "completeAskTitle": "Ask",
+    "@completeAskTitle": {
+        "description": "Onboarding complete: label for the Ask tip"
+    },
+    "foundOmiOptionalHint": "Optional — it helps a small team know what’s working.",
+    "@foundOmiOptionalHint": {
+        "description": "Under the where-did-you-hear-about-Omi question"
+    },
+    "consentTitle": "Your data, in plain words",
+    "@consentTitle": {
+        "description": "Title of the onboarding data consent step"
+    },
+    "consentSubtitle": "Before Omi starts listening, here's exactly what happens to what it hears.",
+    "@consentSubtitle": {
+        "description": "Subtitle of the onboarding data consent step"
+    },
+    "consentStoredTitle": "What's stored",
+    "@consentStoredTitle": {
+        "description": "Consent step row title: what data Omi stores"
+    },
+    "consentStoredBody": "Your audio, transcripts and the details Omi learns are stored securely with your account.",
+    "@consentStoredBody": {
+        "description": "Consent step row body under What's stored"
+    },
+    "consentProcessorsTitle": "Who processes it",
+    "@consentProcessorsTitle": {
+        "description": "Consent step row title: which services process the data"
+    },
+    "consentProcessorsBody": "Speech is transcribed by Deepgram and analysed by OpenAI to write summaries, tasks and memories.",
+    "@consentProcessorsBody": {
+        "description": "Consent step row body under Who processes it; Deepgram and OpenAI are company names"
+    },
+    "consentControlTitle": "What you control",
+    "@consentControlTitle": {
+        "description": "Consent step row title: what the user controls"
+    },
+    "consentControlBody": "Delete any conversation, memory or your whole account whenever you like.",
+    "@consentControlBody": {
+        "description": "Consent step row body under What you control"
+    },
+    "readPrivacyPolicy": "Read the Privacy Policy",
+    "@readPrivacyPolicy": {
+        "description": "Link on the consent step that opens the Privacy Policy"
+    },
+    "whatShouldOmiCallYou": "What should Omi call you?",
+    "@whatShouldOmiCallYou": {
+        "description": "Title of the onboarding name step"
+    },
+    "nameUsageHint": "Omi uses this to label you in transcripts and exports.",
+    "@nameUsageHint": {
+        "description": "Hint under the name field in onboarding"
+    },
+    "yourNamePlaceholder": "Your name",
+    "@yourNamePlaceholder": {
+        "description": "Placeholder in the onboarding name field"
+    },
+    "whatLanguageDoYouSpeakMost": "What language do you speak most?",
+    "@whatLanguageDoYouSpeakMost": {
+        "description": "Title of the onboarding language step"
+    },
+    "languageOnboardingSubtitle": "Omi transcribes best when it knows. You can add more later.",
+    "@languageOnboardingSubtitle": {
+        "description": "Subtitle of the onboarding language step"
+    },
+    "permissionsFewTitle": "A few permissions",
+    "@permissionsFewTitle": {
+        "description": "Title of the onboarding permissions step"
+    },
+    "permissionsFewSubtitle": "Omi asks only for what it uses. You can change these any time in Settings.",
+    "@permissionsFewSubtitle": {
+        "description": "Subtitle of the onboarding permissions step"
+    },
+    "permissionsContinueNote": "Continue won't ask for anything. Each permission is only requested when you tap Allow.",
+    "@permissionsContinueNote": {
+        "description": "Note under the onboarding permission list. Continue and Allow are the button labels on the same screen"
+    },
+    "howDidYouHearAboutOmi": "How did you hear about Omi?",
+    "@howDidYouHearAboutOmi": {
+        "description": "Title of the optional onboarding step asking where the user heard about Omi"
+    },
+    "showOnLockScreen": "Show on Lock Screen",
+    "@showOnLockScreen": {
+        "description": "Setting for recording Live Activities on the lock screen and Dynamic Island"
+    },
+    "seeAll": "See All",
+    "@seeAll": {
+        "description": "Home section link that opens the whole list"
+    },
+    "upNext": "Up next",
+    "@upNext": {
+        "description": "Home section title above the next tasks"
+    },
+    "allTasks": "All Tasks",
+    "@allTasks": {
+        "description": "Home link that opens the Tasks tab"
+    },
+    "thisWeek": "This week",
+    "@thisWeek": {
+        "description": "Home card title: minutes captured per day this week"
+    },
+    "capturedDuration": "{duration} captured",
+    "@capturedDuration": {
+        "description": "Total audio captured this week, e.g. '3 h 38 min captured'",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "newMemoriesCount": "{count, plural, =1{1 new memory} other{{count} new memories}}",
+    "@newMemoriesCount": {
+        "description": "Home card title: memories Omi learned in the last day",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "syncingFromPendant": "Syncing from your pendant",
+    "@syncingFromPendant": {
+        "description": "Home sync card title while recordings upload from the pendant"
+    },
+    "pendantRecordingsSynced": "Pendant recordings synced",
+    "@pendantRecordingsSynced": {
+        "description": "Home sync card title once every recording has uploaded"
+    },
+    "recordedOnPendantWhileAway": "~{duration} recorded on the pendant while your phone was away",
+    "@recordedOnPendantWhileAway": {
+        "description": "Home sync card line: how much audio the pendant saved offline, e.g. '~12 min'",
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "dailyRecapOn": "Daily recap · {day}",
+    "@dailyRecapOn": {
+        "description": "Label on the Home recap card, e.g. 'Daily recap · Wednesday'",
+        "placeholders": {
+            "day": {
+                "type": "String"
+            }
+        }
+    },
+    "taskDueDayTime": "{day}, {time}",
+    "@taskDueDayTime": {
+        "description": "When a task is due, e.g. 'Today, 5:00 PM'",
+        "placeholders": {
+            "day": {
+                "type": "String"
+            },
+            "time": {
+                "type": "String"
+            }
+        }
+    },
+    "fromConversation": "From {title}",
+    "@fromConversation": {
+        "description": "Task line naming the conversation it came from",
+        "placeholders": {
+            "title": {
+                "type": "String"
+            }
+        }
+    },
+    "endCapture": "End",
+    "@endCapture": {
+        "description": "Live card button that ends and processes the current conversation"
+    },
+    "toDo": "To do",
+    "@toDo": {
+        "description": "Tab label: the to-do list"
+    },
+    "devices": "Devices",
+    "@devices": {
+        "description": "Tab label and title: everything that records for Omi"
+    },
+    "devicesSubtitle": "Everything that listens for you. One records at a time.",
+    "@devicesSubtitle": {
+        "description": "Subtitle under the Devices title"
+    },
+    "addADevice": "Add a device",
+    "@addADevice": {
+        "description": "Button on the Devices tab that pairs a new device"
+    },
+    "deviceReady": "Ready",
+    "@deviceReady": {
+        "description": "Device status: connected and able to record, but not recording now"
+    },
+    "importFromOtherApps": "Import from other apps",
+    "@importFromOtherApps": {
+        "description": "Row that opens importing conversations from other recorders (Plaud, Limitless, …)"
+    },
+    "whatWillYouWear": "What will you wear?",
+    "@whatWillYouWear": {
+        "description": "Title of the device picker"
+    },
+    "pickDeviceSubtitle": "You can add more later. One records at a time.",
+    "@pickDeviceSubtitle": {
+        "description": "Subtitle of the device picker"
+    },
+    "alreadyHaveOne": "Already have one?",
+    "@alreadyHaveOne": {
+        "description": "Device picker section: devices from other makers the user may own"
+    },
+    "noDeviceHeader": "No device",
+    "@noDeviceHeader": {
+        "description": "Device picker section: record with this phone"
+    },
+    "omiPendantName": "Omi pendant",
+    "@omiPendantName": {
+        "description": "Product name: the Omi pendant"
+    },
+    "allDayConversations": "All-day conversations",
+    "@allDayConversations": {
+        "description": "What the Omi pendant is for"
+    },
+    "conversationsAndPhotos": "Conversations + photos",
+    "@conversationsAndPhotos": {
+        "description": "What OmiGlass is for"
+    },
+    "wristMic": "Wrist mic",
+    "@wristMic": {
+        "description": "What Apple Watch adds"
+    },
+    "glassesAudio": "Glasses audio",
+    "@glassesAudio": {
+        "description": "What Ray-Ban Meta adds"
+    },
+    "bringRecordingsIntoOmi": "Bring your recordings into Omi",
+    "@bringRecordingsIntoOmi": {
+        "description": "What other recorders (Plaud, Bee, Limitless, …) are for"
+    },
+    "useThisIphone": "Use this iPhone",
+    "@useThisIphone": {
+        "description": "Device picker: record with the iPhone's microphone"
+    },
+    "useThisPhone": "Use this phone",
+    "@useThisPhone": {
+        "description": "Device picker: record with the phone's microphone (non-iPhone)"
+    },
+    "startInSeconds": "Start in 10 seconds",
+    "@startInSeconds": {
+        "description": "Device picker: recording with the phone starts right away"
+    },
+    "askAboutThisConversationPlaceholder": "Ask about this conversation",
+    "@askAboutThisConversationPlaceholder": {
+        "description": "Bar at the bottom of a conversation that opens Ask Omi about it"
+    },
+    "summaryStyle": "Summary style",
+    "@summaryStyle": {
+        "description": "Row in a conversation's summary: which app writes it"
+    },
+    "summaryStyleSubtitle": "Choose which app writes this summary",
+    "@summaryStyleSubtitle": {
+        "description": "Subtitle of the Summary style row"
+    },
+    "appearance": "Appearance",
+    "@appearance": {
+        "description": "Settings row and page title: light, dark or follow the phone"
+    },
+    "appearanceSystem": "System",
+    "@appearanceSystem": {
+        "description": "Appearance option: follow the phone's own light or dark setting"
+    },
+    "appearanceLight": "Light",
+    "@appearanceLight": {
+        "description": "Appearance option: the light palette"
+    },
+    "appearanceDark": "Dark",
+    "@appearanceDark": {
+        "description": "Appearance option: the dark palette"
+    },
+    "feel": "Feel",
+    "@feel": {
+        "description": "Appearance section header: haptics and motion"
+    },
+    "haptics": "Haptics",
+    "@haptics": {
+        "description": "Appearance toggle: vibration feedback"
+    },
+    "hapticsSubtitle": "A light tap when you finish, star or complete something",
+    "@hapticsSubtitle": {
+        "description": "Appearance: what the Haptics toggle does"
+    },
+    "textSize": "Text size",
+    "@textSize": {
+        "description": "Appearance row: the size of text in the app"
+    },
+    "textSizeSubtitle": "Follows your phone’s text size",
+    "@textSizeSubtitle": {
+        "description": "Appearance: text size comes from the phone's accessibility setting"
+    },
+    "appearanceMotionNote": "Motion follows Reduce Motion in your phone’s settings — every loop, including the device light, stops.",
+    "@appearanceMotionNote": {
+        "description": "Appearance footnote: animations respect the phone's Reduce Motion setting"
+    },
+    "signedInWithApple": "Signed in with Apple",
+    "@signedInWithApple": {
+        "description": "Settings account row: how the account signs in"
+    },
+    "signedInWithGoogle": "Signed in with Google",
+    "@signedInWithGoogle": {
+        "description": "Settings account row: how the account signs in"
+    },
+    "premiumMinutesLeftThisMonth": "{left} of {limit} premium minutes left this month",
+    "@premiumMinutesLeftThisMonth": {
+        "description": "Settings plan card: premium transcription minutes left",
+        "placeholders": {
+            "left": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "int"
+            }
+        }
+    },
+    "recordingFrom": "Recording from",
+    "@recordingFrom": {
+        "description": "Sheet title: which device or phone records now"
+    },
+    "recordingFromSubtitle": "One source records at a time. Switching finishes the current conversation.",
+    "@recordingFromSubtitle": {
+        "description": "Recording from sheet: the one-live-source rule"
+    },
+    "manageDevices": "Manage devices",
+    "@manageDevices": {
+        "description": "Recording from sheet: opens the Devices tab"
+    },
+    "notListeningTitle": "Not listening",
+    "@notListeningTitle": {
+        "description": "Today: nothing is recording right now"
+    },
+    "notListeningSubtitle": "Start with this phone, or connect a device to listen all day.",
+    "@notListeningSubtitle": {
+        "description": "Today idle card: how to start listening"
+    },
+    "startListening": "Start listening",
+    "@startListening": {
+        "description": "Button: start capturing with this phone"
+    },
+    "searchEverything": "Search everything",
+    "@searchEverything": {
+        "description": "Search page field: conversations, memories and tasks"
+    },
+    "searchResultsCount": "Results · {count}",
+    "@searchResultsCount": {
+        "description": "Search page: how many matches",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "nothingFound": "Nothing found",
+    "@nothingFound": {
+        "description": "Search page: no matches"
+    },
+    "searchNothingFoundHint": "Try another word, or ask Omi — it understands meaning, not just words.",
+    "@searchNothingFoundHint": {
+        "description": "Search page: no matches, suggest Ask"
+    },
+    "askOmiInstead": "Ask Omi instead",
+    "@askOmiInstead": {
+        "description": "Search page: open Ask with the words typed"
+    },
+    "recentSearches": "Recent",
+    "@recentSearches": {
+        "description": "Search page header: the last few searches"
+    },
+    "searchAskSuggestion": "What did I promise to do this week?",
+    "@searchAskSuggestion": {
+        "description": "Search page: a question to ask Omi"
+    },
+    "welcomeRememberTitle": "Remember every conversation.",
+    "@welcomeRememberTitle": {
+        "description": "Welcome headline (Rev 3: one memory, any device)"
+    },
+    "welcomeRememberSubtitle": "Wear what you like. Omi turns what you hear into notes, to-dos and a recap of your day.",
+    "@welcomeRememberSubtitle": {
+        "description": "Welcome subtitle under the headline, above the list of supported devices"
+    },
+    "memoriesSubtitle": "What Omi knows, and where it learned it",
+    "@memoriesSubtitle": {
+        "description": "Memories page subtitle under the title"
+    },
+    "memoryTierLongTerm": "Long-term",
+    "@memoryTierLongTerm": {
+        "description": "Memory row tier: kept because it keeps mattering"
+    },
+    "memoryTierShortTerm": "Short-term",
+    "@memoryTierShortTerm": {
+        "description": "Memory row tier: new, not yet confirmed as lasting"
+    },
+    "memoriesTierNote": "New memories start as short-term. Omi moves the ones that keep mattering to long-term on its own.",
+    "@memoriesTierNote": {
+        "description": "Memories page footnote explaining short-term and long-term"
+    },
+    "askEmptyTitle": "Ask about anything you’ve heard.",
+    "@askEmptyTitle": {
+        "description": "Ask Omi before the first question: headline"
+    },
+    "askEmptySubtitle": "Omi answers from your conversations, memories and tasks.",
+    "@askEmptySubtitle": {
+        "description": "Ask Omi before the first question: where answers come from"
+    },
+    "completeListeningTitle": "Listening",
+    "@completeListeningTitle": {
+        "description": "Onboarding complete: tip label about the blue listening light"
+    },
+    "completeListeningBody": "Blue means Omi hears you — from a device you wear or this phone.",
+    "@completeListeningBody": {
+        "description": "Onboarding complete: what the blue light means, any device"
+    },
+    "completeAskAnyBody": "Tap Ask to ask about anything you’ve heard.",
+    "@completeAskAnyBody": {
+        "description": "Onboarding complete: how to ask, any device"
+    },
+    "completeDevicesBody": "Add a wearable anytime, or start with this phone.",
+    "@completeDevicesBody": {
+        "description": "Onboarding complete: devices tip, any device"
+    },
+    "conversationSourceGlasses": "Glasses",
+    "@conversationSourceGlasses": {
+        "description": "Conversations filter chip: conversations recorded by smart glasses (OmiGlass, Ray-Ban Meta, Frame)"
+    },
+    "conversationSourceImported": "Imported",
+    "@conversationSourceImported": {
+        "description": "Conversations filter chip: conversations imported from other apps and devices (Plaud, Bee, Limitless, Fieldy)"
+    },
+    "conversationSourceEmptyHint": "Nothing recorded from this source yet.",
+    "@conversationSourceEmptyHint": {
+        "description": "Conversations empty state when a source filter chip (Pendant, Glasses, Phone, Imported) matches nothing"
+    },
+    "findMyPendant": "Find my pendant",
+    "@findMyPendant": {
+        "description": "Device page row: makes the connected Omi pendant play a sound so the user can locate it"
+    },
+    "findMyPendantHint": "Plays a sound so you can find it",
+    "@findMyPendantHint": {
+        "description": "Device page: subtitle under 'Find my pendant' explaining the pendant will play a sound"
+    },
+    "upToDate": "Up to date",
+    "@upToDate": {
+        "description": "Device page: value beside 'Firmware' when no firmware update is available"
+    },
+    "updateAvailable": "Update available",
+    "@updateAvailable": {
+        "description": "Device page: value beside 'Firmware' when a firmware update can be installed"
+    },
+    "storageTitle": "Storage",
+    "@storageTitle": {
+        "description": "Offline Sync page: section title above where recordings are kept (phone, cloud) and auto-sync"
+    },
+    "connectStepTurnOn": "Turn it on and hold it close",
+    "@connectStepTurnOn": {
+        "description": "Connect a device, step 1: switch the wearable on and bring it near the phone"
+    },
+    "connectStepAllowBluetooth": "Allow Bluetooth",
+    "@connectStepAllowBluetooth": {
+        "description": "Connect a device, step 2: give the app Bluetooth permission"
+    },
+    "connectStepTest": "Say something to test",
+    "@connectStepTest": {
+        "description": "Connect a device, step 3: speak so the app can show the words the device heard"
+    },
+    "connectStepTestHint": "Words appear here as you speak",
+    "@connectStepTestHint": {
+        "description": "Connect a device, step 3: shown until the first words the device heard arrive"
+    },
+    "setUpLater": "Set up later",
+    "@setUpLater": {
+        "description": "Connect a device during onboarding: skip pairing for now and continue"
+    },
+    "recapPreviousDay": "Previous day's recap: {day}",
+    "@recapPreviousDay": {
+        "description": "Daily recap: accessibility label of the arrow to the day before; {day} is 'Yesterday' or a date like 'Tue, Sep 22'",
+        "placeholders": {
+            "day": {
+                "type": "String"
+            }
+        }
+    },
+    "recapNextDay": "Next day's recap: {day}",
+    "@recapNextDay": {
+        "description": "Daily recap: accessibility label of the arrow to the day after; {day} is 'Today' or a date like 'Thu, Sep 24'",
+        "placeholders": {
+            "day": {
+                "type": "String"
+            }
+        }
+    },
+    "askStarterToday": "Summarize today",
+    "@askStarterToday": {
+        "description": "Ask Omi starter question: a summary of today's conversations"
+    },
+    "askStarterPeople": "Who did I meet?",
+    "@askStarterPeople": {
+        "description": "Ask Omi starter question: the people the user met recently"
+    },
+    "askStarterOpen": "What's still open?",
+    "@askStarterOpen": {
+        "description": "Ask Omi starter question: unfinished tasks and open questions"
+    },
+    "peopleSubtitle": "Voices Omi can recognize in transcripts",
+    "@peopleSubtitle": {
+        "description": "People page subtitle: the page lists whose voices Omi can tell apart in transcripts"
+    },
+    "usageCurrentPlan": "Current plan",
+    "@usageCurrentPlan": {
+        "description": "Plan & Usage page: small label above the name of the user's plan (e.g. 'Free Plan')"
+    },
+    "appsExplore": "Explore",
+    "@appsExplore": {
+        "description": "Apps page: segment showing every app to discover (the other segment is 'Installed')"
+    },
+    "appOutOfFive": "out of 5",
+    "@appOutOfFive": {
+        "description": "App page stats: caption under the average rating, e.g. '4.5' then 'out of 5'"
+    },
+    "appStatUsers": "Users",
+    "@appStatUsers": {
+        "description": "App page stats: label over how many people use the app"
+    },
+    "homeWelcomeName": "Welcome, {name}",
+    "@homeWelcomeName": {
+        "description": "Home on the first day: large title greeting the new user by first name",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "homeWelcome": "Welcome",
+    "@homeWelcome": {
+        "description": "Home on the first day: large title when the user's name is unknown"
+    },
+    "homeFirstDaySubtitle": "Your first day with Omi",
+    "@homeFirstDaySubtitle": {
+        "description": "Home on the first day: line under the welcome title"
+    },
+    "homeListeningHeroTitle": "Omi is listening",
+    "@homeListeningHeroTitle": {
+        "description": "Home on the first day: title of the card shown while Omi records the first conversation"
+    },
+    "homeListeningHeroBody": "Your first conversation will appear here a minute after it ends.",
+    "@homeListeningHeroBody": {
+        "description": "Home on the first day: what happens after the first recorded conversation"
+    },
+    "homeGettingStarted": "Getting started",
+    "@homeGettingStarted": {
+        "description": "Home on the first days: title of the setup checklist"
+    },
+    "gettingStartedConnect": "Connect a device",
+    "@gettingStartedConnect": {
+        "description": "Home setup checklist step: pair a wearable (pendant, glasses, watch…)"
+    },
+    "gettingStartedConversation": "Have a conversation",
+    "@gettingStartedConversation": {
+        "description": "Home setup checklist step: record a first conversation"
+    },
+    "gettingStartedAsk": "Ask Omi about it",
+    "@gettingStartedAsk": {
+        "description": "Home setup checklist step: ask Omi a question about the recorded conversation"
+    },
+    "homeGoodToKnow": "Good to know",
+    "@homeGoodToKnow": {
+        "description": "Home on the first day: title of the row of tips"
+    },
+    "tipFinishTitle": "Finish anytime",
+    "@tipFinishTitle": {
+        "description": "Home tip card title: ending a conversation early"
+    },
+    "tipFinishBody": "Tap End — or double-press your pendant — and the summary starts right away.",
+    "@tipFinishBody": {
+        "description": "Home tip card body: how ending a conversation starts its summary"
+    },
+    "tipStarTitle": "Star what matters",
+    "@tipStarTitle": {
+        "description": "Home tip card title: starring important conversations"
+    },
+    "tipStarBody": "Starred conversations are easy to find later.",
+    "@tipStarBody": {
+        "description": "Home tip card body: why to star conversations"
+    },
+    "tipPrivateTitle": "Private by default",
+    "@tipPrivateTitle": {
+        "description": "Home tip card title: conversations are private"
+    },
+    "tipPrivateBody": "Your conversations stay private unless you share them.",
+    "@tipPrivateBody": {
+        "description": "Home tip card body: conversations are only shared when the user chooses"
+    },
+    "homeGettingStartedProgress": "{done} of {total}",
+    "@homeGettingStartedProgress": {
+        "description": "Home setup checklist: how many steps are done, e.g. '2 of 4'",
+        "placeholders": {
+            "done": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "noFailedRecordings": "No failed recordings",
+    "@noFailedRecordings": {
+        "description": "Offline Sync: empty state of the Failed filter when no recording failed"
+    },
+    "mapNoPlacesTitle": "No places yet",
+    "@mapNoPlacesTitle": {
+        "description": "Conversation Map: empty state title when no conversation has a location"
+    },
+    "mapNoPlacesMessage": "Conversations appear here when Omi knows where they happened.",
+    "@mapNoPlacesMessage": {
+        "description": "Conversation Map: empty state message under 'No places yet'"
+    },
+    "mergeWithEllipsis": "Merge With…",
+    "@mergeWithEllipsis": {
+        "description": "Conversation long-press menu: start choosing other conversations to merge this one with"
+    },
+    "finishSetupToEnable": "Finish setting up {appName} to turn it on",
+    "@finishSetupToEnable": {
+        "description": "Shown when Enable is tapped on an integration whose setup (a connect or sign-in step) is not done yet; the setup step opens next",
+        "placeholders": {
+            "appName": {
+                "type": "String"
+            }
+        }
+    },
+    "greetingUpLate": "Up late",
+    "@greetingUpLate": {
+        "description": "Home greeting (large title) for midnight to 2 AM; keep it short (fits one line with the first name after it)"
+    },
+    "greetingLunchtime": "Lunchtime",
+    "@greetingLunchtime": {
+        "description": "Home greeting (large title) for noon to 2 PM; keep it short (fits one line with the first name after it)"
+    },
+    "greetingWindingDown": "Winding down",
+    "@greetingWindingDown": {
+        "description": "Home greeting (large title) for 8 PM to 10 PM; keep it short (fits one line with the first name after it)"
+    },
+    "greetingGoodNight": "Good night",
+    "@greetingGoodNight": {
+        "description": "Home greeting (large title) for 10 PM to midnight; keep it short (fits one line with the first name after it)"
+    },
+    "greetingWithName": "{greeting}, {name}",
+    "@greetingWithName": {
+        "description": "Home's greeting with the reader's first name after it, when it fits one line",
+        "placeholders": {
+            "greeting": {
+                "type": "String"
+            },
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "greetingStillUp": "Still up",
+    "@greetingStillUp": {
+        "description": "Home greeting (large title) for 2 AM to 4 AM; keep it short so the first name fits after it on one line"
+    },
+    "greetingEarlyStart": "Early start",
+    "@greetingEarlyStart": {
+        "description": "Home greeting (large title) for 4 AM to 6 AM; keep it short so the first name fits after it on one line"
+    },
+    "greetingNewDay": "New day",
+    "@greetingNewDay": {
+        "description": "Home greeting (large title) for 6 AM to 8 AM; keep it short so the first name fits after it on one line"
+    },
+    "greetingMorning": "Morning",
+    "@greetingMorning": {
+        "description": "Home greeting (large title) for 8 AM to 10 AM; keep it short so the first name fits after it on one line"
+    },
+    "greetingBusyMorning": "Busy morning",
+    "@greetingBusyMorning": {
+        "description": "Home greeting (large title) for 10 AM to noon; keep it short so the first name fits after it on one line"
+    },
+    "greetingAfternoon": "Afternoon",
+    "@greetingAfternoon": {
+        "description": "Home greeting (large title) for 2 PM to 4 PM; keep it short so the first name fits after it on one line"
+    },
+    "greetingHomeStretch": "Home stretch",
+    "@greetingHomeStretch": {
+        "description": "Home greeting (large title) for 4 PM to 6 PM, the end of the working day; keep it short so the first name fits after it on one line"
+    },
+    "greetingEvening": "Evening",
+    "@greetingEvening": {
+        "description": "Home greeting (large title) for 6 PM to 8 PM; keep it short so the first name fits after it on one line"
+    },
+    "unlimitedBadge": "Unlimited",
+    "@unlimitedBadge": {
+        "description": "The plan name on the small lock badge over a locked conversation (unlocks with that plan); keep it one short word"
+    },
+    "voiceSetupTaskSubline": "So Omi knows it’s you · about a minute",
+    "@voiceSetupTaskSubline": {
+        "description": "Subline of the To do setup task \"Teach Omi your voice\": why it helps and how long it takes"
+    },
+    "audioPartiallySaved": "{saved} of {total} audio saved",
+    "@audioPartiallySaved": {
+        "description": "Under a conversation's audio player when the stored audio covers much less than the conversation: saved length and conversation length, e.g. \"0:03 of 5:49 audio saved\"",
+        "placeholders": {
+            "saved": {
+                "type": "String"
+            },
+            "total": {
+                "type": "String"
+            }
+        }
+    },
+    "voiceIntroTitle": "Introduce yourself",
+    "@voiceIntroTitle": {
+        "description": "Title of the guided voice introduction (say a few sentences so Omi learns your voice and what matters to you)"
+    },
+    "memoryLabel": "Memory",
+    "@memoryLabel": {
+        "description": "Label above one remembered fact (singular of Memories), e.g. on the voice introduction review"
+    },
+    "idleReadyHint": "Tap Start and what you say appears here.",
+    "@idleReadyHint": {
+        "description": "Home idle capture card, a device or this phone ready: where the live words will show once listening starts"
     }
 }

@@ -188,7 +188,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: OmiAppBar(
         leading: const OmiBackButton(),
         title: Text(context.l10n.deviceDiagnostics),
         actions: [
@@ -288,7 +288,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
   }) {
     return Container(
       padding: const EdgeInsets.all(OmiSpacing.md),
-      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -320,7 +320,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         Container(
           height: 200,
           padding: const EdgeInsets.only(top: OmiSpacing.md, right: OmiSpacing.md, bottom: OmiSpacing.xs),
-          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
           child: _rssiPoints.length < 2
               ? Center(
                   child: Text(
@@ -426,7 +426,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     return 30;
   }
 
-  static final TextStyle _axisStyle = OmiType.caption.copyWith(color: OmiColors.textTertiary);
+  static TextStyle get _axisStyle => OmiType.caption.copyWith(color: OmiColors.textTertiary);
 
   Color _batteryColor(int level) {
     if (level > 50) return OmiColors.success;
@@ -447,7 +447,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
           context.l10n.batteryHistory,
           trailing: Container(
             padding: const EdgeInsets.all(2),
-            decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+            decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
             child: Row(
               children: [
                 _segmentButton(context.l10n.day, _batteryDayView, () => setState(() => _batteryDayView = true)),
@@ -459,7 +459,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
         Container(
           height: 200,
           padding: const EdgeInsets.only(top: OmiSpacing.md, right: OmiSpacing.md, bottom: OmiSpacing.xs),
-          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
           child: points.length < 2
               ? Center(
                   child: Text(
@@ -608,7 +608,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
             child: Center(
               child: Column(
                 children: [
-                  const FaIcon(FontAwesomeIcons.circleCheck, color: OmiColors.textTertiary, size: 32),
+                  FaIcon(FontAwesomeIcons.circleCheck, color: OmiColors.textTertiary, size: 32),
                   const SizedBox(height: OmiSpacing.sm),
                   Text(
                     context.l10n.noDisconnectsRecorded,

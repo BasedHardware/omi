@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 
 void main() {
@@ -32,6 +32,118 @@ void main() {
 
     final taps = <(int, bool)>[];
     final warmups = <int>[];
+    await _pumpBar(
+      tester,
+      provider,
+      BottomNavBar(
+        onTabWarmup: warmups.add,
+        onTabTap: (index, isRepeat) {
+          taps.add((index, isRepeat));
+          provider.setIndex(index);
+        },
+      ),
+    );
+
+    expect(_glyphFor(tester, 0).asset, 'assets/icons/tab-today-fill.svg');
+    expect(_glyphFor(tester, 0).color, OmiColors.textPrimary);
+    expect(_glyphFor(tester, 2).color, OmiColors.dockTabIdle);
+
+    provider.setIndex(2);
+    await tester.pump();
+
+    expect(_glyphFor(tester, 0).asset, 'assets/icons/tab-today.svg');
+    expect(_glyphFor(tester, 0).color, OmiColors.dockTabIdle);
+    expect(_glyphFor(tester, 2).color, OmiColors.textPrimary);
+
+    provider.setIndex(0);
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('bottom_nav_tab_2')));
+    await tester.tap(find.byKey(const Key('bottom_nav_tab_2')));
+
+    expect(taps, [(2, false), (2, true)]);
+    expect(warmups, [2, 2]);
+  });
+
+  testWidgets('announces each tab once, by its name, with its selected state', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final provider = HomeProvider();
+    addTearDown(provider.dispose);
+
+    await _pumpBar(tester, provider, BottomNavBar(onTabTap: (_, __) {}));
+
+    // The design's app map: Today · Conversations · To do · Apps (devices live in Settings).
+    for (final label in ['Today', 'Conversations', 'To do', 'Apps']) {
+      expect(find.bySemanticsLabel(label), findsOneWidget, reason: 'the $label tab is announced exactly once');
+    }
+    final home = tester.getSemantics(find.bySemanticsLabel('Today')).getSemanticsData();
+    expect(home.flagsCollection.isButton, isTrue);
+    expect(home.flagsCollection.isSelected.toBoolOrNull(), isTrue);
+    expect(home.hasAction(SemanticsAction.tap), isTrue);
+    final tasks = tester.getSemantics(find.bySemanticsLabel('To do')).getSemanticsData();
+    expect(tasks.flagsCollection.isSelected.toBoolOrNull(), isFalse);
+    semantics.dispose();
+  });
+
+  testWidgets('the Ask button opens chat and is only shown when there is somewhere to go', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final provider = HomeProvider();
+    addTearDown(provider.dispose);
+
+    await _pumpBar(tester, provider, BottomNavBar(onTabTap: (_, __) {}));
+    expect(find.byKey(const Key('bottom_nav_ask')), findsNothing);
+
+    var asked = 0;
+    await _pumpBar(tester, provider, BottomNavBar(onTabTap: (_, __) {}, onAskTap: () => asked++));
+    expect(find.bySemanticsLabel('Ask Omi'), findsOneWidget);
+    final ask = tester.getRect(find.byKey(const Key('bottom_nav_ask')));
+    expect(ask.width, greaterThanOrEqualTo(OmiSize.minTap));
+    expect(ask.height, greaterThanOrEqualTo(OmiSize.minTap));
+    await tester.tap(find.byKey(const Key('bottom_nav_ask')));
+    expect(asked, 1);
+    semantics.dispose();
+  });
+
+  testWidgets('holding the Omi mark for two seconds opens Memories; a tap still asks', (tester) async {
+    final semantics = tester.ensureSemantics();
+    final provider = HomeProvider();
+    addTearDown(provider.dispose);
+    var asked = 0;
+    var held = 0;
+    await _pumpBar(
+      tester,
+      provider,
+      BottomNavBar(onTabTap: (_, __) {}, onAskTap: () => asked++, onAskHold: () => held++),
+    );
+    final mark = find.byKey(const Key('bottom_nav_ask'));
+
+    // A short press is still Ask, however long it takes to lift under two seconds.
+    await tester.longPressAt(tester.getCenter(mark)); // the default long press is ~0.5 s
+    await tester.pump();
+    expect(held, 0, reason: 'half a second is not the hidden gesture');
+    expect(asked, 1, reason: 'a press released before two seconds is a tap: Ask');
+
+    final gesture = await tester.startGesture(tester.getCenter(mark));
+    await tester.pump(kAskHoldDuration + const Duration(milliseconds: 50));
+    await gesture.up();
+    await tester.pump();
+    expect(held, 1);
+
+    // Screen readers cannot discover a hidden hold, so Memories is a named action on the mark.
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('Ask Omi')),
+      isSemantics(customActions: const [CustomSemanticsAction(label: 'Memories')]),
+    );
+    expect(asked, 1, reason: 'the hold did not also ask');
+    semantics.dispose();
+  });
+
+  testWidgets('open Ask covers the whole screen: the header and floating buttons sit under the blur', (tester) async {
+    final provider = HomeProvider();
+    addTearDown(provider.dispose);
+    var header = 0;
+    var newTask = 0;
+    final asked = <String>[];
     await tester.pumpWidget(
       ChangeNotifierProvider<HomeProvider>.value(
         value: provider,
@@ -39,136 +151,102 @@ void main() {
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
-            body: BottomNavBar(
-              onTabWarmup: warmups.add,
-              onTabTap: (index, isRepeat) {
-                taps.add((index, isRepeat));
-                provider.setIndex(index);
-              },
-            ),
+            appBar: AppBar(actions: [
+              IconButton(key: const Key('header_button'), onPressed: () => header++, icon: const Icon(Icons.search)),
+            ]),
+            body: Stack(children: [
+              const SizedBox.expand(), // the page under the dock, as Home's tabs are
+              BottomNavBar(onTabTap: (_, __) {}, onAskTap: () {}, onAskSubmit: asked.add),
+              // A floating action placed above the dock, as To do's New Task is.
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 140,
+                child: TextButton(
+                  key: const Key('new_task_button'),
+                  onPressed: () => newTask++,
+                  child: const Text('New Task'),
+                ),
+              ),
+            ]),
           ),
         ),
       ),
     );
 
-    expect(_colorFor(tester, FontAwesomeIcons.house), Colors.white);
-    expect(_colorFor(tester, FontAwesomeIcons.listCheck), Colors.grey);
+    await tester.tap(find.byKey(const Key('bottom_nav_ask')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('bottom_nav_ask_field')), findsOneWidget);
+    expect(find.byKey(const Key('bottom_nav_ask_scrim')), findsOneWidget);
+    expect(find.byType(BackdropFilter), findsWidgets, reason: 'everything behind the question blurs');
 
-    provider.setIndex(2);
-    await tester.pump();
+    // Taps meant for the header or the floating button land on the scrim, which closes Ask.
+    await tester.tap(find.byKey(const Key('new_task_button')), warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(newTask, 0);
+    expect(find.byKey(const Key('bottom_nav_ask_field')), findsNothing, reason: 'the scrim closed Ask');
 
-    expect(_colorFor(tester, FontAwesomeIcons.house), Colors.grey);
-    expect(_colorFor(tester, FontAwesomeIcons.listCheck), Colors.white);
+    await tester.tap(find.byKey(const Key('bottom_nav_ask')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('header_button')), warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(header, 0);
 
-    provider.setIndex(0);
-    await tester.pump();
-
-    await tester.tap(_findIcon(FontAwesomeIcons.listCheck));
-    await tester.tap(_findIcon(FontAwesomeIcons.listCheck));
-
-    expect(taps, [(2, false), (2, true)]);
-    expect(warmups, [2, 2]);
+    // Closed again, the page is reachable as before and the dock is back in place.
+    await tester.tap(find.byKey(const Key('header_button')));
+    expect(header, 1);
+    expect(find.byKey(const Key('bottom_nav_ask')), findsOneWidget);
   });
 
-  testWidgets('announces each icon-only tab to screen readers', (tester) async {
-    final semantics = tester.ensureSemantics();
+  testWidgets('a thumb that drifts a little still holds; one that slides away does nothing', (tester) async {
     final provider = HomeProvider();
     addTearDown(provider.dispose);
-
-    await tester.pumpWidget(
-      ChangeNotifierProvider<HomeProvider>.value(
-        value: provider,
-        child: MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: BottomNavBar(onTabTap: (_, __) {})),
-        ),
-      ),
-    );
-
-    for (final label in ['Home', 'Conversations', 'Tasks', 'Apps']) {
-      expect(find.bySemanticsLabel(label), findsOneWidget, reason: 'the $label tab has no visible text');
-    }
-    final home = tester.getSemantics(find.bySemanticsLabel('Home')).getSemanticsData();
-    expect(home.flagsCollection.isButton, isTrue);
-    expect(home.flagsCollection.isSelected.toBoolOrNull(), isTrue);
-    expect(home.hasAction(SemanticsAction.tap), isTrue);
-    final tasks = tester.getSemantics(find.bySemanticsLabel('Tasks')).getSemanticsData();
-    expect(tasks.flagsCollection.isSelected.toBoolOrNull(), isFalse);
-    semantics.dispose();
-  });
-
-  testWidgets('keeps the tab row clear of the system navigation bar inset', (tester) async {
-    // A 3-button Android navigation bar is roughly this tall and fully opaque.
-    const systemNavBarHeight = 48.0;
-
-    final withoutInset = await _layoutForBottomInset(tester, viewPadding: 0, padding: 0);
-    final withInset = await _layoutForBottomInset(
+    var asked = 0;
+    var held = 0;
+    await _pumpBar(
       tester,
-      viewPadding: systemNavBarHeight,
-      padding: systemNavBarHeight,
+      provider,
+      BottomNavBar(onTabTap: (_, __) {}, onAskTap: () => asked++, onAskHold: () => held++),
     );
+    final center = tester.getCenter(find.byKey(const Key('bottom_nav_ask')));
 
-    final safeBottom = withInset.screenBottom - systemNavBarHeight;
-    for (final entry in withInset.iconBottoms.entries) {
-      expect(
-        entry.value,
-        lessThanOrEqualTo(safeBottom),
-        reason: 'the ${entry.key} tab must not be drawn behind the system navigation bar',
-      );
-    }
+    final drifting = await tester.startGesture(center);
+    await tester.pump(const Duration(milliseconds: 600));
+    await drifting.moveBy(const Offset(0, -20)); // past the arena's 18 pt slop
+    await tester.pump(kAskHoldDuration);
+    await drifting.up();
+    await tester.pump();
+    expect(held, 1, reason: 'a hold survives a small drift');
+    expect(asked, 0);
 
-    // The row lifts by exactly the reported inset: the inset is reserved once,
-    // never scaled or stacked on a second allowance.
-    for (final label in withoutInset.iconBottoms.keys) {
-      expect(
-        withoutInset.iconBottoms[label]! - withInset.iconBottoms[label]!,
-        moreOrLessEquals(systemNavBarHeight, epsilon: 0.5),
-        reason: 'the $label tab should lift by the bottom inset',
-      );
-    }
+    final sliding = await tester.startGesture(center);
+    await tester.pump(const Duration(milliseconds: 300));
+    await sliding.moveBy(const Offset(-60, 0));
+    await tester.pump(kAskHoldDuration);
+    await sliding.up();
+    await tester.pump();
+    expect(held, 1, reason: 'sliding off is not a hold');
+    expect(asked, 0, reason: 'nor a tap');
   });
 
-  testWidgets('sits directly on the system inset instead of stacking its own gap on top', (tester) async {
-    // iPhone home-indicator inset. The bar used to keep ~27pt of empty space
-    // under its icons and then add the inset below that, leaving the icons
-    // ~74pt above the screen edge. A platform tab bar puts its content row
-    // straight on the inset: UITabBar is a 49pt row above the 34pt safe area
-    // (Apple HIG, Tab bars / Layout), Material bottom navigation a 56dp row.
-    const homeIndicatorInset = 34.0;
-
-    for (final inset in [0.0, homeIndicatorInset, 48.0]) {
+  testWidgets('floats in the home-indicator area but never behind an opaque system bar', (tester) async {
+    for (final (inset, expectedOffset) in [(0.0, 8.0), (34.0, 25.0), (48.0, 56.0)]) {
       final layout = await _layoutForBottomInset(tester, viewPadding: inset, padding: inset);
-      final safeBottom = layout.screenBottom - inset;
-
+      expect(
+        layout.screenBottom - layout.capsule.bottom,
+        moreOrLessEquals(expectedOffset, epsilon: 0.5),
+        reason: 'with a ${inset}pt inset the capsule sits ${expectedOffset}pt above the edge',
+      );
+      expect(layout.capsule.height, moreOrLessEquals(kBottomNavRowHeight, epsilon: 0.5));
       for (final entry in layout.tapTargets.entries) {
-        final target = entry.value;
-        expect(
-          target.bottom,
-          moreOrLessEquals(safeBottom, epsilon: 0.5),
-          reason: 'the ${entry.key} tap target should end exactly where the ${inset}pt inset begins',
-        );
-        expect(
-          target.height,
-          inInclusiveRange(48.0, 56.0),
-          reason: 'the ${entry.key} row should be a platform-sized tab row, at least a 48dp target',
-        );
-        expect(target.width, greaterThanOrEqualTo(48.0));
+        expect(entry.value.height, greaterThanOrEqualTo(OmiSize.minTap), reason: '${entry.key} target height');
+        expect(entry.value.width, greaterThanOrEqualTo(OmiSize.minTap), reason: '${entry.key} target width');
       }
-
-      for (final entry in layout.iconBottoms.entries) {
-        expect(
-          safeBottom - entry.value,
-          inInclusiveRange(8.0, 16.0),
-          reason: 'the ${entry.key} icon should sit just above the inset, not float over a second gap',
-        );
-      }
-
-      expect(layout.barHeight, moreOrLessEquals(kBottomNavBarHeight + inset, epsilon: 0.5));
     }
   });
 
-  testWidgets('keeps the chat bar and page clearances tied to the row geometry', (tester) async {
+  testWidgets('keeps the floating slot and page clearances tied to the bar geometry', (tester) async {
+    late double offset;
     late double chatBarOffset;
     late double clearance;
     late double chatClearance;
@@ -177,6 +255,7 @@ void main() {
         data: const MediaQueryData(viewPadding: EdgeInsets.only(bottom: 34)),
         child: Builder(
           builder: (context) {
+            offset = bottomNavBarBottomOffset(context);
             chatBarOffset = bottomNavChatBarOffset(context);
             clearance = bottomNavBarClearance(context);
             chatClearance = homeChatBarClearance(context);
@@ -186,52 +265,48 @@ void main() {
       ),
     );
 
-    // The chat bar floats above the tappable row, never over it.
-    expect(chatBarOffset, greaterThanOrEqualTo(34 + kBottomNavRowHeight));
-    // Scrolling content clears the whole bar, fade and inset included.
-    expect(clearance, 34 + kBottomNavBarHeight);
-    // Home content clears the chat bar that floats above the row.
+    // What floats above the bar sits above the capsule, never over it.
+    expect(chatBarOffset, greaterThanOrEqualTo(offset + kBottomNavRowHeight));
+    // Scrolling content clears the whole capsule.
+    expect(clearance, greaterThan(offset + kBottomNavRowHeight));
+    // Home content clears the slot that floats above the bar.
     expect(chatClearance, greaterThan(chatBarOffset + kHomeChatBarHeight));
   });
 
   testWidgets('reserves viewPadding, which a keyboard does not collapse', (tester) async {
-    // The home Scaffold sets resizeToAvoidBottomInset: false, so an open
-    // keyboard leaves the system bar exactly where it was while driving
-    // padding.bottom to zero. Reading padding instead of viewPadding would put
-    // the tab row back under the navigation bar in precisely this state, so
-    // pin the distinction rather than the value: padding is zero here and only
-    // viewPadding is set.
+    // The home Scaffold sets resizeToAvoidBottomInset: false, so an open keyboard leaves the
+    // system bar exactly where it was while driving padding.bottom to zero. Reading padding
+    // instead of viewPadding would put the bar back under the navigation bar in precisely this
+    // state, so pin the distinction: padding is zero here and only viewPadding is set.
     const systemNavBarHeight = 48.0;
 
-    final keyboardOpen = await _layoutForBottomInset(
-      tester,
-      viewPadding: systemNavBarHeight,
-      padding: 0,
-    );
+    final keyboardOpen = await _layoutForBottomInset(tester, viewPadding: systemNavBarHeight, padding: 0);
 
-    final safeBottom = keyboardOpen.screenBottom - systemNavBarHeight;
-    for (final entry in keyboardOpen.iconBottoms.entries) {
-      expect(
-        entry.value,
-        lessThanOrEqualTo(safeBottom),
-        reason: 'the ${entry.key} tab must reserve viewPadding, not padding',
-      );
-    }
+    expect(keyboardOpen.capsule.bottom, lessThanOrEqualTo(keyboardOpen.screenBottom - systemNavBarHeight));
   });
 }
 
-final _tabIcons = <(String, FaIconData)>[
-  ('Home', FontAwesomeIcons.house),
-  ('Conversations', FontAwesomeIcons.comments),
-  ('Tasks', FontAwesomeIcons.listCheck),
-  ('Apps', FontAwesomeIcons.puzzlePiece),
-];
+Future<void> _pumpBar(WidgetTester tester, HomeProvider provider, Widget bar) {
+  return tester.pumpWidget(
+    ChangeNotifierProvider<HomeProvider>.value(
+      value: provider,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: bar),
+      ),
+    ),
+  );
+}
 
-/// Pumps the bar under the given bottom [viewPadding] and [padding] and reports
-/// where the tab icons landed relative to the bottom of the screen. The two are
-/// separate so a test can pin which inset the bar actually reads.
-Future<({double screenBottom, double barHeight, Map<String, double> iconBottoms, Map<String, Rect> tapTargets})>
-    _layoutForBottomInset(
+OmiGlyph _glyphFor(WidgetTester tester, int index) => tester.widget<OmiGlyph>(
+      find.descendant(of: find.byKey(Key('bottom_nav_tab_$index')), matching: find.byType(OmiGlyph)),
+    );
+
+/// Pumps the bar under the given bottom [viewPadding] and [padding] and reports where the capsule
+/// and its tap targets landed. The two insets are separate so a test can pin which one the bar
+/// reads.
+Future<({double screenBottom, Rect capsule, Map<String, Rect> tapTargets})> _layoutForBottomInset(
   WidgetTester tester, {
   required double viewPadding,
   required double padding,
@@ -247,9 +322,6 @@ Future<({double screenBottom, double barHeight, Map<String, double> iconBottoms,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Builder(
           builder: (context) => MediaQuery(
-            // viewPadding is what survives a keyboard; the home Scaffold sets
-            // resizeToAvoidBottomInset: false, so that is the inset the bar
-            // has to respect.
             data: MediaQuery.of(context).copyWith(
               viewPadding: EdgeInsets.only(bottom: viewPadding),
               padding: EdgeInsets.only(bottom: padding),
@@ -265,18 +337,10 @@ Future<({double screenBottom, double barHeight, Map<String, double> iconBottoms,
 
   return (
     screenBottom: tester.getRect(find.byType(Scaffold)).bottom,
-    barHeight:
-        tester.getRect(find.descendant(of: find.byType(BottomNavBar), matching: find.byType(Container)).first).height,
-    iconBottoms: {
-      for (final (label, icon) in _tabIcons) label: tester.getRect(_findIcon(icon)).bottom,
-    },
+    capsule: tester.getRect(find.byType(OmiGlass).first),
     tapTargets: {
-      for (final (label, icon) in _tabIcons)
-        label: tester.getRect(find.ancestor(of: _findIcon(icon), matching: find.byType(InkWell)).first),
+      for (final (index, label) in const [(0, 'Today'), (1, 'Conversations'), (2, 'To do'), (3, 'Apps')])
+        label: tester.getRect(find.byKey(Key('bottom_nav_tab_$index'))),
     },
   );
 }
-
-Finder _findIcon(FaIconData icon) => find.byWidgetPredicate((widget) => widget is FaIcon && widget.icon == icon.data);
-
-Color _colorFor(WidgetTester tester, FaIconData icon) => tester.widget<FaIcon>(_findIcon(icon)).color!;

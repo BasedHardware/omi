@@ -88,7 +88,7 @@ void main() {
       expect(close.left, greaterThanOrEqualTo(title.right), reason: 'the close X is trailing');
       final sheet = tester.widget<BottomSheet>(find.byType(BottomSheet));
       expect(sheet.showDragHandle, isTrue);
-      expect(sheet.backgroundColor, OmiColors.surface1);
+      expect(sheet.backgroundColor, OmiColors.sheet);
     });
 
     testWidgets('closes on X with a null result', (tester) async {
@@ -216,7 +216,9 @@ void main() {
       );
       expect(find.text('Account'), findsOneWidget);
       expect(tester.getSize(find.byType(OmiSettingsRow).first).height, greaterThanOrEqualTo(48));
-      expect(find.byIcon(Icons.chevron_right), findsOneWidget, reason: 'only the tappable row has a chevron');
+      // v2 chevron: the 14pt glyph.
+      expect(find.byWidgetPredicate((w) => w is OmiGlyph && w.asset == OmiGlyphs.chevronRight), findsOneWidget,
+          reason: 'only the tappable row has a chevron');
       await tester.tap(find.text('English'));
       expect(taps, 1);
     });

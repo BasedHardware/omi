@@ -14,7 +14,7 @@ enum OmiSpinnerSize {
   final double diameter;
 }
 
-/// The one activity indicator: white, 2pt stroke, three sizes.
+/// The one activity indicator: [OmiColors.accent], 2pt stroke, three sizes.
 ///
 /// Use it for every spinner — in a button, a row, a list footer, an overlay. For a page body that
 /// is loading for the first time use [OmiLoadingState], which centres a regular spinner with an

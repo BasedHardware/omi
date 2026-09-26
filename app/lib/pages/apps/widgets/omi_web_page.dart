@@ -83,7 +83,7 @@ class _OmiWebPageState extends State<OmiWebPage> {
         if (mounted) setState(() => _canGoBack = canGoBack);
       },
       child: Scaffold(
-        appBar: AppBar(
+        appBar: OmiAppBar(
           leading: const OmiBackButton(),
           title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
@@ -96,7 +96,7 @@ class _OmiWebPageState extends State<OmiWebPage> {
                 child: OmiErrorState(message: context.l10n.couldNotLoadPage, onRetry: _retry),
               )
             else if (_loading)
-              const ColoredBox(color: OmiColors.surface0, child: OmiLoadingState()),
+              ColoredBox(color: OmiColors.surface0, child: const OmiLoadingState()),
           ],
         ),
       ),

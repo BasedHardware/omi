@@ -108,6 +108,8 @@ final class QuickActionsIconPatcher: NSObject {
   private let appleRemindersService = AppleRemindersService()
   private let appleHealthService = AppleHealthService()
   private var phoneMicController: PhoneMicController?
+  // Any keeps the Runner's existing iOS 15 deployment support intact.
+  private var liveActivityManager: Any?
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
 
@@ -138,6 +140,9 @@ final class QuickActionsIconPatcher: NSObject {
       return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }
     GeneratedPluginRegistrant.register(with: self)
+    if #available(iOS 16.1, *) {
+        liveActivityManager = LiveActivityManager(messenger: controller.binaryMessenger)
+    }
     // Read-only admission evidence for the separately signed capture lane.
     // Missing flags stay nil so Dart fails closed before app-owned networking.
     FlutterMethodChannel(name: "omi/physical_qualification", binaryMessenger: controller.binaryMessenger)
@@ -153,6 +158,21 @@ final class QuickActionsIconPatcher: NSObject {
           "firebase_crashlytics_collection": info["FirebaseCrashlyticsCollectionEnabled"] ?? NSNull(),
           "firebase_data_collection": info["FirebaseDataCollectionDefaultEnabled"] ?? NSNull()
         ])
+      }
+    // The v2 haptic vocabulary's notification moments (success, warning, error) and the soft
+    // impact when capture starts. Flutter's HapticFeedback has impacts and selection only.
+    FlutterMethodChannel(name: "omi/haptics", binaryMessenger: controller.binaryMessenger)
+      .setMethodCallHandler { call, result in
+        switch call.method {
+        case "success": UINotificationFeedbackGenerator().notificationOccurred(.success)
+        case "warning": UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        case "error": UINotificationFeedbackGenerator().notificationOccurred(.error)
+        case "soft": UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        default:
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        result(nil)
       }
     QuickActionsIconPatcher.shared.startObserving()
       
@@ -361,11 +381,36 @@ final class QuickActionsIconPatcher: NSObject {
         if #available(iOS 14.0, *) {
           WidgetCenter.shared.reloadTimelines(ofKind: "OmiBatteryWidget")
         }
+      case "updateChargingState":
+        let isCharging = (args["isCharging"] as? Bool) ?? (args["isCharging"] as? NSNumber)?.boolValue ?? false
+        defaults?.set(isCharging, forKey: "widget_is_charging")
+        if #available(iOS 14.0, *) {
+          WidgetCenter.shared.reloadTimelines(ofKind: "OmiBatteryWidget")
+        }
       case "updateMuteState":
         let isMuted = (args["isMuted"] as? Bool) ?? (args["isMuted"] as? NSNumber)?.boolValue ?? false
         defaults?.set(isMuted, forKey: "widget_is_muted")
         if #available(iOS 14.0, *) {
           WidgetCenter.shared.reloadAllTimelines()
+        }
+      case "updateWidgetData":
+        // A JSON document for a Home Screen widget (Devices, Up next, Latest); a missing one clears it.
+        let kinds = [
+          "widget_devices": "OmiBatteryWidget",
+          "widget_up_next": "OmiUpNextWidget",
+          "widget_latest": "OmiLatestWidget",
+        ]
+        guard let key = args["key"] as? String, let kind = kinds[key] else {
+          result(FlutterError(code: "UNKNOWN_WIDGET_KEY", message: "No widget reads this key", details: args["key"]))
+          return
+        }
+        if let json = args["json"] as? String {
+          defaults?.set(json, forKey: key)
+        } else {
+          defaults?.removeObject(forKey: key)
+        }
+        if #available(iOS 14.0, *) {
+          WidgetCenter.shared.reloadTimelines(ofKind: kind)
         }
       default:
         result(FlutterMethodNotImplemented)

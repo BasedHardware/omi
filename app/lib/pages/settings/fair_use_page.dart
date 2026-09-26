@@ -61,7 +61,7 @@ class _FairUsePageState extends State<FairUsePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.fairUsePolicy)),
+      appBar: OmiAppBar(leading: const OmiBackButton(), title: Text(context.l10n.fairUsePolicy)),
       body: _isLoading
           ? const OmiLoadingState()
           : _error != null || _status == null
@@ -150,7 +150,7 @@ class _FairUsePageState extends State<FairUsePage> {
                             style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontFamily: 'monospace'),
                           ),
                           const SizedBox(width: OmiSpacing.xxs),
-                          const Icon(Icons.copy, size: 14, color: OmiColors.textSecondary),
+                          Icon(Icons.copy, size: 14, color: OmiColors.textSecondary),
                         ],
                       ),
                     ),
@@ -172,7 +172,7 @@ class _FairUsePageState extends State<FairUsePage> {
 
     return Container(
       padding: const EdgeInsets.all(OmiSpacing.lg),
-      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -333,11 +333,11 @@ class _FairUsePageState extends State<FairUsePage> {
       padding: const EdgeInsets.only(top: OmiSpacing.sm),
       child: Container(
         padding: const EdgeInsets.all(14),
-        decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.info_outline, color: OmiColors.textSecondary, size: 16),
+            Icon(Icons.info_outline, color: OmiColors.textSecondary, size: 16),
             const SizedBox(width: 10),
             Expanded(
               child: Text(message, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.4)),

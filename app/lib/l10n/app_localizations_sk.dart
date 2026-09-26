@@ -1865,9 +1865,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get openSettings => 'Otvoriť nastavenia';
 
   @override
-  String get whatsYourName => 'Ako sa voláš?';
-
-  @override
   String get speakTranscribeSummarize => 'Hovoriť. Prepisovať. Sumarizovať.';
 
   @override
@@ -1881,13 +1878,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get termsOfUse => 'Podmienky používania';
-
-  @override
-  String get omiYourAiCompanion => 'Omi – Váš AI spoločník';
-
-  @override
-  String get captureEveryMoment =>
-      'Zachyťte každý moment. Získajte zhrnutia\npoháňané AI. Nikdy viac si nerobte poznámky.';
 
   @override
   String get appleWatchSetup => 'Nastavenie Apple Watch';
@@ -1932,18 +1922,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String errorStartingRecording(String error) {
     return 'Chyba pri spustení nahrávania: $error';
   }
-
-  @override
-  String get selectPrimaryLanguage => 'Vyberte svoj primárny jazyk';
-
-  @override
-  String get languageBenefits => 'Nastavte svoj jazyk pre presnejšie prepisy a personalizovaný zážitok';
-
-  @override
-  String get whatsYourPrimaryLanguage => 'Aký je váš primárny jazyk?';
-
-  @override
-  String get selectYourLanguage => 'Vyberte svoj jazyk';
 
   @override
   String get personalGrowthJourney => 'Vaša cesta osobného rastu s AI, ktorá počúva každé vaše slovo.';
@@ -3368,9 +3346,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get dataProtection => 'Ochrana dát';
-
-  @override
-  String get yourDataIsProtected => 'Vaše dáta sú chránené a riadia sa našimi ';
 
   @override
   String get pleaseSelectYourPrimaryLanguage => 'Prosím vyberte svoj primárny jazyk';
@@ -5043,10 +5018,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'Ďalšia hlasová vzorka odstránená';
-
-  @override
-  String get consentDataMessage =>
-      'Pokračovaním budú vaše konverzácie, nahrávky a osobné údaje bezpečne uložené na našich serveroch. Vaše audio nahrávky a prepisy sú spracovávané AI službami tretích strán (vrátane Deepgram na prepis a OpenAI na analýzu), aby vám poskytli poznatky založené na AI a umožnili všetky funkcie aplikácie.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -7065,9 +7036,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Pripomienka Omi';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName odpojené';
   }
@@ -7758,9 +7726,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get authorizingMcpServer => 'Autorizácia…';
-
-  @override
-  String get whereDidYouHearAboutOmi => 'Ako ste nás našli?';
 
   @override
   String get tiktok => 'TikTok';
@@ -9944,9 +9909,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripcia neprijíma zvuk';
 
   @override
-  String get tapPlusToStartRecording => 'Ťuknutím na tlačidlo nahrávania spustíte nahrávanie';
-
-  @override
   String get chatBlockTask => 'Úloha';
 
   @override
@@ -10663,9 +10625,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get deviceConnecting => 'Pripája sa…';
 
   @override
-  String get recordOptionsTip => 'Tip: klepnutím na šípku na tlačidle nahrávania nahráte telefonický hovor.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Aktualizácia zlyhala';
 
   @override
@@ -11205,12 +11164,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get keepUsingPendant => 'Ďalej používať prívesok';
 
   @override
-  String get recordWith => 'Nahrať pomocou';
-
-  @override
-  String get moreWaysToRecord => 'Ďalšie spôsoby nahrávania';
-
-  @override
   String get openCall => 'Otvoriť hovor';
 
   @override
@@ -11256,4 +11209,538 @@ class AppLocalizationsSk extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name a ďalší';
   }
+
+  @override
+  String get alreadyHaveAccount => 'Už máte účet?';
+
+  @override
+  String get signInToOmi => 'Prihláste sa do Omi';
+
+  @override
+  String get signInSubtitle => 'Vaše rozhovory a spomienky sú vo vašom účte na telefóne, Macu aj na webe.';
+
+  @override
+  String onboardingAllSetName(String name) {
+    return 'Všetko je pripravené, $name.';
+  }
+
+  @override
+  String get completeHomeBody => 'Váš deň, úlohy a zhrnutia na jednom mieste.';
+
+  @override
+  String get completeAskTitle => 'Opýtať sa';
+
+  @override
+  String get foundOmiOptionalHint => 'Nepovinné — pomôže to malému tímu zistiť, čo funguje.';
+
+  @override
+  String get consentTitle => 'Vaše údaje jednoducho a zrozumiteľne';
+
+  @override
+  String get consentSubtitle => 'Skôr než Omi začne počúvať, tu je presne, čo sa deje s tým, čo počuje.';
+
+  @override
+  String get consentStoredTitle => 'Čo sa ukladá';
+
+  @override
+  String get consentStoredBody =>
+      'Vaše zvukové záznamy, prepisy a podrobnosti, ktoré sa Omi dozvie, sú bezpečne uložené vo vašom účte.';
+
+  @override
+  String get consentProcessorsTitle => 'Kto ich spracúva';
+
+  @override
+  String get consentProcessorsBody =>
+      'Reč prepisuje Deepgram a analyzuje OpenAI, aby vznikli zhrnutia, úlohy a spomienky.';
+
+  @override
+  String get consentControlTitle => 'Čo máte pod kontrolou';
+
+  @override
+  String get consentControlBody => 'Odstráňte akýkoľvek rozhovor, spomienku alebo celý účet, kedykoľvek chcete.';
+
+  @override
+  String get readPrivacyPolicy => 'Prečítať zásady ochrany osobných údajov';
+
+  @override
+  String get whatShouldOmiCallYou => 'Ako vás má Omi volať?';
+
+  @override
+  String get nameUsageHint => 'Omi to používa na označenie vás v prepisoch a exportoch.';
+
+  @override
+  String get yourNamePlaceholder => 'Vaše meno';
+
+  @override
+  String get whatLanguageDoYouSpeakMost => 'Akým jazykom hovoríte najčastejšie?';
+
+  @override
+  String get languageOnboardingSubtitle => 'Omi prepisuje najlepšie, keď jazyk pozná. Ďalšie môžete pridať neskôr.';
+
+  @override
+  String get permissionsFewTitle => 'Niekoľko povolení';
+
+  @override
+  String get permissionsFewSubtitle => 'Omi žiada len o to, čo používa. Zmeniť to môžete kedykoľvek v Nastaveniach.';
+
+  @override
+  String get permissionsContinueNote =>
+      '„Pokračovať“ o nič nežiada. Každé povolenie sa vyžiada, až keď ťuknete na „Povoliť“.';
+
+  @override
+  String get howDidYouHearAboutOmi => 'Ako ste sa o Omi dozvedeli?';
+
+  @override
+  String get showOnLockScreen => 'Zobraziť na zamknutej obrazovke';
+
+  @override
+  String get seeAll => 'Zobraziť všetko';
+
+  @override
+  String get upNext => 'Na rade';
+
+  @override
+  String get allTasks => 'Všetky úlohy';
+
+  @override
+  String get thisWeek => 'Tento týždeň';
+
+  @override
+  String capturedDuration(String duration) {
+    return 'Zaznamenané $duration';
+  }
+
+  @override
+  String newMemoriesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nové spomienky: $count',
+      one: '1 nová spomienka',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncingFromPendant => 'Synchronizácia z prívesku';
+
+  @override
+  String get pendantRecordingsSynced => 'Nahrávky z prívesku sú synchronizované';
+
+  @override
+  String recordedOnPendantWhileAway(String duration) {
+    return '~$duration nahrané na prívesok, kým bol telefón mimo dosahu';
+  }
+
+  @override
+  String dailyRecapOn(String day) {
+    return 'Denné zhrnutie · $day';
+  }
+
+  @override
+  String taskDueDayTime(String day, String time) {
+    return '$day, $time';
+  }
+
+  @override
+  String fromConversation(String title) {
+    return 'Z: $title';
+  }
+
+  @override
+  String get endCapture => 'Ukončiť';
+
+  @override
+  String get toDo => 'Úlohy';
+
+  @override
+  String get devices => 'Zariadenia';
+
+  @override
+  String get devicesSubtitle => 'Všetko, čo za vás počúva. Nahráva vždy len jedno.';
+
+  @override
+  String get addADevice => 'Pridať zariadenie';
+
+  @override
+  String get deviceReady => 'Pripravené';
+
+  @override
+  String get importFromOtherApps => 'Import z iných aplikácií';
+
+  @override
+  String get whatWillYouWear => 'Čo budete nosiť?';
+
+  @override
+  String get pickDeviceSubtitle => 'Ďalšie môžete pridať neskôr. Nahráva vždy len jedno.';
+
+  @override
+  String get alreadyHaveOne => 'Už nejaké máte?';
+
+  @override
+  String get noDeviceHeader => 'Bez zariadenia';
+
+  @override
+  String get omiPendantName => 'Prívesok Omi';
+
+  @override
+  String get allDayConversations => 'Rozhovory celý deň';
+
+  @override
+  String get conversationsAndPhotos => 'Rozhovory + fotky';
+
+  @override
+  String get wristMic => 'Mikrofón na zápästí';
+
+  @override
+  String get glassesAudio => 'Zvuk z okuliarov';
+
+  @override
+  String get bringRecordingsIntoOmi => 'Preneste svoje nahrávky do Omi';
+
+  @override
+  String get useThisIphone => 'Použiť tento iPhone';
+
+  @override
+  String get useThisPhone => 'Použiť tento telefón';
+
+  @override
+  String get startInSeconds => 'Začnite za 10 sekúnd';
+
+  @override
+  String get askAboutThisConversationPlaceholder => 'Opýtať sa na tento rozhovor';
+
+  @override
+  String get summaryStyle => 'Štýl zhrnutia';
+
+  @override
+  String get summaryStyleSubtitle => 'Vyberte aplikáciu, ktorá napíše toto zhrnutie';
+
+  @override
+  String get appearance => 'Vzhľad';
+
+  @override
+  String get appearanceSystem => 'Systém';
+
+  @override
+  String get appearanceLight => 'Svetlý';
+
+  @override
+  String get appearanceDark => 'Tmavý';
+
+  @override
+  String get feel => 'Odozva';
+
+  @override
+  String get haptics => 'Haptika';
+
+  @override
+  String get hapticsSubtitle => 'Jemné ťuknutie, keď niečo dokončíte alebo označíte hviezdičkou';
+
+  @override
+  String get textSize => 'Veľkosť textu';
+
+  @override
+  String get textSizeSubtitle => 'Riadi sa veľkosťou textu v telefóne';
+
+  @override
+  String get appearanceMotionNote =>
+      'Pohyb sa riadi voľbou Obmedziť pohyb v nastaveniach telefónu — všetky slučky vrátane svetla zariadenia sa zastavia.';
+
+  @override
+  String get signedInWithApple => 'Prihlásené cez Apple';
+
+  @override
+  String get signedInWithGoogle => 'Prihlásené cez Google';
+
+  @override
+  String premiumMinutesLeftThisMonth(String left, int limit) {
+    return 'Zostáva $left z $limit prémiových minút tento mesiac';
+  }
+
+  @override
+  String get recordingFrom => 'Nahráva sa z';
+
+  @override
+  String get recordingFromSubtitle => 'Naraz nahráva iba jeden zdroj. Prepnutie ukončí aktuálny rozhovor.';
+
+  @override
+  String get manageDevices => 'Spravovať zariadenia';
+
+  @override
+  String get notListeningTitle => 'Nepočúva';
+
+  @override
+  String get notListeningSubtitle => 'Začnite týmto telefónom alebo pripojte zariadenie, ktoré bude počúvať celý deň.';
+
+  @override
+  String get startListening => 'Začať počúvať';
+
+  @override
+  String get searchEverything => 'Hľadať všade';
+
+  @override
+  String searchResultsCount(int count) {
+    return 'Výsledky · $count';
+  }
+
+  @override
+  String get nothingFound => 'Nič sa nenašlo';
+
+  @override
+  String get searchNothingFoundHint => 'Skúste iné slovo alebo sa opýtajte Omi — rozumie významu, nielen slovám.';
+
+  @override
+  String get askOmiInstead => 'Opýtať sa Omi';
+
+  @override
+  String get recentSearches => 'Nedávne';
+
+  @override
+  String get searchAskSuggestion => 'Čo som sľúbil urobiť tento týždeň?';
+
+  @override
+  String get welcomeRememberTitle => 'Zapamätajte si každý rozhovor.';
+
+  @override
+  String get welcomeRememberSubtitle =>
+      'Noste, čo vám vyhovuje. Omi premení, čo počujete, na poznámky, úlohy a zhrnutie vášho dňa.';
+
+  @override
+  String get memoriesSubtitle => 'Čo Omi vie a odkiaľ to má';
+
+  @override
+  String get memoryTierLongTerm => 'Dlhodobá';
+
+  @override
+  String get memoryTierShortTerm => 'Krátkodobá';
+
+  @override
+  String get memoriesTierNote =>
+      'Nové spomienky začínajú ako krátkodobé. Tie, na ktorých stále záleží, Omi sám presunie medzi dlhodobé.';
+
+  @override
+  String get askEmptyTitle => 'Opýtajte sa na čokoľvek, čo ste počuli.';
+
+  @override
+  String get askEmptySubtitle => 'Omi odpovedá z vašich rozhovorov, spomienok a úloh.';
+
+  @override
+  String get completeListeningTitle => 'Počúvanie';
+
+  @override
+  String get completeListeningBody =>
+      'Modrá znamená, že vás Omi počuje — zo zariadenia, ktoré nosíte, alebo z tohto telefónu.';
+
+  @override
+  String get completeAskAnyBody => 'Klepnite na Opýtať sa a pýtajte sa na čokoľvek, čo ste počuli.';
+
+  @override
+  String get completeDevicesBody => 'Kedykoľvek pridajte nositeľné zariadenie alebo začnite týmto telefónom.';
+
+  @override
+  String get conversationSourceGlasses => 'Okuliare';
+
+  @override
+  String get conversationSourceImported => 'Importované';
+
+  @override
+  String get conversationSourceEmptyHint => 'Z tohto zdroja zatiaľ nič nebolo nahraté.';
+
+  @override
+  String get findMyPendant => 'Nájsť môj prívesok';
+
+  @override
+  String get findMyPendantHint => 'Prehrá zvuk, aby ste ho našli';
+
+  @override
+  String get upToDate => 'Aktuálne';
+
+  @override
+  String get updateAvailable => 'K dispozícii je aktualizácia';
+
+  @override
+  String get storageTitle => 'Úložisko';
+
+  @override
+  String get connectStepTurnOn => 'Zapnite ho a držte ho blízko';
+
+  @override
+  String get connectStepAllowBluetooth => 'Povoľte Bluetooth';
+
+  @override
+  String get connectStepTest => 'Povedzte niečo na skúšku';
+
+  @override
+  String get connectStepTestHint => 'Slová sa tu zobrazujú, ako hovoríte';
+
+  @override
+  String get setUpLater => 'Nastaviť neskôr';
+
+  @override
+  String recapPreviousDay(String day) {
+    return 'Zhrnutie predchádzajúceho dňa: $day';
+  }
+
+  @override
+  String recapNextDay(String day) {
+    return 'Zhrnutie nasledujúceho dňa: $day';
+  }
+
+  @override
+  String get askStarterToday => 'Zhrň dnešok';
+
+  @override
+  String get askStarterPeople => 'S kým som sa stretol?';
+
+  @override
+  String get askStarterOpen => 'Čo ešte zostáva?';
+
+  @override
+  String get peopleSubtitle => 'Hlasy, ktoré Omi rozpozná v prepisoch';
+
+  @override
+  String get usageCurrentPlan => 'Aktuálny plán';
+
+  @override
+  String get appsExplore => 'Objavovať';
+
+  @override
+  String get appOutOfFive => 'z 5';
+
+  @override
+  String get appStatUsers => 'Používatelia';
+
+  @override
+  String homeWelcomeName(String name) {
+    return 'Vitajte, $name';
+  }
+
+  @override
+  String get homeWelcome => 'Vitajte';
+
+  @override
+  String get homeFirstDaySubtitle => 'Váš prvý deň s Omi';
+
+  @override
+  String get homeListeningHeroTitle => 'Omi počúva';
+
+  @override
+  String get homeListeningHeroBody => 'Váš prvý rozhovor sa tu zobrazí minútu po jeho skončení.';
+
+  @override
+  String get homeGettingStarted => 'Začíname';
+
+  @override
+  String get gettingStartedConnect => 'Pripojte zariadenie';
+
+  @override
+  String get gettingStartedConversation => 'Porozprávajte sa';
+
+  @override
+  String get gettingStartedAsk => 'Opýtajte sa Omi';
+
+  @override
+  String get homeGoodToKnow => 'Dobré vedieť';
+
+  @override
+  String get tipFinishTitle => 'Ukončite kedykoľvek';
+
+  @override
+  String get tipFinishBody => 'Ťuknite na Ukončiť – alebo dvakrát stlačte prívesok – a zhrnutie začne hneď.';
+
+  @override
+  String get tipStarTitle => 'Označte dôležité hviezdičkou';
+
+  @override
+  String get tipStarBody => 'Rozhovory s hviezdičkou neskôr ľahko nájdete.';
+
+  @override
+  String get tipPrivateTitle => 'Predvolene súkromné';
+
+  @override
+  String get tipPrivateBody => 'Vaše rozhovory zostávajú súkromné, kým ich nezdieľate.';
+
+  @override
+  String homeGettingStartedProgress(int done, int total) {
+    return '$done z $total';
+  }
+
+  @override
+  String get noFailedRecordings => 'Žiadne neúspešné nahrávky';
+
+  @override
+  String get mapNoPlacesTitle => 'Zatiaľ žiadne miesta';
+
+  @override
+  String get mapNoPlacesMessage => 'Konverzácie sa tu zobrazia, keď Omi vie, kde prebehli.';
+
+  @override
+  String get mergeWithEllipsis => 'Zlúčiť s…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Dokončite nastavenie aplikácie $appName, aby ste ju mohli zapnúť';
+  }
+
+  @override
+  String get greetingUpLate => 'Neskorá hodina';
+
+  @override
+  String get greetingLunchtime => 'Čas na obed';
+
+  @override
+  String get greetingWindingDown => 'Čas na oddych';
+
+  @override
+  String get greetingGoodNight => 'Dobrú noc';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Ešte hore';
+
+  @override
+  String get greetingEarlyStart => 'Skorý štart';
+
+  @override
+  String get greetingNewDay => 'Nový deň';
+
+  @override
+  String get greetingMorning => 'Dobré ráno';
+
+  @override
+  String get greetingBusyMorning => 'Rušné dopoludnie';
+
+  @override
+  String get greetingAfternoon => 'Dobré popoludnie';
+
+  @override
+  String get greetingHomeStretch => 'Finiš dňa';
+
+  @override
+  String get greetingEvening => 'Dobrý večer';
+
+  @override
+  String get unlimitedBadge => 'Neobmedzený';
+
+  @override
+  String get voiceSetupTaskSubline => 'Aby Omi vedel, že ste to vy · asi minúta';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Uložené $saved z $total zvuku';
+  }
+
+  @override
+  String get voiceIntroTitle => 'Predstavte sa';
+
+  @override
+  String get memoryLabel => 'Spomienka';
+
+  @override
+  String get idleReadyHint => 'Ťuknite na Spustiť a to, čo poviete, sa zobrazí tu.';
 }

@@ -139,7 +139,7 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
     Widget bar({required double height, double? width}) => Container(
           height: height,
           width: width ?? double.infinity,
-          decoration: const BoxDecoration(color: OmiColors.textPrimary, borderRadius: OmiRadius.smAll),
+          decoration: BoxDecoration(color: OmiColors.textPrimary, borderRadius: OmiRadius.smAll),
         );
     return Shimmer.fromColors(
       baseColor: OmiColors.surface2,
@@ -202,7 +202,7 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
                       const SizedBox(height: OmiSpacing.xxs),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: 2),
-                        decoration: const BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.pillAll),
+                        decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.pillAll),
                         child: Text(
                           context.l10n.suggestedEvent,
                           style: OmiType.caption.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
@@ -247,7 +247,7 @@ class _CalendarEventPickerSheetState extends State<CalendarEventPickerSheet> {
         padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
         itemCount: _events.length,
         separatorBuilder: (_, __) =>
-            const Divider(color: OmiColors.border, height: 1, indent: OmiSpacing.md, endIndent: OmiSpacing.md),
+            Divider(color: OmiColors.border, height: 1, indent: OmiSpacing.md, endIndent: OmiSpacing.md),
         itemBuilder: (context, index) {
           final event = _events[index];
           return _buildEventTile(event, event.eventId == _suggestedEventId, _linkingEventId == event.eventId);
@@ -295,7 +295,7 @@ class _CalendarEventDetailsSheetState extends State<CalendarEventDetailsSheet> {
         children: [
           Row(
             children: [
-              const Icon(Icons.access_time, size: 16, color: OmiColors.textTertiary),
+              Icon(Icons.access_time, size: 16, color: OmiColors.textTertiary),
               const SizedBox(width: OmiSpacing.xs),
               Expanded(child: Text(dates.timeRange(event.startTime, event.endTime), style: secondary)),
             ],
@@ -305,14 +305,14 @@ class _CalendarEventDetailsSheetState extends State<CalendarEventDetailsSheet> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.people_outline, size: 16, color: OmiColors.textTertiary),
+                Icon(Icons.people_outline, size: 16, color: OmiColors.textTertiary),
                 const SizedBox(width: OmiSpacing.xs),
                 Expanded(child: Text(event.attendees.map(formatAttendeeName).join(', '), style: secondary)),
               ],
             ),
           ],
           const SizedBox(height: OmiSpacing.md),
-          const Divider(color: OmiColors.border),
+          Divider(color: OmiColors.border),
           if (event.htmlLink != null)
             _ActionRow(
               icon: Icons.open_in_new,
@@ -344,19 +344,20 @@ class _ActionRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
-  final Color color;
+  final Color? color;
   final bool loading;
 
   const _ActionRow({
     required this.icon,
     required this.label,
     this.onTap,
-    this.color = OmiColors.textPrimary,
+    this.color,
     this.loading = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final color = this.color ?? OmiColors.textPrimary;
     return Semantics(
       button: true,
       child: InkWell(

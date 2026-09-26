@@ -11,37 +11,15 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/providers/conversation_fetchers.dart';
+import 'package:omi/providers/conversation_source_filter.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/logger.dart';
 
-typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool ok})> Function();
-typedef ConversationPageFetcher = Future<({List<ServerConversation> items, bool ok, bool truncated})> Function();
-typedef ConversationLifecycleFetcher = Future<({ServerConversation? item, bool ok})> Function(String id);
-
-/// Returns null when the check could not be made, so the caller keeps the
-/// last known answer instead of reading a failure as "no recaps".
-typedef DailySummariesChecker = Future<bool?> Function();
-typedef ConversationSearchFetcher = Future<(List<ServerConversation>, int, int)> Function(
-  String query, {
-  int? page,
-  int? limit,
-  required bool includeDiscarded,
-  DateTime? startDate,
-  DateTime? endDate,
-  String? speakerId,
-});
-typedef ConversationSearchResultFetcher = Future<ConversationSearchResult> Function(
-  String query, {
-  int? page,
-  int? limit,
-  required bool includeDiscarded,
-  DateTime? startDate,
-  DateTime? endDate,
-  String? speakerId,
-});
-typedef ConversationDetailsFetcher = Future<ServerConversation?> Function(String conversationId);
+export 'package:omi/providers/conversation_fetchers.dart';
+export 'package:omi/providers/conversation_source_filter.dart';
 
 /// Day-bucket key for a conversation timestamp, in the viewer's **local** timezone.
 ///
@@ -106,6 +84,17 @@ class ConversationProvider extends ChangeNotifier {
 
   // Merge functionality state
   Set<String> mergingConversationIds = {};
+
+  // A merge settles on the server and its push says so ([onMergeCompleted]). A push can arrive late
+  // or not at all (notifications off, a build without push), which left rows on "Merging…" until a
+  // manual refresh, so the involved rows are also probed until the merge settles ([watchMerge]).
+  final Map<String, Timer> _mergeWatchers = {};
+
+  @visibleForTesting
+  Duration mergeProbeInterval = const Duration(seconds: 4);
+
+  @visibleForTesting
+  Duration mergeProbeLimit = const Duration(minutes: 3);
   bool isSelectionModeActive = false;
   Set<String> selectedConversationIds = {};
   StreamSubscription<MergeCompletedEvent>? _mergeCompletedSubscription;
@@ -280,6 +269,10 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void clearUserData() {
+    for (final watcher in _mergeWatchers.values) {
+      watcher.cancel();
+    }
+    _mergeWatchers.clear();
     _sessionGeneration++;
     _searchRequestGeneration++;
     _conversationFetchRevision++;
@@ -298,6 +291,7 @@ class ConversationProvider extends ChangeNotifier {
     selectedStartDate = null;
     selectedEndDate = null;
     selectedFolderId = null;
+    sourceFilter = ConversationSourceFilter.all;
     selectedSpeakerId = null;
     searchStartDate = null;
     searchEndDate = null;
@@ -588,8 +582,25 @@ class ConversationProvider extends ChangeNotifier {
     }
   }
 
+  /// Rev 3: which device (or import) the list shows; the server filters by source. A source stands
+  /// alone: the server indexes source with status only, so it clears the folder and Starred.
+  ConversationSourceFilter sourceFilter = ConversationSourceFilter.all;
+
+  void setSourceFilter(ConversationSourceFilter filter) {
+    if (filter == sourceFilter) return;
+    sourceFilter = filter;
+    if (filter != ConversationSourceFilter.all) {
+      selectedFolderId = null;
+      showStarredOnly = false;
+    }
+    groupedConversations = {};
+    notifyListeners();
+    fetchConversations();
+  }
+
   void toggleStarredFilter() {
     showStarredOnly = !showStarredOnly;
+    if (showStarredOnly) sourceFilter = ConversationSourceFilter.all;
 
     // Clear and refetch conversations to get starred from server
     groupedConversations = {};
@@ -617,6 +628,7 @@ class ConversationProvider extends ChangeNotifier {
   Future<void> filterByFolder(String? folderId) async {
     if (selectedFolderId == folderId) return;
     selectedFolderId = folderId;
+    if (folderId != null) sourceFilter = ConversationSourceFilter.all;
 
     // Clear search when applying folder filter
     previousQuery = "";
@@ -974,12 +986,9 @@ class ConversationProvider extends ChangeNotifier {
         }
       }
 
-      // Filter by starred status if enabled
-      if (showStarredOnly) {
-        if (!convo.starred) {
-          return false;
-        }
-      }
+      // Filter by starred status and by source if set
+      if (showStarredOnly && !convo.starred) return false;
+      if (!sourceFilter.matches(convo)) return false;
 
       // Apply date range filter if selected
       if (selectedStartDate != null && selectedEndDate != null) {
@@ -1147,6 +1156,7 @@ class ConversationProvider extends ChangeNotifier {
         endDate: endDate,
         folderId: selectedFolderId,
         starred: showStarredOnly ? true : null,
+        sources: sourceFilter.apiSources,
       );
       return _packTypedConversationList(typed);
     }
@@ -1236,6 +1246,7 @@ class ConversationProvider extends ChangeNotifier {
   bool _matchesActiveConversationFilters(ServerConversation conversation) {
     if (!showDiscardedConversations && conversation.discarded) return false;
     if (showStarredOnly && !conversation.starred) return false;
+    if (!sourceFilter.matches(conversation)) return false;
     if (selectedStartDate != null && selectedEndDate != null) {
       final conversationDate = conversationLocalDayKey(conversation.startedAt ?? conversation.createdAt);
       final startDay = DateTime(selectedStartDate!.year, selectedStartDate!.month, selectedStartDate!.day);
@@ -1337,6 +1348,7 @@ class ConversationProvider extends ChangeNotifier {
           endDate: endDate,
           folderId: selectedFolderId,
           starred: showStarredOnly ? true : null,
+          sources: sourceFilter.apiSources,
         ),
       );
     } else {
@@ -1347,6 +1359,7 @@ class ConversationProvider extends ChangeNotifier {
         endDate: endDate,
         folderId: selectedFolderId,
         starred: showStarredOnly ? true : null,
+        sources: sourceFilter.apiSources,
       );
       pageResult = (items: fetched.items, ok: fetched.ok, truncated: fetched.truncated, typed: null);
     }
@@ -1577,6 +1590,10 @@ class ConversationProvider extends ChangeNotifier {
     _refreshDebounceTimer?.cancel();
     _initialFetchRetryTimer?.cancel();
     _mergeCompletedSubscription?.cancel();
+    for (final watcher in _mergeWatchers.values) {
+      watcher.cancel();
+    }
+    _mergeWatchers.clear();
     super.dispose();
   }
 
@@ -1909,17 +1926,101 @@ class ConversationProvider extends ChangeNotifier {
         }
         notifyListeners();
       }
-    } else if (conversationIds == null) {
-      mergingConversationIds.addAll(idsToMerge);
-      exitSelectionMode();
-      notifyListeners();
+    } else {
+      if (conversationIds == null) {
+        mergingConversationIds.addAll(idsToMerge);
+        exitSelectionMode();
+        notifyListeners();
+      }
+      watchMerge(response.conversationIds.length >= 2 ? response.conversationIds : idsToMerge);
     }
 
     return response;
   }
 
-  /// Handle merge completion from FCM notification
-  Future<void> onMergeCompleted(String mergedConversationId, List<String> removedConversationIds) async {
+  /// Probes the merging rows every [mergeProbeInterval] until the merge settles: once none is still
+  /// merging (or processing its merged summary), the one that remains replaces them as the push
+  /// would. The push settling it first ends the probe. A merge that never settles within
+  /// [mergeProbeLimit] — or leaves nothing readable (a locked result) — hands the rows back to a
+  /// list refresh, so they are never left on "Merging…".
+  @visibleForTesting
+  void watchMerge(List<String> ids) {
+    if (ids.length < 2) return;
+    final key = ids.join(',');
+    _mergeWatchers.remove(key)?.cancel();
+    final deadline = DateTime.now().add(mergeProbeLimit);
+    var probing = false;
+    late final Timer watcher;
+    void stop() {
+      watcher.cancel();
+      if (identical(_mergeWatchers[key], watcher)) _mergeWatchers.remove(key);
+    }
+
+    Future<void> handBackToList() async {
+      mergingConversationIds.removeAll(ids);
+      notifyListeners();
+      await forceRefreshConversations();
+    }
+
+    watcher = Timer.periodic(mergeProbeInterval, (_) async {
+      if (probing) return;
+      if (!ids.any(mergingConversationIds.contains)) {
+        stop(); // the push settled it
+        return;
+      }
+      if (DateTime.now().isAfter(deadline)) {
+        stop();
+        await handBackToList();
+        return;
+      }
+      probing = true;
+      try {
+        final results = <String, ({ServerConversation? item, bool ok})>{};
+        for (final id in ids) {
+          try {
+            results[id] = await _conversationLifecycleFetcher(id);
+          } catch (_) {
+            results[id] = (item: null, ok: false);
+          }
+        }
+        if (!ids.any(mergingConversationIds.contains)) {
+          stop();
+          return;
+        }
+        // Unreachable, or still merging: try again next time.
+        if (results.values.any((r) => !r.ok)) return;
+        if (results.values.any((r) => r.item != null && _isActiveProcessingStatus(r.item!.status))) return;
+        stop();
+        final survivors = <ServerConversation>[
+          for (final id in ids)
+            if (results[id]!.item != null) results[id]!.item!,
+        ];
+        if (survivors.length == 1) {
+          final merged = survivors.single;
+          await onMergeCompleted(
+              merged.id,
+              [
+                for (final id in ids)
+                  if (id != merged.id) id
+              ],
+              merged: merged);
+        } else {
+          await handBackToList();
+        }
+      } finally {
+        probing = false;
+      }
+    });
+    _mergeWatchers[key] = watcher;
+  }
+
+  /// Handle merge completion from FCM notification, or from [watchMerge] with the [merged]
+  /// conversation it already read.
+  Future<void> onMergeCompleted(
+    String mergedConversationId,
+    List<String> removedConversationIds, {
+    ServerConversation? merged,
+  }) async {
     // Remove merging status for ALL involved conversations
     mergingConversationIds.remove(mergedConversationId);
     for (final id in removedConversationIds) {
@@ -1934,7 +2035,7 @@ class ConversationProvider extends ChangeNotifier {
     }
 
     // Fetch updated merged conversation
-    final mergedConvo = await getConversationById(mergedConversationId);
+    final mergedConvo = merged ?? await getConversationById(mergedConversationId);
     if (mergedConvo != null) {
       final idx = conversations.indexWhere((c) => c.id == mergedConversationId);
       if (idx != -1) {

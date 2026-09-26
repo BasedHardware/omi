@@ -24,6 +24,9 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   bool get isConnected => true;
 
   @override
+  bool get isConnecting => false;
+
+  @override
   BtDevice? get connectedDevice => device;
 
   @override
@@ -72,6 +75,13 @@ Widget _app(DeviceProvider provider) {
   );
 }
 
+/// Find my pendant sits in the third group of the page (v2 `Device.dc`), below the first screen.
+Future<void> _scrollToFind(WidgetTester tester) async {
+  await tester.scrollUntilVisible(find.byKey(const Key('find_device_button')), 200,
+      scrollable: find.byType(Scrollable).first);
+  await tester.pump();
+}
+
 void main() {
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -106,8 +116,9 @@ void main() {
 
     await tester.pumpWidget(_app(provider));
     await tester.pump();
+    await _scrollToFind(tester);
 
-    expect(find.text('Find'), findsOneWidget);
+    expect(find.text('Find my pendant'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('find_device_button')));
     await tester.pump();
@@ -132,6 +143,7 @@ void main() {
 
     await tester.pumpWidget(_app(provider));
     await tester.pump();
+    await _scrollToFind(tester);
     await tester.tap(find.byKey(const Key('find_device_button')));
     await tester.pumpAndSettle();
 
@@ -149,6 +161,7 @@ void main() {
 
     await tester.pumpWidget(_app(provider));
     await tester.pump();
+    await _scrollToFind(tester);
     await tester.tap(find.byKey(const Key('find_device_button')));
     await tester.pump();
 
@@ -169,6 +182,7 @@ void main() {
 
     await tester.pumpWidget(_app(provider));
     await tester.pump();
+    await _scrollToFind(tester);
     await tester.tap(find.byKey(const Key('find_device_button')));
     await tester.pump();
 

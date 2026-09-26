@@ -383,7 +383,8 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     final edges = data['edges'] as List<dynamic>? ?? [];
 
     final userName = SharedPreferencesUtil().givenName;
-    final userLabel = userName.isNotEmpty ? userName : 'Me';
+    // The reader's own node: their first name, else "You" in their language.
+    final userLabel = userName.isNotEmpty ? userName : context.l10n.you;
     final knownUserLabels = <String>{'me', 'the user', userLabel.trim().toLowerCase()};
     bool isUserLikeNode(Map<dynamic, dynamic> nodeData) {
       final label = (nodeData['label'] as String? ?? '').trim().toLowerCase();
@@ -426,7 +427,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         id: nodeId,
         label: label,
         nodeType: nodeType,
-        baseColor: isUser ? Colors.white : _colorForType(nodeType),
+        baseColor: isUser ? OmiColors.accent : _colorForType(nodeType),
         initialPosition: isUser ? v.Vector3.zero() : _randomPos3D(),
         isFixed: isUser,
       );
@@ -441,7 +442,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         id: primaryUserId,
         label: userLabel,
         nodeType: 'person',
-        baseColor: Colors.white,
+        baseColor: OmiColors.accent,
         initialPosition: v.Vector3.zero(),
         isFixed: true,
       );
@@ -517,9 +518,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       canvas.drawImage(image, Offset.zero, paint);
 
       // Draw minimal branding "omi.me" at top center
-      const textSpan = TextSpan(
+      final textSpan = TextSpan(
         text: 'omi.me',
-        style: TextStyle(color: Colors.white, fontSize: 72, fontWeight: FontWeight.bold, letterSpacing: -1.0),
+        style: TextStyle(color: OmiColors.textPrimary, fontSize: 72, fontWeight: FontWeight.bold, letterSpacing: -1.0),
       );
       final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
       textPainter.layout();
@@ -876,7 +877,7 @@ class GraphPainter3D extends CustomPainter {
       final alpha = ((p1.alpha + p2.alpha) / 2.0 * 0.10).clamp(0.0, 1.0);
       if (alpha < 0.05) continue;
 
-      _edgePaint.color = Colors.white.withValues(alpha: alpha);
+      _edgePaint.color = OmiColors.textPrimary.withValues(alpha: alpha);
       _edgePaint.strokeWidth = 0.8 * ((p1.scale + p2.scale) / 2);
 
       // Drawn above with logic
@@ -891,7 +892,7 @@ class GraphPainter3D extends CustomPainter {
       if (isDimmed) {
         _edgePaint.color = _edgePaint.color.withValues(alpha: alpha * 0.1);
       } else if (isHighlightedEdge) {
-        _edgePaint.color = Colors.white.withValues(alpha: max(alpha, 0.8)); // Pop
+        _edgePaint.color = OmiColors.textPrimary.withValues(alpha: max(alpha, 0.8)); // Pop
       }
 
       canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), _edgePaint);
@@ -902,7 +903,7 @@ class GraphPainter3D extends CustomPainter {
         final textSpan = TextSpan(
           text: edge.label,
           style: TextStyle(
-            color: Colors.white54.withValues(alpha: alpha * 2),
+            color: OmiColors.textTertiary.withValues(alpha: alpha * 2),
             fontSize: (9 * avgScale).clamp(7, 11),
           ),
         );
@@ -933,8 +934,8 @@ class GraphPainter3D extends CustomPainter {
         centerOffset + Offset(-radius * 0.25, -radius * 0.25),
         radius * 1.2,
         [
-          Colors.white.withValues(alpha: p.alpha * 0.9),
-          Color.lerp(Colors.white, node.baseColor, 0.5)!.withValues(alpha: p.alpha),
+          OmiColors.textPrimary.withValues(alpha: p.alpha * 0.9),
+          Color.lerp(OmiColors.accent, node.baseColor, 0.5)!.withValues(alpha: p.alpha),
           node.baseColor.withValues(alpha: p.alpha),
         ],
         [0.0, 0.3, 1.0],
@@ -948,7 +949,7 @@ class GraphPainter3D extends CustomPainter {
         final textSpan = TextSpan(
           text: node.label,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: screenshotMode ? 0.95 : p.alpha * 0.9),
+            color: OmiColors.textPrimary.withValues(alpha: screenshotMode ? 0.95 : p.alpha * 0.9),
             fontSize: screenshotMode ? 11.0 : (10 * p.scale).clamp(8, 14),
             fontWeight: FontWeight.w600,
           ),

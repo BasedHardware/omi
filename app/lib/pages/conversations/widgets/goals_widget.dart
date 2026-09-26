@@ -312,8 +312,9 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
+              // 20pt from the screen edge, in line with the day headers ("Today") below.
               Padding(
-                padding: const EdgeInsets.only(left: 8, bottom: 6),
+                padding: const EdgeInsets.only(left: OmiSpacing.xxs, bottom: 6),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -358,8 +359,8 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20.0),
-        decoration: const BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.xlAll),
-        child: const Icon(Icons.delete_outline, color: OmiColors.textPrimary),
+        decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.xlAll),
+        child: Icon(Icons.delete_outline, color: OmiColors.textPrimary),
       ),
       onDismissed: (direction) {
         PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'home', method: 'swipe');
@@ -374,7 +375,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
         },
         child: Container(
           margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
-          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           child: Row(
             children: [
@@ -383,7 +384,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                 width: 40,
                 height: 40,
                 margin: const EdgeInsets.only(right: 12),
-                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
                 child: Center(child: ExcludeSemantics(child: Text(emoji, style: OmiType.headline))),
               ),
               // Content

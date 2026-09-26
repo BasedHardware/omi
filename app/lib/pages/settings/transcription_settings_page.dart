@@ -674,7 +674,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: OmiAppBar(
         leading: const OmiBackButton(),
         title: Text(context.l10n.transcription),
         actions: [
@@ -941,7 +941,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
       child: Row(
         children: [
-          const Icon(Icons.warning_amber_rounded, color: OmiColors.warning, size: 14),
+          Icon(Icons.warning_amber_rounded, color: OmiColors.warning, size: 14),
           const SizedBox(width: 6),
           Expanded(child: TranscriptionHelpText(warningText)),
         ],
@@ -1190,7 +1190,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.apple, color: OmiColors.textPrimary, size: 24),
+                Icon(Icons.apple, color: OmiColors.textPrimary, size: 24),
                 const SizedBox(width: OmiSpacing.sm),
                 Expanded(
                   child: Text(context.l10n.usingNativeIosSpeech,

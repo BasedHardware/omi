@@ -19,25 +19,30 @@ class HeaderCircleButton extends StatelessWidget {
     required this.icon,
     required this.onTap,
     required this.semanticLabel,
-    this.color = OmiColors.surface1,
+    this.color,
     this.diameter = kHeaderCircleDiameter,
   });
 
   final Widget icon;
   final VoidCallback onTap;
   final String semanticLabel;
-  final Color color;
+  final Color? color;
 
   /// Diameter of the painted circle. The touch target stays [kMinTapTarget].
   final double diameter;
 
   @override
   Widget build(BuildContext context) {
+    // Daylight: liquid glass, like the device chip beside it (a flat white disc on the pale page read
+    // as a sticker). Dark keeps the graphite circle.
+    if (color == null && OmiColors.isLight) {
+      return OmiIconButton.glass(icon: icon, label: semanticLabel, onPressed: onTap, diameter: diameter);
+    }
     return OmiIconButton.filled(
       icon: icon,
       label: semanticLabel,
       onPressed: onTap,
-      fillColor: color,
+      fillColor: color ?? OmiColors.surface1,
       diameter: diameter,
     );
   }

@@ -66,7 +66,7 @@ class _CountryBottomSheetState extends State<CountryBottomSheet> {
                               ),
                             ),
                             leading: Text(countryFlagFromCode(country['id'] as String), style: OmiType.title2),
-                            trailing: isSelected ? const Icon(Icons.check, color: OmiColors.accent) : null,
+                            trailing: isSelected ? Icon(Icons.check, color: OmiColors.accent) : null,
                             selected: isSelected,
                             onTap: () {
                               provider.setSelectedCountryId(country['id']);

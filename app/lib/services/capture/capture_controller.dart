@@ -57,6 +57,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/app_globals.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 import 'package:omi/backend/schema/message_event.dart'
     show
@@ -71,6 +72,14 @@ import 'package:omi/backend/schema/message_event.dart'
         PhotoDescribedEvent,
         FreemiumThresholdReachedEvent,
         SegmentsDeletedEvent;
+
+/// Whether a live source can be muted: the phone and pendants can; glasses (OmiGlass, Ray-Ban Meta)
+/// keep taking photos, so Stop is their only control. The capture card, the Live page and the
+/// Lock Screen use this one rule.
+bool captureSourceCanMute(DeviceType? device, {required String? source}) {
+  if (source == null || source == ConversationSource.phone.name) return true;
+  return device != DeviceType.openglass && device != DeviceType.raybanMeta;
+}
 
 class CaptureController extends ChangeNotifier
     with MessageNotifierMixin
@@ -358,7 +367,7 @@ class CaptureController extends ChangeNotifier
     final revision = _preferences.capturePolicy.revision;
     if (!_admitsCapture(revision)) return;
     updateRecordingState(RecordingState.initialising);
-    _activeSource = PhoneMicSource();
+    _activeSource = PhoneMicSource(onAudio: _tapAudio);
     _phoneMicWalActive = true;
     await _phoneMic.start(
       onByteReceived: (bytes) {
@@ -477,6 +486,83 @@ class CaptureController extends ChangeNotifier
   /// conversation so the pipeline can be joined without timing heuristics.
   String? get activeRecordingId => _recordingTelemetry.recordingId;
 
+  // Identifies a conversation boundary within a continuous recording. This is
+  // presentation/action identity, not another capture authorization generation.
+  int _systemSurfaceConversationRevision = 0;
+  int get systemSurfaceConversationRevision => _systemSurfaceConversationRevision;
+  bool get systemSurfacePhoneCapture => _activeSource is PhoneMicSource || _phoneMicBatchActive;
+  bool get systemSurfaceBatchCapture =>
+      _phoneMicBatchActive || (_recordingDevice != null && _preferences.batchModeEnabled);
+  // Presentation-only observer of captured audio; never affects capture.
+  AudioTap? systemSurfaceAudioTap;
+  void _tapAudio(List<int> audio, BleAudioCodec codec) {
+    try {
+      systemSurfaceAudioTap?.call(audio, codec);
+    } catch (_) {} // The tap runs before WAL/socket delivery; it must never drop audio.
+  }
+
+  Future<void> performSystemSurfaceAction(String action,
+      {required String recordingId, required int conversationRevision}) async {
+    bool current() =>
+        activeRecordingId == recordingId &&
+        _systemSurfaceConversationRevision == conversationRevision &&
+        !lifetime.isClosed;
+    if (!current()) throw StateError('Recording changed');
+    final phone = systemSurfacePhoneCapture;
+    final batch = systemSurfaceBatchCapture;
+    switch (action) {
+      case 'pause':
+      case 'resume':
+        final mute = action == 'pause';
+        if (isPaused == mute) return;
+        if (!phone) {
+          if (mute) {
+            await pauseDeviceRecording();
+          } else {
+            await resumeDeviceRecording();
+          }
+        } else {
+          final revision = await _setCaptureMuted(mute);
+          if (!current() || _preferences.capturePolicy.revision != revision) {
+            throw StateError('Recording changed');
+          }
+          if (!mute) {
+            if (batch) {
+              updateRecordingState(RecordingState.record);
+            } else {
+              // Rebind the existing native session to the new admission
+              // revision while preserving the socket and conversation.
+              await _resumeMicRecording();
+            }
+          }
+        }
+      case 'finish':
+        if (phone) {
+          final hasContent = segments.isNotEmpty || photos.isNotEmpty;
+          await stopStreamRecording();
+          if (lifetime.isClosed || (activeRecordingId != null && activeRecordingId != recordingId)) {
+            throw StateError('Recording changed');
+          }
+          if (!batch && hasContent) await forceProcessingCurrentConversation();
+        } else {
+          // From the Lock Screen or the island, Stop is the app's Stop: this conversation is closed
+          // and the pendant stops listening until Start, so the presentation ends. Glasses cannot
+          // pause; their next conversation simply begins.
+          if (batch) {
+            startNewOfflineRecording();
+          } else if (segments.isNotEmpty || photos.isNotEmpty) {
+            await forceProcessingCurrentConversation();
+          }
+          if (canMuteLiveSource) {
+            if (!isPaused) await pauseDeviceRecording();
+            await _markStopped();
+          }
+        }
+      default:
+        throw ArgumentError.value(action, 'action');
+    }
+  }
+
   @visibleForTesting
   set testSessionStartSeconds(int v) => _sessionStartSeconds = v;
 
@@ -522,9 +608,13 @@ class CaptureController extends ChangeNotifier
       if (committed.muted) {
         if (_offlineSessionStartSeconds != 0) _offlineMuteStartedAt ??= _nowSeconds;
         updateRecordingState(RecordingState.pause);
-      } else if (_offlineSessionStartSeconds != 0 && _offlineMuteStartedAt != null) {
-        _offlineSessionStartSeconds += _nowSeconds - _offlineMuteStartedAt!;
-        _offlineMuteStartedAt = null;
+      } else {
+        // Listening again (Start, Unmute, the pendant's double tap): no longer stopped.
+        if (_preferences.getBool(_stoppedKey)) await _preferences.saveBool(_stoppedKey, false);
+        if (_offlineSessionStartSeconds != 0 && _offlineMuteStartedAt != null) {
+          _offlineSessionStartSeconds += _nowSeconds - _offlineMuteStartedAt!;
+          _offlineMuteStartedAt = null;
+        }
       }
       notifyListeners();
       return committed.revision;
@@ -542,6 +632,7 @@ class CaptureController extends ChangeNotifier
   /// Manually finalize the current recording and start a fresh one. The native
   /// writer cuts on the next packet; the timer resets immediately for feedback.
   void startNewOfflineRecording() {
+    _systemSurfaceConversationRevision++;
     _preferences.batchCutRequested = true;
     _offlineSessionStartSeconds = _nowSeconds;
     _offlineMuteStartedAt = isPaused ? _nowSeconds : null;
@@ -550,6 +641,7 @@ class CaptureController extends ChangeNotifier
 
   void _onOfflineRecordingFinalized(String _) {
     if (_offlineSessionStartSeconds == 0) return;
+    _systemSurfaceConversationRevision++;
     _offlineSessionStartSeconds = _nowSeconds;
     _offlineMuteStartedAt = isPaused ? _nowSeconds : null;
     notifyListeners();
@@ -730,6 +822,56 @@ class CaptureController extends ChangeNotifier
   /// When the live recording started (it keeps counting through a pause), or null.
   DateTime? get liveCaptureStartedAt => _recordingTelemetry.startedAt;
 
+  // The one capture clock every surface shows (Home card, Live page): how long this recording has
+  // been listening. It stands still while muted and starts again from zero after Stop.
+  String? _clockRecordingId;
+  DateTime? _clockAnchor;
+  DateTime? _clockPausedAt;
+  bool _clockRestartsOnStart = false;
+
+  /// Listening time of the current recording, or null when nothing is recording.
+  Duration? get captureElapsed {
+    final anchor = _clockAnchor;
+    if (anchor == null) return null;
+    final elapsed = (_clockPausedAt ?? _now()).difference(anchor);
+    return elapsed.isNegative ? Duration.zero : elapsed;
+  }
+
+  void _advanceCaptureClock() {
+    final id = activeRecordingId;
+    final startedAt = liveCaptureStartedAt;
+    if (id == null || startedAt == null) {
+      _clockRecordingId = null;
+      _clockAnchor = null;
+      _clockPausedAt = null;
+      return;
+    }
+    final now = _now();
+    if (id != _clockRecordingId || _clockAnchor == null) {
+      // Counted from when this recording is first seen, as the Lock Screen counts it.
+      _clockRecordingId = id;
+      _clockAnchor = now;
+      _clockPausedAt = null;
+    }
+    final stopped = isPaused || isCallActive || recordingState == RecordingState.pause;
+    if (stopped) {
+      _clockPausedAt ??= now;
+    } else if (_clockRestartsOnStart) {
+      _clockRestartsOnStart = false;
+      _clockAnchor = now;
+      _clockPausedAt = null;
+    } else if (_clockPausedAt != null) {
+      _clockAnchor = _clockAnchor!.add(now.difference(_clockPausedAt!));
+      _clockPausedAt = null;
+    }
+  }
+
+  @override
+  void notifyListeners() {
+    _advanceCaptureClock();
+    super.notifyListeners();
+  }
+
   /// Committed ownership for controller/API reads. Effect bodies that must see
   /// the in-flight target read `_capture.stagedReadModel.phoneOwnsCapture`.
   bool get _phoneOwnsCapture => _capture.readModel.phoneOwnsCapture;
@@ -846,6 +988,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future _resetStateVariables() async {
+    _systemSurfaceConversationRevision++;
     _stopInProgressConversationRefresh();
     segments = [];
     photos = [];
@@ -1574,12 +1717,12 @@ class CaptureController extends ChangeNotifier
                 markConversationForStarring();
                 PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
                 // Haptic feedback to confirm
-                HapticFeedback.mediumImpact();
+                OmiHaptics.medium();
               } else {
                 // Toggle off if already marked
                 unmarkConversationForStarring();
                 PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
-                HapticFeedback.lightImpact();
+                OmiHaptics.light();
               }
             } else {
               // End conversation and process (default)
@@ -1697,12 +1840,12 @@ class CaptureController extends ChangeNotifier
           markConversationForStarring();
           PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
           // Haptic feedback to confirm
-          HapticFeedback.mediumImpact();
+          OmiHaptics.medium();
         } else {
           // Toggle off if already marked
           unmarkConversationForStarring();
           PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
-          HapticFeedback.lightImpact();
+          OmiHaptics.light();
         }
       } else {
         // End conversation and process (default)
@@ -1990,7 +2133,7 @@ class CaptureController extends ChangeNotifier
     if (_deviceIdentityStale(deviceRevision)) return;
     final deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
     if (device.type == DeviceType.omi || device.type == DeviceType.openglass) {
-      _activeSource = BleDeviceSource(codec: codec, deviceId: deviceId, deviceModel: deviceModel);
+      _activeSource = BleDeviceSource(codec: codec, deviceId: deviceId, deviceModel: deviceModel, onAudio: _tapAudio);
     }
     _wal.getSyncs().phone.setDeviceInfo(deviceId, deviceModel);
 
@@ -2425,7 +2568,7 @@ class CaptureController extends ChangeNotifier
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
     // Initialize WAL for phone mic recording
-    _activeSource = PhoneMicSource();
+    _activeSource = PhoneMicSource(onAudio: _tapAudio);
     _phoneMicWalActive = true;
     await _wal.getSyncs().phone.onAudioCodecChanged(BleAudioCodec.pcm16);
     _wal.getSyncs().phone.setDeviceInfo('phone-mic', 'Phone Microphone');
@@ -2554,6 +2697,81 @@ class CaptureController extends ChangeNotifier
   Future<void> finishCapture() async {
     final outcome = await _capture.dispatch(const FinishRequested());
     outcome.throwIfFailed();
+  }
+
+  // -- Start / Stop / Mute: the reader's two controls ----------------------------------------------
+
+  static const String _stoppedKey = 'captureStoppedByReader';
+
+  /// The reader pressed Stop and has not pressed Start since. A connected pendant stays paused
+  /// while stopped; a phone recording simply ends. Mute is the other pause: it keeps the
+  /// conversation open, so Unmute carries on where it left off.
+  bool get isCaptureStopped => isPaused && _preferences.getBool(_stoppedKey);
+
+  /// Whether the live source can be muted ([captureSourceCanMute]).
+  bool get canMuteLiveSource => captureSourceCanMute(_recordingDevice?.type, source: liveCaptureSource);
+
+  /// The Stop still on its way, and whether it ends listening (the phone, or a wearable that can
+  /// pause; glasses only close the conversation and listen on).
+  Future<bool>? _stopInFlight;
+  bool _stopEndsListening = false;
+
+  /// Stop was pressed and has not finished: it waits its turn behind capture work already running
+  /// (a transcription reconnect can hold the line for seconds). Every surface shows the capture as
+  /// stopped from the tap, and Start waits for it ([startCapture]).
+  bool get isStopping => _stopInFlight != null && _stopEndsListening;
+
+  /// Stop: this conversation is saved and listening stops until Start — a pendant would otherwise
+  /// listen on and begin the next conversation by itself. With nothing heard there is nothing to
+  /// save, so no empty conversation appears. Returns whether anything was heard, so the caller can
+  /// show where it went. A second Stop while one is on its way joins it rather than stopping twice.
+  Future<bool> stopCapture() {
+    final running = _stopInFlight;
+    if (running != null) return running;
+    final source = liveCaptureSource;
+    _stopEndsListening = source == null || source == ConversationSource.phone.name || canMuteLiveSource;
+    final stop = _stopCapture();
+    _stopInFlight = stop;
+    notifyListeners();
+    unawaited(stop.then((_) {}, onError: (_) {}).whenComplete(() {
+      if (identical(_stopInFlight, stop)) _stopInFlight = null;
+      if (!_captureControllerDisposed) notifyListeners();
+    }));
+    return stop;
+  }
+
+  Future<bool> _stopCapture() async {
+    final heard = segments.isNotEmpty || photos.isNotEmpty;
+    final source = liveCaptureSource;
+    if (source == null || source == ConversationSource.phone.name) {
+      // Finishing is the phone's stop and processes what it heard; a silent one only stops.
+      if (heard) {
+        await finishCapture();
+      } else {
+        await stopStreamRecording();
+      }
+      return heard;
+    }
+    if (heard) await finishCapture();
+    if (canMuteLiveSource) {
+      if (!isPaused) await pauseCapture();
+      await _markStopped();
+    }
+    return heard;
+  }
+
+  /// Start after Stop: the stopped source listens again, as a new conversation from zero. A Stop
+  /// still on its way lands first, so it never undoes this Start.
+  Future<void> startCapture() async {
+    final stopping = _stopInFlight;
+    if (stopping != null) await stopping.then((_) {}, onError: (_) {});
+    await resumeCapture();
+  }
+
+  Future<void> _markStopped() async {
+    _clockRestartsOnStart = true;
+    await _preferences.saveBool(_stoppedKey, true);
+    notifyListeners();
   }
 
   // -- Pendant suspension ------------------------------------------------------
@@ -3292,6 +3510,8 @@ class CaptureController extends ChangeNotifier
 
   Future<void> forceProcessingCurrentConversation() async {
     final sessionStart = _sessionStartSeconds;
+    final recordingId = activeRecordingId;
+    final conversationRevision = _systemSurfaceConversationRevision;
 
     final phoneSync = _wal.getSyncs().phone;
     // Show the Conversations-tab skeleton before the WAL drain. Awaiting
@@ -3300,6 +3520,14 @@ class CaptureController extends ChangeNotifier
     externalActions.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
 
     await phoneSync.finalizeCurrentSession();
+    if (lifetime.isClosed ||
+        recordingId != activeRecordingId ||
+        conversationRevision != _systemSurfaceConversationRevision) {
+      // Another path finished this conversation during the drain; never reset
+      // the next one, and never leave the skeleton stranded.
+      externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
+      return;
+    }
     _clearSessionLocation();
 
     _resetStateVariables();

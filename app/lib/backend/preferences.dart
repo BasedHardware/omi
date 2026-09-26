@@ -538,6 +538,16 @@ class SharedPreferencesUtil {
 
   set batchModeEnabled(bool value) => saveBool('batchModeEnabled', value);
 
+  /// Settings → Appearance: `system` (follow the phone), `light` or `dark`.
+  String get appearanceMode => getString('appearanceMode', defaultValue: 'system');
+
+  set appearanceMode(String value) => saveString('appearanceMode', value);
+
+  /// Settings → Appearance → Haptics: a light tap when you finish, star or complete something.
+  bool get hapticsEnabled => getBool('hapticsEnabled', defaultValue: true);
+
+  set hapticsEnabled(bool value) => saveBool('hapticsEnabled', value);
+
   // Phone-mic batch capture marker. false = explicit Transcribe Later (files
   // named audio_omibatchphone_...), true = automatic offline fallback (files
   // named audio_omibatchphoneauto_...). Read natively as flutter.phoneBatchAuto.
@@ -683,6 +693,9 @@ class SharedPreferencesUtil {
   set notificationFrequency(int value) => saveInt('notificationFrequency', value);
 
   int get notificationFrequency => getInt('notificationFrequency', defaultValue: 0);
+
+  bool get showCaptureLiveActivity => getBool('showCaptureLiveActivity', defaultValue: true);
+  Future<bool> setShowCaptureLiveActivity(bool value) => saveBool('showCaptureLiveActivity', value);
 
   // Task category order for drag-and-drop sorting persistence
   // Format: { "today": ["id1", "id2"], "tomorrow": ["id3"] }

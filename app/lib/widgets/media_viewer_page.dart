@@ -279,7 +279,7 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
     if (item.discarded) {
       return _captionText(
         context.l10n.photoDiscardedMessage,
-        color: Colors.white70,
+        color: OmiColors.textPrimary.withValues(alpha: 0.7),
       );
     }
     if (isProcessing) {
@@ -288,7 +288,7 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textSecondary),
+            OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textSecondary),
             const SizedBox(width: 12),
             Text(
               context.l10n.analyzing,
@@ -300,7 +300,7 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
       );
     }
     if (hasCaption) {
-      return _captionText(item.caption!, color: Colors.white);
+      return _captionText(item.caption!, color: OmiColors.textPrimary);
     }
     return null;
   }
@@ -330,7 +330,7 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
         final zoomed = state != PhotoViewScaleState.initial;
         if (zoomed != _zoomed) setState(() => _zoomed = zoomed);
       },
-      backgroundDecoration: const BoxDecoration(color: Colors.black),
+      backgroundDecoration: BoxDecoration(color: OmiColors.surface0),
       builder: (context, index) {
         final item = widget.items[index];
         if (item.bytesLoader != null) {
@@ -343,7 +343,7 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
                   return const Center(child: OmiSpinner());
                 }
                 if (bytes == null || bytes.isEmpty) {
-                  return const Center(child: Icon(Icons.broken_image_outlined, color: Colors.white70));
+                  return Center(child: Icon(Icons.broken_image_outlined, color: OmiColors.textSecondary));
                 }
                 return Image.memory(bytes, fit: BoxFit.contain, gaplessPlayback: true);
               },
@@ -381,7 +381,7 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
     );
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: OmiColors.surface0,
       appBar: AppBar(
         backgroundColor: widget.appBarBackgroundColor,
         elevation: 0,

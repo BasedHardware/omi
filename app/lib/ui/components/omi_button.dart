@@ -7,7 +7,7 @@ import 'package:omi/ui/omi_tokens.dart';
 
 /// What a button does, which decides how loud it is.
 enum OmiButtonVariant {
-  /// The one main action on a screen or sheet: white fill, black label.
+  /// The one main action on a screen or sheet: [OmiColors.accent] fill, [OmiColors.onAccent] label.
   primary,
 
   /// Other actions next to a primary, or the only action on a quiet surface (empty/error states).
@@ -26,7 +26,7 @@ enum OmiButtonVariant {
 
 /// Button heights. Both keep a touch target of at least 44pt.
 enum OmiButtonSize {
-  /// 48pt tall: page and sheet actions.
+  /// 50pt capsule (v2 `controls.primaryButton`): page and sheet actions.
   regular,
 
   /// 36pt visual inside a 48pt touch target: rows, cards, empty/error states, headers.
@@ -179,6 +179,14 @@ class OmiButton extends StatefulWidget {
 class _OmiButtonState extends State<OmiButton> {
   bool _running = false;
 
+  /// A finger is down on the button (drives the press dip; tracked from raw pointer events so it
+  /// never rebuilds the button while the framework is building it).
+  bool _down = false;
+
+  void _setDown(bool down) {
+    if (_down != down && mounted) setState(() => _down = down);
+  }
+
   bool get _loading => widget.isLoading || _running;
 
   Future<void> _handlePressed() async {
@@ -215,13 +223,13 @@ class _OmiButtonState extends State<OmiButton> {
     if (override != null) return (background: override.background, foreground: override.foreground);
     if (!enabled) {
       return switch (widget.variant) {
-        OmiButtonVariant.tertiary => (background: Colors.transparent, foreground: OmiColors.textDisabled),
-        _ => (background: OmiColors.surface2, foreground: OmiColors.textDisabled),
+        OmiButtonVariant.tertiary => (background: Colors.transparent, foreground: OmiColors.textTertiary),
+        _ => (background: OmiColors.surface2, foreground: OmiColors.textTertiary),
       };
     }
     return switch (widget.variant) {
       OmiButtonVariant.primary => (background: OmiColors.accent, foreground: OmiColors.onAccent),
-      OmiButtonVariant.secondary => (background: OmiColors.surface2, foreground: OmiColors.textPrimary),
+      OmiButtonVariant.secondary => (background: OmiColors.surface3, foreground: OmiColors.textPrimary),
       OmiButtonVariant.destructive => (background: OmiColors.dangerSurface, foreground: OmiColors.danger),
       OmiButtonVariant.tertiary => (background: Colors.transparent, foreground: OmiColors.textPrimary),
       OmiButtonVariant.toolbar => (background: OmiColors.surface1, foreground: OmiColors.textPrimary),
@@ -233,8 +241,9 @@ class _OmiButtonState extends State<OmiButton> {
     final compact = widget.size == OmiButtonSize.compact;
     final enabled = widget.onPressed != null;
     final colors = _colors(enabled);
-    final visualHeight = widget.height ?? (compact ? 36.0 : 48.0);
-    final baseStyle = compact ? OmiType.subhead : OmiType.callout;
+    final visualHeight = widget.height ?? (compact ? 36.0 : OmiSize.primaryButton);
+    // v2: 17pt semibold on a full-size capsule, 15pt on a compact one.
+    final baseStyle = compact ? OmiType.subhead : OmiType.body;
     final textStyle = (widget.labelStyle ?? baseStyle.copyWith(fontWeight: FontWeight.w600)).copyWith(
       color: colors.foreground,
     );
@@ -266,23 +275,45 @@ class _OmiButtonState extends State<OmiButton> {
     );
 
     // A legacy fixed width owns its own sizing; keep the label from being squeezed by padding.
-    final horizontalPadding = widget.width != null ? OmiSpacing.xs : (compact ? OmiSpacing.md : OmiSpacing.xl);
+    final horizontalPadding = widget.width != null ? OmiSpacing.xs : (compact ? OmiSpacing.md : 22.0);
     Widget button = TextButton(
       onPressed: !enabled ? null : (_loading ? () {} : _handlePressed),
       style: ButtonStyle(
         backgroundColor: WidgetStatePropertyAll(colors.background),
         foregroundColor: WidgetStatePropertyAll(colors.foreground),
-        overlayColor: WidgetStatePropertyAll(colors.foreground.withValues(alpha: 0.12)),
+        // v2 presses dip the whole capsule (below) instead of flooding it with a ripple.
+        overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+        splashFactory: NoSplash.splashFactory,
         elevation: const WidgetStatePropertyAll(0),
         padding: WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: horizontalPadding)),
         minimumSize: WidgetStatePropertyAll(Size(widget.width ?? visualHeight, visualHeight)),
         fixedSize: widget.width != null ? WidgetStatePropertyAll(Size(widget.width!, visualHeight)) : null,
-        shape: const WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: OmiRadius.mdAll)),
-        // A visual under 44pt gets padded out to a 48pt target; a 48pt button needs no padding.
+        // v2: every text button is a capsule (radius = height / 2).
+        shape: const WidgetStatePropertyAll(StadiumBorder()),
+        // A visual under 44pt gets padded out to a 48pt target; a regular button needs no padding.
         tapTargetSize: visualHeight < 44 ? MaterialTapTargetSize.padded : MaterialTapTargetSize.shrinkWrap,
         textStyle: WidgetStatePropertyAll(textStyle),
       ),
       child: content,
+    );
+
+    // The design's `.press`: scale 0.96 and 82 % opacity while held (fade only under Reduce Motion).
+    final reduce = MediaQuery.disableAnimationsOf(context);
+    final down = _down && enabled;
+    button = Listener(
+      onPointerDown: enabled ? (_) => _setDown(true) : null,
+      onPointerUp: (_) => _setDown(false),
+      onPointerCancel: (_) => _setDown(false),
+      child: AnimatedOpacity(
+        opacity: down ? 0.82 : 1,
+        duration: const Duration(milliseconds: 200),
+        child: AnimatedScale(
+          scale: down && !reduce ? 0.96 : 1,
+          duration: const Duration(milliseconds: 420),
+          curve: OmiMotion.springCurve,
+          child: button,
+        ),
+      ),
     );
 
     if (widget.expand) {

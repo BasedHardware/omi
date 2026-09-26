@@ -12,6 +12,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/widgets/components/memory_review_card.dart';
+import 'package:omi/ui/ui.dart';
 
 class _TestEnvFields implements EnvFields {
   @override
@@ -54,7 +55,8 @@ void main() {
 
     final firstRow = find.byKey(const ValueKey('daily_summary_location_row_0'));
     final secondRow = find.byKey(const ValueKey('daily_summary_location_row_1'));
-    final contentWidth = tester.getSize(find.byType(Scaffold)).width - 40;
+    // Rows span the page between the v2 gutters.
+    final contentWidth = tester.getSize(find.byType(Scaffold)).width - 2 * OmiSize.screenMargin;
 
     expect(firstRow, findsOneWidget);
     expect(secondRow, findsOneWidget);
@@ -221,6 +223,111 @@ void main() {
     expect(find.text('17m'), findsOneWidget);
     expect(find.text('9'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+  testWidgets('day arrows step to the neighbouring recaps in place', (tester) async {
+    DailySummary day(String id, String date, String headline) => DailySummary(
+          id: id,
+          date: date,
+          createdAt: DateTime(2026, 7, 16),
+          headline: headline,
+          overview: 'Overview of $headline',
+          stats: DayStats(totalConversations: 1, totalDurationMinutes: 30),
+        );
+    // Newest first, as the recap lists hold them.
+    final days = [
+      day('d3', '2026-07-16', 'A planning day'),
+      day('d2', '2026-07-15', 'A quiet day'),
+      day('d1', '2026-07-14', 'A busy day'),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: ThemeData.dark(),
+        home: DailySummaryDetailPage(summaryId: 'd2', summary: days[1], days: days),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(find.text('A quiet day'), findsOneWidget);
+
+    final previous = find.byKey(const Key('recap_previous_day'));
+    final next = find.byKey(const Key('recap_next_day'));
+    await tester.scrollUntilVisible(previous, 200, scrollable: find.byType(Scrollable).first);
+    expect(find.descendant(of: previous, matching: find.text('Tue, Jul 14')), findsOneWidget);
+    expect(find.descendant(of: next, matching: find.text('Thu, Jul 16')), findsOneWidget);
+    final semantics = tester.ensureSemantics();
+    expect(tester.getSemantics(previous), isSemantics(label: "Previous day's recap: Tue, Jul 14", isButton: true));
+    semantics.dispose();
+
+    await tester.tap(previous);
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(find.text('A busy day'), findsOneWidget);
+    expect(find.text('A quiet day'), findsNothing);
+    // The oldest day has no day before it.
+    await tester.scrollUntilVisible(next, 200, scrollable: find.byType(Scrollable).first);
+    expect(previous, findsNothing);
+
+    await tester.tap(next);
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(find.text('A quiet day'), findsOneWidget);
+  });
+
+  testWidgets('swiping sideways turns the day like the arrows (#5057)', (tester) async {
+    DailySummary day(String id, String date, String headline) => DailySummary(
+          id: id,
+          date: date,
+          createdAt: DateTime(2026, 7, 16),
+          headline: headline,
+          overview: 'Overview of $headline',
+          stats: DayStats(totalConversations: 1, totalDurationMinutes: 30),
+        );
+    final days = [
+      day('d3', '2026-07-16', 'A planning day'),
+      day('d2', '2026-07-15', 'A quiet day'),
+      day('d1', '2026-07-14', 'A busy day'),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: ThemeData.dark(),
+        home: DailySummaryDetailPage(summaryId: 'd2', summary: days[1], days: days),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 900));
+    final page = find.byKey(const Key('recap_day_swipe'));
+
+    // Right: the day before, where the ‹ arrow points.
+    await tester.fling(page, const Offset(300, 0), 1200);
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(find.text('A busy day'), findsOneWidget);
+
+    // Left twice: back to the middle day, then the newer one.
+    await tester.fling(page, const Offset(-300, 0), 1200);
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(find.text('A quiet day'), findsOneWidget);
+    await tester.fling(page, const Offset(-300, 0), 1200);
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(find.text('A planning day'), findsOneWidget);
+
+    // Nothing is newer than the newest day.
+    await tester.fling(page, const Offset(-300, 0), 1200);
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(find.text('A planning day'), findsOneWidget);
+  });
+
+  testWidgets('a recap opened on its own shows no day arrows', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: ThemeData.dark(),
+        home: DailySummaryDetailPage(summaryId: 'summary-1', summary: _summary(locations: const [])),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(find.byKey(const Key('recap_previous_day')), findsNothing);
+    expect(find.byKey(const Key('recap_next_day')), findsNothing);
   });
 }
 

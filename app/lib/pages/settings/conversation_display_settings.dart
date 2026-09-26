@@ -51,7 +51,7 @@ class _ConversationDisplaySettingsState extends State<ConversationDisplaySetting
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.conversationDisplay)),
+      appBar: OmiAppBar(leading: const OmiBackButton(), title: Text(context.l10n.conversationDisplay)),
       body: Consumer<ConversationProvider>(
         builder: (context, provider, child) {
           return ListView(

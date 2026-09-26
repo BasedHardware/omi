@@ -59,6 +59,7 @@ Future<List<ServerConversation>> getConversations({
   DateTime? endDate,
   String? folderId,
   bool? starred,
+  List<String> sources = const [],
 }) async {
   final result = await getConversationsResult(
     limit: limit,
@@ -69,6 +70,7 @@ Future<List<ServerConversation>> getConversations({
     endDate: endDate,
     folderId: folderId,
     starred: starred,
+    sources: sources,
   );
   return result.items;
 }
@@ -86,6 +88,7 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
   DateTime? endDate,
   String? folderId,
   bool? starred,
+  List<String> sources = const [],
 }) async {
   String url = conversationCollectionUrl(
     Env.apiBaseUrl ?? '',
@@ -97,6 +100,7 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
     endDate: endDate,
     folderId: folderId,
     starred: starred,
+    sources: sources,
   );
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
@@ -293,10 +297,17 @@ String conversationCollectionUrl(
   DateTime? endDate,
   String? folderId,
   bool? starred,
+  List<String> sources = const [],
 }) {
   final root = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
+  // The server takes several sources only with one status (one `in` filter per query), so a
+  // multi-source filter lists completed conversations.
+  if (sources.length > 1 && statuses.length != 1) statuses = const [ConversationStatus.completed];
   var url =
       '${root}v1/conversations?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}';
+  if (sources.isNotEmpty) {
+    url += '&sources=${sources.join(',')}';
+  }
   if (startDate != null) {
     url += '&start_date=${startDate.toUtc().toIso8601String()}';
   }
@@ -331,6 +342,7 @@ class ConversationApi {
     DateTime? endDate,
     String? folderId,
     bool? starred,
+    List<String> sources = const [],
   }) async {
     final sent = await executeApi<String>(
       request: ApiRequest(
@@ -344,6 +356,7 @@ class ConversationApi {
           endDate: endDate,
           folderId: folderId,
           starred: starred,
+          sources: sources,
         ),
         method: 'GET',
       ),

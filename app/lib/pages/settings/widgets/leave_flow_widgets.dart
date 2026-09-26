@@ -81,10 +81,10 @@ class LeaveFlowStepScaffold extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Semantics(header: true, child: Text(title, style: OmiType.title2)),
+                    Semantics(header: true, child: OmiBalancedText(title, style: OmiType.title2)),
                     if (subtitle != null) ...[
                       const SizedBox(height: OmiSpacing.xxs),
-                      Text(subtitle!, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                      OmiBalancedText(subtitle!, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
                     ],
                   ],
                 ),
@@ -223,7 +223,8 @@ class LeaveFlowConsequenceRow extends StatelessWidget {
             _IconBadge(icon: icon, color: OmiColors.textSecondary),
             const SizedBox(width: OmiSpacing.sm),
             Expanded(
-              child: Text(text, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.3)),
+              child:
+                  OmiBalancedText(text, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.3)),
             ),
           ],
         ),
@@ -292,7 +293,7 @@ class LeaveFlowTextField extends StatelessWidget {
 }
 
 /// Input decoration shared by the leave flows' text fields.
-InputDecoration leaveFlowInputDecoration({String? hint, Color focusColor = OmiColors.textTertiary}) {
+InputDecoration leaveFlowInputDecoration({String? hint, Color? focusColor}) {
   OutlineInputBorder border(Color color) =>
       OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide(color: color));
   return InputDecoration(
@@ -302,7 +303,7 @@ InputDecoration leaveFlowInputDecoration({String? hint, Color focusColor = OmiCo
     fillColor: OmiColors.surface1,
     border: border(OmiColors.border),
     enabledBorder: border(OmiColors.border),
-    focusedBorder: border(focusColor),
+    focusedBorder: border(focusColor ?? OmiColors.textTertiary),
     counterStyle: OmiType.caption.copyWith(color: OmiColors.textTertiary),
     contentPadding: const EdgeInsets.all(OmiSpacing.md),
   );
@@ -320,7 +321,7 @@ class _IconBadge extends StatelessWidget {
       child: Container(
         width: 36,
         height: 36,
-        decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
         child: Center(child: FaIcon(icon, size: 14, color: color)),
       ),
     );

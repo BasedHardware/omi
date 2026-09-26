@@ -22,52 +22,69 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: OmiColors.surface0,
-      appBar: AppBar(
+      appBar: OmiAppBar(
         leading: const OmiBackButton(),
         title: Text(context.l10n.appleWatchSetup),
       ),
+      // The step layout: what the permission is for scrolls; the buttons sit pinned where
+      // Continue does on every first-run step (16pt sides, 8pt above the bottom safe area).
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(OmiSpacing.xxl),
-          child: Column(
-            children: [
-              const SizedBox(height: OmiSpacing.xxl),
-              // Apple Watch image
-              ExcludeSemantics(
-                child: ClipRRect(
-                  borderRadius: OmiRadius.xlAll,
-                  child: Image.asset('assets/images/apple_watch.png', width: 160, height: 160, fit: BoxFit.cover),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.xl, OmiSpacing.lg, OmiSpacing.md),
+                child: Column(
+                  children: [
+                    // Apple Watch image
+                    ExcludeSemantics(
+                      child: ClipRRect(
+                        borderRadius: OmiRadius.xlAll,
+                        child: Image.asset('assets/images/apple_watch.png', width: 160, height: 160, fit: BoxFit.cover),
+                      ),
+                    ),
+                    const SizedBox(height: 48),
+                    Semantics(
+                      header: true,
+                      child: OmiBalancedText(
+                        _permissionRequested
+                            ? context.l10n.permissionRequestedExclaim
+                            : context.l10n.microphonePermission,
+                        style: OmiType.title1.copyWith(height: 1.2),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(height: OmiSpacing.xl),
+                    OmiBalancedText(
+                      _permissionRequested ? context.l10n.permissionGrantedNow : context.l10n.needMicrophonePermission,
+                      style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.6),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 48),
-              Semantics(
-                header: true,
-                child: Text(
-                  _permissionRequested ? context.l10n.permissionRequestedExclaim : context.l10n.microphonePermission,
-                  style: OmiType.title1.copyWith(height: 1.2),
-                  textAlign: TextAlign.center,
-                ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.xs),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (!_permissionRequested)
+                    OmiButton(
+                      label: context.l10n.grantPermissionButton,
+                      expand: true,
+                      onPressed: _requestPermission,
+                    )
+                  else ...[
+                    OmiButton(label: context.l10n.continueButton, expand: true, onPressed: _continueAndStartRecording),
+                    OmiButton.tertiary(label: context.l10n.needHelp, onPressed: _showHelpDialog),
+                  ],
+                ],
               ),
-              const SizedBox(height: OmiSpacing.xl),
-              Text(
-                _permissionRequested ? context.l10n.permissionGrantedNow : context.l10n.needMicrophonePermission,
-                style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.6),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 48),
-              if (!_permissionRequested)
-                OmiButton(
-                  label: context.l10n.grantPermissionButton,
-                  expand: true,
-                  onPressed: _requestPermission,
-                )
-              else ...[
-                OmiButton(label: context.l10n.continueButton, expand: true, onPressed: _continueAndStartRecording),
-                const SizedBox(height: OmiSpacing.md),
-                OmiButton.tertiary(label: context.l10n.needHelp, onPressed: _showHelpDialog),
-              ],
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

@@ -1823,9 +1823,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get openSettings => '打开设置';
 
   @override
-  String get whatsYourName => '您叫什么名字？';
-
-  @override
   String get speakTranscribeSummarize => '开口说，自动转写，智能总结。';
 
   @override
@@ -1839,12 +1836,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get termsOfUse => '使用条款';
-
-  @override
-  String get omiYourAiCompanion => 'Omi – 您的 AI 助手';
-
-  @override
-  String get captureEveryMoment => '记录每个瞬间，AI 为您生成摘要。';
 
   @override
   String get appleWatchSetup => 'Apple Watch 设置';
@@ -1885,18 +1876,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String errorStartingRecording(String error) {
     return '开始录音出错：$error';
   }
-
-  @override
-  String get selectPrimaryLanguage => '选择主要语言';
-
-  @override
-  String get languageBenefits => '设置语言以获得更清晰的转录';
-
-  @override
-  String get whatsYourPrimaryLanguage => '您的主要语言是什么？';
-
-  @override
-  String get selectYourLanguage => '选择您的语言';
 
   @override
   String get personalGrowthJourney => '您的个人成长之旅，AI 倾听您的每一句话。';
@@ -3306,9 +3285,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dataProtection => '数据保护';
-
-  @override
-  String get yourDataIsProtected => '您的数据受保护并受我们的';
 
   @override
   String get pleaseSelectYourPrimaryLanguage => '请选择您的主要语言';
@@ -4945,10 +4921,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => '已删除附加语音样本';
-
-  @override
-  String get consentDataMessage =>
-      '继续即表示您的对话、录音和个人信息将安全存储在我们的服务器上。您的音频录音和转录由第三方AI服务处理（包括用于转录的Deepgram和用于分析的OpenAI），以为您提供AI驱动的洞察并启用所有应用功能。';
 
   @override
   String get tasksEmptyStateMessage => '来自您对话的任务将显示在这里。\n点击 + 手动创建。';
@@ -6939,9 +6911,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi 提醒';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName 已断开连接';
   }
@@ -7632,9 +7601,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get authorizingMcpServer => '正在授权…';
-
-  @override
-  String get whereDidYouHearAboutOmi => '你是怎么知道我们的？';
 
   @override
   String get tiktok => 'TikTok';
@@ -9763,9 +9729,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcriptionNoAudio => '转录未接收到音频';
 
   @override
-  String get tapPlusToStartRecording => '点击录音按钮开始录音';
-
-  @override
   String get chatBlockTask => '任务';
 
   @override
@@ -10476,9 +10439,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceConnecting => '正在连接…';
 
   @override
-  String get recordOptionsTip => '提示：点按录音按钮上的箭头即可录制电话通话。';
-
-  @override
   String get firmwareUpdateFailedTitle => '更新失败';
 
   @override
@@ -11010,12 +10970,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get keepUsingPendant => '继续使用吊坠';
 
   @override
-  String get recordWith => '录音方式';
-
-  @override
-  String get moreWaysToRecord => '更多录音方式';
-
-  @override
   String get openCall => '打开通话';
 
   @override
@@ -11058,4 +11012,531 @@ class AppLocalizationsZh extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name等人';
   }
+
+  @override
+  String get alreadyHaveAccount => '已有账户？';
+
+  @override
+  String get signInToOmi => '登录 Omi';
+
+  @override
+  String get signInSubtitle => '你的对话和记忆随账户同步到手机、Mac 和网页。';
+
+  @override
+  String onboardingAllSetName(String name) {
+    return '一切就绪，$name。';
+  }
+
+  @override
+  String get completeHomeBody => '你的一天、任务和回顾都在一处。';
+
+  @override
+  String get completeAskTitle => '提问';
+
+  @override
+  String get foundOmiOptionalHint => '可选——帮助一个小团队了解哪些方式有效。';
+
+  @override
+  String get consentTitle => '用简单的话说说你的数据';
+
+  @override
+  String get consentSubtitle => '在 Omi 开始聆听之前，先告诉你它听到的内容会被如何处理。';
+
+  @override
+  String get consentStoredTitle => '存储哪些内容';
+
+  @override
+  String get consentStoredBody => '你的音频、转录内容以及 Omi 了解到的信息会安全地存储在你的账户中。';
+
+  @override
+  String get consentProcessorsTitle => '由谁处理';
+
+  @override
+  String get consentProcessorsBody => '语音由 Deepgram 转录，并由 OpenAI 分析，用于生成摘要、任务和记忆。';
+
+  @override
+  String get consentControlTitle => '你能掌控的';
+
+  @override
+  String get consentControlBody => '你可以随时删除任何对话、记忆或整个账户。';
+
+  @override
+  String get readPrivacyPolicy => '阅读隐私政策';
+
+  @override
+  String get whatShouldOmiCallYou => 'Omi 该怎么称呼你？';
+
+  @override
+  String get nameUsageHint => 'Omi 会用它在转录和导出内容中标注你。';
+
+  @override
+  String get yourNamePlaceholder => '你的名字';
+
+  @override
+  String get whatLanguageDoYouSpeakMost => '你最常说哪种语言？';
+
+  @override
+  String get languageOnboardingSubtitle => 'Omi 知道你的语言后转录效果最好。之后还可以添加更多语言。';
+
+  @override
+  String get permissionsFewTitle => '几项权限';
+
+  @override
+  String get permissionsFewSubtitle => 'Omi 只请求它会用到的权限。你可以随时在设置中更改。';
+
+  @override
+  String get permissionsContinueNote => '点“继续”不会请求任何权限。只有在你点“允许”时才会请求对应权限。';
+
+  @override
+  String get howDidYouHearAboutOmi => '你是从哪里知道 Omi 的？';
+
+  @override
+  String get showOnLockScreen => '在锁定屏幕上显示';
+
+  @override
+  String get seeAll => '查看全部';
+
+  @override
+  String get upNext => '接下来';
+
+  @override
+  String get allTasks => '所有任务';
+
+  @override
+  String get thisWeek => '本周';
+
+  @override
+  String capturedDuration(String duration) {
+    return '已记录 $duration';
+  }
+
+  @override
+  String newMemoriesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条新记忆',
+      one: '1 条新记忆',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncingFromPendant => '正在从吊坠同步';
+
+  @override
+  String get pendantRecordingsSynced => '吊坠录音已同步';
+
+  @override
+  String recordedOnPendantWhileAway(String duration) {
+    return '手机不在身边时，吊坠录下了约 $duration';
+  }
+
+  @override
+  String dailyRecapOn(String day) {
+    return '每日回顾 · $day';
+  }
+
+  @override
+  String taskDueDayTime(String day, String time) {
+    return '$day $time';
+  }
+
+  @override
+  String fromConversation(String title) {
+    return '来自 $title';
+  }
+
+  @override
+  String get endCapture => '结束';
+
+  @override
+  String get toDo => '待办';
+
+  @override
+  String get devices => '设备';
+
+  @override
+  String get devicesSubtitle => '所有为你聆听的设备。一次只有一个在录音。';
+
+  @override
+  String get addADevice => '添加设备';
+
+  @override
+  String get deviceReady => '就绪';
+
+  @override
+  String get importFromOtherApps => '从其他应用导入';
+
+  @override
+  String get whatWillYouWear => '你打算佩戴什么？';
+
+  @override
+  String get pickDeviceSubtitle => '之后还可以添加更多。一次只有一个在录音。';
+
+  @override
+  String get alreadyHaveOne => '已经有设备了？';
+
+  @override
+  String get noDeviceHeader => '没有设备';
+
+  @override
+  String get omiPendantName => 'Omi 吊坠';
+
+  @override
+  String get allDayConversations => '全天对话';
+
+  @override
+  String get conversationsAndPhotos => '对话 + 照片';
+
+  @override
+  String get wristMic => '腕上麦克风';
+
+  @override
+  String get glassesAudio => '眼镜音频';
+
+  @override
+  String get bringRecordingsIntoOmi => '把你的录音带进 Omi';
+
+  @override
+  String get useThisIphone => '使用这台 iPhone';
+
+  @override
+  String get useThisPhone => '使用这部手机';
+
+  @override
+  String get startInSeconds => '10 秒即可开始';
+
+  @override
+  String get askAboutThisConversationPlaceholder => '询问这段对话';
+
+  @override
+  String get summaryStyle => '摘要样式';
+
+  @override
+  String get summaryStyleSubtitle => '选择由哪个应用撰写此摘要';
+
+  @override
+  String get appearance => '外观';
+
+  @override
+  String get appearanceSystem => '跟随系统';
+
+  @override
+  String get appearanceLight => '浅色';
+
+  @override
+  String get appearanceDark => '深色';
+
+  @override
+  String get feel => '触感';
+
+  @override
+  String get haptics => '触感反馈';
+
+  @override
+  String get hapticsSubtitle => '结束、加星标或完成某项内容时轻触反馈';
+
+  @override
+  String get textSize => '文字大小';
+
+  @override
+  String get textSizeSubtitle => '跟随手机的文字大小';
+
+  @override
+  String get appearanceMotionNote => '动效跟随手机设置中的“减弱动态效果”——所有循环动画（包括设备指示灯）都会停止。';
+
+  @override
+  String get signedInWithApple => '已通过 Apple 登录';
+
+  @override
+  String get signedInWithGoogle => '已通过 Google 登录';
+
+  @override
+  String premiumMinutesLeftThisMonth(String left, int limit) {
+    return '本月剩余 $left/$limit 分钟高级转写时长';
+  }
+
+  @override
+  String get recordingFrom => '录音来源';
+
+  @override
+  String get recordingFromSubtitle => '同一时间只有一个来源在录音。切换会结束当前对话。';
+
+  @override
+  String get manageDevices => '管理设备';
+
+  @override
+  String get notListeningTitle => '未在收听';
+
+  @override
+  String get notListeningSubtitle => '用这部手机开始，或连接设备全天收听。';
+
+  @override
+  String get startListening => '开始收听';
+
+  @override
+  String get searchEverything => '搜索全部';
+
+  @override
+  String searchResultsCount(int count) {
+    return '结果 · $count';
+  }
+
+  @override
+  String get nothingFound => '未找到结果';
+
+  @override
+  String get searchNothingFoundHint => '换个词试试，或者问问 Omi——它理解的是意思，而不只是字面。';
+
+  @override
+  String get askOmiInstead => '改为询问 Omi';
+
+  @override
+  String get recentSearches => '最近';
+
+  @override
+  String get searchAskSuggestion => '我这周答应要做哪些事？';
+
+  @override
+  String get welcomeRememberTitle => '记住每一次对话。';
+
+  @override
+  String get welcomeRememberSubtitle => '想戴什么就戴什么。Omi 会把你听到的内容整理成笔记、待办和当天回顾。';
+
+  @override
+  String get memoriesSubtitle => 'Omi 知道什么，以及从哪里得知';
+
+  @override
+  String get memoryTierLongTerm => '长期';
+
+  @override
+  String get memoryTierShortTerm => '短期';
+
+  @override
+  String get memoriesTierNote => '新记忆先作为短期记忆。一直重要的那些，Omi 会自动转为长期记忆。';
+
+  @override
+  String get askEmptyTitle => '问问你听过的任何内容。';
+
+  @override
+  String get askEmptySubtitle => 'Omi 会根据你的对话、记忆和任务来回答。';
+
+  @override
+  String get completeListeningTitle => '收听';
+
+  @override
+  String get completeListeningBody => '蓝色表示 Omi 正在收听——通过你佩戴的设备或这部手机。';
+
+  @override
+  String get completeAskAnyBody => '点按“提问”，询问你听过的任何内容。';
+
+  @override
+  String get completeDevicesBody => '随时添加可穿戴设备，或者先用这部手机开始。';
+
+  @override
+  String get conversationSourceGlasses => '眼镜';
+
+  @override
+  String get conversationSourceImported => '已导入';
+
+  @override
+  String get conversationSourceEmptyHint => '此来源尚未录制任何内容。';
+
+  @override
+  String get findMyPendant => '查找我的吊坠';
+
+  @override
+  String get findMyPendantHint => '播放声音，方便你找到它';
+
+  @override
+  String get upToDate => '已是最新';
+
+  @override
+  String get updateAvailable => '有可用更新';
+
+  @override
+  String get storageTitle => '存储';
+
+  @override
+  String get connectStepTurnOn => '打开设备并靠近手机';
+
+  @override
+  String get connectStepAllowBluetooth => '允许蓝牙';
+
+  @override
+  String get connectStepTest => '说句话试试';
+
+  @override
+  String get connectStepTestHint => '说话时文字会显示在这里';
+
+  @override
+  String get setUpLater => '稍后设置';
+
+  @override
+  String recapPreviousDay(String day) {
+    return '前一天的回顾：$day';
+  }
+
+  @override
+  String recapNextDay(String day) {
+    return '后一天的回顾：$day';
+  }
+
+  @override
+  String get askStarterToday => '总结今天';
+
+  @override
+  String get askStarterPeople => '我见了谁？';
+
+  @override
+  String get askStarterOpen => '还有什么没完成？';
+
+  @override
+  String get peopleSubtitle => 'Omi 能在转写中认出的声音';
+
+  @override
+  String get usageCurrentPlan => '当前方案';
+
+  @override
+  String get appsExplore => '发现';
+
+  @override
+  String get appOutOfFive => '满分 5';
+
+  @override
+  String get appStatUsers => '用户';
+
+  @override
+  String homeWelcomeName(String name) {
+    return '欢迎，$name';
+  }
+
+  @override
+  String get homeWelcome => '欢迎';
+
+  @override
+  String get homeFirstDaySubtitle => '你与 Omi 的第一天';
+
+  @override
+  String get homeListeningHeroTitle => 'Omi 正在聆听';
+
+  @override
+  String get homeListeningHeroBody => '第一段对话结束一分钟后会出现在这里。';
+
+  @override
+  String get homeGettingStarted => '开始使用';
+
+  @override
+  String get gettingStartedConnect => '连接设备';
+
+  @override
+  String get gettingStartedConversation => '进行一次对话';
+
+  @override
+  String get gettingStartedAsk => '向 Omi 提问';
+
+  @override
+  String get homeGoodToKnow => '小贴士';
+
+  @override
+  String get tipFinishTitle => '随时结束';
+
+  @override
+  String get tipFinishBody => '点按“结束”，或连按两下吊坠，摘要会立即开始。';
+
+  @override
+  String get tipStarTitle => '为重要内容加星标';
+
+  @override
+  String get tipStarBody => '加星标的对话以后很容易找到。';
+
+  @override
+  String get tipPrivateTitle => '默认私密';
+
+  @override
+  String get tipPrivateBody => '除非你分享，否则你的对话始终保持私密。';
+
+  @override
+  String homeGettingStartedProgress(int done, int total) {
+    return '$done/$total';
+  }
+
+  @override
+  String get noFailedRecordings => '没有失败的录音';
+
+  @override
+  String get mapNoPlacesTitle => '还没有地点';
+
+  @override
+  String get mapNoPlacesMessage => '当 Omi 知道对话发生的地点时，对话会显示在这里。';
+
+  @override
+  String get mergeWithEllipsis => '合并…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return '完成 $appName 的设置后即可开启';
+  }
+
+  @override
+  String get greetingUpLate => '夜深了';
+
+  @override
+  String get greetingLunchtime => '午饭时间';
+
+  @override
+  String get greetingWindingDown => '放松时间';
+
+  @override
+  String get greetingGoodNight => '晚安';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting，$name';
+  }
+
+  @override
+  String get greetingStillUp => '还没睡';
+
+  @override
+  String get greetingEarlyStart => '起得真早';
+
+  @override
+  String get greetingNewDay => '新的一天';
+
+  @override
+  String get greetingMorning => '早上好';
+
+  @override
+  String get greetingBusyMorning => '忙碌的上午';
+
+  @override
+  String get greetingAfternoon => '下午好';
+
+  @override
+  String get greetingHomeStretch => '冲刺时刻';
+
+  @override
+  String get greetingEvening => '晚上好';
+
+  @override
+  String get unlimitedBadge => '无限';
+
+  @override
+  String get voiceSetupTaskSubline => '让 Omi 认出你的声音 · 大约一分钟';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '已保存 $saved／$total 的音频';
+  }
+
+  @override
+  String get voiceIntroTitle => '介绍一下你自己';
+
+  @override
+  String get memoryLabel => '回忆';
+
+  @override
+  String get idleReadyHint => '点按“开始”，你说的话会显示在这里。';
 }

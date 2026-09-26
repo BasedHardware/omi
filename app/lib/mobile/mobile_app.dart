@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/home/page.dart';
-import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/providers/auth_provider.dart';
@@ -64,7 +63,8 @@ class _MobileAppState extends State<MobileApp> {
             },
           );
         } else {
-          return const DeviceSelectionPage();
+          // Rev 3: a first launch opens on Welcome (one memory, any device), not a video splash.
+          return const OnboardingWrapper();
         }
       },
     );
@@ -102,7 +102,7 @@ class _PermissionsGateState extends State<_PermissionsGate> {
   @override
   Widget build(BuildContext context) {
     if (_permissionsGranted == null) {
-      return const Scaffold(backgroundColor: OmiColors.surface0, body: Center(child: OmiSpinner()));
+      return Scaffold(backgroundColor: OmiColors.surface0, body: const Center(child: OmiSpinner()));
     }
     if (_permissionsGranted!) {
       return const HomePageWrapper();

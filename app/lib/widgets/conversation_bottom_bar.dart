@@ -1,25 +1,17 @@
+import 'dart:math' as math;
 import 'dart:async';
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/audio.dart';
-import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
-import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
-import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/ui/ui.dart';
@@ -156,7 +148,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     if (!_isAudioInitialized) {
       await _initAudioIfNeeded();
     }
-    if (!mounted || _audioPlayer == null) return;
+    if (!mounted || _audioPlayer == null || !_isAudioInitialized) return;
 
     await _segmentStopSubscription?.cancel();
     _segmentStopSubscription = null;
@@ -234,6 +226,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     }
 
     _initCompleter = Completer<void>();
+    // Read before the awaits below: the messages for a load that fails.
+    final l10n = context.l10n;
 
     setState(() {
       _isAudioLoading = true;
@@ -254,12 +248,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         if (DateTime.now().isAfter(deadline)) {
           Logger.debug('Audio still pending after poll budget for ${widget.conversation!.id}');
           AnalyticsManager().audioPlaybackFailed(conversationId: widget.conversation!.id, reason: 'pending_timeout');
-          setState(() {
-            _isAudioLoading = false;
-          });
-          if (mounted) {
-            OmiFeedback.error(context, context.l10n.anErrorOccurredTryAgain);
-          }
+          await _dropFailedLoad(l10n.anErrorOccurredTryAgain);
           return;
         }
         await Future.delayed(Duration(milliseconds: urlsResponse.pollAfterMs ?? 3000));
@@ -290,9 +279,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       if (audioSources.isEmpty) {
         Logger.debug('No cached audio sources for ${widget.conversation!.id}');
         AnalyticsManager().audioPlaybackFailed(conversationId: widget.conversation!.id, reason: 'no_matching_sources');
-        if (mounted) {
-          OmiFeedback.error(context, context.l10n.anErrorOccurredTryAgain);
-        }
+        await _dropFailedLoad(l10n.audioPlaybackUnavailable);
         return;
       }
 
@@ -303,6 +290,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     } catch (e) {
       Logger.debug('Error initializing audio: $e');
       AnalyticsManager().audioPlaybackFailed(conversationId: widget.conversation?.id ?? '', reason: e.toString());
+      // Before, a failed load was silent and Play then "played" an empty player.
+      if (mounted) await _dropFailedLoad(l10n.audioPlaybackUnavailable);
     } finally {
       final completer = _initCompleter;
       _initCompleter = null;
@@ -315,13 +304,24 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     }
   }
 
+  /// A load that failed leaves nothing to play: drop the player so the next tap loads again, and
+  /// say why.
+  Future<void> _dropFailedLoad(String message) async {
+    final player = _audioPlayer;
+    _audioPlayer = null;
+    _isAudioInitialized = false;
+    await player?.dispose();
+    if (mounted) OmiFeedback.error(context, message);
+  }
+
   Future<void> _togglePlayPause() async {
     widget.onAudioInteraction?.call();
     if (!_isAudioInitialized && !_isAudioLoading) {
       await _initAudioIfNeeded();
     }
     if (!mounted) return;
-    if (_audioPlayer == null) return;
+    // Nothing loaded (still loading, or the load failed and said so): never show Pause over silence.
+    if (_audioPlayer == null || !_isAudioInitialized) return;
 
     final conversationId = widget.conversation?.id ?? '';
 
@@ -348,12 +348,6 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       await _audioPlayer!.play();
     }
     if (mounted) setState(() {});
-  }
-
-  String _formatDurationRemaining(Duration position) {
-    final remaining = _totalDuration - position;
-    // OmiDuration.offset keeps the hours: 1h 5m remaining reads 1:05:00, not 5:00.
-    return OmiDuration.offset(remaining.isNegative ? 0 : remaining.inSeconds);
   }
 
   @override
@@ -411,257 +405,121 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     );
   }
 
+  /// v2 Conversation: the recording as an inline card under the title — play, a waveform to tap
+  /// or scrub (played bars in white), and position / length. Nothing without audio.
+  ///
+  /// When the saved audio covers much less than the conversation (the server stored only part of
+  /// it, IMG_1160: a 5m 49s conversation with 3 s of audio), the card says so under the player
+  /// instead of looking like a broken recording.
   Widget _buildDetailBar(BuildContext context) {
-    final isTranscriptSelected = widget.selectedTab == ConversationTab.transcript;
-    final isSummarySelected = widget.selectedTab == ConversationTab.summary;
     final hasAudio = widget.conversation?.hasAudio() ?? false;
-
-    const double iconSize = 56.0;
-    const double transcriptPillWidth = 195.0;
-    const double summaryPillWidth = 140.0;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        // Transcript: animated width expansion/collapse
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeInOut,
-          width: (isTranscriptSelected && hasAudio) ? transcriptPillWidth : iconSize,
-          height: iconSize,
-          clipBehavior: Clip.hardEdge,
-          decoration: const BoxDecoration(borderRadius: OmiRadius.pillAll),
-          child: OverflowBox(
-            maxWidth: transcriptPillWidth,
-            alignment: Alignment.center,
-            child: (isTranscriptSelected && hasAudio)
-                ? _buildTranscriptPillContent()
-                : _buildCircularButtonContent(
-                    icon: FontAwesomeIcons.solidComments,
-                    isSelected: isTranscriptSelected,
-                    onTap: () => widget.onTabSelected(ConversationTab.transcript),
-                    semanticLabel: context.l10n.transcript,
-                  ),
-          ),
-        ),
-
-        const SizedBox(width: 8),
-
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeInOut,
-          width: isSummarySelected ? summaryPillWidth : iconSize,
-          height: iconSize,
-          clipBehavior: Clip.hardEdge,
-          decoration: const BoxDecoration(borderRadius: OmiRadius.pillAll),
-          child: OverflowBox(
-            maxWidth: summaryPillWidth,
-            alignment: Alignment.center,
-            child: isSummarySelected
-                ? _buildSummaryPillContent(context)
-                : _buildCircularButtonContent(
-                    icon: FontAwesomeIcons.solidFileLines,
-                    isSelected: false,
-                    onTap: () => widget.onTabSelected(ConversationTab.summary),
-                    semanticLabel: context.l10n.summary,
-                  ),
-          ),
-        ),
-
-        if (widget.hasActionItems) ...[
-          const SizedBox(width: 8),
-          _buildCircularButton(
-            icon: FontAwesomeIcons.listCheck,
-            isSelected: widget.selectedTab == ConversationTab.actionItems,
-            onTap: () => widget.onTabSelected(ConversationTab.actionItems),
-            semanticLabel: context.l10n.actionItems,
-          ),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildTranscriptPillContent() {
-    return Container(
-      height: 56,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: OmiColors.surface3,
-        borderRadius: OmiRadius.pillAll,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            spreadRadius: 1,
-            blurRadius: 5,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
+    if (!hasAudio) return const SizedBox.shrink();
+    final conversationSeconds = widget.conversation!.getDurationInSeconds();
+    final partial = conversationSeconds >= 30 &&
+        _totalDuration > Duration.zero &&
+        _totalDuration.inMilliseconds < conversationSeconds * 1000 * 0.5;
+    return OmiCard(
+      key: const Key('conversation_audio_card'),
+      radius: 24,
+      padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Play/Pause button
-          _buildPlayPauseButton(),
-          const SizedBox(width: 8),
-          // Progress bar + time remaining
-          Flexible(child: _buildProgressBar()),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCircularButtonContent({
-    required FaIconData icon,
-    required bool isSelected,
-    required VoidCallback onTap,
-    required String semanticLabel,
-  }) {
-    return Semantics(
-      button: true,
-      label: semanticLabel,
-      excludeSemantics: true,
-      onTap: () {
-        HapticFeedback.mediumImpact();
-        onTap();
-      },
-      child: Container(
-        height: 56,
-        width: 56,
-        decoration: BoxDecoration(
-          color: isSelected ? OmiColors.surface3 : OmiColors.surface1,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              spreadRadius: 1,
-              blurRadius: 5,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          shape: const CircleBorder(),
-          child: InkWell(
-            borderRadius: OmiRadius.pillAll,
-            onTap: () {
-              HapticFeedback.mediumImpact();
-              onTap();
-            },
-            child: Center(
-                child: FaIcon(icon, color: isSelected ? OmiColors.textPrimary : OmiColors.textTertiary, size: 22)),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSummaryPillContent(BuildContext context) {
-    return Consumer<ConversationDetailProvider>(
-      builder: (context, provider, _) {
-        final summarySelection = provider.getSummarySelection();
-        final app = summarySelection.isApp
-            ? provider.appsList.firstWhereOrNull((element) => element.id == summarySelection.appId)
-            : null;
-
-        return _buildSummaryPillInner(context, provider, summarySelection, app);
-      },
-    );
-  }
-
-  Widget _buildSummaryPillInner(
-    BuildContext context,
-    ConversationDetailProvider provider,
-    ConversationSummarySelection summarySelection,
-    App? app,
-  ) {
-    final isReprocessing = provider.loadingReprocessConversation;
-    final reprocessingApp = provider.selectedAppForReprocessing;
-
-    void handleTap() {
-      HapticFeedback.mediumImpact();
-      if (widget.selectedTab == ConversationTab.summary) {
-        showSummarizedAppsSheet(context);
-      } else {
-        widget.onTabSelected(ConversationTab.summary);
-      }
-    }
-
-    String displayName = context.l10n.summary;
-    if (isReprocessing && reprocessingApp != null) {
-      displayName = reprocessingApp.name;
-    } else if (summarySelection.isApp) {
-      displayName = app?.name ?? context.l10n.unknownApp;
-    }
-
-    String? appImageUrl;
-    bool isLocalAsset = false;
-    if (isReprocessing) {
-      if (reprocessingApp != null) {
-        appImageUrl = reprocessingApp.getImageUrl();
-      } else {
-        appImageUrl = Assets.images.herologo.path;
-        isLocalAsset = true;
-      }
-    } else if (summarySelection.isApp && app != null) {
-      appImageUrl = app.getImageUrl();
-    }
-    final isUnknownApp = !isReprocessing && summarySelection.isApp && app == null;
-
-    return Container(
-      height: 56,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: OmiColors.surface3,
-        borderRadius: OmiRadius.pillAll,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            spreadRadius: 1,
-            blurRadius: 5,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: OmiRadius.pillAll,
-        child: InkWell(
-          borderRadius: OmiRadius.pillAll,
-          onTap: handleTap,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
+          Row(
             children: [
-              // App icon or default icon
-              _buildAppIcon(appImageUrl, isLocalAsset, isReprocessing, isUnknownApp: isUnknownApp),
-              const SizedBox(width: 6),
-              // App name
-              Flexible(
-                child: Text(
-                  displayName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600),
-                ),
-              ),
-              // Dropdown arrow
-              const Icon(Icons.keyboard_arrow_down, color: OmiColors.textPrimary, size: 18),
+              _buildPlayPauseButton(diameter: 44),
+              const SizedBox(width: 12),
+              Expanded(child: _buildWaveformScrubber()),
             ],
           ),
-        ),
+          if (partial)
+            Padding(
+              key: const Key('conversation_audio_partial'),
+              padding: const EdgeInsets.fromLTRB(4, 8, 0, 0),
+              child: Text(
+                context.l10n.audioPartiallySaved(
+                  _clock(_totalDuration),
+                  _clock(Duration(seconds: conversationSeconds)),
+                ),
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+              ),
+            ),
+        ],
       ),
     );
   }
 
-  /// Play/pause: a 32pt white circle in a 44pt target, labelled for screen readers.
-  Widget _buildPlayPauseButton() {
+  /// The waveform strip (44 bars, 30 pt) and "0:12 / 0:30"; tap or drag it to seek.
+  Widget _buildWaveformScrubber() {
+    Widget strip(Duration position) {
+      // Never a length shorter than what is playing ("0:03 / 0:02"): the audio file itself may run
+      // a little past the saved-audio manifest.
+      final fileLength = _singleArtifact ? _audioPlayer?.duration : null;
+      var total = _totalDuration;
+      if (fileLength != null && fileLength > total) total = fileLength;
+      if (position > total) total = position;
+      final progress =
+          total.inMilliseconds > 0 ? (position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0).toDouble() : 0.0;
+      return Row(
+        children: [
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final width = constraints.maxWidth;
+                void seekAt(double dx) {
+                  if (_audioPlayer == null || total.inMilliseconds <= 0 || width <= 0) return;
+                  final p = (dx / width).clamp(0.0, 1.0);
+                  _seekToCombinedPosition(Duration(milliseconds: (p * total.inMilliseconds).round()));
+                }
+
+                return GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: (d) => seekAt(d.localPosition.dx),
+                  onHorizontalDragUpdate: (d) => seekAt(d.localPosition.dx),
+                  child: SizedBox(
+                    height: 30,
+                    child: CustomPaint(painter: _ScrubStripPainter(progress: progress), size: Size(width, 30)),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            '${_clock(position)} / ${_clock(total)}',
+            style: OmiType.footnote.copyWith(
+              color: OmiColors.textSecondary,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (_audioPlayer == null) return strip(Duration.zero);
+    return StreamBuilder<int?>(
+      stream: _audioPlayer!.currentIndexStream,
+      builder: (context, indexSnapshot) => StreamBuilder<Duration>(
+        stream: _audioPlayer!.positionStream,
+        builder: (context, positionSnapshot) =>
+            strip(_getCombinedPosition(indexSnapshot.data ?? 0, positionSnapshot.data ?? Duration.zero)),
+      ),
+    );
+  }
+
+  static String _clock(Duration d) {
+    final minutes = d.inMinutes;
+    final seconds = (d.inSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
+
+  /// Play/pause: a white circle ([diameter], in at least a 44pt target), labelled for screen readers.
+  Widget _buildPlayPauseButton({double diameter = 32}) {
     Widget button(bool isPlaying) => OmiIconButton.filled(
           icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow, size: 20),
           label: isPlaying ? context.l10n.pause : context.l10n.play,
-          diameter: 32,
+          diameter: diameter,
           fillColor: OmiColors.accent,
           color: OmiColors.onAccent,
           onPressed: _togglePlayPause,
@@ -681,95 +539,6 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           return loading;
         }
         return button(playerState?.playing ?? false);
-      },
-    );
-  }
-
-  Widget _buildProgressBar() {
-    const double progressBarWidth = 90.0;
-
-    if (_audioPlayer == null) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: progressBarWidth,
-            height: 12,
-            alignment: Alignment.center,
-            child: Container(
-              width: progressBarWidth,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.3),
-                borderRadius: const BorderRadius.all(Radius.circular(2)),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(_formatDurationRemaining(Duration.zero), style: OmiType.caption),
-        ],
-      );
-    }
-
-    return StreamBuilder<int?>(
-      stream: _audioPlayer!.currentIndexStream,
-      builder: (context, indexSnapshot) {
-        final currentIndex = indexSnapshot.data ?? 0;
-        return StreamBuilder<Duration>(
-          stream: _audioPlayer!.positionStream,
-          builder: (context, positionSnapshot) {
-            final trackPosition = positionSnapshot.data ?? Duration.zero;
-            final combinedPosition = _getCombinedPosition(currentIndex, trackPosition);
-            final progress = _totalDuration.inMilliseconds > 0
-                ? (combinedPosition.inMilliseconds / _totalDuration.inMilliseconds).clamp(0.0, 1.0)
-                : 0.0;
-
-            return Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Progress bar with tap-to-seek
-                GestureDetector(
-                  onTapDown: (details) {
-                    final tapPosition = details.localPosition.dx;
-                    final seekProgress = (tapPosition / progressBarWidth).clamp(0.0, 1.0);
-                    final seekPosition = Duration(milliseconds: (seekProgress * _totalDuration.inMilliseconds).toInt());
-                    _seekToCombinedPosition(seekPosition);
-                  },
-                  onHorizontalDragUpdate: (details) {
-                    final tapPosition = details.localPosition.dx;
-                    final seekProgress = (tapPosition / progressBarWidth).clamp(0.0, 1.0);
-                    final seekPosition = Duration(milliseconds: (seekProgress * _totalDuration.inMilliseconds).toInt());
-                    _seekToCombinedPosition(seekPosition);
-                  },
-                  child: Container(
-                    width: progressBarWidth,
-                    height: 20, // Larger hit area
-                    alignment: Alignment.center,
-                    child: Container(
-                      width: progressBarWidth,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.3),
-                        borderRadius: const BorderRadius.all(Radius.circular(2)),
-                      ),
-                      child: FractionallySizedBox(
-                        alignment: Alignment.centerLeft,
-                        widthFactor: progress,
-                        child: Container(
-                          decoration: const BoxDecoration(
-                              color: OmiColors.accent, borderRadius: BorderRadius.all(Radius.circular(2))),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Duration remaining
-                Text(_formatDurationRemaining(combinedPosition), style: OmiType.caption),
-              ],
-            );
-          },
-        );
       },
     );
   }
@@ -838,7 +607,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       label: semanticLabel,
       excludeSemantics: true,
       onTap: () {
-        HapticFeedback.mediumImpact();
+        OmiHaptics.medium();
         onTap();
       },
       child: Material(
@@ -867,7 +636,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             child: InkWell(
               borderRadius: OmiRadius.pillAll,
               onTap: () {
-                HapticFeedback.mediumImpact();
+                OmiHaptics.medium();
                 onTap();
               },
               child: Center(
@@ -889,68 +658,42 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       onPressed: widget.onStopPressed,
     );
   }
+}
 
-  Widget _buildAppIcon(String? imageUrl, bool isLocalAsset, bool isLoading, {bool isUnknownApp = false}) {
-    const double size = 28;
+/// The design's static waveform (lib.py `_hs`, seed 3, floor 0.18): played bars in white, the rest
+/// at 26 % so the playhead reads at a glance.
+class _ScrubStripPainter extends CustomPainter {
+  _ScrubStripPainter({required this.progress});
 
-    if (isLoading) {
-      return const SizedBox.square(dimension: size, child: Center(child: OmiSpinner(size: OmiSpinnerSize.small)));
-    }
+  final double progress;
+  static const int _bars = 44;
+  static const double _gap = 2;
 
-    if (isUnknownApp) {
-      return const SizedBox(
-        width: size,
-        height: size,
-        child: Icon(Icons.apps_outlined, color: OmiColors.textPrimary, size: 24),
-      );
-    }
-
-    if (imageUrl == null) {
-      return SizedBox(
-        width: size,
-        height: size,
-        child: SvgPicture.asset(
-          Assets.images.aiMagic,
-          colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
-        ),
-      );
-    }
-
-    if (isLocalAsset) {
-      return Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(size / 2),
-          image: DecorationImage(image: AssetImage(imageUrl), fit: BoxFit.cover),
-        ),
-      );
-    }
-
-    return CachedNetworkImage(
-      imageUrl: imageUrl,
-      imageBuilder: (context, imageProvider) {
-        return Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
-          ),
-        );
-      },
-      errorWidget: (context, url, error) {
-        return SizedBox(
-          width: size,
-          height: size,
-          child: SvgPicture.asset(
-            Assets.images.aiMagic,
-            colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
-          ),
-        );
-      },
-      placeholder: (context, url) =>
-          const SizedBox.square(dimension: size, child: Center(child: OmiSpinner(size: OmiSpinnerSize.small))),
-    );
+  static double _level(int i) {
+    const seed = 3.0;
+    const floor = 0.18;
+    final a = (math.sin(i * 0.37 + seed) * math.sin(i * 0.113 + seed * 2.1)).abs();
+    final b = math.sin(i * 1.7 + seed * 0.5).abs() * 0.35;
+    return floor + (1 - floor) * math.min(1.0, a * 0.85 + b * 0.5);
   }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final barWidth = (size.width - _gap * (_bars - 1)) / _bars;
+    if (barWidth <= 0) return;
+    final played = Paint()..color = OmiColors.textPrimary;
+    final rest = Paint()..color = OmiColors.textPrimary.withValues(alpha: 0.26);
+    for (var i = 0; i < _bars; i++) {
+      final h = math.max(4.0, size.height * _level(i));
+      final x = i * (barWidth + _gap);
+      final rect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, (size.height - h) / 2, barWidth, h),
+        const Radius.circular(1),
+      );
+      canvas.drawRRect(rect, i / _bars < progress ? played : rest);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_ScrubStripPainter old) => old.progress != progress;
 }

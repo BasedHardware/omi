@@ -3,16 +3,13 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
-import 'package:omi/pages/settings/settings_destinations.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
-import 'package:omi/providers/home_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -20,56 +17,13 @@ import 'package:omi/widgets/conversation_photo_image.dart';
 import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/widgets/transcript.dart';
 
-class SpeechProfileCardWidget extends StatelessWidget {
-  const SpeechProfileCardWidget({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<HomeProvider>(
-      builder: (context, provider, child) {
-        if (provider.isLoading) return const SizedBox();
-        return provider.hasSpeakerProfile
-            ? const SizedBox()
-            : Consumer<DeviceProvider>(
-                builder: (context, device, child) {
-                  if (device.pairedDevice == null ||
-                      !device.isConnected ||
-                      device.pairedDevice?.firmwareRevision == '1.0.2') {
-                    return const SizedBox();
-                  }
-                  return _CardRow(
-                    icon: Icons.multitrack_audio,
-                    label: context.l10n.teachOmiYourVoice,
-                    // A dot marks a setup step still to do.
-                    badge: true,
-                    onTap: () async {
-                      PlatformManager.instance.analytics.pageOpened('Speech Profile Memories');
-                      bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
-                      await openVoiceProfile(context);
-                      final newHasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
-                      if (hasSpeakerProfile != newHasSpeakerProfile) {
-                        if (!context.mounted) return;
-                        await context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                        if (!context.mounted) return;
-                        context.read<HomeProvider>().setSpeakerProfile(newHasSpeakerProfile);
-                      }
-                    },
-                  );
-                },
-              );
-      },
-    );
-  }
-}
-
 /// A tappable card row on the capture surfaces: icon, label, chevron; announced as a button.
 class _CardRow extends StatelessWidget {
-  const _CardRow({required this.icon, required this.label, required this.onTap, this.badge = false});
+  const _CardRow({required this.icon, required this.label, required this.onTap});
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final bool badge;
 
   @override
   Widget build(BuildContext context) {
@@ -92,11 +46,7 @@ class _CardRow extends StatelessWidget {
                   Icon(icon, color: OmiColors.textPrimary),
                   const SizedBox(width: OmiSpacing.md),
                   Expanded(child: Text(label, style: OmiType.callout)),
-                  if (badge) ...[
-                    const Icon(Icons.fiber_manual_record, color: OmiColors.danger, size: 10),
-                    const SizedBox(width: OmiSpacing.xs),
-                  ],
-                  const Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
+                  Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
                 ],
               ),
             ),

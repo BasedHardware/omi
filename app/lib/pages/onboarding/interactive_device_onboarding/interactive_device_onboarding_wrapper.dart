@@ -135,7 +135,7 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
         child: Scaffold(
           backgroundColor: Colors.transparent,
           body: Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,

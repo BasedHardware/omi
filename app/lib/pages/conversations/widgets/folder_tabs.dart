@@ -1,6 +1,5 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -13,7 +12,6 @@ import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
 import 'package:omi/widgets/header_circle_button.dart';
 
 class FolderTabs extends StatefulWidget {
@@ -23,6 +21,11 @@ class FolderTabs extends StatefulWidget {
   final bool showStarredOnly;
   final VoidCallback onStarredToggle;
 
+  /// Rev 3 source chips (Pendant · Glasses · Phone · Imported), after Starred. A source stands
+  /// alone: the provider clears the folder and Starred when one is chosen.
+  final ConversationSourceFilter sourceFilter;
+  final ValueChanged<ConversationSourceFilter>? onSourceSelected;
+
   const FolderTabs({
     super.key,
     required this.folders,
@@ -30,6 +33,8 @@ class FolderTabs extends StatefulWidget {
     required this.onFolderSelected,
     required this.showStarredOnly,
     required this.onStarredToggle,
+    this.sourceFilter = ConversationSourceFilter.all,
+    this.onSourceSelected,
   });
 
   @override
@@ -40,21 +45,26 @@ class _FolderTabsState extends State<FolderTabs> {
   final ScrollController _scrollController = ScrollController();
   String? _previousSelectedFolderId;
   bool _previousShowStarredOnly = false;
+  ConversationSourceFilter _previousSourceFilter = ConversationSourceFilter.all;
 
   @override
   void initState() {
     super.initState();
     _previousSelectedFolderId = widget.selectedFolderId;
     _previousShowStarredOnly = widget.showStarredOnly;
+    _previousSourceFilter = widget.sourceFilter;
   }
 
   @override
   void didUpdateWidget(FolderTabs oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Auto-scroll to top when selection changes
-    if (widget.selectedFolderId != _previousSelectedFolderId || widget.showStarredOnly != _previousShowStarredOnly) {
+    if (widget.selectedFolderId != _previousSelectedFolderId ||
+        widget.showStarredOnly != _previousShowStarredOnly ||
+        widget.sourceFilter != _previousSourceFilter) {
       _previousSelectedFolderId = widget.selectedFolderId;
       _previousShowStarredOnly = widget.showStarredOnly;
+      _previousSourceFilter = widget.sourceFilter;
       _scrollToStart();
     }
   }
@@ -77,7 +87,6 @@ class _FolderTabsState extends State<FolderTabs> {
       child: _FolderTab(
         label: context.l10n.starred,
         icon: '⭐',
-        color: Colors.amber,
         isSelected: widget.showStarredOnly,
         skipFolderTracking: true,
         onTap: () {
@@ -92,6 +101,32 @@ class _FolderTabsState extends State<FolderTabs> {
     );
   }
 
+  static String _sourceLabel(BuildContext context, ConversationSourceFilter source) {
+    final l10n = context.l10n;
+    return switch (source) {
+      ConversationSourceFilter.all => l10n.all,
+      ConversationSourceFilter.pendant => l10n.captureSourcePendant,
+      ConversationSourceFilter.glasses => l10n.conversationSourceGlasses,
+      ConversationSourceFilter.phone => l10n.phone,
+      ConversationSourceFilter.imported => l10n.conversationSourceImported,
+    };
+  }
+
+  Widget _buildSourceTab(ConversationSourceFilter source) {
+    final isSelected = widget.sourceFilter == source;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: _FolderTab(
+        key: ValueKey('conversation_source_${source.name}'),
+        label: _sourceLabel(context, source),
+        isSelected: isSelected,
+        skipFolderTracking: true,
+        // Choosing the selected source again goes back to everything.
+        onTap: () => widget.onSourceSelected?.call(isSelected ? ConversationSourceFilter.all : source),
+      ),
+    );
+  }
+
   Widget _buildFolderTab(Folder folder) {
     final isSelected = widget.selectedFolderId == folder.id;
     return Padding(
@@ -99,7 +134,6 @@ class _FolderTabsState extends State<FolderTabs> {
       child: _FolderTab(
         label: folder.name,
         icon: folder.icon,
-        color: folder.colorValue,
         count: folder.conversationCount,
         isSelected: isSelected,
         // If already selected, clicking clears the selection
@@ -111,14 +145,16 @@ class _FolderTabsState extends State<FolderTabs> {
 
   @override
   Widget build(BuildContext context) {
-    // Build ordered list of tabs: All, Starred, folders
+    // Build ordered list of tabs: All, Starred, sources, folders
     final List<Widget> tabs = [];
+    final hasSource = widget.sourceFilter != ConversationSourceFilter.all;
 
     // "All" tab always first - clears all filters when clicked
     tabs.add(
       _FolderTab(
+        key: const ValueKey('conversation_source_all'),
         label: context.l10n.all,
-        isSelected: widget.selectedFolderId == null && !widget.showStarredOnly,
+        isSelected: widget.selectedFolderId == null && !widget.showStarredOnly && !hasSource,
         onTap: () {
           // Clear folder filter
           widget.onFolderSelected(null);
@@ -126,6 +162,7 @@ class _FolderTabsState extends State<FolderTabs> {
           if (widget.showStarredOnly) {
             widget.onStarredToggle();
           }
+          if (hasSource) widget.onSourceSelected?.call(ConversationSourceFilter.all);
         },
       ),
     );
@@ -140,6 +177,12 @@ class _FolderTabsState extends State<FolderTabs> {
         : null;
     if (selectedFolder != null) {
       tabs.add(_buildFolderTab(selectedFolder));
+    }
+
+    if (widget.onSourceSelected != null) {
+      for (final source in ConversationSourceFilter.values) {
+        if (source != ConversationSourceFilter.all) tabs.add(_buildSourceTab(source));
+      }
     }
 
     // Add remaining folders (excluding selected one)
@@ -160,13 +203,21 @@ class _FolderTabsState extends State<FolderTabs> {
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          // Scrollable folder tabs
+          // Scrollable folder tabs. Chips that run on under the + fade out instead of stopping in a
+          // hard cut against it.
           Expanded(
-            child: ListView(
-              controller: _scrollController,
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.only(left: 16),
-              children: tabs,
+            child: ShaderMask(
+              blendMode: BlendMode.dstIn,
+              shaderCallback: (rect) => LinearGradient(
+                colors: const [Colors.black, Colors.black, Colors.transparent],
+                stops: [0, rect.width > 28 ? 1 - 28 / rect.width : 0, 1],
+              ).createShader(rect),
+              child: ListView(
+                controller: _scrollController,
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.only(left: 16),
+                children: tabs,
+              ),
             ),
           ),
           // Fixed add button
@@ -181,7 +232,6 @@ class _FolderTabsState extends State<FolderTabs> {
 class _FolderTab extends StatelessWidget {
   final String label;
   final String? icon;
-  final Color? color;
   final int? count;
   final bool isSelected;
   final VoidCallback onTap;
@@ -189,9 +239,9 @@ class _FolderTab extends StatelessWidget {
   final bool skipFolderTracking;
 
   const _FolderTab({
+    super.key,
     required this.label,
     this.icon,
-    this.color,
     this.count,
     required this.isSelected,
     required this.onTap,
@@ -202,7 +252,7 @@ class _FolderTab extends StatelessWidget {
   void _showContextMenu(BuildContext context) {
     if (folder == null) return; // No context menu for "All" tab
 
-    HapticFeedback.mediumImpact();
+    OmiHaptics.medium();
 
     // Track context menu opened
     PlatformManager.instance.analytics.folderContextMenuOpened(folderId: folder!.id, folderName: folder!.name);
@@ -212,8 +262,8 @@ class _FolderTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Use a visible color for "All" tab (white), otherwise use folder color
-    final effectiveColor = color ?? Colors.white;
+    // v2 chips: the selected chip is the neutral accent fill; the rest sit on surface2.
+    final foreground = isSelected ? OmiColors.onAccent : OmiColors.textPrimary;
 
     return GestureDetector(
       onTap: () {
@@ -231,11 +281,12 @@ class _FolderTab extends StatelessWidget {
         button: true,
         selected: isSelected,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+          duration: OmiMotion.of(context).quick,
+          curve: OmiMotion.springCurve,
           margin: const EdgeInsets.symmetric(vertical: (kMinTapTarget - 36) / 2),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
           decoration: BoxDecoration(
-            color: isSelected ? effectiveColor.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.12),
+            color: isSelected ? OmiColors.accent : OmiColors.surface2,
             borderRadius: OmiRadius.pillAll,
           ),
           child: Row(
@@ -244,16 +295,13 @@ class _FolderTab extends StatelessWidget {
               if (icon != null) ...[
                 Padding(
                   padding: const EdgeInsets.only(bottom: 2),
-                  child: FaIcon(folderIconToFa(icon), size: 12, color: isSelected ? effectiveColor : Colors.grey[400]),
+                  child: FaIcon(folderIconToFa(icon), size: 12, color: foreground),
                 ),
                 const SizedBox(width: 5),
               ],
               Text(
                 label,
-                style: OmiType.footnote.copyWith(
-                  color: isSelected ? effectiveColor : Colors.grey[400],
-                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                ),
+                style: OmiType.footnote.copyWith(color: foreground, fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -274,10 +322,10 @@ class _AddFolderButton extends StatelessWidget {
       child: HeaderCircleButton(
         semanticLabel: context.l10n.newFolder,
         diameter: 32,
-        color: Colors.grey.withValues(alpha: 0.12),
-        icon: Icon(Icons.add, size: 18, color: Colors.grey[400]),
+        color: OmiColors.surface2,
+        icon: Icon(Icons.add, size: 18, color: OmiColors.textSecondary),
         onTap: () async {
-          HapticFeedback.mediumImpact();
+          OmiHaptics.medium();
           PlatformManager.instance.analytics.createFolderButtonClicked();
           await showCreateFolderBottomSheet(context);
         },
@@ -420,7 +468,7 @@ class _DeleteFolderSheet extends StatelessWidget {
                     icon: '🚫',
                     name: context.l10n.noFolder,
                     description: context.l10n.removeFromAllFolders,
-                    color: Colors.grey,
+                    color: OmiColors.textTertiary,
                     onTap: () => onDelete(null),
                   ),
 
@@ -463,16 +511,12 @@ class _MoveOption extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
-      decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: ResponsiveHelper.backgroundTertiary, width: 1),
-      ),
+      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: OmiRadius.mdAll,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
@@ -491,14 +535,7 @@ class _MoveOption extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        name,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          color: ResponsiveHelper.textPrimary,
-                        ),
-                      ),
+                      Text(name, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500)),
                       if (description != null && description!.isNotEmpty)
                         Padding(
                           padding: const EdgeInsets.only(top: 3),
@@ -506,7 +543,7 @@ class _MoveOption extends StatelessWidget {
                             description!,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12, color: ResponsiveHelper.textTertiary),
+                            style: OmiType.caption1.copyWith(color: OmiColors.textTertiary),
                           ),
                         ),
                     ],

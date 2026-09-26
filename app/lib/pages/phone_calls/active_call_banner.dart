@@ -1,6 +1,5 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 
@@ -35,7 +34,7 @@ class ActiveCallBanner extends StatelessWidget {
           },
           child: Container(
             margin: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, OmiSpacing.xxs),
-            decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
             child: Padding(
               padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 14, OmiSpacing.sm, 9),
               child: Column(
@@ -132,7 +131,7 @@ class _CallInfoRow extends StatelessWidget {
                 width: 32,
                 height: 32,
                 decoration: BoxDecoration(color: iconColor, shape: BoxShape.circle),
-                child: const Icon(Icons.phone_in_talk, color: OmiColors.textPrimary, size: 16),
+                child: Icon(Icons.phone_in_talk, color: OmiColors.textPrimary, size: 16),
               ),
             );
           },
@@ -162,7 +161,7 @@ class _CallInfoRow extends StatelessWidget {
         // Duration / status
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
           child: Text(
             statusText,
             style: OmiType.footnote.copyWith(color: OmiColors.success, fontWeight: FontWeight.w500),
@@ -170,7 +169,7 @@ class _CallInfoRow extends StatelessWidget {
         ),
         const SizedBox(width: 6),
         // Expand icon
-        const ExcludeSemantics(child: Icon(Icons.keyboard_arrow_up, color: OmiColors.textTertiary, size: 22)),
+        ExcludeSemantics(child: Icon(Icons.keyboard_arrow_up, color: OmiColors.textTertiary, size: 22)),
       ],
     );
   }
@@ -187,7 +186,7 @@ class _TranscriptSnippet extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
       child: Text(
         '$speakerLabel: $text',
         style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.3),
@@ -244,18 +243,18 @@ class _CompactCallControls extends StatelessWidget {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () {
-              HapticFeedback.heavyImpact();
+              OmiHaptics.heavy();
               onEndCall();
             },
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 5),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.xs),
-                decoration: const BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.pillAll),
+                decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.pillAll),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.call_end, color: OmiColors.textPrimary, size: 18),
+                    Icon(Icons.call_end, color: OmiColors.textPrimary, size: 18),
                     const SizedBox(width: 6),
                     Text(context.l10n.phoneEndCall, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600)),
                   ],
@@ -289,7 +288,7 @@ class _CompactControlButton extends StatelessWidget {
         onTap: onTap == null
             ? null
             : () {
-                HapticFeedback.mediumImpact();
+                OmiHaptics.medium();
                 onTap!();
               },
         child: Padding(
@@ -347,7 +346,7 @@ class ActiveCallTopBar extends StatelessWidget {
             color: OmiColors.success,
             child: Row(
               children: [
-                const ExcludeSemantics(child: Icon(Icons.phone_in_talk, color: OmiColors.onAccent, size: 16)),
+                ExcludeSemantics(child: Icon(Icons.phone_in_talk, color: OmiColors.onAccent, size: 16)),
                 const SizedBox(width: OmiSpacing.xs),
                 Expanded(
                   child: Text(
@@ -362,7 +361,7 @@ class ActiveCallTopBar extends StatelessWidget {
                   style: OmiType.subhead.copyWith(color: OmiColors.onAccent, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(width: 6),
-                const ExcludeSemantics(child: Icon(Icons.keyboard_arrow_up, color: OmiColors.onAccent, size: 18)),
+                ExcludeSemantics(child: Icon(Icons.keyboard_arrow_up, color: OmiColors.onAccent, size: 18)),
               ],
             ),
           ),

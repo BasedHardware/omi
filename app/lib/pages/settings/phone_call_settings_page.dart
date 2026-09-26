@@ -31,7 +31,7 @@ class _PhoneCallSettingsPageState extends State<PhoneCallSettingsPage> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.phoneCallSettingsTitle)),
+      appBar: OmiAppBar(leading: const OmiBackButton(), title: Text(l10n.phoneCallSettingsTitle)),
       body: Consumer<PhoneCallProvider>(
         builder: (context, provider, _) {
           if (!provider.numbersLoaded) return const OmiLoadingState();

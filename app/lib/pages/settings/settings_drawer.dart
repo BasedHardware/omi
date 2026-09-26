@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/settings/settings_destinations.dart';
 import 'package:omi/pages/settings/settings_groups.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -13,9 +18,10 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
-/// The Settings sheet: Account, then seven groups (Device, Recording & Transcription,
-/// Notifications & Display, Integrations, Privacy & Data, Help & About, Developer Settings), plus
-/// search over every row in Settings and its pages ([settingsSearchEntries]).
+/// The Settings sheet (Rev 3 "Account + groups"): the account, the plan and what is left of it,
+/// Referral, then the groups (Devices, Recording & Transcription, Notifications & Display, Apps,
+/// Integrations, Data & Privacy, Import from other apps, Help & About, Feedback, Developer
+/// Settings), plus search over every row in Settings and its pages ([settingsSearchEntries]).
 ///
 /// Every setting is at most one tap below the sheet: a group row opens its group page
 /// (settings_groups.dart), whose rows open the same pages the sheet used to open directly.
@@ -31,15 +37,12 @@ class SettingsDrawer extends StatefulWidget {
     // Settings is a grouped list: surface1 rows on the black page colour, so the sheet itself is
     // surface0 (showOmiSheet paints surface1). Same shell otherwise: OmiSheetScaffold content,
     // framework drag handle, trailing close X.
-    final showSheet = showModalBottomSheet<void>; // omi-ux-allow: raw-bottom-sheet -- surface0 grouped sheet
-    return showSheet(
+    // The colour is read each time the sheet paints, so Settings follows a light/dark switch made
+    // on a page opened from it.
+    return showOmiModalSheet<void>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      backgroundColor: OmiColors.surface0,
+      color: () => OmiColors.surface0,
       shape: const RoundedRectangleBorder(borderRadius: OmiRadius.sheetTop),
-      clipBehavior: Clip.antiAlias,
       builder: (context) => const FractionallySizedBox(heightFactor: 0.92, child: SettingsDrawer()),
     );
   }
@@ -64,9 +67,16 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     if (mounted) setState(() {});
   }
 
-  void _startSearch() {
-    setState(() => _isSearching = true);
-    Future.microtask(() => _searchFocusNode.requestFocus());
+  @override
+  void initState() {
+    super.initState();
+    _searchFocusNode.addListener(_syncSearching);
+  }
+
+  /// Searching while the field has focus or holds text; Cancel shows only then.
+  void _syncSearching() {
+    final searching = _searchFocusNode.hasFocus || _searchController.text.isNotEmpty;
+    if (searching != _isSearching) setState(() => _isSearching = searching);
   }
 
   void _stopSearch() {
@@ -110,16 +120,20 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     );
   }
 
-  /// "Pro" on the Plan & Usage row for a paid plan.
-  String? _planValue(UsageProvider usage) {
-    final plan = usage.subscription?.subscription.plan;
-    if (plan == null || !plan.isPaid) return null;
-    return context.l10n.pro;
+  /// "Signed in with Apple" (or Google) from the account's sign-in provider; the email otherwise.
+  static String? _accountSubtitle(AppLocalizations l10n, String email) {
+    // No Firebase app in previews and widget tests: there is no provider to name there.
+    final providers = Firebase.apps.isEmpty
+        ? const <String>[]
+        : [...?FirebaseAuth.instance.currentUser?.providerData.map((info) => info.providerId)];
+    if (providers.contains('apple.com')) return l10n.signedInWithApple;
+    if (providers.contains('google.com')) return l10n.signedInWithGoogle;
+    return email.isEmpty ? null : email;
   }
 
   Widget _buildSettings(BuildContext context) {
     final l10n = context.l10n;
-    final planValue = _planValue(context.watch<UsageProvider>());
+    final subscription = context.watch<UsageProvider>().subscription;
     final prefs = SharedPreferencesUtil();
     final name = prefs.givenName;
     final email = prefs.email;
@@ -128,22 +142,22 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
       children: [
         OmiSettingsGroup(
           children: [
-            _row(SettingsDestination.profile,
-                key: 'settings_account',
-                icon: FontAwesomeIcons.solidUser,
-                title: name.isEmpty ? l10n.account : name,
-                subtitle: email.isEmpty ? null : email),
+            OmiSettingsRow(
+              key: const ValueKey('settings_account'),
+              leading: OmiInitialAvatar(name: name.isEmpty ? (email.isEmpty ? l10n.account : email) : name),
+              title: name.isEmpty ? l10n.account : name,
+              subtitle: _accountSubtitle(l10n, email),
+              showChevron: true,
+              onTap: () => _open(SettingsDestination.profile),
+            ),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
         // Plan, referrals and feedback stay one tap from the sheet (David, 2026-09-24).
+        _PlanCard(subscription: subscription, onTap: () => _open(SettingsDestination.planAndUsage)),
+        const SizedBox(height: OmiSpacing.sm),
         OmiSettingsGroup(
           children: [
-            _row(SettingsDestination.planAndUsage,
-                key: 'settings_row_planAndUsage',
-                icon: FontAwesomeIcons.chartLine,
-                title: l10n.planAndUsage,
-                value: planValue),
             _row(SettingsDestination.referral,
                 key: 'settings_row_referral',
                 icon: FontAwesomeIcons.gift,
@@ -155,7 +169,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         OmiSettingsGroup(
           children: [
             _row(SettingsDestination.deviceGroup,
-                key: 'settings_group_device', icon: FontAwesomeIcons.bluetooth, title: l10n.device),
+                key: 'settings_group_device', icon: FontAwesomeIcons.headphones, title: l10n.devices),
             _row(SettingsDestination.recordingGroup,
                 key: 'settings_group_recording',
                 icon: FontAwesomeIcons.microphone,
@@ -164,6 +178,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 key: 'settings_group_notifications',
                 icon: FontAwesomeIcons.solidBell,
                 title: l10n.notificationsAndDisplay),
+            _row(SettingsDestination.apps,
+                key: 'settings_row_apps', icon: FontAwesomeIcons.tableCellsLarge, title: l10n.apps),
             _row(SettingsDestination.integrations,
                 key: 'settings_group_integrations',
                 icon: FontAwesomeIcons.networkWired,
@@ -171,6 +187,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 tag: SettingsTag(l10n.beta, OmiColors.warning)),
             _row(SettingsDestination.privacyGroup,
                 key: 'settings_group_privacy', icon: FontAwesomeIcons.shield, title: l10n.dataAndPrivacy),
+            // Rev 3: bringing recordings over from Plaud, Limitless, Bee… sits at the top level.
+            _row(SettingsDestination.importData,
+                key: 'settings_row_importData', icon: FontAwesomeIcons.fileImport, title: l10n.importFromOtherApps),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
@@ -215,41 +234,66 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   // ---------------------------------------------------------------------------------------------
   // Header
 
+  /// v2: a large title with the close X on its trailing edge (UX contract §1), then the search
+  /// field. The field stays where it is while searching — only Cancel slides in beside it — so the
+  /// list under it never moves (IMG_1147); its edges line up with the cards'.
   Widget _buildHeader(BuildContext context) {
     final l10n = context.l10n;
-    if (_isSearching) {
-      return Padding(
-        key: const ValueKey('search-header'),
-        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.xs, OmiSpacing.xs),
-        child: Row(
-          children: [
-            Expanded(
-              child: OmiSearchField(
-                placeholder: l10n.searchSettings,
-                controller: _searchController,
-                focusNode: _searchFocusNode,
-                autofocus: true,
-                onChanged: (value) => setState(() => _searchQuery = value),
-              ),
-            ),
-            OmiButton.tertiary(label: l10n.cancel, size: OmiButtonSize.compact, onPressed: _stopSearch),
-          ],
-        ),
-      );
-    }
     return Padding(
-      key: const ValueKey('normal-header'),
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, 0, OmiSpacing.xxs, 0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          OmiIconButton(icon: const Icon(Icons.search), label: l10n.search, onPressed: _startSearch),
-          Expanded(
-            child: Semantics(
-              header: true,
-              child: Text(l10n.settings, textAlign: TextAlign.center, style: OmiType.headline),
+          Row(
+            children: [
+              Expanded(
+                child: Semantics(
+                  header: true,
+                  child: Text(l10n.settings, maxLines: 1, overflow: TextOverflow.ellipsis, style: OmiType.largeTitle),
+                ),
+              ),
+              const OmiCloseButton(),
+            ],
+          ),
+          const SizedBox(height: OmiSpacing.sm),
+          // One height whether or not Cancel shows, so the rows below never shift.
+          Container(
+            height: OmiSize.minTap,
+            padding: const EdgeInsets.only(right: OmiSpacing.lg - OmiSpacing.xxs),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OmiSearchField(
+                    key: const Key('settings_search_field'),
+                    placeholder: l10n.searchSettings,
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    onChanged: (value) {
+                      setState(() => _searchQuery = value);
+                      _syncSearching();
+                    },
+                  ),
+                ),
+                AnimatedSize(
+                  duration: OmiMotion.of(context).quick,
+                  curve: Curves.easeOutCubic,
+                  alignment: Alignment.centerLeft,
+                  child: _isSearching
+                      ? Padding(
+                          padding: const EdgeInsets.only(left: OmiSpacing.xs),
+                          child: OmiButton.tertiary(
+                            key: const Key('settings_search_cancel'),
+                            label: l10n.cancel,
+                            size: OmiButtonSize.compact,
+                            onPressed: _stopSearch,
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ],
             ),
           ),
-          const OmiCloseButton(),
         ],
       ),
     );
@@ -257,20 +301,79 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
 
   @override
   Widget build(BuildContext context) {
-    final motion = OmiMotion.of(context);
     return Column(
       children: [
-        AnimatedSwitcher(duration: motion.quick, child: _buildHeader(context)),
+        _buildHeader(context),
         const SizedBox(height: OmiSpacing.xs),
         Expanded(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
+            // Room to scroll the last results above the keyboard; nothing above moves.
+            padding: EdgeInsets.fromLTRB(OmiSpacing.lg, 0, OmiSpacing.lg, MediaQuery.viewInsetsOf(context).bottom),
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             child:
                 _isSearching && _searchQuery.trim().isNotEmpty ? _buildSearchResults(context) : _buildSettings(context),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The plan at a glance (v2 Settings): which plan, what is left of this month's premium
+/// transcription on the free plan, and a bar of it. Opens Plan & Usage.
+class _PlanCard extends StatelessWidget {
+  const _PlanCard({required this.subscription, required this.onTap});
+
+  final UserSubscriptionResponse? subscription;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final sub = subscription;
+    final paid = sub?.subscription.plan.isPaid ?? false;
+    final limitSeconds = sub?.transcriptionSecondsLimit ?? 0;
+    final metered = sub != null && !paid && limitSeconds > 0;
+    final limit = (limitSeconds / 60).round();
+    final left = metered ? ((limitSeconds - sub.transcriptionSecondsUsed).clamp(0, limitSeconds) / 60).round() : 0;
+    final title = sub == null ? l10n.planAndUsage : (paid ? l10n.pro : l10n.freePlan);
+    final subtitle = metered
+        ? l10n.premiumMinutesLeftThisMonth(NumberFormat.decimalPattern(l10n.localeName).format(left), limit)
+        : null;
+    return OmiCard(
+      key: const ValueKey('settings_row_planAndUsage'),
+      padding: const EdgeInsets.all(OmiSpacing.md),
+      onTap: onTap,
+      semanticLabel: subtitle == null ? title : '$title, $subtitle',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const OmiIconTile(child: FaIcon(FontAwesomeIcons.chartLine, size: 16)),
+              const SizedBox(width: OmiSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: OmiType.headline),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(subtitle, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: OmiSpacing.xs),
+              OmiGlyph(OmiGlyphs.chevronRight, size: 14, color: OmiColors.textTertiary),
+            ],
+          ),
+          if (metered) ...[
+            const SizedBox(height: 10),
+            OmiProgressBar(value: limit == 0 ? 0 : left / limit),
+          ],
+        ],
+      ),
     );
   }
 }

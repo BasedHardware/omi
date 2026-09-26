@@ -14,10 +14,12 @@ enum SettingsDestination {
   privacyGroup,
   helpGroup,
   notifications,
+  appearance,
   planAndUsage,
   offlineSync,
   device,
   integrations,
+  apps,
   permissions,
   memories,
   language,
@@ -118,7 +120,7 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
   SettingsSearchEntry('offlineSync', (l) => l.offlineSync, SettingsDestination.offlineSync, _groups),
   SettingsSearchEntry('phoneCalls', (l) => l.phoneCalls, SettingsDestination.phoneCalls, _groups),
   SettingsSearchEntry('permissions', (l) => l.permissions, SettingsDestination.permissions, _groups),
-  SettingsSearchEntry('device', (l) => l.device, SettingsDestination.deviceGroup, _drawer),
+  SettingsSearchEntry('devices', (l) => l.devices, SettingsDestination.deviceGroup, _drawer),
 
   // Recording & Transcription group
   SettingsSearchEntry('transcription', (l) => l.transcription, SettingsDestination.transcription, _groups),
@@ -137,6 +139,7 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
       'recordingAndTranscription', (l) => l.recordingAndTranscription, SettingsDestination.recordingGroup, _drawer),
 
   // Notifications & Display group
+  SettingsSearchEntry('appearance', (l) => l.appearance, SettingsDestination.appearance, _groups),
   SettingsSearchEntry('notifications', (l) => l.notifications, SettingsDestination.notifications, _groups),
   SettingsSearchEntry('homeScreen', (l) => l.homeScreen, SettingsDestination.homeScreen, _groups),
   SettingsSearchEntry(
@@ -146,12 +149,13 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
 
   // Integrations (opens the Integrations page directly)
   SettingsSearchEntry('integrations', (l) => l.integrations, SettingsDestination.integrations, _drawer),
+  SettingsSearchEntry('apps', (l) => l.apps, SettingsDestination.apps, _drawer),
 
   // Data & Privacy group
   SettingsSearchEntry('dataProtection', (l) => l.dataProtection, SettingsDestination.dataPrivacy, _groups),
   SettingsSearchEntry('memories', (l) => l.memories, SettingsDestination.memories, _groups),
   SettingsSearchEntry('exportAllData', (l) => l.exportAllData, SettingsDestination.exportData, _groups),
-  SettingsSearchEntry('importData', (l) => l.importData, SettingsDestination.importData, _groups),
+  SettingsSearchEntry('importFromOtherApps', (l) => l.importFromOtherApps, SettingsDestination.importData, _drawer),
   SettingsSearchEntry('dataAndPrivacy', (l) => l.dataAndPrivacy, SettingsDestination.privacyGroup, _drawer),
 
   // Help & About group
@@ -181,7 +185,7 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
   SettingsSearchEntry('ledBrightness', (l) => l.ledBrightness, SettingsDestination.device, _device,
       visible: _whenDeviceConnected),
   SettingsSearchEntry('micGain', (l) => l.micGain, SettingsDestination.device, _device, visible: _whenDeviceConnected),
-  SettingsSearchEntry('findDevice', (l) => l.findDevice, SettingsDestination.device, _device,
+  SettingsSearchEntry('findMyPendant', (l) => l.findMyPendant, SettingsDestination.device, _device,
       visible: _whenDeviceConnected),
 
   // Permissions

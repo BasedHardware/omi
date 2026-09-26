@@ -1857,9 +1857,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get openSettings => 'ترتیبات کھولیں';
 
   @override
-  String get whatsYourName => 'آپ کا نام کیا ہے؟';
-
-  @override
   String get speakTranscribeSummarize => 'بولیں۔ ٹرانسکرائب کریں۔ خلاصہ کریں۔';
 
   @override
@@ -1873,12 +1870,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get termsOfUse => 'استعمال کی شرائط';
-
-  @override
-  String get omiYourAiCompanion => 'Omi – آپ کا AI ساتھی';
-
-  @override
-  String get captureEveryMoment => 'ہر لمحہ پکڑیں۔ AI سے چلائے ہوئے\nخلاصے حاصل کریں۔ کبھی نوٹس نہ لیں۔';
 
   @override
   String get appleWatchSetup => 'Apple Watch سیٹ اپ';
@@ -1923,18 +1914,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String errorStartingRecording(String error) {
     return 'ریکارڈنگ شروع کرتے وقت خرابی: $error';
   }
-
-  @override
-  String get selectPrimaryLanguage => 'اپنی بنیادی زبان منتخب کریں';
-
-  @override
-  String get languageBenefits => 'تیز تر ٹرانسکرپشن اور ذاتی نوعیت کے تجربے کے لیے اپنی زبان مقرر کریں';
-
-  @override
-  String get whatsYourPrimaryLanguage => 'آپ کی بنیادی زبان کیا ہے؟';
-
-  @override
-  String get selectYourLanguage => 'اپنی زبان منتخب کریں';
 
   @override
   String get personalGrowthJourney => 'AI کے ساتھ آپ کا ذاتی نشوونما کا سفر جو آپ کے ہر لفظ کو سنتا ہے۔';
@@ -3371,9 +3350,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get dataProtection => 'ڈیٹا کی حفاظت';
-
-  @override
-  String get yourDataIsProtected => 'آپ کا ڈیٹا محفوظ ہے اور ہماری ';
 
   @override
   String get pleaseSelectYourPrimaryLanguage => 'براہ کرم اپنی بنیادی زبان منتخب کریں';
@@ -5052,10 +5028,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'اضافی صوتی نمونہ ہٹایا گیا';
-
-  @override
-  String get consentDataMessage =>
-      'جاری رکھ کر، آپ کی بات چیت، ریکارڈنگز اور ذاتی معلومات ہمارے سرورز پر محفوظ طریقے سے ذخیرہ کی جائیں گی۔ آپ کی آڈیو ریکارڈنگز اور ٹرانسکرپٹس تھرڈ پارٹی AI سروسز کے ذریعے پراسیس کی جاتی ہیں (بشمول ٹرانسکرپشن کے لیے Deepgram اور تجزیے کے لیے OpenAI) تاکہ آپ کو AI سے چلنے والی بصیرتیں فراہم کی جا سکیں اور ایپ کی تمام خصوصیات کو فعال کیا جا سکے۔';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -7077,9 +7049,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi یادگار';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName منقطع ہو گیا';
   }
@@ -7777,9 +7746,6 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get authorizingMcpServer => 'اختیار دیا جا رہا ہے…';
-
-  @override
-  String get whereDidYouHearAboutOmi => 'آپ نے ہم سے کہاں سنا؟';
 
   @override
   String get tiktok => 'TikTok';
@@ -9962,9 +9928,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get transcriptionNoAudio => 'ٹرانسکرپشن آڈیو وصول نہیں کر رہی';
 
   @override
-  String get tapPlusToStartRecording => 'ریکارڈنگ شروع کرنے کے لیے ریکارڈ بٹن پر ٹیپ کریں';
-
-  @override
   String get chatBlockTask => 'کام';
 
   @override
@@ -10682,9 +10645,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deviceConnecting => 'منسلک ہو رہا ہے…';
 
   @override
-  String get recordOptionsTip => 'مشورہ: فون کال ریکارڈ کرنے کے لیے ریکارڈ بٹن پر تیر کو ٹیپ کریں۔';
-
-  @override
   String get firmwareUpdateFailedTitle => 'اپ ڈیٹ ناکام';
 
   @override
@@ -11224,12 +11184,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get keepUsingPendant => 'پینڈنٹ ہی استعمال کریں';
 
   @override
-  String get recordWith => 'ریکارڈ کرنے کا ذریعہ';
-
-  @override
-  String get moreWaysToRecord => 'ریکارڈ کرنے کے مزید طریقے';
-
-  @override
   String get openCall => 'کال کھولیں';
 
   @override
@@ -11276,4 +11230,540 @@ class AppLocalizationsUr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name اور دیگر';
   }
+
+  @override
+  String get alreadyHaveAccount => 'پہلے سے اکاؤنٹ ہے؟';
+
+  @override
+  String get signInToOmi => 'Omi میں سائن ان کریں';
+
+  @override
+  String get signInSubtitle => 'آپ کی گفتگو اور یادیں آپ کے اکاؤنٹ کے ساتھ فون، Mac اور ویب پر رہتی ہیں۔';
+
+  @override
+  String onboardingAllSetName(String name) {
+    return 'سب تیار ہے، $name۔';
+  }
+
+  @override
+  String get completeHomeBody => 'آپ کا دن، کام اور خلاصے ایک جگہ۔';
+
+  @override
+  String get completeAskTitle => 'پوچھیں';
+
+  @override
+  String get foundOmiOptionalHint => 'اختیاری — اس سے ایک چھوٹی ٹیم کو پتا چلتا ہے کہ کیا کام کر رہا ہے۔';
+
+  @override
+  String get consentTitle => 'آپ کا ڈیٹا، آسان الفاظ میں';
+
+  @override
+  String get consentSubtitle => 'Omi کے سننا شروع کرنے سے پہلے، یہ رہا کہ وہ جو سنتا ہے اس کے ساتھ بالکل کیا ہوتا ہے۔';
+
+  @override
+  String get consentStoredTitle => 'کیا محفوظ کیا جاتا ہے';
+
+  @override
+  String get consentStoredBody =>
+      'آپ کی آڈیو، ٹرانسکرپٹس اور Omi کی سیکھی ہوئی تفصیلات آپ کے اکاؤنٹ کے ساتھ محفوظ طریقے سے رکھی جاتی ہیں۔';
+
+  @override
+  String get consentProcessorsTitle => 'اس پر کون کارروائی کرتا ہے';
+
+  @override
+  String get consentProcessorsBody =>
+      'خلاصے، کام اور یادیں لکھنے کے لیے بولی کو Deepgram ٹرانسکرائب کرتا ہے اور OpenAI اس کا تجزیہ کرتا ہے۔';
+
+  @override
+  String get consentControlTitle => 'آپ کے اختیار میں کیا ہے';
+
+  @override
+  String get consentControlBody => 'جب چاہیں کوئی بھی گفتگو، یاد یا اپنا پورا اکاؤنٹ حذف کریں۔';
+
+  @override
+  String get readPrivacyPolicy => 'رازداری کی پالیسی پڑھیں';
+
+  @override
+  String get whatShouldOmiCallYou => 'Omi آپ کو کس نام سے پکارے؟';
+
+  @override
+  String get nameUsageHint => 'Omi اسے ٹرانسکرپٹس اور ایکسپورٹس میں آپ کی شناخت کے لیے استعمال کرتا ہے۔';
+
+  @override
+  String get yourNamePlaceholder => 'آپ کا نام';
+
+  @override
+  String get whatLanguageDoYouSpeakMost => 'آپ سب سے زیادہ کون سی زبان بولتے ہیں؟';
+
+  @override
+  String get languageOnboardingSubtitle =>
+      'زبان معلوم ہو تو Omi بہترین ٹرانسکرائب کرتا ہے۔ آپ بعد میں مزید شامل کر سکتے ہیں۔';
+
+  @override
+  String get permissionsFewTitle => 'چند اجازتیں';
+
+  @override
+  String get permissionsFewSubtitle =>
+      'Omi صرف وہی مانگتا ہے جو وہ استعمال کرتا ہے۔ آپ انہیں کسی بھی وقت ترتیبات میں بدل سکتے ہیں۔';
+
+  @override
+  String get permissionsContinueNote =>
+      '\"جاری رکھیں\" کچھ نہیں مانگے گا۔ ہر اجازت صرف تب مانگی جاتی ہے جب آپ \"اجازت دیں\" پر ٹیپ کرتے ہیں۔';
+
+  @override
+  String get howDidYouHearAboutOmi => 'آپ کو Omi کے بارے میں کیسے پتا چلا؟';
+
+  @override
+  String get showOnLockScreen => 'لاک اسکرین پر دکھائیں';
+
+  @override
+  String get seeAll => 'سب دیکھیں';
+
+  @override
+  String get upNext => 'اگلا';
+
+  @override
+  String get allTasks => 'تمام کام';
+
+  @override
+  String get thisWeek => 'اس ہفتے';
+
+  @override
+  String capturedDuration(String duration) {
+    return '$duration ریکارڈ ہوا';
+  }
+
+  @override
+  String newMemoriesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count نئی یادیں',
+      one: '1 نئی یاد',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncingFromPendant => 'آپ کے پینڈنٹ سے سنک ہو رہا ہے';
+
+  @override
+  String get pendantRecordingsSynced => 'پینڈنٹ کی ریکارڈنگز سنک ہو گئیں';
+
+  @override
+  String recordedOnPendantWhileAway(String duration) {
+    return 'آپ کا فون دور تھا تو پینڈنٹ پر ~$duration ریکارڈ ہوا';
+  }
+
+  @override
+  String dailyRecapOn(String day) {
+    return 'روزانہ خلاصہ · $day';
+  }
+
+  @override
+  String taskDueDayTime(String day, String time) {
+    return '$day، $time';
+  }
+
+  @override
+  String fromConversation(String title) {
+    return '$title سے';
+  }
+
+  @override
+  String get endCapture => 'ختم کریں';
+
+  @override
+  String get toDo => 'کرنے کے کام';
+
+  @override
+  String get devices => 'آلات';
+
+  @override
+  String get devicesSubtitle => 'ہر وہ چیز جو آپ کے لیے سنتی ہے۔ ایک وقت میں ایک ہی ریکارڈ کرتی ہے۔';
+
+  @override
+  String get addADevice => 'آلہ شامل کریں';
+
+  @override
+  String get deviceReady => 'تیار';
+
+  @override
+  String get importFromOtherApps => 'دوسری ایپس سے درآمد کریں';
+
+  @override
+  String get whatWillYouWear => 'آپ کیا پہنیں گے؟';
+
+  @override
+  String get pickDeviceSubtitle => 'آپ بعد میں مزید شامل کر سکتے ہیں۔ ایک وقت میں ایک ہی ریکارڈ کرتا ہے۔';
+
+  @override
+  String get alreadyHaveOne => 'پہلے سے موجود ہے؟';
+
+  @override
+  String get noDeviceHeader => 'کوئی آلہ نہیں';
+
+  @override
+  String get omiPendantName => 'Omi پینڈنٹ';
+
+  @override
+  String get allDayConversations => 'دن بھر کی گفتگو';
+
+  @override
+  String get conversationsAndPhotos => 'گفتگو + تصاویر';
+
+  @override
+  String get wristMic => 'کلائی کا مائیک';
+
+  @override
+  String get glassesAudio => 'عینک کی آڈیو';
+
+  @override
+  String get bringRecordingsIntoOmi => 'اپنی ریکارڈنگز Omi میں لائیں';
+
+  @override
+  String get useThisIphone => 'یہ iPhone استعمال کریں';
+
+  @override
+  String get useThisPhone => 'یہ فون استعمال کریں';
+
+  @override
+  String get startInSeconds => '10 سیکنڈ میں شروع کریں';
+
+  @override
+  String get askAboutThisConversationPlaceholder => 'اس گفتگو کے بارے میں پوچھیں';
+
+  @override
+  String get summaryStyle => 'خلاصے کا انداز';
+
+  @override
+  String get summaryStyleSubtitle => 'منتخب کریں کہ کون سی ایپ یہ خلاصہ لکھے';
+
+  @override
+  String get appearance => 'ظاہری شکل';
+
+  @override
+  String get appearanceSystem => 'سسٹم';
+
+  @override
+  String get appearanceLight => 'لائٹ';
+
+  @override
+  String get appearanceDark => 'ڈارک';
+
+  @override
+  String get feel => 'احساس';
+
+  @override
+  String get haptics => 'ہیپٹکس';
+
+  @override
+  String get hapticsSubtitle => 'کچھ ختم کرنے، ستارہ لگانے یا مکمل کرنے پر ہلکی سی تھپکی';
+
+  @override
+  String get textSize => 'متن کا سائز';
+
+  @override
+  String get textSizeSubtitle => 'آپ کے فون کے متن کے سائز کے مطابق';
+
+  @override
+  String get appearanceMotionNote =>
+      'حرکت آپ کے فون کی سیٹنگز میں «حرکت کم کریں» کی پیروی کرتی ہے — آلے کی روشنی سمیت ہر لوپ رک جاتا ہے۔';
+
+  @override
+  String get signedInWithApple => 'Apple کے ساتھ سائن ان';
+
+  @override
+  String get signedInWithGoogle => 'Google کے ساتھ سائن ان';
+
+  @override
+  String premiumMinutesLeftThisMonth(String left, int limit) {
+    return 'اس ماہ $left/$limit پریمیم منٹ باقی ہیں';
+  }
+
+  @override
+  String get recordingFrom => 'ریکارڈنگ کا ذریعہ';
+
+  @override
+  String get recordingFromSubtitle => 'ایک وقت میں ایک ہی ذریعہ ریکارڈ کرتا ہے۔ بدلنے سے موجودہ گفتگو مکمل ہو جاتی ہے۔';
+
+  @override
+  String get manageDevices => 'آلات کا انتظام کریں';
+
+  @override
+  String get notListeningTitle => 'نہیں سن رہا';
+
+  @override
+  String get notListeningSubtitle => 'اس فون سے شروع کریں، یا دن بھر سننے کے لیے کوئی آلہ جوڑیں۔';
+
+  @override
+  String get startListening => 'سننا شروع کریں';
+
+  @override
+  String get searchEverything => 'ہر چیز میں تلاش کریں';
+
+  @override
+  String searchResultsCount(int count) {
+    return 'نتائج · $count';
+  }
+
+  @override
+  String get nothingFound => 'کچھ نہیں ملا';
+
+  @override
+  String get searchNothingFoundHint =>
+      'کوئی اور لفظ آزمائیں، یا Omi سے پوچھیں — یہ صرف الفاظ نہیں، مطلب بھی سمجھتا ہے۔';
+
+  @override
+  String get askOmiInstead => 'اس کے بجائے Omi سے پوچھیں';
+
+  @override
+  String get recentSearches => 'حالیہ';
+
+  @override
+  String get searchAskSuggestion => 'اس ہفتے میں نے کیا کرنے کا وعدہ کیا تھا؟';
+
+  @override
+  String get welcomeRememberTitle => 'ہر گفتگو یاد رکھیں۔';
+
+  @override
+  String get welcomeRememberSubtitle =>
+      'جو پسند ہو پہنیں۔ آپ جو سنتے ہیں Omi اسے نوٹس، کرنے کے کاموں اور آپ کے دن کے خلاصے میں بدل دیتا ہے۔';
+
+  @override
+  String get memoriesSubtitle => 'Omi کیا جانتا ہے، اور اس نے یہ کہاں سے سیکھا';
+
+  @override
+  String get memoryTierLongTerm => 'طویل مدتی';
+
+  @override
+  String get memoryTierShortTerm => 'قلیل مدتی';
+
+  @override
+  String get memoriesTierNote =>
+      'نئی یادیں قلیل مدتی کے طور پر شروع ہوتی ہیں۔ جو اہم رہتی ہیں، Omi خود انہیں طویل مدتی میں منتقل کر دیتا ہے۔';
+
+  @override
+  String get askEmptyTitle => 'جو کچھ سنا ہے اس کے بارے میں کچھ بھی پوچھیں۔';
+
+  @override
+  String get askEmptySubtitle => 'Omi آپ کی گفتگو، یادوں اور کاموں سے جواب دیتا ہے۔';
+
+  @override
+  String get completeListeningTitle => 'سننا';
+
+  @override
+  String get completeListeningBody => 'نیلا مطلب Omi آپ کو سن رہا ہے — آپ کے پہنے ہوئے آلے سے یا اس فون سے۔';
+
+  @override
+  String get completeAskAnyBody => 'جو کچھ سنا ہے اس کے بارے میں پوچھنے کے لیے ‘پوچھیں’ پر ٹیپ کریں۔';
+
+  @override
+  String get completeDevicesBody => 'کسی بھی وقت پہننے والا آلہ شامل کریں، یا اس فون سے شروع کریں۔';
+
+  @override
+  String get conversationSourceGlasses => 'چشمہ';
+
+  @override
+  String get conversationSourceImported => 'درآمد شدہ';
+
+  @override
+  String get conversationSourceEmptyHint => 'اس ذریعے سے ابھی تک کچھ ریکارڈ نہیں ہوا۔';
+
+  @override
+  String get findMyPendant => 'میرا پینڈنٹ تلاش کریں';
+
+  @override
+  String get findMyPendantHint => 'آواز بجاتا ہے تاکہ آپ اسے ڈھونڈ سکیں';
+
+  @override
+  String get upToDate => 'تازہ ترین';
+
+  @override
+  String get updateAvailable => 'اپ ڈیٹ دستیاب ہے';
+
+  @override
+  String get storageTitle => 'اسٹوریج';
+
+  @override
+  String get connectStepTurnOn => 'اسے آن کریں اور قریب رکھیں';
+
+  @override
+  String get connectStepAllowBluetooth => 'بلوٹوتھ کی اجازت دیں';
+
+  @override
+  String get connectStepTest => 'جانچ کے لیے کچھ بولیں';
+
+  @override
+  String get connectStepTestHint => 'بولتے ہی الفاظ یہاں ظاہر ہوں گے';
+
+  @override
+  String get setUpLater => 'بعد میں سیٹ اپ کریں';
+
+  @override
+  String recapPreviousDay(String day) {
+    return 'پچھلے دن کا خلاصہ: $day';
+  }
+
+  @override
+  String recapNextDay(String day) {
+    return 'اگلے دن کا خلاصہ: $day';
+  }
+
+  @override
+  String get askStarterToday => 'آج کا خلاصہ دو';
+
+  @override
+  String get askStarterPeople => 'میں کس سے ملا؟';
+
+  @override
+  String get askStarterOpen => 'ابھی کیا باقی ہے؟';
+
+  @override
+  String get peopleSubtitle => 'وہ آوازیں جنہیں Omi ٹرانسکرپٹس میں پہچانتا ہے';
+
+  @override
+  String get usageCurrentPlan => 'موجودہ پلان';
+
+  @override
+  String get appsExplore => 'دریافت کریں';
+
+  @override
+  String get appOutOfFive => '5 میں سے';
+
+  @override
+  String get appStatUsers => 'صارفین';
+
+  @override
+  String homeWelcomeName(String name) {
+    return 'خوش آمدید، $name';
+  }
+
+  @override
+  String get homeWelcome => 'خوش آمدید';
+
+  @override
+  String get homeFirstDaySubtitle => 'Omi کے ساتھ آپ کا پہلا دن';
+
+  @override
+  String get homeListeningHeroTitle => 'Omi سن رہا ہے';
+
+  @override
+  String get homeListeningHeroBody => 'آپ کی پہلی گفتگو ختم ہونے کے ایک منٹ بعد یہاں نظر آئے گی۔';
+
+  @override
+  String get homeGettingStarted => 'آغاز';
+
+  @override
+  String get gettingStartedConnect => 'ایک ڈیوائس جوڑیں';
+
+  @override
+  String get gettingStartedConversation => 'ایک گفتگو کریں';
+
+  @override
+  String get gettingStartedAsk => 'اس کے بارے میں Omi سے پوچھیں';
+
+  @override
+  String get homeGoodToKnow => 'جاننا مفید ہے';
+
+  @override
+  String get tipFinishTitle => 'جب چاہیں ختم کریں';
+
+  @override
+  String get tipFinishBody => 'ختم پر ٹیپ کریں — یا اپنے پینڈنٹ کو دو بار دبائیں — اور خلاصہ فوراً شروع ہو جائے گا۔';
+
+  @override
+  String get tipStarTitle => 'اہم چیزوں پر ستارہ لگائیں';
+
+  @override
+  String get tipStarBody => 'ستارہ لگی گفتگو بعد میں آسانی سے مل جاتی ہے۔';
+
+  @override
+  String get tipPrivateTitle => 'بطور ڈیفالٹ نجی';
+
+  @override
+  String get tipPrivateBody => 'جب تک آپ شیئر نہ کریں، آپ کی گفتگو نجی رہتی ہے۔';
+
+  @override
+  String homeGettingStartedProgress(int done, int total) {
+    return '$done/$total';
+  }
+
+  @override
+  String get noFailedRecordings => 'کوئی ناکام ریکارڈنگ نہیں';
+
+  @override
+  String get mapNoPlacesTitle => 'ابھی تک کوئی مقام نہیں';
+
+  @override
+  String get mapNoPlacesMessage => 'گفتگوئیں یہاں تب ظاہر ہوتی ہیں جب Omi جانتا ہو کہ وہ کہاں ہوئیں۔';
+
+  @override
+  String get mergeWithEllipsis => 'اس کے ساتھ ضم کریں…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return '$appName آن کرنے کے لیے اس کا سیٹ اپ مکمل کریں';
+  }
+
+  @override
+  String get greetingUpLate => 'رات گئے';
+
+  @override
+  String get greetingLunchtime => 'کھانے کا وقت';
+
+  @override
+  String get greetingWindingDown => 'آرام کا وقت';
+
+  @override
+  String get greetingGoodNight => 'شب بخیر';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting، $name';
+  }
+
+  @override
+  String get greetingStillUp => 'ابھی تک جاگ رہے';
+
+  @override
+  String get greetingEarlyStart => 'صبح سویرے';
+
+  @override
+  String get greetingNewDay => 'نیا دن';
+
+  @override
+  String get greetingMorning => 'صبح بخیر';
+
+  @override
+  String get greetingBusyMorning => 'مصروف صبح';
+
+  @override
+  String get greetingAfternoon => 'سہ پہر بخیر';
+
+  @override
+  String get greetingHomeStretch => 'دن کا آخری حصہ';
+
+  @override
+  String get greetingEvening => 'شام بخیر';
+
+  @override
+  String get unlimitedBadge => 'غیر محدود';
+
+  @override
+  String get voiceSetupTaskSubline => 'تاکہ Omi جانے کہ یہ آپ ہیں · تقریباً ایک منٹ';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '$saved آڈیو محفوظ ہوا ($total میں سے)';
+  }
+
+  @override
+  String get voiceIntroTitle => 'اپنا تعارف کرائیں';
+
+  @override
+  String get memoryLabel => 'یاد';
+
+  @override
+  String get idleReadyHint => 'شروع کریں پر ٹیپ کریں، آپ جو کہیں گے وہ یہاں نظر آئے گا۔';
 }

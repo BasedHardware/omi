@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// Starters stay editable in the composer; choosing one never sends a message.
+/// Ask before the first question (v2 Ask): the Omi mark, what you can ask and where answers come
+/// from, then suggestions as chips. Starters stay editable in the composer; choosing one never
+/// sends a message.
 class ChatStarters extends StatelessWidget {
   final bool hasExistingData;
   final bool isConnected;
@@ -15,42 +17,82 @@ class ChatStarters extends StatelessWidget {
     if (!isConnected) {
       return Center(child: Text(context.l10n.noInternetConnection, textAlign: TextAlign.center));
     }
-    final prompts = hasExistingData ? ['activity', 'improve'] : ['capabilities', 'goal'];
+    final l10n = context.l10n;
+    // Rev 3 Ask: with something heard, questions about it; before that, what Omi can do.
+    final prompts = hasExistingData
+        ? [('today', l10n.askStarterToday), ('people', l10n.askStarterPeople), ('open', l10n.askStarterOpen)]
+        : [('capabilities', l10n.chatStarterPrompt('capabilities')), ('goal', l10n.chatStarterPrompt('goal'))];
     return Center(
-        child: SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: ConstrainedBox(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(OmiSpacing.xl),
+        child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 400),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(Icons.auto_awesome_outlined, size: 28, color: OmiColors.textSecondary),
-              const SizedBox(height: 16),
-              Text(context.l10n.askOmi, textAlign: TextAlign.center, style: OmiType.title3),
-              const SizedBox(height: 24),
-              for (final kind in prompts)
-                Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: OutlinedButton(
+              const OmiRingLogo(size: 56, mode: OmiRingMode.orbit, loops: 1),
+              const SizedBox(height: 18),
+              Semantics(
+                header: true,
+                child: OmiBalancedText(l10n.askEmptyTitle, textAlign: TextAlign.center, style: OmiType.serifTitle),
+              ),
+              const SizedBox(height: OmiSpacing.xs),
+              OmiBalancedText(
+                l10n.askEmptySubtitle,
+                textAlign: TextAlign.center,
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+              ),
+              const SizedBox(height: OmiSpacing.xl),
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: OmiSpacing.xs,
+                runSpacing: OmiSpacing.xs,
+                children: [
+                  for (final (kind, prompt) in prompts)
+                    _SuggestionChip(
                       key: ValueKey('chat_starter_$kind'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        backgroundColor: Colors.white.withValues(alpha: 0.04),
-                        minimumSize: const Size.fromHeight(56),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                        side: const BorderSide(color: OmiColors.border),
-                        shape: const RoundedRectangleBorder(borderRadius: OmiRadius.lgAll),
-                      ),
-                      onPressed: () => onSelected(context.l10n.chatStarterPrompt(kind)),
-                      child: Row(children: [
-                        Expanded(child: Text(context.l10n.chatStarterPrompt(kind))),
-                        const SizedBox(width: 12),
-                        const Icon(Icons.north_west, size: 18, color: OmiColors.textTertiary),
-                      ]),
-                    )),
+                      label: prompt,
+                      onTap: () => onSelected(prompt),
+                    ),
+                ],
+              ),
             ],
-          )),
-    ));
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A question to start with (v2 Ask suggestions): an outlined 38 pt capsule.
+class _SuggestionChip extends StatelessWidget {
+  const _SuggestionChip({super.key, required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      onTap: onTap,
+      child: OmiPressable(
+        onTap: () {
+          OmiHaptics.selection();
+          onTap();
+        },
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 38),
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 9),
+          decoration: BoxDecoration(
+            borderRadius: OmiRadius.pillAll,
+            border: Border.all(color: OmiColors.textPrimary.withValues(alpha: 0.28), width: 0.5),
+          ),
+          child: Text(label, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500)),
+        ),
+      ),
+    );
   }
 }

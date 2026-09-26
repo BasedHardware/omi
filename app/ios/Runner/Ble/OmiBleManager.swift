@@ -175,11 +175,28 @@ final class OmiBleManager: NSObject {
         pairingLostBlocked.remove(uuid)
 
         if let peripheral = peripherals[uuid] {
-            if peripheral.state == .connected {
-                NSLog("[OmiBle] connectPeripheral: \(uuid) already connected, skipping")
-                return
+            // A state-restored peripheral can be connected before Flutter is
+            // listening, so its ready event may already be lost.
+            let link: OmiBleConnectPolicy.Link = switch peripheral.state {
+            case .connected: .connected
+            case .connecting: .connecting
+            default: .disconnected
             }
-            centralManager.connect(peripheral, options: nil)
+            let services = peripheral.services ?? []
+            let discovered = !services.isEmpty && services.allSatisfy { $0.characteristics != nil }
+            switch OmiBleConnectPolicy.action(link: link, servicesDiscovered: discovered) {
+            case .announceReady:
+                NSLog("[OmiBle] connectPeripheral: \(uuid) already connected, re-announcing")
+                peripheral.delegate = self
+                readyNotified.insert(uuid)
+                announceReady(peripheral, services: services)
+            case .discoverServices:
+                NSLog("[OmiBle] connectPeripheral: \(uuid) already connected, rediscovering")
+                peripheral.delegate = self
+                peripheral.discoverServices(nil)
+            case .connect:
+                centralManager.connect(peripheral, options: nil)
+            }
             return
         }
 
@@ -853,22 +870,31 @@ extension OmiBleManager: CBPeripheralDelegate {
         guard let services = peripheral.services else { return }
         let allDiscovered = services.allSatisfy { $0.characteristics != nil }
 
+        // Characteristic discovery reports once per service: announce the first time all are in.
         if allDiscovered, readyNotified.insert(uuid).inserted {
-            let bleServices = services.map { svc in
-                BleService(
-                    uuid: self.fullUuidString(svc.uuid),
-                    characteristicUuids: svc.characteristics?.map { self.fullUuidString($0.uuid) } ?? []
-                )
-            }
-            
-            flutterApi?.onDeviceReady(peripheralUuid: uuid, services: bleServices) { _ in }
-            LimitlessFlashDrainEngine.shared.onDeviceReady(uuid)
-            // Retain one connection-time sample for disconnect diagnostics, but
-            // do not keep the radio polling unless the diagnostics UI asks.
-            peripheral.readRSSI()
-            if diagnosticsRssiPeripheralUuid == uuid {
-                startRssiDiagnosticsPolling(for: peripheral)
-            }
+            announceReady(peripheral, services: services)
+        }
+    }
+
+    /// Tells Flutter the peripheral is connected with its services discovered. The discovery
+    /// callback announces once per connection ([readyNotified]); connectPeripheral re-announces
+    /// on purpose for a state-restored peripheral whose first ready event Flutter may have missed.
+    private func announceReady(_ peripheral: CBPeripheral, services: [CBService]) {
+        let uuid = peripheralUuidString(peripheral)
+        let bleServices = services.map { svc in
+            BleService(
+                uuid: self.fullUuidString(svc.uuid),
+                characteristicUuids: svc.characteristics?.map { self.fullUuidString($0.uuid) } ?? []
+            )
+        }
+
+        flutterApi?.onDeviceReady(peripheralUuid: uuid, services: bleServices) { _ in }
+        LimitlessFlashDrainEngine.shared.onDeviceReady(uuid)
+        // Retain one connection-time sample for disconnect diagnostics, but
+        // do not keep the radio polling unless the diagnostics UI asks.
+        peripheral.readRSSI()
+        if diagnosticsRssiPeripheralUuid == uuid {
+            startRssiDiagnosticsPolling(for: peripheral)
         }
     }
 

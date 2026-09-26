@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -55,7 +54,7 @@ class MoveToFolderSheet extends StatelessWidget {
   }
 
   void _moveToFolder(BuildContext context, FolderProvider provider, String folderId) {
-    HapticFeedback.selectionClick();
+    OmiHaptics.selection();
     // Close sheet immediately with the folder ID
     Navigator.of(context).pop(folderId);
     // Fire and forget - API call in background
@@ -125,7 +124,7 @@ class _FolderListItem extends StatelessWidget {
                     ),
                   ),
                   if (isCurrentFolder)
-                    const ExcludeSemantics(child: Icon(Icons.check_circle, color: OmiColors.accent, size: 22)),
+                    ExcludeSemantics(child: Icon(Icons.check_circle, color: OmiColors.accent, size: 22)),
                 ],
               ),
             ),

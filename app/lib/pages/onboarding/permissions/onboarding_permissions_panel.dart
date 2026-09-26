@@ -4,11 +4,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/ui/components/omi_glyph.dart';
 import 'package:omi/ui/components/omi_permission_row.dart';
 import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -128,34 +128,42 @@ class _OnboardingPermissionsPanelState extends State<OnboardingPermissionsPanel>
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final permission in _source.permissions) ...[
-          OmiPermissionRow(
-            key: ValueKey('onboarding_permission_${permission.name}'),
-            // The same glyphs as the Settings permission list.
-            leading: FaIcon(switch (permission) {
-              OnboardingPermission.background => FontAwesomeIcons.batteryFull,
-              OnboardingPermission.location => FontAwesomeIcons.locationArrow,
-              OnboardingPermission.notifications => FontAwesomeIcons.solidBell,
-            }),
-            title: switch (permission) {
-              OnboardingPermission.background => l10n.backgroundActivity,
-              OnboardingPermission.location => l10n.locationAccess,
-              OnboardingPermission.notifications => l10n.notifications,
-            },
-            reason: switch (permission) {
-              OnboardingPermission.background => l10n.backgroundActivityDesc,
-              OnboardingPermission.location => l10n.locationAccessDesc,
-              OnboardingPermission.notifications => l10n.notificationsDesc,
-            },
-            status: _statuses[permission] ?? OmiPermissionStatus.askable,
-            onAllow: () => _allow(permission),
-          ),
-          const SizedBox(height: OmiSpacing.sm),
+    final permissions = _source.permissions.toList();
+    // v2: every permission in one grouped card, split by hairlines.
+    return Container(
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.rowAll),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final (i, permission) in permissions.indexed) ...[
+            if (i > 0) Divider(height: 0.5, thickness: 0.5, indent: 58, color: OmiColors.border),
+            OmiPermissionRow(
+              key: ValueKey('onboarding_permission_${permission.name}'),
+              inGroup: true,
+              leading: OmiGlyph(
+                switch (permission) {
+                  OnboardingPermission.background => OmiGlyphs.bolt,
+                  OnboardingPermission.location => OmiGlyphs.location,
+                  OnboardingPermission.notifications => OmiGlyphs.bell,
+                },
+                size: 17,
+              ),
+              title: switch (permission) {
+                OnboardingPermission.background => l10n.backgroundActivity,
+                OnboardingPermission.location => l10n.locationAccess,
+                OnboardingPermission.notifications => l10n.notifications,
+              },
+              reason: switch (permission) {
+                OnboardingPermission.background => l10n.backgroundActivityDesc,
+                OnboardingPermission.location => l10n.locationAccessDesc,
+                OnboardingPermission.notifications => l10n.notificationsDesc,
+              },
+              status: _statuses[permission] ?? OmiPermissionStatus.askable,
+              onAllow: () => _allow(permission),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }

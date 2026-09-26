@@ -52,7 +52,7 @@ class CaptureRecoveryBanner extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.warning_amber_rounded, size: 16, color: OmiColors.warning),
+                    Icon(Icons.warning_amber_rounded, size: 16, color: OmiColors.warning),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -64,7 +64,7 @@ class CaptureRecoveryBanner extends StatelessWidget {
                         style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
                       ),
                     ),
-                    const Icon(Icons.chevron_right, size: 16, color: OmiColors.textTertiary),
+                    Icon(Icons.chevron_right, size: 16, color: OmiColors.textTertiary),
                   ],
                 ),
               ),

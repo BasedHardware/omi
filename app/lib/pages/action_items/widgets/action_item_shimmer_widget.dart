@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/widgets/shimmer_with_timeout.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class ActionItemShimmerWidget extends StatelessWidget {
   const ActionItemShimmerWidget({super.key});
@@ -8,12 +9,12 @@ class ActionItemShimmerWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ShimmerWithTimeout(
-      baseColor: Colors.grey[800]!,
-      highlightColor: Colors.grey[600]!,
+      baseColor: OmiColors.surface2,
+      highlightColor: OmiColors.surface4,
       child: Container(
         height: 60,
         width: double.infinity,
-        decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(16)),
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: BorderRadius.circular(16)),
       ),
     );
   }

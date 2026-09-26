@@ -1858,9 +1858,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get openSettings => 'Avaa asetukset';
 
   @override
-  String get whatsYourName => 'Mikä on nimesi?';
-
-  @override
   String get speakTranscribeSummarize => 'Puhu. Litteroi. Tee yhteenveto.';
 
   @override
@@ -1874,13 +1871,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get termsOfUse => 'Käyttöehdot';
-
-  @override
-  String get omiYourAiCompanion => 'Omi – tekoälykumppanisi';
-
-  @override
-  String get captureEveryMoment =>
-      'Tallenna jokainen hetki. Saat tekoälyn\nluomat yhteenvedot. Älä enää tee muistiinpanoja.';
 
   @override
   String get appleWatchSetup => 'Apple Watch -asennus';
@@ -1925,18 +1915,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String errorStartingRecording(String error) {
     return 'Virhe nauhoituksen aloittamisessa: $error';
   }
-
-  @override
-  String get selectPrimaryLanguage => 'Valitse ensisijainen kielesi';
-
-  @override
-  String get languageBenefits => 'Aseta kielesi tarkempaa litterointia ja henkilökohtaista kokemusta varten';
-
-  @override
-  String get whatsYourPrimaryLanguage => 'Mikä on ensisijainen kielesi?';
-
-  @override
-  String get selectYourLanguage => 'Valitse kielesi';
 
   @override
   String get personalGrowthJourney => 'Henkilökohtainen kasvumatkasi tekoälyn kanssa, joka kuuntelee jokaista sanaasi.';
@@ -3365,9 +3343,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get dataProtection => 'Tietosuoja';
-
-  @override
-  String get yourDataIsProtected => 'Tietosi ovat suojattuja ja niitä säätelee ';
 
   @override
   String get pleaseSelectYourPrimaryLanguage => 'Valitse ensisijainen kielesi';
@@ -5048,10 +5023,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'Lisäpuhenäyte poistettu';
-
-  @override
-  String get consentDataMessage =>
-      'Jatkamalla keskustelusi, tallenteet ja henkilötietosi tallennetaan turvallisesti palvelimillemme. Äänitallenteitasi ja transkriptioitasi käsittelevät kolmannen osapuolen tekoälypalvelut (mukaan lukien Deepgram transkriptiota ja OpenAI analyysiä varten) tarjotaksemme sinulle tekoälypohjaisia oivalluksia ja mahdollistaaksemme kaikki sovelluksen ominaisuudet.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -7071,9 +7042,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Omi-muistutus';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName yhteys katkaistu';
   }
@@ -7768,9 +7736,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get authorizingMcpServer => 'Valtuutetaan…';
-
-  @override
-  String get whereDidYouHearAboutOmi => 'Miten löysit meidät?';
 
   @override
   String get tiktok => 'TikTok';
@@ -9955,9 +9920,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkriptio ei vastaanota ääntä';
 
   @override
-  String get tapPlusToStartRecording => 'Aloita tallennus napauttamalla tallennuspainiketta';
-
-  @override
   String get chatBlockTask => 'Tehtävä';
 
   @override
@@ -10675,9 +10637,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deviceConnecting => 'Yhdistetään…';
 
   @override
-  String get recordOptionsTip => 'Vinkki: tallenna puhelu napauttamalla tallennuspainikkeen nuolta.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Päivitys epäonnistui';
 
   @override
@@ -11217,12 +11176,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get keepUsingPendant => 'Jatka riipuksella';
 
   @override
-  String get recordWith => 'Tallennustapa';
-
-  @override
-  String get moreWaysToRecord => 'Lisää tallennustapoja';
-
-  @override
   String get openCall => 'Avaa puhelu';
 
   @override
@@ -11269,4 +11222,538 @@ class AppLocalizationsFi extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ja muut';
   }
+
+  @override
+  String get alreadyHaveAccount => 'Onko sinulla jo tili?';
+
+  @override
+  String get signInToOmi => 'Kirjaudu Omiin';
+
+  @override
+  String get signInSubtitle => 'Keskustelusi ja muistosi seuraavat tiliäsi puhelimessa, Macissa ja verkossa.';
+
+  @override
+  String onboardingAllSetName(String name) {
+    return 'Kaikki valmista, $name.';
+  }
+
+  @override
+  String get completeHomeBody => 'Päiväsi, tehtäväsi ja yhteenvetosi yhdessä paikassa.';
+
+  @override
+  String get completeAskTitle => 'Kysy';
+
+  @override
+  String get foundOmiOptionalHint => 'Valinnainen – auttaa pientä tiimiä tietämään, mikä toimii.';
+
+  @override
+  String get consentTitle => 'Tietosi selkokielellä';
+
+  @override
+  String get consentSubtitle => 'Ennen kuin Omi alkaa kuunnella, näet tästä tarkalleen, mitä sen kuulemalle tapahtuu.';
+
+  @override
+  String get consentStoredTitle => 'Mitä tallennetaan';
+
+  @override
+  String get consentStoredBody => 'Äänesi, litteroinnit ja Omin oppimat tiedot tallennetaan turvallisesti tilillesi.';
+
+  @override
+  String get consentProcessorsTitle => 'Kuka niitä käsittelee';
+
+  @override
+  String get consentProcessorsBody =>
+      'Deepgram litteroi puheen ja OpenAI analysoi sen, jotta syntyy yhteenvetoja, tehtäviä ja muistoja.';
+
+  @override
+  String get consentControlTitle => 'Mitä sinä hallitset';
+
+  @override
+  String get consentControlBody => 'Poista mikä tahansa keskustelu, muisto tai koko tilisi milloin haluat.';
+
+  @override
+  String get readPrivacyPolicy => 'Lue tietosuojakäytäntö';
+
+  @override
+  String get whatShouldOmiCallYou => 'Miksi Omi saa kutsua sinua?';
+
+  @override
+  String get nameUsageHint => 'Omi käyttää tätä merkitsemään sinut litterointeihin ja vientitiedostoihin.';
+
+  @override
+  String get yourNamePlaceholder => 'Nimesi';
+
+  @override
+  String get whatLanguageDoYouSpeakMost => 'Mitä kieltä puhut eniten?';
+
+  @override
+  String get languageOnboardingSubtitle => 'Omi litteroi parhaiten, kun se tietää kielen. Voit lisätä muita myöhemmin.';
+
+  @override
+  String get permissionsFewTitle => 'Muutama lupa';
+
+  @override
+  String get permissionsFewSubtitle =>
+      'Omi pyytää vain sitä, mitä se käyttää. Voit muuttaa näitä milloin tahansa asetuksista.';
+
+  @override
+  String get permissionsContinueNote => '”Jatka” ei pyydä mitään. Kutakin lupaa pyydetään vasta, kun napautat ”Salli”.';
+
+  @override
+  String get howDidYouHearAboutOmi => 'Mistä kuulit Omista?';
+
+  @override
+  String get showOnLockScreen => 'Näytä lukitusnäytöllä';
+
+  @override
+  String get seeAll => 'Näytä kaikki';
+
+  @override
+  String get upNext => 'Seuraavaksi';
+
+  @override
+  String get allTasks => 'Kaikki tehtävät';
+
+  @override
+  String get thisWeek => 'Tämä viikko';
+
+  @override
+  String capturedDuration(String duration) {
+    return '$duration tallennettu';
+  }
+
+  @override
+  String newMemoriesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count uutta muistoa',
+      one: '1 uusi muisto',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncingFromPendant => 'Synkronoidaan riipuksestasi';
+
+  @override
+  String get pendantRecordingsSynced => 'Riipuksen tallenteet synkronoitu';
+
+  @override
+  String recordedOnPendantWhileAway(String duration) {
+    return '~$duration tallennettu riipukseen puhelimen ollessa poissa';
+  }
+
+  @override
+  String dailyRecapOn(String day) {
+    return 'Päivän yhteenveto · $day';
+  }
+
+  @override
+  String taskDueDayTime(String day, String time) {
+    return '$day, $time';
+  }
+
+  @override
+  String fromConversation(String title) {
+    return 'Lähde: $title';
+  }
+
+  @override
+  String get endCapture => 'Lopeta';
+
+  @override
+  String get toDo => 'Tehtävät';
+
+  @override
+  String get devices => 'Laitteet';
+
+  @override
+  String get devicesSubtitle => 'Kaikki, mikä kuuntelee puolestasi. Yksi tallentaa kerrallaan.';
+
+  @override
+  String get addADevice => 'Lisää laite';
+
+  @override
+  String get deviceReady => 'Valmis';
+
+  @override
+  String get importFromOtherApps => 'Tuo muista sovelluksista';
+
+  @override
+  String get whatWillYouWear => 'Mitä pidät mukanasi?';
+
+  @override
+  String get pickDeviceSubtitle => 'Voit lisätä muita myöhemmin. Yksi tallentaa kerrallaan.';
+
+  @override
+  String get alreadyHaveOne => 'Onko sinulla jo sellainen?';
+
+  @override
+  String get noDeviceHeader => 'Ei laitetta';
+
+  @override
+  String get omiPendantName => 'Omi-riipus';
+
+  @override
+  String get allDayConversations => 'Keskustelut koko päivän';
+
+  @override
+  String get conversationsAndPhotos => 'Keskustelut + kuvat';
+
+  @override
+  String get wristMic => 'Rannemikrofoni';
+
+  @override
+  String get glassesAudio => 'Lasien ääni';
+
+  @override
+  String get bringRecordingsIntoOmi => 'Tuo tallenteesi Omiin';
+
+  @override
+  String get useThisIphone => 'Käytä tätä iPhonea';
+
+  @override
+  String get useThisPhone => 'Käytä tätä puhelinta';
+
+  @override
+  String get startInSeconds => 'Aloita 10 sekunnissa';
+
+  @override
+  String get askAboutThisConversationPlaceholder => 'Kysy tästä keskustelusta';
+
+  @override
+  String get summaryStyle => 'Yhteenvedon tyyli';
+
+  @override
+  String get summaryStyleSubtitle => 'Valitse, mikä sovellus kirjoittaa tämän yhteenvedon';
+
+  @override
+  String get appearance => 'Ulkoasu';
+
+  @override
+  String get appearanceSystem => 'Järjestelmä';
+
+  @override
+  String get appearanceLight => 'Vaalea';
+
+  @override
+  String get appearanceDark => 'Tumma';
+
+  @override
+  String get feel => 'Tuntuma';
+
+  @override
+  String get haptics => 'Haptiikka';
+
+  @override
+  String get hapticsSubtitle => 'Kevyt napautus, kun lopetat, merkitset tähdellä tai viet jotain loppuun';
+
+  @override
+  String get textSize => 'Tekstin koko';
+
+  @override
+  String get textSizeSubtitle => 'Seuraa puhelimen tekstikokoa';
+
+  @override
+  String get appearanceMotionNote =>
+      'Liike noudattaa puhelimen Vähennä liikettä -asetusta – kaikki toistuvat animaatiot, myös laitteen valo, pysähtyvät.';
+
+  @override
+  String get signedInWithApple => 'Kirjautunut Applella';
+
+  @override
+  String get signedInWithGoogle => 'Kirjautunut Googlella';
+
+  @override
+  String premiumMinutesLeftThisMonth(String left, int limit) {
+    return '$left/$limit premium-minuuttia jäljellä tässä kuussa';
+  }
+
+  @override
+  String get recordingFrom => 'Tallennuslähde';
+
+  @override
+  String get recordingFromSubtitle => 'Vain yksi lähde tallentaa kerrallaan. Vaihtaminen päättää nykyisen keskustelun.';
+
+  @override
+  String get manageDevices => 'Hallitse laitteita';
+
+  @override
+  String get notListeningTitle => 'Ei kuuntele';
+
+  @override
+  String get notListeningSubtitle => 'Aloita tällä puhelimella tai yhdistä laite, joka kuuntelee koko päivän.';
+
+  @override
+  String get startListening => 'Aloita kuuntelu';
+
+  @override
+  String get searchEverything => 'Hae kaikkialta';
+
+  @override
+  String searchResultsCount(int count) {
+    return 'Tulokset · $count';
+  }
+
+  @override
+  String get nothingFound => 'Mitään ei löytynyt';
+
+  @override
+  String get searchNothingFoundHint =>
+      'Kokeile toista sanaa tai kysy Omilta – se ymmärtää merkityksen, ei vain sanoja.';
+
+  @override
+  String get askOmiInstead => 'Kysy Omilta';
+
+  @override
+  String get recentSearches => 'Viimeisimmät';
+
+  @override
+  String get searchAskSuggestion => 'Mitä lupasin tehdä tällä viikolla?';
+
+  @override
+  String get welcomeRememberTitle => 'Muista jokainen keskustelu.';
+
+  @override
+  String get welcomeRememberSubtitle =>
+      'Käytä mitä haluat. Omi muuttaa kuulemasi muistiinpanoiksi, tehtäviksi ja päiväsi yhteenvedoksi.';
+
+  @override
+  String get memoriesSubtitle => 'Mitä Omi tietää ja mistä se sen oppi';
+
+  @override
+  String get memoryTierLongTerm => 'Pitkäaikainen';
+
+  @override
+  String get memoryTierShortTerm => 'Lyhytaikainen';
+
+  @override
+  String get memoriesTierNote =>
+      'Uudet muistot ovat aluksi lyhytaikaisia. Omi siirtää itse tärkeinä pysyvät pitkäaikaisiksi.';
+
+  @override
+  String get askEmptyTitle => 'Kysy mitä tahansa kuulemastasi.';
+
+  @override
+  String get askEmptySubtitle => 'Omi vastaa keskustelujesi, muistojesi ja tehtäviesi pohjalta.';
+
+  @override
+  String get completeListeningTitle => 'Kuuntelu';
+
+  @override
+  String get completeListeningBody =>
+      'Sininen tarkoittaa, että Omi kuulee sinua – käyttämästäsi laitteesta tai tästä puhelimesta.';
+
+  @override
+  String get completeAskAnyBody => 'Napauta Kysy ja kysy mitä tahansa kuulemastasi.';
+
+  @override
+  String get completeDevicesBody => 'Lisää puettava laite milloin vain tai aloita tällä puhelimella.';
+
+  @override
+  String get conversationSourceGlasses => 'Lasit';
+
+  @override
+  String get conversationSourceImported => 'Tuodut';
+
+  @override
+  String get conversationSourceEmptyHint => 'Tästä lähteestä ei ole vielä tallennettu mitään.';
+
+  @override
+  String get findMyPendant => 'Etsi riipukseni';
+
+  @override
+  String get findMyPendantHint => 'Soittaa äänen, jotta löydät sen';
+
+  @override
+  String get upToDate => 'Ajan tasalla';
+
+  @override
+  String get updateAvailable => 'Päivitys saatavilla';
+
+  @override
+  String get storageTitle => 'Tallennustila';
+
+  @override
+  String get connectStepTurnOn => 'Käynnistä se ja pidä lähellä';
+
+  @override
+  String get connectStepAllowBluetooth => 'Salli Bluetooth';
+
+  @override
+  String get connectStepTest => 'Sano jotain testiksi';
+
+  @override
+  String get connectStepTestHint => 'Sanat näkyvät tässä, kun puhut';
+
+  @override
+  String get setUpLater => 'Määritä myöhemmin';
+
+  @override
+  String recapPreviousDay(String day) {
+    return 'Edellisen päivän kooste: $day';
+  }
+
+  @override
+  String recapNextDay(String day) {
+    return 'Seuraavan päivän kooste: $day';
+  }
+
+  @override
+  String get askStarterToday => 'Tiivistä tämä päivä';
+
+  @override
+  String get askStarterPeople => 'Keitä tapasin?';
+
+  @override
+  String get askStarterOpen => 'Mikä on vielä kesken?';
+
+  @override
+  String get peopleSubtitle => 'Äänet, jotka Omi tunnistaa litteroinneista';
+
+  @override
+  String get usageCurrentPlan => 'Nykyinen tilaus';
+
+  @override
+  String get appsExplore => 'Tutki';
+
+  @override
+  String get appOutOfFive => '/ 5';
+
+  @override
+  String get appStatUsers => 'Käyttäjät';
+
+  @override
+  String homeWelcomeName(String name) {
+    return 'Tervetuloa, $name';
+  }
+
+  @override
+  String get homeWelcome => 'Tervetuloa';
+
+  @override
+  String get homeFirstDaySubtitle => 'Ensimmäinen päiväsi Omin kanssa';
+
+  @override
+  String get homeListeningHeroTitle => 'Omi kuuntelee';
+
+  @override
+  String get homeListeningHeroBody => 'Ensimmäinen keskustelusi näkyy tässä minuutin kuluttua sen päättymisestä.';
+
+  @override
+  String get homeGettingStarted => 'Aloitus';
+
+  @override
+  String get gettingStartedConnect => 'Yhdistä laite';
+
+  @override
+  String get gettingStartedConversation => 'Käy keskustelu';
+
+  @override
+  String get gettingStartedAsk => 'Kysy Omilta siitä';
+
+  @override
+  String get homeGoodToKnow => 'Hyvä tietää';
+
+  @override
+  String get tipFinishTitle => 'Lopeta milloin vain';
+
+  @override
+  String get tipFinishBody => 'Napauta Lopeta – tai paina riipusta kahdesti – niin yhteenveto alkaa heti.';
+
+  @override
+  String get tipStarTitle => 'Merkitse tärkeät tähdellä';
+
+  @override
+  String get tipStarBody => 'Tähdellä merkityt keskustelut löytyvät myöhemmin helposti.';
+
+  @override
+  String get tipPrivateTitle => 'Oletuksena yksityinen';
+
+  @override
+  String get tipPrivateBody => 'Keskustelusi pysyvät yksityisinä, ellet jaa niitä.';
+
+  @override
+  String homeGettingStartedProgress(int done, int total) {
+    return '$done/$total';
+  }
+
+  @override
+  String get noFailedRecordings => 'Ei epäonnistuneita tallenteita';
+
+  @override
+  String get mapNoPlacesTitle => 'Ei vielä paikkoja';
+
+  @override
+  String get mapNoPlacesMessage => 'Keskustelut näkyvät täällä, kun Omi tietää, missä ne käytiin.';
+
+  @override
+  String get mergeWithEllipsis => 'Yhdistä…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Viimeistele sovelluksen $appName käyttöönotto, niin voit ottaa sen käyttöön';
+  }
+
+  @override
+  String get greetingUpLate => 'Myöhään valveilla';
+
+  @override
+  String get greetingLunchtime => 'Lounasaika';
+
+  @override
+  String get greetingWindingDown => 'Aika rentoutua';
+
+  @override
+  String get greetingGoodNight => 'Hyvää yötä';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Vielä hereillä';
+
+  @override
+  String get greetingEarlyStart => 'Aikainen aloitus';
+
+  @override
+  String get greetingNewDay => 'Uusi päivä';
+
+  @override
+  String get greetingMorning => 'Hyvää huomenta';
+
+  @override
+  String get greetingBusyMorning => 'Kiireinen aamupäivä';
+
+  @override
+  String get greetingAfternoon => 'Hyvää iltapäivää';
+
+  @override
+  String get greetingHomeStretch => 'Loppukiri';
+
+  @override
+  String get greetingEvening => 'Hyvää iltaa';
+
+  @override
+  String get unlimitedBadge => 'Rajoittamaton';
+
+  @override
+  String get voiceSetupTaskSubline => 'Jotta Omi tietää, että se olet sinä · noin minuutti';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Ääntä tallennettu $saved/$total';
+  }
+
+  @override
+  String get voiceIntroTitle => 'Esittele itsesi';
+
+  @override
+  String get memoryLabel => 'Muisto';
+
+  @override
+  String get idleReadyHint => 'Napauta Aloita, niin sanomasi näkyy tässä.';
 }

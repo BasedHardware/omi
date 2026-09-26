@@ -75,6 +75,8 @@ import 'package:omi/providers/user_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/ui/omi_appearance.dart';
+import 'package:omi/ui/omi_sheet_depth.dart';
 import 'package:omi/ui/omi_theme.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
@@ -91,11 +93,13 @@ import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/environment_detector.dart';
 import 'package:omi/utils/analytics/rage_click_context_tracker.dart';
+import 'package:omi/utils/appearance_preferences.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 /// Firebase parameters for the current flavor, resolved identically in every engine.
 FirebaseOptions _firebaseOptionsForFlavor() => Env.profile == AppEnvironmentProfile.localDev
@@ -133,7 +137,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       channelName: NotificationChannelStrings.omiChannelName,
       channelDescription: NotificationChannelStrings.omiChannelDescription,
       defaultColor: const Color(0xFF9D50DD),
-      ledColor: Colors.white,
+      ledColor: OmiColors.textPrimary,
     ),
   ]);
 
@@ -210,6 +214,7 @@ Future _init() async {
   }
 
   await PhysicalQualification.startupStage('shared_preferences', SharedPreferencesUtil.init);
+  restoreAppearance();
 
   // TestFlight remains a distribution/telemetry signal; production-family
   // builds always use the established production backend.
@@ -374,6 +379,8 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   final AppSessionTelemetry _appSessionTelemetry = AppSessionTelemetry();
+  // Motion N2: the page behind a bottom sheet recedes (OmiSheetRecede).
+  final OmiSheetObserver _sheetObserver = OmiSheetObserver();
   late final MobilePerformanceTelemetry _performanceTelemetry = MobilePerformanceTelemetry(
     emit: (name, properties) => PlatformManager.instance.analytics.track(name, properties: properties),
     identityEpoch: () => AnalyticsManager.identityEpoch,
@@ -530,37 +537,41 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(lazy: true, create: (context) => PhoneCallProvider()),
       ],
       builder: (context, child) {
-        return WithForegroundTask(
-          child: MaterialApp(
-            debugShowCheckedModeBanner: F.env == Environment.dev,
-            title: F.title,
-            navigatorKey: MyApp.navigatorKey,
-            navigatorObservers: [if (!PhysicalQualification.enabled) _performanceTelemetry],
-            locale: context.watch<LocaleProvider>().locale,
-            localizationsDelegates: const [
-              AppLocalizations.delegate,
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            supportedLocales: AppLocalizations.supportedLocales,
-            theme: buildOmiTheme(),
-            themeMode: ThemeMode.dark,
-            builder: (context, child) {
-              syncIntlDefaultLocale(Localizations.localeOf(context));
-              ErrorWidget.builder = (errorDetails) {
-                return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
-              };
-              final content = child!;
-              final guidedContent = BluetoothGuidanceListener(child: content);
-              return PlatformService.isIOS && Env.posthogApiKey != null
-                  ? RageClickContextTracker(child: guidedContent)
-                  : guidedContent;
-            },
-            home: TalkerWrapper(
-              talker: Logger.instance.talker,
-              options: const TalkerWrapperOptions(enableErrorAlerts: false, enableExceptionAlerts: false),
-              child: const AppShell(),
+        // Rebuilds everything below, state kept, when Settings → Appearance or the phone's own
+        // appearance switches the palette.
+        return OmiAppearanceScope(
+          builder: (context) => WithForegroundTask(
+            child: MaterialApp(
+              debugShowCheckedModeBanner: F.env == Environment.dev,
+              title: F.title,
+              navigatorKey: MyApp.navigatorKey,
+              navigatorObservers: [if (!PhysicalQualification.enabled) _performanceTelemetry, _sheetObserver],
+              locale: context.watch<LocaleProvider>().locale,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              supportedLocales: AppLocalizations.supportedLocales,
+              theme: buildOmiTheme(),
+              builder: (context, child) {
+                syncIntlDefaultLocale(Localizations.localeOf(context));
+                ErrorWidget.builder = (errorDetails) {
+                  return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
+                };
+                final content = child!;
+                final guidedContent = BluetoothGuidanceListener(child: content);
+                return PlatformService.isIOS && Env.posthogApiKey != null
+                    ? RageClickContextTracker(child: guidedContent)
+                    : guidedContent;
+              },
+              home: TalkerWrapper(
+                talker: Logger.instance.talker,
+                options: const TalkerWrapperOptions(enableErrorAlerts: false, enableExceptionAlerts: false),
+                // The first page recedes behind sheets like every pushed one (omiPageRoute).
+                child: const OmiSheetRecede(child: AppShell()),
+              ),
             ),
           ),
         );
@@ -581,7 +592,7 @@ class CustomErrorWidget extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, color: Colors.red, size: 50.0),
+            Icon(Icons.error_outline, color: OmiColors.danger, size: 50.0),
             const SizedBox(height: 10.0),
             Text(
               context.l10n.somethingWentWrong,
@@ -594,7 +605,7 @@ class CustomErrorWidget extends StatelessWidget {
               margin: const EdgeInsets.all(16),
               height: 200,
               decoration: BoxDecoration(
-                color: const Color.fromARGB(255, 63, 63, 63),
+                color: OmiColors.surface2,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(errorMessage, textAlign: TextAlign.start, style: const TextStyle(fontSize: 16.0)),
@@ -603,7 +614,7 @@ class CustomErrorWidget extends StatelessWidget {
             SizedBox(
               width: 210,
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                style: ElevatedButton.styleFrom(backgroundColor: OmiColors.danger),
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: errorMessage));
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.errorCopied)));

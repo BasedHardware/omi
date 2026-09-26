@@ -5,7 +5,7 @@ import 'package:omi/ui/omi_tokens.dart';
 
 /// Shows a modal bottom sheet in the app's one sheet shell and returns its result.
 ///
-/// The shell: [OmiColors.surface1] with 24pt top corners, the framework drag handle (36x4, which
+/// The shell: [OmiColors.sheet] with 40pt (iOS) / 28pt (Android) top corners, the framework drag handle (36x4, which
 /// screen readers can activate to dismiss), an optional title row with a trailing
 /// [OmiCloseButton], bottom safe-area padding, and padding for the keyboard so text fields stay
 /// visible. Content that does not fit scrolls if it is (or contains) a scrollable; wrap a long
@@ -35,7 +35,7 @@ Future<T?> showOmiSheet<T>({
   EdgeInsetsGeometry padding = const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
   RouteSettings? routeSettings,
 }) {
-  return showModalBottomSheet<T>(
+  return showOmiModalSheet<T>(
     context: context,
     isScrollControlled: isScrollControlled,
     useSafeArea: useSafeArea,
@@ -45,9 +45,8 @@ Future<T?> showOmiSheet<T>({
     routeSettings: routeSettings,
     // Size (36x4) and colour come from the app theme's bottomSheetTheme (buildOmiTheme).
     showDragHandle: true,
-    backgroundColor: OmiColors.surface1,
-    shape: const RoundedRectangleBorder(borderRadius: OmiRadius.sheetTop),
-    clipBehavior: Clip.antiAlias,
+    color: () => OmiColors.sheet,
+    shape: RoundedRectangleBorder(borderRadius: OmiRadius.sheetTopFor(Theme.of(context).platform)),
     builder: (sheetContext) => OmiSheetScaffold(
       title: title,
       showCloseButton: showCloseButton,
@@ -55,6 +54,69 @@ Future<T?> showOmiSheet<T>({
       child: Builder(builder: builder),
     ),
   );
+}
+
+/// `showModalBottomSheet` for the Omi palette: the sheet's [color] is read each time it paints,
+/// so switching light/dark while a sheet is open (Settings → Appearance) repaints the sheet itself
+/// along with its content. The framework's route keeps the colour it was opened with, which left
+/// Settings dark behind light cards after a switch.
+Future<T?> showOmiModalSheet<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  required Color Function() color,
+  required ShapeBorder shape,
+  bool isScrollControlled = true,
+  bool useSafeArea = true,
+  bool isDismissible = true,
+  bool enableDrag = true,
+  bool showDragHandle = true,
+  bool useRootNavigator = false,
+  RouteSettings? routeSettings,
+}) {
+  final navigator = Navigator.of(context, rootNavigator: useRootNavigator);
+  final localizations = MaterialLocalizations.of(context);
+  return navigator.push(
+    _OmiModalSheetRoute<T>(
+      color: color,
+      builder: builder,
+      capturedThemes: InheritedTheme.capture(from: context, to: navigator.context),
+      isScrollControlled: isScrollControlled,
+      barrierLabel: localizations.scrimLabel,
+      barrierOnTapHint: localizations.scrimOnTapHint(localizations.bottomSheetLabel),
+      shape: shape,
+      clipBehavior: Clip.antiAlias,
+      isDismissible: isDismissible,
+      modalBarrierColor: Theme.of(context).bottomSheetTheme.modalBarrierColor,
+      enableDrag: enableDrag,
+      showDragHandle: showDragHandle,
+      settings: routeSettings,
+      useSafeArea: useSafeArea,
+    ),
+  );
+}
+
+class _OmiModalSheetRoute<T> extends ModalBottomSheetRoute<T> {
+  _OmiModalSheetRoute({
+    required this.color,
+    required super.builder,
+    super.capturedThemes,
+    super.barrierLabel,
+    super.barrierOnTapHint,
+    super.shape,
+    super.clipBehavior,
+    super.modalBarrierColor,
+    super.isDismissible,
+    super.enableDrag,
+    super.showDragHandle,
+    required super.isScrollControlled,
+    super.settings,
+    super.useSafeArea,
+  });
+
+  final Color Function() color;
+
+  @override
+  Color? get backgroundColor => color();
 }
 
 /// The inside of an Omi sheet: optional title row with a trailing close X, the content, and the

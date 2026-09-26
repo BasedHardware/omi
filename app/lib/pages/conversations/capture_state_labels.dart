@@ -10,8 +10,8 @@ import 'package:omi/l10n/app_localizations.dart';
 /// | [listening]                  | Listening                    | live capture with live transcription           |
 /// | [capturing]                  | Capturing                    | live capture from a camera device (photos)     |
 /// | [recording]                  | Recording                    | audio saved for later (no live transcription)  |
-/// | [paused]                     | Paused                       | the reader paused, or the OS interrupted audio (a call, another app) |
-/// | [muted]                      | Muted                        | the device's mic is muted                      |
+/// | [paused]                     | Paused                       | the OS interrupted audio (a call, another app) |
+/// | [muted]                      | Muted                        | the reader muted (Mute), keeping the conversation open |
 /// | [reconnecting]               | Reconnecting…                | the transcription connection dropped and is being restored |
 /// | [bufferingOffline]           | Offline, buffering (· 3m)    | a custom speech endpoint is unreachable; audio is kept locally |
 /// | [transcriptionUnavailable]   | Transcriptions are unavailable, recording continues on device and will process later | the server said live transcription cannot run; the WAL keeps recording regardless |
@@ -123,19 +123,18 @@ CaptureCardCopy captureCardCopy(
 }
 
 /// Resolves the state of a live capture from the capture provider's signals, in priority order:
-/// an interruption or pause, then a server-side transcription failure, then offline buffering,
-/// then a dropped transcription connection, then live.
+/// an interruption, then the reader's mute, then a server-side transcription failure, then offline
+/// buffering, then a dropped transcription connection, then live.
 CaptureDisplayState liveCaptureDisplayState({
   bool audioInterrupted = false,
   bool paused = false,
-  bool deviceMuted = false,
   bool transcriptionUnavailable = false,
   Duration? bufferingFor,
   bool reconnecting = false,
   bool capturingPhotos = false,
 }) {
   if (audioInterrupted) return CaptureDisplayState.paused;
-  if (paused) return deviceMuted ? CaptureDisplayState.muted : CaptureDisplayState.paused;
+  if (paused) return CaptureDisplayState.muted;
   if (transcriptionUnavailable) return CaptureDisplayState.transcriptionUnavailable;
   if (bufferingFor != null) return CaptureDisplayState.bufferingOffline;
   if (reconnecting) return CaptureDisplayState.reconnecting;

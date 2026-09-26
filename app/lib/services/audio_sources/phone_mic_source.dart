@@ -22,11 +22,17 @@ class PhoneMicSource implements AudioSource {
   @override
   String get deviceModel => 'Phone Microphone';
 
+  /// Observes audio for presentation only; it never alters frames.
+  final AudioTap? onAudio;
+
+  PhoneMicSource({this.onAudio});
+
   final List<int> _buffer = [];
   int _frameIndex = 0;
 
   @override
   List<WalFrame> processBytes(List<int> rawBytes) {
+    onAudio?.call(rawBytes, codec);
     _buffer.addAll(rawBytes);
     final frames = <WalFrame>[];
 

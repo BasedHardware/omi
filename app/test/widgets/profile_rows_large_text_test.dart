@@ -83,6 +83,6 @@ void main() {
     final titleRect = tester.getRect(find.text('Voice response'));
     final valueRect = tester.getRect(valueFinder);
     expect(titleRect.right, lessThanOrEqualTo(valueRect.left));
-    expect(find.byIcon(Icons.chevron_right), findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is OmiGlyph && w.asset == OmiGlyphs.chevronRight), findsOneWidget);
   });
 }

@@ -75,7 +75,7 @@ class CapabilityCategorySection extends StatelessWidget {
                 const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: const BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
+                  decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
                   child: Text(
                     '${apps.length}',
                     style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
@@ -148,13 +148,13 @@ class CapabilitySectionAppItemCard extends StatelessWidget {
               placeholder: (context, url) => Container(
                 width: 60,
                 height: 60,
-                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
               ),
               errorWidget: (context, url, error) => Container(
                 width: 60,
                 height: 60,
-                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-                child: const Icon(Icons.error_outline, color: OmiColors.textTertiary, size: 24),
+                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+                child: Icon(Icons.error_outline, color: OmiColors.textTertiary, size: 24),
               ),
             ),
             const SizedBox(width: 12),
@@ -183,7 +183,7 @@ class CapabilitySectionAppItemCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        const FaIcon(FontAwesomeIcons.solidStar, color: Colors.white, size: 9),
+                        FaIcon(FontAwesomeIcons.solidStar, color: OmiColors.textPrimary, size: 9),
                         const SizedBox(width: 4),
                         Text(
                           app.getRatingAvg()!,

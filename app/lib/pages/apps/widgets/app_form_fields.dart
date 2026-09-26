@@ -19,18 +19,18 @@ InputDecoration appFormInputDecoration({String? label, String? hint, bool alignL
     labelText: label,
     hintText: hint,
     hintMaxLines: 4,
-    labelStyle: const TextStyle(color: OmiColors.textTertiary),
+    labelStyle: TextStyle(color: OmiColors.textTertiary),
     hintStyle: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-    floatingLabelStyle: const TextStyle(color: OmiColors.textSecondary),
+    floatingLabelStyle: TextStyle(color: OmiColors.textSecondary),
     alignLabelWithHint: alignLabelWithHint,
     contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.md),
     border: OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: outline),
     enabledBorder: OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: outline),
-    focusedBorder: const OutlineInputBorder(
+    focusedBorder: OutlineInputBorder(
       borderRadius: OmiRadius.mdAll,
       borderSide: BorderSide(color: OmiColors.textSecondary, width: 1),
     ),
-    errorBorder: const OutlineInputBorder(
+    errorBorder: OutlineInputBorder(
       borderRadius: OmiRadius.mdAll,
       borderSide: BorderSide(color: OmiColors.danger, width: 1),
     ),
@@ -49,7 +49,7 @@ class AppFormCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       padding: padding,
       child: child,
     );
@@ -71,7 +71,7 @@ class AppFormSectionTitle extends StatelessWidget {
       TextSpan(
         text: text,
         style: style,
-        children: const [TextSpan(text: ' *', style: TextStyle(color: OmiColors.danger))],
+        children: [TextSpan(text: ' *', style: TextStyle(color: OmiColors.danger))],
       ),
     );
   }
@@ -136,7 +136,7 @@ class AppFormSelectorField extends StatelessWidget {
                     ),
                   ),
                 ),
-                const FaIcon(FontAwesomeIcons.chevronRight, color: OmiColors.textTertiary, size: 14),
+                FaIcon(FontAwesomeIcons.chevronRight, color: OmiColors.textTertiary, size: 14),
               ],
             ),
           ),
@@ -170,7 +170,7 @@ Future<void> showAppOptionPicker<T>({
       child: ListView.separated(
         shrinkWrap: true,
         itemCount: options.length,
-        separatorBuilder: (_, __) => const Divider(color: OmiColors.border, height: 1),
+        separatorBuilder: (_, __) => Divider(color: OmiColors.border, height: 1),
         itemBuilder: (itemContext, index) {
           final option = options[index];
           final isSelected = option.value == selected;
@@ -193,7 +193,7 @@ Future<void> showAppOptionPicker<T>({
                     Checkbox(
                       value: isSelected,
                       onChanged: (_) => pick(),
-                      side: const BorderSide(color: OmiColors.textSecondary),
+                      side: BorderSide(color: OmiColors.textSecondary),
                       shape: const CircleBorder(),
                     ),
                   ],
@@ -301,11 +301,11 @@ class AppScreenshotsSection extends StatelessWidget {
           width: _width,
           height: _height,
           margin: const EdgeInsets.only(right: 8),
-          decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
           child: Center(
             child: isUploading
                 ? const OmiSpinner(size: OmiSpinnerSize.small)
-                : const FaIcon(FontAwesomeIcons.image, size: 28, color: OmiColors.textPrimary),
+                : FaIcon(FontAwesomeIcons.image, size: 28, color: OmiColors.textPrimary),
           ),
         ),
       ),
@@ -394,7 +394,7 @@ class AppSourceCodeUrlSection extends StatelessWidget {
             controller: controller,
             // An example value, not prose: the same in every language.
             decoration: appFormInputDecoration(hint: 'https://github.com/username/repo'),
-            style: const TextStyle(color: OmiColors.textPrimary),
+            style: TextStyle(color: OmiColors.textPrimary),
             keyboardType: TextInputType.url,
             validator: (value) {
               if (value == null || value.trim().isEmpty) return l10n.githubRepositoryUrlRequired;

@@ -82,10 +82,27 @@ class _TrackingCaptureProvider extends CaptureProvider {
         );
 
   var forceProcessingCalls = 0;
+  var finishes = 0;
+
+  /// Makes Finish fail the way the capture owner reports an effect failure.
+  Object? finishFailure;
+
+  /// Holds Finish until completed: a stop waiting its turn behind a transcription reconnect.
+  Completer<void>? finishGate;
 
   @override
   Future<void> forceProcessingCurrentConversation() async {
     forceProcessingCalls++;
+  }
+
+  @override
+  Future<void> finishCapture() async {
+    finishes++;
+    final gate = finishGate;
+    if (gate != null) await gate.future;
+    final failure = finishFailure;
+    if (failure != null) throw failure;
+    return super.finishCapture();
   }
 }
 
@@ -114,10 +131,10 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
-  testWidgets('Finish processes and lands on the Conversations tab', (tester) async {
+  testWidgets('Stop with something heard processes it and lands on the Conversations tab', (tester) async {
     final harness = await _pumpCapturingPage(tester);
 
-    expect(find.byKey(const Key('process_now_button')), findsOneWidget);
+    expect(find.byKey(const Key('capture_stop_button')), findsOneWidget);
     await _stopFromPage(tester, harness.capture);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
@@ -129,9 +146,63 @@ void main() {
     expect(find.byType(ConversationCapturingPage), findsNothing);
   });
 
-  // David, 2026-09-25: Finish is the only stop and is explicit, so the "Finished Conversation?"
+  testWidgets('with nothing heard, Stop saves nothing and goes back to Today', (tester) async {
+    final harness = await _pumpCapturingPage(tester, heard: false);
+    harness.home.setIndex(2);
+
+    await _stopFromPage(tester, harness.capture);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(harness.capture.forceProcessingCalls, 0, reason: 'no empty Processing row');
+    expect(harness.home.selectedIndex, 0);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(ConversationCapturingPage), findsNothing);
+  });
+
+  testWidgets('a Stop that fails says so where the reader lands', (tester) async {
+    final harness = await _pumpCapturingPage(tester);
+    harness.capture.finishFailure = StateError('refused');
+
+    await _stopFromPage(tester, harness.capture);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text(lookupAppLocalizations(const Locale('en')).somethingWentWrong), findsOneWidget);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(ConversationCapturingPage), findsNothing);
+    expect(find.text('open-capture'), findsOneWidget);
+  });
+
+  // IMG_1148–1150: opened from the island, Stop waited behind a transcription reconnect, looked
+  // dead, took a second tap, and then closed twice — Home too, leaving a black screen.
+  testWidgets('Stop leaves at once while the stop waits its turn, and a second tap never closes Home', (tester) async {
+    final harness = await _pumpCapturingPage(tester);
+    final gate = Completer<void>();
+    harness.capture.finishGate = gate;
+
+    final dynamic state = tester.state(find.byType(ConversationCapturingPage));
+    unawaited(state.debugStopConversation(harness.capture) as Future<void>);
+    unawaited(state.debugStopConversation(harness.capture) as Future<void>);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(ConversationCapturingPage), findsNothing, reason: 'Stop closes the page at once');
+    expect(find.text('open-capture'), findsOneWidget);
+    expect(harness.home.selectedIndex, 1);
+    expect(harness.capture.isStopping, true);
+
+    gate.complete();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(harness.capture.finishes, 1, reason: 'the second tap joins the first stop');
+    expect(harness.capture.forceProcessingCalls, 1);
+    expect(harness.capture.isStopping, false);
+    expect(find.text('open-capture'), findsOneWidget, reason: 'Home is never closed');
+  });
+
+  // David, 2026-09-25: Stop is the only stop and is explicit, so the "Finished Conversation?"
   // confirmation is gone, even for users who had left it switched on.
-  testWidgets('Finish never asks for confirmation, whatever the old preference says', (tester) async {
+  testWidgets('Stop never asks for confirmation, whatever the old preference says', (tester) async {
     await SharedPreferencesUtil().saveBool('showSummarizeConfirmation', true);
     final harness = await _pumpCapturingPage(tester);
 
@@ -204,14 +275,14 @@ Future<void> _stopFromPage(WidgetTester tester, CaptureProvider capture) async {
   await tester.pump();
 }
 
-Future<_Harness> _pumpCapturingPage(WidgetTester tester) async {
+Future<_Harness> _pumpCapturingPage(WidgetTester tester, {bool heard = true}) async {
   tester.view.physicalSize = const Size(800, 1600);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
   final home = HomeProvider();
-  final capture = _TrackingCaptureProvider()..segments = [_segment()];
+  final capture = _TrackingCaptureProvider()..segments = [if (heard) _segment()];
   addTearDown(home.dispose);
   addTearDown(capture.dispose);
 

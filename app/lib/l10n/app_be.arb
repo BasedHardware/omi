@@ -1781,10 +1781,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "whatsYourName": "Якое вашае імя?",
-    "@whatsYourName": {
-        "description": "Question asking for user's name"
-    },
     "@enterYourName": {
         "description": "Hint text for name input field"
     },
@@ -1807,14 +1803,6 @@
     "termsOfUse": "Усім ўмовам выкарыстання",
     "@termsOfUse": {
         "description": "Link text for Terms of Use"
-    },
-    "omiYourAiCompanion": "Omi – вашы AI помочнік",
-    "@omiYourAiCompanion": {
-        "description": "App title or branding on onboarding screen"
-    },
-    "captureEveryMoment": "Захапляйце кожны момант. Атрымайце рэзюме на базе AI.\nАбыходіцеся бес запісаў.",
-    "@captureEveryMoment": {
-        "description": "App value proposition or description"
     },
     "appleWatchSetup": "Налада Apple Watch",
     "@appleWatchSetup": {
@@ -1877,27 +1865,11 @@
             }
         }
     },
-    "selectPrimaryLanguage": "Выберыце вашу асноўную мову",
-    "@selectPrimaryLanguage": {
-        "description": "Title for language selection dialog"
-    },
-    "languageBenefits": "Ўстаноўце вашу мову для больш складаных расшифровак і персаналізаванага вопыту",
-    "@languageBenefits": {
-        "description": "Explanation of why language selection matters"
-    },
     "@searchLanguageHint": {
         "description": "Hint text for language search"
     },
     "@noLanguagesFound": {
         "description": "Text when search returns no results"
-    },
-    "whatsYourPrimaryLanguage": "Якая вашая асноўная мова?",
-    "@whatsYourPrimaryLanguage": {
-        "description": "Question asking for primary language"
-    },
-    "selectYourLanguage": "Выберыце вашу мову",
-    "@selectYourLanguage": {
-        "description": "Placeholder for selected language name"
     },
     "personalGrowthJourney": "Ваш персаніфічны шлях росту з AI, які слухае кожнае вашае слова.",
     "@personalGrowthJourney": {
@@ -3914,10 +3886,6 @@
     "@dataProtection": {
         "description": "Section title for data protection info"
     },
-    "yourDataIsProtected": "Вашы даныя абаронены і кіруюцца нашай ",
-    "@yourDataIsProtected": {
-        "description": "First part of data protection text"
-    },
     "pleaseSelectYourPrimaryLanguage": "Пажалуйста, выберыце вашу асноўную мову",
     "chooseYourLanguage": "Выберыце вашу мову",
     "selectPreferredLanguageForBestExperience": "Выберыце вашу аддаленую мову для лепшага вопыту Omi",
@@ -5925,10 +5893,6 @@
     "additionalSpeechSampleRemoved": "Дадатковы Ўзор Мовы Выдалены",
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
-    },
-    "consentDataMessage": "Працягваючы, вашы размовы, запісы і асабістая інфармацыя будуць надзейна захоўвацца на нашых серверах. Вашы аўдыязапісы і транскрыпцыі апрацоўваюцца староннімі сэрвісамі ШІ (уключаючы Deepgram для транскрыпцыі і OpenAI для аналізу), каб забяспечыць вас аналітыкай на аснове ШІ і ўключыць усе функцыі праграмы.",
-    "@consentDataMessage": {
-        "description": "Consent message explaining how user data will be stored and used"
     },
     "tasksEmptyStateMessage": "Задачы з вашых разговораў пояўляцца тут.\nТапніце + каб стварыць адну ручнічна.",
     "@tasksEmptyStateMessage": {
@@ -8689,10 +8653,6 @@
             }
         }
     },
-    "actionItemReminderTitle": "Нагадаванне Omi",
-    "@actionItemReminderTitle": {
-        "description": "Title for action item reminder notifications"
-    },
     "deviceDisconnectedTitle": "{deviceName} адключаны",
     "@deviceDisconnectedTitle": {
         "description": "Notification title when a device disconnects",
@@ -9493,7 +9453,6 @@
     },
     "mcpConnectionFailed": "Не ўдалося падключыцца да MCP-сервера",
     "authorizingMcpServer": "Аўтарызацыя…",
-    "whereDidYouHearAboutOmi": "Як вы пра нас даведаліся?",
     "tiktok": "TikTok",
     "youtube": "YouTube",
     "instagram": "Instagram",
@@ -10782,7 +10741,6 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "Націсніце кнопку запісу, каб пачаць запіс",
     "processingTakingLonger": "Яшчэ апрацоўваецца — гэта доўжыцца даўжэй, чым звычайна.",
     "speechProfileEnrollmentPrompt": "Каб Omi ведаў, які голас ваш, гаварыце пра што заўгодна каля 5 секунд.",
     "home": "Галоўная",
@@ -10948,7 +10906,6 @@
     "batteryLevelSemantics": "Батарэя {level}%",
     "updateOmiGlassFirmware": "Абнавіць прашыўку OmiGlass",
     "deviceConnecting": "Падключэнне…",
-    "recordOptionsTip": "Парада: націсніце стрэлку на кнопцы запісу, каб запісаць тэлефонны званок.",
     "firmwareUpdateFailedTitle": "Абнаўленне не ўдалося",
     "firmwareUpdateFailedMessage": "Абнаўленне не завяршылася. Прылада працуе на бягучай прашыўцы, ёю можна бяспечна карыстацца. Зарадзіце яе і трымайце побач з тэлефонам, потым паспрабуйце зноў.",
     "firmwareDownloadFailedMessage": "Не ўдалося спампаваць абнаўленне, прылада не змянілася. Праверце падключэнне да інтэрнэту і паспрабуйце зноў.",
@@ -11100,8 +11057,6 @@
     "pendantPausesUntilYouFinish": "Кулон на паўзе да завяршэння запісу",
     "pendantPausesDuringCall": "Кулон на паўзе падчас званка",
     "keepUsingPendant": "Працягнуць з кулонам",
-    "recordWith": "Запісаць праз",
-    "moreWaysToRecord": "Іншыя спосабы запісу",
     "openCall": "Адкрыць званок",
     "captureRecoveryBanner": "Гук кулона не даходзіць да праграмы — націсніце, каб выправіць",
     "phoneRecordingBlockedByPendantBatch": "Спыніце Transcribe Later на падвесцы перад запісам на тэлефоне.",
@@ -11115,5 +11070,168 @@
     "capturePhoneStorageFull": "Памяць тэлефона запоўнена",
     "captureStorageAlmostFull": "Памяць амаль запоўнена",
     "capturePendantDisconnectedDetail": "Кулон страціў сувязь з гэтым тэлефонам. Omi перападключыцца сам, калі кулон уключаны і побач. Усё, што запісана да гэтага, захавана.",
-    "participantsSummaryUncounted": "{name} і іншыя"
+    "participantsSummaryUncounted": "{name} і іншыя",
+    "alreadyHaveAccount": "Ужо ёсць уліковы запіс?",
+    "signInToOmi": "Увайдзіце ў Omi",
+    "signInSubtitle": "Вашы размовы і ўспаміны даступныя ў вашым уліковым запісе на тэлефоне, Mac і ў вэбе.",
+    "onboardingAllSetName": "Усё гатова, {name}.",
+    "completeHomeBody": "Ваш дзень, задачы і зводкі ў адным месцы.",
+    "completeAskTitle": "Спытаць",
+    "foundOmiOptionalHint": "Неабавязкова — гэта дапамагае невялікай камандзе зразумець, што працуе.",
+    "consentTitle": "Вашы даныя простымі словамі",
+    "consentSubtitle": "Перш чым Omi пачне слухаць, вось што менавіта адбываецца з тым, што ён чуе.",
+    "consentStoredTitle": "Што захоўваецца",
+    "consentStoredBody": "Ваша аўдыя, расшыфроўкі і звесткі, якія даведваецца Omi, надзейна захоўваюцца ў вашым уліковым запісе.",
+    "consentProcessorsTitle": "Хто іх апрацоўвае",
+    "consentProcessorsBody": "Маўленне расшыфроўвае Deepgram, а аналізуе OpenAI, каб складаць зводкі, задачы і ўспаміны.",
+    "consentControlTitle": "Што вы кантралюеце",
+    "consentControlBody": "Выдаляйце любую размову, успамін або ўвесь уліковы запіс, калі захочаце.",
+    "readPrivacyPolicy": "Прачытаць палітыку прыватнасці",
+    "whatShouldOmiCallYou": "Як Omi вас называць?",
+    "nameUsageHint": "Omi выкарыстоўвае гэта, каб пазначаць вас у расшыфроўках і экспарце.",
+    "yourNamePlaceholder": "Ваша імя",
+    "whatLanguageDoYouSpeakMost": "На якой мове вы размаўляеце найчасцей?",
+    "languageOnboardingSubtitle": "Omi лепш расшыфроўвае, калі ведае мову. Іншыя можна дадаць пазней.",
+    "permissionsFewTitle": "Некалькі дазволаў",
+    "permissionsFewSubtitle": "Omi просіць толькі тое, чым карыстаецца. Змяніць гэта можна ў любы час у Наладах.",
+    "permissionsContinueNote": "«Прадоўжыць» нічога не запытвае. Кожны дазвол запытваецца, толькі калі вы націскаеце «Дазволіць».",
+    "howDidYouHearAboutOmi": "Як вы даведаліся пра Omi?",
+    "showOnLockScreen": "Паказваць на экране блакіроўкі",
+    "seeAll": "Паглядзець усе",
+    "upNext": "Далей",
+    "allTasks": "Усе задачы",
+    "thisWeek": "Гэты тыдзень",
+    "capturedDuration": "Запісана {duration}",
+    "newMemoriesCount": "{count, plural, =1{1 новы ўспамін} other{Новых успамінаў: {count}}}",
+    "syncingFromPendant": "Сінхранізацыя з вашага кулона",
+    "pendantRecordingsSynced": "Запісы з кулона сінхранізаваны",
+    "recordedOnPendantWhileAway": "~{duration} запісана на кулон, пакуль тэлефон быў далёка",
+    "dailyRecapOn": "Штодзённы агляд · {day}",
+    "taskDueDayTime": "{day}, {time}",
+    "fromConversation": "З «{title}»",
+    "endCapture": "Завяршыць",
+    "toDo": "Справы",
+    "devices": "Прылады",
+    "devicesSubtitle": "Усё, што слухае за вас. Запісвае адна прылада за раз.",
+    "addADevice": "Дадаць прыладу",
+    "deviceReady": "Гатова",
+    "importFromOtherApps": "Імпарт з іншых праграм",
+    "whatWillYouWear": "Што вы будзеце насіць?",
+    "pickDeviceSubtitle": "Іншыя можна дадаць пазней. Запісвае адна прылада за раз.",
+    "alreadyHaveOne": "Ужо маеце прыладу?",
+    "noDeviceHeader": "Без прылады",
+    "omiPendantName": "Кулон Omi",
+    "allDayConversations": "Размовы ўвесь дзень",
+    "conversationsAndPhotos": "Размовы + фота",
+    "wristMic": "Мікрафон на запясці",
+    "glassesAudio": "Гук з акуляраў",
+    "bringRecordingsIntoOmi": "Перанясіце свае запісы ў Omi",
+    "useThisIphone": "Выкарыстоўваць гэты iPhone",
+    "useThisPhone": "Выкарыстоўваць гэты тэлефон",
+    "startInSeconds": "Пачніце за 10 секунд",
+    "askAboutThisConversationPlaceholder": "Спытаць пра гэтую размову",
+    "summaryStyle": "Стыль зводкі",
+    "summaryStyleSubtitle": "Выберыце праграму, якая напіша гэтую зводку",
+    "appearance": "Выгляд",
+    "appearanceSystem": "Сістэма",
+    "appearanceLight": "Светлы",
+    "appearanceDark": "Цёмны",
+    "feel": "Адчуванне",
+    "haptics": "Тактыльны водгук",
+    "hapticsSubtitle": "Лёгкі дотык, калі вы завяршаеце, адзначаеце зоркай або выконваеце нешта",
+    "textSize": "Памер тэксту",
+    "textSizeSubtitle": "Адпавядае памеру тэксту на вашым тэлефоне",
+    "appearanceMotionNote": "Рух адпавядае наладзе «Паменшыць рух» на тэлефоне — усе паўторныя анімацыі, у тым ліку святло прылады, спыняюцца.",
+    "signedInWithApple": "Уваход праз Apple",
+    "signedInWithGoogle": "Уваход праз Google",
+    "premiumMinutesLeftThisMonth": "Засталося {left} з {limit} прэміум-хвілін у гэтым месяцы",
+    "recordingFrom": "Запіс з",
+    "recordingFromSubtitle": "Адначасова запісвае толькі адна крыніца. Пераключэнне завяршае бягучую размову.",
+    "manageDevices": "Кіраваць прыладамі",
+    "notListeningTitle": "Не слухае",
+    "notListeningSubtitle": "Пачніце з гэтага тэлефона або падключыце прыладу, каб слухаць увесь дзень.",
+    "startListening": "Пачаць слухаць",
+    "searchEverything": "Шукаць усюды",
+    "searchResultsCount": "Вынікі · {count}",
+    "nothingFound": "Нічога не знойдзена",
+    "searchNothingFoundHint": "Паспрабуйце іншае слова або спытайце Omi — ён разумее сэнс, а не толькі словы.",
+    "askOmiInstead": "Спытаць Omi",
+    "recentSearches": "Нядаўнія",
+    "searchAskSuggestion": "Што я паабяцаў зрабіць на гэтым тыдні?",
+    "welcomeRememberTitle": "Памятайце кожную размову.",
+    "welcomeRememberSubtitle": "Насіце, што вам зручна. Omi ператварае пачутае ў нататкі, справы і агляд вашага дня.",
+    "memoriesSubtitle": "Што ведае Omi і адкуль",
+    "memoryTierLongTerm": "Доўгатэрміновая",
+    "memoryTierShortTerm": "Кароткатэрміновая",
+    "memoriesTierNote": "Новыя ўспаміны спачатку кароткатэрміновыя. Тыя, што застаюцца важнымі, Omi сам пераносіць у доўгатэрміновыя.",
+    "askEmptyTitle": "Пытайцеся пра ўсё, што чулі.",
+    "askEmptySubtitle": "Omi адказвае на падставе вашых размоў, успамінаў і спраў.",
+    "completeListeningTitle": "Слуханне",
+    "completeListeningBody": "Сіні колер азначае, што Omi вас чуе — праз прыладу, якую вы носіце, або праз гэты тэлефон.",
+    "completeAskAnyBody": "Націсніце «Спытаць», каб спытаць пра ўсё, што чулі.",
+    "completeDevicesBody": "Дадайце носную прыладу ў любы час або пачніце з гэтага тэлефона.",
+    "conversationSourceGlasses": "Акуляры",
+    "conversationSourceImported": "Імпартаваныя",
+    "conversationSourceEmptyHint": "З гэтай крыніцы пакуль нічога не запісана.",
+    "findMyPendant": "Знайсці кулон",
+    "findMyPendantHint": "Прайграе гук, каб вы яго знайшлі",
+    "upToDate": "Абноўлена",
+    "updateAvailable": "Ёсць абнаўленне",
+    "storageTitle": "Сховішча",
+    "connectStepTurnOn": "Уключыце яго і трымайце побач",
+    "connectStepAllowBluetooth": "Дазвольце Bluetooth",
+    "connectStepTest": "Скажыце што-небудзь для праверкі",
+    "connectStepTestHint": "Словы з'яўляюцца тут, калі вы гаворыце",
+    "setUpLater": "Наладзіць пазней",
+    "recapPreviousDay": "Зводка папярэдняга дня: {day}",
+    "recapNextDay": "Зводка наступнага дня: {day}",
+    "askStarterToday": "Падсумуй сёння",
+    "askStarterPeople": "З кім я сустракаўся?",
+    "askStarterOpen": "Што яшчэ не зроблена?",
+    "peopleSubtitle": "Галасы, якія Omi пазнае ў расшыфроўках",
+    "usageCurrentPlan": "Бягучы план",
+    "appsExplore": "Агляд",
+    "appOutOfFive": "з 5",
+    "appStatUsers": "Карыстальнікі",
+    "homeWelcomeName": "Вітаем, {name}",
+    "homeWelcome": "Вітаем",
+    "homeFirstDaySubtitle": "Ваш першы дзень з Omi",
+    "homeListeningHeroTitle": "Omi слухае",
+    "homeListeningHeroBody": "Ваша першая размова з'явіцца тут праз хвіліну пасля заканчэння.",
+    "homeGettingStarted": "Пачатак працы",
+    "gettingStartedConnect": "Падключыце прыладу",
+    "gettingStartedConversation": "Правядзіце размову",
+    "gettingStartedAsk": "Спытайце Omi пра яе",
+    "homeGoodToKnow": "Карысна ведаць",
+    "tipFinishTitle": "Завяршайце калі заўгодна",
+    "tipFinishBody": "Націсніце «Завяршыць» або двойчы націсніце кулон, і зводка пачнецца адразу.",
+    "tipStarTitle": "Пазначайце важнае зоркай",
+    "tipStarBody": "Размовы з зоркай лёгка знайсці потым.",
+    "tipPrivateTitle": "Прыватна па змаўчанні",
+    "tipPrivateBody": "Вашы размовы застаюцца прыватнымі, пакуль вы імі не падзеліцеся.",
+    "homeGettingStartedProgress": "{done} з {total}",
+    "noFailedRecordings": "Няма няўдалых запісаў",
+    "mapNoPlacesTitle": "Пакуль няма месцаў",
+    "mapNoPlacesMessage": "Размовы з'яўляюцца тут, калі Omi ведае, дзе яны адбыліся.",
+    "mergeWithEllipsis": "Аб'яднаць з…",
+    "finishSetupToEnable": "Завяршыце наладку {appName}, каб уключыць",
+    "greetingUpLate": "Позняя гадзіна",
+    "greetingLunchtime": "Час абеду",
+    "greetingWindingDown": "Час адпачыць",
+    "greetingGoodNight": "Дабранач",
+    "greetingWithName": "{greeting}, {name}",
+    "greetingStillUp": "Яшчэ не спіце",
+    "greetingEarlyStart": "Ранні пачатак",
+    "greetingNewDay": "Новы дзень",
+    "greetingMorning": "Добрай раніцы",
+    "greetingBusyMorning": "Насычаная раніца",
+    "greetingAfternoon": "Добры дзень",
+    "greetingHomeStretch": "Фінішная прамая",
+    "greetingEvening": "Добры вечар",
+    "unlimitedBadge": "Неабмежаваны",
+    "voiceSetupTaskSubline": "Каб Omi ведаў, што гэта вы · каля хвіліны",
+    "audioPartiallySaved": "Захавана {saved} аўдыя з {total}",
+    "voiceIntroTitle": "Прадстаўцеся",
+    "memoryLabel": "Успамін",
+    "idleReadyHint": "Націсніце «Пачаць», і тое, што вы кажаце, з’явіцца тут."
 }

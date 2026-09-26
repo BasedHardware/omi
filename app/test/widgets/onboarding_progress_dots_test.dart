@@ -22,7 +22,7 @@ void main() {
     handle.dispose();
   });
 
-  test('the progress steps are the six real first-run steps', () {
-    expect(OnboardingProgressStepsForTest.steps, hasLength(6));
+  test('the progress steps are the seven real first-run steps (Rev 3 asks for the device first)', () {
+    expect(OnboardingProgressStepsForTest.steps, hasLength(7));
   });
 }

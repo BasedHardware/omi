@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/conversation_detail/widgets/summary_style_row.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -133,6 +134,11 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                         recordingId: conversation.id,
                       ),
                     const SliverToBoxAdapter(child: GetGeolocationWidgets()),
+                    if (!discarded)
+                      const SliverPadding(
+                        padding: EdgeInsets.only(top: 26),
+                        sliver: SliverToBoxAdapter(child: SummaryStyleRow()),
+                      ),
                     const SliverToBoxAdapter(child: SizedBox(height: 150)),
                   ],
                 ),
@@ -329,7 +335,7 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
             child: Row(
               children: [
                 Expanded(
@@ -352,19 +358,19 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
                   tooltip: context.l10n.wasThisHelpful,
                   onPressed: _saving || !_policyClaimed ? null : () => _submit(1),
                   icon: const Icon(Icons.thumb_up_alt_outlined, size: 19),
-                  color: Colors.white70,
+                  color: OmiColors.textSecondary,
                 ),
                 IconButton(
                   tooltip: context.l10n.notHelpful,
                   onPressed: _saving || !_policyClaimed ? null : () => _submit(-1),
                   icon: const Icon(Icons.thumb_down_alt_outlined, size: 19),
-                  color: Colors.white70,
+                  color: OmiColors.textSecondary,
                 ),
                 IconButton(
                   tooltip: context.l10n.close,
                   onPressed: _saving || !_policyClaimed ? null : _dismiss,
                   icon: const Icon(Icons.close, size: 18),
-                  color: Colors.white54,
+                  color: OmiColors.textTertiary,
                 ),
               ],
             ),
@@ -571,14 +577,14 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
         child: Row(
           children: [
             Expanded(
               child: Text(
                 context.l10n.wasThisHelpful,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: OmiColors.textPrimary,
                   fontSize: 14, // omi-ux-allow: font-size-literal -- pre-existing label style; no 14pt OmiType token
                   fontWeight: FontWeight.w500,
                 ),
@@ -588,19 +594,19 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
               tooltip: context.l10n.wasThisHelpful,
               onPressed: _saving || !_policyClaimed ? null : () => _submit(1),
               icon: const Icon(Icons.thumb_up_alt_outlined, size: 19),
-              color: Colors.white70,
+              color: OmiColors.textSecondary,
             ),
             IconButton(
               tooltip: context.l10n.notHelpful,
               onPressed: _saving || !_policyClaimed ? null : () => _submit(-1),
               icon: const Icon(Icons.thumb_down_alt_outlined, size: 19),
-              color: Colors.white70,
+              color: OmiColors.textSecondary,
             ),
             IconButton(
               tooltip: context.l10n.close,
               onPressed: _saving || !_policyClaimed ? null : _dismiss,
               icon: const Icon(Icons.close, size: 18),
-              color: Colors.white54,
+              color: OmiColors.textTertiary,
             ),
           ],
         ),

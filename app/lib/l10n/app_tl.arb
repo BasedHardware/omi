@@ -1781,10 +1781,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "whatsYourName": "Ano ang iyong pangalan?",
-    "@whatsYourName": {
-        "description": "Question asking for user's name"
-    },
     "@enterYourName": {
         "description": "Hint text for name input field"
     },
@@ -1807,14 +1803,6 @@
     "termsOfUse": "Terms of Use",
     "@termsOfUse": {
         "description": "Link text for Terms of Use"
-    },
-    "omiYourAiCompanion": "Omi – Ang Iyong AI Companion",
-    "@omiYourAiCompanion": {
-        "description": "App title or branding on onboarding screen"
-    },
-    "captureEveryMoment": "Kunan ang bawat sandali. Makakuha ng AI-powered\nsummaries. Hindi na kailangan mag-notes.",
-    "@captureEveryMoment": {
-        "description": "App value proposition or description"
     },
     "appleWatchSetup": "Apple Watch Setup",
     "@appleWatchSetup": {
@@ -1877,27 +1865,11 @@
             }
         }
     },
-    "selectPrimaryLanguage": "Pumili ng iyong pangunahing wika",
-    "@selectPrimaryLanguage": {
-        "description": "Title for language selection dialog"
-    },
-    "languageBenefits": "Itakda ang iyong wika para sa mas matalinong transcriptions at personalized na karanasan",
-    "@languageBenefits": {
-        "description": "Explanation of why language selection matters"
-    },
     "@searchLanguageHint": {
         "description": "Hint text for language search"
     },
     "@noLanguagesFound": {
         "description": "Text when search returns no results"
-    },
-    "whatsYourPrimaryLanguage": "Ano ang iyong pangunahing wika?",
-    "@whatsYourPrimaryLanguage": {
-        "description": "Question asking for primary language"
-    },
-    "selectYourLanguage": "Pumili ng iyong wika",
-    "@selectYourLanguage": {
-        "description": "Placeholder for selected language name"
     },
     "personalGrowthJourney": "Ang iyong personal growth journey gamit ang AI na nakikinig sa bawat salita mo.",
     "@personalGrowthJourney": {
@@ -3914,10 +3886,6 @@
     "@dataProtection": {
         "description": "Section title for data protection info"
     },
-    "yourDataIsProtected": "Ang iyong data ay protektado at pinamamahalaan ng aming ",
-    "@yourDataIsProtected": {
-        "description": "First part of data protection text"
-    },
     "pleaseSelectYourPrimaryLanguage": "Piliin ang iyong pangunahing wika",
     "chooseYourLanguage": "Piliin ang iyong wika",
     "selectPreferredLanguageForBestExperience": "Piliin ang iyong preferred na wika para sa pinakamahusay na Omi experience",
@@ -5925,10 +5893,6 @@
     "additionalSpeechSampleRemoved": "Additional Speech Sample Removed",
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
-    },
-    "consentDataMessage": "Sa pagpapatuloy, ang iyong mga pag-uusap, recording, at personal na impormasyon ay ligtas na maiimbak sa aming mga server. Ang iyong mga audio recording at transcript ay pinoproseso ng third-party na mga serbisyo ng AI (kabilang ang Deepgram para sa transcription at OpenAI para sa analysis) upang mabigyan ka ng AI-powered na mga insight at ma-enable ang lahat ng feature ng app.",
-    "@consentDataMessage": {
-        "description": "Consent message explaining how user data will be stored and used"
     },
     "tasksEmptyStateMessage": "Ang mga tasks mula sa iyong mga pag-uusap ay lilitaw dito.\nI-tap ang + upang lumikha ng isa nang manual.",
     "@tasksEmptyStateMessage": {
@@ -8689,10 +8653,6 @@
             }
         }
     },
-    "actionItemReminderTitle": "Omi Reminder",
-    "@actionItemReminderTitle": {
-        "description": "Title for action item reminder notifications"
-    },
     "deviceDisconnectedTitle": "{deviceName} Nadiskonekta",
     "@deviceDisconnectedTitle": {
         "description": "Notification title when a device disconnects",
@@ -9493,7 +9453,6 @@
     },
     "mcpConnectionFailed": "Nabigo ang pagkonekta sa MCP server",
     "authorizingMcpServer": "Nag-authorize…",
-    "whereDidYouHearAboutOmi": "Paano ka nakahanap sa amin?",
     "tiktok": "TikTok",
     "youtube": "YouTube",
     "instagram": "Instagram",
@@ -10782,7 +10741,6 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "I-tap ang record button para magsimulang mag-record",
     "processingTakingLonger": "Ginagawa pa — mas matagal ito kaysa karaniwan.",
     "speechProfileEnrollmentPrompt": "Para malaman ng Omi kung alin ang boses mo — magsalita tungkol sa kahit ano nang mga 5 segundo.",
     "home": "Home",
@@ -10948,7 +10906,6 @@
     "batteryLevelSemantics": "Baterya {level}%",
     "updateOmiGlassFirmware": "I-update ang Firmware ng OmiGlass",
     "deviceConnecting": "Kumokonekta…",
-    "recordOptionsTip": "Tip: i-tap ang arrow sa record button para mag-record ng tawag.",
     "firmwareUpdateFailedTitle": "Nabigo ang Update",
     "firmwareUpdateFailedMessage": "Hindi natapos ang update. Nasa kasalukuyang firmware pa rin ang device mo at ligtas itong gamitin. Panatilihin itong naka-charge at malapit sa telepono, saka subukang muli.",
     "firmwareDownloadFailedMessage": "Hindi ma-download ang update at walang nagbago sa device mo. Tingnan ang koneksyon sa internet, saka subukang muli.",
@@ -11100,8 +11057,6 @@
     "pendantPausesUntilYouFinish": "Naka-pause ang pendant hanggang matapos ka",
     "pendantPausesDuringCall": "Naka-pause ang pendant habang may tawag",
     "keepUsingPendant": "Ituloy ang paggamit ng pendant",
-    "recordWith": "Mag-record gamit ang",
-    "moreWaysToRecord": "Iba pang paraan ng pag-record",
     "openCall": "Buksan ang tawag",
     "captureRecoveryBanner": "Hindi nakakarating sa app ang audio ng pendant — i-tap para ayusin",
     "phoneRecordingBlockedByPendantBatch": "Itigil ang Transcribe Later sa iyong pendant bago mag-record gamit ang telepono.",
@@ -11115,5 +11070,168 @@
     "capturePhoneStorageFull": "Puno na ang storage ng telepono",
     "captureStorageAlmostFull": "Halos puno na ang storage",
     "capturePendantDisconnectedDetail": "Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.",
-    "participantsSummaryUncounted": "{name} at iba pa"
+    "participantsSummaryUncounted": "{name} at iba pa",
+    "alreadyHaveAccount": "May account ka na?",
+    "signInToOmi": "Mag-sign in sa Omi",
+    "signInSubtitle": "Kasama ng account mo ang iyong mga usapan at alaala sa telepono, Mac at web.",
+    "onboardingAllSetName": "Handa na ang lahat, {name}.",
+    "completeHomeBody": "Ang araw mo, mga gawain at buod sa iisang lugar.",
+    "completeAskTitle": "Magtanong",
+    "foundOmiOptionalHint": "Opsyonal — nakakatulong ito sa isang maliit na team na malaman kung ano ang gumagana.",
+    "consentTitle": "Ang data mo, sa simpleng salita",
+    "consentSubtitle": "Bago magsimulang makinig si Omi, ito mismo ang nangyayari sa naririnig nito.",
+    "consentStoredTitle": "Ano ang itinatago",
+    "consentStoredBody": "Ligtas na itinatago sa account mo ang iyong audio, mga transcript at mga detalyeng natututunan ni Omi.",
+    "consentProcessorsTitle": "Sino ang nagpoproseso nito",
+    "consentProcessorsBody": "Tina-transcribe ng Deepgram ang pananalita at sinusuri ng OpenAI para isulat ang mga buod, gawain at alaala.",
+    "consentControlTitle": "Ang kontrolado mo",
+    "consentControlBody": "Burahin ang anumang usapan, alaala o ang buong account mo kahit kailan.",
+    "readPrivacyPolicy": "Basahin ang Patakaran sa Privacy",
+    "whatShouldOmiCallYou": "Ano ang itatawag sa iyo ni Omi?",
+    "nameUsageHint": "Ginagamit ito ni Omi para lagyan ka ng label sa mga transcript at export.",
+    "yourNamePlaceholder": "Pangalan mo",
+    "whatLanguageDoYouSpeakMost": "Anong wika ang pinakamadalas mong gamitin?",
+    "languageOnboardingSubtitle": "Pinakamahusay mag-transcribe si Omi kapag alam nito ang wika. Puwede kang magdagdag pa mamaya.",
+    "permissionsFewTitle": "Ilang pahintulot",
+    "permissionsFewSubtitle": "Hinihingi lang ni Omi ang ginagamit nito. Mapapalitan mo ang mga ito anumang oras sa Settings.",
+    "permissionsContinueNote": "Walang hihingin ang \"Magpatuloy\". Hinihingi lang ang bawat pahintulot kapag tinapik mo ang \"Payagan\".",
+    "howDidYouHearAboutOmi": "Paano mo nalaman ang tungkol sa Omi?",
+    "showOnLockScreen": "Ipakita sa lock screen",
+    "seeAll": "Tingnan Lahat",
+    "upNext": "Susunod",
+    "allTasks": "Lahat ng Gawain",
+    "thisWeek": "Ngayong linggo",
+    "capturedDuration": "{duration} na-capture",
+    "newMemoriesCount": "{count, plural, =1{1 bagong alaala} other{{count} bagong alaala}}",
+    "syncingFromPendant": "Nagsi-sync mula sa iyong pendant",
+    "pendantRecordingsSynced": "Na-sync na ang mga recording ng pendant",
+    "recordedOnPendantWhileAway": "~{duration} ang na-record sa pendant habang malayo ang telepono mo",
+    "dailyRecapOn": "Pang-araw-araw na recap · {day}",
+    "taskDueDayTime": "{day}, {time}",
+    "fromConversation": "Mula sa {title}",
+    "endCapture": "Tapusin",
+    "toDo": "Gagawin",
+    "devices": "Mga Device",
+    "devicesSubtitle": "Lahat ng nakikinig para sa iyo. Isa lang ang nagre-record sa bawat pagkakataon.",
+    "addADevice": "Magdagdag ng device",
+    "deviceReady": "Handa",
+    "importFromOtherApps": "Mag-import mula sa ibang app",
+    "whatWillYouWear": "Ano ang isusuot mo?",
+    "pickDeviceSubtitle": "Puwede kang magdagdag pa mamaya. Isa lang ang nagre-record sa bawat pagkakataon.",
+    "alreadyHaveOne": "Mayroon ka na ba?",
+    "noDeviceHeader": "Walang device",
+    "omiPendantName": "Omi pendant",
+    "allDayConversations": "Mga usapan buong araw",
+    "conversationsAndPhotos": "Mga usapan + larawan",
+    "wristMic": "Mikropono sa pulso",
+    "glassesAudio": "Audio ng salamin",
+    "bringRecordingsIntoOmi": "Dalhin ang mga recording mo sa Omi",
+    "useThisIphone": "Gamitin ang iPhone na ito",
+    "useThisPhone": "Gamitin ang teleponong ito",
+    "startInSeconds": "Magsimula sa loob ng 10 segundo",
+    "askAboutThisConversationPlaceholder": "Magtanong tungkol sa usapang ito",
+    "summaryStyle": "Estilo ng buod",
+    "summaryStyleSubtitle": "Piliin kung aling app ang susulat ng buod na ito",
+    "appearance": "Hitsura",
+    "appearanceSystem": "System",
+    "appearanceLight": "Maliwanag",
+    "appearanceDark": "Madilim",
+    "feel": "Pakiramdam",
+    "haptics": "Haptics",
+    "hapticsSubtitle": "Isang mahinang tapik kapag may tinapos, ni-star o kinumpleto ka",
+    "textSize": "Laki ng text",
+    "textSizeSubtitle": "Sumusunod sa laki ng text ng phone mo",
+    "appearanceMotionNote": "Sinusunod ng galaw ang Reduce Motion sa settings ng phone mo — humihinto ang bawat loop, pati ang ilaw ng device.",
+    "signedInWithApple": "Naka-sign in gamit ang Apple",
+    "signedInWithGoogle": "Naka-sign in gamit ang Google",
+    "premiumMinutesLeftThisMonth": "{left} sa {limit} premium na minuto ang natitira ngayong buwan",
+    "recordingFrom": "Nire-record mula sa",
+    "recordingFromSubtitle": "Isang source lang ang nagre-record sa isang pagkakataon. Tatapusin ng paglipat ang kasalukuyang usapan.",
+    "manageDevices": "Pamahalaan ang mga device",
+    "notListeningTitle": "Hindi nakikinig",
+    "notListeningSubtitle": "Magsimula sa phone na ito, o magkonekta ng device para makinig buong araw.",
+    "startListening": "Simulang makinig",
+    "searchEverything": "Hanapin ang lahat",
+    "searchResultsCount": "Mga resulta · {count}",
+    "nothingFound": "Walang nahanap",
+    "searchNothingFoundHint": "Sumubok ng ibang salita, o tanungin si Omi — naiintindihan nito ang kahulugan, hindi lang ang mga salita.",
+    "askOmiInstead": "Tanungin na lang si Omi",
+    "recentSearches": "Kamakailan",
+    "searchAskSuggestion": "Ano ang ipinangako kong gagawin ngayong linggo?",
+    "welcomeRememberTitle": "Tandaan ang bawat usapan.",
+    "welcomeRememberSubtitle": "Isuot ang gusto mo. Ginagawa ni Omi ang naririnig mo na mga tala, gagawin at buod ng araw mo.",
+    "memoriesSubtitle": "Ang alam ni Omi, at kung saan niya ito natutunan",
+    "memoryTierLongTerm": "Pangmatagalan",
+    "memoryTierShortTerm": "Panandalian",
+    "memoriesTierNote": "Nagsisimula bilang panandalian ang mga bagong alaala. Kusang inililipat ni Omi sa pangmatagalan ang mga patuloy na mahalaga.",
+    "askEmptyTitle": "Magtanong tungkol sa kahit anong narinig mo.",
+    "askEmptySubtitle": "Sumasagot si Omi mula sa iyong mga usapan, alaala at gawain.",
+    "completeListeningTitle": "Pakikinig",
+    "completeListeningBody": "Asul ibig sabihin ay naririnig ka ni Omi — mula sa device na suot mo o sa phone na ito.",
+    "completeAskAnyBody": "I-tap ang Magtanong para magtanong tungkol sa kahit anong narinig mo.",
+    "completeDevicesBody": "Magdagdag ng wearable kahit kailan, o magsimula sa phone na ito.",
+    "conversationSourceGlasses": "Salamin",
+    "conversationSourceImported": "Na-import",
+    "conversationSourceEmptyHint": "Wala pang na-record mula sa source na ito.",
+    "findMyPendant": "Hanapin ang pendant ko",
+    "findMyPendantHint": "Magpapatunog para mahanap mo ito",
+    "upToDate": "Napapanahon",
+    "updateAvailable": "May update",
+    "storageTitle": "Storage",
+    "connectStepTurnOn": "I-on ito at ilapit",
+    "connectStepAllowBluetooth": "Payagan ang Bluetooth",
+    "connectStepTest": "Magsabi ng kahit ano para subukan",
+    "connectStepTestHint": "Lalabas dito ang mga salita habang nagsasalita ka",
+    "setUpLater": "I-set up mamaya",
+    "recapPreviousDay": "Recap ng nakaraang araw: {day}",
+    "recapNextDay": "Recap ng susunod na araw: {day}",
+    "askStarterToday": "Ibuod ang araw na ito",
+    "askStarterPeople": "Sino ang nakilala ko?",
+    "askStarterOpen": "Ano pa ang bukas?",
+    "peopleSubtitle": "Mga boses na nakikilala ng Omi sa mga transcript",
+    "usageCurrentPlan": "Kasalukuyang plan",
+    "appsExplore": "Tuklasin",
+    "appOutOfFive": "sa 5",
+    "appStatUsers": "Mga user",
+    "homeWelcomeName": "Maligayang pagdating, {name}",
+    "homeWelcome": "Maligayang pagdating",
+    "homeFirstDaySubtitle": "Ang una mong araw kasama ang Omi",
+    "homeListeningHeroTitle": "Nakikinig ang Omi",
+    "homeListeningHeroBody": "Lalabas dito ang una mong usapan isang minuto pagkatapos nito.",
+    "homeGettingStarted": "Pagsisimula",
+    "gettingStartedConnect": "Magkonekta ng device",
+    "gettingStartedConversation": "Makipag-usap",
+    "gettingStartedAsk": "Tanungin ang Omi tungkol dito",
+    "homeGoodToKnow": "Mabuting malaman",
+    "tipFinishTitle": "Tapusin kahit kailan",
+    "tipFinishBody": "I-tap ang Tapusin — o pindutin nang dalawang beses ang pendant — at magsisimula agad ang buod.",
+    "tipStarTitle": "Lagyan ng star ang mahalaga",
+    "tipStarBody": "Madaling mahanap mamaya ang mga usapang may star.",
+    "tipPrivateTitle": "Pribado bilang default",
+    "tipPrivateBody": "Pribado ang mga usapan mo maliban kung ibahagi mo.",
+    "homeGettingStartedProgress": "{done} sa {total}",
+    "noFailedRecordings": "Walang nabigong recording",
+    "mapNoPlacesTitle": "Wala pang mga lugar",
+    "mapNoPlacesMessage": "Lumalabas dito ang mga usapan kapag alam ng Omi kung saan ito nangyari.",
+    "mergeWithEllipsis": "Pagsamahin sa…",
+    "finishSetupToEnable": "Tapusin ang pag-set up ng {appName} para i-on ito",
+    "greetingUpLate": "Hatinggabi na",
+    "greetingLunchtime": "Tanghalian na",
+    "greetingWindingDown": "Oras ng pahinga",
+    "greetingGoodNight": "Mahimbing na tulog",
+    "greetingWithName": "{greeting}, {name}",
+    "greetingStillUp": "Gising pa rin",
+    "greetingEarlyStart": "Maagang simula",
+    "greetingNewDay": "Bagong araw",
+    "greetingMorning": "Magandang umaga",
+    "greetingBusyMorning": "Abalang umaga",
+    "greetingAfternoon": "Magandang hapon",
+    "greetingHomeStretch": "Huling bahagi",
+    "greetingEvening": "Magandang gabi",
+    "unlimitedBadge": "Unlimited",
+    "voiceSetupTaskSubline": "Para malaman ng Omi na ikaw ito · mga isang minuto",
+    "audioPartiallySaved": "{saved} sa {total} na audio ang na-save",
+    "voiceIntroTitle": "Ipakilala ang sarili",
+    "memoryLabel": "Alaala",
+    "idleReadyHint": "I-tap ang Simulan at lalabas dito ang sinasabi mo."
 }

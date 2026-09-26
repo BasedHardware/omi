@@ -6,9 +6,8 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/pages/capture/connect.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
-import 'package:omi/pages/home/device.dart';
+import 'package:omi/pages/devices/recording_source_sheet.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -22,17 +21,9 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/capture_sources.dart';
-import 'package:omi/widgets/header_circle_button.dart';
-
-/// The header pills paint 36pt tall; this transparent margin, inside an opaque
-/// GestureDetector, makes the touch target [kMinTapTarget] without moving them
-/// (the app bar centers the row, and the toolbar is taller than the target).
-const EdgeInsets _pillTargetMargin = EdgeInsets.symmetric(vertical: (kMinTapTarget - 36) / 2);
 
 /// Battery at or below this shows a low-battery glyph and a warning colour, not just a dot.
 const int kLowBatteryPercent = 20;
-
-const _stopGlyphRadius = BorderRadius.all(Radius.circular(4)); // omi-ux-allow: radius-literal -- a glyph
 
 class BatteryInfoWidget extends StatefulWidget {
   const BatteryInfoWidget({super.key});
@@ -71,22 +62,17 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
               final batteryPill = _DevicePill(
                 semanticsLabel: semantics,
                 onTap: () {
-                  OmiHaptics.selection();
-                  routeToPage(context, const ConnectedDevice());
                   PlatformManager.instance.analytics.batteryIndicatorClicked();
+                  showRecordingSourceSheet(context);
                 },
                 children: [
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: Image.asset(
-                      DeviceUtils.getDeviceImagePath(
-                        deviceType: connectedDevice.type,
-                        modelNumber: connectedDevice.modelNumber,
-                        deviceName: connectedDevice.name,
-                      ),
-                      fit: BoxFit.contain,
+                  _DeviceThumb(
+                    path: DeviceUtils.getDeviceImagePath(
+                      deviceType: connectedDevice.type,
+                      modelNumber: connectedDevice.modelNumber,
+                      deviceName: connectedDevice.name,
                     ),
+                    lit: true,
                   ),
                   // Only show battery indicator and percentage when battery level is valid (> 0)
                   if (hasBattery) ...[
@@ -94,50 +80,30 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                     // Battery only: a bar glyph, never a coloured dot (live status lives on the
                     // capture card). Red appears only when critically low.
                     if (isCharging) ...[
-                      const Icon(Icons.bolt, color: OmiColors.textSecondary, size: 13),
+                      Icon(Icons.bolt, color: OmiColors.textSecondary, size: 13),
                       const SizedBox(width: 1),
                     ],
                     BatteryGlyph(level: batteryLevel, critical: low),
                     const SizedBox(width: 4.0),
                     Text(
                       '$batteryLevel%',
-                      style: OmiType.caption.copyWith(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                      style: OmiType.subhead.copyWith(
+                        fontWeight: FontWeight.w700,
                         color: low ? OmiColors.danger : OmiColors.textPrimary,
                       ),
                     ),
                   ],
                 ],
               );
-              if (!isMemoriesPage) return batteryPill;
-              return Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  batteryPill,
-                  // 8pt between the painted shapes; the button's 44pt target overhangs
-                  // its 36pt circle by 4pt.
-                  const SizedBox(width: 4),
-                  HeaderCircleButton(
-                    semanticLabel: l10n.phoneCallsWithOmi,
-                    icon: const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 16),
-                    onTap: () {
-                      OmiHaptics.selection();
-                      routeToPage(context, const PhoneCallsPage());
-                    },
-                  ),
-                ],
-              );
+              // Rev 3: the chip is the source; calls live in Settings → Devices → Phone Calls.
+              return batteryPill;
             } else if (pairedDevice != null && pairedDevice.id.isNotEmpty) {
               // Paired but not connected: "Connecting…" while a reconnect runs, otherwise one word,
               // "Disconnected" (the device page uses the same word).
               final status = isConnecting ? l10n.deviceConnecting : l10n.disconnected;
               return _DevicePill(
                 semanticsLabel: '${pairedDevice.name}, $status',
-                onTap: () async {
-                  OmiHaptics.selection();
-                  await routeToPage(context, const ConnectedDevice());
-                },
+                onTap: () => showRecordingSourceSheet(context),
                 children: [
                   // Device icon with slash line
                   SizedBox(
@@ -158,17 +124,14 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
               final label = isConnecting ? l10n.searching : l10n.connect;
               return _DevicePill(
                 semanticsLabel: label,
-                onTap: () async {
-                  OmiHaptics.selection();
+                onTap: () {
                   if (SharedPreferencesUtil().btDevice.id.isEmpty) {
-                    routeToPage(context, const ConnectDevicePage());
                     PlatformManager.instance.analytics.connectFriendClicked();
-                  } else {
-                    await routeToPage(context, const ConnectedDevice());
                   }
+                  showRecordingSourceSheet(context);
                 },
                 children: [
-                  Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16),
+                  Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16, color: OmiColors.textPrimary),
                   // Home has room for the word; the other tabs keep the logo alone (it still has a
                   // spoken label).
                   if (isMemoriesPage) ...[
@@ -204,60 +167,26 @@ class _DevicePill extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: Container(
-          height: 36,
-          margin: _pillTargetMargin,
-          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
-          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.pillAll),
-          child: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.center, children: children),
+        // v2: a 44pt glass pill (the device, its battery) on the leading edge of Home.
+        child: OmiGlass(
+          inHeader: true,
+          borderRadius: OmiRadius.pillAll,
+          child: Container(
+            height: OmiSize.minTap,
+            padding: const EdgeInsets.only(left: 6, right: OmiSpacing.sm),
+            child:
+                Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.center, children: children),
+          ),
         ),
       ),
     );
   }
 }
 
-/// Circular phone-mic record button shown to the right of the home chat bar.
-/// Tap starts/stops recording; long-press opens the record options sheet (phone call). The options
-/// are announced as the long-press action, and a one-time tip points them out after the first
-/// recording.
-class HomeRecordButton extends StatefulWidget {
-  const HomeRecordButton({super.key});
-
-  @override
-  State<HomeRecordButton> createState() => _HomeRecordButtonState();
-}
-
-class _HomeRecordButtonState extends State<HomeRecordButton> {
-  static const _optionsTipKey = 'v2/homeRecordOptionsTipShown';
-
-  void _showRecordOptions(BuildContext context) {
-    OmiHaptics.light();
-    SharedPreferencesUtil().saveBool(_optionsTipKey, true);
-    showOmiSheet<void>(
-      context: context,
-      title: context.l10n.recordWith,
-      builder: (sheetContext) => RecordOptionsSheet(
-        onPickPhoneMic: () {
-          Navigator.pop(sheetContext);
-          _startRecording(context);
-        },
-        onPickPhoneCall: () {
-          Navigator.pop(sheetContext);
-          if (!context.mounted) return;
-          routeToPage(context, const PhoneCallsPage());
-        },
-      ),
-    );
-  }
-
-  /// Once, after the first recording stops: say that holding the button offers more ways to record.
-  void _maybeShowOptionsTip(BuildContext context) {
-    final prefs = SharedPreferencesUtil();
-    if (prefs.getBool(_optionsTipKey)) return;
-    prefs.saveBool(_optionsTipKey, true);
-    OmiFeedback.info(context, context.l10n.recordOptionsTip);
-  }
-
+/// Recording with this phone (Today's Start listening, Recording from → This phone, Devices →
+/// "Use this phone"). An Omi call opens instead; a wearable that is listening asks first (one
+/// source records at a time); a phone recording that is already running is finished.
+abstract final class PhoneCapture {
   static bool _callInProgress(BuildContext context) {
     final state = context.read<PhoneCallProvider>().callState;
     return state == PhoneCallState.connecting || state == PhoneCallState.ringing || state == PhoneCallState.active;
@@ -274,7 +203,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
         !capture.isPendantBatchRecording;
   }
 
-  void _showPendantListening(BuildContext context) {
+  static void _showPendantListening(BuildContext context) {
     OmiHaptics.light();
     showOmiSheet<void>(
       context: context,
@@ -293,10 +222,10 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     );
   }
 
-  Future<void> _startRecording(BuildContext context) async {
+  static Future<void> start(BuildContext context) async {
     final captureProvider = context.read<CaptureProvider>();
     if (captureProvider.recordingState == RecordingState.initialising) return;
-    // An Omi call owns the capture while it runs: the button opens the call, never a recording.
+    // An Omi call owns the capture while it runs: open the call, never a recording.
     if (_callInProgress(context)) {
       routeToPage(context, const ActiveCallPage());
       return;
@@ -308,15 +237,19 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     await _startPhoneRecording(context);
   }
 
-  Future<void> _startPhoneRecording(BuildContext context) async {
+  static Future<void> _startPhoneRecording(BuildContext context) async {
     final captureProvider = context.read<CaptureProvider>();
     OmiHaptics.medium();
     if (captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused) {
-      // The phone recording is this button's own: finish it (processed, except Transcribe Later,
+      // A phone recording is running: finish it (processed, except Transcribe Later,
       // whose local file is finalized on stop), then any pendant it paused resumes.
-      await captureProvider.finishCapture();
+      try {
+        await captureProvider.finishCapture();
+      } catch (_) {
+        if (context.mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+        return;
+      }
       PlatformManager.instance.analytics.phoneMicRecordingStopped();
-      if (context.mounted) _maybeShowOptionsTip(context);
       return;
     }
     if (captureProvider.isPendantBatchRecording) {
@@ -346,101 +279,6 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     if (context.mounted) {
       routeToPage(context, ConversationCapturingPage(topConversationId: captureProvider.topConversationId));
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<CaptureProvider>(
-      builder: (context, captureProvider, _) {
-        // The phone recording is this button's own (live or paused); anything else is idle here.
-        final isRecording = captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused;
-        final isInitialising = captureProvider.recordingState == RecordingState.initialising;
-        final canShowOptions = !isRecording && !isInitialising;
-        final l10n = context.l10n;
-        final circle = Semantics(
-          button: true,
-          label: isRecording ? l10n.stopRecording : l10n.startRecording,
-          enabled: !isInitialising,
-          // The child's gestures are excluded below, so the actions (tap, and long-press for the
-          // record options) are declared here where assistive tech can reach them.
-          onTap: isInitialising ? null : () => _startRecording(context),
-          onLongPress: canShowOptions ? () => _showRecordOptions(context) : null,
-          onLongPressHint: canShowOptions ? l10n.moreOptions : null,
-          excludeSemantics: true,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _startRecording(context),
-            onLongPress: canShowOptions ? () => _showRecordOptions(context) : null,
-            // "Record with this phone": a neutral circle with a white dot, a stop square while the
-            // phone records. The ⌄ badge opens the other ways to record.
-            child: Container(
-              width: 62,
-              height: 62,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: OmiColors.surface1,
-                shape: BoxShape.circle,
-                border: Border.all(color: OmiColors.border, width: 1),
-              ),
-              child: isRecording
-                  ? Container(
-                      width: 18,
-                      height: 18,
-                      decoration: const BoxDecoration(
-                        color: OmiColors.textPrimary,
-                        borderRadius: _stopGlyphRadius,
-                      ),
-                    )
-                  : isInitialising
-                      ? const OmiSpinner(size: OmiSpinnerSize.small)
-                      : Container(
-                          width: 20,
-                          height: 20,
-                          decoration: const BoxDecoration(color: OmiColors.textPrimary, shape: BoxShape.circle),
-                        ),
-            ),
-          ),
-        );
-        // The badge is its own control (and its own accessibility node) beside the circle's.
-        return SizedBox(
-          width: 62,
-          height: 62,
-          child: Stack(clipBehavior: Clip.none, children: [
-            circle,
-            if (canShowOptions)
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Semantics(
-                  button: true,
-                  label: l10n.moreWaysToRecord,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _showRecordOptions(context),
-                    // A 30pt hit area around the 22pt badge, inside the button's 62pt box (a Stack
-                    // does not hit-test outside its bounds, and 44pt would cover the circle's
-                    // centre). Screen readers also get the options as the circle's long-press action.
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Container(
-                        width: 22,
-                        height: 22,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: OmiColors.surface3,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: OmiColors.surface0, width: 2),
-                        ),
-                        child: const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: OmiColors.textPrimary),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ]),
-        );
-      },
-    );
   }
 }
 
@@ -477,40 +315,7 @@ class SlashLinePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-/// Ways to record, opened by holding the home record button. Shown in the shared sheet shell.
-class RecordOptionsSheet extends StatelessWidget {
-  final VoidCallback onPickPhoneMic;
-  final VoidCallback onPickPhoneCall;
-
-  const RecordOptionsSheet({super.key, required this.onPickPhoneMic, required this.onPickPhoneCall});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: OmiSpacing.md),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _RecordOption(
-            icon: CaptureSources.icon('phone'),
-            title: context.l10n.captureSourcePhoneMic,
-            subtitle: context.l10n.recordWithPhoneMicSubtitle,
-            onTap: onPickPhoneMic,
-          ),
-          const SizedBox(height: 10),
-          _RecordOption(
-            icon: Icons.call_rounded,
-            title: context.l10n.phoneCall,
-            subtitle: context.l10n.phoneCallSubtitle,
-            onTap: onPickPhoneCall,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
+/// One choice in [PendantListeningSheet]: a round icon, a title and what it does.
 class _RecordOption extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -543,7 +348,7 @@ class _RecordOption extends StatelessWidget {
                   width: 44,
                   height: 44,
                   alignment: Alignment.center,
-                  decoration: const BoxDecoration(shape: BoxShape.circle, color: OmiColors.surface3),
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: OmiColors.surface3),
                   child: Icon(icon, color: OmiColors.textPrimary, size: 20),
                 ),
                 const SizedBox(width: 14),
@@ -558,7 +363,7 @@ class _RecordOption extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded, color: OmiColors.textTertiary, size: 22),
+                OmiGlyph(OmiGlyphs.chevronRight, size: 14, color: OmiColors.textTertiary),
               ],
             ),
           ),
@@ -657,6 +462,28 @@ class PendantListeningSheet extends StatelessWidget {
           OmiButton.secondary(label: l10n.keepUsingPendant, onPressed: onKeepPendant),
         ],
       ),
+    );
+  }
+}
+
+/// The device in the pill: the Omi pendant is drawn (LED lit while connected); other devices use
+/// their photo.
+class _DeviceThumb extends StatelessWidget {
+  const _DeviceThumb({required this.path, required this.lit});
+
+  final String path;
+  final bool lit;
+
+  @override
+  Widget build(BuildContext context) {
+    final pendant = path == Assets.images.omiWithoutRope.path || path == Assets.images.omiWithRope.path;
+    // The LED is blue only while this device is what Omi is recording from.
+    final recording = context.select<CaptureProvider, bool>((c) => c.recordingState == RecordingState.deviceRecord);
+    return SizedBox.square(
+      dimension: 32,
+      child: pendant
+          ? Center(child: OmiOrb(size: 30, live: lit && recording))
+          : Padding(padding: const EdgeInsets.all(6), child: Image.asset(path, fit: BoxFit.contain)),
     );
   }
 }

@@ -108,7 +108,7 @@ class SpeakerFilterSheet extends StatelessWidget {
       selectedColor: OmiColors.textPrimary,
       leading: Icon(icon),
       title: Text(name),
-      trailing: selected ? const Icon(Icons.check, color: OmiColors.accent) : null,
+      trailing: selected ? Icon(Icons.check, color: OmiColors.accent) : null,
       onTap: () async {
         await onSelected(speakerId);
       },

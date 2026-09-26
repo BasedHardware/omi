@@ -68,7 +68,7 @@ class TrainingDataOptionCard extends StatelessWidget {
                 if (!approved && !pending && isLoading)
                   const OmiSpinner(size: OmiSpinnerSize.small)
                 else
-                  const ExcludeSemantics(child: Icon(Icons.chevron_right, color: OmiColors.textSecondary)),
+                  ExcludeSemantics(child: Icon(Icons.chevron_right, color: OmiColors.textSecondary)),
               ],
             ),
           ),
@@ -131,7 +131,7 @@ class _TrainingProgramPageState extends State<TrainingProgramPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(widget.title)),
+      appBar: OmiAppBar(leading: const OmiBackButton(), title: Text(widget.title)),
       body: _failed
           ? OmiErrorState(message: context.l10n.couldNotLoadPage, onRetry: _load)
           : Stack(

@@ -40,11 +40,24 @@ class CategorySection extends StatelessWidget {
     final displayedApps = apps.take(9).toList();
 
     // --- Configuration Constants ---
-    const double targetItemHeight = 85.0;
+    // Heights follow the reader's text size: fixed 85 / 60 pt rows cut the app's name, category
+    // and rating (and the section title) at a larger text size (layout lint, 1.3x).
+    final scaler = MediaQuery.textScalerOf(context);
+    final direction = Directionality.of(context);
+    double lineOf(TextStyle style) {
+      final painter =
+          TextPainter(text: TextSpan(text: 'Ag', style: style), textScaler: scaler, textDirection: direction)..layout();
+      final height = painter.height;
+      painter.dispose();
+      return height;
+    }
+
+    final rowText = lineOf(OmiType.body) + 2 + lineOf(OmiType.footnote) + 2 + lineOf(OmiType.caption);
+    final double targetItemHeight = max(85.0, 16 + max(52.0, rowText) + 1);
     const double crossAxisSpacing = 0.0;
     const double mainAxisSpacing = 14.0;
     const int maxRows = 3;
-    const double titleSectionHeight = 60.0;
+    final double titleSectionHeight = max(60.0, 24 + 16 + lineOf(OmiType.title2));
 
     // --- Dynamic Calculation ---
     final int numRows = min(maxRows, displayedApps.length);
@@ -53,7 +66,8 @@ class CategorySection extends StatelessWidget {
     final double gridContentHeight = numRows * targetItemHeight + max(0, numRows - 1) * crossAxisSpacing;
     final double totalSectionHeight = titleSectionHeight + gridContentHeight;
 
-    const double childAspectRatio = 0.28;
+    // Cards keep their width (85 / 0.28 pt) as rows grow taller with the text.
+    final double childAspectRatio = targetItemHeight / (85.0 / 0.28);
 
     return Container(
       height: totalSectionHeight,
@@ -68,7 +82,7 @@ class CategorySection extends StatelessWidget {
               children: [
                 Text(
                   categoryName,
-                  style: OmiType.title3,
+                  style: OmiType.title2,
                 ),
                 const Spacer(),
                 if (showViewAll)
@@ -79,7 +93,7 @@ class CategorySection extends StatelessWidget {
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: const BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
+                          decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.tileAll),
                           child: Text(
                             context.l10n.all,
                             style:
@@ -87,7 +101,7 @@ class CategorySection extends StatelessWidget {
                           ),
                         ),
                         // const SizedBox(width: 8),
-                        Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 16),
+                        Icon(Icons.chevron_right_rounded, color: OmiColors.textTertiary, size: 18),
                       ],
                     ),
                   ),
@@ -141,24 +155,24 @@ class SectionAppItemCard extends StatelessWidget {
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
               },
               imageBuilder: (context, imageProvider) => Container(
-                width: 60,
-                height: 60,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
                   shape: BoxShape.rectangle,
-                  borderRadius: OmiRadius.smAll,
+                  borderRadius: OmiRadius.tileAll,
                   image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                 ),
               ),
               placeholder: (context, url) => Container(
-                width: 60,
-                height: 60,
-                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.tileAll),
               ),
               errorWidget: (context, url, error) => Container(
-                width: 60,
-                height: 60,
-                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-                child: const Icon(Icons.error_outline, color: OmiColors.textTertiary, size: 24),
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.tileAll),
+                child: Icon(Icons.error_outline, color: OmiColors.textTertiary, size: 24),
               ),
             ),
             const SizedBox(width: 12),

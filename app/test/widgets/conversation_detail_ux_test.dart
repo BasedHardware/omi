@@ -89,12 +89,18 @@ void main() {
     expect(text, isNot(contains('Speaker 1:')));
   });
 
-  testWidgets('transcript bubble: no provider name, start offset, labelled 44pt play', (tester) async {
+  testWidgets('transcript line: no provider name, start offset, the whole line plays from there', (tester) async {
     final segments = [_segment('a', start: 65, stt: 'deepgram')];
+    final played = <String>[];
     await tester.pumpWidget(
       _app(
         Scaffold(
-          body: TranscriptWidget(segments: segments, onSegmentTap: (_) {}, canDisplaySeconds: true),
+          body: TranscriptWidget(
+            segments: segments,
+            onSegmentTap: (segment) => played.add(segment.id),
+            canDisplaySeconds: true,
+            isConversationDetail: true,
+          ),
         ),
       ),
     );
@@ -102,11 +108,11 @@ void main() {
 
     expect(find.textContaining('Deepgram'), findsNothing);
     expect(find.text('1:05'), findsOneWidget);
-    final play = find.byTooltip('Play from here');
-    expect(play, findsOneWidget);
-    final size = tester.getSize(find.ancestor(of: play, matching: find.byType(OmiIconButton)));
-    expect(size.width, greaterThanOrEqualTo(kOmiMinTapTarget));
-    expect(size.height, greaterThanOrEqualTo(kOmiMinTapTarget));
+    final line = find.byKey(const ValueKey('transcript_seek_a'));
+    expect(line, findsOneWidget);
+    expect(tester.getSize(line).height, greaterThanOrEqualTo(kOmiMinTapTarget));
+    await tester.tap(line);
+    expect(played, ['a']);
   });
 
   testWidgets('capture state header names the state with the shared labels (hub #25)', (tester) async {

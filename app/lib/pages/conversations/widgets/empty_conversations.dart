@@ -9,7 +9,10 @@ import 'package:omi/utils/l10n_extensions.dart';
 class EmptyConversationsWidget extends StatelessWidget {
   final bool isStarredFilterActive;
 
-  const EmptyConversationsWidget({super.key, this.isStarredFilterActive = false});
+  /// A source chip (Pendant, Glasses, Phone, Imported) is narrowing the list.
+  final bool isSourceFilterActive;
+
+  const EmptyConversationsWidget({super.key, this.isStarredFilterActive = false, this.isSourceFilterActive = false});
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +25,11 @@ class EmptyConversationsWidget extends StatelessWidget {
               title: l10n.noStarredConversations,
               message: l10n.starConversationHint,
             )
-          : OmiEmptyState(icon: Icons.forum_rounded, title: l10n.noConversationsYet),
+          : OmiEmptyState(
+              icon: Icons.forum_rounded,
+              title: l10n.noConversationsYet,
+              message: isSourceFilterActive ? l10n.conversationSourceEmptyHint : null,
+            ),
     );
   }
 }

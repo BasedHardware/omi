@@ -19,7 +19,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
 
   Widget _card(Widget child) {
     return DecoratedBox(
-      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: child,
     );
   }
@@ -34,8 +34,10 @@ class DeveloperApiKeysSection extends StatelessWidget {
           children: [
             OmiSectionHeader(
               context.l10n.developerApi,
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
+              // The buttons wrap rather than overflow on a narrow phone at a large text size.
+              trailing: Wrap(
+                spacing: OmiSpacing.xs,
+                runSpacing: OmiSpacing.xs,
                 children: [
                   OmiButton.secondary(
                     label: context.l10n.docs,
@@ -45,7 +47,6 @@ class DeveloperApiKeysSection extends StatelessWidget {
                       PlatformManager.instance.analytics.pageOpened('Developer API Docs');
                     },
                   ),
-                  const SizedBox(width: OmiSpacing.xs),
                   OmiButton.secondary(
                     label: context.l10n.createKey,
                     leading: const FaIcon(FontAwesomeIcons.plus),

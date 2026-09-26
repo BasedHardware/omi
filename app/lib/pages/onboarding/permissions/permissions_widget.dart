@@ -18,15 +18,17 @@ class PermissionsWidget extends StatelessWidget {
     return OnboardingStep(
       card: OnboardingCard(
         content: [
-          Text(context.l10n.grantPermissions, style: OmiType.title1, textAlign: TextAlign.center),
-          const SizedBox(height: OmiSpacing.xs),
-          Text(
-            context.l10n.permissionsSetupDescription,
-            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: OmiSpacing.xl),
+          OnboardingHeader(title: context.l10n.permissionsFewTitle, subtitle: context.l10n.permissionsFewSubtitle),
+          const SizedBox(height: OmiSpacing.lg),
           OnboardingPermissionsPanel(source: source),
+          const SizedBox(height: OmiSpacing.md),
+          Padding(
+            padding: OnboardingCard.textInset,
+            child: Text(
+              context.l10n.permissionsContinueNote,
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+            ),
+          ),
         ],
         footer: [
           const SizedBox(height: OmiSpacing.xs),

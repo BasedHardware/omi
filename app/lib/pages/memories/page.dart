@@ -83,8 +83,54 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
   }
 
   Widget _buildHeader(MemoriesProvider provider, {required bool loading}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // v2 Memories: what the list is, under the title.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(OmiSpacing.md + OmiSpacing.xxs, 0, OmiSpacing.md, OmiSpacing.xxs),
+          child: Text(context.l10n.memoriesSubtitle, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+        ),
+        _buildSearchRow(provider, loading: loading),
+        if (!loading) _buildCategoryChips(provider),
+      ],
+    );
+  }
+
+  /// v2 Memories: the categories as one row of chips under search (the management sheet keeps the
+  /// rest of the filters). Same provider calls as the sheet.
+  Widget _buildCategoryChips(MemoriesProvider provider) {
+    final l10n = context.l10n;
+    final options = <(String, MemoryCategory?)>[
+      (l10n.filterAll, null),
+      (l10n.filterSystem, MemoryCategory.system),
+      (l10n.filterInteresting, MemoryCategory.interesting),
+      (l10n.filterManual, MemoryCategory.manual),
+    ];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+      child: Row(
+        children: [
+          for (final (label, category) in options) ...[
+            OmiChip(
+              key: Key('memories_chip_${category?.name ?? 'all'}'),
+              label: label,
+              selected: category == null
+                  ? provider.selectedCategories.isEmpty
+                  : provider.selectedCategories.contains(category),
+              onTap: () => category == null ? provider.clearCategoryFilter() : provider.toggleCategoryFilter(category),
+            ),
+            const SizedBox(width: OmiSpacing.xs),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchRow(MemoriesProvider provider, {required bool loading}) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, 10),
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, OmiSpacing.xxs),
       child: Row(
         children: [
           Expanded(
@@ -167,7 +213,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
       builder: (context, provider, _) {
         return Scaffold(
           backgroundColor: OmiColors.surface0,
-          appBar: AppBar(
+          appBar: OmiAppBar(
             leading: const OmiBackButton(),
             title: Text(context.l10n.memories),
           ),
@@ -216,9 +262,23 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                               padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 120),
                               sliver: SliverList(
                                 delegate: SliverChildBuilderDelegate((context, index) {
+                                  final count = provider.filteredMemories.length;
+                                  // After the last row: how memories move from short- to long-term.
+                                  if (index == count) {
+                                    return Padding(
+                                      padding:
+                                          const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, 0),
+                                      child: Text(
+                                        context.l10n.memoriesTierNote,
+                                        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                                      ),
+                                    );
+                                  }
                                   final memory = provider.filteredMemories[index];
                                   return MemoryItem(
                                     memory: memory,
+                                    first: index == 0,
+                                    last: index == count - 1,
                                     highlighted: memory.id == _highlightedMemoryId,
                                     provider: provider,
                                     onTap:
@@ -227,7 +287,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                       _showQuickEditSheet(context, tappedMemory, tappedProvider);
                                     },
                                   );
-                                }, childCount: provider.filteredMemories.length),
+                                }, childCount: provider.filteredMemories.length + 1),
                               ),
                             ),
                         ],
@@ -273,7 +333,7 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
             child: Container(
               margin: const EdgeInsets.only(bottom: AppStyles.spacingM),
               height: 88, // Approximate height of a memory item
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: AppStyles.backgroundSecondary,
                 borderRadius: OmiRadius.mdAll,
               ),

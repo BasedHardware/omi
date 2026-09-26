@@ -1869,9 +1869,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get openSettings => 'Deschide setările';
 
   @override
-  String get whatsYourName => 'Cum te cheamă?';
-
-  @override
   String get speakTranscribeSummarize => 'Vorbește. Transcrie. Rezumă.';
 
   @override
@@ -1885,12 +1882,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get termsOfUse => 'Termeni de utilizare';
-
-  @override
-  String get omiYourAiCompanion => 'Omi – Companionul tău AI';
-
-  @override
-  String get captureEveryMoment => 'Capturează fiecare moment. Primește rezumate\ncu AI. Nu mai lua niciodată notițe.';
 
   @override
   String get appleWatchSetup => 'Configurare Apple Watch';
@@ -1935,18 +1926,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String errorStartingRecording(String error) {
     return 'Eroare la pornirea înregistrării: $error';
   }
-
-  @override
-  String get selectPrimaryLanguage => 'Selectează limba principală';
-
-  @override
-  String get languageBenefits => 'Setează-ți limba pentru transcrieri mai precise și o experiență personalizată';
-
-  @override
-  String get whatsYourPrimaryLanguage => 'Care este limba ta principală?';
-
-  @override
-  String get selectYourLanguage => 'Selectează limba ta';
 
   @override
   String get personalGrowthJourney => 'Călătoria ta de creștere personală cu AI care ascultă fiecare cuvânt al tău.';
@@ -3383,9 +3362,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get dataProtection => 'Protecția datelor';
-
-  @override
-  String get yourDataIsProtected => 'Datele tale sunt protejate și guvernate de ';
 
   @override
   String get pleaseSelectYourPrimaryLanguage => 'Vă rugăm să selectați limba principală';
@@ -5072,10 +5048,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'Mostră vocală suplimentară eliminată';
-
-  @override
-  String get consentDataMessage =>
-      'Continuând, conversațiile, înregistrările și informațiile dvs. personale vor fi stocate în siguranță pe serverele noastre. Înregistrările audio și transcrierile dvs. sunt procesate de servicii AI terțe (inclusiv Deepgram pentru transcriere și OpenAI pentru analiză) pentru a vă oferi informații bazate pe AI și a activa toate funcțiile aplicației.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -7100,9 +7072,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get actionItemReminderTitle => 'Memento Omi';
-
-  @override
   String deviceDisconnectedTitle(String deviceName) {
     return '$deviceName deconectat';
   }
@@ -7803,9 +7772,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get authorizingMcpServer => 'Se autorizează…';
-
-  @override
-  String get whereDidYouHearAboutOmi => 'Cum ne-ai găsit?';
 
   @override
   String get tiktok => 'TikTok';
@@ -9999,9 +9965,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get transcriptionNoAudio => 'Transcrierea nu primește audio';
 
   @override
-  String get tapPlusToStartRecording => 'Atinge butonul de înregistrare pentru a începe înregistrarea';
-
-  @override
   String get chatBlockTask => 'Sarcină';
 
   @override
@@ -10721,9 +10684,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deviceConnecting => 'Se conectează…';
 
   @override
-  String get recordOptionsTip => 'Sfat: atinge săgeata de pe butonul de înregistrare pentru a înregistra un apel.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Actualizarea a eșuat';
 
   @override
@@ -11266,12 +11226,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get keepUsingPendant => 'Continuă cu pandantivul';
 
   @override
-  String get recordWith => 'Înregistrează cu';
-
-  @override
-  String get moreWaysToRecord => 'Mai multe moduri de înregistrare';
-
-  @override
   String get openCall => 'Deschide apelul';
 
   @override
@@ -11318,4 +11272,540 @@ class AppLocalizationsRo extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name și alții';
   }
+
+  @override
+  String get alreadyHaveAccount => 'Ai deja un cont?';
+
+  @override
+  String get signInToOmi => 'Conectează-te la Omi';
+
+  @override
+  String get signInSubtitle => 'Conversațiile și amintirile tale te urmează în cont pe telefon, Mac și web.';
+
+  @override
+  String onboardingAllSetName(String name) {
+    return 'Totul e gata, $name.';
+  }
+
+  @override
+  String get completeHomeBody => 'Ziua ta, sarcinile și rezumatele într-un singur loc.';
+
+  @override
+  String get completeAskTitle => 'Întreabă';
+
+  @override
+  String get foundOmiOptionalHint => 'Opțional — ajută o echipă mică să știe ce funcționează.';
+
+  @override
+  String get consentTitle => 'Datele tale, pe înțelesul tuturor';
+
+  @override
+  String get consentSubtitle => 'Înainte ca Omi să înceapă să asculte, iată exact ce se întâmplă cu ce aude.';
+
+  @override
+  String get consentStoredTitle => 'Ce se stochează';
+
+  @override
+  String get consentStoredBody =>
+      'Sunetul, transcrierile și detaliile pe care le află Omi sunt stocate în siguranță în contul tău.';
+
+  @override
+  String get consentProcessorsTitle => 'Cine le prelucrează';
+
+  @override
+  String get consentProcessorsBody =>
+      'Vorbirea este transcrisă de Deepgram și analizată de OpenAI pentru a scrie rezumate, sarcini și amintiri.';
+
+  @override
+  String get consentControlTitle => 'Ce controlezi tu';
+
+  @override
+  String get consentControlBody => 'Șterge orice conversație, amintire sau întregul cont oricând vrei.';
+
+  @override
+  String get readPrivacyPolicy => 'Citește Politica de confidențialitate';
+
+  @override
+  String get whatShouldOmiCallYou => 'Cum să-ți spună Omi?';
+
+  @override
+  String get nameUsageHint => 'Omi folosește asta ca să te identifice în transcrieri și exporturi.';
+
+  @override
+  String get yourNamePlaceholder => 'Numele tău';
+
+  @override
+  String get whatLanguageDoYouSpeakMost => 'Ce limbă vorbești cel mai des?';
+
+  @override
+  String get languageOnboardingSubtitle =>
+      'Omi transcrie cel mai bine când știe limba. Poți adăuga și altele mai târziu.';
+
+  @override
+  String get permissionsFewTitle => 'Câteva permisiuni';
+
+  @override
+  String get permissionsFewSubtitle => 'Omi cere doar ce folosește. Le poți schimba oricând din Setări.';
+
+  @override
+  String get permissionsContinueNote =>
+      '„Continuați” nu cere nimic. Fiecare permisiune este cerută doar când atingi „Permite”.';
+
+  @override
+  String get howDidYouHearAboutOmi => 'Cum ai aflat de Omi?';
+
+  @override
+  String get showOnLockScreen => 'Afișează pe ecranul de blocare';
+
+  @override
+  String get seeAll => 'Vezi tot';
+
+  @override
+  String get upNext => 'Urmează';
+
+  @override
+  String get allTasks => 'Toate sarcinile';
+
+  @override
+  String get thisWeek => 'Săptămâna aceasta';
+
+  @override
+  String capturedDuration(String duration) {
+    return '$duration înregistrate';
+  }
+
+  @override
+  String newMemoriesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count amintiri noi',
+      one: '1 amintire nouă',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncingFromPendant => 'Se sincronizează de pe pandantivul tău';
+
+  @override
+  String get pendantRecordingsSynced => 'Înregistrările pandantivului au fost sincronizate';
+
+  @override
+  String recordedOnPendantWhileAway(String duration) {
+    return '~$duration înregistrate pe pandantiv cât telefonul a fost departe';
+  }
+
+  @override
+  String dailyRecapOn(String day) {
+    return 'Rezumatul zilei · $day';
+  }
+
+  @override
+  String taskDueDayTime(String day, String time) {
+    return '$day, $time';
+  }
+
+  @override
+  String fromConversation(String title) {
+    return 'Din $title';
+  }
+
+  @override
+  String get endCapture => 'Încheie';
+
+  @override
+  String get toDo => 'De făcut';
+
+  @override
+  String get devices => 'Dispozitive';
+
+  @override
+  String get devicesSubtitle => 'Tot ce ascultă pentru tine. Înregistrează câte unul odată.';
+
+  @override
+  String get addADevice => 'Adaugă un dispozitiv';
+
+  @override
+  String get deviceReady => 'Pregătit';
+
+  @override
+  String get importFromOtherApps => 'Importă din alte aplicații';
+
+  @override
+  String get whatWillYouWear => 'Ce vei purta?';
+
+  @override
+  String get pickDeviceSubtitle => 'Poți adăuga și altele mai târziu. Înregistrează câte unul odată.';
+
+  @override
+  String get alreadyHaveOne => 'Ai deja unul?';
+
+  @override
+  String get noDeviceHeader => 'Fără dispozitiv';
+
+  @override
+  String get omiPendantName => 'Pandantiv Omi';
+
+  @override
+  String get allDayConversations => 'Conversații toată ziua';
+
+  @override
+  String get conversationsAndPhotos => 'Conversații + fotografii';
+
+  @override
+  String get wristMic => 'Microfon la încheietură';
+
+  @override
+  String get glassesAudio => 'Audio de la ochelari';
+
+  @override
+  String get bringRecordingsIntoOmi => 'Adu-ți înregistrările în Omi';
+
+  @override
+  String get useThisIphone => 'Folosește acest iPhone';
+
+  @override
+  String get useThisPhone => 'Folosește acest telefon';
+
+  @override
+  String get startInSeconds => 'Începe în 10 secunde';
+
+  @override
+  String get askAboutThisConversationPlaceholder => 'Întreabă despre această conversație';
+
+  @override
+  String get summaryStyle => 'Stilul rezumatului';
+
+  @override
+  String get summaryStyleSubtitle => 'Alege aplicația care scrie acest rezumat';
+
+  @override
+  String get appearance => 'Aspect';
+
+  @override
+  String get appearanceSystem => 'Sistem';
+
+  @override
+  String get appearanceLight => 'Luminos';
+
+  @override
+  String get appearanceDark => 'Întunecat';
+
+  @override
+  String get feel => 'Senzație';
+
+  @override
+  String get haptics => 'Haptică';
+
+  @override
+  String get hapticsSubtitle => 'O atingere ușoară când termini, marchezi cu stea sau finalizezi ceva';
+
+  @override
+  String get textSize => 'Dimensiunea textului';
+
+  @override
+  String get textSizeSubtitle => 'Urmează dimensiunea textului de pe telefon';
+
+  @override
+  String get appearanceMotionNote =>
+      'Mișcarea urmează opțiunea „Reducere mișcare” din setările telefonului — toate buclele, inclusiv lumina dispozitivului, se opresc.';
+
+  @override
+  String get signedInWithApple => 'Conectat cu Apple';
+
+  @override
+  String get signedInWithGoogle => 'Conectat cu Google';
+
+  @override
+  String premiumMinutesLeftThisMonth(String left, int limit) {
+    return 'Au rămas $left din $limit minute premium luna aceasta';
+  }
+
+  @override
+  String get recordingFrom => 'Se înregistrează de pe';
+
+  @override
+  String get recordingFromSubtitle => 'Înregistrează o singură sursă odată. Schimbarea încheie conversația curentă.';
+
+  @override
+  String get manageDevices => 'Gestionează dispozitivele';
+
+  @override
+  String get notListeningTitle => 'Nu ascultă';
+
+  @override
+  String get notListeningSubtitle => 'Începe cu acest telefon sau conectează un dispozitiv care să asculte toată ziua.';
+
+  @override
+  String get startListening => 'Începe ascultarea';
+
+  @override
+  String get searchEverything => 'Caută peste tot';
+
+  @override
+  String searchResultsCount(int count) {
+    return 'Rezultate · $count';
+  }
+
+  @override
+  String get nothingFound => 'Nu s-a găsit nimic';
+
+  @override
+  String get searchNothingFoundHint =>
+      'Încearcă alt cuvânt sau întreabă-l pe Omi — înțelege sensul, nu doar cuvintele.';
+
+  @override
+  String get askOmiInstead => 'Întreabă-l pe Omi';
+
+  @override
+  String get recentSearches => 'Recente';
+
+  @override
+  String get searchAskSuggestion => 'Ce am promis să fac săptămâna aceasta?';
+
+  @override
+  String get welcomeRememberTitle => 'Ține minte fiecare conversație.';
+
+  @override
+  String get welcomeRememberSubtitle =>
+      'Poartă ce îți place. Omi transformă ce auzi în notițe, sarcini și un rezumat al zilei tale.';
+
+  @override
+  String get memoriesSubtitle => 'Ce știe Omi și de unde a aflat';
+
+  @override
+  String get memoryTierLongTerm => 'Pe termen lung';
+
+  @override
+  String get memoryTierShortTerm => 'Pe termen scurt';
+
+  @override
+  String get memoriesTierNote =>
+      'Amintirile noi încep pe termen scurt. Omi le mută singur pe termen lung pe cele care contează în continuare.';
+
+  @override
+  String get askEmptyTitle => 'Întreabă despre orice ai auzit.';
+
+  @override
+  String get askEmptySubtitle => 'Omi răspunde pe baza conversațiilor, amintirilor și sarcinilor tale.';
+
+  @override
+  String get completeListeningTitle => 'Ascultare';
+
+  @override
+  String get completeListeningBody =>
+      'Albastru înseamnă că Omi te aude — de pe un dispozitiv pe care îl porți sau de pe acest telefon.';
+
+  @override
+  String get completeAskAnyBody => 'Atinge Întreabă ca să întrebi despre orice ai auzit.';
+
+  @override
+  String get completeDevicesBody => 'Adaugă oricând un dispozitiv purtabil sau începe cu acest telefon.';
+
+  @override
+  String get conversationSourceGlasses => 'Ochelari';
+
+  @override
+  String get conversationSourceImported => 'Importate';
+
+  @override
+  String get conversationSourceEmptyHint => 'Încă nu s-a înregistrat nimic din această sursă.';
+
+  @override
+  String get findMyPendant => 'Găsește pandantivul';
+
+  @override
+  String get findMyPendantHint => 'Redă un sunet ca să-l găsești';
+
+  @override
+  String get upToDate => 'La zi';
+
+  @override
+  String get updateAvailable => 'Actualizare disponibilă';
+
+  @override
+  String get storageTitle => 'Stocare';
+
+  @override
+  String get connectStepTurnOn => 'Pornește-l și ține-l aproape';
+
+  @override
+  String get connectStepAllowBluetooth => 'Permite Bluetooth';
+
+  @override
+  String get connectStepTest => 'Spune ceva pentru test';
+
+  @override
+  String get connectStepTestHint => 'Cuvintele apar aici pe măsură ce vorbești';
+
+  @override
+  String get setUpLater => 'Configurează mai târziu';
+
+  @override
+  String recapPreviousDay(String day) {
+    return 'Rezumatul zilei anterioare: $day';
+  }
+
+  @override
+  String recapNextDay(String day) {
+    return 'Rezumatul zilei următoare: $day';
+  }
+
+  @override
+  String get askStarterToday => 'Rezumă ziua de azi';
+
+  @override
+  String get askStarterPeople => 'Pe cine am întâlnit?';
+
+  @override
+  String get askStarterOpen => 'Ce a rămas deschis?';
+
+  @override
+  String get peopleSubtitle => 'Vocile pe care Omi le recunoaște în transcrieri';
+
+  @override
+  String get usageCurrentPlan => 'Planul actual';
+
+  @override
+  String get appsExplore => 'Explorează';
+
+  @override
+  String get appOutOfFive => 'din 5';
+
+  @override
+  String get appStatUsers => 'Utilizatori';
+
+  @override
+  String homeWelcomeName(String name) {
+    return 'Bun venit, $name';
+  }
+
+  @override
+  String get homeWelcome => 'Bun venit';
+
+  @override
+  String get homeFirstDaySubtitle => 'Prima ta zi cu Omi';
+
+  @override
+  String get homeListeningHeroTitle => 'Omi ascultă';
+
+  @override
+  String get homeListeningHeroBody => 'Prima ta conversație va apărea aici la un minut după ce se termină.';
+
+  @override
+  String get homeGettingStarted => 'Primii pași';
+
+  @override
+  String get gettingStartedConnect => 'Conectează un dispozitiv';
+
+  @override
+  String get gettingStartedConversation => 'Poartă o conversație';
+
+  @override
+  String get gettingStartedAsk => 'Întreabă-l pe Omi despre ea';
+
+  @override
+  String get homeGoodToKnow => 'Bine de știut';
+
+  @override
+  String get tipFinishTitle => 'Încheie oricând';
+
+  @override
+  String get tipFinishBody => 'Atinge Încheie — sau apasă de două ori pe pandantiv — și rezumatul începe imediat.';
+
+  @override
+  String get tipStarTitle => 'Marchează cu stea ce contează';
+
+  @override
+  String get tipStarBody => 'Conversațiile marcate cu stea se găsesc ușor mai târziu.';
+
+  @override
+  String get tipPrivateTitle => 'Privat în mod implicit';
+
+  @override
+  String get tipPrivateBody => 'Conversațiile tale rămân private dacă nu le partajezi.';
+
+  @override
+  String homeGettingStartedProgress(int done, int total) {
+    return '$done din $total';
+  }
+
+  @override
+  String get noFailedRecordings => 'Nicio înregistrare eșuată';
+
+  @override
+  String get mapNoPlacesTitle => 'Încă nu există locuri';
+
+  @override
+  String get mapNoPlacesMessage => 'Conversațiile apar aici când Omi știe unde au avut loc.';
+
+  @override
+  String get mergeWithEllipsis => 'Îmbină cu…';
+
+  @override
+  String finishSetupToEnable(String appName) {
+    return 'Finalizează configurarea $appName pentru a o activa';
+  }
+
+  @override
+  String get greetingUpLate => 'Târziu în noapte';
+
+  @override
+  String get greetingLunchtime => 'Ora prânzului';
+
+  @override
+  String get greetingWindingDown => 'Timp de relaxare';
+
+  @override
+  String get greetingGoodNight => 'Noapte bună';
+
+  @override
+  String greetingWithName(String greeting, String name) {
+    return '$greeting, $name';
+  }
+
+  @override
+  String get greetingStillUp => 'Încă treji';
+
+  @override
+  String get greetingEarlyStart => 'Început devreme';
+
+  @override
+  String get greetingNewDay => 'Zi nouă';
+
+  @override
+  String get greetingMorning => 'Bună dimineața';
+
+  @override
+  String get greetingBusyMorning => 'Dimineață plină';
+
+  @override
+  String get greetingAfternoon => 'Bună ziua';
+
+  @override
+  String get greetingHomeStretch => 'Final de zi';
+
+  @override
+  String get greetingEvening => 'Bună seara';
+
+  @override
+  String get unlimitedBadge => 'Nelimitat';
+
+  @override
+  String get voiceSetupTaskSubline => 'Ca Omi să știe că ești tu · cam un minut';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Audio salvat: $saved din $total';
+  }
+
+  @override
+  String get voiceIntroTitle => 'Prezintă-te';
+
+  @override
+  String get memoryLabel => 'Amintire';
+
+  @override
+  String get idleReadyHint => 'Atinge Pornește și ce spui va apărea aici.';
 }

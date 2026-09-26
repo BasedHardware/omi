@@ -45,7 +45,7 @@ class ConversationTimeoutDialog {
                       subtitle: option.description,
                       showChevron: false,
                       trailing: option.value == currentDuration
-                          ? const Icon(Icons.check_rounded, color: OmiColors.accent, size: 22)
+                          ? Icon(Icons.check_rounded, color: OmiColors.accent, size: 22)
                           : const SizedBox(width: 22),
                       onTap: () => Navigator.of(sheetContext).pop(option.value),
                     ),

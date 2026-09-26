@@ -34,8 +34,7 @@ class ActionFieldsWidget extends StatelessWidget {
                     children: [
                       Text(context.l10n.scopes, style: OmiType.callout.copyWith(color: OmiColors.textSecondary)),
                       OmiIconButton(
-                        icon:
-                            const FaIcon(FontAwesomeIcons.solidCircleQuestion, color: OmiColors.textTertiary, size: 18),
+                        icon: FaIcon(FontAwesomeIcons.solidCircleQuestion, color: OmiColors.textTertiary, size: 18),
                         label: context.l10n.docs,
                         onPressed: () {
                           launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Integrations'));
@@ -62,14 +61,14 @@ class ActionFieldsWidget extends StatelessWidget {
                                 Container(
                                   width: 40,
                                   height: 40,
-                                  decoration: const BoxDecoration(
+                                  decoration: BoxDecoration(
                                     color: OmiColors.surface2,
                                     borderRadius: OmiRadius.mdAll,
                                   ),
                                   child: Center(
                                     child: FaIcon(
                                       _getIconForAction(actionType.id),
-                                      color: Colors.grey.shade400,
+                                      color: OmiColors.textSecondary,
                                       size: 16,
                                     ),
                                   ),
@@ -96,7 +95,7 @@ class ActionFieldsWidget extends StatelessWidget {
                             if (!isLast)
                               Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 12),
-                                child: Divider(color: Colors.grey.shade800, height: 1),
+                                child: Divider(color: OmiColors.border, height: 1),
                               ),
                           ],
                         );

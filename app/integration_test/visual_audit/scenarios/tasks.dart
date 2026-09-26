@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
 import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
 
 import '../harness.dart';
 
@@ -94,6 +95,79 @@ final tasksScenarios = <AuditScenario>[
       await a.shot('Tasks tab with a parent task and an indented child', step: 'list');
       await a.longPress(find.text('Book the venue'));
       await a.shot('Long-press the indented task row', step: 'menu');
+    },
+  ),
+  AuditScenario(
+    id: 'tasks-from-conversations',
+    title: 'To do: overdue, today and undated tasks, each saying which conversation it came from',
+    page: 'lib/pages/action_items/action_items_page.dart (ActionItemsPage)',
+    state: 'Four open tasks: one overdue, two due today (one at 5 PM), one undated; three from conversations',
+    run: (a) async {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      ServerConversation conversation(String id, String title) => ServerConversation(
+            id: id,
+            createdAt: today,
+            structured: Structured(title, 'Overview', emoji: '', category: 'work'),
+            status: ConversationStatus.completed,
+          );
+      final conversations = ConversationProvider(
+        conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+        isSignedIn: () => true,
+      )..conversations = [
+          conversation('c1', 'Pricing review'),
+          conversation('c2', 'App UX and battery'),
+          conversation('c3', 'Subscription concerns'),
+        ];
+      Future<ActionItemsResponse?> items({
+        int limit = 100,
+        int offset = 0,
+        bool? completed,
+        String? conversationId,
+        DateTime? startDate,
+        DateTime? endDate,
+        DateTime? dueStartDate,
+        DateTime? dueEndDate,
+      }) async =>
+          ActionItemsResponse(actionItems: [
+            ActionItemWithMetadata(
+              id: 'overdue',
+              description: 'Send the pricing draft to the team',
+              completed: false,
+              dueAt: today.subtract(const Duration(hours: 7)),
+              conversationId: 'c1',
+              sortOrder: 1000,
+            ),
+            ActionItemWithMetadata(
+              id: 'call',
+              description: 'Call Chitapa',
+              completed: false,
+              dueAt: today.add(const Duration(hours: 17)),
+              sortOrder: 2000,
+            ),
+            ActionItemWithMetadata(
+              id: 'battery',
+              description: 'Pull battery reports',
+              completed: false,
+              dueAt: today.add(const Duration(hours: 23)),
+              conversationId: 'c2',
+              sortOrder: 3000,
+            ),
+            const ActionItemWithMetadata(
+              id: 'errors',
+              description: 'Separate plan-limit and verification errors',
+              completed: false,
+              conversationId: 'c3',
+              sortOrder: 4000,
+            ),
+          ]);
+      final actionItems = ActionItemsProvider(getActionItems: items);
+      await a.tester.runAsync(actionItems.ensureLoaded);
+      await a.pump(const ActionItemsPage(), providers: [
+        ChangeNotifierProvider<ActionItemsProvider>.value(value: actionItems),
+        ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
+      ]);
+      await a.shot('To do with overdue, today and undated tasks from conversations');
     },
   ),
 ];

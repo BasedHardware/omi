@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/components/omi_glass.dart';
 import 'package:omi/ui/omi_tokens.dart';
 
 /// Smallest comfortable touch target: Apple's HIG asks for 44x44pt, Material for 48dp. Icon
 /// controls use the smaller of the two so a row of them still fits a phone-width app bar.
-const double kOmiMinTapTarget = 44;
+const double kOmiMinTapTarget = OmiSize.minTap;
 
-/// Diameter of the circle a filled [OmiIconButton] paints by default.
-const double kOmiIconCircleDiameter = 36;
+/// Diameter of the circle a filled [OmiIconButton] paints by default (v2 `controls.navButton`): the
+/// circle and its touch target are the same 44pt.
+const double kOmiIconCircleDiameter = OmiSize.navButton;
 
 /// An icon-only control. The [label] is required: it is the tooltip on long-press and the name a
 /// screen reader announces. An icon without words is only a control for people who already know
@@ -33,6 +35,7 @@ class OmiIconButton extends StatelessWidget {
     this.color,
     this.isDestructive = false,
   })  : filled = false,
+        glass = false,
         fillColor = null,
         diameter = kOmiIconCircleDiameter;
 
@@ -45,7 +48,21 @@ class OmiIconButton extends StatelessWidget {
     this.fillColor,
     this.diameter = kOmiIconCircleDiameter,
     this.isDestructive = false,
-  }) : filled = true;
+  })  : filled = true,
+        glass = false;
+
+  /// A header circle in liquid glass ([OmiGlass]), like the device chip beside it.
+  const OmiIconButton.glass({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+    this.color,
+    this.diameter = kOmiIconCircleDiameter,
+    this.isDestructive = false,
+  })  : filled = true,
+        glass = true,
+        fillColor = null;
 
   /// The glyph, usually an [Icon]. Its colour defaults to [color] through [IconTheme].
   final Widget icon;
@@ -65,6 +82,9 @@ class OmiIconButton extends StatelessWidget {
   /// Whether a circle is painted behind the glyph.
   final bool filled;
 
+  /// The circle is liquid glass rather than [fillColor].
+  final bool glass;
+
   /// Circle colour for [OmiIconButton.filled]. Defaults to [OmiColors.surface1].
   final Color? fillColor;
 
@@ -81,7 +101,16 @@ class OmiIconButton extends StatelessWidget {
       data: IconThemeData(color: glyphColor, size: filled ? 18 : 22),
       child: ExcludeSemantics(child: icon),
     );
-    if (filled) {
+    if (glass) {
+      glyph = SizedBox.square(
+        dimension: diameter,
+        child: OmiGlass(
+          inHeader: true,
+          borderRadius: BorderRadius.circular(diameter / 2),
+          child: Center(child: glyph),
+        ),
+      );
+    } else if (filled) {
       glyph = Container(
         width: diameter,
         height: diameter,
