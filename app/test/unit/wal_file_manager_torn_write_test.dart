@@ -123,6 +123,31 @@ void main() {
     expect((await WalFileManager.loadWals()).map((w) => w.timerStart), [1000, 2000]);
   });
 
+  test('a missing index file falls back to backup', () async {
+    await WalFileManager.saveWals([_wal(1000)]);
+
+    // Create backup file manually since saving writes to the temp file then renames, skipping backup if it's the first save
+    final content = await walFile.readAsString();
+    await backupFile.writeAsString(content);
+
+    if (walFile.existsSync()) walFile.deleteSync();
+
+    expect((await WalFileManager.loadWals()).map((w) => w.timerStart), [1000]);
+  });
+
+  test('invalid JSON types do not crash loadWals', () async {
+    walFile.writeAsStringSync('{"wals": "not a list"}');
+
+    expect(await WalFileManager.loadWals(), isEmpty);
+  });
+
+  test('totally empty WAL files return empty lists when no backup exists', () async {
+    walFile.writeAsStringSync('');
+    if (backupFile.existsSync()) backupFile.deleteSync();
+
+    expect(await WalFileManager.loadWals(), isEmpty);
+  });
+
   test('saving after an empty index keeps the good backup', () async {
     await WalFileManager.saveWals([_wal(1000)]);
     await WalFileManager.saveWals([_wal(1000), _wal(2000)]);

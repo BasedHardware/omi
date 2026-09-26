@@ -31,8 +31,8 @@ class WalFileManager {
     }
 
     if (_walFile == null || !_walFile!.existsSync()) {
-      Logger.debug('WAL file does not exist, returning empty list');
-      return [];
+      Logger.debug('WAL file does not exist, trying backup');
+      return await _loadFromBackup();
     }
 
     final content = await _walFile!.readAsString();
