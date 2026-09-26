@@ -74,8 +74,7 @@ void main() {
         home: Scaffold(
           body: Builder(
             builder: (context) => TextButton(
-              // No server in a hermetic test, so making the link fails; only the question matters.
-              onPressed: () => shareConversation(context, conversation).catchError((_) {}),
+              onPressed: () => shareConversation(context, conversation),
               child: const Text('share'),
             ),
           ),
@@ -89,5 +88,8 @@ void main() {
     expect(find.text(en.anyoneWithLinkCanView), findsNothing);
     await tester.pumpAndSettle();
     expect(find.text(en.shareConversationQuestion), findsNothing);
+    // No server in a hermetic test: the link cannot be made, and it says so.
+    expect(find.text(en.conversationUrlNotShared), findsOneWidget);
+    expect(shares, isEmpty);
   });
 }

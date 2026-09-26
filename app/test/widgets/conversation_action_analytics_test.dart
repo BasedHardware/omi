@@ -109,8 +109,8 @@ void main() {
       await tester.pump();
       await tester.tap(find.byKey(const Key('conversation_share')));
       await tester.pump();
-      // Share asks before making a private conversation public; leave it private.
-      await tester.tap(find.text('Cancel'));
+      // Share goes straight to the system share sheet (IMG_1146): no question to answer first.
+      expect(find.text('Anyone with the link can view'), findsNothing);
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('conversation_more')));
