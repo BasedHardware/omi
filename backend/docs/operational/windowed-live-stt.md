@@ -241,10 +241,50 @@ only when the whole chain cannot serve. That is what #15189's
 accepted sockets, 35% warn / 60% page). Per-leg degraded events do not move
 those ratios.
 
-Grafana split `alerts/live-stt.json` and the combined export cover terminal chain
-exhaustion, per-leg error ratios, authentication deaths, overflow ratio,
-sustained cap occupancy and batch POST error ratio. Traffic floors suppress
-ratio noise; saturation uses a dwell gauge. Existing #15189 fallback alerts and
+Grafana split `alerts/live-stt.json` and the combined export cover per-leg
+error ratios, authentication deaths, overflow ratio, sustained cap occupancy
+and batch POST error ratio. Traffic floors suppress ratio noise; saturation
+uses a dwell gauge. The former `omi-stt-chain-terminal` rule was deleted
+(2026-09-26): it read `omi_stt_chain_exhausted_total`, which the legacy
+connect path never emits, so it sat unfirable through the whole 2026-09-26
+prod incident; chain exhaustion is covered by #15189's
+`omi-stt-chain-exhausted-warn` / `-page` on `omi_fallback_total` plus the
+headline session-outcome page below.
+
+2026-09-26 additions (live-transcription health):
+
+- `omi_live_session_transcript_outcome_total{outcome}` — the headline SLI,
+  emitted exactly once per backend-STT listen session at teardown
+  (`routers/listen/runtime.py::_record_session_transcript_outcome`).
+  `transcribed` = at least one nonempty transcript batch was delivered;
+  `no_transcript` = session ended without one (including STT-terminal
+  failures, which never get the short-session excuse); `too_short` = under
+  ~10 s of audio or zero VAD speech on a clean teardown — excluded from the
+  success ratio so quiet sessions cannot page. Custom-STT sessions are not
+  counted. Unit = one accepted WebSocket: a client reconnect counts once per
+  socket (the runtime cannot see the prior socket's transcripts without
+  cross-connection state).
+- `omi-live-transcription-success-low` — **PAGE**.
+  `transcribed / (transcribed + no_transcript) < 0.90` for 5 m with a
+  `>= 50 counted sessions / 5 m` volume guard. This is the alert the
+  2026-09-26 incident did not have.
+- `omi_stt_provider_connect_total{provider,outcome,error_class}` — recorded
+  on every connect path (legacy order and configured chain) with bounded
+  error classes `budget|auth|server_error|timeout|capability|other`.
+  `omi-stt-leg-error-rate` now reads it instead of the configured-chain-only
+  `omi_stt_leg_attempts_total`.
+- `omi_stt_provider_circuit_open{provider,kind=selection|account}` — per-pod
+  mirror of the process-local breakers; sum across the listen job for "pods
+  with this provider benched".
+- `omi_stt_provider_retired{provider}` — deployment config
+  (`STT_RETIRED_PROVIDERS`, default `deepgram` per the 2026-09 cost ruling:
+  hosted Deepgram is intentionally unfunded). The per-provider budget page
+  and the leg-error rule subtract retired providers so an unfunded leg
+  cannot fire forever.
+
+The Backend-listen dashboard has a "Live transcription health" row: headline
+%, sessions by outcome, per-provider sessions served and connect success %,
+breaker-open pods, and connect failures by error class. Existing #15189 fallback alerts and
 #15218 budget/quota page remain; the auth rule excludes budget refusals to avoid
 duplicate pages. An initialization-terminal rule on
 `omi_live_stt_terminal_failures_total{phase="initialization"}` is **not**

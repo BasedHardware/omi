@@ -83,11 +83,29 @@ class TranscriptSegment(BaseModel):
     speaker_match_source: SkipJsonSchema[Optional[str]] = None
     speaker_id_scope: SkipJsonSchema[Optional[str]] = None
     speaker_identity_status: SkipJsonSchema[str] = SpeakerIdentityStatus.unknown
+    # Only present for v2 text whose provider position could not be proven.
+    # Absence keeps every v1 serialized segment byte-identical.
+    audio_alignment: SkipJsonSchema[Optional[str]] = Field(default=None, exclude=True)
+    # V2 accepted-send run start in capture samples. Stops live text merging
+    # from turning two valid windows across a VAD skip into one false window.
+    audio_capture_run: SkipJsonSchema[Optional[int]] = Field(default=None, exclude=True)
     # In-memory only: True when neither speaker nor speaker_id was in the
     # construction payload, so speaker_id is the SPEAKER_00 default rather
     # than persisted diarization. Not dumped; a stored synthesized 0 still
     # looks real after a round-trip.
     _speaker_id_synthesized: bool = PrivateAttr(default=False)
+
+    def model_dump(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        # The ordinary model schema and every v1 dump stay unchanged. Only a
+        # v2 unplaced segment carries this internal marker into persistence
+        # and WebSocket payloads; Pydantic's model serializer would erase the
+        # public TranscriptSegment OpenAPI shape entirely.
+        data = super().model_dump(*args, **kwargs)
+        if self.audio_alignment is not None:
+            data['audio_alignment'] = self.audio_alignment
+        if self.audio_capture_run is not None:
+            data['audio_capture_run'] = self.audio_capture_run
+        return data
 
     def __init__(self, **data: Any):
         if 'speaker_identity_status' not in data and data.get('is_user') is True:
@@ -108,6 +126,13 @@ class TranscriptSegment(BaseModel):
                 self.speaker_id = 0
         else:
             self.speaker_id = 0
+
+    def assign_resolved_speaker(self, speaker_id: int, scope: str) -> None:
+        """Adopt a conversation-wide speaker id; it is real diarization, not the SPEAKER_00 default."""
+        self.speaker_id = speaker_id
+        self.speaker = f'SPEAKER_{speaker_id}'
+        self.speaker_id_scope = scope
+        self._speaker_id_synthesized = False
 
     def get_timestamp_string(self) -> str:
         start_duration = timedelta(seconds=int(self.start))
@@ -257,6 +282,12 @@ class TranscriptSegment(BaseModel):
             if b.speaker_match_source != a.speaker_match_source:
                 return a, b
             if b.speaker_id_scope != a.speaker_id_scope:
+                return a, b
+            # An unplaced point must not merge into a covered segment and
+            # silently inherit that segment's audio provenance.
+            if b.audio_alignment != a.audio_alignment:
+                return a, b
+            if b.audio_capture_run != a.audio_capture_run:
                 return a, b
 
             if (
