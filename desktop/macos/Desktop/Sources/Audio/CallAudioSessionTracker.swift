@@ -58,7 +58,7 @@ struct CallAudioSessionTracker {
     noteDevice(snapshot.defaultInputDeviceID, at: now)
     var flags: [String: (input: Bool, output: Bool)] = [:]
     for process in snapshot.processes {
-      let bundle = process.bundleID.lowercased()
+      let bundle = Self.appKey(process.bundleID)
       guard !bundle.isEmpty else { continue }
       var current = flags[bundle] ?? (false, false)
       current.input = current.input || process.isRunningInput
@@ -70,6 +70,20 @@ struct CallAudioSessionTracker {
       let audio = flags[bundle] ?? (false, false)
       ingest(bundle: bundle, input: audio.input, output: audio.output, at: now)
     }
+  }
+
+  /// The key a process is counted under. Electron and Chromium apps split audio across helper
+  /// processes (a Discord call holds the mic in `com.hnc.discord.helper.renderer`), so helpers
+  /// are folded into their app: a catalogued call app resolves through
+  /// `ConferencingApps.nativeCallAppID`, and any other `<app>.helper[.<kind>]` drops the helper
+  /// suffix. Call identities, the release catalog, and the daily summary all use this key.
+  static func appKey(_ bundleID: String) -> String {
+    if let appID = ConferencingApps.nativeCallAppID(bundleID: bundleID) { return appID }
+    let lower = bundleID.lowercased()
+    if let range = lower.range(of: #"\.helper(\.[a-z0-9_-]+)*$"#, options: .regularExpression) {
+      return String(lower[..<range.lowerBound])
+    }
+    return lower
   }
 
   /// `app:<bundle>#<n>` when the catalog says a mic release ends the call.
