@@ -2,16 +2,18 @@
 
 These tests require a running Firestore emulator (FIRESTORE_EMULATOR_HOST).
 They are wired into the listen-pusher gauntlet (run.sh) so CI always exercises
-them against a provisioned emulator.  They verify three correctness invariants
+them against a provisioned emulator.  They verify four correctness invariants
 that unit tests with mocks cannot prove:
 
-1. Multi-pod cursor CAS — two pods advancing the cursor concurrently; exactly
+1. Live-session fencing — recording-session creation/renewal racing recovery
+   stays serializable and never exposes a committed binding without its marker.
+2. Multi-pod cursor CAS — two pods advancing the cursor concurrently; exactly
    one CAS succeeds and the generation advances by exactly one.
-2. Production durable-finalization owner vs orphan race — the real
+3. Production durable-finalization owner vs orphan race — the real
    ``create_or_get_finalization_intent`` transaction and orphan terminalization
    race on the same conversation; exactly one commits and no active work is
    falsely completed.
-3. Deferred reacquire vs orphan sweep — the atomic ``reacquire_deferred_processing``
+4. Deferred reacquire vs orphan sweep — the atomic ``reacquire_deferred_processing``
    transaction and orphan terminalization race; exactly one commits and no stale
    processor produces side effects.
 
@@ -26,8 +28,10 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from database import conversation_finalization_jobs as jobs_db
+from database import recording_sessions as recording_sessions_db
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.processing_trigger import ProcessingTrigger
 from firebase_admin import firestore
 from google.api_core.exceptions import Aborted
 
@@ -53,6 +57,175 @@ def _cleanup_cursor():
 def _cleanup_conversation(uid: str, cid: str):
     client = _client()
     client.collection('users').document(uid).collection('conversations').document(cid).delete()
+
+
+def _cleanup_recording_session(uid: str, recording_session_id: str):
+    client = _client()
+    client.collection('users').document(uid).collection('recording_sessions').document(recording_session_id).delete()
+
+
+def test_recording_session_creation_and_recovery_sweep_race_is_serializable():
+    """Opening a session commits its conversation marker in the same transaction."""
+    uid = 'test-race-user'
+    cid = 'live-recording-creation-race'
+    recording_session_id = 'new-live-recording-session'
+    now = datetime.now(timezone.utc)
+    _cleanup_conversation(uid, cid)
+    _cleanup_recording_session(uid, recording_session_id)
+    _cleanup_finalization_jobs(uid, cid)
+
+    client = _client()
+    conv_ref = client.collection('users').document(uid).collection('conversations').document(cid)
+    conv_ref.set(
+        {
+            'id': cid,
+            'status': 'in_progress',
+            'source': 'omi',
+            'finished_at': now - timedelta(hours=3),
+            'audio_files': [{'id': 'live-audio'}],
+            'external_data': {'preserved': True},
+        }
+    )
+
+    barrier = threading.Barrier(2)
+    results: dict[str, object] = {}
+    errors: list[BaseException] = []
+
+    def open_session():
+        barrier.wait()
+        try:
+            results['binding'] = lifecycle_service.open_live_recording_session(
+                uid,
+                recording_session_id,
+                cid,
+                firestore_client=client,
+            )
+        except Exception as error:
+            errors.append(error)
+
+    def sweep_recovery():
+        barrier.wait()
+        try:
+            results['intent'] = jobs_db.create_or_get_finalization_intent(
+                uid,
+                cid,
+                requires_byok=False,
+                finalization_admission=lambda conv: lifecycle_service._finalization_admission(conv, cid),
+                trigger=ProcessingTrigger.SERVER_RECOVERY,
+                recovery_cutoff=now - timedelta(hours=2),
+                firestore_client=client,
+            )
+        except Exception as error:
+            errors.append(error)
+
+    opener = threading.Thread(target=open_session)
+    sweep = threading.Thread(target=sweep_recovery)
+    opener.start()
+    sweep.start()
+    opener.join(timeout=15)
+    sweep.join(timeout=15)
+
+    assert not errors, f'unexpected emulator failures surfaced: {errors}'
+    final_conversation = conv_ref.get().to_dict() or {}
+    assert final_conversation['external_data'] == {
+        'preserved': True,
+        'recording_session_id': recording_session_id,
+    }
+    assert results['binding']['conversation_id'] == cid
+    if results['intent']['status'] == 'refused_active_recording_session':
+        assert final_conversation['status'] == 'in_progress'
+        assert results['binding']['conversation_snapshot']['status'] == 'in_progress'
+        assert not final_conversation.get('finalization_job_id')
+    else:
+        # Recovery linearized first; the later session open observes a
+        # processing row rather than creating an unfenced in-progress window.
+        assert results['intent']['status'] == 'queued'
+        assert final_conversation['status'] == 'processing'
+        assert results['binding']['conversation_snapshot']['status'] == 'processing'
+        assert final_conversation.get('finalization_job_id')
+
+    _cleanup_conversation(uid, cid)
+    _cleanup_recording_session(uid, recording_session_id)
+    _cleanup_finalization_jobs(uid, cid)
+
+
+def test_live_recording_lease_and_recovery_sweep_race_keeps_session_in_progress():
+    """A renewal racing SERVER_RECOVERY conflicts on the same session lease."""
+    uid = 'test-race-user'
+    cid = 'live-recording-recovery-race'
+    recording_session_id = 'live-recording-session'
+    now = datetime.now(timezone.utc)
+    _cleanup_conversation(uid, cid)
+    _cleanup_recording_session(uid, recording_session_id)
+    _cleanup_finalization_jobs(uid, cid)
+
+    client = _client()
+    conv_ref = client.collection('users').document(uid).collection('conversations').document(cid)
+    conv_ref.set(
+        {
+            'id': cid,
+            'status': 'in_progress',
+            'source': 'omi',
+            'finished_at': now - timedelta(hours=3),
+            'audio_files': [{'id': 'live-audio'}],
+            'external_data': {'recording_session_id': recording_session_id},
+        }
+    )
+    recording_sessions_db.create_or_get_recording_session(
+        uid,
+        recording_session_id,
+        cid,
+        firestore_client=client,
+    )
+
+    barrier = threading.Barrier(2)
+    results: dict[str, object] = {}
+    errors: list[BaseException] = []
+
+    def renew_live_lease():
+        barrier.wait()
+        try:
+            results['renewed'] = recording_sessions_db.renew_recording_session_lease(
+                uid,
+                recording_session_id,
+                cid,
+                firestore_client=client,
+            )
+        except Exception as error:
+            errors.append(error)
+
+    def sweep_recovery():
+        barrier.wait()
+        try:
+            results['intent'] = jobs_db.create_or_get_finalization_intent(
+                uid,
+                cid,
+                requires_byok=False,
+                finalization_admission=lambda conv: lifecycle_service._finalization_admission(conv, cid),
+                trigger=ProcessingTrigger.SERVER_RECOVERY,
+                recovery_cutoff=now - timedelta(hours=2),
+                firestore_client=client,
+            )
+        except Exception as error:
+            errors.append(error)
+
+    renewal = threading.Thread(target=renew_live_lease)
+    sweep = threading.Thread(target=sweep_recovery)
+    renewal.start()
+    sweep.start()
+    renewal.join(timeout=15)
+    sweep.join(timeout=15)
+
+    assert not errors, f'unexpected emulator failures surfaced: {errors}'
+    assert results['renewed'] is True
+    assert results['intent']['status'] == 'refused_active_recording_session'
+    final_conversation = conv_ref.get().to_dict() or {}
+    assert final_conversation['status'] == 'in_progress'
+    assert not final_conversation.get('finalization_job_id')
+
+    _cleanup_conversation(uid, cid)
+    _cleanup_recording_session(uid, recording_session_id)
+    _cleanup_finalization_jobs(uid, cid)
 
 
 # ---------------------------------------------------------------------------

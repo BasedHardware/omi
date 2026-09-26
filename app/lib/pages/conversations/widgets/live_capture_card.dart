@@ -7,15 +7,21 @@ import 'package:omi/widgets/capture_sources.dart';
 
 /// The one capture status and control surface on Home: what is recording now.
 ///
-/// Row 1 names the source with the Recordings-sheet icon, then "● state · elapsed", then Pause or
-/// Resume (a pause glyph: mics belong to Ask Omi). Row 2 is the latest transcript line. A call
-/// shows a chevron instead of Pause, because the call page owns the call's controls.
+/// Leading: the source as a glyph in a circle (pendant, phone or call), named for screen readers
+/// but not in text. Then two lines: the short [status] ("Listening", "Paused", "Not
+/// transcribing"), and in a muted colour the elapsed time and the [detail] ("0:14 · Audio saved,
+/// transcribes later"). A problem ([explanation] set) carries an amber warning glyph instead of a
+/// status dot, and tapping the text opens a sheet that explains it. Trailing: Pause while live,
+/// Resume only when [paused] (a pause glyph, since mics belong to Ask Omi); a call shows a chevron
+/// because the call page owns the call's controls. Below: the latest transcript line and a [note].
 class LiveCaptureCard extends StatelessWidget {
   const LiveCaptureCard({
     super.key,
     required this.source,
-    required this.stateLabel,
-    required this.paused,
+    required this.status,
+    this.detail,
+    this.explanation,
+    this.paused = false,
     this.elapsed,
     this.lastLine,
     this.note,
@@ -24,9 +30,17 @@ class LiveCaptureCard extends StatelessWidget {
 
   /// A conversation source ('omi', 'phone', …) or [callSource].
   final String source;
-  final String stateLabel;
 
-  /// Paused or degraded (amber dot) rather than live (red dot).
+  /// Line 1: the short state name. Must fit one line at 320pt and 1.3x text in English.
+  final String status;
+
+  /// Line 2, after the timer: the consequence of the state, if any.
+  final String? detail;
+
+  /// For a problem state: what the details sheet says. Marks the card with a warning glyph.
+  final String? explanation;
+
+  /// The reader (or the pendant) paused capture: the trailing control resumes.
   final bool paused;
   final Duration? elapsed;
   final String? lastLine;
@@ -36,6 +50,9 @@ class LiveCaptureCard extends StatelessWidget {
   final VoidCallback? onPauseToggle;
 
   static const String callSource = 'call';
+
+  /// Diameter of the leading source glyph's circle.
+  static const double sourceDiameter = 36;
 
   /// Pausing means nothing to a photo-capture device (OmiGlass, Ray-Ban Meta): it keeps taking
   /// photos. The live card and the live page use this one rule.
@@ -50,45 +67,96 @@ class LiveCaptureCard extends StatelessWidget {
     return h > 0 ? '$h:${m.toString().padLeft(2, '0')}:$s' : '$m:$s';
   }
 
+  /// The details sheet for a problem state: what is happening and that the audio is safe.
+  static Future<void> showDetails(BuildContext context, {required String title, required String explanation}) {
+    return showOmiSheet<void>(
+      context: context,
+      title: title,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(explanation, style: OmiType.body.copyWith(color: OmiColors.textSecondary)),
+            const SizedBox(height: OmiSpacing.lg),
+            OmiButton(label: sheetContext.l10n.gotIt, onPressed: () => Navigator.pop(sheetContext)),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final isCall = source == callSource;
-    final label = isCall
+    final sourceName = isCall
         ? l10n.captureSourceCall
         : source == 'phone'
             ? l10n.phone
             : CaptureSources.label(context, source);
     final secondary = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
-    final separator = Text('  ·  ', style: OmiType.subhead.copyWith(color: OmiColors.textTertiary));
-    final statusRow = Row(children: [
-      Expanded(
-        child: Row(children: [
-          ExcludeSemantics(
-            child:
-                Icon(isCall ? Icons.call_rounded : CaptureSources.icon(source), size: 18, color: OmiColors.textPrimary),
-          ),
-          const SizedBox(width: OmiSpacing.xs),
-          Text(label, maxLines: 1, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
-          separator,
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: paused ? OmiColors.warning : OmiColors.danger, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: OmiSpacing.xs),
-          // The state gives way first on a narrow screen or in a long language.
-          // Long states (offline buffering, in a long language) take a second line, not an ellipsis.
-          Flexible(child: Text(stateLabel, maxLines: 2, overflow: TextOverflow.ellipsis, style: secondary)),
-          if (elapsed != null) ...[
-            separator,
-            Text(formatElapsed(elapsed!),
-                style: secondary.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
-          ],
-        ]),
+    final problem = explanation != null;
+
+    final leading = Semantics(
+      label: sourceName,
+      excludeSemantics: true,
+      child: Container(
+        width: sourceDiameter,
+        height: sourceDiameter,
+        alignment: Alignment.center,
+        decoration: const BoxDecoration(color: OmiColors.surface2, shape: BoxShape.circle),
+        child: Icon(isCall ? Icons.call_rounded : CaptureSources.icon(source), size: 18, color: OmiColors.textPrimary),
       ),
+    );
+
+    final line2 = [
+      if (elapsed != null) formatElapsed(elapsed!),
+      if (detail != null) detail!,
+    ].join('  ·  ');
+    Widget text = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        if (problem) ...[
+          const ExcludeSemantics(child: Icon(Icons.warning_amber_rounded, size: 18, color: OmiColors.warning)),
+          const SizedBox(width: OmiSpacing.xxs),
+        ],
+        // The short status always fits in English; a longer translation gives up its tail only.
+        Flexible(
+          child: Text(status,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
+        ),
+      ]),
+      if (line2.isNotEmpty)
+        // The consequence wraps rather than losing its meaning at large text sizes.
+        Text(line2,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: secondary.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+    ]);
+    if (problem) {
+      text = Semantics(
+        button: true,
+        hint: l10n.learnMore,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => showDetails(context, title: status, explanation: explanation!),
+          child: ConstrainedBox(constraints: const BoxConstraints(minHeight: kOmiMinTapTarget), child: text),
+        ),
+      );
+    }
+
+    final statusRow = Row(children: [
+      leading,
+      const SizedBox(width: OmiSpacing.xs),
+      Expanded(child: text),
       if (isCall)
-        const Icon(Icons.chevron_right_rounded, size: 22, color: OmiColors.textTertiary)
+        const SizedBox(
+          width: kOmiMinTapTarget,
+          child: Icon(Icons.chevron_right_rounded, size: 22, color: OmiColors.textTertiary),
+        )
       else if (onPauseToggle != null)
         OmiIconButton.filled(
           icon: Icon(paused ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 22),
@@ -101,7 +169,7 @@ class LiveCaptureCard extends StatelessWidget {
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
       statusRow,
       if (lastLine != null && lastLine!.trim().isNotEmpty) ...[
-        const SizedBox(height: OmiSpacing.xs),
+        const SizedBox(height: OmiSpacing.sm),
         Text('… ${lastLine!.trim()}', maxLines: 1, overflow: TextOverflow.ellipsis, style: secondary),
       ],
       if (note != null) ...[

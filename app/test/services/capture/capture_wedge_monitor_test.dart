@@ -13,6 +13,7 @@ void main() {
   CaptureWedgeMonitor makeMonitor({
     Future<bool> Function()? featureGate,
     Future<void> Function(String deviceId)? bleRetry,
+    Future<void> Function()? transferRetry,
     bool withRetry = false,
   }) {
     return CaptureWedgeMonitor(
@@ -20,6 +21,7 @@ void main() {
       featureGate: featureGate ?? () async => flagEnabled,
       track: (event, properties) => events.add((event: event, properties: properties)),
       bleRetry: withRetry ? (bleRetry ?? ((deviceId) async => retriedDevices.add(deviceId))) : (_) async {},
+      transferRetry: transferRetry,
       appBuild: () => '987',
       platform: () => 'ios',
     );
@@ -34,7 +36,9 @@ void main() {
   }
 
   void positiveSession(CaptureWedgeMonitor monitor, {String deviceId = 'dev-a', String source = 'omi'}) {
-    monitor.onCaptureSessionEnded(connectedSession(monitor, deviceId: deviceId, source: source), binaryBytesSent: 320);
+    final handle = connectedSession(monitor, deviceId: deviceId, source: source);
+    monitor.onTranscriptObserved(deviceId);
+    monitor.onCaptureSessionEnded(handle, binaryBytesSent: 320);
   }
 
   List<Map<String, Object>> forEvent(String name) =>
@@ -189,8 +193,11 @@ void main() {
   });
 
   group('rapid BLE drops', () {
-    void bleDrop(CaptureWedgeMonitor monitor,
-        {String deviceId = 'dev-a', Duration duration = const Duration(seconds: 3)}) {
+    void bleDrop(
+      CaptureWedgeMonitor monitor, {
+      String deviceId = 'dev-a',
+      Duration duration = const Duration(seconds: 3),
+    }) {
       monitor.onBleSessionEnded(deviceId: deviceId, deviceType: DeviceType.omi, duration: duration);
     }
 
@@ -291,10 +298,7 @@ void main() {
 
     test('the retry-induced BLE end neither counts as a drop nor clears the episode', () async {
       final retryGate = Completer<void>();
-      final monitor = makeMonitor(
-        withRetry: true,
-        bleRetry: (_) => retryGate.future,
-      );
+      final monitor = makeMonitor(withRetry: true, bleRetry: (_) => retryGate.future);
       bleDrop(monitor);
       bleDrop(monitor);
       bleDrop(monitor);
@@ -313,6 +317,106 @@ void main() {
       monitor.onBleSessionEnded(deviceId: 'dev-a', deviceType: DeviceType.omi, duration: const Duration(seconds: 2));
       await pumpEventQueue();
       expect(forEvent('Capture Wedge Detected'), hasLength(1));
+    });
+  });
+
+  group('transport bytes without transcript', () {
+    void noTranscriptSession(CaptureWedgeMonitor monitor) {
+      monitor.onCaptureSessionEnded(connectedSession(monitor), binaryBytesSent: 320);
+    }
+
+    test('three byte-producing sessions with no transcript declare an ungated wedge', () async {
+      flagEnabled = false;
+      final monitor = makeMonitor(withRetry: true);
+      noTranscriptSession(monitor);
+      noTranscriptSession(monitor);
+      noTranscriptSession(monitor);
+      await pumpEventQueue();
+
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerBytesSentNoTranscript);
+      expect(retriedDevices, ['dev-a']);
+      expect(forEvent('Capture Wedge Detected').single['trigger'], 'bytes_sent_no_transcript');
+    });
+
+    test('an observed transcript clears the no-transcript streak', () async {
+      final monitor = makeMonitor();
+      noTranscriptSession(monitor);
+      noTranscriptSession(monitor);
+      positiveSession(monitor);
+      noTranscriptSession(monitor);
+      noTranscriptSession(monitor);
+      await pumpEventQueue();
+
+      expect(monitor.visiblePrompt, isNull);
+    });
+
+    test('connected watchdog declares while the byte-producing socket never ends', () async {
+      var transferRetries = 0;
+      final monitor = makeMonitor(transferRetry: () async => transferRetries++);
+      final handle = connectedSession(monitor);
+      monitor.onSocketBytesSent(handle, 640);
+
+      now = now.add(CaptureWedgeMonitor.connectedNoTranscriptWindow);
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+
+      expect(transferRetries, 1);
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerBytesSentNoTranscript);
+      final detected = forEvent('Capture Wedge Detected').single;
+      expect(detected['bytes_since_last_transcript'], 640);
+      expect(detected['socket_still_connected'], isTrue);
+      monitor.dispose();
+    });
+  });
+
+  group('upload silence', () {
+    test('two-hour local backlog is surfaced and wakes transfer even with the legacy flag off', () async {
+      var transferRetries = 0;
+      flagEnabled = false;
+      final monitor = makeMonitor(transferRetry: () async => transferRetries++);
+
+      monitor.observeWalBacklog(pendingCount: 4, oldestPendingAt: now.subtract(const Duration(hours: 2)));
+      await pumpEventQueue();
+
+      expect(transferRetries, 1);
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerUploadSilence);
+      final detected = forEvent('Capture Wedge Detected').single;
+      expect(detected['pending_wal_count'], 4);
+      expect(detected['oldest_pending_age_seconds'], 7200);
+    });
+
+    test('recent backlog stays quiet and a successful upload resolves an active episode', () async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      monitor.observeWalBacklog(pendingCount: 2, oldestPendingAt: now.subtract(const Duration(minutes: 119)));
+      await pumpEventQueue();
+      expect(monitor.visiblePrompt, isNull);
+
+      monitor.observeWalBacklog(pendingCount: 2, oldestPendingAt: now.subtract(const Duration(hours: 3)));
+      await pumpEventQueue();
+      expect(monitor.visiblePrompt, isNotNull);
+      monitor.onUploadCompleted();
+      expect(monitor.visiblePrompt, isNull);
+      expect(forEvent('Capture Recovery Resolved'), hasLength(1));
+    });
+  });
+
+  group('storage retention risk', () {
+    test('cap engagement is surfaced once with eviction telemetry', () async {
+      var transferRetries = 0;
+      final monitor = makeMonitor(transferRetry: () async => transferRetries++);
+      final engagedAt = now;
+
+      monitor.observeStorageAtRisk(engagedAt: engagedAt, evictedCount: 3, retainedCount: 720);
+      monitor.observeStorageAtRisk(engagedAt: engagedAt, evictedCount: 3, retainedCount: 720);
+      await pumpEventQueue();
+
+      expect(transferRetries, 1);
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk);
+      final detected = forEvent('Capture Wedge Detected').single;
+      expect(detected['evicted_wal_count'], 3);
+      expect(detected['retained_wal_count'], 720);
+      expect(detected['retention_policy'], 'oldest_first_count_cap');
+      monitor.dispose();
     });
   });
 
@@ -360,10 +464,7 @@ void main() {
 
     test('dismissDeviceEpisode during an in-flight retry suppresses the prompt', () async {
       final retryGate = Completer<void>();
-      final monitor = makeMonitor(
-        withRetry: true,
-        bleRetry: (deviceId) => retryGate.future,
-      );
+      final monitor = makeMonitor(withRetry: true, bleRetry: (deviceId) => retryGate.future);
       zeroSession(monitor);
       zeroSession(monitor);
       zeroSession(monitor);
@@ -387,10 +488,7 @@ void main() {
 
     test('a positive session during retry resolves without a prompt', () async {
       final retryGate = Completer<void>();
-      final monitor = makeMonitor(
-        withRetry: true,
-        bleRetry: (deviceId) => retryGate.future,
-      );
+      final monitor = makeMonitor(withRetry: true, bleRetry: (deviceId) => retryGate.future);
       zeroSession(monitor);
       zeroSession(monitor);
       zeroSession(monitor);
@@ -457,11 +555,7 @@ void main() {
       zeroSession(monitor);
       zeroSession(monitor);
       for (var i = 0; i < 3; i++) {
-        monitor.onBleSessionEnded(
-          deviceId: 'dev-a',
-          deviceType: DeviceType.omi,
-          duration: const Duration(seconds: 2),
-        );
+        monitor.onBleSessionEnded(deviceId: 'dev-a', deviceType: DeviceType.omi, duration: const Duration(seconds: 2));
       }
       await pumpEventQueue();
       expect(monitor.visiblePrompt, isNull);
