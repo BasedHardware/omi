@@ -16,6 +16,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database import conversations as conversations_db
+from database import recording_sessions as recording_sessions_db
 from database._client import document_id_from_seed, get_firestore_client
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_index_registry import (
@@ -343,6 +344,40 @@ def recovery_admission_refusal(
     return None
 
 
+def _has_active_recording_session_lease(
+    transaction: Any,
+    recording_sessions_collection: Any | None,
+    uid: str,
+    conversation_id: str,
+    conversation: Mapping[str, Any],
+    now: datetime,
+) -> bool:
+    """Read the live-session fence in the same transaction as recovery admission."""
+    external_data = conversation.get('external_data') or {}
+    if not isinstance(external_data, Mapping):
+        return False
+    recording_session_id = external_data.get('recording_session_id')
+    if not isinstance(recording_session_id, str) or not recording_session_id or recording_sessions_collection is None:
+        return False
+    snapshot = recording_sessions_collection.document(recording_session_id).get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return False
+    session = snapshot.to_dict() or {}
+    if (
+        session.get('uid') != uid
+        or session.get('recording_session_id') != recording_session_id
+        or session.get('conversation_id') != conversation_id
+        or str(session.get('lifecycle_phase') or '') != 'in_progress'
+    ):
+        return False
+    lease_expires_at = session.get('lease_expires_at')
+    if not isinstance(lease_expires_at, datetime):
+        return False
+    if lease_expires_at.tzinfo is None and now.tzinfo is not None:
+        lease_expires_at = lease_expires_at.replace(tzinfo=timezone.utc)
+    return lease_expires_at > now
+
+
 def _snapshot_bound_projection_updates(
     uid: str,
     conversation: Mapping[str, Any],
@@ -414,6 +449,7 @@ def _create_or_get_finalization_intent_txn(
     trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     extra_updates: Mapping[str, Any] | None = None,
     recovery_cutoff: datetime | None = None,
+    recording_sessions_collection: Any | None = None,
 ) -> FinalizationIntent:
     """Persist finalization ownership before any pusher or task handoff.
 
@@ -436,6 +472,16 @@ def _create_or_get_finalization_intent_txn(
             refusal = recovery_admission_refusal(uid, loaded, recovery_cutoff)
             if refusal is not None:
                 intent = _no_finalization_intent(f'refused_{refusal}')
+                return intent
+            if _has_active_recording_session_lease(
+                transaction,
+                recording_sessions_collection,
+                uid,
+                conversation_id,
+                loaded,
+                now,
+            ):
+                intent = _no_finalization_intent('refused_active_recording_session')
                 return intent
         if loaded.get('deferred'):
             intent = _no_finalization_intent('deferred')
@@ -586,6 +632,9 @@ def create_or_get_finalization_intent(
     conversation_ref = _conversation_ref(client, uid, conversation_id)
     jobs_collection = client.collection(FINALIZATION_JOBS_COLLECTION)
     projection_collection = client.collection(FINALIZATION_PROJECTION_COLLECTION)
+    recording_sessions_collection = (
+        client.collection('users').document(uid).collection(recording_sessions_db.RECORDING_SESSIONS_COLLECTION)
+    )
 
     def create_intent_in_transaction(transaction: Any) -> FinalizationIntent:
         # The Firestore SDK's transactional wrapper retains retry state. Build
@@ -605,6 +654,7 @@ def create_or_get_finalization_intent(
             trigger=trigger,
             extra_updates=extra_updates,
             recovery_cutoff=recovery_cutoff,
+            recording_sessions_collection=recording_sessions_collection,
         )
 
     return run_with_transaction_contention_retry(
