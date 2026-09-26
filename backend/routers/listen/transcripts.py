@@ -388,14 +388,13 @@ class TranscriptProcessor:
             self.segment_buffer.clear()
             photos = list(self.photo_buffer)
             self.photo_buffer.clear()
-            if not self.host.state.first_audio_byte_timestamp:
-                continue
             if getattr(self.host.state, 'capture_timeline_v2', False):
-                # Audio-timeline v2 persistence: segments already carry
-                # absolute projected wall times and their owning conversation
-                # from the capture span; offsets are computed against the
-                # pinned origin below.
                 await self._process_v2_batches(raw_segments, photos, diarized_speaker_ids_by_conversation)
+                continue
+            if not self.host.state.first_audio_byte_timestamp:
+                if self.host.state.active:
+                    self.segment_buffer.extend(raw_segments)
+                    self.photo_buffer.extend(photos)
                 continue
             # Legacy persistence (flag off, resumed rows, custom/multi channel).
             # Segments may still carry a capture-clock window attached by the
@@ -427,7 +426,7 @@ class TranscriptProcessor:
                     persisted_started_seconds(data.get('started_at')) or self.host.state.first_audio_byte_timestamp
                 )
                 offset = self.host.state.first_audio_byte_timestamp - started_ts
-                self.speaker_id_allocator.hydrate(data.get('transcript_segments', []))
+                self.speaker_id_allocator.hydrate(data.get('transcript_segments') or [])
                 for raw in raw_segments:
                     self.speaker_id_allocator.assign(raw)
                     raw['start'] += offset
@@ -552,11 +551,11 @@ class TranscriptProcessor:
             is_current = owner == state.current_conversation_id
             data = await self.cache.get(owner) if is_current else await self._load_conversation(owner)
             if not data:
-                if is_current and segments:
-                    # The conversation row may be a beat behind its binding;
-                    # re-queue rather than drop live speech.
+                if is_current:
                     for segment in reversed(segments):
                         self.segment_buffer.appendleft(segment)
+                    for photo in reversed(photos):
+                        self.photo_buffer.appendleft(photo)
                 else:
                     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='late_owner_dropped').inc()
                 continue
@@ -602,11 +601,11 @@ class TranscriptProcessor:
                 pin_started_at = None
                 pin_marker = None
             else:
-                if is_current and segments:
-                    # First audio not observed yet; the origin is pinned by the
-                    # receiver at the next accepted frame.
+                if is_current:
                     for segment in reversed(segments):
                         self.segment_buffer.appendleft(segment)
+                    for photo in reversed(photos):
+                        self.photo_buffer.appendleft(photo)
                     continue
                 OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='late_owner_dropped').inc()
                 continue
@@ -620,16 +619,13 @@ class TranscriptProcessor:
             new_segments: List[TranscriptSegment] = []
             if segments:
                 state.last_transcript_time = time.time()
-                self.speaker_id_allocator.hydrate(data.get('transcript_segments', []))
+                self.speaker_id_allocator.hydrate(data.get('transcript_segments') or [])
                 for raw in segments:
                     self.speaker_id_allocator.assign(raw)
                     raw['start'] = float(raw['start']) - started_ts
                     raw['end'] = float(raw['end']) - started_ts
                     segment = TranscriptSegment(**raw, speech_profile_processed=True)
-                    if (
-                        self.host.onboarding_handler is not None
-                        and raw.get('speaker_id') != self.host.onboarding_omi_speaker_id
-                    ):
+                    if self.host.onboarding_handler and raw.get('speaker_id') != self.host.onboarding_omi_speaker_id:
                         segment.is_user = True
                         segment.speaker_identity_status = SpeakerIdentityStatus.user
                     new_segments.append(segment)

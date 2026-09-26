@@ -1198,3 +1198,140 @@ async def test_heartbeat_stops_after_close_message_instead_of_crashing():
     await runtime._heartbeat()
 
     assert runtime.state.active is False
+
+
+@pytest.mark.anyio
+async def test_process_loop_v2_drains_photos_before_first_audio_byte_timestamp(monkeypatch):
+    """Photos submitted before any audio frames arrive must be processed and persisted
+    in v2 audio-timeline mode rather than dropped by a first_audio_byte_timestamp guard."""
+    from collections import deque
+    import routers.listen.transcripts as transcripts_module
+
+    updated_photos = []
+
+    state = SimpleNamespace(
+        active=True,
+        first_audio_byte_timestamp=None,
+        last_transcript_time=None,
+        words_transcribed_since_last_record=0,
+        current_conversation_id='conversation-1',
+        capture_timeline_v2=True,
+        conversation_capture_origins={},
+        conversations_legacy_locked=set(),
+        speaker_id_done=asyncio.Event(),
+        speaker_map_dirty=False,
+    )
+    state.speaker_id_done.set()
+
+    async def wait(_seconds):
+        state.active = False
+        return False
+
+    async def cache_get(_conversation_id):
+        return {'id': 'conversation-1', 'transcript_segments': [], 'started_at': 1700000000.0}
+
+    async def update(_conversation, segments, photos, _finished_at, _started_at, **kwargs):
+        updated_photos.extend(photos)
+        return SimpleNamespace(id='conversation-1'), segments, []
+
+    host = SimpleNamespace(
+        state=state,
+        wait=wait,
+        request=SimpleNamespace(uid='user-1', onboarding_mode=False),
+        onboarding_handler=None,
+        send_event=lambda _event: None,
+        speakers=SimpleNamespace(drain=AsyncMock(), tasks=set()),
+        complete_live_transcription=lambda: None,
+        limits=SimpleNamespace(max_segment_buffer_size=8, max_photo_buffer_size=8),
+        translation_language=None,
+    )
+
+    processor = object.__new__(TranscriptProcessor)
+    processor.host = host
+    processor.segment_buffer = deque()
+    photo_item = SimpleNamespace(id='photo-1')
+    processor.photo_buffer = deque([photo_item])
+    processor.cache = SimpleNamespace(get=cache_get)
+    processor._load_conversation = cache_get
+    processor.current_session_segments = {}
+    processor.speaker_id_allocator = SimpleNamespace(hydrate=lambda _segments: None, assign=lambda _segment: None)
+    processor._update_live_conversation = update
+    processor._deliver_live_updates = AsyncMock()
+    processor._speaker_detection = AsyncMock()
+    processor.flush_speaker_assignments = AsyncMock()
+    processor._flush_failures = 0
+    processor._flush_backoff_until = 0.0
+
+    monkeypatch.setattr(
+        transcripts_module, 'deserialize_conversation', lambda _data: SimpleNamespace(id='conversation-1')
+    )
+
+    await processor.process_loop()
+
+    assert len(updated_photos) == 1
+    assert updated_photos[0].id == 'photo-1'
+    assert len(processor.photo_buffer) == 0
+
+
+@pytest.mark.anyio
+async def test_process_loop_legacy_requeues_segments_and_photos_if_first_audio_missing():
+    """In legacy mode, segments and photos arriving before first audio must be retained/re-queued
+    while the session is active, rather than dropped permanently from the processor buffers."""
+    from collections import deque
+
+    state = SimpleNamespace(
+        active=True,
+        first_audio_byte_timestamp=None,
+        last_transcript_time=None,
+        words_transcribed_since_last_record=0,
+        current_conversation_id='conversation-1',
+        capture_timeline_v2=False,
+        speaker_id_done=asyncio.Event(),
+        speaker_map_dirty=False,
+    )
+    state.speaker_id_done.set()
+
+    observed_requeued = False
+    call_count = 0
+
+    async def wait(_seconds):
+        nonlocal call_count, observed_requeued
+        call_count += 1
+        if call_count == 1:
+            return False
+        observed_requeued = len(processor.segment_buffer) == 1 and len(processor.photo_buffer) == 1
+        state.active = False
+        return False
+
+    host = SimpleNamespace(
+        state=state,
+        wait=wait,
+        request=SimpleNamespace(uid='user-1', onboarding_mode=False),
+        onboarding_handler=None,
+        send_event=lambda _event: None,
+        speakers=SimpleNamespace(drain=AsyncMock(), tasks=set()),
+        complete_live_transcription=lambda: None,
+        limits=SimpleNamespace(max_segment_buffer_size=8, max_photo_buffer_size=8),
+        translation_language=None,
+    )
+
+    processor = object.__new__(TranscriptProcessor)
+    processor.host = host
+    segment_item = {'id': 'seg-1', 'text': 'hi', 'start': 0.0, 'end': 1.0}
+    photo_item = SimpleNamespace(id='photo-1')
+    processor.segment_buffer = deque([segment_item])
+    processor.photo_buffer = deque([photo_item])
+    processor.cache = SimpleNamespace(get=AsyncMock())
+    processor._load_conversation = AsyncMock()
+    processor.current_session_segments = {}
+    processor.speaker_id_allocator = SimpleNamespace(hydrate=lambda _segments: None, assign=lambda _segment: None)
+    processor._update_live_conversation = AsyncMock()
+    processor._deliver_live_updates = AsyncMock()
+    processor._speaker_detection = AsyncMock()
+    processor.flush_speaker_assignments = AsyncMock()
+    processor._flush_failures = 0
+    processor._flush_backoff_until = 0.0
+
+    await processor.process_loop()
+
+    assert observed_requeued is True
