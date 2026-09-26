@@ -1,5 +1,6 @@
 import copy
 import json
+import concurrent.futures
 import logging
 import uuid
 import zlib
@@ -1683,6 +1684,8 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
         ],
     )
 
+    successful_snapshots = []
+
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
             logger.warning(f"Conversation {doc_snapshot.id} not found, skipping.")
@@ -1713,35 +1716,49 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             transaction.update(doc_snapshot.reference, prepared)
             return True
 
-        if not _migrate(db.transaction()):
-            continue
+        if _migrate(db.transaction()):
+            successful_snapshots.append(doc_snapshot)
 
-        # Photos retain their separate batched migration path.
-        photos_ref = doc_snapshot.reference.collection('photos')
-        photos_stream = photos_ref.select(['data_protection_level', 'base64']).stream()
-        for photo_doc in photos_stream:
-            photo_data = photo_doc.to_dict()
-            current_photo_level = photo_data.get('data_protection_level', 'standard')
-            if current_photo_level == target_level:
+    # Photos retain their separate batched migration path.
+    # Execute photo queries in parallel for the successful snapshots
+    def _fetch_photos(doc_snap):
+        if not doc_snap.exists:
+            return []
+        photos_ref = doc_snap.reference.collection('photos')
+        return list(photos_ref.select(['data_protection_level', 'base64']).stream())
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        futures = {executor.submit(_fetch_photos, doc_snap): doc_snap for doc_snap in successful_snapshots}
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                photos = future.result()
+            except Exception as e:
+                logger.error(f"Failed to fetch photos for conversation {futures[future].id}: {e}")
                 continue
 
-            # Decrypt first to get a clean state
-            plain_photo_data = _prepare_photo_for_read(photo_data, uid)
+            for photo_doc in photos:
+                photo_data = photo_doc.to_dict()
+                current_photo_level = photo_data.get('data_protection_level', 'standard')
+                if current_photo_level == target_level:
+                    continue
 
-            # Prepare the specific fields for update
-            photo_update_payload = {'data_protection_level': target_level}
-            if target_level == 'enhanced':
-                photo_update_payload['base64'] = encryption.encrypt(plain_photo_data['base64'], uid)
-            else:  # Moving from enhanced to standard
-                photo_update_payload['base64'] = plain_photo_data['base64']
+                # Decrypt first to get a clean state
+                plain_photo_data = _prepare_photo_for_read(photo_data, uid)
 
-            # Add photo update to the batch
-            batch.update(photo_doc.reference, photo_update_payload)
-            batch_count += 1
-            if batch_count >= 100:
-                batch.commit()
-                batch = db.batch()
-                batch_count = 0
+                # Prepare the specific fields for update
+                photo_update_payload = {'data_protection_level': target_level}
+                if target_level == 'enhanced':
+                    photo_update_payload['base64'] = encryption.encrypt(plain_photo_data['base64'], uid)
+                else:  # Moving from enhanced to standard
+                    photo_update_payload['base64'] = plain_photo_data['base64']
+
+                # Add photo update to the batch
+                batch.update(photo_doc.reference, photo_update_payload)
+                batch_count += 1
+                if batch_count >= 100:
+                    batch.commit()
+                    batch = db.batch()
+                    batch_count = 0
 
     if batch_count > 0:
         batch.commit()
