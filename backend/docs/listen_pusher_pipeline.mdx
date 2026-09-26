@@ -855,6 +855,8 @@ intervening silence; overlapping frames count once. Multiple queries use live's
 normalized mean embedding and unchanged 0.65 threshold / 0.10 margin. The batch
 floor stays at one second **total**, not live's five-second waiting policy.
 Longest-segment speaker ordering and post-comparison person dedup stay intact.
+The sync pipeline and pusher shadow pass share these speaker identity helpers in
+`utils/sync/speaker_identity.py`; the pusher must not import the sync pipeline's local VAD stack.
 `speaker_id_decision` keeps the legacy fields (`clip_seconds` is the longest
 segment, historically capped at 10 seconds during extraction) and adds `segments`,
 `clips`, actual `evidence_seconds`, distinct `available_seconds`, `failed_clips`,
