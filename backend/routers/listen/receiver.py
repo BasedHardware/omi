@@ -910,6 +910,17 @@ class ListenReceiver:
         self.stt_socket = None
         self.stt_sockets_multi = [None] * len(self.channel_configs)
 
+    def _wrap_legacy_stt_socket(self, raw: Any, epoch: Optional[ProviderEpochTranslator]) -> Any:
+        """Keep send accounting when VAD is disabled or fails to initialize."""
+        if getattr(raw, 'manages_vad', False) or (self.vad_gate is None and epoch is None):
+            return raw
+        return GatedSTTSocket(
+            raw,
+            gate=self.vad_gate,
+            passthrough_audio=self.host.stt_service == STTService.modulate,
+            send_tracker=epoch,
+        )
+
     async def initialize_stt(self) -> bool:
         request = self.host.request
         if self.host.use_custom_stt:
@@ -975,12 +986,7 @@ class ListenReceiver:
                 return False
             if epoch is not None:
                 epoch.provider_label = audio_timeline_provider_label(getattr(self.host.stt_service, 'value', None))
-            passthrough = self.host.stt_service == STTService.modulate
-            self.stt_socket = (
-                GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough, send_tracker=epoch)
-                if self.vad_gate and not getattr(raw, 'manages_vad', False)
-                else raw
-            )
+            self.stt_socket = self._wrap_legacy_stt_socket(raw, epoch)
             # Retained so a mid-session failover can rebuild the socket against the
             # next provider without re-deriving the callbacks or the gate.
             self._stt_rebuild = (self._build_stt_callbacks, request.sample_rate)
@@ -1070,12 +1076,7 @@ class ListenReceiver:
                 self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
             return False
 
-        passthrough = self.host.stt_service == STTService.modulate
-        self.stt_socket = (
-            GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough, send_tracker=epoch)
-            if self.vad_gate and not getattr(raw, 'manages_vad', False)
-            else raw
-        )
+        self.stt_socket = self._wrap_legacy_stt_socket(raw, epoch)
         self._pending_live_failover = hop
         record_live_stt_failover_accepted(provider=self.host.stt_service.value, platform=self._telemetry_platform())
         logger.info(f'STT failover mid-session: {dead_provider} -> {self.host.stt_service.value}')
