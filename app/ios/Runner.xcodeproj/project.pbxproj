@@ -38,6 +38,7 @@
 		42B17C642F69B9E100BFDA9D /* BleHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */; };
 		E91B0002E91B0002E91B0002 /* OmiBleEnergyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */; };
 		E91C0002E91C0002E91C0002 /* OmiBlePairingPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91C0001E91C0001E91C0001 /* OmiBlePairingPolicy.swift */; };
+		E91D0002E91D0002E91D0002 /* OmiBleDiscoveryNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91D0001E91D0001E91D0001 /* OmiBleDiscoveryNaming.swift */; };
 		42B17C7C2F69BC6600BFDA9D /* PigeonCommunicator.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */; };
 		42BABFB82F2A81B100E78A3C /* OmiRecordingAudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */; };
 		42BABFB92F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */; };
@@ -82,6 +83,7 @@
 		99ADCEC5933A6FA3EE3AAE5D /* OmiBleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */; };
 		E91B0003E91B0003E91B0003 /* OmiBleEnergyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */; };
 		E91C0003E91C0003E91C0003 /* OmiBlePairingPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91C0001E91C0001E91C0001 /* OmiBlePairingPolicy.swift */; };
+		E91D0003E91D0003E91D0003 /* OmiBleDiscoveryNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91D0001E91D0001E91D0001 /* OmiBleDiscoveryNaming.swift */; };
 		9A25BD940EC94B21766CB950 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E5BBFB39079A4743502BBEE /* Pods_Runner.framework */; };
 		9A26EFBA2ABCE6C441ADBE8E /* OmiCallCoordinatorProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC62F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift */; };
 		9A519AEFA12F139B0082101F /* Base.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF2F518C2EC08EA60025B331 /* Base.xcconfig */; };
@@ -218,6 +220,7 @@
 		42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BleHostApiImpl.swift; sourceTree = "<group>"; };
 		E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleEnergyPolicy.swift; sourceTree = "<group>"; };
 		E91C0001E91C0001E91C0001 /* OmiBlePairingPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBlePairingPolicy.swift; sourceTree = "<group>"; };
+		E91D0001E91D0001E91D0001 /* OmiBleDiscoveryNaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleDiscoveryNaming.swift; sourceTree = "<group>"; };
 		42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PigeonCommunicator.g.swift; sourceTree = "<group>"; };
 		42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiRecordingAudioDevice.swift; sourceTree = "<group>"; };
 		42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiPhoneCallsPlugin.swift; sourceTree = "<group>"; };
@@ -512,6 +515,7 @@
 			children = (
 				E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */,
 				E91C0001E91C0001E91C0001 /* OmiBlePairingPolicy.swift */,
+				E91D0001E91D0001E91D0001 /* OmiBleDiscoveryNaming.swift */,
 				42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */,
 				42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */,
 			);
@@ -954,6 +958,7 @@
 				E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */,
 				E91B0002E91B0002E91B0002 /* OmiBleEnergyPolicy.swift in Sources */,
 				E91C0002E91C0002E91C0002 /* OmiBlePairingPolicy.swift in Sources */,
+				E91D0002E91D0002E91D0002 /* OmiBleDiscoveryNaming.swift in Sources */,
 				42B17C622F69B9CF00BFDA9D /* OmiBleManager.swift in Sources */,
 				BAADF00DF00DF00DF00DF0D2 /* BatchAudioWriter.swift in Sources */,
 				BAADF00DF00DF00DF00DF0D4 /* BaseBatchAudioWriter.swift in Sources */,
@@ -1003,6 +1008,7 @@
 				E1293502E1293502E1293502 /* SpeechDeadline.swift in Sources */,
 				E91B0003E91B0003E91B0003 /* OmiBleEnergyPolicy.swift in Sources */,
 				E91C0003E91C0003E91C0003 /* OmiBlePairingPolicy.swift in Sources */,
+				E91D0003E91D0003E91D0003 /* OmiBleDiscoveryNaming.swift in Sources */,
 				99ADCEC5933A6FA3EE3AAE5D /* OmiBleManager.swift in Sources */,
 				0658C1BEFC86B56785C10A69 /* BatchAudioWriter.swift in Sources */,
 				BB125CDB70C0DB5AAFB15E9C /* BaseBatchAudioWriter.swift in Sources */,

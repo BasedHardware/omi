@@ -712,7 +712,11 @@ extension OmiBleManager: CBCentralManagerDelegate {
 
         let blePeripheral = BlePeripheral(
             uuid: uuid,
-            name: peripheral.name ?? "",
+            name: OmiBleDiscoveryNaming.discoveredName(
+                advertisedLocalName: advertisementData[CBAdvertisementDataLocalNameKey] as? String,
+                cachedName: peripheral.name,
+                advertisementData: advertisementData
+            ),
             rssi: Int64(RSSI.intValue),
             serviceUuids: serviceUuids
         )
