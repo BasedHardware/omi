@@ -4,19 +4,30 @@ import unittest
 from pathlib import Path
 import sys
 
-from openpyxl import load_workbook
+try:
+    import openpyxl
+    from openpyxl import load_workbook
+    HAS_OPENPYXL = True
+except ImportError:
+    HAS_OPENPYXL = False
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
 
-from goals_to_xlsx import (
-    convert,
-    parse_time,
-    sanitize_text,
-    to_float,
-)
+if HAS_OPENPYXL:
+    from goals_to_xlsx import (
+        convert,
+        parse_time,
+        sanitize_text,
+        to_float,
+    )
 
 
 class TestGoalsToXlsx(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if not HAS_OPENPYXL:
+            raise unittest.SkipTest("openpyxl is not installed")
+
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.dir_path = Path(self.temp_dir.name)
