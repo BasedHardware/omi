@@ -746,6 +746,7 @@ class GatedSTTSocket(STTSocket):
         if self._gate is None:
             accepted = self._conn.send(self._counted(data))
             if accepted is True and self._send_tracker is not None and start_sample is not None and len(data) >= 2:
+                self._send_tracker.send_path = 'direct_recorded'
                 self._send_tracker.note_accepted(start_sample, len(data) // 2)
             return accepted
 
@@ -765,6 +766,7 @@ class GatedSTTSocket(STTSocket):
             self._gate = None  # Disable gate for rest of session
             accepted = self._conn.send(data)
             if accepted is True and self._send_tracker is not None and start_sample is not None and len(data) >= 2:
+                self._send_tracker.send_path = 'direct_recorded'
                 self._send_tracker.note_accepted(start_sample, len(data) // 2)
             return accepted
         if self._raw_file:
@@ -783,6 +785,7 @@ class GatedSTTSocket(STTSocket):
             accepted = True
             sent_spans = ()
         if accepted is True and self._send_tracker is not None and sent_spans:
+            self._send_tracker.send_path = 'vad_gate_passthrough' if self._passthrough_audio else 'vad_gate_active'
             self._send_tracker.note_accepted_spans(sent_spans)
         if gate_out.should_finalize:
             try:

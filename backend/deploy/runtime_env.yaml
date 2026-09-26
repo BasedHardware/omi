@@ -236,6 +236,21 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://api.omiapi.com
+          TRANSCRIPTION_SHADOW_ENABLED:
+            value: 'false'
+            category: rollout
+          TRANSCRIPTION_SHADOW_KILL_SWITCH:
+            value: 'false'
+            category: rollout
+          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+            value: ''
+            category: rollout
+          TRANSCRIPTION_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+            value: '0'
+            category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           OMI_FIRESTORE_DATA_PLANE_PROJECT:
@@ -320,6 +335,21 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omiapi.com:80
+          TRANSCRIPTION_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSCRIPTION_SHADOW_KILL_SWITCH:
+            value: 'false'
+            category: rollout
+          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+            value: omi-release-probe
+            category: rollout
+          TRANSCRIPTION_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+            value: '1'
+            category: rollout
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
@@ -900,6 +930,21 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+            TRANSCRIPTION_SHADOW_ENABLED:
+              value: 'false'
+              category: rollout
+            TRANSCRIPTION_SHADOW_KILL_SWITCH:
+              value: 'false'
+              category: rollout
+            TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+              value: ''
+              category: rollout
+            TRANSCRIPTION_SHADOW_PERCENT:
+              value: '0'
+              category: rollout
+            TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+              value: '0'
+              category: rollout
             OMI_CUSTOMER_DATA_PROJECT:
               value: based-hardware
             GOOGLE_CLOUD_PROJECT:

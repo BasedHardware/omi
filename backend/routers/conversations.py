@@ -843,7 +843,7 @@ def get_conversations(
     limit: PositiveLimit = 100,
     offset: NonNegativeOffset = 0,
     statuses: Optional[str] = "processing,completed",
-    include_discarded: bool = True,
+    include_discarded: bool = False,
     sources: Optional[str] = Query(
         None,
         description="Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",

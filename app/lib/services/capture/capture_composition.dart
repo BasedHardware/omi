@@ -168,6 +168,7 @@ CaptureWedgeMonitor composeCaptureWedgeMonitor() {
       if (SharedPreferencesUtil().btDevice.id != deviceId) return;
       await deviceService.ensureConnection(deviceId, force: true);
     },
+    transferRetry: () => RecordingTransferCoordinator.instance.wake(WakeTrigger.dataStalled),
     appBuild: () => AnalyticsManager.appBuild,
     platform: () => AnalyticsManager.mobilePlatform,
   );

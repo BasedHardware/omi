@@ -396,42 +396,6 @@ actor ContextProactivityEngine {
     }
     var recentDeliveries = await store.recentDeliveredForBucket(
       bucketID: snapshot.bucketID, now: currentFrame.captureTime)
-    // The related-workstream section: validated facts from sibling buckets of
-    // the visit's live workstream, quality-gated and quoted as non-citable
-    // context. Read the flag once so section, dedup, and provenance agree; with
-    // the flag off (or no live tag) the prompt is byte-identical to today.
-    let workstreamPoolingEnabled = await MainActor.run {
-      ContextBucketsFeature.isWorkstreamPoolingEnabled
-    }
-    var workstreamSection: String? = nil
-    var workstreamProvenance: [String: Any]? = nil
-    var pooledFactIDs: Set<String> = []
-    if workstreamPoolingEnabled,
-      let liveTag = await store.liveWorkstreamTag(for: fence, now: currentFrame.captureTime)
-    {
-      let selected = ContextWorkstreamPooling.select(
-        await store.workstreamPool(
-          tag: liveTag, excludingBucketID: snapshot.bucketID, now: currentFrame.captureTime),
-        now: currentFrame.captureTime)
-      if !selected.isEmpty {
-        workstreamSection = ContextWorkstreamPooling.promptSection(
-          tag: liveTag, items: selected, now: currentFrame.captureTime)
-        pooledFactIDs = Set(selected.map(\.factID))
-        workstreamProvenance = [
-          "tag": liveTag,
-          "pooled_fact_ids": selected.map(\.factID),
-        ]
-      }
-      // Tag-aware dedup: with pooling, the same cross-app point is reachable
-      // from every bucket carrying this tag, so sibling deliveries join the
-      // bucket's own under the same prompt cap.
-      let workstreamDeliveries = await store.recentDeliveredForWorkstream(
-        tag: liveTag, excludingBucketID: snapshot.bucketID, now: currentFrame.captureTime)
-      recentDeliveries = Array(
-        (recentDeliveries + workstreamDeliveries)
-          .sorted { $0.deliveredAt > $1.deliveredAt }
-          .prefix(ContextBucketRecentDelivery.promptCap))
-    }
     let candidatesEnabled = await MainActor.run {
       ContextBucketsFeature.isProactiveCandidatesEnabled
     }
@@ -511,15 +475,14 @@ actor ContextProactivityEngine {
     let envSignal = await MainActor.run {
       EnvironmentalSpeakerAnalyzer.analyze(segments: LiveTranscriptMonitor.shared.segments)
     }
-    var volatileExtras = workstreamSection.map { "\n\n" + $0 } ?? ""
+    var volatileExtras = ""
     if candidatesEnabled {
       let selected = ContextWorkstreamPooling.selectRecent(
         await store.recentContextPool(
           excludingBucketID: snapshot.bucketID, now: currentFrame.captureTime),
         now: currentFrame.captureTime)
-      let fresh = selected.filter { !pooledFactIDs.contains($0.factID) }
       if let section = ContextWorkstreamPooling.recentContextPromptSection(
-        items: fresh, now: currentFrame.captureTime)
+        items: selected, now: currentFrame.captureTime)
       {
         volatileExtras += "\n\n" + section
       }
@@ -723,9 +686,6 @@ actor ContextProactivityEngine {
       if var hopProvenance = retrievalProvenance {
         hopProvenance["cited_refs"] = retrievedRefs
         provenance["retrieval"] = hopProvenance
-      }
-      if let workstreamProvenance {
-        provenance["workstream"] = workstreamProvenance
       }
       let provenanceData = try JSONSerialization.data(withJSONObject: provenance, options: [.sortedKeys])
       let provenanceJSON = String(data: provenanceData, encoding: .utf8) ?? "{}"

@@ -35,6 +35,7 @@ import pytest
 import routers.listen.receiver as receiver_module
 from database import conversations as conversations_db
 from routers.listen.contracts import ListenSessionState
+from routers.listen.conversations import LiveConversationController
 from routers.listen.receiver import ListenReceiver
 from routers.listen.transcripts import ConversationCache, TranscriptProcessor
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -231,7 +232,8 @@ async def test_late_final_resolves_owner_after_thirty_seconds(monkeypatch):
     assert len(receiver.collected) == 1
     assert receiver.collected[0]['_conversation_id'] == 'conv-r3'
 
-    # A segment straddling the A→B boundary is still dropped (fail closed).
+    # A segment straddling A→B keeps its text on the socket's original
+    # conversation without inventing an audio claim.
     receiver.collected.clear()
     receiver._enqueue_translated_segments(
         [
@@ -247,7 +249,9 @@ async def test_late_final_resolves_owner_after_thirty_seconds(monkeypatch):
             }
         ]
     )
-    assert receiver.collected == []
+    assert [segment['text'] for segment in receiver.collected] == ['straddle']
+    assert receiver.collected[0]['_conversation_id'] == 'conv-r3'
+    assert receiver.collected[0]['audio_alignment'] == 'unplaced'
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +293,9 @@ def test_translator_rejects_evicted_interval_segments():
     assert timeline.compacted_below_sample is not None and timeline.compacted_below_sample > old_start
 
     out = translator.translate([{'id': 'old', 'start': 0.0, 'end': 1.0, 'text': 'x'}])
-    assert out == []
+    assert [segment['text'] for segment in out] == ['x']
+    assert out[0]['audio_alignment'] == 'unplaced'
+    assert out[0]['start'] == out[0]['end'] == timeline.wall(timeline.next_sample)
     assert translator.rejected_segments == 1
 
 
@@ -428,7 +434,6 @@ async def test_resumed_v1_row_is_never_marked_v2(monkeypatch):
 
 async def test_resumed_row_with_string_started_at_adopts_it(monkeypatch):
     from routers.listen.contracts import ConversationCaptureOrigin
-    from routers.listen.conversations import LiveConversationController
 
     # The controller's adopt path parses the ISO string instead of falling
     # through to a fresh pin.
@@ -478,6 +483,21 @@ async def test_photo_only_drain_writes_photos(monkeypatch):
     assert 'audio_timeline' not in row, 'photos alone never pin the marker'
 
 
+async def test_load_conversation_coerces_a_null_transcript_segments_field(monkeypatch):
+    """A row persisted with `transcript_segments: None` (not merely absent) must come
+    back out of `_load_conversation` as `[]`: every caller downstream treats it as a
+    list (`Conversation` model validation, `ConversationSpeakerIdAllocator.hydrate`,
+    which iterates its argument directly and raises `TypeError` on `None`)."""
+    store = StrictFirestore()
+    row = _seed_row(store, 'conv-null', started_at=datetime.fromtimestamp(T0 - 5, tz=timezone.utc))
+    row['transcript_segments'] = None
+    processor, _sent = _processor(monkeypatch, store, current='conv-null')
+
+    data = await processor._load_conversation('conv-null')
+
+    assert data['transcript_segments'] == []
+
+
 async def test_late_owner_drain_still_writes_current_photos(monkeypatch):
     from models.conversation_photo import ConversationPhoto
     from routers.listen.contracts import ConversationCaptureOrigin
@@ -525,3 +545,59 @@ async def test_fresh_v2_row_still_pins_marker(monkeypatch):
     row = store.rows[('users', UID, 'conversations', 'conv-fresh')]
     assert row.get('audio_timeline') == {'version': 2}
     assert row['started_at'].timestamp() == pytest.approx(T0 + 1.0)
+
+
+async def test_terminal_owner_final_is_persisted_on_send_owner(monkeypatch):
+    from routers.listen.contracts import ConversationCaptureOrigin
+
+    store = StrictFirestore()
+    old = _seed_row(store, 'conv-old', started_at=datetime.fromtimestamp(T0 - 60, tz=timezone.utc), status='completed')
+    old['audio_timeline'] = {'version': 2}
+    _seed_row(store, 'conv-current', started_at=datetime.fromtimestamp(T0 - 5, tz=timezone.utc))
+    processor, _ = _processor(monkeypatch, store, current='conv-current')
+    processor.host.state.conversation_capture_origins['conv-current'] = ConversationCaptureOrigin(T0, pinnable=True)
+
+    await processor._process_v2_batches([_v2_segment('late', T0 - 59, T0 - 58, 'conv-old', text='late final')], [], {})
+    assert not processor.segment_buffer
+    current = store.rows[('users', UID, 'conversations', 'conv-old')]
+    stored = conversations_db._decode_transcript_segments_strict(
+        UID, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
+    )
+    assert [(segment['text'], segment['start'], segment['end'], segment['audio_alignment']) for segment in stored] == [
+        ('late final', -1.0, -1.0, 'unplaced')
+    ]
+    assert current['status'] == 'completed'
+
+
+async def test_rollover_recovery_does_not_reuse_failed_owner_offsets_or_marker(monkeypatch):
+    from routers.listen.contracts import ConversationCaptureOrigin
+
+    store = StrictFirestore()
+    _seed_row(store, 'failed', started_at=datetime.fromtimestamp(T0, tz=timezone.utc))
+    processor, _ = _processor(monkeypatch, store, current='failed')
+    processor.host.state.conversation_capture_origins['failed'] = ConversationCaptureOrigin(T0, pinnable=True)
+
+    async def rollover(*, rollover):
+        assert rollover
+        _seed_row(store, 'fresh', started_at=datetime.fromtimestamp(T0 + 100, tz=timezone.utc))
+        processor.host.state.current_conversation_id = 'fresh'
+
+    processor.host.conversations.create_new_in_progress_conversation = rollover
+    original = processor._update_live_conversation
+    calls = 0
+
+    async def fail_first(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return None
+        return await original(*args, **kwargs)
+
+    processor._update_live_conversation = fail_first
+    await processor._process_v2_batches([_v2_segment('s1', T0 + 1, T0 + 2, 'failed')], [], {})
+    fresh = store.rows[('users', UID, 'conversations', 'fresh')]
+    stored = conversations_db._decode_transcript_segments_strict(
+        UID, fresh.get('transcript_segments', []), bool(fresh.get('transcript_segments_compressed'))
+    )
+    assert [(s['start'], s['end'], s['audio_alignment']) for s in stored] == [(-1.0, -1.0, 'unplaced')]
+    assert 'audio_timeline' not in fresh

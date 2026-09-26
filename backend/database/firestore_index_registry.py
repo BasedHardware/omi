@@ -170,9 +170,9 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('discarded'), _asc('status'), _asc('structured.category'), _desc('created_at'), _desc('__name__')),
     ),
-    # `GET /v1/conversations?sources=...` retains the legacy
-    # `include_discarded=true` default, so this is distinct from the archive
-    # query below that explicitly excludes discarded captures.
+    # Explicit `GET /v1/conversations?sources=...&include_discarded=true`
+    # remains supported, so this is distinct from the default/archive query
+    # below that excludes discarded captures.
     FirestoreIndexRequirement(
         'conversations_source_status_created',
         'conversations',
@@ -193,8 +193,8 @@ INDEX_ONLY_REQUIREMENTS = (
     ),
     # Several conversations.py serving reads filter by `status` alone and sort by
     # `created_at` descending (get_in_progress_conversation, get_action_items,
-    # get_last_completed_conversation, and the default `GET /v1/conversations`
-    # call with include_discarded=True). Production has this index only because
+    # get_last_completed_conversation, and explicit `GET /v1/conversations`
+    # calls with include_discarded=True). Production has this index only because
     # it was created by hand; a fresh self-host 400s with FailedPrecondition the
     # first time any of those paths runs.
     FirestoreIndexRequirement(

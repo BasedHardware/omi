@@ -712,7 +712,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       state == WalSyncDisplayState.failed ||
       state == WalSyncDisplayState.corrupted ||
       state == WalSyncDisplayState.outsideRecoveryWindow ||
-      state == WalSyncDisplayState.unsupportedAudio;
+      state == WalSyncDisplayState.unsupportedAudio ||
+      state == WalSyncDisplayState.uploadRejected;
 }
 
 /// The top of Live (canvas Live, Rev 3 device-agnostic): the orb for whatever is listening, lit
