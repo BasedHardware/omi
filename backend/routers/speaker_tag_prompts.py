@@ -34,7 +34,9 @@ router = APIRouter()
 
 
 @router.get('/v1/speaker-tag-prompts', tags=['speaker-tag-prompts'], response_model=SpeakerTagPromptsResponse)
-def get_speaker_tag_prompts(uid: str = Depends(auth.get_current_user_uid)):
+def get_speaker_tag_prompts(
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, 'speaker_tag_prompts:list'))
+):
     """Today's small set of voices to confirm, from conversations in the last 48 hours."""
     return service.get_prompts(uid)
 

@@ -1,4 +1,6 @@
 import asyncio
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
@@ -251,7 +253,109 @@ def test_clip_verification_rejects_mismatch_and_caches_negative(monkeypatch):
     monkeypatch.setattr(service, 'verify_and_transcribe_sample', verify)
     assert service.verified_clip_pcm('u', row, 1.0, 6.0, 'one two three four five') is None
     assert service.verified_clip_pcm('u', row, 1.0, 6.0, 'one two three four five') is None
-    assert len(checks) == 1 and list(cache.values()) == [False]
+    assert len(checks) == 1
+    assert list(cache.values())[0]['valid'] is False
+
+
+def test_negative_cache_rechecks_changed_pcm_under_same_manifest(monkeypatch):
+    row = {'id': 'c1', 'audio_files': [{'chunk_timestamps': [10.0], 'duration': 20.0}]}
+    cache = {}
+    pcm = [b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 5)]
+    checks = []
+    monkeypatch.setattr(service.redis_db, 'get_generic_cache', lambda key: cache.get(key))
+    monkeypatch.setattr(service.redis_db, 'set_generic_cache', lambda key, value, ttl: cache.__setitem__(key, value))
+    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *args: pcm[0])
+
+    async def verify(audio, sample_rate, expected_text, language=None):
+        checks.append(1)
+        return (
+            'one two three four five' if len(checks) == 2 else 'wrong speech elsewhere',
+            len(checks) == 2,
+            'ok' if len(checks) == 2 else 'text_mismatch',
+        )
+
+    monkeypatch.setattr(service, 'verify_and_transcribe_sample', verify)
+    for _ in range(2):
+        assert service.verified_clip_pcm('u', row, 1, 6, 'one two three four five') is None
+    assert len(checks) == 1
+    pcm[0] = b'\x02\x00' * (service.CLIP_SAMPLE_RATE * 5)
+    assert service.verified_clip_pcm('u', row, 1, 6, 'one two three four five') == pcm[0]
+    assert len(checks) == 2
+
+
+def test_clip_match_rejects_short_subset_of_long_expected_text(monkeypatch):
+    row = {'id': 'c1', 'audio_files': []}
+    pcm = b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 5)
+    monkeypatch.setattr(service.redis_db, 'get_generic_cache', lambda key: None)
+    monkeypatch.setattr(service.redis_db, 'set_generic_cache', lambda *args, **kwargs: None)
+
+    async def verify(audio, sample_rate, expected_text, language=None):
+        return ('one two three four five', True, 'ok')
+
+    monkeypatch.setattr(service, 'verify_and_transcribe_sample', verify)
+    assert service.verified_clip_pcm('u', row, 0, 5, 'one two three four five', pcm) == pcm
+    assert (
+        service.verified_clip_pcm('u', row, 0, 5, 'one two three four five six seven eight nine ten eleven twelve', pcm)
+        is None
+    )
+    assert service.verified_clip_pcm('u', row, 0, 5, 'completely different spoken words today', pcm) is None
+
+
+def test_clip_expected_text_trims_long_segment_to_clip_window():
+    row = {
+        'transcript_segments': [
+            {
+                'speaker_id': 0,
+                'start': 0,
+                'end': 20,
+                'text': 'one two three four five six seven eight nine ten eleven twelve',
+            }
+        ]
+    }
+    text = service.clip_expected_text(row, 0, 10)
+    assert text.startswith('one two')
+    assert 'twelve' not in text
+
+    cjk = {
+        'transcript_segments': [
+            {'speaker_id': 0, 'start': 0, 'end': 20, 'text': '今天我们一起讨论如何安排下周的工作会议和项目计划'}
+        ]
+    }
+    assert len(service.clip_expected_text(cjk, 0, 10)) < len(cjk['transcript_segments'][0]['text'])
+
+
+def test_prompt_list_verification_budget_returns_without_empty_cooldown(monkeypatch):
+    world = World(monkeypatch)
+    started = NOW - timedelta(hours=1)
+    row = {
+        'id': 'slow',
+        'started_at': started,
+        'status': 'completed',
+        'audio_files': [{'chunk_timestamps': [started.timestamp()], 'duration': 20.0}],
+        'transcript_segments': [
+            {'id': 's1', 'speaker_id': 0, 'start': 0, 'end': 10, 'text': 'one two three four five six seven eight'}
+        ],
+    }
+    monkeypatch.setattr(service.conversations_db, 'get_conversations', lambda *args, **kwargs: [row])
+    monkeypatch.setattr(service, 'LIST_VERIFY_BUDGET_SECONDS', 0.02)
+    release = threading.Event()
+    started_verify = threading.Event()
+
+    def slow_verify(*args):
+        started_verify.set()
+        release.wait(timeout=1)
+        return None
+
+    monkeypatch.setattr(service, 'verified_clip_pcm', slow_verify)
+    try:
+        began = time.monotonic()
+        response = service.get_prompts('u', NOW)
+        assert time.monotonic() - began < 0.5
+        assert started_verify.is_set()
+        assert response.status == 'no_candidates'
+        assert 'last_empty_check_at' not in world.state
+    finally:
+        release.set()
 
 
 def test_truncated_clip_is_rejected_before_transcription(monkeypatch):
