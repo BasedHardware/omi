@@ -49,6 +49,7 @@ omi auth login
 
 # 2. Start using it:
 omi memory list
+omi memory search "where did I put my passport?"
 omi conversation list --limit 5
 omi action-item list --open
 omi goal list
@@ -59,6 +60,7 @@ machine-readable output, ready for `jq`, agent harnesses, or whatever else:
 
 ```bash
 omi --json memory list | jq '.[] | {id, content}'
+omi --json memory search "passport" --limit 5 | jq '.items[] | {id, content, relevance_score}'
 ```
 
 Pretty output displays returned text literally, including square brackets and

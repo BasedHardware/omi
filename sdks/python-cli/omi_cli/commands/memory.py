@@ -27,6 +27,35 @@ def _ctx(typer_ctx: typer.Context) -> "AppContext":
 
 
 _LIST_COLUMNS = ["id", "category", "visibility", "content", "tags", "created_at"]
+_SEARCH_COLUMNS = ["id", "category", "relevance_score", "content"]
+
+
+@app.command("search", help="Find relevant memories by meaning.")
+def search_memories(
+    typer_ctx: typer.Context,
+    query: str = typer.Argument(..., help="Text to search for."),
+    limit: int = typer.Option(10, "--limit", min=1, max=100, help="Max matches to return."),
+) -> None:
+    ctx = _ctx(typer_ctx)
+    with ctx.make_client() as client:
+        result = client.get(
+            "/v1/dev/user/memories/vector/search",
+            params={"query": query, "limit": limit},
+        )
+    if ctx.renderer.json_mode:
+        # Preserve the API envelope, including policy and count metadata.
+        ctx.renderer.emit(result)
+        return
+    rows = [
+        {
+            "id": item.get("id"),
+            "category": item.get("category"),
+            "relevance_score": item.get("relevance_score"),
+            "content": shorten(item.get("content"), 80),
+        }
+        for item in (result or {}).get("items", [])
+    ]
+    ctx.renderer.emit(rows, columns=_SEARCH_COLUMNS, title=f"memory search: {query}")
 
 
 @app.command("list", help="List memories.")
