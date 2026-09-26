@@ -1,9 +1,13 @@
+import logging
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 import firebase_admin.auth
 from pydantic import BaseModel
 
 from database.referrals import claim_referral_trial
+from utils.integration_telemetry import emit_posthog_event
 from utils.other import endpoints as auth
 from utils.referrals import (
     REFERRAL_COOKIE_MAX_AGE_SECONDS,
@@ -16,7 +20,8 @@ from utils.referrals import (
     referral_signup_url,
     referrer_uid_from_code,
 )
-from utils.integration_telemetry import emit_posthog_event
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=['referrals'])
 
@@ -34,13 +39,20 @@ class ReferralClaimResponse(BaseModel):
     trial_days: int
 
 
+def _safe_emit_posthog_event(distinct_id: Optional[str], event: str, properties: dict) -> None:
+    try:
+        emit_posthog_event(distinct_id, event, properties)
+    except Exception:
+        logger.warning('Failed to emit referral telemetry event: %s', event, exc_info=True)
+
+
 @router.get('/v1/users/me/referral', response_model=ReferralLinkResponse)
 def get_referral_link(uid: str = Depends(auth.get_current_user_uid)) -> ReferralLinkResponse:
     try:
         response = ReferralLinkResponse(referral_url=referral_link(uid))
     except ReferralCodeError as error:
         raise HTTPException(status_code=503, detail='Referral links are temporarily unavailable') from error
-    emit_posthog_event(uid, 'Referral Link Issued', {'program': REFERRAL_PROGRAM})
+    _safe_emit_posthog_event(uid, 'Referral Link Issued', {'program': REFERRAL_PROGRAM})
     return response
 
 
@@ -61,7 +73,7 @@ def capture_referral(code: str) -> RedirectResponse:
         samesite='lax',
         path='/',
     )
-    emit_posthog_event(referrer_uid, 'Referral Link Captured', {'program': REFERRAL_PROGRAM})
+    _safe_emit_posthog_event(referrer_uid, 'Referral Link Captured', {'program': REFERRAL_PROGRAM})
     return response
 
 
@@ -70,19 +82,32 @@ def claim_referral(
     body: ReferralClaimRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ) -> ReferralClaimResponse:
+    if not body.code or not body.code.strip():
+        raise HTTPException(status_code=400, detail='Referral code cannot be blank')
+
     try:
-        referrer_uid = referrer_uid_from_code(body.code)
+        referrer_uid = referrer_uid_from_code(body.code.strip())
     except ReferralCodeError as error:
         raise HTTPException(status_code=404, detail='Referral link not found') from error
 
-    user = firebase_admin.auth.get_user(uid)
+    try:
+        user = firebase_admin.auth.get_user(uid)
+    except Exception as exc:
+        logger.warning('Failed to fetch user auth metadata for referral claim: %s', type(exc).__name__)
+        raise HTTPException(status_code=503, detail='User authentication metadata temporarily unavailable') from exc
+
     creation_timestamp = getattr(getattr(user, 'user_metadata', None), 'creation_timestamp', None)
-    claimed, reason = claim_referral_trial(
-        uid,
-        referrer_uid,
-        is_new_user=is_new_referral_account(creation_timestamp),
-    )
-    emit_posthog_event(
+    try:
+        claimed, reason = claim_referral_trial(
+            uid,
+            referrer_uid,
+            is_new_user=is_new_referral_account(creation_timestamp),
+        )
+    except Exception as exc:
+        logger.warning('Failed to execute claim_referral_trial: %s', type(exc).__name__)
+        raise HTTPException(status_code=503, detail='Referral claim service temporarily unavailable') from exc
+
+    _safe_emit_posthog_event(
         uid,
         'Referral Claimed',
         {'program': REFERRAL_PROGRAM, 'claimed': claimed, 'reason': reason},
