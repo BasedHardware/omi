@@ -86,4 +86,33 @@ void main() {
     provider.selectedFolderId = 'work';
     expect(HomeThisWeek.countWeek(provider, monday), isNull);
   });
+  // IMG_1168: tapping a day shows that day's time, not only the week's; tapping it again goes back.
+  testWidgets('tapping a day shows its time; tapping it again shows the week', (tester) async {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final monday = today.subtract(Duration(days: today.weekday - DateTime.monday));
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.conversations = [
+      at(monday.add(const Duration(hours: 9)), const Duration(minutes: 20)),
+      at(today.add(const Duration(hours: 1)), const Duration(minutes: 5)),
+      at(monday.subtract(const Duration(days: 2)), const Duration(hours: 1)), // the list reaches Monday
+    ];
+    await pump(tester, provider);
+    final week = en.capturedDuration(OmiDuration.compact(today == monday ? 1500 : 1500, en));
+    expect(find.text(week), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('home_this_week_day_0')));
+    await tester.pump();
+    final mondayTime = today == monday ? 1500 : 1200;
+    expect(find.textContaining(en.capturedDuration(OmiDuration.compact(mondayTime, en))), findsOneWidget);
+    expect(find.textContaining('Monday'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('home_this_week_day_0')));
+    await tester.pump();
+    expect(find.text(week), findsOneWidget, reason: 'back to the week');
+  });
 }

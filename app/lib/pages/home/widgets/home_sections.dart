@@ -428,65 +428,129 @@ class HomeThisWeek extends StatelessWidget {
         if (seconds == null) return const SizedBox.shrink();
         final total = seconds.fold<int>(0, (a, b) => a + b);
         if (total == 0) return const SizedBox.shrink();
-        final peak = seconds.reduce(math.max);
         final todayIndex = today.difference(weekStart).inDays;
         final locale = Localizations.localeOf(context).toString();
-        final l10n = context.l10n;
 
         return Padding(
           padding: const EdgeInsets.only(top: 22),
           child: OmiCard(
             key: const Key('home_this_week'),
             padding: const EdgeInsets.fromLTRB(18, OmiSpacing.md, 18, OmiSpacing.md),
-            child: Semantics(
-              container: true,
-              label: '${l10n.thisWeek}, ${l10n.capturedDuration(OmiDuration.long(total, l10n))}',
-              excludeSemantics: true,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Expanded(child: Text(l10n.thisWeek, style: OmiType.headline)),
-                      Text(
-                        l10n.capturedDuration(OmiDuration.compact(total, l10n)),
-                        style: OmiType.footnote.copyWith(
-                          color: OmiColors.textSecondary,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    // The tallest bar (52) and the day letter under it, at the reader's text size.
-                    height: 52 + 6 + _DayBar.letterHeight(context),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        for (var i = 0; i < 7; i++) ...[
-                          if (i > 0) const SizedBox(width: 10),
-                          Expanded(
-                            child: _DayBar(
-                              letter: DateFormat.EEEEE(locale).format(weekStart.add(Duration(days: i))),
-                              fraction: peak == 0 ? 0 : seconds[i] / peak,
-                              isToday: i == todayIndex,
-                              isFuture: i > todayIndex,
-                              index: i,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            child: _WeekChart(seconds: seconds, weekStart: weekStart, todayIndex: todayIndex, locale: locale),
           ),
         );
       },
+    );
+  }
+}
+
+/// The week's bars and what they add up to; tapping a day shows that day's time (IMG_1168), and
+/// tapping it again goes back to the week.
+class _WeekChart extends StatefulWidget {
+  const _WeekChart({required this.seconds, required this.weekStart, required this.todayIndex, required this.locale});
+
+  final List<int> seconds;
+  final DateTime weekStart;
+  final int todayIndex;
+  final String locale;
+
+  @override
+  State<_WeekChart> createState() => _WeekChartState();
+}
+
+class _WeekChartState extends State<_WeekChart> {
+  int? _selected;
+
+  @override
+  void didUpdateWidget(_WeekChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.weekStart != widget.weekStart) _selected = null;
+  }
+
+  void _toggle(int day) {
+    OmiHaptics.selection();
+    setState(() => _selected = _selected == day ? null : day);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final seconds = widget.seconds;
+    final total = seconds.fold<int>(0, (a, b) => a + b);
+    final peak = seconds.reduce(math.max);
+    final selected = _selected;
+    final dayName =
+        selected == null ? null : DateFormat.EEEE(widget.locale).format(widget.weekStart.add(Duration(days: selected)));
+    final captured = selected == null
+        ? l10n.capturedDuration(OmiDuration.compact(total, l10n))
+        : '$dayName · ${l10n.capturedDuration(OmiDuration.compact(seconds[selected], l10n))}';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          container: true,
+          liveRegion: true,
+          label:
+              '${l10n.thisWeek}, ${selected == null ? l10n.capturedDuration(OmiDuration.long(total, l10n)) : '$dayName, ${l10n.capturedDuration(OmiDuration.long(seconds[selected], l10n))}'}',
+          excludeSemantics: true,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Expanded(child: Text(l10n.thisWeek, style: OmiType.headline)),
+              Flexible(
+                child: Text(
+                  captured,
+                  key: const Key('home_this_week_captured'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: OmiType.footnote.copyWith(
+                    color: OmiColors.textSecondary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        SizedBox(
+          // The tallest bar (52) and the day letter under it, at the reader's text size.
+          height: 52 + 6 + _DayBar.letterHeight(context),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              for (var i = 0; i < 7; i++) ...[
+                if (i > 0) const SizedBox(width: 10),
+                Expanded(
+                  child: Semantics(
+                    button: i <= widget.todayIndex,
+                    selected: i == selected,
+                    label:
+                        '${DateFormat.EEEE(widget.locale).format(widget.weekStart.add(Duration(days: i)))}, ${l10n.capturedDuration(OmiDuration.long(seconds[i], l10n))}',
+                    excludeSemantics: true,
+                    child: GestureDetector(
+                      key: Key('home_this_week_day_$i'),
+                      behavior: HitTestBehavior.opaque,
+                      // Days still to come have nothing to show.
+                      onTap: i <= widget.todayIndex ? () => _toggle(i) : null,
+                      child: _DayBar(
+                        letter: DateFormat.EEEEE(widget.locale).format(widget.weekStart.add(Duration(days: i))),
+                        fraction: peak == 0 ? 0 : seconds[i] / peak,
+                        // The chosen day takes today's highlight while it is chosen.
+                        isToday: selected == null ? i == widget.todayIndex : i == selected,
+                        isFuture: i > widget.todayIndex,
+                        index: i,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
