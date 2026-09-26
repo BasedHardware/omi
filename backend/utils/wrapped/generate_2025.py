@@ -126,7 +126,7 @@ def _find_signature_phrases(conversations: List[Conversation], sample_size: int 
 
 def _determine_archetype_with_llm(conversations: List[Conversation], stats: Dict[str, Any]) -> Dict[str, str]:
     """Use Gemini to determine decision style archetype based on conversation patterns."""
-    logger.info(f"[Wrapped]   - Starting decision style analysis with Gemini...")
+    logger.info("[Wrapped]   - Starting decision style analysis with Gemini...")
 
     try:
         context = _build_conversations_context(conversations, max_chars=300000)
@@ -156,7 +156,7 @@ Return as JSON (no markdown):
 
 Make the description specific to THIS person based on what you see in their conversations, not generic."""
 
-        logger.info(f"[Wrapped]     - Calling Gemini for decision style...")
+        logger.info("[Wrapped]     - Calling Gemini for decision style...")
         response = get_llm('wrapped_analysis').invoke(prompt)
         content = _content_str(response).strip()
         logger.info(f"[Wrapped]     - Gemini response received: {len(content)} chars")
@@ -184,7 +184,7 @@ Make the description specific to THIS person based on what you see in their conv
 
 def _find_top_phrases_with_llm(conversations: List[Conversation]) -> List[Dict[str, Any]]:
     """Use Gemini to find the user's top 5 most used phrases."""
-    logger.info(f"[Wrapped]   - Starting top phrases analysis with Gemini...")
+    logger.info("[Wrapped]   - Starting top phrases analysis with Gemini...")
 
     try:
         context = _build_conversations_context(conversations, max_chars=400000)
@@ -215,7 +215,7 @@ Return as JSON (no markdown):
 
 Be specific with actual phrases from their conversations. Avoid generic filler words like "um", "like", "you know"."""
 
-        logger.info(f"[Wrapped]     - Calling Gemini for top phrases...")
+        logger.info("[Wrapped]     - Calling Gemini for top phrases...")
         response = get_llm('wrapped_analysis').invoke(prompt)
         content = _content_str(response).strip()
         logger.info(f"[Wrapped]     - Gemini response received: {len(content)} chars")
@@ -273,7 +273,7 @@ def _build_conversations_context(conversations: List[Conversation], max_chars: i
 
 def _analyze_memorable_days_with_llm(conversations: List[Conversation]) -> Dict[str, Any]:
     """Use Gemini to analyze and find the most memorable days of the year."""
-    logger.info(f"[Wrapped]   - Starting memorable days analysis with Gemini...")
+    logger.info("[Wrapped]   - Starting memorable days analysis with Gemini...")
 
     try:
         # Build context from all conversations
@@ -318,7 +318,7 @@ Return your analysis as JSON (no markdown):
 IMPORTANT: Each description MUST be exactly 15-20 words. No more, no less.
 Be specific and reference actual events from the conversations. Make titles catchy and memorable."""
 
-        logger.info(f"[Wrapped]     - Calling Gemini for memorable days...")
+        logger.info("[Wrapped]     - Calling Gemini for memorable days...")
         response = get_llm('wrapped_analysis').invoke(prompt)
         content = _content_str(response).strip()
         logger.info(f"[Wrapped]     - Gemini response received: {len(content)} chars")
@@ -330,7 +330,7 @@ Be specific and reference actual events from the conversations. Make titles catc
             content = content.split("```")[1].split("```")[0].strip()
 
         result = json.loads(content)
-        logger.info(f"[Wrapped]     - Successfully parsed memorable days")
+        logger.info("[Wrapped]     - Successfully parsed memorable days")
         return result
 
     except Exception as e:
@@ -362,7 +362,7 @@ Be specific and reference actual events from the conversations. Make titles catc
 
 def _find_funniest_event_with_llm(conversations: List[Conversation]) -> Dict[str, Any]:
     """Use Gemini to find the funniest event/moment from the year."""
-    logger.info(f"[Wrapped]   - Starting funniest event analysis with Gemini...")
+    logger.info("[Wrapped]   - Starting funniest event analysis with Gemini...")
 
     try:
         context = _build_conversations_context(conversations)
@@ -393,7 +393,7 @@ Return the single funniest event as JSON (no markdown):
 IMPORTANT: The story MUST be exactly 20-30 words. No more, no less.
 Pick something genuinely funny and retell it in an entertaining way. Make the user smile when they read it!"""
 
-        logger.info(f"[Wrapped]     - Calling Gemini for funniest event...")
+        logger.info("[Wrapped]     - Calling Gemini for funniest event...")
         response = get_llm('wrapped_analysis').invoke(prompt)
         content = _content_str(response).strip()
         logger.info(f"[Wrapped]     - Gemini response received: {len(content)} chars")
@@ -422,7 +422,7 @@ Pick something genuinely funny and retell it in an entertaining way. Make the us
 
 def _find_most_embarrassing_event_with_llm(conversations: List[Conversation]) -> Dict[str, Any]:
     """Use Gemini to find the most embarrassing moment from the year."""
-    logger.info(f"[Wrapped]   - Starting most embarrassing event analysis with Gemini...")
+    logger.info("[Wrapped]   - Starting most embarrassing event analysis with Gemini...")
 
     try:
         context = _build_conversations_context(conversations)
@@ -453,7 +453,7 @@ Return the most embarrassing event as JSON (no markdown):
 IMPORTANT: The story MUST be exactly 20-30 words. No more, no less.
 Frame it in a lighthearted, relatable way - we've all been there! Make it funny rather than cruel."""
 
-        logger.info(f"[Wrapped]     - Calling Gemini for most embarrassing event...")
+        logger.info("[Wrapped]     - Calling Gemini for most embarrassing event...")
         response = get_llm('wrapped_analysis').invoke(prompt)
         content = _content_str(response).strip()
         logger.info(f"[Wrapped]     - Gemini response received: {len(content)} chars")
@@ -482,7 +482,7 @@ Frame it in a lighthearted, relatable way - we've all been there! Make it funny 
 
 def _find_top_buddies_with_llm(conversations: List[Conversation]) -> List[Dict[str, Any]]:
     """Use Gemini to find the top 5 people the user interacted with most."""
-    logger.info(f"[Wrapped]   - Starting top buddies analysis with Gemini...")
+    logger.info("[Wrapped]   - Starting top buddies analysis with Gemini...")
 
     try:
         context = _build_conversations_context(conversations)
@@ -516,7 +516,7 @@ IMPORTANT:
 - The context should be specific and memorable, not generic
 - Each context MUST be 10-15 words max"""
 
-        logger.info(f"[Wrapped]     - Calling Gemini for top buddies...")
+        logger.info("[Wrapped]     - Calling Gemini for top buddies...")
         response = get_llm('wrapped_analysis').invoke(prompt)
         content = _content_str(response).strip()
         logger.info(f"[Wrapped]     - Gemini response received: {len(content)} chars")
@@ -562,7 +562,7 @@ IMPORTANT:
 
 def _find_obsessions_with_llm(conversations: List[Conversation]) -> Dict[str, Any]:
     """Find what shows, movies, books, celebrities, and food the user couldn't stop talking about."""
-    logger.info(f"[Wrapped]   - Starting obsessions analysis with Gemini...")
+    logger.info("[Wrapped]   - Starting obsessions analysis with Gemini...")
 
     try:
         context = _build_conversations_context(conversations)
@@ -592,7 +592,7 @@ Return as JSON (no markdown):
 
 Be specific with actual names. If something isn't clearly mentioned, make your best inference or use "Not mentioned"."""
 
-        logger.info(f"[Wrapped]     - Calling Gemini for obsessions...")
+        logger.info("[Wrapped]     - Calling Gemini for obsessions...")
         response = get_llm('wrapped_analysis').invoke(prompt)
         content = _content_str(response).strip()
         logger.info(f"[Wrapped]     - Gemini response received: {len(content)} chars")
@@ -626,7 +626,7 @@ Be specific with actual names. If something isn't clearly mentioned, make your b
 
 def _find_movie_recommendations_with_llm(conversations: List[Conversation]) -> List[str]:
     """Find 5 movies the user would recommend to friends based on their conversations."""
-    logger.info(f"[Wrapped]   - Starting movie recommendations analysis with Gemini...")
+    logger.info("[Wrapped]   - Starting movie recommendations analysis with Gemini...")
 
     try:
         context = _build_conversations_context(conversations)
@@ -649,7 +649,7 @@ Return as JSON (no markdown):
 
 Include a mix of movies they mentioned AND movies that match their vibe/interests. Use actual movie titles."""
 
-        logger.info(f"[Wrapped]     - Calling Gemini for movie recommendations...")
+        logger.info("[Wrapped]     - Calling Gemini for movie recommendations...")
         response = get_llm('wrapped_analysis').invoke(prompt)
         content = _content_str(response).strip()
         logger.info(f"[Wrapped]     - Gemini response received: {len(content)} chars")
@@ -683,7 +683,7 @@ Include a mix of movies they mentioned AND movies that match their vibe/interest
 
 def _find_struggles_and_wins_with_llm(conversations: List[Conversation]) -> Dict[str, Any]:
     """Find the biggest struggle and personal win of the year."""
-    logger.info(f"[Wrapped]   - Starting struggles and wins analysis with Gemini...")
+    logger.info("[Wrapped]   - Starting struggles and wins analysis with Gemini...")
 
     try:
         context = _build_conversations_context(conversations)
@@ -714,7 +714,7 @@ Return as JSON (no markdown):
 
 Be specific and empathetic. These should feel personal and meaningful."""
 
-        logger.info(f"[Wrapped]     - Calling Gemini for struggles and wins...")
+        logger.info("[Wrapped]     - Calling Gemini for struggles and wins...")
         response = get_llm('wrapped_analysis').invoke(prompt)
         content = _content_str(response).strip()
         logger.info(f"[Wrapped]     - Gemini response received: {len(content)} chars")
@@ -729,7 +729,7 @@ Be specific and empathetic. These should feel personal and meaningful."""
             loaded = cast(Any, loaded[0])
         result = cast(Dict[str, Any], loaded)
 
-        logger.info(f"[Wrapped]     - Struggles and wins found")
+        logger.info("[Wrapped]     - Struggles and wins found")
         return result
 
     except Exception as e:
@@ -761,7 +761,7 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         # Step 1: Fetch conversations
         step_start = time.time()
         _update_progress(uid, year, "Fetching conversations...", 0.1)
-        logger.info(f"[Wrapped] Step 1: Fetching conversations...")
+        logger.info("[Wrapped] Step 1: Fetching conversations...")
 
         conversations_data = conversations_db.get_conversations_without_photos(
             uid=uid,
@@ -785,7 +785,7 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         # Step 2: Fetch action items
         step_start = time.time()
         _update_progress(uid, year, "Fetching action items...", 0.2)
-        logger.info(f"[Wrapped] Step 2: Fetching action items...")
+        logger.info("[Wrapped] Step 2: Fetching action items...")
 
         action_items = action_items_db.get_action_items(
             uid=uid,
@@ -803,7 +803,7 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         # Step 3: Compute basic stats
         step_start = time.time()
         _update_progress(uid, year, "Computing statistics...", 0.3)
-        logger.info(f"[Wrapped] Step 3: Computing statistics...")
+        logger.info("[Wrapped] Step 3: Computing statistics...")
 
         result = _compute_all_stats(conversations, action_items)
         logger.info(f"[Wrapped] Step 3 complete: Statistics computed (took {time.time() - step_start:.2f}s)")
@@ -814,7 +814,7 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         # Step 4: Determine decision style with Gemini
         step_start = time.time()
         _update_progress(uid, year, "Analyzing your personality...", 0.50)
-        logger.info(f"[Wrapped] Step 4: Analyzing decision style with Gemini...")
+        logger.info("[Wrapped] Step 4: Analyzing decision style with Gemini...")
 
         decision_style = _determine_archetype_with_llm(conversations, result)
         result["decision_style"] = decision_style
@@ -824,7 +824,7 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         # Step 5: Find top phrases with Gemini
         step_start = time.time()
         _update_progress(uid, year, "Finding your catchphrases...", 0.58)
-        logger.info(f"[Wrapped] Step 5: Finding top phrases with Gemini...")
+        logger.info("[Wrapped] Step 5: Finding top phrases with Gemini...")
 
         top_phrases = _find_top_phrases_with_llm(conversations)
         result["top_phrases"] = top_phrases
@@ -834,7 +834,7 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         # Step 6: Analyze memorable days with Gemini
         step_start = time.time()
         _update_progress(uid, year, "Finding your memorable days...", 0.65)
-        logger.info(f"[Wrapped] Step 6: Analyzing memorable days with Gemini...")
+        logger.info("[Wrapped] Step 6: Analyzing memorable days with Gemini...")
 
         memorable_days = _analyze_memorable_days_with_llm(conversations)
         result["memorable_days"] = memorable_days
@@ -850,7 +850,7 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         # Step 7: Find funniest event with Gemini
         step_start = time.time()
         _update_progress(uid, year, "Finding your funniest moment...", 0.72)
-        logger.info(f"[Wrapped] Step 7: Finding funniest event with Gemini...")
+        logger.info("[Wrapped] Step 7: Finding funniest event with Gemini...")
 
         funniest_event = _find_funniest_event_with_llm(conversations)
         result["funniest_event"] = funniest_event
@@ -860,7 +860,7 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         # Step 8: Find most embarrassing event with Gemini
         step_start = time.time()
         _update_progress(uid, year, "Finding your most cringe moment...", 0.78)
-        logger.info(f"[Wrapped] Step 8: Finding most embarrassing event with Gemini...")
+        logger.info("[Wrapped] Step 8: Finding most embarrassing event with Gemini...")
 
         embarrassing_event = _find_most_embarrassing_event_with_llm(conversations)
         result["most_embarrassing_event"] = embarrassing_event
@@ -870,7 +870,7 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         # Step 9: Find top buddies with Gemini
         step_start = time.time()
         _update_progress(uid, year, "Finding your top buddies...", 0.80)
-        logger.info(f"[Wrapped] Step 9: Finding top buddies with Gemini...")
+        logger.info("[Wrapped] Step 9: Finding top buddies with Gemini...")
 
         top_buddies = _find_top_buddies_with_llm(conversations)
         result["top_buddies"] = top_buddies
@@ -880,7 +880,7 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         # Step 10: Find obsessions (shows, movies, books, celebrities, food)
         step_start = time.time()
         _update_progress(uid, year, "Finding your obsessions...", 0.86)
-        logger.info(f"[Wrapped] Step 10: Finding obsessions with Gemini...")
+        logger.info("[Wrapped] Step 10: Finding obsessions with Gemini...")
 
         obsessions = _find_obsessions_with_llm(conversations)
         result["obsessions"] = obsessions
@@ -890,7 +890,7 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         # Step 11: Find movie recommendations
         step_start = time.time()
         _update_progress(uid, year, "Generating movie recommendations...", 0.90)
-        logger.info(f"[Wrapped] Step 11: Finding movie recommendations with Gemini...")
+        logger.info("[Wrapped] Step 11: Finding movie recommendations with Gemini...")
 
         movie_recs = _find_movie_recommendations_with_llm(conversations)
         result["movie_recommendations"] = movie_recs
@@ -900,7 +900,7 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         # Step 12: Find struggles and wins
         step_start = time.time()
         _update_progress(uid, year, "Finding your wins and struggles...", 0.94)
-        logger.info(f"[Wrapped] Step 12: Finding struggles and wins with Gemini...")
+        logger.info("[Wrapped] Step 12: Finding struggles and wins with Gemini...")
 
         struggles_wins = _find_struggles_and_wins_with_llm(conversations)
         result["struggle"] = struggles_wins.get("struggle", {})
@@ -910,14 +910,14 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         # Step 13: Save result
         step_start = time.time()
         _update_progress(uid, year, "Saving your Wrapped...", 0.98)
-        logger.info(f"[Wrapped] Step 13: Saving result to Firestore...")
+        logger.info("[Wrapped] Step 13: Saving result to Firestore...")
 
         wrapped_db.update_wrapped_status(uid, year, WrappedStatus.DONE, result=result)
         logger.info(f"[Wrapped] Step 13 complete: Result saved (took {time.time() - step_start:.2f}s)")
 
         # Step 14: Send notification
         step_start = time.time()
-        logger.info(f"[Wrapped] Step 14: Sending notification...")
+        logger.info("[Wrapped] Step 14: Sending notification...")
         _send_wrapped_ready_notification(uid)
         logger.info(f"[Wrapped] Step 14 complete: Notification sent (took {time.time() - step_start:.2f}s)")
 
@@ -943,7 +943,7 @@ def _compute_all_stats(conversations: List[Conversation], action_items: List[Dic
     result: Dict[str, Any] = {}
 
     # === Section 1: Your Year in Numbers ===
-    logger.info(f"[Wrapped]   - Section 1: Year in Numbers...")
+    logger.info("[Wrapped]   - Section 1: Year in Numbers...")
     total_conversations = len(conversations)
     result["total_conversations"] = total_conversations
 
@@ -963,7 +963,7 @@ def _compute_all_stats(conversations: List[Conversation], action_items: List[Dic
     )
 
     # === Section 2: What You Talked About ===
-    logger.info(f"[Wrapped]   - Section 2: Topics & Categories...")
+    logger.info("[Wrapped]   - Section 2: Topics & Categories...")
     category_counts: Counter[str] = Counter()
 
     for conv in conversations:
@@ -976,7 +976,7 @@ def _compute_all_stats(conversations: List[Conversation], action_items: List[Dic
     result["category_breakdown"] = [{"category": cat, "count": count} for cat, count in top_cats]
 
     # === Section 3: Conversations → Actions ===
-    logger.info(f"[Wrapped]   - Section 3: Action Items...")
+    logger.info("[Wrapped]   - Section 3: Action Items...")
     total_action_items = len(action_items)
     completed_items = sum(1 for item in action_items if item.get("completed", False))
     logger.info(f"[Wrapped]     - {completed_items}/{total_action_items} action items completed")
@@ -986,7 +986,7 @@ def _compute_all_stats(conversations: List[Conversation], action_items: List[Dic
     result["action_items_completion_rate"] = completed_items / total_action_items if total_action_items > 0 else 0
 
     # === Section 4: Voice Patterns ===
-    logger.info(f"[Wrapped]   - Section 4: Voice Patterns...")
+    logger.info("[Wrapped]   - Section 4: Voice Patterns...")
     # Signature phrases
     phrase_counts = _find_signature_phrases(conversations)
     logger.info(f"[Wrapped]     - Found {len(phrase_counts)} signature phrases")
@@ -1001,7 +1001,7 @@ def _compute_all_stats(conversations: List[Conversation], action_items: List[Dic
 
     # Note: Decision style and top phrases computed via LLM in main function
 
-    logger.info(f"[Wrapped]   - All stats computed successfully")
+    logger.info("[Wrapped]   - All stats computed successfully")
     return result
 
 
