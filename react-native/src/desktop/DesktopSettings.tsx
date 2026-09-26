@@ -10,6 +10,7 @@ import Sparkles from 'lucide-react-native/icons/sparkles';
 import Info from 'lucide-react-native/icons/info';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {desktopEaseSmoothOut} from './desktopMotion';
+import {ScrollFade, useScrollFade} from './ScrollFade';
 import {
   loadAccountSettings,
   setPrivateCloudSync,
@@ -253,6 +254,7 @@ export function DesktopSettings({
   softwarePlaneLocked,
 }: Props) {
   const [pane, setPane] = useState<DesktopSettingsPane>('General');
+  const fade = useScrollFade();
   const [prefs, setPrefs] = useState<DesktopPreferences>(
     defaultDesktopPreferences,
   );
@@ -712,24 +714,31 @@ export function DesktopSettings({
   return (
     <View style={styles.root}>
       <SettingsNav onChange={setPane} pane={pane} />
-      <ScrollView contentContainerStyle={styles.content} style={styles.scroll}>
-        <PageHeading
-          title={paneInfo[pane].title}
-          subtitle={paneInfo[pane].description}
-        />
-        {actionStatus !== null ? (
-          <Text
-            accessibilityLabel="Settings action status"
-            accessibilityLiveRegion="polite"
-            style={styles.status}>
-            {actionStatus}
-          </Text>
-        ) : null}
-        <ShippingStage stageKey={pane} variant="page" style={styles.stage}>
-          <View style={styles.group}>{body}</View>
-          {pane === 'General' ? deviceContent : null}
-        </ShippingStage>
-      </ScrollView>
+      <ScrollFade visible style={styles.scroll}>
+        <ScrollView
+          onLayout={fade.onLayout}
+          onScroll={fade.onScroll}
+          onContentSizeChange={fade.onContentSizeChange}
+          scrollEventThrottle={16}
+          contentContainerStyle={styles.content}>
+          <PageHeading
+            title={paneInfo[pane].title}
+            subtitle={paneInfo[pane].description}
+          />
+          {actionStatus !== null ? (
+            <Text
+              accessibilityLabel="Settings action status"
+              accessibilityLiveRegion="polite"
+              style={styles.status}>
+              {actionStatus}
+            </Text>
+          ) : null}
+          <ShippingStage stageKey={pane} variant="page" style={styles.stage}>
+            <View style={styles.group}>{body}</View>
+            {pane === 'General' ? deviceContent : null}
+          </ShippingStage>
+        </ScrollView>
+      </ScrollFade>
     </View>
   );
 }

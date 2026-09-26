@@ -472,13 +472,13 @@ describe('Onboarding chrome', () => {
     );
     expect(String(error.props.children)).toBe(unreachable);
     expect(Object.assign({}, ...flattenStyle(error.props.style)).color).toBe(
-      '#ff3b30',
+      '#ff453a',
     );
     expect(JSON.stringify(offline.toJSON())).toContain('Welcome to Omi');
     expect(JSON.stringify(offline.toJSON())).toContain('Sign in');
   });
 
-  test('macOS onboarding renders dark ink on the light native window', () => {
+  test('macOS onboarding renders light ink on the dark native glass', () => {
     mockPlatformOS = 'macos';
     const renderer = render(
       <Onboarding
@@ -491,22 +491,22 @@ describe('Onboarding chrome', () => {
       node => node.props.accessibilityRole === 'header',
     );
     expect(Object.assign({}, ...flattenStyle(title.props.style)).color).toBe(
-      '#242622',
+      '#F2F4EF',
     );
     const dots = findOmiDots(renderer);
-    expect(dots.props.inkColor).toBe('#242622');
+    expect(dots.props.inkColor).toBe('#F2F4EF');
     const hosts = dots.findAll(node => String(node.type) === 'Animated.View');
     expect(hosts).toHaveLength(8);
     for (const host of hosts) {
       expect(
         Object.assign({}, ...flattenStyle(host.props.style)).backgroundColor,
-      ).toBe('#242622');
+      ).toBe('#F2F4EF');
     }
     const error = renderer.root.find(
       node => node.props.accessibilityLabel === 'Sign-in error',
     );
     expect(Object.assign({}, ...flattenStyle(error.props.style)).color).toBe(
-      '#666a62',
+      'rgba(242, 244, 239, 0.62)',
     );
   });
 

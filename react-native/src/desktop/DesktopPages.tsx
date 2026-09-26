@@ -100,53 +100,59 @@ export function LibraryPage({
         </Text>
       ) : null}
       {selected !== null ? (
-        <ScrollView
-          accessibilityLabel="Selected conversation details"
-          contentContainerStyle={styles.conversationDetail}>
-          <FocusPressable
-            accessibilityRole="button"
-            accessibilityLabel="Back to conversations"
-            onPress={() => setSelectedId(null)}
-            style={[styles.taskEdit, styles.backAction]}>
-            <Text style={styles.rowMeta}>Back to conversations</Text>
-          </FocusPressable>
-          {selected.kind === 'conversation' ? (
-            <ConversationDetail
-              key={selected.id}
-              conversation={selected}
-              apiContract={
-                outcome?.status === 'success'
-                  ? outcome.value.apiContract
-                  : undefined
-              }
-              desktop
-            />
-          ) : (
-            <View
-              accessibilityLabel="Selected memory details"
-              style={styles.memoryDetail}>
-              {selected.title.trim() !== '' &&
-                !selected.summary.startsWith(selected.title) && (
-                  <Text accessibilityRole="header" style={styles.rowTitle}>
-                    {selected.title}
-                  </Text>
-                )}
-              <Text selectable style={styles.memoryBody}>
-                {selected.summary}
-              </Text>
-              <Text style={styles.rowMeta}>
-                {selected.timestamp === null
-                  ? 'Date unavailable'
-                  : new Date(selected.timestamp * 1000).toLocaleDateString()}
-              </Text>
-              <Text style={styles.rowMeta}>
-                {selected.citations.length}{' '}
-                {selected.citations.length === 1 ? 'citation' : 'citations'} ·{' '}
-                {selected.provenance.label || 'Synthesized memory'}
-              </Text>
-            </View>
-          )}
-        </ScrollView>
+        <ScrollFade visible style={styles.list}>
+          <ScrollView
+            accessibilityLabel="Selected conversation details"
+            onLayout={fade.onLayout}
+            onScroll={fade.onScroll}
+            onContentSizeChange={fade.onContentSizeChange}
+            scrollEventThrottle={16}
+            contentContainerStyle={styles.conversationDetail}>
+            <FocusPressable
+              accessibilityRole="button"
+              accessibilityLabel="Back to conversations"
+              onPress={() => setSelectedId(null)}
+              style={[styles.taskEdit, styles.backAction]}>
+              <Text style={styles.rowMeta}>Back to conversations</Text>
+            </FocusPressable>
+            {selected.kind === 'conversation' ? (
+              <ConversationDetail
+                key={selected.id}
+                conversation={selected}
+                apiContract={
+                  outcome?.status === 'success'
+                    ? outcome.value.apiContract
+                    : undefined
+                }
+                desktop
+              />
+            ) : (
+              <View
+                accessibilityLabel="Selected memory details"
+                style={styles.memoryDetail}>
+                {selected.title.trim() !== '' &&
+                  !selected.summary.startsWith(selected.title) && (
+                    <Text accessibilityRole="header" style={styles.rowTitle}>
+                      {selected.title}
+                    </Text>
+                  )}
+                <Text selectable style={styles.memoryBody}>
+                  {selected.summary}
+                </Text>
+                <Text style={styles.rowMeta}>
+                  {selected.timestamp === null
+                    ? 'Date unavailable'
+                    : new Date(selected.timestamp * 1000).toLocaleDateString()}
+                </Text>
+                <Text style={styles.rowMeta}>
+                  {selected.citations.length}{' '}
+                  {selected.citations.length === 1 ? 'citation' : 'citations'} ·{' '}
+                  {selected.provenance.label || 'Synthesized memory'}
+                </Text>
+              </View>
+            )}
+          </ScrollView>
+        </ScrollFade>
       ) : (
         <ScrollFade visible style={styles.list}>
           <ScrollView
@@ -245,6 +251,7 @@ export function TasksPage({
   taskPagination?: React.ReactNode;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  const fade = useScrollFade();
   const outcome = outcomes?.tasks ?? null;
   const tasks = outcome?.status === 'success' ? outcome.value.items : [];
   const emptyCopy =
@@ -267,94 +274,100 @@ export function TasksPage({
         onRetryTaskMutation={onRetryTaskMutation}
         onDismissTaskMutation={onDismissTaskMutation}
       />
-      <ScrollView
-        contentContainerStyle={styles.listContent}
-        style={styles.list}>
-        {tasks.length > 0 ? (
-          tasks.map(item => {
-            const editable =
-              outcome?.status === 'success' &&
-              (outcome.value.apiContract === 'omi' || item.revision !== null);
-            return (
-              <ShippingListInsert itemKey={item.id} key={item.id}>
-                <View style={styles.libraryRow}>
-                  <View style={styles.taskActions}>
-                    <FocusPressable
-                      accessibilityRole={
-                        writesAvailable && onTaskToggle ? 'checkbox' : 'text'
-                      }
-                      accessibilityLabel={`${
-                        item.completed ? 'Reopen' : 'Complete'
-                      } task: ${item.title}`}
-                      accessibilityState={{
-                        checked: item.completed,
-                        disabled:
+      <ScrollFade visible style={styles.list}>
+        <ScrollView
+          onLayout={fade.onLayout}
+          onScroll={fade.onScroll}
+          onContentSizeChange={fade.onContentSizeChange}
+          scrollEventThrottle={16}
+          contentContainerStyle={styles.listContent}>
+          {tasks.length > 0 ? (
+            tasks.map(item => {
+              const editable =
+                outcome?.status === 'success' &&
+                (outcome.value.apiContract === 'omi' || item.revision !== null);
+              return (
+                <ShippingListInsert itemKey={item.id} key={item.id}>
+                  <View style={styles.libraryRow}>
+                    <View style={styles.taskActions}>
+                      <FocusPressable
+                        accessibilityRole={
+                          writesAvailable && onTaskToggle ? 'checkbox' : 'text'
+                        }
+                        accessibilityLabel={`${
+                          item.completed ? 'Reopen' : 'Complete'
+                        } task: ${item.title}`}
+                        accessibilityState={{
+                          checked: item.completed,
+                          disabled:
+                            !writesAvailable ||
+                            !onTaskToggle ||
+                            !editable ||
+                            busyTaskId !== null,
+                          busy:
+                            busyTaskId === item.id &&
+                            taskMutationError === null,
+                        }}
+                        disabled={
                           !writesAvailable ||
                           !onTaskToggle ||
                           !editable ||
-                          busyTaskId !== null,
-                        busy:
-                          busyTaskId === item.id && taskMutationError === null,
-                      }}
-                      disabled={
-                        !writesAvailable ||
-                        !onTaskToggle ||
-                        !editable ||
-                        busyTaskId !== null
-                      }
-                      onPress={() => onTaskToggle?.(item.id)}
-                      style={styles.taskToggle}>
-                      <TaskRow item={item} />
-                    </FocusPressable>
-                    {writesAvailable && onTaskEdit && editable && (
-                      <FocusPressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Edit task: ${item.title}`}
-                        disabled={busyTaskId !== null}
-                        accessibilityState={{disabled: busyTaskId !== null}}
-                        onPress={() => setEditingId(item.id)}
-                        style={styles.taskEdit}>
-                        <Text style={styles.rowMeta}>Edit</Text>
+                          busyTaskId !== null
+                        }
+                        onPress={() => onTaskToggle?.(item.id)}
+                        style={styles.taskToggle}>
+                        <TaskRow item={item} />
                       </FocusPressable>
-                    )}
+                      {writesAvailable && onTaskEdit && editable && (
+                        <FocusPressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Edit task: ${item.title}`}
+                          disabled={busyTaskId !== null}
+                          accessibilityState={{disabled: busyTaskId !== null}}
+                          onPress={() => setEditingId(item.id)}
+                          style={styles.taskEdit}>
+                          <Text style={styles.rowMeta}>Edit</Text>
+                        </FocusPressable>
+                      )}
+                    </View>
+                    {editingId === item.id &&
+                      writesAvailable &&
+                      onTaskEdit &&
+                      editable && (
+                        <TaskEditor
+                          desktop
+                          id={item.id}
+                          title={item.title}
+                          busy={busyTaskId !== null}
+                          failed={taskMutationError !== null}
+                          onSave={onTaskEdit}
+                          onClose={() => setEditingId(null)}
+                        />
+                      )}
                   </View>
-                  {editingId === item.id &&
-                    writesAvailable &&
-                    onTaskEdit &&
-                    editable && (
-                      <TaskEditor
-                        desktop
-                        id={item.id}
-                        title={item.title}
-                        busy={busyTaskId !== null}
-                        failed={taskMutationError !== null}
-                        onSave={onTaskEdit}
-                        onClose={() => setEditingId(null)}
-                      />
-                    )}
-                </View>
-              </ShippingListInsert>
-            );
-          })
-        ) : (
-          <DesktopEmptyState
-            icon={ListChecks}
-            error={outcome?.status === 'error'}
-            title={
-              outcome === null
-                ? 'Gathering your tasks…'
-                : outcome.status === 'error'
-                ? 'Tasks are unavailable'
-                : 'A little room to think.'
-            }
-            detail={emptyCopy}
-          />
-        )}
-        {taskPagination}
-        {outcome?.status === 'success' ? (
-          <ReadStatus label="Tasks" mac page={outcome.value.page} />
-        ) : null}
-      </ScrollView>
+                </ShippingListInsert>
+              );
+            })
+          ) : (
+            <DesktopEmptyState
+              icon={ListChecks}
+              error={outcome?.status === 'error'}
+              title={
+                outcome === null
+                  ? 'Gathering your tasks…'
+                  : outcome.status === 'error'
+                  ? 'Tasks are unavailable'
+                  : 'A little room to think.'
+              }
+              detail={emptyCopy}
+            />
+          )}
+          {taskPagination}
+          {outcome?.status === 'success' ? (
+            <ReadStatus label="Tasks" mac page={outcome.value.page} />
+          ) : null}
+        </ScrollView>
+      </ScrollFade>
     </View>
   );
 }

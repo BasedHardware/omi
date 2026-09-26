@@ -62,7 +62,7 @@ test('retires row animation and restores a row when animation is disabled', () =
 });
 
 test.each([false, true])(
-  'AI replies have bubbles and user messages are unboxed (desktop=%s)',
+  'user messages are boxed and AI replies are unboxed on desktop (desktop=%s)',
   desktop => {
     let tree!: Renderer.ReactTestRenderer;
     const message = {
@@ -90,8 +90,14 @@ test.each([false, true])(
             node.type === Text && node.props.children === 'Message content',
         ).parent!.props.style,
       );
-    expect(bubble().backgroundColor).toBe('transparent');
-    expect(bubble().borderWidth).toBe(0);
+    if (desktop) {
+      expect(bubble().backgroundColor).toBe('rgba(255, 255, 255, 0.14)');
+      expect(bubble().borderRadius).toBe(18);
+      expect(bubble().borderWidth).toBe(0);
+    } else {
+      expect(bubble().backgroundColor).toBe('transparent');
+      expect(bubble().borderWidth).toBe(0);
+    }
     act(() =>
       tree.update(
         <ChatMessageRow
@@ -103,7 +109,12 @@ test.each([false, true])(
         />,
       ),
     );
-    expect(bubble().backgroundColor).not.toBe('transparent');
+    if (desktop) {
+      // Omi replies as flat text: the text node carries no bubble fill.
+      expect(bubble().backgroundColor).toBeUndefined();
+    } else {
+      expect(bubble().backgroundColor).not.toBe('transparent');
+    }
     act(() => tree.unmount());
   },
 );

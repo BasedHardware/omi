@@ -97,7 +97,11 @@ const ChatMessageRow = memo(function ChatMessageRow({
         <View
           style={[
             styles.chatBubble,
-            human ? transcriptStyles.human : styles.chatBubbleAi,
+            human
+              ? desktop
+                ? desktopStyles.human
+                : transcriptStyles.human
+              : styles.chatBubbleAi,
             desktop && !human && desktopStyles.ai,
             message.generationOutcome === 'cancelled' &&
               styles.cancelledMessage,
@@ -225,7 +229,16 @@ export {ChatMessageRow, ChatThinking};
 
 const desktopStyles = StyleSheet.create({
   column: {maxWidth: '82%'},
-  ai: {backgroundColor: token.color.glassQuiet, borderWidth: 0},
+  // Mirrors the shipped Omi app: your words sit in a quiet bubble on the
+  // right; Omi answers as flat text beside its avatar, with no bubble.
+  human: {
+    backgroundColor: token.color.glassStrong,
+    borderWidth: 0,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  ai: {backgroundColor: 'transparent', borderWidth: 0},
   text: {color: token.color.ink, fontSize: 15, lineHeight: 24},
   time: {color: token.color.inkFaint, fontSize: 11},
 });

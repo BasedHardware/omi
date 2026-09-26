@@ -79,7 +79,7 @@ test('legacy tasks without revisions toggle and save edited descriptions', () =>
   act(() => label(view, 'Edit task: Review notes').props.onPress());
   expect(
     StyleSheet.flatten(label(view, 'Task description').props.style).color,
-  ).toBe('#242622');
+  ).toBe('#F2F4EF');
   act(() =>
     label(view, 'Task description').props.onChangeText('Review all notes'),
   );
