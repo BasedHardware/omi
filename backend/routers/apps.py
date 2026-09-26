@@ -33,8 +33,8 @@ from utils.mcp_client import (
     refresh_oauth_token,
     discover_mcp_tools,
     fetch_brandfetch_logo,
-    generate_state_token,
-    parse_state_token,
+    create_mcp_oauth_state,
+    consume_mcp_oauth_state,
     generate_pkce_pair,
 )
 
@@ -1926,7 +1926,13 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
                 detail='MCP server requires OAuth but does not support dynamic client registration',
             )
 
-        state = generate_state_token(app_id, uid)
+        # Single-use server-side state: the callback trusts only a state this server issued,
+        # so a caller cannot forge one that binds the connection to another account.
+        try:
+            state = await run_blocking(db_executor, create_mcp_oauth_state, app_id, uid)
+        except Exception as e:
+            logger.error(f'[MCP OAuth] Failed to store state in Redis: {e}')
+            raise HTTPException(status_code=500, detail='Failed to initialize OAuth flow')
 
         # Generate PKCE pair (required by MCP OAuth 2.1 spec)
         code_verifier, code_challenge = generate_pkce_pair()
@@ -2031,14 +2037,16 @@ async def mcp_oauth_callback(code: str, state: str):
     Exchanges the authorization code for tokens, discovers tools, updates the app.
     Returns an HTML success/failure page.
     """
-    try:
-        app_id, uid = parse_state_token(state)
-    except ValueError:
-        return HTMLResponse('<html><body><h1>Invalid state parameter</h1></body></html>', status_code=400)
+    subject = await run_blocking(db_executor, consume_mcp_oauth_state, state)
+    if not subject:
+        return HTMLResponse('<html><body><h1>Invalid or expired state parameter</h1></body></html>', status_code=400)
+    app_id, uid = subject
 
     app_data = await run_blocking(db_executor, get_app_by_id_db, app_id)
     if not app_data:
         return HTMLResponse('<html><body><h1>App not found</h1></body></html>', status_code=404)
+    if app_data.get('uid') != uid:
+        return HTMLResponse('<html><body><h1>OAuth state does not match app owner</h1></body></html>', status_code=403)
 
     ext = app_data.get('external_integration', {})
     oauth_tokens = ext.get('mcp_oauth_tokens', {})

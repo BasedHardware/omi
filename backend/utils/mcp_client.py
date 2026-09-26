@@ -19,6 +19,7 @@ from urllib.parse import urlencode, urljoin, urlparse
 
 import httpx
 
+from database import redis_db
 from models.app import ChatTool
 from utils.log_sanitizer import sanitize
 import logging
@@ -768,15 +769,45 @@ async def fetch_brandfetch_logo(domain: str) -> Optional[str]:
     return f"https://cdn.brandfetch.io/domain/{root_domain}?c=1idiDEee8WtzJbSEuuW"
 
 
-def generate_state_token(app_id: str, uid: str) -> str:
-    """Generate a state parameter for OAuth that encodes app_id and uid."""
-    nonce = secrets.token_urlsafe(16)
-    return f"{app_id}:{uid}:{nonce}"
+MCP_OAUTH_STATE_EXPIRY_SECONDS = 600  # 10 minutes, same as the integration OAuth flows
 
 
-def parse_state_token(state: str) -> tuple[str, str]:
-    """Parse app_id and uid from an OAuth state parameter."""
-    parts = state.split(":", 2)
-    if len(parts) < 2:
-        raise ValueError("Invalid state token")
-    return parts[0], parts[1]
+def create_mcp_oauth_state(app_id: str, uid: str) -> str:
+    """Create a single-use OAuth state for an MCP app connection.
+
+    The state is an opaque random token; the app_id/uid pair it stands for lives
+    server-side in Redis. The callback trusts only a state this server issued, so a
+    caller cannot forge a state that binds an app connection to another account.
+    """
+    state_token = secrets.token_urlsafe(32)
+    redis_db.r.setex(
+        f"mcp_oauth_state:{state_token}",
+        MCP_OAUTH_STATE_EXPIRY_SECONDS,
+        json.dumps({'app_id': app_id, 'uid': uid}),
+    )
+    return state_token
+
+
+def consume_mcp_oauth_state(state_token: str) -> Optional[tuple[str, str]]:
+    """Atomically consume an MCP OAuth state and return its (app_id, uid) pair.
+
+    Returns None for a missing, expired, already-used, or malformed state. GETDEL
+    keeps consumption single-use: a separate GET then DELETE would let two concurrent
+    callbacks carrying the same state both read it before either delete runs.
+    """
+    if not state_token:
+        return None
+    raw = redis_db.r.getdel(f"mcp_oauth_state:{state_token}")
+    if not raw:
+        return None
+    try:
+        loaded: object = json.loads(raw.decode() if isinstance(raw, bytes) else raw)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(loaded, dict):
+        return None
+    app_id = loaded.get('app_id')
+    uid = loaded.get('uid')
+    if not isinstance(app_id, str) or not isinstance(uid, str) or not app_id or not uid:
+        return None
+    return app_id, uid
