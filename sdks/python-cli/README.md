@@ -254,6 +254,7 @@ omi
 │   ├── list [--limit N] [--offset N] [--categories ...]
 │   ├── get <id>
 │   ├── create <content> [--category ...] [--visibility ...] [--tag ...]
+│   ├── create-batch <file.json>
 │   ├── update <id> [--content ...] [--category ...] [--visibility ...] [--tag ...]
 │   └── delete <id> [-y]
 ├── conversation
@@ -306,6 +307,30 @@ and overflowing exponents are rejected before an API request.
 `action-item get` searches successive API pages until it finds the ID or
 reaches the end of the results. It can retrieve items beyond the first 1,000;
 looking up an older or missing item may require several API requests.
+
+`memory create-batch` imports up to 25 memories from a UTF-8 JSON file in one
+request. The file can be a JSON array of memory objects, or an object with a
+`memories` array:
+
+```json
+{
+  "memories": [
+    { "content": "Team retro every Friday", "category": "work", "visibility": "private", "tags": ["meetings"] },
+    { "content": "Prefers dark mode" }
+  ]
+}
+```
+
+```bash
+omi memory create-batch memories.json
+```
+
+Every entry needs non-empty string `content` (max 500 characters). Optional
+fields: `category` (known category), `visibility` (`public` or `private`,
+defaults to `private`), and `tags` (list of strings). Files may include a UTF-8
+BOM. Invalid JSON, more than 25 entries, or malformed entries fail before any
+HTTP request; the server still applies its own authorization and validation on
+the single batch call.
 
 ## Global flags
 
