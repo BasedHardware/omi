@@ -259,6 +259,7 @@ omi
 ├── conversation
 │   ├── list [--limit N] [--start-date ...] [--end-date ...] [--include-transcript]
 │   ├── get <id> [--include-transcript]
+│   ├── export <id> --format srt --output <file.srt> [--overwrite]
 │   ├── create [--text ...] [--text-source ...] [...]
 │   ├── from-segments <file.json> [--source ...]
 │   ├── update <id> [--title ...] [--discarded/--no-discarded]
@@ -292,6 +293,8 @@ omi
     ├── history <id> [--days N]
     └── delete <id> [-y]
 ```
+
+`conversation export ID --format srt --output transcript.srt` exports existing timed transcript segments as a UTF-8 SubRip subtitle file. The command refuses to overwrite an existing file unless `--overwrite` is passed, and rejects segments with missing, non-finite, negative, or non-increasing timestamps.
 
 `conversation from-segments` reads JSON files as UTF-8 (with or without a BOM),
 UTF-16, or UTF-32, independently of the system's default text encoding.
