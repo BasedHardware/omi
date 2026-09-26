@@ -3530,6 +3530,7 @@
     "keepUsingPendant": "Hanger blijven gebruiken",
     "openCall": "Gesprek openen",
     "captureRecoveryBanner": "De audio van de hanger komt niet aan in de app — tik om te repareren",
+    "phoneRecordingBlockedByPendantBatch": "Stop Transcribe Later op je hanger voordat je met je telefoon opneemt.",
     "captureNotTranscribing": "Geen transcriptie",
     "captureAudioSavedTranscribesLater": "Audio opgeslagen, later getranscribeerd",
     "captureStillRecording": "Neemt nog op",

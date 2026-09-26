@@ -11211,6 +11211,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get captureRecoveryBanner => 'Audio loket tidak sampai ke aplikasi — ketik untuk membaiki';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Hentikan Transcribe Later pada loket anda sebelum merakam dengan telefon.';
+
+  @override
   String get captureNotTranscribing => 'Tiada transkripsi';
 
   @override

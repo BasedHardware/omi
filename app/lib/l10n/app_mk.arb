@@ -11063,6 +11063,7 @@
     "keepUsingPendant": "Продолжи со приврзокот",
     "openCall": "Отвори го повикот",
     "captureRecoveryBanner": "Аудиото од привезокот не стигнува до апликацијата — допрете за поправка",
+    "phoneRecordingBlockedByPendantBatch": "Запрете Transcribe Later на привезокот пред да снимате со телефонот.",
     "captureNotTranscribing": "Нема транскрипција",
     "captureAudioSavedTranscribesLater": "Аудиото е зачувано, транскрипција подоцна",
     "captureStillRecording": "Снимањето продолжува",

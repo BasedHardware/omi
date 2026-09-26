@@ -3530,6 +3530,7 @@
     "keepUsingPendant": "Seguir usando el colgante",
     "openCall": "Abrir llamada",
     "captureRecoveryBanner": "El audio del colgante no llega a la app — toca para reparar",
+    "phoneRecordingBlockedByPendantBatch": "Detén Transcribe Later en tu colgante antes de grabar con el teléfono.",
     "captureNotTranscribing": "Sin transcripción",
     "captureAudioSavedTranscribesLater": "Audio guardado, se transcribirá después",
     "captureStillRecording": "Sigue grabando",

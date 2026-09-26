@@ -11063,6 +11063,7 @@
     "keepUsingPendant": "ادامه با آویز",
     "openCall": "باز کردن تماس",
     "captureRecoveryBanner": "صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید",
+    "phoneRecordingBlockedByPendantBatch": "قبل از ضبط با گوشی، Transcribe Later را روی آویز خود متوقف کنید.",
     "captureNotTranscribing": "رونویسی انجام نمی‌شود",
     "captureAudioSavedTranscribesLater": "صدا ذخیره شد، بعداً رونویسی می‌شود",
     "captureStillRecording": "ضبط ادامه دارد",

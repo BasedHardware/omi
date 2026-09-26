@@ -11094,6 +11094,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get captureRecoveryBanner => 'השמע מהתליון לא מגיע לאפליקציה — הקישו לתיקון';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch => 'עצרו את Transcribe Later בקולייה לפני ההקלטה בטלפון.';
+
+  @override
   String get captureNotTranscribing => 'אין תמלול';
 
   @override

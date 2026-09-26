@@ -11225,6 +11225,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get captureRecoveryBanner => 'A medál hangja nem érkezik meg az alkalmazásba — a javításhoz koppintson';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Állítsa le a Transcribe Later módot a medálján, mielőtt telefonnal rögzítene.';
+
+  @override
   String get captureNotTranscribing => 'Nincs átírás';
 
   @override

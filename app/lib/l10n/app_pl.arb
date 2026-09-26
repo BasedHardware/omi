@@ -3565,6 +3565,7 @@
     "keepUsingPendant": "Używaj dalej wisiorka",
     "openCall": "Otwórz połączenie",
     "captureRecoveryBanner": "Dźwięk z zawieszki nie dociera do aplikacji — dotknij, aby naprawić",
+    "phoneRecordingBlockedByPendantBatch": "Zatrzymaj Transcribe Later na wisiorku, zanim zaczniesz nagrywać telefonem.",
     "captureNotTranscribing": "Brak transkrypcji",
     "captureAudioSavedTranscribesLater": "Dźwięk zapisany, transkrypcja później",
     "captureStillRecording": "Nagrywanie trwa",

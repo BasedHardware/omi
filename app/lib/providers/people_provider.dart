@@ -46,8 +46,11 @@ class PeopleProvider extends BaseProvider {
     final value = await _loadPeople();
     loading = false;
     if (value != null) {
-      people = value;
-      SharedPreferencesUtil().cachedPeople = people;
+      people = [
+        ...value,
+        ...people.where((person) => person.id.startsWith('optimistic-person:')),
+      ];
+      SharedPreferencesUtil().cachedPeople = value;
     }
     Logger.debug("${SharedPreferencesUtil().cachedPeople.length} people");
     notifyListeners();
@@ -98,11 +101,22 @@ class PeopleProvider extends BaseProvider {
 
     people.add(newPerson);
     people.sort((a, b) => a.name.compareTo(b.name));
-    SharedPreferencesUtil().cachedPeople = people;
+    SharedPreferencesUtil().cachedPeople =
+        people.where((person) => !person.id.startsWith('optimistic-person:')).toList();
 
     loading = false;
     notifyListeners();
     return newPerson;
+  }
+
+  void addOptimisticPerson(Person person) {
+    people.add(person);
+    notifyListeners();
+  }
+
+  void removeOptimisticPerson(String id) {
+    people.removeWhere((person) => person.id == id);
+    notifyListeners();
   }
 
   Future<void> updatePersonProvider(Person person, String name) async {

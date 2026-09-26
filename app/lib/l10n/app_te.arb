@@ -11063,6 +11063,7 @@
     "keepUsingPendant": "పెండెంట్‌నే ఉపయోగించండి",
     "openCall": "కాల్‌ను తెరవండి",
     "captureRecoveryBanner": "పెండెంట్ ఆడియో యాప్‌కు చేరడం లేదు — రిపేర్ చేయడానికి ట్యాప్ చేయండి",
+    "phoneRecordingBlockedByPendantBatch": "మీ ఫోన్‌తో రికార్డ్ చేయడానికి ముందు మీ పెండెంట్‌లో Transcribe Later ఆపండి.",
     "captureNotTranscribing": "ట్రాన్స్‌క్రిప్షన్ లేదు",
     "captureAudioSavedTranscribesLater": "ఆడియో సేవ్ అయింది, తర్వాత ట్రాన్స్‌క్రైబ్ అవుతుంది",
     "captureStillRecording": "ఇంకా రికార్డ్ అవుతోంది",

@@ -11191,6 +11191,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get captureRecoveryBanner => 'Ljudet från hänget når inte appen — tryck för att reparera';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Stoppa Transcribe Later på ditt hängsmycke innan du spelar in med telefonen.';
+
+  @override
   String get captureNotTranscribing => 'Transkriberar inte';
 
   @override

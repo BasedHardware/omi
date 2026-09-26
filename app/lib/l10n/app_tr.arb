@@ -3565,6 +3565,7 @@
     "keepUsingPendant": "Kolyeyi kullanmaya devam et",
     "openCall": "Aramayı aç",
     "captureRecoveryBanner": "Kolye sesi uygulamaya ulaşmıyor — onarmak için dokunun",
+    "phoneRecordingBlockedByPendantBatch": "Telefonunuzla kaydetmeden önce kolyenizdeki Transcribe Later'ı durdurun.",
     "captureNotTranscribing": "Metne dökülmüyor",
     "captureAudioSavedTranscribesLater": "Ses kaydedildi, sonra metne dökülecek",
     "captureStillRecording": "Kayıt sürüyor",

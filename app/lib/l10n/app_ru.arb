@@ -3565,6 +3565,7 @@
     "keepUsingPendant": "Продолжить с кулоном",
     "openCall": "Открыть звонок",
     "captureRecoveryBanner": "Звук кулона не доходит до приложения — нажмите, чтобы исправить",
+    "phoneRecordingBlockedByPendantBatch": "Остановите Transcribe Later на подвеске, прежде чем записывать с телефона.",
     "captureNotTranscribing": "Нет текста",
     "captureAudioSavedTranscribesLater": "Аудио сохранено, расшифруется позже",
     "captureStillRecording": "Запись продолжается",

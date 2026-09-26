@@ -11173,6 +11173,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get captureRecoveryBanner => 'Zvuk prívesku sa do aplikácie nedostáva — opravte klepnutím';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch => 'Pred nahrávaním telefónom zastavte Transcribe Later na prívesku.';
+
+  @override
   String get captureNotTranscribing => 'Neprepisuje sa';
 
   @override

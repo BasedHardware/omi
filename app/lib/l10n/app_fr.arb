@@ -3565,6 +3565,7 @@
     "keepUsingPendant": "Continuer avec le pendentif",
     "openCall": "Ouvrir l'appel",
     "captureRecoveryBanner": "Le son du pendentif n'arrive pas à l'application — touchez pour réparer",
+    "phoneRecordingBlockedByPendantBatch": "Arrêtez Transcribe Later sur votre pendentif avant d'enregistrer avec votre téléphone.",
     "captureNotTranscribing": "Pas de transcription",
     "captureAudioSavedTranscribesLater": "Audio enregistré, transcrit plus tard",
     "captureStillRecording": "Enregistrement en cours",

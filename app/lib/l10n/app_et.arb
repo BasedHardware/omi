@@ -3530,6 +3530,7 @@
     "keepUsingPendant": "Jätka ripatsiga",
     "openCall": "Ava kõne",
     "captureRecoveryBanner": "Ripatsi heli ei jõua rakendusse — parandamiseks puudutage",
+    "phoneRecordingBlockedByPendantBatch": "Peata ripatsi režiim Transcribe Later enne telefoniga salvestamist.",
     "captureNotTranscribing": "Transkriptsioon puudub",
     "captureAudioSavedTranscribesLater": "Heli salvestatud, transkribeeritakse hiljem",
     "captureStillRecording": "Salvestamine jätkub",

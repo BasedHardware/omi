@@ -11244,6 +11244,10 @@ class AppLocalizationsIt extends AppLocalizations {
   String get captureRecoveryBanner => 'L\'audio del ciondolo non arriva all\'app — tocca per riparare';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Interrompi Transcribe Later sul pendente prima di registrare con il telefono.';
+
+  @override
   String get captureNotTranscribing => 'Nessuna trascrizione';
 
   @override

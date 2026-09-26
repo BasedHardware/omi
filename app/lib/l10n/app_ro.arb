@@ -3530,6 +3530,7 @@
     "keepUsingPendant": "Continuă cu pandantivul",
     "openCall": "Deschide apelul",
     "captureRecoveryBanner": "Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara",
+    "phoneRecordingBlockedByPendantBatch": "Opriți Transcribe Later pe pandantiv înainte de a înregistra cu telefonul.",
     "captureNotTranscribing": "Fără transcriere",
     "captureAudioSavedTranscribesLater": "Audio salvat, transcris mai târziu",
     "captureStillRecording": "Înregistrarea continuă",

@@ -3530,6 +3530,7 @@
     "keepUsingPendant": "Ďalej používať prívesok",
     "openCall": "Otvoriť hovor",
     "captureRecoveryBanner": "Zvuk prívesku sa do aplikácie nedostáva — opravte klepnutím",
+    "phoneRecordingBlockedByPendantBatch": "Pred nahrávaním telefónom zastavte Transcribe Later na prívesku.",
     "captureNotTranscribing": "Neprepisuje sa",
     "captureAudioSavedTranscribesLater": "Zvuk uložený, prepíše sa neskôr",
     "captureStillRecording": "Stále sa nahráva",
