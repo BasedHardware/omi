@@ -19,6 +19,10 @@ file(GLOB app_sources
     src/imu.c
 )
 
+if(CONFIG_OMI_ENABLE_VAD_GATE)
+    list(APPEND app_sources src/software_vad.c)
+endif()
+
 if(CONFIG_OMI_ENABLE_T5838_AAD)
     # Hardware AAD is integrated into mic.c; t5838_aad.c is the low-level driver.
     list(APPEND app_sources src/t5838_aad.c)
