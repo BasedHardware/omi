@@ -13,15 +13,15 @@ Two output schemas are supported:
 Usage
 -----
   # Fetch from live API and write chat-format JSONL:
-  omi --json memory list | python examples/memories_to_jsonl.py - out.jsonl
+  omi --json memory list | python examples/memories_to_jsonl.py - -o out.jsonl
 
   # Multiple input files, deduplicated by id, knowledge format:
   python examples/memories_to_jsonl.py \\
       memories_2024.json memories_2025.json \\
-      dataset.jsonl --format knowledge
+      -o dataset.jsonl --format knowledge
 
   # Stream straight to stdout for further processing:
-  omi --json memory list | python examples/memories_to_jsonl.py - /dev/stdout
+  omi --json memory list | python examples/memories_to_jsonl.py - -o /dev/stdout
 
 Inputs
 ------
@@ -114,7 +114,7 @@ def to_chat_record(memory: dict) -> Optional[dict]:
     """
     content = (
         memory.get("content")
-        or memory.get("structured", {}).get("title")
+        or (memory.get("structured") or {}).get("title")
         or memory.get("text")
         or ""
     ).strip()
@@ -136,7 +136,7 @@ def to_knowledge_record(memory: dict) -> Optional[dict]:
     """
     content = (
         memory.get("content")
-        or memory.get("structured", {}).get("title")
+        or (memory.get("structured") or {}).get("title")
         or memory.get("text")
         or ""
     ).strip()
@@ -227,9 +227,10 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  omi --json memory list | python memories_to_jsonl.py - out.jsonl\n"
-            "  python memories_to_jsonl.py memories.json dataset.jsonl "
+            "  omi --json memory list | python memories_to_jsonl.py - -o out.jsonl\n"
+            "  python memories_to_jsonl.py memories.json -o dataset.jsonl "
             "--format knowledge\n"
+            "  omi --json memory list | python memories_to_jsonl.py - -o /dev/stdout\n"
         ),
     )
     p.add_argument(
