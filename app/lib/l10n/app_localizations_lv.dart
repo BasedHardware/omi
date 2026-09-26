@@ -2493,12 +2493,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Detalizēti diagnostikas ziņojumi';
 
   @override
-  String get autoCreateSpeakers => 'Automātiski izveidot runātājus';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Automātiski izveidot, kad konstatēts vārds';
-
-  @override
   String get followUpQuestions => 'Turpinājuma jautājumi';
 
   @override
@@ -11199,9 +11193,6 @@ class AppLocalizationsLv extends AppLocalizations {
       'Transkripcijas nav pieejamas, ierakstīšana turpinās ierīcē un tiks apstrādāta vēlāk';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transkripcija nav pieejama · tiek saglabāta ierīcē';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Gaidošas transkripcijas $pending/$total';
   }
@@ -11273,4 +11264,45 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => 'Pirms ierakstīšanas ar tālruni apturiet Transcribe Later piekari.';
+
+  @override
+  String get captureNotTranscribing => 'Netiek transkribēts';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio saglabāts, tiks transkribēts vēlāk';
+
+  @override
+  String get captureStillRecording => 'Ierakstīšana turpinās';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofonu izmanto cita lietotne';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Zvans vai cita lietotne aizņēma mikrofonu, tāpēc Omi pašlaik nedzird. Omi turpinās pats, kad mikrofons būs brīvs. Viss, kas ierakstīts līdz šim, ir drošībā.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Jūsu pielāgotais runas pārveides tekstā pakalpojums nav sasniedzams. Omi glabā audio šajā tālrunī un nosūtīs to, kad pakalpojums atjaunosies. Nekas netiek zaudēts.';
+
+  @override
+  String get captureStarting => 'Sāk…';
+
+  @override
+  String get capturePhoneStorageFull => 'Tālruņa krātuve ir pilna';
+
+  @override
+  String get captureStorageAlmostFull => 'Krātuve gandrīz pilna';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name un citi';
+  }
 }

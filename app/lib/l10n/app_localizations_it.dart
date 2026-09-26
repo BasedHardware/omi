@@ -2499,12 +2499,6 @@ class AppLocalizationsIt extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Messaggi diagnostici dettagliati';
 
   @override
-  String get autoCreateSpeakers => 'Crea Automaticamente Relatori';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Crea automaticamente quando viene rilevato un nome';
-
-  @override
   String get followUpQuestions => 'Domande di Follow-up';
 
   @override
@@ -11235,9 +11229,6 @@ class AppLocalizationsIt extends AppLocalizations {
       'Trascrizioni non disponibili, la registrazione continua sul dispositivo e verrà elaborata più tardi';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Trascrizione non disponibile · salvataggio sul dispositivo';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Trascrizioni in attesa $pending/$total';
   }
@@ -11309,4 +11300,46 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'L\'audio del ciondolo non arriva all\'app — tocca per riparare';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Interrompi Transcribe Later sul pendente prima di registrare con il telefono.';
+
+  @override
+  String get captureNotTranscribing => 'Nessuna trascrizione';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio salvato, trascritto più tardi';
+
+  @override
+  String get captureStillRecording => 'Registrazione in corso';
+
+  @override
+  String get captureMicInUseElsewhere => 'Microfono in uso da un\'altra app';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Una chiamata o un\'altra app sta usando il microfono, quindi Omi ora non può ascoltare. Omi riprenderà da solo quando il microfono sarà libero. Tutto ciò che è stato registrato prima è al sicuro.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Il tuo servizio personalizzato di trascrizione vocale non è raggiungibile. Omi conserva l\'audio su questo telefono e lo invierà quando il servizio tornerà. Non si perde nulla.';
+
+  @override
+  String get captureStarting => 'Avvio…';
+
+  @override
+  String get capturePhoneStorageFull => 'Memoria del telefono piena';
+
+  @override
+  String get captureStorageAlmostFull => 'Memoria quasi piena';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Il ciondolo ha perso la connessione con questo telefono. Omi si riconnetterà da solo quando il ciondolo sarà acceso e vicino. Tutto ciò che è stato registrato prima è al sicuro.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name e altri';
+  }
 }

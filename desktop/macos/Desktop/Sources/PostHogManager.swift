@@ -375,6 +375,12 @@ extension PostHogManager {
     track(Self.captureAttemptOutcomeEventName, properties: properties)
   }
 
+  /// One local day's per-bundle call-audio counts. `track` already drops the
+  /// event when analytics is uninitialized or the user has opted out.
+  func callAppAudioSummary(_ summary: CallAppAudioSummary) {
+    track(CallAppAudioSummaryTelemetry.eventName, properties: CallAppAudioSummaryTelemetry.properties(summary))
+  }
+
   func recordingError(
     error: String,
     reason: String? = nil,

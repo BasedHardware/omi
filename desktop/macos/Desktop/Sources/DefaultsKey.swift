@@ -135,6 +135,10 @@ enum DefaultsKey: String {
   /// Ambient capture mutes its microphone contribution while a dictation app (Wispr Flow,
   /// superwhisper, macOS Dictation) holds the mic. Absent means on.
   case transcriptionIgnoreDictationApps = "transcription_ignoreDictationApps"
+  /// Current local day's per-bundle call-audio aggregates. The meeting detector
+  /// flushes the previous day as `Desktop Call App Audio Summary` on the first
+  /// tick of a new day and when it starts after a relaunch.
+  case callAppAudioDailyLedger = "callAppAudioDailyLedger"
   case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
   case floatingBarCachedPlan = "floatingBar_cachedPlan"
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
@@ -287,6 +291,7 @@ struct ScopedDefaultsKey {
 /// compiler-checked.
 extension UserDefaults {
   func string(forKey key: DefaultsKey) -> String? { string(forKey: key.rawValue) }
+  func data(forKey key: DefaultsKey) -> Data? { data(forKey: key.rawValue) }
   func bool(forKey key: DefaultsKey) -> Bool { bool(forKey: key.rawValue) }
   func integer(forKey key: DefaultsKey) -> Int { integer(forKey: key.rawValue) }
   func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }

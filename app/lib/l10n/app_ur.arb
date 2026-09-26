@@ -2712,14 +2712,6 @@
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
     },
-    "autoCreateSpeakers": "خود کار طور پر بولنے والے بنائیں",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "جب نام پایا جائے تو خود کار طور پر بنائیں",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
-    },
     "followUpQuestions": "فالو اپ سوالات",
     "@followUpQuestions": {
         "description": "Experimental feature name"
@@ -11094,7 +11086,6 @@
     "addToClaudeCodeConfig": "~/.claude.json میں شامل کریں",
     "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors پر ایک کسٹم کنیکٹر شامل کریں اور سرور URL پیسٹ کریں۔ اگر Claude ایک ایڈوانسڈ OAuth Client ID مانگے تو نیچے دی گئی قدر استعمال کریں اور سیکریٹ خالی چھوڑیں — اپنی MCP API کلید کو کبھی بھی OAuth سیکریٹ کے طور پر استعمال نہ کریں۔",
     "transcriptionUnavailableRecordingContinues": "ٹرانسکرپشن دستیاب نہیں، ریکارڈنگ ڈیوائس پر جاری ہے اور بعد میں پروسیس ہوگی",
-    "transcriptionUnavailableSavingOnDevice": "ٹرانسکرپشن دستیاب نہیں · ڈیوائس پر محفوظ ہو رہی ہے",
     "transcriptionsPendingFraction": "زیرِ التوا ٹرانسکرپشن {pending}/{total}",
     "transcriptionsPendingCount": "زیرِ التوا ٹرانسکرپشن {count}",
     "captureSourceCall": "کال",
@@ -11112,9 +11103,21 @@
     "recordWith": "ریکارڈ کرنے کا ذریعہ",
     "moreWaysToRecord": "ریکارڈ کرنے کے مزید طریقے",
     "openCall": "کال کھولیں",
+    "captureRecoveryBanner": "پینڈنٹ کی آواز ایپ تک نہیں پہنچ رہی — درست کرنے کے لیے ٹیپ کریں",
+    "phoneRecordingBlockedByPendantBatch": "فون سے ریکارڈ کرنے سے پہلے اپنے لاکٹ پر Transcribe Later بند کریں۔",
+    "captureNotTranscribing": "ٹرانسکرپشن نہیں ہو رہی",
+    "captureAudioSavedTranscribesLater": "آڈیو محفوظ، بعد میں ٹرانسکرائب ہوگی",
+    "captureStillRecording": "ریکارڈنگ جاری ہے",
+    "captureMicInUseElsewhere": "مائیک کسی اور ایپ کے استعمال میں ہے",
+    "captureMicInterruptedDetail": "کسی کال یا دوسری ایپ نے مائیکروفون لے لیا ہے، اس لیے Omi ابھی سن نہیں سکتا۔ مائیکروفون خالی ہوتے ہی Omi خود دوبارہ شروع ہو جائے گا۔ اس سے پہلے ریکارڈ ہونے والی ہر چیز محفوظ ہے۔",
+    "captureCustomSttUnreachableDetail": "آپ کی کسٹم اسپیچ ٹو ٹیکسٹ سروس تک رسائی نہیں ہو رہی۔ Omi آڈیو اسی فون پر رکھتا ہے اور سروس واپس آنے پر بھیج دے گا۔ کچھ ضائع نہیں ہوگا۔",
+    "captureStarting": "شروع ہو رہا ہے…",
+    "capturePhoneStorageFull": "فون اسٹوریج بھر گئی",
+    "captureStorageAlmostFull": "اسٹوریج تقریباً بھر گئی",
+    "capturePendantDisconnectedDetail": "آپ کے پینڈنٹ کا اس فون سے رابطہ ٹوٹ گیا۔ پینڈنٹ آن اور قریب ہونے پر Omi خود دوبارہ جڑ جائے گا۔ اس سے پہلے ریکارڈ ہونے والی ہر چیز محفوظ ہے۔",
+    "participantsSummaryUncounted": "{name} اور دیگر",
     "secondDevice": "دوسرا ڈیوائس",
     "pairSecondDevice": "دوسرا ڈیوائس جوڑیں",
     "pairSecondDeviceDescription": "اپنے Omi کے ساتھ OmiGlass کو کنیکٹ کریں تاکہ تصاویر اور آڈیو ایک ہی گفتگو میں جائیں۔",
-    "forgetSecondDevice": "دوسرا ڈیوائس بھول جائیں",
-    "captureRecoveryBanner": "پینڈنٹ کی آواز ایپ تک نہیں پہنچ رہی — درست کرنے کے لیے ٹیپ کریں"
+    "forgetSecondDevice": "دوسرا ڈیوائس بھول جائیں"
 }

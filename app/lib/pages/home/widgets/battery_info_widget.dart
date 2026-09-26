@@ -287,9 +287,14 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
   }
 
   /// The pendant is recording (or paused) in realtime mode: explain, and let the user choose.
+  /// A Transcribe Later pendant is excluded — its capture can't be taken over at all, so it
+  /// falls through to the refusal feedback rather than offering a choice that would fail.
   static bool _pendantHasCapture(CaptureProvider capture) {
     final source = capture.liveCaptureSource;
-    return source != null && source != 'phone' && !SharedPreferencesUtil().batchModeEnabled;
+    return source != null &&
+        source != 'phone' &&
+        !SharedPreferencesUtil().batchModeEnabled &&
+        !capture.isPendantBatchRecording;
   }
 
   void _showPendantListening(BuildContext context) {
@@ -337,7 +342,21 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
       if (context.mounted) _maybeShowOptionsTip(context);
       return;
     }
-    await captureProvider.streamRecording();
+    if (captureProvider.isPendantBatchRecording) {
+      if (context.mounted) {
+        OmiFeedback.info(context, context.l10n.phoneRecordingBlockedByPendantBatch);
+      }
+      return;
+    }
+    try {
+      await captureProvider.streamRecording();
+    } catch (_) {
+      if (context.mounted) {
+        OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      }
+      return;
+    }
+    if (captureProvider.liveCaptureSource != 'phone') return;
     PlatformManager.instance.analytics.phoneMicRecordingStarted();
     // Phone-mic Transcribe Later (batch) has no live transcript — its surface is the
     // conversations-list batch card, so skip the capturing page (same as BLE batch).

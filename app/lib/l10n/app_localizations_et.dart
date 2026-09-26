@@ -2489,12 +2489,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Üksikasjalikud diagnostikasõnumid';
 
   @override
-  String get autoCreateSpeakers => 'Loo kõnelejad automaatselt';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Loo automaatselt nime tuvastamisel';
-
-  @override
   String get followUpQuestions => 'Järgmised küsimused';
 
   @override
@@ -11169,9 +11163,6 @@ class AppLocalizationsEt extends AppLocalizations {
       'Transkriptsioonid pole saadaval, salvestamine jätkub seadmel ja töödeldakse hiljem';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transkriptsioon pole saadaval · salvestatakse seadmesse';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Ootel transkriptsioonid $pending/$total';
   }
@@ -11243,4 +11234,46 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Ripatsi heli ei jõua rakendusse — parandamiseks puudutage';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Peata ripatsi režiim Transcribe Later enne telefoniga salvestamist.';
+
+  @override
+  String get captureNotTranscribing => 'Transkriptsioon puudub';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Heli salvestatud, transkribeeritakse hiljem';
+
+  @override
+  String get captureStillRecording => 'Salvestamine jätkub';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofoni kasutab teine rakendus';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Kõne või mõni teine rakendus võttis mikrofoni, seega Omi praegu ei kuule. Omi jätkab ise, kui mikrofon vabaneb. Kõik varem salvestatu on alles.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Sinu kohandatud kõnetuvastusteenus pole kättesaadav. Omi hoiab heli selles telefonis ja saadab selle, kui teenus taastub. Midagi ei lähe kaduma.';
+
+  @override
+  String get captureStarting => 'Käivitamine…';
+
+  @override
+  String get capturePhoneStorageFull => 'Telefoni mälu on täis';
+
+  @override
+  String get captureStorageAlmostFull => 'Mälu on peaaegu täis';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name ja teised';
+  }
 }

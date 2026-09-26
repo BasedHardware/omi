@@ -2712,14 +2712,6 @@
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
     },
-    "autoCreateSpeakers": "స్పీకర్‌లను స్వయంచాలకంగా సృష్టించండి",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "పేరు కనుగొనబడినప్పుడు స్వయంచాలకంగా సృష్టించండి",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
-    },
     "followUpQuestions": "అనుసరణ ప్రశ్నలు",
     "@followUpQuestions": {
         "description": "Experimental feature name"
@@ -11094,7 +11086,6 @@
     "addToClaudeCodeConfig": "~/.claude.json కు జోడించండి",
     "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors లో కస్టమ్ కనెక్టర్‌ను జోడించి, సర్వర్ URL ను పేస్ట్ చేయండి. Claude అడ్వాన్స్డ్ OAuth Client ID అడిగితే, కింది విలువను ఉపయోగించి, సీక్రెట్‌ను ఖాళీగా ఉంచండి — మీ MCP API కీని OAuth సీక్రెట్‌గా ఎప్పుడూ ఉపయోగించకండి.",
     "transcriptionUnavailableRecordingContinues": "ట్రాన్స్‌క్రిప్షన్‌లు అందుబాటులో లేవు, రికార్డింగ్ పరికరంలో కొనసాగుతుంది మరియు తర్వాత ప్రాసెస్ చేయబడుతుంది",
-    "transcriptionUnavailableSavingOnDevice": "ట్రాన్స్‌క్రిప్షన్ అందుబాటులో లేదు · పరికరంలో సేవ్ చేయబడుతోంది",
     "transcriptionsPendingFraction": "పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు {pending}/{total}",
     "transcriptionsPendingCount": "పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు {count}",
     "captureSourceCall": "కాల్",
@@ -11112,9 +11103,21 @@
     "recordWith": "రికార్డ్ చేసే విధానం",
     "moreWaysToRecord": "రికార్డ్ చేయడానికి మరిన్ని మార్గాలు",
     "openCall": "కాల్‌ను తెరవండి",
+    "captureRecoveryBanner": "పెండెంట్ ఆడియో యాప్‌కు చేరడం లేదు — రిపేర్ చేయడానికి ట్యాప్ చేయండి",
+    "phoneRecordingBlockedByPendantBatch": "మీ ఫోన్‌తో రికార్డ్ చేయడానికి ముందు మీ పెండెంట్‌లో Transcribe Later ఆపండి.",
+    "captureNotTranscribing": "ట్రాన్స్‌క్రిప్షన్ లేదు",
+    "captureAudioSavedTranscribesLater": "ఆడియో సేవ్ అయింది, తర్వాత ట్రాన్స్‌క్రైబ్ అవుతుంది",
+    "captureStillRecording": "ఇంకా రికార్డ్ అవుతోంది",
+    "captureMicInUseElsewhere": "మైక్‌ను వేరే యాప్ ఉపయోగిస్తోంది",
+    "captureMicInterruptedDetail": "ఒక కాల్ లేదా వేరే యాప్ మైక్రోఫోన్‌ను తీసుకుంది, కాబట్టి Omi ఇప్పుడు వినలేదు. మైక్రోఫోన్ ఖాళీ అయినప్పుడు Omi తనంతట తానే కొనసాగుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.",
+    "captureCustomSttUnreachableDetail": "మీ కస్టమ్ స్పీచ్-టు-టెక్స్ట్ సేవను చేరుకోలేకపోతున్నాం. Omi ఆడియోను ఈ ఫోన్‌లో ఉంచి, సేవ తిరిగి వచ్చినప్పుడు పంపుతుంది. ఏదీ కోల్పోదు.",
+    "captureStarting": "ప్రారంభమవుతోంది…",
+    "capturePhoneStorageFull": "ఫోన్ స్టోరేజ్ నిండింది",
+    "captureStorageAlmostFull": "స్టోరేజ్ దాదాపు నిండింది",
+    "capturePendantDisconnectedDetail": "మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.",
+    "participantsSummaryUncounted": "{name} మరియు ఇతరులు",
     "secondDevice": "రెండవ పరికరం",
     "pairSecondDevice": "రెండవ పరికరాన్ని జోడించండి",
     "pairSecondDeviceDescription": "ఫోటోలు మరియు ఆడియో ఒకే సంభాషణలోకి వెళ్లేలా మీ Omi తో పాటు OmiGlass ను కనెక్ట్ చేయండి.",
-    "forgetSecondDevice": "రెండవ పరికరాన్ని మర్చిపోండి",
-    "captureRecoveryBanner": "పెండెంట్ ఆడియో యాప్‌కు చేరడం లేదు — రిపేర్ చేయడానికి ట్యాప్ చేయండి"
+    "forgetSecondDevice": "రెండవ పరికరాన్ని మర్చిపోండి"
 }

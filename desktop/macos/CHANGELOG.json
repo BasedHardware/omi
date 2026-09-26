@@ -2,6 +2,56 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.398",
+      "date": "2026-09-26",
+      "changes": [
+        "Back-to-back Zoom calls are now saved as separate conversations"
+      ]
+    },
+    {
+      "version": "0.12.397",
+      "date": "2026-09-26",
+      "changes": [
+        "Fixed Discord calls, and other call apps that use the microphone from a helper process, not being detected as meetings",
+        "Speaker names now appear immediately when you label a transcript, with a retry if saving fails"
+      ]
+    },
+    {
+      "version": "0.12.396",
+      "date": "2026-09-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.395",
+      "date": "2026-09-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.394",
+      "date": "2026-09-25",
+      "changes": [
+        "Onboarding no longer restarts unexpectedly after setup; any in-progress setup can still be completed."
+      ]
+    },
+    {
+      "version": "0.12.393",
+      "date": "2026-09-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.392",
+      "date": "2026-09-25",
+      "changes": [
+        "Back-to-back calls are now saved as separate conversations, even when you join the next Google Meet or switch call apps within seconds"
+      ]
+    },
+    {
       "version": "0.12.391",
       "date": "2026-09-25",
       "changes": [

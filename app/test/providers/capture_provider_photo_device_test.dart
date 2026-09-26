@@ -93,6 +93,10 @@ void main() {
     addTearDown(provider.dispose);
     provider.updateRecordingDevice(omi);
     await provider.updatePhotoDevice(glass);
+    // `updateRecordingDevice` now hands the device change to the capture
+    // coordinator, whose tail body notifies once it drains. Let that settle
+    // before arming the counter so only the companion change is measured.
+    await pumpEventQueue();
     var notifications = 0;
     provider.addListener(() => notifications++);
 
