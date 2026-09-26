@@ -29,7 +29,7 @@ def get_action_items_sync_page(
     uid: str,
     *,
     updated_since: Any = None,
-    after: Optional[Tuple[Any, str]] = None,
+    after: Optional[Tuple[Any, Any]] = None,
     limit: int,
     firestore_client: Any = None,
 ) -> Tuple[List[Dict[str, Any]], Optional[Tuple[Any, str]]]:
@@ -57,7 +57,7 @@ def get_action_items_sync_page(
         after_dt, after_id = after
         if after_dt is None:
             raise ValueError('action item sync timestamp is invalid')
-        if not after_id.strip() or '/' in after_id:
+        if not isinstance(after_id, str) or not after_id.strip() or '/' in after_id:
             raise ValueError('action item sync doc id is invalid')
         query = query.start_after({'updated_at': after_dt, '__name__': collection.document(after_id)})
     query = query.select(list(ACTION_ITEMS_LIST_SELECT_FIELDS)).limit(limit + 1)
