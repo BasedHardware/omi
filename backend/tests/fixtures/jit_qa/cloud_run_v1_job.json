@@ -1,0 +1,38 @@
+{
+  "apiVersion": "run.googleapis.com/v1",
+  "kind": "Job",
+  "metadata": {
+    "name": "knowledge-ledger-drain-qa-job"
+  },
+  "spec": {
+    "template": {
+      "spec": {
+        "template": {
+        "spec": {
+          "serviceAccountName": "jit-qa-runtime@based-hardware-dev.iam.gserviceaccount.com",
+          "containers": [
+            {
+              "image": "gcr.io/based-hardware-dev/knowledge-ledger-drain-qa-job@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "env": [
+                {"name": "OMI_ENV_STAGE", "value": "dev"},
+                {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware-dev"},
+                {"name": "OMI_FIRESTORE_DATA_PLANE_PROJECT", "value": "based-hardware-dev"},
+                {"name": "FIRESTORE_DATABASE_ID", "value": "jit-qa"},
+                {"name": "FIREBASE_AUTH_PROJECT_ID", "value": "based-hardware"},
+                {"name": "MEMORY_ENABLED", "value": "on"},
+                {"name": "KNOWLEDGE_LEDGER_DRAIN_ENABLED", "value": "false"},
+                {"name": "KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
+                {"name": "OMI_JIT_QA_AUTH_ONLY", "value": "true"},
+                {"name": "OMI_JIT_QA_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
+                {"name": "ENCRYPTION_SECRET", "valueSource": {"secretKeyRef": {"secret": "ENCRYPTION_SECRET", "version": "latest"}}},
+                {"name": "POSTHOG_PROJECT_API_KEY", "valueSource": {"secretKeyRef": {"secret": "POSTHOG_PROJECT_API_KEY", "version": "latest"}}}
+              ],
+              "envFrom": []
+            }
+          ]
+        }
+      }
+      }
+    }
+  }
+}

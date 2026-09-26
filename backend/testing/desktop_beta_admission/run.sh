@@ -12,7 +12,9 @@ elif command -v uv >/dev/null 2>&1; then
   python_command=(
     uv run --no-project --python "$python_version"
     --with "google-cloud-firestore==2.20.0"
-    --with "prometheus-client==0.21.1" -- python
+    --with "fastapi==0.121.0"
+    --with "prometheus-client==0.21.1"
+    --with "redis==5.0.8" -- python
   )
 else
   echo "Missing backend/.venv and uv. Run backend/scripts/sync-python-deps.sh first." >&2

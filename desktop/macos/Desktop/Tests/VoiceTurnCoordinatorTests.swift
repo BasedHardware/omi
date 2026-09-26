@@ -611,6 +611,82 @@ import XCTest
       XCTAssertEqual(terminal["response_outcome"] as? String, "success")
     }
 
+    /// Drives one turn to a drained full-answer playback, then starts the next
+    /// turn's capture — the physical shape of "the user heard the whole reply
+    /// and spoke again." The terminal must carry delivery so the journal seals
+    /// the reply as the completed answer it was. `beginTurn`'s interrupted-turn
+    /// capture reads exactly this terminal state (`lastTerminal` barge-in +
+    /// `lastTerminalAnswerDelivered`), because the superseded turn's own drain
+    /// entry is already consumed by the time capture runs.
+    private func drainedTurnReadyForBargeIn() throws -> (VoiceTurnCoordinator, VoiceTurnID) {
+      DesktopDiagnosticsManager.shared.resetForTests()
+      defer { DesktopDiagnosticsManager.shared.resetForTests() }
+      let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+      let turnID = coordinator.begin(intent: .hold)
+      coordinator.publish(.selectRoute(turnID: turnID, route: .deepgramBatch))
+      coordinator.publish(.finalize(turnID: turnID))
+      coordinator.publish(.transcriptionStarted(turnID: turnID))
+      coordinator.publish(.transcriptionFinal(turnID: turnID, text: "hello"))
+      let providerIdentity = try XCTUnwrap(coordinator.activeTurn?.providerEffectIdentity)
+      coordinator.publish(
+        .providerResponseStartedScoped(
+          turnID: turnID,
+          identity: providerIdentity,
+          sessionID: nil,
+          responseID: nil))
+      guard
+        case .acquired(let lease) = coordinator.acquireOutput(
+          .selectedVoiceFallback, turnID: turnID)
+      else {
+        XCTFail("expected output lease")
+        throw NSError(domain: "VoiceTurnCoordinatorTests", code: 1)
+      }
+
+      XCTAssertFalse(coordinator.fullAnswerDrained(turnID: turnID))
+      XCTAssertTrue(coordinator.releaseOutput(lease))
+      XCTAssertTrue(coordinator.fullAnswerDrained(turnID: turnID))
+      return (coordinator, turnID)
+    }
+
+    func testBargeInAfterPlaybackDrainTerminalizesWithDeliveredAnswer() throws {
+      let (coordinator, turnID) = try drainedTurnReadyForBargeIn()
+
+      // The next press starts a new turn; the drained one terminalizes as a barge-in.
+      _ = coordinator.begin(intent: .hold)
+
+      XCTAssertEqual(coordinator.model.lastTerminal?.turnID, turnID)
+      XCTAssertEqual(coordinator.model.lastTerminal?.reason, .interruptedByBargeIn)
+      XCTAssertTrue(coordinator.lastTerminalAnswerDelivered)
+      XCTAssertEqual(
+        VoiceTurnJournalStatusPolicy.status(
+          for: .interruptedByBargeIn,
+          answerDelivered: coordinator.lastTerminalAnswerDelivered),
+        .completed)
+    }
+
+    func testBargeInWithoutPlaybackDrainTerminalizesUndelivered() throws {
+      DesktopDiagnosticsManager.shared.resetForTests()
+      defer { DesktopDiagnosticsManager.shared.resetForTests() }
+      let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+      let turnID = coordinator.begin(intent: .hold)
+      coordinator.publish(.selectRoute(turnID: turnID, route: .deepgramBatch))
+      coordinator.publish(.finalize(turnID: turnID))
+      coordinator.publish(.transcriptionStarted(turnID: turnID))
+      coordinator.publish(.transcriptionFinal(turnID: turnID, text: "hello"))
+
+      XCTAssertFalse(coordinator.fullAnswerDrained(turnID: turnID))
+      _ = coordinator.begin(intent: .hold)
+
+      XCTAssertEqual(coordinator.model.lastTerminal?.turnID, turnID)
+      XCTAssertEqual(coordinator.model.lastTerminal?.reason, .interruptedByBargeIn)
+      XCTAssertFalse(coordinator.lastTerminalAnswerDelivered)
+      XCTAssertEqual(
+        VoiceTurnJournalStatusPolicy.status(
+          for: .interruptedByBargeIn,
+          answerDelivered: coordinator.lastTerminalAnswerDelivered),
+        .failed)
+    }
+
     func testFillerDrainDoesNotHideLaterVoicePlaybackFailure() throws {
       DesktopDiagnosticsManager.shared.resetForTests()
       defer { DesktopDiagnosticsManager.shared.resetForTests() }

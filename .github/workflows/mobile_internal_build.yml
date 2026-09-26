@@ -29,6 +29,8 @@ jobs:
         with:
           # The schedule run compares main against the last commit Codemagic built.
           fetch-depth: 0
+          # Keep the checkout bound to the event's immutable source while main may advance.
+          ref: ${{ github.sha }}
 
       - name: Collect commit authors
         id: authors
@@ -48,12 +50,14 @@ jobs:
           CODEMAGIC_APP_ID: ${{ vars.CODEMAGIC_APP_ID || '66c95e6ec76853c447b8bcbb' }}
           MOBILE_INSTANT_BUILD_ACTORS: ${{ vars.MOBILE_INSTANT_BUILD_ACTORS || 'mdmohsin7' }}
         run: |
+          set -euo pipefail
           python3 .github/scripts/dispatch_mobile_internal_builds.py \
             --event "${{ github.event_name }}" \
             --actor "${{ github.actor }}" \
             --commit-authors "${{ steps.authors.outputs.authors }}" \
             --app-id "$CODEMAGIC_APP_ID" \
-            --branch main | tee "$RUNNER_TEMP/dispatch.txt"
+            --branch main \
+            --source-sha "$GITHUB_SHA" | tee "$RUNNER_TEMP/dispatch.txt"
           {
             echo "### Mobile internal builds"
             echo

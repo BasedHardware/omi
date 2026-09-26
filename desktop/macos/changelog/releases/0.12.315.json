@@ -1,0 +1,7 @@
+{
+  "version": "0.12.315",
+  "date": "2026-09-07",
+  "changes": [
+    "Improved proactive JIT notifications so reasoning requests stay within the backend budget and failures retain actionable diagnostics"
+  ]
+}

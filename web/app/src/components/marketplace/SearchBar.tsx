@@ -21,6 +21,7 @@ export const SearchBar = memo(function SearchBar({
   const [searchResults, setSearchResults] = useState<Plugin[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [searchFailed, setSearchFailed] = useState(false);
 
   const handleSearch = useCallback(
     async (query: string) => {
@@ -30,6 +31,7 @@ export const SearchBar = memo(function SearchBar({
       if (!searchContent) {
         setIsSearching(false);
         setSearchResults([]);
+        setSearchFailed(false);
         setIsLoading(false);
         onSearching?.(false);
         return;
@@ -42,7 +44,12 @@ export const SearchBar = memo(function SearchBar({
 
       try {
         // Call server-side search API
-        const response = await fetch(`/api/apps/search?q=${encodeURIComponent(searchContent)}`);
+        const response = await fetch(
+          `/api/apps/search?q=${encodeURIComponent(searchContent)}`,
+        );
+        if (!response.ok) {
+          throw new Error(`search request failed with ${response.status}`);
+        }
         const data = await response.json();
 
         // Transform results to have capabilities as Set
@@ -52,9 +59,11 @@ export const SearchBar = memo(function SearchBar({
         }));
 
         setSearchResults(transformedResults);
+        setSearchFailed(false);
       } catch (error) {
         console.error('Search failed:', error);
         setSearchResults([]);
+        setSearchFailed(true);
       } finally {
         setIsLoading(false);
       }
@@ -117,14 +126,26 @@ export const SearchBar = memo(function SearchBar({
       {isSearching && (
         <div className="container mx-auto mt-8">
           <div className="space-y-4">
-            <h2 className="text-xl font-semibold text-white">
-              Search Results ({searchResults.length})
-            </h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {searchResults.map((plugin, index) => (
-                <CompactPluginCard key={plugin.id} plugin={plugin} index={index + 1} />
-              ))}
-            </div>
+            {searchFailed ? (
+              <p role="alert" className="text-white/70">
+                Search is unavailable right now. Please try again.
+              </p>
+            ) : (
+              <>
+                <h2 className="text-xl font-semibold text-white">
+                  Search Results ({searchResults.length})
+                </h2>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {searchResults.map((plugin, index) => (
+                    <CompactPluginCard
+                      key={plugin.id}
+                      plugin={plugin}
+                      index={index + 1}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

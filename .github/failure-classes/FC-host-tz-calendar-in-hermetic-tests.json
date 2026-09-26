@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-host-tz-calendar-in-hermetic-tests",
+  "violated_contract": "Hermetic Dart tests and journeys must not encode the host's calendar day or timezone. A UTC timestamp compared against DateTime.now(), or grouped with `.single` as \"the same day\", is only true in the author's zone and on the author's date; hosted CI and UTC+ hosts fail with StateError('No valid conversation found') or a missed day-bucket.",
+  "canonical_prevention": "Construct same-day fixtures with local DateTime(y, m, d, h) (app/test/support/local_day.dart) or conversationLocalDayKey of the record; pin ConversationDetailProvider.selectedDate to that key; default \"today\" through package:clock so tests can freeze time. Prove the suite under TZ=Pacific/Kiritimati and TZ=Pacific/Pago_Pago via bash app/test.sh and make mobile-verify ARGS=\"fast --all\".",
+  "canonical_prevention_artifact": [
+    "app/test/support/local_day.dart",
+    "app/test/unit/search_rank_grouping_test.dart",
+    "app/test/providers/conversation_detail_provider_selection_test.dart",
+    "app/test/widgets/home_conversations_preview_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/test/**",
+    "app/integration_test/**",
+    "app/lib/pages/conversation_detail/conversation_detail_provider.dart",
+    "app/lib/providers/conversation_provider.dart"
+  ],
+  "status": "open"
+}

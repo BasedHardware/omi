@@ -29,18 +29,120 @@ extension RealtimeHubController {
       let ownerID = VoiceTurnCoordinator.shared.activeTurn?.ownerID
     else { return }
 
+    let nativeEvidence: [ConversationEvidence] = {
+      guard let turnID = Self.turnID(forVoiceContinuityKey: turnIdempotencyKey),
+        let evidence = turnEvidenceLedger.evidence(
+          for: RealtimeTurnEvidenceLedger.Key(
+            ownerID: ownerID, turnID: turnID, continuityKey: turnIdempotencyKey))
+      else { return [] }
+      return [evidence]
+    }()
     let projection = RealtimeStreamingJournalProjection(
       ownerID: ownerID, continuityKey: turnIdempotencyKey,
-      admissionSurface: FloatingControlBarManager.shared.mainChatSurfaceReference())
+      admissionSurface: FloatingControlBarManager.shared.mainChatSurfaceReference(),
+      modelsUsed: [sessionProvider?.modelID].compactMap { $0 },
+      screenContext: screenContextByContinuityKey[turnIdempotencyKey],
+      evidence: nativeEvidence)
     guard
       streamingJournalWriteLedger.begin(
         projection: projection,
-        record: { projection in
-          await FloatingControlBarManager.shared.recordStreamingRealtimeExchange(
+        record: { [weak self] projection in
+          let accepted = await FloatingControlBarManager.shared.recordStreamingRealtimeExchange(
             projection: projection, userText: userText)
+          if accepted, !projection.evidence.isEmpty,
+            let self,
+            let turnID = Self.turnID(forVoiceContinuityKey: projection.continuityKey)
+          {
+            let key = RealtimeTurnEvidenceLedger.Key(
+              ownerID: projection.ownerID,
+              turnID: turnID,
+              continuityKey: projection.continuityKey)
+            _ = self.turnEvidenceLedger.markEvidencePersisted(key: key)
+          } else if !accepted, !projection.evidence.isEmpty,
+            let self,
+            let turnID = Self.turnID(forVoiceContinuityKey: projection.continuityKey)
+          {
+            let key = RealtimeTurnEvidenceLedger.Key(
+              ownerID: projection.ownerID,
+              turnID: turnID,
+              continuityKey: projection.continuityKey)
+            _ = self.turnEvidenceLedger.markPersistenceFailed(key: key)
+          }
+          return accepted
         })
     else { return }
+    if let turnID = Self.turnID(forVoiceContinuityKey: turnIdempotencyKey) {
+      let key = RealtimeTurnEvidenceLedger.Key(
+        ownerID: ownerID, turnID: turnID, continuityKey: turnIdempotencyKey)
+      _ = turnEvidenceLedger.attachJournalUserTurn(key: key, turnID: projection.userTurnID)
+    }
     scheduleStreamingRealtimeProjectionFlush(continuityKey: projection.continuityKey)
+  }
+
+  /// Schedules a late native OCR result behind the same record/update tail as
+  /// the user and assistant rows. If the first journal stage has not begun,
+  /// the evidence is picked up by the projection constructor above instead.
+  func enqueueNativeEvidenceUpdate(
+    continuityKey: String,
+    evidence: ConversationEvidence
+  ) {
+    guard streamingJournalWriteLedger.contains(continuityKey: continuityKey) else { return }
+    streamingJournalWriteLedger.enqueueUpdate(continuityKey: continuityKey) { [weak self] projection in
+      guard let self else { return false }
+      let accepted = await self.attachResolvedNativeUserEvidence(
+        surface: projection.admissionSurface,
+        ownerID: projection.ownerID,
+        userTurnID: projection.userTurnID,
+        evidence: evidence)
+      guard let turnID = Self.turnID(forVoiceContinuityKey: projection.continuityKey) else {
+        return accepted
+      }
+      let key = RealtimeTurnEvidenceLedger.Key(
+        ownerID: projection.ownerID,
+        turnID: turnID,
+        continuityKey: projection.continuityKey)
+      if accepted {
+        _ = self.turnEvidenceLedger.markEvidencePersisted(key: key)
+      } else {
+        _ = self.turnEvidenceLedger.markPersistenceFailed(key: key)
+      }
+      return accepted
+    }
+  }
+
+  /// Completes the evidence side of a non-streaming journal admission. A
+  /// provider/spawn fallback can finish the user row while native OCR is still
+  /// resolving; re-reading the bounded transient obligation here closes that
+  /// race without creating another durable ledger.
+  func persistNativeEvidenceAfterJournalAdmission(
+    ownerID: String,
+    continuityKey: String
+  ) async -> Bool {
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID,
+      let turnID = Self.turnID(forVoiceContinuityKey: continuityKey)
+    else { return false }
+    let key = RealtimeTurnEvidenceLedger.Key(
+      ownerID: ownerID, turnID: turnID, continuityKey: continuityKey)
+    guard let entry = turnEvidenceLedger.entry(for: key) else { return true }
+    let userTurnID =
+      entry.journalUserTurnID
+      ?? KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "user")
+    _ = turnEvidenceLedger.attachJournalUserTurn(key: key, turnID: userTurnID)
+    guard entry.state != .pending else { return true }
+    if entry.evidencePersisted { return true }
+    guard let evidence = entry.evidence else { return true }
+    let accepted = await attachResolvedNativeUserEvidence(
+      surface: entry.surface ?? FloatingControlBarManager.shared.mainChatSurfaceReference(),
+      ownerID: ownerID,
+      userTurnID: userTurnID,
+      evidence: evidence)
+    if accepted {
+      _ = turnEvidenceLedger.markEvidencePersisted(key: key)
+      _ = turnEvidenceLedger.attachJournalUserTurn(key: key, turnID: userTurnID)
+    } else {
+      _ = turnEvidenceLedger.markPersistenceFailed(key: key)
+    }
+    return accepted
   }
 
   /// Coalesces transcript deltas so audio frames do not each create a revision.
@@ -73,14 +175,16 @@ extension RealtimeHubController {
     assistantText: String,
     continuityKey: String,
     assistantStatus: KernelJournalTurnStatus = .completed,
-    terminalReason: String? = nil
+    terminalReason: String? = nil,
+    answerTextCompleted: Bool? = nil
   ) async -> RealtimeStreamingJournalWriteLedger.FinalizationResult {
     streamingJournalFlushTasks.removeValue(forKey: continuityKey)?.cancel()
     return await streamingJournalWriteLedger.finalize(continuityKey: continuityKey) { projection in
       guard projection.ownerID == ownerID else { return false }
       return await FloatingControlBarManager.shared.completeStreamingRealtimeExchange(
         projection: projection, userText: userText, assistantText: assistantText,
-        assistantStatus: assistantStatus, terminalReason: terminalReason)
+        assistantStatus: assistantStatus, terminalReason: terminalReason,
+        answerTextCompleted: answerTextCompleted)
     }
   }
 

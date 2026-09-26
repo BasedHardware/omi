@@ -67,6 +67,8 @@ struct OmiSearchField: View {
   let placeholder: String
   @Binding var text: String
   var isLoading = false
+  var searchSurface: SearchSurface? = nil
+  @FocusState private var isFocused: Bool
 
   var body: some View {
     HStack(spacing: OmiSpacing.sm) {
@@ -86,18 +88,14 @@ struct OmiSearchField: View {
         .textFieldStyle(.plain)
         .scaledFont(size: OmiType.body)
         .foregroundStyle(Ink.primary)
+        .focused($isFocused)
+        .onChange(of: isFocused) { _, focused in
+          guard focused, let searchSurface else { return }
+          SearchAnalytics.barFocused(surface: searchSurface)
+        }
 
       if !text.isEmpty {
-        Button {
-          text = ""
-        } label: {
-          Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: OmiType.body)
-            .foregroundStyle(Ink.secondary)
-        }
-        .buttonStyle(.plain)
-        .help("Clear search")
-        .accessibilityLabel("Clear search")
+        ClearFieldButton { text = "" }
       }
     }
     .padding(.horizontal, OmiSpacing.md)
@@ -106,5 +104,7 @@ struct OmiSearchField: View {
     // cannot disagree — and no drop shadow, which is what `omiControlSurface` added.
     .glassField()
     .accessibilityElement(children: .contain)
+    // ⌘F lands here while this page is the one on screen (`FindCommandRouter`).
+    .focusesOnFind($isFocused)
   }
 }

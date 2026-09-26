@@ -31,10 +31,13 @@ LOCAL_CHECK_ORDER = (
 PHASE_ORDER = (
     *LOCAL_CHECK_ORDER,
     "app-analysis-tests",
+    "app-journeys-hermetic",
     "app-compile-smoke",
+    "app-ios-compile",
     "desktop-agent-runtime",
     "desktop-swift-tests",
     "desktop-swift-release-compile",
+    "desktop-swift-release-test-compile",
     "desktop-swift-notification-release-regression",
 )
 
@@ -118,8 +121,10 @@ DESKTOP_SWIFT_TEST_INPUTS = {
     "desktop/macos/Desktop/Package.resolved",
     "desktop/macos/test.sh",
     "desktop/macos/scripts/run-swift-ci.sh",
+    "desktop/macos/tests/test-run-swift-ci.sh",
     "desktop/macos/scripts/swift-test-suites.sh",
     "desktop/macos/scripts/swift-test-skips.json",
+    "desktop/macos/scripts/swift-test-slow-suites.json",
     "desktop/macos/scripts/swift-test-skip-ratchet.py",
     "desktop/macos/scripts/check_desktop_test_quality.py",
     "desktop/macos/scripts/check-main-actor-xctest-hooks.py",
@@ -263,6 +268,56 @@ def _is_app_compile_smoke_input(path: str) -> bool:
     }
 
 
+IOS_PIGEON_DEFINITIONS = {
+    "app/lib/pigeon_interfaces.dart",
+    "app/lib/phone_mic_interface.dart",
+}
+
+
+def _is_app_ios_compile_input(path: str) -> bool:
+    """Wake the iOS simulator compile on native iOS, Pigeon, pubspec, or this job.
+
+    Generated Pigeon Swift lives under ``app/ios/``, so it is covered by that
+    prefix. Ordinary Dart under ``app/lib/`` stays on Android compile smoke.
+    Editing this workflow (or detect-changes) must wake the job so a change
+    to the compile check actually runs the compile check.
+    """
+    return (
+        path.startswith("app/ios/")
+        or path.startswith(".github/actions/detect-changes/")
+        or path in IOS_PIGEON_DEFINITIONS
+        or path in {
+            "app/pubspec.yaml",
+            "app/pubspec.lock",
+            ".github/workflows/mobile-app-checks.yml",
+        }
+    )
+
+
+def _is_app_journey_input(path: str) -> bool:
+    """Wake the hermetic seeded-journey lane (SCA-490).
+
+    Journey definitions and their support, the C3 replay world, the dev
+    controls harness, and non-generated app/lib production Dart (which runs
+    the full small suite as its conservative fallback) all select the lane.
+    Generated Dart and l10n template files stay owned by the codegen/l10n
+    lanes; native Android/iOS trees stay owned by the compile smoke.
+    """
+    if path.startswith("app/lib/l10n/app_") and (path.endswith(".arb") or path.endswith(".dart")):
+        return False
+    if _is_generated_dart(path):
+        return False
+    if path.startswith("app/lib/") and path.endswith(".dart"):
+        return True
+    return path.startswith(
+        ("app/integration_test/journeys/", "app/test/support/capture/", "app/lib/services/dev_controls/")
+    ) or path in {
+        "contracts/session/session-evidence-v1.schema.json",
+        "scripts/dev-harness/mobile-verify.sh",
+        "scripts/dev-harness/dev_harness/mobile_verify.py",
+    }
+
+
 def _matches_desktop_release_pathspec(path: str, pathspec: str) -> bool:
     """Match a changed file against one planner git pathspec."""
     if path == pathspec:
@@ -291,6 +346,12 @@ def _is_desktop_swift_test_input(path: str) -> bool:
         )
         or (path.startswith("desktop/macos/tests/") and path.endswith(".sh"))
     )
+
+
+def _is_desktop_release_test_input(path: str) -> bool:
+    # Own the whole package tree, including native targets/resources and future
+    # target directories; a new target must not need a second selector edit.
+    return path in DESKTOP_SWIFT_TEST_INPUTS or path.startswith("desktop/macos/Desktop/")
 
 
 def _is_desktop_notification_input(path: str) -> bool:
@@ -339,12 +400,19 @@ def resolve_impact(
     )
 
     for path in normalized_paths:
+        # The hermetic journey lane owns inputs beyond app/ (the evidence
+        # contract and the verify entrypoint), so it is resolved per path
+        # before the component blocks.
+        if _is_app_journey_input(path):
+            selected.add("app-journeys-hermetic")
         if path.startswith("app/"):
             # Unknown paths within a component remain conservative: they wake
             # its normal analyzer/test lane rather than silently doing nothing.
             selected.update({"app-ci-only", "app-analysis-tests"})
             if _is_app_compile_smoke_input(path):
                 selected.add("app-compile-smoke")
+            if _is_app_ios_compile_input(path):
+                selected.add("app-ios-compile")
             if path.endswith(".dart") and not _is_generated_dart(path):
                 selected.add("app-dart-format")
             if _is_app_l10n_input(path):
@@ -357,6 +425,10 @@ def resolve_impact(
                 selected.add("desktop-ci-only")
             if _is_desktop_swift_test_input(path):
                 selected.add("desktop-swift-tests")
+            # Every source/test input can expose a DEBUG-only seam to the
+            # release test target (#13123, #13467), regardless of its name.
+            if _is_desktop_release_test_input(path):
+                selected.add("desktop-swift-release-test-compile")
             if _is_desktop_notification_input(path):
                 selected.add("desktop-swift-notification-release-regression")
             if _is_desktop_agent_runtime_input(path):
@@ -381,10 +453,13 @@ def resolve_impact(
             {
                 "app-ci-only",
                 "app-analysis-tests",
+                "app-journeys-hermetic",
                 "app-compile-smoke",
+                "app-ios-compile",
                 "desktop-ci-only",
                 "desktop-flow-lint",
                 "desktop-swift-tests",
+                "desktop-swift-release-test-compile",
             }
         )
 
@@ -397,6 +472,7 @@ def resolve_impact(
                 "desktop-ci-only",
                 "desktop-swift-tests",
                 "desktop-swift-release-compile",
+                "desktop-swift-release-test-compile",
             }
         )
 
@@ -407,11 +483,13 @@ def resolve_impact(
     )
     if releasable_desktop:
         selected.add("desktop-ci-only")
-        # Release compile runs on PRs too, not just pushes: strict-concurrency
-        # errors that only manifest under whole-module release optimization
-        # otherwise land on main and wedge the release train (#11373/#11374 —
-        # the KG ResolveOutcome Sendable break shipped through a PR whose debug
-        # lane stayed green and blocked every candidate for three merges).
+    # Source/test PRs compile the complete release test target in the existing
+    # release job. It builds the app and tests once, then reuses those artifacts
+    # for the narrow notification regression (#13481). Non-target release inputs
+    # retain the cheaper app-only main-push check; pre-push stays debug-only.
+    if package_changed:
+        selected.add("desktop-swift-release-compile")
+    if event == "push" and releasable_desktop:
         selected.add("desktop-swift-release-compile")
 
     return ImpactPlan(frozenset(selected))
@@ -434,11 +512,14 @@ def github_outputs(plan: ImpactPlan) -> dict[str, str]:
         "has_app_l10n": str(plan.includes("flutter-l10n")).lower(),
         "has_flutter_generated": str(plan.includes("flutter-codegen") or plan.includes("flutter-l10n")).lower(),
         "has_app_compile_smoke": str(plan.includes("app-compile-smoke")).lower(),
+        "has_app_ios_compile": str(plan.includes("app-ios-compile")).lower(),
         "has_app_dart": str(plan.includes("app-analysis-tests")).lower(),
+        "has_app_journeys": str(plan.includes("app-journeys-hermetic")).lower(),
         "has_desktop_agent_runtime": str(plan.includes("desktop-agent-runtime")).lower(),
         "should_run": str(plan.includes("desktop-ci-only")).lower(),
         "should_run_tests": str(plan.includes("desktop-swift-tests")).lower(),
         "should_release_compile": str(plan.includes("desktop-swift-release-compile")).lower(),
+        "should_release_test_compile": str(plan.includes("desktop-swift-release-test-compile")).lower(),
         "should_notification_release_regression": str(
             plan.includes("desktop-swift-notification-release-regression")
         ).lower(),

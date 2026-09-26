@@ -83,15 +83,12 @@ extension DesktopAutomationBridge {
     )
   }
 
-  /// Confirms the target resolves to a known chat-first or legacy destination
-  /// so the acknowledgement path cannot mask an unknown route as success.
+  /// Confirms the target resolves to a known destination so the acknowledgement
+  /// path cannot mask an unknown route as success.
   private func validateKnownNavigationTarget(
     _ payload: DesktopAutomationNavigationRequest
   ) throws {
-    let isKnown =
-      ChatFirstRoute.automationVisibilityDestination(named: payload.target) != nil
-      || legacyAutomationDestinationTitle(named: payload.target) != nil
-    guard isKnown else {
+    guard ChatFirstRoute.automationVisibilityDestination(named: payload.target) != nil else {
       throw DesktopAutomationActionError.invalidParams("unknown_navigation_target")
     }
   }
@@ -100,7 +97,6 @@ extension DesktopAutomationBridge {
     _ payload: DesktopAutomationNavigationRequest
   ) async throws -> DesktopAutomationSnapshot {
     let expectedChatFirstRoute = ChatFirstRoute.automationVisibilityDestination(named: payload.target)?.stableName
-    let expectedLegacyTitle = legacyAutomationDestinationTitle(named: payload.target)
     let deadline = Date().addingTimeInterval(5)
 
     while Date() < deadline {
@@ -108,10 +104,8 @@ extension DesktopAutomationBridge {
       if !snapshot.snapshotStale,
         DesktopAutomationNavigationVisibilityPolicy.isTargetVisible(
           shellVariant: snapshot.shellVariant,
-          selectedTab: snapshot.selectedTab,
           visibleChatFirstRoute: snapshot.visibleChatFirstRoute,
-          expectedChatFirstRoute: expectedChatFirstRoute,
-          expectedLegacyTitle: expectedLegacyTitle
+          expectedChatFirstRoute: expectedChatFirstRoute
         )
       {
         return snapshot
@@ -121,40 +115,17 @@ extension DesktopAutomationBridge {
     throw DesktopAutomationActionError.invalidParams("navigation_target_not_visible")
   }
 
-  private func legacyAutomationDestinationTitle(named target: String) -> String? {
-    switch target.lowercased().replacingOccurrences(of: "-", with: "_") {
-    // Home is the chat surface, so "chat" and "home" name the same destination.
-    case "dashboard", "home", "chat": return "Home"
-    case "conversations": return "Conversations"
-    case "memories": return "Memories"
-    case "tasks": return "Tasks"
-    case "rewind": return "Rewind"
-    case "apps", "integrations": return "Apps"
-    case "settings": return "Settings"
-    case "permissions": return "Permissions"
-    case "help": return "Help from Founder"
-    default: return nil
-    }
-  }
 }
 
-/// Shared legacy and cohort visibility comparison retained separately from the
-/// HTTP bridge so it has no access to rollout state beyond the sampled snapshot.
+/// Visibility comparison retained separately from the HTTP bridge so it has no
+/// access to shell state beyond the sampled snapshot.
 enum DesktopAutomationNavigationVisibilityPolicy {
   static func isTargetVisible(
     shellVariant: String?,
-    selectedTab: String?,
     visibleChatFirstRoute: String?,
-    expectedChatFirstRoute: String?,
-    expectedLegacyTitle: String?
+    expectedChatFirstRoute: String?
   ) -> Bool {
-    switch shellVariant {
-    case "chat_first":
-      return expectedChatFirstRoute != nil && visibleChatFirstRoute == expectedChatFirstRoute
-    case "legacy":
-      return expectedLegacyTitle != nil && selectedTab == expectedLegacyTitle
-    default:
-      return false
-    }
+    guard shellVariant == DesktopAutomationSnapshot.singleShellVariant else { return false }
+    return expectedChatFirstRoute != nil && visibleChatFirstRoute == expectedChatFirstRoute
   }
 }

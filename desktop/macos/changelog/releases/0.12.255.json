@@ -1,0 +1,7 @@
+{
+  "version": "0.12.255",
+  "date": "2026-09-01",
+  "changes": [
+    "Proactive Focus, Insight and Task notifications now come from one just-in-time lane that prioritizes what you already told Omi (open tasks, goals, calendar) and spreads its daily budget across the day instead of spending it all after midnight"
+  ]
+}

@@ -47,6 +47,11 @@ class LockContract:
 # shared target must keep resolving to the same value. Keep this explicit so a
 # new deploy writer cannot silently bypass the audited lock graph.
 LOCK_CONTRACTS = {
+    "jit_qa_cloud_run.yml": LockContract("jit-isolated-qa-cloud-run-development"),
+    # The projection rebuild mutates the same named QA Typesense service that
+    # the application-plane workflow deploys and verifies. Keep both writers
+    # in one workflow-level lock so a rebuild cannot race service rollout.
+    "jit_qa_typesense_projection.yml": LockContract("jit-isolated-qa-cloud-run-development"),
     "desktop_backend_auto_dev.yml": LockContract("desktop-backend-auto-dev"),
     "desktop_backend_prod.yml": LockContract("desktop-backend-prod"),
     "desktop_backend_recover_prod.yml": LockContract("desktop-backend-prod"),

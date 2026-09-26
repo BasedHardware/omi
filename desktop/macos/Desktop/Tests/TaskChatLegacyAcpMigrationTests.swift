@@ -142,8 +142,21 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 
     XCTAssertTrue(source.contains("await failUnboundJournalMessage(messageId: aiMessageId, lease: lease)"))
-    XCTAssertTrue(source.contains("status: .failed"))
     XCTAssertTrue(source.contains("once query admission links a producer"))
+    guard let functionRange = source.range(of: "private func failUnboundJournalMessage(") else {
+      return XCTFail("failUnboundJournalMessage missing")
+    }
+    let rest = source[functionRange.lowerBound...]
+    guard let nextMark = rest.range(of: "\n  // MARK: - Send Message") else {
+      return XCTFail("failUnboundJournalMessage body end missing")
+    }
+    let body = String(rest[..<nextMark.lowerBound])
+
+    XCTAssertTrue(body.contains("updateJournalMessageOperation("))
+    XCTAssertTrue(body.contains(".failed"))
+    XCTAssertFalse(
+      body.contains("terminalizeJournalMessage"),
+      "query-pre-producer failures must use the unbound journal update, not exact terminalization")
   }
 
   func testTaskChatSendSignalsLocalSendOnlyAfterAtomicExchangeAcceptance() throws {

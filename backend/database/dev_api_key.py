@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any, List, Optional, Tuple, cast
@@ -28,6 +29,10 @@ from utils.dev_api_keys import generate_dev_api_key, hash_dev_api_key
 from utils.scopes import AVAILABLE_SCOPES, READ_ONLY_SCOPES, Scopes
 
 DEV_API_KEY_APP_ID = "developer_api"
+
+# Every issued Developer API key is ``omi_dev_`` + secrets.token_hex(16):
+# 32 lowercase hex characters (see utils.dev_api_keys.generate_dev_api_key).
+_DEV_API_KEY_PATTERN = re.compile(r"omi_dev_[0-9a-f]{32}")
 
 
 def _db() -> Any:
@@ -199,7 +204,11 @@ def get_api_key_auth_result(api_key: str) -> ApiKeyAuthLookupResult:
     Returns dict with 'user_id' and 'scopes' keys, or None if invalid.
     If scopes don't exist in the database, returns None (treated as read-only by has_scope).
     """
-    if not api_key.startswith("omi_dev_"):
+    # Keys are always issued as ``omi_dev_`` + 32 lowercase hex chars
+    # (generate_dev_api_key); anything else can never match a stored key, so
+    # reject it before the Redis read and Firestore query. Scripted abuse of
+    # /v1/dev/* presents junk Bearer tokens — those must cost nothing.
+    if not _DEV_API_KEY_PATTERN.fullmatch(api_key or ""):
         return ApiKeyAuthLookupResult(context=None)
     secret_part = api_key.replace("omi_dev_", "", 1)
     hashed_key = hash_dev_api_key(secret_part)

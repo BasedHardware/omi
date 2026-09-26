@@ -52,6 +52,38 @@ def _current_month_llm_usage_docs(llm_usage_ref: Any, now: datetime) -> Iterable
     )
 
 
+def get_monthly_bucket_call_count(
+    uid: str, bucket: str, now: Optional[datetime] = None, *, firestore_client: Any | None = None
+) -> int:
+    """Sum one bucket's ``call_count`` over the current month's ``llm_usage`` docs.
+
+    Bounded like :func:`get_monthly_chat_usage` (and recorded under its own
+    ``FirestoreReadFamily`` so the read stays visible in the read metrics).
+    Used by the realtime relay to bound how many Omi-paid provider responses a
+    user may take in a month independently of the question counter, which only
+    the chat request advances.
+    """
+    now = now or datetime.now(timezone.utc)
+    llm_usage_ref = (firestore_client or db).collection('users').document(uid).collection('llm_usage')
+    total = 0
+    document_count = 0
+    for snap in _current_month_llm_usage_docs(llm_usage_ref, now):
+        document_count += 1
+        data = _typed_doc(snap)
+        value = data.get(bucket)
+        if isinstance(value, dict):
+            total += int(cast(Dict[str, Any], value).get('call_count', 0) or 0)
+        flat = data.get(f'{bucket}.call_count')
+        if isinstance(flat, (int, float)) and not isinstance(flat, bool):
+            total += int(flat)
+    record_firestore_read(
+        FirestoreReadFamily.RELAY_RESPONSE_MONTHLY_COUNT,
+        FirestoreReadMode.BOUNDED,
+        document_count,
+    )
+    return total
+
+
 def _merge_cost_status(existing: str | None, observed: str) -> str:
     statuses = {existing, observed} - {None}
     if statuses == {'complete'} or (statuses <= {'complete', 'excluded'} and 'complete' in statuses):
@@ -599,36 +631,39 @@ def get_all_time_usage_stats(uid: str) -> Dict[str, Any]:
     return stats
 
 
-def get_hourly_history_for_today(uid: str, date: datetime) -> List[Dict[str, Any]]:
+def get_hourly_history_for_today(uid: str, start: datetime, end: datetime) -> List[Dict[str, Any]]:
     """Gets hourly usage for a specific day by aggregating hourly data."""
     user_ref = db.collection('users').document(uid)
     hourly_usage_collection = user_ref.collection('hourly_usage')
-    query = (
-        hourly_usage_collection.where(filter=FieldFilter('year', '==', date.year))
-        .where(filter=FieldFilter('month', '==', date.month))
-        .where(filter=FieldFilter('day', '==', date.day))
-    )
-    docs = query.stream()
-    hourly_totals: Dict[int, Dict[str, int]] = {}
-    for doc in docs:
-        data: Dict[str, Any] = _typed_doc(doc)
-        hour = cast(int, data.get('hour', 0))
-        if hour not in hourly_totals:
-            hourly_totals[hour] = {
-                'transcription_seconds': 0,
-                'words_transcribed': 0,
-                'insights_gained': 0,
-                'memories_created': 0,
-            }
+    hourly_totals: Dict[datetime, Dict[str, int]] = {}
+    cursor = start.replace(hour=0, minute=0, second=0, microsecond=0)
+    while cursor < end:
+        query = (
+            hourly_usage_collection.where(filter=FieldFilter('year', '==', cursor.year))
+            .where(filter=FieldFilter('month', '==', cursor.month))
+            .where(filter=FieldFilter('day', '==', cursor.day))
+        )
+        for doc in query.stream():
+            data: Dict[str, Any] = _typed_doc(doc)
+            bucket = cursor.replace(hour=int(data.get('hour', 0)))
+            if not start <= bucket < end:
+                continue
+            if bucket not in hourly_totals:
+                hourly_totals[bucket] = {
+                    'transcription_seconds': 0,
+                    'words_transcribed': 0,
+                    'insights_gained': 0,
+                    'memories_created': 0,
+                }
 
-        hourly_totals[hour]['transcription_seconds'] += cast(int, data.get('transcription_seconds', 0))
-        hourly_totals[hour]['words_transcribed'] += cast(int, data.get('words_transcribed', 0))
-        hourly_totals[hour]['insights_gained'] += cast(int, data.get('insights_gained', 0))
-        hourly_totals[hour]['memories_created'] += cast(int, data.get('memories_created', 0))
+            hourly_totals[bucket]['transcription_seconds'] += cast(int, data.get('transcription_seconds', 0))
+            hourly_totals[bucket]['words_transcribed'] += cast(int, data.get('words_transcribed', 0))
+            hourly_totals[bucket]['insights_gained'] += cast(int, data.get('insights_gained', 0))
+            hourly_totals[bucket]['memories_created'] += cast(int, data.get('memories_created', 0))
+        cursor += timedelta(days=1)
 
     history: List[Dict[str, Any]] = [
-        {'date': f"{date.year}-{date.month:02d}-{date.day:02d}T{hour:02d}:00:00Z", **stats}
-        for hour, stats in hourly_totals.items()
+        {'date': bucket.strftime('%Y-%m-%dT%H:00:00Z'), **stats} for bucket, stats in hourly_totals.items()
     ]
     history.sort(key=lambda x: cast(str, x['date']))
     return history
@@ -793,7 +828,7 @@ def get_current_user_usage(
                 # zone we cannot parse is a data problem worth seeing, not something to swallow.
                 logger.error('usage today tz fallback to UTC uid=%s tz=%s: %s', uid, tz_name, e)
         response['today'] = UsageStats(**get_today_usage_stats(uid, start, end)).model_dump()
-        response['history'] = get_hourly_history_for_today(uid, now)
+        response['history'] = get_hourly_history_for_today(uid, start, end)
     elif period == 'monthly':
         response['monthly'] = UsageStats(**get_monthly_usage_stats(uid, now)).model_dump()
         response['history'] = get_daily_history_for_month(uid, now)

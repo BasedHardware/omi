@@ -1,8 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/feedback/omi_clipboard.dart';
 
 class OmiTextSelectionToolbar extends StatelessWidget {
   final Offset anchorAbove;
@@ -86,9 +86,7 @@ Widget omiSelectionMenuBuilder(
         onPressed: () {
           delegate.copySelection(SelectionChangedCause.toolbar);
           delegate.hideToolbar();
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(context.l10n.messageCopied), duration: const Duration(seconds: 2)));
+          OmiClipboard.confirmCopied(context);
         },
       ),
     );

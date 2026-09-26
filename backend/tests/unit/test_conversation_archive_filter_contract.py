@@ -1,6 +1,7 @@
 """Hermetic contract tests for the server-side Omi capture archive filter."""
 
 import os
+import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock
@@ -35,6 +36,7 @@ class _Snapshot:
 
     def __init__(self, row):
         self._row = row
+        self.id = row['id']
 
     def to_dict(self):
         return dict(self._row)
@@ -53,6 +55,7 @@ class _Query:
         self._order_field = None
         self._limit = None
         self._offset = 0
+        self.selected_fields = None
 
     def where(self, *, filter):
         self.filters.append((filter.field_path, filter.op_string, filter.value))
@@ -62,6 +65,11 @@ class _Query:
     def order_by(self, field_path, direction=None):
         self._order_field = field_path
         self.events.append(("order_by", field_path, direction))
+        return self
+
+    def select(self, field_paths):
+        self.selected_fields = list(field_paths)
+        self.events.append(("select", tuple(field_paths)))
         return self
 
     def limit(self, value):
@@ -147,6 +155,10 @@ def conversations_db():
     database_client.delete_collection_recursive = MagicMock()
     database_client.get_firestore_client = MagicMock()
     database_client.run_transactional = MagicMock()
+    firestore_read_metrics = ModuleType("database.firestore_read_metrics")
+    firestore_read_metrics.FirestoreReadOutcome = SimpleNamespace(HIT="hit", MISS="miss")
+    firestore_read_metrics.FirestoreReadSite = SimpleNamespace(UNATTRIBUTED="unattributed")
+    firestore_read_metrics.record_document_read = MagicMock()
     database_helpers = ModuleType("database.helpers")
     database_helpers.set_data_protection_level = MagicMock()
     database_helpers.prepare_for_write = _decorator
@@ -159,6 +171,8 @@ def conversations_db():
     utils.__path__ = []
     utils_other = ModuleType("utils.other")
     utils_other.__path__ = []
+    utils_conversations = ModuleType("utils.conversations")
+    utils_conversations.__path__ = []
 
     fakes = {
         "google": google,
@@ -168,6 +182,7 @@ def conversations_db():
         "google.api_core": google_api_core,
         "google.api_core.exceptions": exceptions_module,
         "database._client": database_client,
+        "database.firestore_read_metrics": firestore_read_metrics,
         "database.helpers": database_helpers,
         "database.users": AutoMockModule("database.users"),
         "models": models,
@@ -176,19 +191,56 @@ def conversations_db():
         "models.conversation_photo": AutoMockModule("models.conversation_photo"),
         "models.transcript_segment": AutoMockModule("models.transcript_segment"),
         "utils": utils,
+        "utils.conversations": utils_conversations,
         "utils.encryption": AutoMockModule("utils.encryption"),
+        "utils.observability.speaker_identification": AutoMockModule("utils.observability.speaker_identification"),
         "utils.other": utils_other,
         "utils.other.hume": AutoMockModule("utils.other.hume"),
         "utils.other.list_budget": list_budget_real,
         "utils.other.storage": AutoMockModule("utils.other.storage"),
     }
 
+    # database.conversations binds PROJECTION_FAMILY_FIELDS and the transcript
+    # digest at import time, and both must be the real modules: an AutoMock answers
+    # ``in`` with False, which would silently turn the projection field-path filter
+    # into a no-op here. They are loaded before the stub block, not inside it --
+    # each needs its own real models.* dependency to build (a pydantic enum, a
+    # dataclass), which the fakes do not provide.
+    client_processing_real = load_module_fresh(
+        "models.client_processing",
+        os.path.join(str(_BACKEND), "models", "client_processing.py"),
+    )
+    transcript_hash_real = load_module_fresh(
+        "utils.conversations.transcript_hash",
+        os.path.join(str(_BACKEND), "utils", "conversations", "transcript_hash.py"),
+    )
+    fragment_visibility_real = load_module_fresh(
+        "utils.conversations.fragment_visibility",
+        os.path.join(str(_BACKEND), "utils", "conversations", "fragment_visibility.py"),
+    )
+    # Receipt policy is stdlib + TranscriptSegment: load it against the real
+    # models.* graph before the stub block, then install the real module. An
+    # AutoMock here would hide apply_manual_assignments / remap_absorbed_receipt
+    # from database.conversations.
+    manual_assignments_real = load_module_fresh(
+        "utils.manual_speaker_assignments",
+        os.path.join(str(_BACKEND), "utils", "manual_speaker_assignments.py"),
+    )
+    fakes["models.client_processing"] = client_processing_real
+    fakes["utils.conversations.transcript_hash"] = transcript_hash_real
+    fakes["utils.conversations.fragment_visibility"] = fragment_visibility_real
+    fakes["utils.manual_speaker_assignments"] = manual_assignments_real
+
     with stub_modules(fakes):
         module = load_module_fresh(
             "database.conversations",
             os.path.join(str(_BACKEND), "database", "conversations.py"),
         )
-        yield module, firestore
+        pages_module = load_module_fresh(
+            "database.mcp_conversation_pages",
+            os.path.join(str(_BACKEND), "database", "mcp_conversation_pages.py"),
+        )
+        yield module, pages_module, firestore
 
 
 def _conversation(conversation_id, *, created_at, source, status="completed", discarded=False):
@@ -202,7 +254,7 @@ def _conversation(conversation_id, *, created_at, source, status="completed", di
 
 
 def test_archive_filter_precedes_pagination_and_matches_count(conversations_db):
-    module, firestore = conversations_db
+    module, _pages_module, firestore = conversations_db
     firestore.rows = [
         _conversation("discarded-omi", created_at=8, source="omi", discarded=True),
         _conversation("failed-omi", created_at=7, source="omi", status="failed"),
@@ -249,7 +301,7 @@ def test_archive_filter_precedes_pagination_and_matches_count(conversations_db):
 
 
 def test_sources_honor_legacy_include_discarded_default(conversations_db):
-    module, firestore = conversations_db
+    module, _pages_module, firestore = conversations_db
     firestore.rows = [
         _conversation("discarded-omi", created_at=3, source="omi", discarded=True),
         _conversation("friend", created_at=2, source="friend"),
@@ -272,7 +324,7 @@ def test_sources_honor_legacy_include_discarded_default(conversations_db):
 
 
 def test_sources_omitted_preserves_legacy_filter_chain(conversations_db):
-    module, firestore = conversations_db
+    module, _pages_module, firestore = conversations_db
     firestore.rows = [
         _conversation("discarded-omi", created_at=3, source="omi", discarded=True),
         _conversation("friend", created_at=2, source="friend"),
@@ -285,3 +337,41 @@ def test_sources_omitted_preserves_legacy_filter_chain(conversations_db):
 
     assert [row["id"] for row in results] == ["discarded-omi", "friend", "omi"]
     assert firestore.queries[0].filters == [("status", "in", ["processing", "completed"])]
+
+
+def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations_db):
+    module, pages_module, firestore = conversations_db
+    firestore.rows = [
+        {
+            **_conversation("conversation-1", created_at=1, source="omi"),
+            "started_at": 1,
+            "finished_at": 2,
+            "language": "en",
+            "structured": {"title": "A card", "overview": "Small", "action_items": [{"large": True}]},
+            "transcript_segments": [{"text": "large transcript"}],
+            "photos": [{"base64": "large photo"}],
+        }
+    ]
+
+    result = pages_module.get_mcp_conversation_cards(
+        "user-1",
+        20,
+        0,
+        firestore_client=firestore,
+    )
+
+    assert [row["id"] for row in result] == ["conversation-1"]
+    selected_fields = set(firestore.queries[0].selected_fields)
+    assert "structured.title" in selected_fields
+    assert "structured.overview" in selected_fields
+    assert "transcript_segments" not in selected_fields
+    assert "photos" not in selected_fields
+    # Visibility needs only user-owned metadata; generated arrays are never read.
+    assert "structured.action_items" not in selected_fields
+    assert "structured.sections" not in selected_fields
+    assert "structured.events" not in selected_fields
+    assert ("select", tuple(module.MCP_CONVERSATION_CARD_FIELD_PATHS)) in firestore.queries[0].events
+    transcript_fields = set(module._MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS)
+    assert "transcript_segments" in transcript_fields
+    assert "photos" not in transcript_fields
+    assert "structured.action_items" not in transcript_fields

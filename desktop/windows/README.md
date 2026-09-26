@@ -53,6 +53,11 @@ the window still comes up blank rather than missing, also add
 for the full dev-only environment variable reference and parallel-worktree
 port/profile isolation.
 
+`pnpm run dev` automatically unsets `ELECTRON_RUN_AS_NODE` for the spawned Electron
+app. Some shell/tooling sessions leave that variable set after using Electron as a
+Node runtime; if it leaks into app startup, Electron does not expose `electron.app`
+and the dev app crashes before opening.
+
 ## Authentication
 
 - **App sign-in:** each user signs in with **their own** Google or Apple/Omi account
@@ -60,11 +65,9 @@ port/profile isolation.
   flow as the macOS app, so provider credentials stay server-side. The Firebase project
   is shared (Omi's `based-hardware`); accounts are individual. Nothing to configure —
   it works out of the box from `.env.example`.
-- **Google integration** (optional Gmail/Google connect — separate from sign-in): bring
-  your own credentials. Create an OAuth **Desktop app** client in the
-  [Google Cloud Console](https://console.cloud.google.com/apis/credentials), then in your
-  local `.env` set `MAIN_VITE_GOOGLE_CLIENT_ID`, `MAIN_VITE_GOOGLE_CLIENT_SECRET`, and
-  `VITE_ENABLE_GOOGLE_INTEGRATION=1`. Keep these in your local `.env` only — never commit them.
+- **Gmail connector** (Settings → Integrations): sign into Google once inside an
+  Omi-owned window and Omi reads recent mail through that session — no OAuth
+  client credentials to configure.
 
 ## Optional keys
 
@@ -72,8 +75,6 @@ Everything below is blank in `.env.example` and safe to leave unset:
 
 - `VITE_OMI_API_KEY` — cloud-sync recorded conversations (generate in Omi → Settings →
   Developer). Blank = recordings save locally only.
-- `MAIN_VITE_GOOGLE_CLIENT_ID` / `MAIN_VITE_GOOGLE_CLIENT_SECRET` /
-  `VITE_ENABLE_GOOGLE_INTEGRATION` — the Google integration above.
 
 ## Coding agents (Claude Code, OpenClaw, Hermes, Codex)
 

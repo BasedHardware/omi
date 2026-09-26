@@ -120,3 +120,26 @@ def test_transaction_create_inserts_a_new_document_and_rejects_an_existing_one()
 
     with pytest.raises(RuntimeError, match='document already exists'):
         transaction.create(record, {'value': 'again'})
+
+
+def test_bounded_equality_id_query_filters_and_enforces_transaction_ordering():
+    from google.cloud.firestore_v1.base_query import FieldFilter
+
+    database = StrictFirestore(
+        {
+            ('fences', 'a'): {'uid': 'u', 'window': 'one'},
+            ('fences', 'b'): {'uid': 'u', 'window': 'two'},
+            ('fences', 'c'): {'uid': 'u', 'window': 'one'},
+            ('fences', 'd', 'nested', 'e'): {'uid': 'u', 'window': 'one'},
+        }
+    )
+    query = database.collection('fences').where(filter=FieldFilter('uid', '==', 'u'))
+    query = query.where(filter=FieldFilter('window', '==', 'one')).select(()).limit(1)
+    transaction = database.transaction()
+    assert [row.to_dict() for row in query.stream(transaction=transaction)] == [{}]
+    assert len(list(query.limit(10).stream(transaction=transaction))) == 2
+    with pytest.raises(ForeignTransactionError):
+        list(query.stream(transaction=StrictFirestore().transaction()))
+    transaction.set(database.document('fences/new'), {'uid': 'u', 'window': 'one'})
+    with pytest.raises(ReadAfterWriteError):
+        list(query.stream(transaction=transaction))

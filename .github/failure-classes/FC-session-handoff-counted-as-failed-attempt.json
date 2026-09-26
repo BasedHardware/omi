@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-session-handoff-counted-as-failed-attempt",
+  "violated_contract": "A durable job's attempt budget counts failed processing attempts, not lease handoffs. Reclaiming an expired lease because a listen session reconnected is not evidence that the worker failed to process the job. Dead-lettering after N session handoffs turns a healthy reconnect into a terminal MIC failure while the upstream STT outage is still in progress.",
+  "canonical_prevention": "Increment the processing attempt counter only on a retryable processing failure. Inline (pusher) retryable failures must increment the same retries counter as the Cloud Tasks worker. Cover reclaim-without-failure, retryable increment, and dead-letter-only-after-N-failed-processing-attempts with behavioral tests.",
+  "canonical_prevention_artifact": [
+    "backend/database/conversation_finalization_jobs.py",
+    "backend/utils/pusher_finalization.py",
+    "backend/tests/unit/test_conversation_finalization_jobs.py",
+    "backend/tests/unit/test_listen_finalization_cloud_tasks.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/conversation_finalization_jobs.py",
+    "backend/utils/pusher_finalization.py",
+    "backend/utils/stt/**"
+  ],
+  "status": "open"
+}

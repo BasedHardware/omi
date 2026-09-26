@@ -1,3 +1,4 @@
+import ScreenCaptureKit
 import XCTest
 
 @testable import Omi_Computer
@@ -62,5 +63,15 @@ final class ScreenCaptureDimensionsTests: XCTestCase {
 
   func testReturnsNilForNegativeFrame() {
     XCTAssertNil(ScreenCaptureService.captureDimensions(width: -100, height: 900, maxSize: maxSize))
+  }
+
+  @available(macOS 14.0, *)
+  func testSingleWindowCaptureConfigurationProducesOpaqueContentWithoutShadowFraming() {
+    let configuration = SCStreamConfiguration()
+
+    ScreenCaptureService.applySingleWindowPixelIntegrityPolicy(to: configuration)
+
+    XCTAssertTrue(configuration.ignoreShadowsSingleWindow)
+    XCTAssertTrue(configuration.shouldBeOpaque)
   }
 }

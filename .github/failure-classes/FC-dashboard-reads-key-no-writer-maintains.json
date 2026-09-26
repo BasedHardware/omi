@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-dashboard-reads-key-no-writer-maintains",
+  "violated_contract": "A dashboard data path must not request a cache key that no active writer refreshes when the serving route serves cached payloads at any age. Cache keys that embed request parameters split the cache: a surface whose params differ from the precompute cron's canonical params reads a doc only legacy writers maintained, so it silently serves a frozen payload forever while a fresh doc sits under a sibling key. The serving contract (any-age serve for latency) makes this invisible: no error, no staleness signal, and the freshness status doc reports all metrics ok because the cron only ever checks its own keys.",
+  "canonical_prevention": "Every surface that reads a precomputed payload cache must use exactly the canonical parameter set the precompute writer uses (cost/dimension params never in the URL unless a writer maintains that exact key), and a staleness guard must compare each served doc's freshAt against a bound (or the precompute status doc must enumerate every key surfaces actually read, not only the keys it writes), so a frozen doc is distinguishable from live data at serve time rather than only when a human notices the chart stopped moving.",
+  "canonical_prevention_artifact": [
+    "web/admin/grafana/test_build_dashboards.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "web/admin/grafana/build_dashboards.py",
+    "web/admin/app/api/internal/precompute/route.ts",
+    "web/admin/lib/payload-cache.ts"
+  ],
+  "status": "open"
+}

@@ -225,6 +225,7 @@ struct MemoryGraphSceneView: NSViewRepresentable {
 class MemoryGraphViewModel: ObservableObject {
   typealias CanonicalGraphFetcher =
     (RuntimeOwnerAuthorizationSnapshot) async throws -> KnowledgeGraphResponse
+  typealias OwnerNameProvider = () -> String?
 
   @Published var isLoading = false
   @Published var isRebuilding = false
@@ -260,6 +261,7 @@ class MemoryGraphViewModel: ObservableObject {
   private var activeSearchQuery = ""
   private var sessionGeneration = 0
   private let canonicalGraphFetcher: CanonicalGraphFetcher
+  private let ownerNameProvider: OwnerNameProvider
 
   private static func hasAtlasContent(_ response: KnowledgeGraphResponse) -> Bool {
     !response.atlasNodes.isEmpty || !(response.catalogNodes?.isEmpty ?? true)
@@ -270,19 +272,39 @@ class MemoryGraphViewModel: ObservableObject {
       try await APIClient.shared.getKnowledgeGraph(
         authorizationSnapshot: authorizationSnapshot)
     }
+    ownerNameProvider = Self.currentOwnerName
     setupCamera()
     setupLighting()
   }
 
-  init(
+  convenience init(
     canonicalGraphFetcher: @escaping CanonicalGraphFetcher,
     initialGraphResponse: KnowledgeGraphResponse
   ) {
+    self.init(
+      canonicalGraphFetcher: canonicalGraphFetcher,
+      initialGraphResponse: initialGraphResponse,
+      ownerNameProvider: Self.currentOwnerName)
+  }
+
+  init(
+    canonicalGraphFetcher: @escaping CanonicalGraphFetcher,
+    initialGraphResponse: KnowledgeGraphResponse,
+    ownerNameProvider: @escaping OwnerNameProvider
+  ) {
     self.canonicalGraphFetcher = canonicalGraphFetcher
+    self.ownerNameProvider = ownerNameProvider
     graphResponse = initialGraphResponse
     isEmpty = !Self.hasAtlasContent(initialGraphResponse)
     setupCamera()
     setupLighting()
+  }
+
+  private static func currentOwnerName() -> String? {
+    let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let ownerName = givenName.isEmpty ? displayName : givenName
+    return ownerName.isEmpty ? nil : ownerName
   }
 
   private func setupCamera() {
@@ -410,11 +432,9 @@ class MemoryGraphViewModel: ObservableObject {
         let hasContent = Self.hasAtlasContent(response)
         var projection: MemoryAtlasProjection?
         if hasContent {
-          let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
-          let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-          let ownerName = givenName.isEmpty ? displayName : givenName
+          let ownerName = ownerNameProvider()
           projection = await Task.detached(priority: .userInitiated) {
-            MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName.isEmpty ? nil : ownerName)
+            MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName)
           }.value
           guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
             return
@@ -480,11 +500,9 @@ class MemoryGraphViewModel: ObservableObject {
         }
 
         if !response.atlasNodes.isEmpty || !(response.catalogNodes?.isEmpty ?? true) {
-          let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
-          let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-          let ownerName = givenName.isEmpty ? displayName : givenName
+          let ownerName = ownerNameProvider()
           let projection = await Task.detached(priority: .userInitiated) {
-            MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName.isEmpty ? nil : ownerName)
+            MemoryAtlasProjection(graph: response.atlasResponse, userName: ownerName)
           }.value
           guard isCanonicalLoadCurrent(generation: generation, authorizationSnapshot: authorizationSnapshot) else {
             return false
@@ -838,6 +856,10 @@ class MemoryGraphViewModel: ObservableObject {
         needle.isEmpty || node.label.localizedCaseInsensitiveContains(needle) ? node.id : nil
       })
     searchMatchCount = needle.isEmpty ? nil : matchingIDs.count
+    if !needle.isEmpty {
+      let resultsCount = matchingIDs.count
+      SearchAnalytics.scheduleQueryEntered(surface: .brainMap, query: needle) { resultsCount }
+    }
 
     for (id, node) in nodeSceneNodes {
       node.isHidden = !needle.isEmpty && !matchingIDs.contains(id)

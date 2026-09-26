@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-dev-harness-system-global-tool-shadows-repo-pinned",
+  "violated_contract": "A dev-harness script that resolves a CLI tool by searching PATH first silently uses whatever global version is installed on the developer's machine, which may be on an incompatible Node version, drift from the version pinned in package.json, and cause the emulator to hang until a health-check timeout.",
+  "canonical_prevention": "Invoke the tool exclusively through the repo-pinned devDependency version (npx --prefix <repo_root> --yes <package>@<exact-pinned-version>), reject any PATH-resolved global, and fail fast with a clear message when package.json does not carry an exact (no range) pin.",
+  "canonical_prevention_artifact": [
+    "scripts/dev-harness/dev_harness/cli.py"
+  ],
+  "evidence_prs": [
+    12393
+  ],
+  "scope_hints": [
+    "scripts/dev-harness/**"
+  ],
+  "status": "open"
+}

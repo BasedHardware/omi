@@ -1,0 +1,8 @@
+{
+  "version": "0.12.268",
+  "date": "2026-09-02",
+  "changes": [
+    "Thumbs up/down on responses now records whether it was a chat or a voice reply, powering the team quality dashboards.",
+    "Onboarding permission steps now lead with the Allow action; the way past a permission is a quieter text link beneath it rather than a second button of equal weight"
+  ]
+}

@@ -14,6 +14,7 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import openai
 import pytest
 
 import utils.other.chat_file as cf  # noqa: E402
@@ -37,14 +38,33 @@ def _gateway_mode(monkeypatch):
 
 def _vision_files():
     file_chat = SimpleNamespace(
-        is_pdf=lambda: False, is_image=lambda: True, openai_file_id='file-1', mime_type='image/png', name='pic.png'
+        is_document=lambda: False,
+        is_image=lambda: True,
+        openai_file_id='file-1',
+        mime_type='image/png',
+        name='pic.png',
     )
     return [file_chat]
 
 
 def _pdf_files():
     file_chat = SimpleNamespace(
-        is_pdf=lambda: True, is_image=lambda: False, openai_file_id='file-2', mime_type='application/pdf', name='a.pdf'
+        is_document=lambda: True,
+        is_image=lambda: False,
+        openai_file_id='file-2',
+        mime_type='application/pdf',
+        name='a.pdf',
+    )
+    return [file_chat]
+
+
+def _txt_files():
+    file_chat = SimpleNamespace(
+        is_document=lambda: True,
+        is_image=lambda: False,
+        openai_file_id='file-3',
+        mime_type='text/plain',
+        name='a.txt',
     )
     return [file_chat]
 
@@ -72,6 +92,22 @@ async def _fake_stream(*_args, **_kwargs):
         yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content='answer'))])
 
     return iterator()
+
+
+async def _failing_stream(*_args, **_kwargs):
+    async def iterator():
+        yield SimpleNamespace(choices=[SimpleNamespace(delta=SimpleNamespace(content='partial'))])
+        raise RuntimeError('direct stream failed')
+
+    return iterator()
+
+
+def _not_found(*, code=None, param=None):
+    return openai.NotFoundError(
+        message='not found',
+        response=SimpleNamespace(request=None, status_code=404, headers={}),
+        body={'message': 'not found', 'type': 'api_error', 'code': code, 'param': param},
+    )
 
 
 @pytest.mark.asyncio
@@ -107,6 +143,7 @@ def test_lane_selection_splits_vision_from_documents(monkeypatch):
     assert cf.file_chat_auto_lane_id(pdf=False) == FILE_CHAT_VISION_AUTO_LANE_ID
     assert cf._completion_model(_vision_files()) == FILE_CHAT_VISION_AUTO_LANE_ID
     assert cf._completion_model(_pdf_files()) == FILE_CHAT_DOCUMENTS_AUTO_LANE_ID
+    assert cf._completion_model(_txt_files()) == FILE_CHAT_DOCUMENTS_AUTO_LANE_ID
 
 
 def test_sync_completion_uses_gateway_client_under_gateway_mode(monkeypatch):
@@ -185,3 +222,115 @@ async def test_async_entrypoint_routes_through_gateway(monkeypatch):
 
     assert output == 'answer'
     assert gateway_client.chat.completions.create.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_stream_completion_falls_back_direct_when_deployed_gateway_lacks_lane(monkeypatch):
+    _gateway_mode(monkeypatch)
+    gateway_client = MagicMock()
+    gateway_client.chat.completions.create = AsyncMock(side_effect=_not_found(code='model_not_found'))
+    direct_client = MagicMock()
+    direct_client.chat.completions.create = AsyncMock(side_effect=_fake_stream)
+    fallback = MagicMock()
+
+    tool = _tool(_pdf_files())
+    callback = _callback()
+    with patch.object(cf, 'get_file_chat_gateway_async_client', return_value=gateway_client), patch.object(
+        cf, '_get_async_openai', return_value=direct_client
+    ), patch.object(
+        cf.FileChatTool, '_completion_messages', AsyncMock(return_value=[{'role': 'user', 'content': 'q'}])
+    ), patch.object(
+        cf, 'record_fallback', fallback
+    ):
+        output = await tool._ask_files_stream('q', _pdf_files(), callback)
+
+    assert output == 'answer'
+    assert direct_client.chat.completions.create.call_args.kwargs['model'] == cf._FILE_CHAT_DOCUMENT_MODEL
+    fallback.assert_called_once_with(
+        component='llm_gateway',
+        from_mode='gateway_file_chat',
+        to_mode='direct_file_chat',
+        reason='capability_mismatch',
+        outcome='recovered',
+        log=cf.logger,
+    )
+
+
+@pytest.mark.asyncio
+async def test_stream_completion_records_exhausted_when_direct_fallback_fails(monkeypatch):
+    _gateway_mode(monkeypatch)
+    gateway_client = MagicMock()
+    gateway_client.chat.completions.create = AsyncMock(side_effect=_not_found(code='model_not_found'))
+    direct_client = MagicMock()
+    direct_client.chat.completions.create = AsyncMock(side_effect=_failing_stream)
+    fallback = MagicMock()
+
+    tool = _tool(_pdf_files())
+    callback = _callback()
+    with patch.object(cf, 'get_file_chat_gateway_async_client', return_value=gateway_client), patch.object(
+        cf, '_get_async_openai', return_value=direct_client
+    ), patch.object(
+        cf.FileChatTool, '_completion_messages', AsyncMock(return_value=[{'role': 'user', 'content': 'q'}])
+    ), patch.object(
+        cf, 'record_fallback', fallback
+    ):
+        with pytest.raises(RuntimeError, match='direct stream failed'):
+            await tool._ask_files_stream('q', _pdf_files(), callback)
+
+    fallback.assert_called_once_with(
+        component='llm_gateway',
+        from_mode='gateway_file_chat',
+        to_mode='direct_file_chat',
+        reason='capability_mismatch',
+        outcome='exhausted',
+        log=cf.logger,
+    )
+    callback.end.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_gateway_file_404_stays_a_stale_attachment_failure(monkeypatch):
+    _gateway_mode(monkeypatch)
+    gateway_client = MagicMock()
+    gateway_client.chat.completions.create = AsyncMock(side_effect=_not_found(param='file_id'))
+    direct_client = MagicMock()
+    fallback = MagicMock()
+
+    tool = _tool(_pdf_files())
+    callback = _callback()
+    with patch.object(cf, 'get_file_chat_gateway_async_client', return_value=gateway_client), patch.object(
+        cf, '_get_async_openai', return_value=direct_client
+    ), patch.object(
+        cf.FileChatTool, '_completion_messages', AsyncMock(return_value=[{'role': 'user', 'content': 'q'}])
+    ), patch.object(
+        cf, 'record_fallback', fallback
+    ):
+        with pytest.raises(cf.StaleChatFileError):
+            await tool._ask_files_stream('q', _pdf_files(), callback)
+
+    direct_client.chat.completions.create.assert_not_called()
+    fallback.assert_not_called()
+
+
+def test_sync_completion_falls_back_direct_when_deployed_gateway_lacks_lane(monkeypatch):
+    _gateway_mode(monkeypatch)
+    gateway_client = MagicMock()
+    gateway_client.chat.completions.create = MagicMock(side_effect=_not_found(code='model_not_found'))
+    direct_response = SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='ok'))])
+    direct_client = MagicMock()
+    direct_client.chat.completions.create = MagicMock(return_value=direct_response)
+    fallback = MagicMock()
+
+    tool = _tool(_pdf_files())
+    with patch.object(cf, 'get_file_chat_gateway_sync_client', return_value=gateway_client), patch.object(
+        cf, '_get_sync_openai', return_value=direct_client
+    ), patch.object(
+        cf.FileChatTool, '_completion_messages_sync', MagicMock(return_value=[{'role': 'user', 'content': 'q'}])
+    ), patch.object(
+        cf, 'record_fallback', fallback
+    ):
+        result = tool._ask_files('q', _pdf_files())
+
+    assert result == 'ok'
+    assert direct_client.chat.completions.create.call_args.kwargs['model'] == cf._FILE_CHAT_DOCUMENT_MODEL
+    fallback.assert_called_once()

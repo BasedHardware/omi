@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-settings-seed-authority-rot",
+  "violated_contract": "A seed authority that named bundles mirror on every launch must hold the operator's effective preferences. A present-but-stale authority domain — installed, but missing overrides the operator curates in the app they actually use — makes exact mirroring delete real overrides and ship compiled defaults, and an existence-only fallback never repairs it because the failing state is 'present but stale', not 'absent'.",
+  "canonical_prevention": "Resolve exactly one authority per run — explicit env source that fails closed on a missing domain, then the production app when installed, then the dev profile — keep exact-mirror deletion semantics against that single authority, warn when it lacks a shortcut override naming the compiled default, and test resolution order, fail-closed behavior, and mirror deletion against a prepopulated target.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/tests/test-settings-seed.sh",
+    ".github/checks-manifest.yaml"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/run.sh",
+    "desktop/macos/scripts/omi-settings-seed.sh",
+    "desktop/macos/scripts/omi-auth-dump.sh"
+  ],
+  "status": "open"
+}

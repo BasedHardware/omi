@@ -66,6 +66,28 @@ struct AccountCutoverControl: Codable, Equatable, Sendable {
   )
 }
 
+/// Synchronous, sendable view of the server control generation for delayed
+/// owner-bound work. The manager remains the sole authority that updates this
+/// value; the lock lets an actor recheck the same generation at its write
+/// linearization point without reaching across isolation to read MainActor
+/// state.
+final class AccountCutoverGenerationAuthority: @unchecked Sendable {
+  private let lock = NSLock()
+  private var generation: Int
+
+  init(generation: Int = AccountCutoverControl.legacyDefault.accountGeneration) {
+    self.generation = generation
+  }
+
+  func update(_ generation: Int) {
+    lock.withLock { self.generation = generation }
+  }
+
+  func isCurrent(_ expectedGeneration: Int) -> Bool {
+    lock.withLock { generation == expectedGeneration }
+  }
+}
+
 enum AccountCutoverGateDecision: Equatable, Sendable {
   case allowProductTraffic
   case forceUpgrade
@@ -137,6 +159,7 @@ final class AccountCutoverControlManager: ObservableObject {
   private var boundOwnerID: String?
   private var refreshGeneration: UInt64 = 0
   private var hasAuthoritativeControl = false
+  let generationAuthority = AccountCutoverGenerationAuthority()
 
   init(
     fetchControl: @escaping () async throws -> AccountCutoverControl = AccountCutoverControlManager.defaultFetch,
@@ -284,10 +307,12 @@ final class AccountCutoverControlManager: ObservableObject {
     bootstrapPhase = .pending
     control = .legacyDefault
     decision = .migrationMaintenance
+    generationAuthority.update(control.accountGeneration)
   }
 
   private func applyAuthoritative(_ control: AccountCutoverControl) {
     self.control = control
+    generationAuthority.update(control.accountGeneration)
     decision = gate.decide(control)
     hasAuthoritativeControl = true
     bootstrapPhase = .ready
@@ -300,6 +325,7 @@ final class AccountCutoverControlManager: ObservableObject {
     bootstrapPhase = .pending
     control = .legacyDefault
     decision = .migrationMaintenance
+    generationAuthority.update(control.accountGeneration)
   }
 
   private func resetForSignedOutOwner() {

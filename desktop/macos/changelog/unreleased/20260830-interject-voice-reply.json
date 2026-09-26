@@ -1,3 +1,0 @@
-{
-  "change": "Added a hold-to-reply hint, reading-time card timing, and voice feedback on proactive notifications (Interject, flag-gated). Hold-⌥ keeps the classification inject through PTT-up so Gemini can accept it when the activity window opens."
-}

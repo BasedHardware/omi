@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-capture-session-window-read-as-content-duration",
+  "violated_contract": "A duration that is displayed to a user or fed to a policy decision must be measured from the content it describes, never from a capture-session timestamp that merely bounds it. `Conversation.started_at` on a live-socket capture is the streaming-session origin (the STT stream offset plus the socket's first-audio-byte wall time), so `finished_at - started_at` reports how long the SOCKET has been open, and every conversation after the first in a session inherits the whole session's age. Nothing fails when a consumer recomputes it: the subtraction succeeds, no decode error or exception is raised, and each platform's own tests stay green because each asserts the number it computes. Measured on a real account 2026-09-07, six consecutive conversations showed 14m31s / 19m13s / 24m13s / 35m19s / 36m0s / 42m45s on macOS against 17s / 1m24s / 46s / 2m12s / 18s / 8s on mobile, and the backend discard gate received 2565 seconds for an 8-second dictation scrap, so the prompt's stricter under-120-seconds short-content bar never applied and the scrap was kept.",
+  "canonical_prevention": "Derive the duration from the content \u2014 the validated transcript span, the largest segment `end` with usable text and interval \u2014 through one named authority per platform (`backend/utils/conversations/duration.py::conversation_duration_seconds`, `ServerConversation.durationInSeconds`, `ServerConversation.getDurationInSeconds`), and keep the capture-window timestamps only as the fallback for records that carry no content to measure. Because the rule ships on three platforms, pin it with shared vectors (`contracts/parity/conversation_duration.json`) that each platform runs through its own production code, so a divergence becomes a fixture edit instead of a silent per-platform drift.",
+  "canonical_prevention_artifact": [
+    "contracts/parity/conversation_duration.json",
+    "backend/tests/unit/test_discard_gate_duration_input.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/duration.py",
+    "backend/utils/conversations/process_conversation.py",
+    "desktop/macos/Desktop/Sources/Services/APIClient/APIClient+ConversationModels.swift",
+    "app/lib/backend/schema/conversation.dart"
+  ],
+  "status": "open"
+}

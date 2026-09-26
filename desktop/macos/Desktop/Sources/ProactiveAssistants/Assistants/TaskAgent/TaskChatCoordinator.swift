@@ -44,7 +44,10 @@ final class TaskChatCoordinator: ObservableObject {
   private var suppressUnreadPersistence = false
   private var isResettingOwnerProjection = false
 
-  private let chatProvider: ChatProvider
+  /// The one provider (INV-6). Exposed so the task panel can build the same
+  /// content-block context every other Chat surface uses, without a second
+  /// provider or transcript.
+  let chatProvider: ChatProvider
   private let workstreamAPI: any TaskWorkstreamAPI
   private let persistWorkstreamLink: @MainActor (String, String, String, LocalMutationAuthorization) async -> Void
   private let ownerIDProvider: @MainActor () -> String?
@@ -622,6 +625,7 @@ final class TaskChatCoordinator: ObservableObject {
     func registerAutomationActions() {
       DesktopAutomationActionRegistry.shared.register(
         name: "task_thread_scenario_13",
+        effects: [.localState, .networkOrModel, .remoteWrite],
         summary: "Exercise live task-backed thread continuity through the app kernel",
         params: ["task", "resume"]
       ) { [weak self] params in
@@ -1011,11 +1015,11 @@ final class TaskChatCoordinator: ObservableObject {
 
   private func runtimeStatusLabel(_ status: AgentRunProjectionStatus) -> String {
     switch status {
-    case .queued, .starting: return "Starting..."
+    case .queued, .starting: return "Starting…"
     case .waitingApproval: return "Needs approval"
     case .waitingInput: return "Needs input"
-    case .cancelling: return "Stopping..."
-    case .running: return "Working..."
+    case .cancelling: return "Stopping…"
+    case .running: return "Working…"
     default: return ""
     }
   }

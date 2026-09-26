@@ -46,6 +46,10 @@ final class VoiceTurnUIProjectionCopyTests: XCTestCase {
     XCTAssertEqual(
       VoiceTurnUICopy.terminalHint(for: .toolTimeout),
       "A tool took too long — try again")
+    // An offline question is not a provider failure: nothing was reached.
+    XCTAssertEqual(
+      VoiceTurnUICopy.terminalHint(for: .noNetwork),
+      "No network — say “type …” to dictate offline")
     XCTAssertNil(VoiceTurnUICopy.terminalHint(for: .interruptedByBargeIn))
     XCTAssertNil(VoiceTurnUICopy.terminalHint(for: .hubWarmTimeout))
     XCTAssertNil(VoiceTurnUICopy.terminalHint(for: .success))

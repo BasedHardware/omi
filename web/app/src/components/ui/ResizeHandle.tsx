@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 
 interface ResizeHandleProps {
   onResize: (delta: number) => void;
+  onResizeStart?: () => void;
   onResizeEnd?: () => void;
   onDoubleClick?: () => void;
   className?: string;
@@ -12,6 +13,7 @@ interface ResizeHandleProps {
 
 export function ResizeHandle({
   onResize,
+  onResizeStart,
   onResizeEnd,
   onDoubleClick,
   className,
@@ -24,7 +26,8 @@ export function ResizeHandle({
     e.preventDefault();
     setIsDragging(true);
     startXRef.current = e.clientX;
-  }, []);
+    onResizeStart?.();
+  }, [onResizeStart]);
 
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {

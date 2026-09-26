@@ -10,6 +10,7 @@ Map<String, dynamic> _ledgerJson({
   bool? userReview,
   String? supersededBy,
   String? invalidAt,
+  String? ledgerStatus,
 }) {
   return {
     'id': id,
@@ -26,6 +27,7 @@ Map<String, dynamic> _ledgerJson({
     'slot': slot,
     'subject_scope': 'primary_user',
     'intent_backed': true,
+    'ledger_status': ledgerStatus,
     'curation_weight': 7,
     'valid_at': '2026-08-23T12:00:00Z',
     'write_reason': 'direct_user_statement',
@@ -92,6 +94,15 @@ void main() {
       expect(memory.isCurrentKnowledgeLedgerRow, isFalse);
       expect(memory.isHistoricalKnowledgeLedgerRow, isTrue);
     }
+  });
+
+  test('inactive ledger status is historical and survives the adapter round trip', () {
+    final memory = Memory.fromJson(_ledgerJson(ledgerStatus: 'hidden'));
+
+    expect(memory.ledgerStatus, 'hidden');
+    expect(memory.isCurrentKnowledgeLedgerRow, isFalse);
+    expect(memory.isHistoricalKnowledgeLedgerRow, isTrue);
+    expect(Memory.fromJson(memory.toJson()).ledgerStatus, 'hidden');
   });
 
   test('legacy rows never gain ledger authority from compatibility tier fields', () {

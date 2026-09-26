@@ -464,23 +464,19 @@ def _load_active_memory_graph_assertions(
     uid: str,
     *,
     db_client: Any = None,
-    scan_limit: Optional[int] = None,
+    scan_limit: int,
 ) -> Tuple[List[MemoryGraphAssertion], bool]:
-    """Load fenced assertions with an optional bounded Firestore scan."""
+    """Load fenced assertions with a required bounded Firestore scan."""
     client = _firestore_client(db_client)
     user_ref = client.collection(users_collection).document(uid)
     assertions_ref = user_ref.collection(memory_graph_assertions_collection)
     candidates: Dict[str, MemoryGraphAssertion] = {}
 
-    if scan_limit is None:
-        snapshots = list(assertions_ref.stream())
-        truncated = False
-    else:
-        bounded_limit = max(0, int(scan_limit))
-        query = assertions_ref.order_by(KNOWLEDGE_GRAPH_DOCUMENT_ORDER).limit(bounded_limit + 1)
-        snapshots = list(query.stream())
-        truncated = len(snapshots) > bounded_limit
-        snapshots = snapshots[:bounded_limit]
+    bounded_limit = max(0, int(scan_limit))
+    query = assertions_ref.order_by(KNOWLEDGE_GRAPH_DOCUMENT_ORDER).limit(bounded_limit + 1)
+    snapshots = list(query.stream())
+    truncated = len(snapshots) > bounded_limit
+    snapshots = snapshots[:bounded_limit]
 
     for snapshot in snapshots:
         assertion = _parse_assertion_snapshot(uid, snapshot)
@@ -519,7 +515,11 @@ def get_active_memory_graph_assertions(
     db_client: Any = None,
 ) -> List[MemoryGraphAssertion]:
     """Load only assertions fenced to their current active Long-term memory item."""
-    assertions, _ = _load_active_memory_graph_assertions(uid, db_client=db_client)
+    assertions, _ = _load_active_memory_graph_assertions(
+        uid,
+        db_client=db_client,
+        scan_limit=MAX_KNOWLEDGE_GRAPH_ASSERTIONS,
+    )
     return assertions
 
 

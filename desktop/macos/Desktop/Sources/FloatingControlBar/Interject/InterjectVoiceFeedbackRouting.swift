@@ -2,23 +2,30 @@ import Foundation
 
 /// Instructions and parse for the user-initiated interjection turn.
 ///
-/// Classification rides that one turn — no extra model call. The token is
-/// stripped before speech; the remainder is the spoken acknowledgment.
+/// Hub/PTT classification is a silent `record_interject_feedback` tool call.
+/// Leading `[[interject:…]]` tokens remain only for selected-voice / typed
+/// history sanitizing — they must not be taught on the hub speech path.
 enum InterjectVoiceFeedbackRouting {
   static let classificationInstruction = """
-    The user's latest utterance may be a reply to the card quoted above. Classify \
-    it as exactly one of these and act in the same turn:
-    - Feedback verbs (JIT Decision 24): useful, false_positive, snooze, disable, missed.
-      Silence and a dismiss are never feedback — only this utterance is.
+    The user's latest utterance may be a reply to the card quoted above. If it \
+    is, call record_interject_feedback silently with the matching verb, then \
+    speak only the user-facing reply.
+    - Feedback verbs (JIT Decision 24): useful, false_positive, snooze, disable, \
+    missed. Silence and a dismiss are never feedback — only this utterance is.
     - correction: the card got a fact wrong. Use the existing memory amend/close \
-      tools so the ledger supersedes the wrong row. The spoken acknowledgment must \
-      name exactly what changed ("Got it — Thursday. I'd had it as Wednesday; fixed.").
-    - riff: they are continuing the topic. Answer in place; do not switch surfaces.
-    Put exactly one token on its own first line, then the spoken reply:
-    [[interject:useful]] or [[interject:false_positive]] or [[interject:snooze]] \
-    or [[interject:disable]] or [[interject:missed]] or [[interject:correction]] \
-    or [[interject:riff]]
-    Do not read the token aloud. Do not mention the classification.
+    tools so the ledger supersedes the wrong row. Speak one consequence sentence \
+    that names the fact that changed ("Got it — Thursday. I'd had it as \
+    Wednesday; fixed."), then any leftover question. Never speak the taxonomy \
+    name.
+    - riff, or a question about the card ("what is this suggestion for?"): call \
+    with riff, or omit the tool. Your first audio must be the answer. Do not say \
+    got it, continuing the topic, or any acknowledgement before the answer. Riff \
+    does not write teach-rate.
+    If you omit the tool, treat the utterance as riff: answer anyway. Do not \
+    mention classification. Do not say you could not classify.
+    Call record_interject_feedback silently and immediately. Do not speak a \
+    heads-up. The app does not play a canned acknowledgement for this tool. \
+    Never speak verb names as labels. Never read the tool result aloud.
     """
 
   static func parse(_ text: String) -> (verb: InterjectFeedbackVerb?, spoken: String) {

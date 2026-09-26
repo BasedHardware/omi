@@ -13,6 +13,7 @@ final class NotchCardVoiceDeliveryTests: XCTestCase {
   private final class Harness {
     var sessionLive = true
     var acceptSends = true
+    var unsupported = false
     private(set) var injected: [String] = []
     var injectCount: Int { injected.count }
 
@@ -20,9 +21,10 @@ final class NotchCardVoiceDeliveryTests: XCTestCase {
       NotchCardVoiceDelivery(
         isVoiceSessionLive: { [unowned self] in self.sessionLive },
         injectContext: { [unowned self] text in
-          guard self.acceptSends else { return false }
+          if self.unsupported { return .unsupported }
+          guard self.acceptSends else { return .retry }
           self.injected.append(text)
-          return true
+          return .delivered
         },
         // Synchronous so each entry point's effect is observable on return.
         scheduleWork: { work in
@@ -151,6 +153,14 @@ final class NotchCardVoiceDeliveryTests: XCTestCase {
 
     XCTAssertEqual(harness.injectCount, 1)
     XCTAssertNil(subject.pendingCard)
+  }
+
+  func testUnsupportedProviderConsumesCardWithoutInjectingItIntoUserSpeech() {
+    harness.unsupported = true
+    subject.cardPresented(id: UUID(), text: "visible card")
+
+    XCTAssertEqual(harness.injectCount, 0)
+    XCTAssertNil(subject.pendingCard, "unsupported context must not retry into a later unrelated turn")
   }
 
   // MARK: - Dedup and supersession

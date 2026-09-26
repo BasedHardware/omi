@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
 
-from omi_cli.main import app
+import pytest
+
+from omi_cli.main import app, main
 
 
 def test_conversation_list_renders(authed_profile, respx_mock, cli_runner) -> None:
@@ -59,6 +63,18 @@ def test_conversation_delete_with_yes(authed_profile, respx_mock, cli_runner) ->
     assert result.exit_code == 0
 
 
+def test_conversation_delete_missing_empty_404_exits_not_found(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.delete("/v1/dev/user/conversations/missing").respond(404)
+    result = cli_runner.invoke(app, ["conversation", "delete", "missing", "--yes"])
+    assert result.exit_code == 5  # EXIT_NOT_FOUND
+
+
+def test_conversation_get_missing_empty_404_json_exits_not_found(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.get("/v1/dev/user/conversations/missing").respond(404)
+    result = cli_runner.invoke(app, ["--json", "conversation", "get", "missing"])
+    assert result.exit_code == 5  # EXIT_NOT_FOUND
+
+
 def test_conversation_from_segments_reads_file(authed_profile, respx_mock, cli_runner, tmp_path) -> None:
     f = tmp_path / "segments.json"
     segments = {
@@ -76,3 +92,61 @@ def test_conversation_from_segments_reads_file(authed_profile, respx_mock, cli_r
     body = json.loads(route.calls.last.request.content)
     assert len(body["transcript_segments"]) == 2
     assert body["source"] == "phone"
+
+
+@pytest.mark.parametrize("encoding", ["utf-8", "utf-8-sig", "utf-16", "utf-32"])
+def test_conversation_from_segments_preserves_unicode(
+    authed_profile, respx_mock, cli_runner, tmp_path, encoding
+) -> None:
+    segments = [{"text": "Caf\u00e9, \u65e5\u672c\u8a9e \U0001f642", "start": 0.0, "end": 1.0}]
+    source = tmp_path / "segments.json"
+    source.write_bytes(json.dumps(segments, ensure_ascii=False).encode(encoding))
+    route = respx_mock.post("/v1/dev/user/conversations/from-segments").respond(
+        json={"id": "c1", "status": "completed", "discarded": False}
+    )
+
+    result = cli_runner.invoke(app, ["--json", "conversation", "from-segments", str(source)])
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(route.calls.last.request.content)["transcript_segments"] == segments
+
+
+def test_conversation_from_segments_rejects_invalid_unicode(config_path, respx_mock, cli_runner, tmp_path) -> None:
+    source = tmp_path / "segments.json"
+    source.write_bytes(b'[{"text": "\xff", "start": 0, "end": 1}]')
+
+    result = cli_runner.invoke(app, ["--json", "conversation", "from-segments", str(source)])
+
+    assert result.exit_code == 1
+    assert "Invalid JSON" in result.stderr
+    assert not respx_mock.calls
+
+def test_conversation_from_segments_rejects_directory(config_path, respx_mock, monkeypatch, capsys, tmp_path) -> None:
+    test_dir = tmp_path / "somedir"
+    test_dir.mkdir()
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "conversation", "from-segments", str(test_dir)])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    output = capsys.readouterr()
+    err = json.loads(output.err)
+    assert "Expected a file, but found a directory" in err["error"]
+    assert not respx_mock.calls
+
+
+def test_conversation_from_segments_rejects_unreadable_file(config_path, respx_mock, monkeypatch, capsys, tmp_path) -> None:
+    f = tmp_path / "unreadable.json"
+    f.write_text("{}")
+
+    def fail_read(*args, **kwargs):
+        raise PermissionError("Access denied")
+
+    monkeypatch.setattr(Path, "read_bytes", fail_read)
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "conversation", "from-segments", str(f)])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    output = capsys.readouterr()
+    err = json.loads(output.err)
+    assert "Cannot read file" in err["error"]
+    assert not respx_mock.calls

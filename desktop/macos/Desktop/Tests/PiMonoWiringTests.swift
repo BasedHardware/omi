@@ -42,6 +42,32 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(AgentRuntimeRouting.adapterId(for: .hermes).rawValue, "hermes")
     XCTAssertEqual(AgentRuntimeRouting.adapterId(for: .openclaw).rawValue, "openclaw")
     XCTAssertNil(AgentRuntimeRouting.harnessMode(from: "unknown"))
+    XCTAssertNil(
+      AgentRuntimeRouting.defaultModelProfile(
+        harnessMode: AgentHarnessMode.hermes.rawValue,
+        chatBridgeMode: ChatProvider.BridgeMode.hermes.rawValue
+      )
+    )
+    XCTAssertNil(
+      AgentRuntimeRouting.defaultModelProfile(
+        harnessMode: AgentHarnessMode.piMono.rawValue,
+        chatBridgeMode: ChatProvider.BridgeMode.local.rawValue
+      )
+    )
+    XCTAssertEqual(
+      AgentRuntimeRouting.defaultModelProfile(
+        harnessMode: AgentHarnessMode.piMono.rawValue,
+        chatBridgeMode: ChatProvider.BridgeMode.piMono.rawValue
+      ),
+      ModelQoS.Claude.chat
+    )
+    XCTAssertEqual(
+      AgentRuntimeRouting.defaultModelProfileForRunHarness(
+        AgentHarnessMode.piMono.rawValue,
+        persistedChatBridgeMode: ChatProvider.BridgeMode.hermes.rawValue
+      ),
+      ModelQoS.Claude.chat
+    )
   }
 
   func testLocalAgentProviderDetectorUsesExplicitCommand() {

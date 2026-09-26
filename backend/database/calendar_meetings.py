@@ -95,20 +95,20 @@ def get_meeting_id_by_calendar_event(uid: str, calendar_event_id: str, calendar_
     return None
 
 
+def _to_utc(dt: datetime) -> datetime:
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+
+
 def list_meetings(
     uid: str, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, limit: int = 50
 ) -> List[Dict[str, Any]]:
-    """
-    List calendar meetings, optionally filtered by date range.
-    Returns meetings sorted by start_time descending.
-    """
-    query = _get_meetings_collection(uid).order_by('start_time', direction=firestore.Query.DESCENDING).limit(limit)
-
+    """List calendar meetings, optionally filtered by date range, sorted by start_time descending."""
+    query: Any = _get_meetings_collection(uid)
     if start_date:
-        query = query.where('start_time', '>=', start_date)
-
+        query = query.where('start_time', '>=', _to_utc(start_date))
     if end_date:
-        query = query.where('start_time', '<=', end_date)
+        query = query.where('start_time', '<=', _to_utc(end_date))
+    query = query.order_by('start_time', direction=firestore.Query.DESCENDING).limit(limit)
 
     meetings: List[Dict[str, Any]] = []
     for doc in query.stream():
@@ -126,11 +126,8 @@ def delete_meeting(uid: str, meeting_id: str) -> None:
 
 
 def delete_old_meetings(uid: str, before_date: datetime) -> int:
-    """
-    Delete meetings that ended before a certain date.
-    Returns the number of meetings deleted.
-    """
-    query = _get_meetings_collection(uid).where('end_time', '<', before_date)
+    """Delete meetings that ended before a certain date. Returns the number of meetings deleted."""
+    query = _get_meetings_collection(uid).where('end_time', '<', _to_utc(before_date))
 
     deleted_count = 0
     batch = db.batch()
@@ -140,14 +137,11 @@ def delete_old_meetings(uid: str, before_date: datetime) -> int:
         batch.delete(doc.reference)
         batch_size += 1
         deleted_count += 1
-
-        # Commit in batches of 500 (Firestore limit)
         if batch_size >= 500:
             batch.commit()
             batch = db.batch()
             batch_size = 0
 
-    # Commit remaining
     if batch_size > 0:
         batch.commit()
 
@@ -155,23 +149,13 @@ def delete_old_meetings(uid: str, before_date: datetime) -> int:
 
 
 def get_meetings_in_time_range(uid: str, start_time: datetime, end_time: datetime) -> List[Dict[str, Any]]:
-    """
-    Find meetings that overlap with the given time range.
-    A meeting overlaps if: meeting.start_time < range.end_time AND meeting.end_time > range.start_time
-
-    Note: This requires a composite index on (start_time, end_time).
-    Returns meetings sorted by start_time ascending.
-    """
-    # Query for meetings where:
-    # - meeting starts before the range ends (start_time < end_time)
-    # - meeting ends after the range starts (end_time > start_time)
-    # This captures all overlapping meetings
+    """Find meetings that overlap with the given time range, sorted by start_time ascending."""
     query = (
         _get_meetings_collection(uid)
-        .where('start_time', '<', end_time)
-        .where('end_time', '>', start_time)
+        .where('start_time', '<', _to_utc(end_time))
+        .where('end_time', '>', _to_utc(start_time))
         .order_by('start_time', direction=firestore.Query.ASCENDING)
-        .limit(10)  # Cap to prevent excessive results
+        .limit(10)
     )
 
     meetings: List[Dict[str, Any]] = []

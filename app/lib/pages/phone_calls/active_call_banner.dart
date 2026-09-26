@@ -7,7 +7,9 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/pages/phone_calls/call_duration_format.dart';
 
 /// Compact call banner shown on the home screen when a phone call is active.
@@ -29,13 +31,13 @@ class ActiveCallBanner extends StatelessWidget {
         return GestureDetector(
           onTap: () {
             PlatformManager.instance.analytics.track('Phone Call Banner Tapped');
-            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ActiveCallPage()));
+            routeToPage(context, const ActiveCallPage());
           },
           child: Container(
-            margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-            decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24)),
+            margin: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, OmiSpacing.xxs),
+            decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+              padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 14, OmiSpacing.sm, 9),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -56,8 +58,9 @@ class ActiveCallBanner extends StatelessWidget {
                       ),
                     ),
                   // Row 3: Compact call controls
+                  // The controls carry 5pt of their own vertical padding (44pt targets).
                   Padding(
-                    padding: const EdgeInsets.only(top: 12),
+                    padding: const EdgeInsets.only(top: 7),
                     child: _CompactCallControls(
                       state: provider.callState,
                       isMuted: provider.isMuted,
@@ -116,19 +119,21 @@ class _CallInfoRow extends StatelessWidget {
             Color iconColor;
             switch (provider.transcriptionStatus) {
               case TranscriptionStatus.reconnecting:
-                iconColor = Colors.orange;
+                iconColor = OmiColors.warning;
                 break;
               case TranscriptionStatus.failed:
-                iconColor = Colors.red;
+                iconColor = OmiColors.danger;
                 break;
               default:
-                iconColor = const Color(0xFF34C759);
+                iconColor = OmiColors.success;
             }
-            return Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(color: iconColor, shape: BoxShape.circle),
-              child: const Icon(Icons.phone_in_talk, color: Colors.white, size: 16),
+            return ExcludeSemantics(
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(color: iconColor, shape: BoxShape.circle),
+                child: const Icon(Icons.phone_in_talk, color: OmiColors.textPrimary, size: 16),
+              ),
             );
           },
         ),
@@ -140,14 +145,14 @@ class _CallInfoRow extends StatelessWidget {
             children: [
               Text(
                 contactName ?? phoneNumber,
-                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
               if (contactName != null && phoneNumber.isNotEmpty)
                 Text(
                   phoneNumber,
-                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                  style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -157,15 +162,15 @@ class _CallInfoRow extends StatelessWidget {
         // Duration / status
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(12)),
+          decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
           child: Text(
             statusText,
-            style: const TextStyle(color: Color(0xFF34C759), fontSize: 13, fontWeight: FontWeight.w500),
+            style: OmiType.footnote.copyWith(color: OmiColors.success, fontWeight: FontWeight.w500),
           ),
         ),
         const SizedBox(width: 6),
         // Expand icon
-        const Icon(Icons.keyboard_arrow_up, color: Colors.grey, size: 22),
+        const ExcludeSemantics(child: Icon(Icons.keyboard_arrow_up, color: OmiColors.textTertiary, size: 22)),
       ],
     );
   }
@@ -182,10 +187,10 @@ class _TranscriptSnippet extends StatelessWidget {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(color: const Color(0xFF2A2A30), borderRadius: BorderRadius.circular(12)),
+      decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
       child: Text(
         '$speakerLabel: $text',
-        style: TextStyle(color: Colors.grey[400], fontSize: 13, height: 1.3),
+        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.3),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
@@ -233,24 +238,29 @@ class _CompactCallControls extends StatelessWidget {
         ),
         const Spacer(),
         // End call button
-        GestureDetector(
-          onTap: () {
-            HapticFeedback.heavyImpact();
-            onEndCall();
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(20)),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.call_end, color: Colors.white, size: 18),
-                const SizedBox(width: 6),
-                Text(
-                  context.l10n.phoneEndCall,
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+        // Red is state (hang up), not decoration.
+        Semantics(
+          button: true,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              HapticFeedback.heavyImpact();
+              onEndCall();
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.xs),
+                decoration: const BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.pillAll),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.call_end, color: OmiColors.textPrimary, size: 18),
+                    const SizedBox(width: 6),
+                    Text(context.l10n.phoneEndCall, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600)),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -269,33 +279,36 @@ class _CompactControlButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap == null
-          ? null
-          : () {
-              HapticFeedback.mediumImpact();
-              onTap!();
-            },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive ? Colors.white : const Color(0xFF35343B),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: isActive ? Colors.black : (onTap != null ? Colors.white : Colors.grey[600]), size: 18),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                color: isActive ? Colors.black : (onTap != null ? Colors.white : Colors.grey[600]),
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-              ),
+    final foreground = isActive ? OmiColors.onAccent : (onTap != null ? OmiColors.textPrimary : OmiColors.textDisabled);
+    return Semantics(
+      button: true,
+      enabled: onTap != null,
+      toggled: isActive,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.mediumImpact();
+                onTap!();
+              },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.xs),
+            decoration: BoxDecoration(
+              color: isActive ? OmiColors.accent : OmiColors.surface2,
+              borderRadius: OmiRadius.pillAll,
             ),
-          ],
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: foreground, size: 18),
+                const SizedBox(width: 6),
+                Text(label, style: OmiType.caption.copyWith(color: foreground, fontWeight: FontWeight.w500)),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -324,30 +337,32 @@ class ActiveCallTopBar extends StatelessWidget {
         return GestureDetector(
           onTap: () {
             PlatformManager.instance.analytics.track('Phone Call Top Bar Tapped');
-            Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ActiveCallPage()));
+            routeToPage(context, const ActiveCallPage());
           },
           child: Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            color: const Color(0xFF34C759),
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 10),
+            // The in-call green is state (a call is live), as in the system call bar. Black on it
+            // keeps text legible (white on this green is under 2:1).
+            color: OmiColors.success,
             child: Row(
               children: [
-                const Icon(Icons.phone_in_talk, color: Colors.white, size: 16),
-                const SizedBox(width: 8),
+                const ExcludeSemantics(child: Icon(Icons.phone_in_talk, color: OmiColors.onAccent, size: 16)),
+                const SizedBox(width: OmiSpacing.xs),
                 Expanded(
                   child: Text(
                     displayName,
-                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                    style: OmiType.subhead.copyWith(color: OmiColors.onAccent, fontWeight: FontWeight.w600),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Text(
                   timeStr,
-                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                  style: OmiType.subhead.copyWith(color: OmiColors.onAccent, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(width: 6),
-                const Icon(Icons.keyboard_arrow_up, color: Colors.white, size: 18),
+                const ExcludeSemantics(child: Icon(Icons.keyboard_arrow_up, color: OmiColors.onAccent, size: 18)),
               ],
             ),
           ),

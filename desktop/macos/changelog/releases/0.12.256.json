@@ -1,0 +1,9 @@
+{
+  "version": "0.12.256",
+  "date": "2026-09-01",
+  "changes": [
+    "Onboarding's ask demo now opens a three-door riddle page in your browser so you can try asking Omi about what's on screen, including something no longer visible",
+    "Fixed Omi answering \"that was never mentioned\" when you ask about something you read on screen earlier; voice and chat now check your screen history, not just conversations",
+    "When you ask Omi by voice about what's on your screen, what it saw is now kept with that message, so later questions like \"what did that page say?\" work from conversation history"
+  ]
+}

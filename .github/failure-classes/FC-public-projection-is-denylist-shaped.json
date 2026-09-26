@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-public-projection-is-denylist-shaped",
+  "violated_contract": "A public unauthenticated response must name the fields it exposes. A denylist (inherit the internal record, extra=allow, null a few keys) makes every new field on that record public by default, so owner-internal data such as device ids, calendar attendee emails, speech-sample URIs, and merge provenance ships on the share link the day it is added to the stored document.",
+  "canonical_prevention": "Declare an explicit response model that does not inherit the internal record, sets extra=ignore, and is built in one projection from the deserialized document. Cover it with a test that the response's top-level keys equal the declared set, that previously leaking fields are absent, and that a new arbitrary field on the stored document does not appear.",
+  "canonical_prevention_artifact": [
+    "backend/models/conversation.py",
+    "backend/routers/conversations.py",
+    "backend/tests/unit/test_shared_conversation_field_exposure.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/models/conversation.py",
+    "backend/routers/conversations.py",
+    "backend/tests/unit/test_shared_conversation_field_exposure.py"
+  ],
+  "status": "open"
+}

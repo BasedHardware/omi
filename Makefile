@@ -38,7 +38,7 @@ CHAT_FIRST_E2E_ACTION ?= prepare
 CHAT_FIRST_E2E_CASE ?= enabled
 CHAT_FIRST_E2E_SECONDS ?= 86400
 
-.PHONY: setup setup-main setup-hooks setup-backend preflight runtime-image-source-closure runtime-image-smoke dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local chat-first-e2e-fixture run-canonical-promotion run-canonical-maintenance
+.PHONY: setup setup-main setup-hooks setup-backend lane-backend lane-bootstrap preflight runtime-image-source-closure runtime-image-smoke dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs mobile-session mobile-verify dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local chat-first-e2e-fixture run-canonical-maintenance
 
 # Baseline setup is deliberately limited to prerequisites that the default
 # pre-push gate may require; app and desktop runtime environments stay opt-in.
@@ -53,6 +53,14 @@ setup-hooks:
 
 setup-backend:
 	@$(BASH) backend/scripts/sync-python-deps.sh
+
+# Opt-in wheel install for the mobile harness and pre-push backend gates.
+# Not lock-hash identical; use `make setup` / `make setup-backend` for the locked environment.
+lane-backend:
+	$(BASH) scripts/dev-harness/lane-backend.sh
+
+lane-bootstrap:
+	$(BASH) scripts/dev-harness/bootstrap-lane-worktree.sh
 
 preflight:
 	$(PYTHON_RUNNER) .github/scripts/pr_preflight.py --lane local --base origin/main
@@ -98,6 +106,14 @@ dev-down:
 dev-logs:
 	$(BASH) scripts/dev-harness/dev-logs.sh
 
+
+mobile-session:
+	$(BASH) scripts/dev-harness/mobile-session.sh $(ARGS)
+
+
+mobile-verify:
+	$(BASH) scripts/dev-harness/mobile-verify.sh $(ARGS)
+
 list-memory-scenarios:
 	$(PYTHON_RUNNER) scripts/dev-harness/list-memory-scenarios.py
 
@@ -116,9 +132,6 @@ desktop-run-local:
 
 chat-first-e2e-fixture:
 	PYTHON="$(PYTHON)" bash scripts/dev-harness/chat-first-e2e-fixture.sh "$(CHAT_FIRST_E2E_ACTION)" "$(CHAT_FIRST_E2E_CASE)" "$(CHAT_FIRST_E2E_SECONDS)"
-
-run-canonical-promotion:
-	PYTHON="$$PYTHON" PYTHONPATH="scripts/dev-harness:backend$(if $(PYTHONPATH),:$(PYTHONPATH),)" "$$PYTHON" scripts/dev-harness/run-canonical-promotion.py "$(PROMOTION_USER)"
 
 run-canonical-maintenance:
 	$(PYTHON_RUNNER) scripts/dev-harness/run-canonical-maintenance.py "$(MAINTENANCE_USER)"

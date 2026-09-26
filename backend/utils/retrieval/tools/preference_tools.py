@@ -11,7 +11,8 @@ from typing import Any, Dict, Optional, cast
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
-from database._client import get_firestore_client
+from database._client import get_data_plane_firestore_client
+from models.knowledge_ledger_policy import canonicalize_ledger_slot
 from models.memory_contracts import deterministic_contract_id
 from models.memory_apply import WriterMode
 from models.memories import MemoryDB
@@ -158,7 +159,11 @@ def _save_compatibility_preference(uid: str, preference: str, *, firestore_clien
 
 
 @tool
-def save_user_preference_tool(preference: str, config: RunnableConfig = None) -> str:  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
+def save_user_preference_tool(
+    preference: str,
+    slot: str = "",
+    config: RunnableConfig = None,
+) -> str:  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
     """Save a learned user preference or personal detail for future conversations.
 
     Call this when you learn something about the user's preferences, habits, or
@@ -174,13 +179,16 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
 
     Args:
         preference: A clear, concise statement of the preference or personal detail.
+        slot: Optional canonical registry slot (for example ``home_city`` or
+            ``occupation``). Unknown names are stored unslotted and remain
+            searchable; do not invent new slot names.
     """
     uid = _get_uid(config)
     if not uid:
         return "Error: Could not determine user ID"
 
     try:
-        firestore_client = get_firestore_client()
+        firestore_client = get_data_plane_firestore_client()
     except Exception as e:
         logger.error("Failed to resolve preference storage error_type=%s", type(e).__name__)
         return "Error saving preference"
@@ -205,11 +213,13 @@ def save_user_preference_tool(preference: str, config: RunnableConfig = None) ->
             _save_compatibility_preference(uid, preference, firestore_client=firestore_client)
         elif writer_mode == WriterMode.ledger:
             provenance = _write_provenance(uid, preference, config)
+            resolved_slot = canonicalize_ledger_slot(slot, strict=False) if isinstance(slot, str) else None
             memory_id = save_fact(
                 uid,
                 preference,
                 provenance=provenance,
                 write_reason=LedgerWriteReason.agent_reusable_conclusion,
+                slot=resolved_slot,
                 db_client=firestore_client,
             )
             capture_memory_write(

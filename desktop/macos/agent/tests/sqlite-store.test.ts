@@ -1,5 +1,5 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
@@ -15,6 +15,17 @@ afterEach(() => {
 });
 
 describe("SqliteAgentStore", () => {
+  it("keeps the runtime state directory and database owner-only", () => {
+    const databasePath = newDatabasePath();
+    const stateDir = dirname(databasePath);
+    chmodSync(stateDir, 0o755);
+
+    const store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
+    expect(statSync(stateDir).mode & 0o777).toBe(0o700);
+    expect(statSync(databasePath).mode & 0o777).toBe(0o600);
+    store.close();
+  });
+
   it("runs runtime and desktop coordinator migrations idempotently", () => {
     const store = newStore({ reconcileOnOpen: false });
 

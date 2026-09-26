@@ -73,28 +73,40 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     }
 
     XCTAssertEqual(ChatTranscriptLayout.topAdjustment(at: 0, in: messages), 0)
-    // assistant → user starts a new exchange and takes the full gap.
-    XCTAssertEqual(gap(1), ChatTranscriptLayout.regularRowSpacing)
+    // assistant → user: the assistant row already reserves its own 28 pt band,
+    // which is the separation. Adding the exchange gap on top charged twice.
+    XCTAssertEqual(gap(1), ChatTranscriptLayout.afterMetadataBandRowSpacing)
     XCTAssertEqual(gap(2), ChatTranscriptLayout.consecutiveUserRowSpacing)
     // user → assistant is one exchange, so it is the tight gap.
     XCTAssertEqual(gap(3), ChatTranscriptLayout.replySpacing)
-    XCTAssertEqual(gap(4), ChatTranscriptLayout.regularRowSpacing)
+    XCTAssertEqual(gap(4), ChatTranscriptLayout.afterMetadataBandRowSpacing)
 
     XCTAssertLessThan(
       ChatTranscriptLayout.replySpacing, ChatTranscriptLayout.regularRowSpacing,
       "a reply must bind to its question more tightly than to the next exchange")
+    XCTAssertLessThan(
+      ChatTranscriptLayout.replySpacing,
+      ChatBubbleMetadataControlMetrics.bandHeight
+        + ChatTranscriptLayout.afterMetadataBandRowSpacing,
+      "the exchange boundary is still the widest gap once the band is counted")
   }
 
-  /// The gap after an assistant row is also the room its hover-revealed metadata
-  /// band draws into — that band is zero-height at rest, so the space has to come
-  /// from somewhere, and it comes from here.
-  func testTheGapAfterAnAssistantRowStaysWideEnoughForItsHoverBand() {
-    let messages = [
-      ChatMessage(id: "a0", text: "Answer", sender: .ai),
-      ChatMessage(id: "a1", text: "Also this", sender: .ai),
-    ]
+  /// The band is real, reserved height under the row, so the *stack* must not
+  /// also pay for it — that double charge is what left two one-line answers
+  /// roughly 100 device pixels apart.
+  func testTheGapAfterARowThatReservesItsBandIsNotChargedTwice() {
+    let banded = ChatMessage(id: "a0", text: "Answer", sender: .ai)
+    let next = ChatMessage(id: "a1", text: "Also this", sender: .ai)
+    XCTAssertNotEqual(ChatBubbleMetadataBand.of(banded), .hidden)
     XCTAssertEqual(
-      ChatTranscriptLayout.spacing(from: messages[0], to: messages[1]),
+      ChatTranscriptLayout.spacing(from: banded, to: next),
+      ChatTranscriptLayout.afterMetadataBandRowSpacing)
+
+    // A row with no band of its own still takes the ordinary exchange gap.
+    let streaming = ChatMessage(id: "a2", text: "Thinking", sender: .ai, isStreaming: true)
+    XCTAssertEqual(ChatBubbleMetadataBand.of(streaming), .hidden)
+    XCTAssertEqual(
+      ChatTranscriptLayout.spacing(from: streaming, to: next),
       ChatTranscriptLayout.regularRowSpacing)
   }
 
@@ -178,35 +190,33 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     XCTAssertTrue(messagesSource.contains("ChatScrollLiveEdge.canResumeFollowing"))
   }
 
-  func testChatFirstShellUsesModernTopNavigation() throws {
+  func testEveryMainWindowChatSurfaceSharesOneRendererAndOneContext() throws {
     let shellSource = try sourceFile("MainWindow/ChatFirst/ChatFirstShell.swift")
     let queryHomeSource = try sourceFile("MainWindow/QueryShell/QueryShellHome.swift")
     let answerThreadSource = try sourceFile("MainWindow/QueryShell/QueryAnswerThread.swift")
-    let dashboardSource = try sourceFile("MainWindow/Pages/DashboardPage.swift")
+    let bubbleSource = try sourceFile("MainWindow/Components/ChatBubble.swift")
+    let taskPanelSource = try sourceFile("MainWindow/Components/TaskChatPanel.swift")
 
-    // omi-test-quality: source-inspection -- static contract: the Chat-first shell must share the modern
-    // top-navigation and the single QueryShellHome chat surface, while rich-block capability and
-    // visible-transcript lifecycle remain threaded through the shared answer view.
+    // omi-test-quality: source-inspection -- static contract: there is one shell, one chat
+    // destination, and one content-block context threaded through every host. Behavioural coverage
+    // of what the blocks then do lives in `OneChatShellRichBlockTests`.
     XCTAssertTrue(shellSource.contains("DesktopTopBar("))
-    // The shell keeps the modern chat surface in one shared destination so
-    // the legacy Dashboard alias cannot drift into a second implementation.
     XCTAssertTrue(shellSource.contains("case .chat, .more(.dashboard):"))
     XCTAssertTrue(shellSource.contains("private var chatDestination: some View"))
-    XCTAssertFalse(shellSource.contains("case .chat:\n      DashboardPage("))
-    XCTAssertTrue(shellSource.contains("forceModernPresentation: true"))
     XCTAssertTrue(shellSource.contains("chatFirstRichBlockContext: richBlockContext"))
-    XCTAssertTrue(queryHomeSource.contains("forceModernPresentation"))
-    XCTAssertTrue(queryHomeSource.contains("chatFirstRichBlockContext: chatFirstRichBlockContext"))
-    XCTAssertTrue(answerThreadSource.contains("chatFirstRichBlockContext: chatFirstRichBlockContext"))
     XCTAssertTrue(answerThreadSource.contains("chatTranscriptFirstPageDidLoad()"))
     XCTAssertTrue(answerThreadSource.contains("chatTranscriptDidDisappear()"))
     XCTAssertFalse(shellSource.contains("ChatFirstSidebar("))
     XCTAssertFalse(shellSource.contains("\n      ChatPage("))
-    XCTAssertTrue(dashboardSource.contains("chatFirstRichBlockContext: chatFirstRichBlockContext"))
-    XCTAssertTrue(dashboardSource.contains("chatTranscriptFirstPageDidLoad()"))
 
-    let homeSource = try sourceFile("MainWindow/DesktopHomeView.swift")
-    XCTAssertTrue(homeSource.contains("if usesChatFirstShell,"))
+    // The context is a required binding on every host, not an optional capability.
+    XCTAssertTrue(
+      queryHomeSource.contains("let chatFirstRichBlockContext: ChatFirstRichBlockContext"))
+    XCTAssertTrue(
+      answerThreadSource.contains("let chatFirstRichBlockContext: ChatFirstRichBlockContext"))
+    XCTAssertTrue(
+      bubbleSource.contains("let chatFirstRichBlockContext: ChatFirstRichBlockContext"))
+    XCTAssertTrue(taskPanelSource.contains("chatFirstRichBlockContext: .auxiliary("))
   }
 
   /// The fade is the notch's alone now that the standalone chat page is gone.
@@ -215,7 +225,7 @@ final class DesktopChatDriftGuardTests: XCTestCase {
   /// an incoming reply — so this pins the notch and pins Home's abstention.
   func testTheTranscriptFadeIsTheNotchsAloneAndHomeAbstains() throws {
     let notchChat = try sourceFile("FloatingControlBar/AIResponseView.swift")
-    let home = try sourceFile("MainWindow/Pages/DashboardPage.swift")
+    let home = try sourceFile("MainWindow/QueryShell/QueryAnswerThread.swift")
 
     XCTAssertTrue(notchChat.contains(".overlay(alignment: .bottom) {\n        ChatComposerFade()"))
     XCTAssertFalse(
@@ -224,9 +234,9 @@ final class DesktopChatDriftGuardTests: XCTestCase {
   }
 
   func testChatTranscriptLoaderIgnoresSessionListRefreshes() throws {
-    let dashboardPage = try sourceFile("MainWindow/Pages/DashboardPage.swift")
+    let answerThread = try sourceFile("MainWindow/QueryShell/QueryAnswerThread.swift")
 
-    for source in [dashboardPage] {
+    for source in [answerThread] {
       XCTAssertFalse(
         source.contains("isLoadingInitial: (chatProvider.isLoading || chatProvider.isLoadingSessions)"),
         "Session-list refreshes must not hide a non-empty transcript behind the initial message-history loader."
@@ -238,9 +248,9 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     }
 
     XCTAssertEqual(
-      dashboardPage.components(separatedBy: "isLoadingInitial: chatProvider.isLoading && !chatProvider.isClearing")
+      answerThread.components(separatedBy: "isLoadingInitial: chatProvider.isLoading && !chatProvider.isClearing")
         .count - 1,
-      2
+      1
     )
   }
 

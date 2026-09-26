@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-wall-clock-gesture-ownership",
+  "violated_contract": "A live viewport gesture owns the transcript until the platform reports that input has ended; reader ownership must not expire on a fixed wall-clock delay while trackpad momentum or another native scroll transaction is still active.",
+  "canonical_prevention": "Centralize input ownership in the AppKit scroll detector, emit an end callback from native live-scroll completion or the bounded fallback for inputs without a native lifecycle, and make every auto-following chat surface release its active-scroll state only from that callback.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/ChatScrollLiveEdgeTests.swift",
+    "desktop/macos/Desktop/Tests/ChatTranscriptGestureHarnessTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift",
+    "desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift"
+  ],
+  "status": "open"
+}

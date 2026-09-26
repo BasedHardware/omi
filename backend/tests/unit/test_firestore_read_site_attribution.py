@@ -6,7 +6,7 @@ must survive the `@prepare_for_read` / `@with_photos` decorator chain and land o
 right outcome (hit/miss) with the right count, without changing what the helpers
 return. Also covers the `record_document_read` primitive itself (hit vs miss labeling,
 and that an internal failure never propagates) and the uncached account-deletion fence
-in `database/users.py`.
+in `database/account_deletion_marker.py`.
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 
 import database.conversations as conversations_db
 import database.users as users_db
+from database import account_deletion_marker as deletion_marker
 from database.firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite
 
 # ---------------------------------------------------------------------------
@@ -277,7 +278,7 @@ def test_batch_helper_return_value_is_unaffected_by_read_site(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# database/users.py: get_user_deletion_wipe_status — the uncached deletion
+# database/account_deletion_marker.py: get_user_deletion_wipe_status — the uncached deletion
 # fence. Instrumentation must not touch its caching/behaviour.
 # ---------------------------------------------------------------------------
 
@@ -317,7 +318,7 @@ class _DeletionClient:
 
 
 def test_user_deletion_wipe_status_hit_records_hit_and_keeps_behaviour(monkeypatch):
-    recorded = _spy_record_document_read(monkeypatch, users_db)
+    recorded = _spy_record_document_read(monkeypatch, deletion_marker)
     client = _DeletionClient(_DeletionSnapshot(exists=True, data={'wipe_status': 'running'}))
 
     status = users_db.get_user_deletion_wipe_status('uid-1', firestore_client=client)
@@ -327,7 +328,7 @@ def test_user_deletion_wipe_status_hit_records_hit_and_keeps_behaviour(monkeypat
 
 
 def test_user_deletion_wipe_status_miss_records_miss_and_keeps_behaviour(monkeypatch):
-    recorded = _spy_record_document_read(monkeypatch, users_db)
+    recorded = _spy_record_document_read(monkeypatch, deletion_marker)
     client = _DeletionClient(_DeletionSnapshot(exists=False))
 
     status = users_db.get_user_deletion_wipe_status('uid-1', firestore_client=client)

@@ -24,6 +24,7 @@ MAX_DAILY_SWEEP_UIDS_PER_PAGE = 400
 # Keep retry work bounded to a slice of each page. A permanently failing first
 # retry UID must not consume the whole page and starve fresh source pages.
 MAX_DAILY_SWEEP_RETRY_UIDS_PER_PAGE = 32
+MAX_JIT_QA_SWEEP_UIDS = 4
 DAILY_SWEEP_CANONICAL_REGISTRY_COLLECTION = "daily_memory_sweep_registry"
 DAILY_SWEEP_CANONICAL_CURSOR_PATH = "daily_memory_sweep_control/canonical_inventory_cursor"
 DAILY_SWEEP_CANONICAL_REGISTRY_SCHEMA_VERSION = 1
@@ -60,6 +61,30 @@ class DailySweepUIDInventoryPage:
         self.canonical_cursor_generation = canonical_cursor_generation
         self.onboarding_cursor_generation = onboarding_cursor_generation
         self.retry_cursor_generation = retry_cursor_generation
+
+
+def explicit_jit_qa_daily_sweep_uid_inventory(
+    uids: Iterable[object],
+) -> DailySweepUIDInventoryPage:
+    """Build a bounded QA page without touching the global inventory/cursors.
+
+    The isolated QA job must never scan shared ``memory_state`` or mutate the
+    normal sweep cursors.  Keep this helper independent of Firestore so tests
+    can prove that a QA execution cannot accidentally fall back to a global
+    inventory query.
+    """
+
+    normalized: list[str] = []
+    for value in uids:
+        uid = value.strip() if isinstance(value, str) else ""
+        if not uid or "/" in uid or uid in normalized:
+            if uid and uid in normalized:
+                continue
+            raise DailySweepInventoryUnavailable("JIT QA sweep allowlist contains an invalid UID")
+        normalized.append(uid)
+    if not normalized or len(normalized) > MAX_JIT_QA_SWEEP_UIDS:
+        raise DailySweepInventoryUnavailable("JIT QA sweep requires one to four explicit UIDs")
+    return DailySweepUIDInventoryPage(uids=tuple(normalized))
 
 
 def _read_payload(ref: Any) -> dict[str, Any]:

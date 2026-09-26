@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-tail-work-starved-by-timeout-predecessor",
+  "violated_contract": "A required recurring operation must not live only after an unrelated predecessor that can consume the scheduler's entire execution deadline. The knowledge-ledger drain was bounded by account and row counts, but it ran only after serial short-term consolidation returned; the Cloud Run Job was killed at 3600 seconds during consolidation on every execution, so the drain's bounded code was never entered and no account could reach ledger writer mode.",
+  "canonical_prevention": "Give independently required progress its own executable, runtime image, bounded inventory cursor, Cloud Run Job, and Scheduler target. Advance that cursor only after the bounded page returns, keep rollout authorization at every account and mutation boundary, and contract-test both the behavior and admitted deployment wiring so later orchestration cannot bury the operation behind another deadline-consuming lifecycle.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_knowledge_ledger_drain.py",
+    "backend/tests/unit/test_knowledge_ledger_drain_job.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/modal/*job.py",
+    "backend/utils/memory/**",
+    ".github/workflows/gcp_*job*.yml"
+  ],
+  "status": "open"
+}

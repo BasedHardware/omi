@@ -68,8 +68,22 @@ final class LocalTranscriptionService: @unchecked Sendable {
   /// room noise blips don't emit fragments. Also keeps every emitted window ≥ 1 s, which the
   /// system-audio music classifier needs for a stable verdict.
   private let minUtteranceSeconds = 1.0
-  /// Noise floor shared with `drain`'s own silence check.
-  private static let speechFloor: Float = 0.004
+  /// Noise floor shared with `drain`'s own silence check, and the lowest a pause floor goes.
+  static let speechFloor: Float = 0.004
+  /// A pause is quiet *for this room*: at most this multiple of its recent background level.
+  ///
+  /// A fixed floor only works where the room is quieter than it. Measured live with people
+  /// talking nearby, the quietest 100 ms of microphone audio never dropped below 0.0041 RMS in
+  /// two minutes and the trailing 0.6 s sat at a median of 0.0084, so against 0.004 no pause
+  /// ever registered: every microphone window ran the full 10 s, a wake-word command waited
+  /// for it, and window boundaries split Omi's own answer into fragments that read as speech.
+  static let roomNoiseMargin: Float = 2
+  /// Ceiling on the pause floor, so a loud room cannot make ordinary speech count as quiet.
+  static let maximumQuietFloor: Float = 0.02
+  /// Frames needed before the background estimate is trusted; until then the fixed floor holds.
+  static let minimumRoomLevelFrames = 20
+  /// 30 s of the ~100 ms frames capture delivers.
+  private static let roomLevelHistoryFrames = 300
 
   private var asrManager: AsrManager?
   private var onSegments: SegmentsHandler?
@@ -88,6 +102,8 @@ final class LocalTranscriptionService: @unchecked Sendable {
   /// silently dropped.
   private var acceptingAudio = true
   private var emittedSeconds = 0.0  // absolute start offset of the next emitted segment
+  /// RMS of each recently appended capture frame, guarded by `lock`; the room's background level.
+  private var recentFrameRMS: [Float] = []
 
   private var pumpTask: Task<Void, Never>?
 
@@ -152,9 +168,14 @@ final class LocalTranscriptionService: @unchecked Sendable {
   func appendAudio(_ data: Data) {
     let floats = Self.int16ToFloat32(data)
     guard !floats.isEmpty else { return }
+    let frameRMS = Self.rms(floats)
     lock.withLock {
       if acceptingAudio {
         buffer.append(contentsOf: floats)
+        recentFrameRMS.append(frameRMS)
+        if recentFrameRMS.count > Self.roomLevelHistoryFrames {
+          recentFrameRMS.removeFirst(recentFrameRMS.count - Self.roomLevelHistoryFrames)
+        }
       }
     }
   }
@@ -209,7 +230,8 @@ final class LocalTranscriptionService: @unchecked Sendable {
         // the window fills partway through the next sentence — observed live cutting
         // "Omi, what time is it now" down to "Now". Now the cap can only be reached by
         // 10 s of continuous talking, where a cut is unavoidable anyway.
-        let lead = Self.leadingSilenceSamples(buffer, chunk: sampleRate / 10, keep: 2)
+        let quiet = Self.quietFloor(recentFrameRMS: recentFrameRMS)
+        let lead = Self.leadingSilenceSamples(buffer, chunk: sampleRate / 10, keep: 2, floor: quiet)
         if lead > 0 {
           buffer.removeFirst(lead)
           emittedSeconds += Double(lead) / Double(sampleRate)
@@ -220,7 +242,8 @@ final class LocalTranscriptionService: @unchecked Sendable {
         let endpointed = Self.isEndpointed(
           buffer,
           tailSamples: Int(Double(sampleRate) * silenceTailSeconds),
-          minSamples: Int(Double(sampleRate) * minUtteranceSeconds)
+          minSamples: Int(Double(sampleRate) * minUtteranceSeconds),
+          floor: quiet
         )
         let ready = available >= windowSamples || endpointed || (force && available > 0)
         guard ready else { return nil }
@@ -317,35 +340,47 @@ final class LocalTranscriptionService: @unchecked Sendable {
   /// admit a window that is mostly quiet with one blip in it, and Parakeet answers those with
   /// a hallucinated word: a 1.1 s window at rms 0.0067 decoded to "Yeah." live. Requiring a
   /// second of actual speech separates that cleanly — real commands carried 2.4–2.9 s of it.
-  static func isEndpointed(_ buffer: [Float], tailSamples: Int, minSamples: Int) -> Bool {
+  static func isEndpointed(
+    _ buffer: [Float], tailSamples: Int, minSamples: Int, floor: Float = speechFloor
+  ) -> Bool {
     guard tailSamples > 0, buffer.count > tailSamples else { return false }
     let split = buffer.count - tailSamples
-    guard rms(buffer[split...]) <= speechFloor else { return false }
-    return voicedSamples(buffer[..<split], chunk: max(1, tailSamples / 6)) >= minSamples
+    guard rms(buffer[split...]) <= floor else { return false }
+    return voicedSamples(buffer[..<split], chunk: max(1, tailSamples / 6), floor: floor) >= minSamples
   }
 
   /// Total audio above the noise floor, counted in `chunk`-sized steps.
-  static func voicedSamples(_ samples: ArraySlice<Float>, chunk: Int) -> Int {
+  static func voicedSamples(_ samples: ArraySlice<Float>, chunk: Int, floor: Float = speechFloor) -> Int {
     guard chunk > 0 else { return 0 }
     var voiced = 0
     var index = samples.startIndex
     while index + chunk <= samples.endIndex {
-      if rms(samples[index..<(index + chunk)]) > speechFloor { voiced += chunk }
+      if rms(samples[index..<(index + chunk)]) > floor { voiced += chunk }
       index += chunk
     }
     return voiced
+  }
+
+  /// The level at or below which audio counts as quiet in this room: `roomNoiseMargin` times
+  /// the 10th percentile of recent frame levels, never below `speechFloor` and never above
+  /// `maximumQuietFloor`. A low percentile, not a mean, so speech in the history does not
+  /// raise it. A quiet room and the system-audio lane (digital silence) keep `speechFloor`.
+  static func quietFloor(recentFrameRMS: [Float]) -> Float {
+    guard recentFrameRMS.count >= minimumRoomLevelFrames else { return speechFloor }
+    let background = recentFrameRMS.sorted()[recentFrameRMS.count / 10]
+    return min(maximumQuietFloor, max(speechFloor, background * roomNoiseMargin))
   }
 
   /// Samples of silence at the head of the buffer, scanned in `chunk`-sized steps, leaving
   /// `keep` chunks of lead-in so the window never starts flush against the first phoneme.
   /// Returns 0 when the buffer opens with speech, and stops at the first speech chunk — a
   /// pause *between* utterances is never trimmed, only quiet before any of them.
-  static func leadingSilenceSamples(_ buffer: [Float], chunk: Int, keep: Int) -> Int {
+  static func leadingSilenceSamples(_ buffer: [Float], chunk: Int, keep: Int, floor: Float = speechFloor) -> Int {
     guard chunk > 0 else { return 0 }
     var silent = 0
     var index = 0
     while index + chunk <= buffer.count {
-      if rms(buffer[index..<(index + chunk)]) > speechFloor { break }
+      if rms(buffer[index..<(index + chunk)]) > floor { break }
       silent += 1
       index += chunk
     }

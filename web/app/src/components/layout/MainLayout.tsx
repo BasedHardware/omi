@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { usePathname, useSearchParams } from '@tschk/moonshine-next/navigation';
-import { motion } from 'framer-motion';
 import dynamic from '@tschk/moonshine-next/dynamic';
 import { Sidebar, MobileMenuButton } from './Sidebar';
+import { PageSlide } from '@/components/ui/PageSlide';
 import { ChatProvider, useChat as useChatContext } from '@/components/chat/ChatContext';
 import { BottomNavigation } from './BottomNavigation';
 import {
@@ -15,7 +15,11 @@ import { HeaderRecordingIndicator } from '@/components/recording';
 import { getChatApps } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MemoriesPrefetcher } from '@/components/memories/MemoriesPrefetcher';
-import { ChatBubble } from '@/components/chat/ChatBubble';
+
+const ChatBubble = dynamic(
+  () => import('@/components/chat/ChatBubble').then((mod) => ({ default: mod.ChatBubble })),
+  { ssr: false },
+);
 
 // Dynamic imports for panels - not visible on initial load
 const ChatPanel = dynamic(
@@ -147,8 +151,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
                     'sm:shadow-[0_14px_26px_rgba(0,0,0,0.22)]',
                   )}
                 >
-                  {/* Keyed on the pathname so each destination fades and lifts
-                      in.
+                  {/* Keyed on the pathname so each destination enters.
 
                       Deliberately not wrapped in `AnimatePresence
                       initial={false}`: every route registers its own copy of
@@ -156,19 +159,14 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
                       makes each navigation look like a first render, and
                       `initial={false}` exists precisely to suppress the enter
                       animation on a first render — so the transition never
-                      played on any page. A plain keyed `initial` animates on
-                      both a remount and an in-place key change. There is no
-                      exit animation for the same reason: the outgoing tree is
-                      already gone by the time the new one mounts. */}
-                  <motion.div
-                    key={pathname}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
-                    className="h-full"
-                  >
+                      played on any page. `PageSlide` flips `data-page` on
+                      mount so the incoming `.t-page` runs the enter slide.
+                      There is no exit animation for the same reason: the
+                      outgoing tree is already gone by the time the new one
+                      mounts. */}
+                  <PageSlide pageKey={pathname ?? ''} className="h-full">
                     {children}
-                  </motion.div>
+                  </PageSlide>
                 </div>
               </div>
             </main>

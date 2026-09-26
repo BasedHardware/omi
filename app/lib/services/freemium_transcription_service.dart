@@ -139,6 +139,7 @@ class FreemiumTranscriptionService extends ChangeNotifier {
       return CustomSttConfig(
         provider: SttProvider.onDeviceWhisper, // Uses OnDeviceAppleProvider on iOS
         language: effectiveLanguage,
+        sendRawAudioToOmi: false,
       );
     }
 
@@ -160,6 +161,7 @@ class FreemiumTranscriptionService extends ChangeNotifier {
       language: effectiveLanguage,
       model: modelName ?? 'tiny',
       url: effectiveModelPath,
+      sendRawAudioToOmi: false,
     );
   }
 

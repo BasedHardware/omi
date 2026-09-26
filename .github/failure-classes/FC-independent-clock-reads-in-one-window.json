@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-independent-clock-reads-in-one-window",
+  "violated_contract": "A date-series window must include its upper calendar bucket even when the clock advances while constructing the bounds.",
+  "canonical_prevention": "Capture one clock instant and derive both window bounds from it; exercise a clock that advances between successive reads.",
+  "canonical_prevention_artifact": [
+    "web/admin/lib/__tests__/stats-staleness-honesty.test.ts"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "web/admin/**"
+  ],
+  "status": "open"
+}

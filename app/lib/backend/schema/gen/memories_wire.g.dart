@@ -4,64 +4,242 @@
 
 class GeneratedEvidence {
   final Map<String, dynamic>? artifactRef;
+  final String? attribution;
   final double captureConfidence;
+  final DateTime? capturedAt;
   final String? clientDeviceId;
   final DateTime? createdAt;
   final String evidenceId;
   final String extractorId;
   final String extractorVersion;
   final String independenceGroup;
+  final String? lineageId;
+  final List<Map<String, dynamic>>? quoteRefs;
   final String redactionStatus;
   final String? sourceId;
   final String sourceSignal;
   final String sourceType;
+  final String? sourceVersion;
 
   const GeneratedEvidence({
     this.artifactRef,
+    this.attribution,
     this.captureConfidence = 0.5,
+    this.capturedAt,
     this.clientDeviceId,
     this.createdAt,
     required this.evidenceId,
     this.extractorId = "unknown",
     this.extractorVersion = "unknown",
     required this.independenceGroup,
+    this.lineageId,
+    this.quoteRefs,
     this.redactionStatus = "active",
     this.sourceId,
     this.sourceSignal = "unknown",
     this.sourceType = "unknown",
+    this.sourceVersion,
   });
 
   factory GeneratedEvidence.fromJson(Map<String, dynamic> json) {
     return GeneratedEvidence(
       artifactRef: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["artifact_ref"]), "artifact_ref", _readMap, requiredField: false, nullable: true),
+      attribution: _readFieldValue<String>(_readField(json, const ["attribution"]), "attribution", _readString, requiredField: false, nullable: true),
       captureConfidence: _required(_readFieldValue<double>(_readField(json, const ["capture_confidence"]), "capture_confidence", _readDouble, requiredField: false, nullable: false, defaultValue: 0.5), "capture_confidence"),
+      capturedAt: _readFieldValue<DateTime>(_readField(json, const ["captured_at"]), "captured_at", _readDateTime, requiredField: false, nullable: true),
       clientDeviceId: _readFieldValue<String>(_readField(json, const ["client_device_id"]), "client_device_id", _readString, requiredField: false, nullable: true),
       createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
       evidenceId: _required(_readFieldValue<String>(_readField(json, const ["evidence_id"]), "evidence_id", _readString, requiredField: true, nullable: false), "evidence_id"),
       extractorId: _required(_readFieldValue<String>(_readField(json, const ["extractor_id"]), "extractor_id", _readString, requiredField: false, nullable: false, defaultValue: "unknown"), "extractor_id"),
       extractorVersion: _required(_readFieldValue<String>(_readField(json, const ["extractor_version"]), "extractor_version", _readString, requiredField: false, nullable: false, defaultValue: "unknown"), "extractor_version"),
       independenceGroup: _required(_readFieldValue<String>(_readField(json, const ["independence_group"]), "independence_group", _readString, requiredField: true, nullable: false), "independence_group"),
+      lineageId: _readFieldValue<String>(_readField(json, const ["lineage_id"]), "lineage_id", _readString, requiredField: false, nullable: true),
+      quoteRefs: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["quote_refs"]), "quote_refs", _readMapList, requiredField: false, nullable: true),
       redactionStatus: _required(_readFieldValue<String>(_readField(json, const ["redaction_status"]), "redaction_status", _readString, requiredField: false, nullable: false, defaultValue: "active"), "redaction_status"),
       sourceId: _readFieldValue<String>(_readField(json, const ["source_id"]), "source_id", _readString, requiredField: false, nullable: true),
       sourceSignal: _required(_readFieldValue<String>(_readField(json, const ["source_signal"]), "source_signal", _readString, requiredField: false, nullable: false, defaultValue: "unknown"), "source_signal"),
       sourceType: _required(_readFieldValue<String>(_readField(json, const ["source_type"]), "source_type", _readString, requiredField: false, nullable: false, defaultValue: "unknown"), "source_type"),
+      sourceVersion: _readFieldValue<String>(_readField(json, const ["source_version"]), "source_version", _readString, requiredField: false, nullable: true),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'artifact_ref': artifactRef,
+      'attribution': attribution,
       'capture_confidence': captureConfidence,
+      'captured_at': capturedAt?.toUtc().toIso8601String(),
       'client_device_id': clientDeviceId,
       'created_at': createdAt?.toUtc().toIso8601String(),
       'evidence_id': evidenceId,
       'extractor_id': extractorId,
       'extractor_version': extractorVersion,
       'independence_group': independenceGroup,
+      'lineage_id': lineageId,
+      'quote_refs': quoteRefs,
       'redaction_status': redactionStatus,
       'source_id': sourceId,
       'source_signal': sourceSignal,
       'source_type': sourceType,
+      'source_version': sourceVersion,
+    };
+  }
+}
+
+class GeneratedMemoryCaptureContext {
+  final String? attribution;
+  final DateTime? capturedAt;
+  final String? independenceGroup;
+  final String? lineageId;
+  final List<Map<String, dynamic>>? quoteRefs;
+  final String? sourceId;
+  final String? sourceSignal;
+  final String sourceType;
+  final String? sourceVersion;
+
+  const GeneratedMemoryCaptureContext({
+    this.attribution,
+    this.capturedAt,
+    this.independenceGroup,
+    this.lineageId,
+    this.quoteRefs,
+    this.sourceId,
+    this.sourceSignal,
+    required this.sourceType,
+    this.sourceVersion,
+  });
+
+  factory GeneratedMemoryCaptureContext.fromJson(Map<String, dynamic> json) {
+    return GeneratedMemoryCaptureContext(
+      attribution: _readFieldValue<String>(_readField(json, const ["attribution"]), "attribution", _readString, requiredField: false, nullable: true),
+      capturedAt: _readFieldValue<DateTime>(_readField(json, const ["captured_at"]), "captured_at", _readDateTime, requiredField: false, nullable: true),
+      independenceGroup: _readFieldValue<String>(_readField(json, const ["independence_group"]), "independence_group", _readString, requiredField: false, nullable: true),
+      lineageId: _readFieldValue<String>(_readField(json, const ["lineage_id"]), "lineage_id", _readString, requiredField: false, nullable: true),
+      quoteRefs: _readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["quote_refs"]), "quote_refs", _readMapList, requiredField: false, nullable: true),
+      sourceId: _readFieldValue<String>(_readField(json, const ["source_id"]), "source_id", _readString, requiredField: false, nullable: true),
+      sourceSignal: _readFieldValue<String>(_readField(json, const ["source_signal"]), "source_signal", _readString, requiredField: false, nullable: true),
+      sourceType: _required(_readFieldValue<String>(_readField(json, const ["source_type"]), "source_type", _readString, requiredField: true, nullable: false), "source_type"),
+      sourceVersion: _readFieldValue<String>(_readField(json, const ["source_version"]), "source_version", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'attribution': attribution,
+      'captured_at': capturedAt?.toUtc().toIso8601String(),
+      'independence_group': independenceGroup,
+      'lineage_id': lineageId,
+      'quote_refs': quoteRefs,
+      'source_id': sourceId,
+      'source_signal': sourceSignal,
+      'source_type': sourceType,
+      'source_version': sourceVersion,
+    };
+  }
+}
+
+class GeneratedMemoryUseAction {
+  final String value;
+
+  const GeneratedMemoryUseAction._(this.value);
+  static const suppress = GeneratedMemoryUseAction._("suppress");
+  static const allow = GeneratedMemoryUseAction._("allow");
+  static const useful = GeneratedMemoryUseAction._("useful");
+
+  factory GeneratedMemoryUseAction.fromJson(dynamic value) {
+    if (value is! String) {
+      throw const FormatException('Invalid MemoryUseAction: expected string');
+    }
+    switch (value) {
+      case "suppress": return suppress;
+      case "allow": return allow;
+      case "useful": return useful;
+      default:
+        throw FormatException('Invalid MemoryUseAction: $value');
+    }
+  }
+
+  String toJson() => value;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is GeneratedMemoryUseAction && other.value == value;
+
+  @override
+  int get hashCode => value.hashCode;
+
+  @override
+  String toString() => value;
+}
+
+class GeneratedMemoryUseRequest {
+  final GeneratedMemoryUseAction action;
+  final int? expectedItemRevision;
+  final String feedbackId;
+
+  const GeneratedMemoryUseRequest({
+    required this.action,
+    this.expectedItemRevision,
+    required this.feedbackId,
+  });
+
+  factory GeneratedMemoryUseRequest.fromJson(Map<String, dynamic> json) {
+    return GeneratedMemoryUseRequest(
+      action: _required(_readFieldValue<GeneratedMemoryUseAction>(_readField(json, const ["action"]), "action", GeneratedMemoryUseAction.fromJson, requiredField: true, nullable: false), "action"),
+      expectedItemRevision: _readFieldValue<int>(_readField(json, const ["expected_item_revision"]), "expected_item_revision", _readInt, requiredField: false, nullable: true),
+      feedbackId: _required(_readFieldValue<String>(_readField(json, const ["feedback_id"]), "feedback_id", _readString, requiredField: true, nullable: false), "feedback_id"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'action': action.toJson(),
+      'expected_item_revision': expectedItemRevision,
+      'feedback_id': feedbackId,
+    };
+  }
+}
+
+class GeneratedMemoryUseResponse {
+  final GeneratedMemoryUseAction action;
+  final int curationWeight;
+  final String feedbackId;
+  final int itemRevision;
+  final String memoryId;
+  final String status;
+  final bool suppressed;
+
+  const GeneratedMemoryUseResponse({
+    required this.action,
+    required this.curationWeight,
+    required this.feedbackId,
+    required this.itemRevision,
+    required this.memoryId,
+    required this.status,
+    required this.suppressed,
+  });
+
+  factory GeneratedMemoryUseResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedMemoryUseResponse(
+      action: _required(_readFieldValue<GeneratedMemoryUseAction>(_readField(json, const ["action"]), "action", GeneratedMemoryUseAction.fromJson, requiredField: true, nullable: false), "action"),
+      curationWeight: _required(_readFieldValue<int>(_readField(json, const ["curation_weight"]), "curation_weight", _readInt, requiredField: true, nullable: false), "curation_weight"),
+      feedbackId: _required(_readFieldValue<String>(_readField(json, const ["feedback_id"]), "feedback_id", _readString, requiredField: true, nullable: false), "feedback_id"),
+      itemRevision: _required(_readFieldValue<int>(_readField(json, const ["item_revision"]), "item_revision", _readInt, requiredField: true, nullable: false), "item_revision"),
+      memoryId: _required(_readFieldValue<String>(_readField(json, const ["memory_id"]), "memory_id", _readString, requiredField: true, nullable: false), "memory_id"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      suppressed: _required(_readFieldValue<bool>(_readField(json, const ["suppressed"]), "suppressed", _readBool, requiredField: true, nullable: false), "suppressed"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'action': action.toJson(),
+      'curation_weight': curationWeight,
+      'feedback_id': feedbackId,
+      'item_revision': itemRevision,
+      'memory_id': memoryId,
+      'status': status,
+      'suppressed': suppressed,
     };
   }
 }
@@ -69,19 +247,26 @@ class GeneratedEvidence {
 class GeneratedMemoryDB {
   final String? appId;
   final Map<String, dynamic>? arguments;
+  final DateTime? asOf;
+  final String? beliefClass;
+  final DateTime? beliefComputedAt;
   final String? body;
   final String? canonicalMemoryId;
   final double? captureConfidence;
+  final GeneratedMemoryCaptureContext? captureContext;
   final List<String>? captureDeviceIds;
   final String category;
   final String content;
   final String? conversationId;
   final DateTime createdAt;
   final int curationWeight;
+  final double? currency;
+  final String? currencyBand;
   final String? dataProtectionLevel;
   final String? durability;
   final bool edited;
   final List<GeneratedEvidence>? evidence;
+  final double? halfLifeDays;
   final String? headline;
   final String id;
   final bool intentBacked;
@@ -116,6 +301,7 @@ class GeneratedMemoryDB {
   final DateTime updatedAt;
   final bool? userReview;
   final DateTime? validAt;
+  final DateTime? validTo;
   final double? veracity;
   final String? visibility;
   final String? writeReason;
@@ -123,19 +309,26 @@ class GeneratedMemoryDB {
   const GeneratedMemoryDB({
     this.appId,
     this.arguments,
+    this.asOf,
+    this.beliefClass,
+    this.beliefComputedAt,
     this.body,
     this.canonicalMemoryId,
     this.captureConfidence,
+    this.captureContext,
     this.captureDeviceIds,
     this.category = "interesting",
     required this.content,
     this.conversationId,
     required this.createdAt,
     this.curationWeight = 0,
+    this.currency,
+    this.currencyBand,
     this.dataProtectionLevel,
     this.durability,
     this.edited = false,
     this.evidence,
+    this.halfLifeDays,
     this.headline,
     required this.id,
     this.intentBacked = false,
@@ -170,6 +363,7 @@ class GeneratedMemoryDB {
     required this.updatedAt,
     this.userReview,
     this.validAt,
+    this.validTo,
     this.veracity,
     this.visibility = "public",
     this.writeReason,
@@ -179,19 +373,26 @@ class GeneratedMemoryDB {
     return GeneratedMemoryDB(
       appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: false, nullable: true),
       arguments: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["arguments"]), "arguments", _readMap, requiredField: false, nullable: true),
+      asOf: _readFieldValue<DateTime>(_readField(json, const ["as_of"]), "as_of", _readDateTime, requiredField: false, nullable: true),
+      beliefClass: _readFieldValue<String>(_readField(json, const ["belief_class"]), "belief_class", _readString, requiredField: false, nullable: true),
+      beliefComputedAt: _readFieldValue<DateTime>(_readField(json, const ["belief_computed_at"]), "belief_computed_at", _readDateTime, requiredField: false, nullable: true),
       body: _readFieldValue<String>(_readField(json, const ["body"]), "body", _readString, requiredField: false, nullable: true),
       canonicalMemoryId: _readFieldValue<String>(_readField(json, const ["canonical_memory_id"]), "canonical_memory_id", _readString, requiredField: false, nullable: true),
       captureConfidence: _readFieldValue<double>(_readField(json, const ["capture_confidence"]), "capture_confidence", _readDouble, requiredField: false, nullable: true),
+      captureContext: _readFieldValue<GeneratedMemoryCaptureContext>(_readField(json, const ["capture_context"]), "capture_context", (value) => _readObject(value, GeneratedMemoryCaptureContext.fromJson), requiredField: false, nullable: true),
       captureDeviceIds: _readFieldValue<List<String>>(_readField(json, const ["capture_device_ids"]), "capture_device_ids", _readStringList, requiredField: false, nullable: true),
       category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: false, nullable: false, defaultValue: "interesting"), "category"),
       content: _required(_readFieldValue<String>(_readField(json, const ["content"]), "content", _readString, requiredField: true, nullable: false), "content"),
       conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
       curationWeight: _required(_readFieldValue<int>(_readField(json, const ["curation_weight"]), "curation_weight", _readInt, requiredField: false, nullable: false, defaultValue: 0), "curation_weight"),
+      currency: _readFieldValue<double>(_readField(json, const ["currency"]), "currency", _readDouble, requiredField: false, nullable: true),
+      currencyBand: _readFieldValue<String>(_readField(json, const ["currency_band"]), "currency_band", _readString, requiredField: false, nullable: true),
       dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
       durability: _readFieldValue<String>(_readField(json, const ["durability"]), "durability", _readString, requiredField: false, nullable: true),
       edited: _required(_readFieldValue<bool>(_readField(json, const ["edited"]), "edited", _readBool, requiredField: false, nullable: false, defaultValue: false), "edited"),
       evidence: _readFieldValue<List<GeneratedEvidence>>(_readField(json, const ["evidence"]), "evidence", (value) => _readObjectList(value, GeneratedEvidence.fromJson), requiredField: false, nullable: true),
+      halfLifeDays: _readFieldValue<double>(_readField(json, const ["half_life_days"]), "half_life_days", _readDouble, requiredField: false, nullable: true),
       headline: _readFieldValue<String>(_readField(json, const ["headline"]), "headline", _readString, requiredField: false, nullable: true),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       intentBacked: _required(_readFieldValue<bool>(_readField(json, const ["intent_backed"]), "intent_backed", _readBool, requiredField: false, nullable: false, defaultValue: false), "intent_backed"),
@@ -226,6 +427,7 @@ class GeneratedMemoryDB {
       updatedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: true, nullable: false), "updated_at"),
       userReview: _readFieldValue<bool>(_readField(json, const ["user_review"]), "user_review", _readBool, requiredField: false, nullable: true),
       validAt: _readFieldValue<DateTime>(_readField(json, const ["valid_at"]), "valid_at", _readDateTime, requiredField: false, nullable: true),
+      validTo: _readFieldValue<DateTime>(_readField(json, const ["valid_to"]), "valid_to", _readDateTime, requiredField: false, nullable: true),
       veracity: _readFieldValue<double>(_readField(json, const ["veracity"]), "veracity", _readDouble, requiredField: false, nullable: true),
       visibility: _readFieldValue<String>(_readField(json, const ["visibility"]), "visibility", _readString, requiredField: false, nullable: true, defaultValue: "public"),
       writeReason: _readFieldValue<String>(_readField(json, const ["write_reason"]), "write_reason", _readString, requiredField: false, nullable: true),
@@ -236,19 +438,26 @@ class GeneratedMemoryDB {
     return {
       'app_id': appId,
       'arguments': arguments,
+      'as_of': asOf?.toUtc().toIso8601String(),
+      'belief_class': beliefClass,
+      'belief_computed_at': beliefComputedAt?.toUtc().toIso8601String(),
       'body': body,
       'canonical_memory_id': canonicalMemoryId,
       'capture_confidence': captureConfidence,
+      'capture_context': captureContext?.toJson(),
       'capture_device_ids': captureDeviceIds,
       'category': category,
       'content': content,
       'conversation_id': conversationId,
       'created_at': createdAt.toUtc().toIso8601String(),
       'curation_weight': curationWeight,
+      'currency': currency,
+      'currency_band': currencyBand,
       'data_protection_level': dataProtectionLevel,
       'durability': durability,
       'edited': edited,
       'evidence': evidence?.map((value) => value.toJson()).toList(),
+      'half_life_days': halfLifeDays,
       'headline': headline,
       'id': id,
       'intent_backed': intentBacked,
@@ -283,6 +492,7 @@ class GeneratedMemoryDB {
       'updated_at': updatedAt.toUtc().toIso8601String(),
       'user_review': userReview,
       'valid_at': validAt?.toUtc().toIso8601String(),
+      'valid_to': validTo?.toUtc().toIso8601String(),
       'veracity': veracity,
       'visibility': visibility,
       'write_reason': writeReason,
@@ -428,6 +638,11 @@ List<T>? _readObjectList<T>(dynamic value, T Function(Map<String, dynamic>) from
   return [
     for (final item in value) fromJson(_required(_readMap(item), 'list item'))
   ];
+}
+
+List<T>? _readValueList<T>(dynamic value, T Function(dynamic) fromJson) {
+  if (value is! List) return null;
+  return [for (final item in value) fromJson(item)];
 }
 
 List<String>? _readStringList(dynamic value) {

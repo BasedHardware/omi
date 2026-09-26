@@ -20,7 +20,10 @@ enum SidebarNavItem: Int, CaseIterable {
     case "rewind": return .rewind
     case "apps", "integrations": return .apps
     case "settings": return .settings
-    case "permissions": return .permissions
+    // `permissions` is not listed here: automation must resolve through
+    // `ChatFirstRoute.automationVisibilityDestination` → `.more(.permissions)` so
+    // `markRouteVisible` matches `waitForNavigationTarget`. The legacy adapter lands
+    // on `.more(.settings)` with the Permissions section selected — same UI, wrong ack.
     default: return nil
     }
   }

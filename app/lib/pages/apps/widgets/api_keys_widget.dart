@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'app_form_fields.dart';
 
 class ApiKeysWidget extends StatefulWidget {
   final String appId;
 
-  const ApiKeysWidget({Key? key, required this.appId}) : super(key: key);
+  const ApiKeysWidget({super.key, required this.appId});
 
   @override
   State<ApiKeysWidget> createState() => _ApiKeysWidgetState();
@@ -21,7 +20,6 @@ class ApiKeysWidget extends StatefulWidget {
 
 class _ApiKeysWidgetState extends State<ApiKeysWidget> {
   bool _isLoading = false;
-  bool _isCreatingKey = false;
   String? _deletingKeyId;
   AppApiKey? _newKey;
 
@@ -50,58 +48,37 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
   }
 
   Future<void> _createApiKey() async {
-    setState(() {
-      _isCreatingKey = true;
-    });
-
     try {
       final result = await Provider.of<AddAppProvider>(context, listen: false).createApiKey(widget.appId);
-      setState(() {
-        _newKey = result;
-      });
-
-      // Show the dialog with the new key
-      if (mounted) {
-        _showNewKeyDialog();
-      }
+      _newKey = result;
+      if (mounted) _showNewKeyDialog();
     } catch (e) {
       if (mounted) {
-        AppSnackbar.showSnackbarError(context.l10n.failedToCreateApiKey(readableError(e)));
+        OmiFeedback.error(context, context.l10n.failedToCreateApiKey(readableError(e)));
       }
-    } finally {
-      setState(() {
-        _isCreatingKey = false;
-      });
     }
   }
 
   void _showNewKeyDialog() {
+    final l10n = context.l10n;
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1F25),
-        title: Text(context.l10n.createAKey, textAlign: TextAlign.center),
-        content: _buildNewKeyContent(),
-        contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+      builder: (dialogContext) => OmiAlertDialog(
+        title: l10n.createAKey,
+        content: _buildNewKeyContent(dialogContext),
         actions: [
-          Center(
-            child: ElevatedButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop();
-                setState(() {
-                  _newKey = null;
-                });
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Theme.of(dialogContext).colorScheme.secondary,
-                minimumSize: const Size(120, 40),
-              ),
-              child: Text(context.l10n.done, style: const TextStyle(color: Colors.white)),
-            ),
+          OmiDialogAction(
+            label: l10n.done,
+            isDefault: true,
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              setState(() {
+                _newKey = null;
+              });
+            },
           ),
         ],
-        actionsPadding: const EdgeInsets.fromLTRB(0, 0, 0, 16),
       ),
     );
   }
@@ -114,31 +91,27 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
     try {
       await Provider.of<AddAppProvider>(context, listen: false).deleteApiKey(widget.appId, keyId);
       if (mounted) {
-        AppSnackbar.showSnackbarSuccess(context.l10n.apiKeyRevokedSuccessfully);
+        OmiFeedback.confirm(context, context.l10n.apiKeyRevokedSuccessfully);
       }
     } catch (e) {
       if (mounted) {
-        AppSnackbar.showSnackbarError(context.l10n.failedToRevokeApiKey(readableError(e)));
+        OmiFeedback.error(context, context.l10n.failedToRevokeApiKey(readableError(e)));
       }
     } finally {
-      setState(() {
-        _deletingKeyId = null;
-      });
+      if (mounted) {
+        setState(() {
+          _deletingKeyId = null;
+        });
+      }
     }
-  }
-
-  void _copyToClipboard(String text) {
-    Clipboard.setData(ClipboardData(text: text));
-    AppSnackbar.showSnackbarSuccess(context.l10n.copiedToClipboard('API key'));
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final provider = Provider.of<AddAppProvider>(context);
 
-    return Container(
-      decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(12.0)),
-      padding: const EdgeInsets.all(14.0),
+    return AppFormCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -149,53 +122,35 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
               children: [
                 Row(
                   children: [
-                    Text(context.l10n.apiKeys, style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: Icon(Icons.info_outline, size: 20, color: Colors.grey.shade400),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                    Text(l10n.apiKeys, style: OmiType.headline),
+                    OmiIconButton(
+                      icon: const Icon(Icons.info_outline, size: 20),
+                      color: OmiColors.textTertiary,
+                      label: l10n.aboutOmiApiKeys,
                       onPressed: () {
                         showDialog(
                           context: context,
-                          builder: (dialogContext) => AlertDialog(
-                            backgroundColor: const Color(0xFF1F1F25),
-                            title: Text(context.l10n.omiApiKeys),
-                            content: Text(context.l10n.apiKeysDescription),
+                          builder: (dialogContext) => OmiAlertDialog(
+                            title: l10n.omiApiKeys,
+                            message: l10n.apiKeysDescription,
                             actions: [
-                              TextButton(
+                              OmiDialogAction(
+                                label: l10n.gotIt,
+                                isDefault: true,
                                 onPressed: () => Navigator.of(dialogContext).pop(),
-                                style: TextButton.styleFrom(
-                                  backgroundColor: Theme.of(dialogContext).colorScheme.secondary,
-                                  foregroundColor: Colors.white,
-                                ),
-                                child: Text(context.l10n.gotIt),
                               ),
                             ],
                           ),
                         );
                       },
-                      tooltip: context.l10n.aboutOmiApiKeys,
                     ),
                   ],
                 ),
-                ElevatedButton.icon(
-                  onPressed: _isCreatingKey ? null : _createApiKey,
-                  icon: _isCreatingKey
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                        )
-                      : const Icon(Icons.add, size: 16),
-                  label: Text(_isCreatingKey ? context.l10n.creating : context.l10n.createKey),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.secondary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    disabledBackgroundColor: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.7),
-                    disabledForegroundColor: Colors.white.withValues(alpha: 0.7),
-                  ),
+                OmiButton.secondary(
+                  label: l10n.createKey,
+                  icon: Icons.add,
+                  size: OmiButtonSize.compact,
+                  onPressed: _createApiKey,
                 ),
               ],
             ),
@@ -203,17 +158,17 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
           if (_isLoading)
             const Center(
               child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: CircularProgressIndicator(color: Colors.white),
+                padding: EdgeInsets.all(OmiSpacing.md),
+                child: OmiSpinner(),
               ),
             ),
           if (provider.apiKeys.isEmpty)
             Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.all(OmiSpacing.md),
               child: Center(
                 child: Text(
-                  context.l10n.noApiKeysYet,
-                  style: Theme.of(context).textTheme.bodyMedium,
+                  l10n.noApiKeysYet,
+                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -225,124 +180,105 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
     );
   }
 
-  Widget _buildNewKeyContent() {
+  Widget _buildNewKeyContent(BuildContext dialogContext) {
+    final l10n = dialogContext.l10n;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Center(child: Text(context.l10n.yourNewKey, style: Theme.of(context).textTheme.labelLarge)),
-        const SizedBox(height: 16),
+        Center(child: Text(l10n.yourNewKey, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600))),
+        const SizedBox(height: OmiSpacing.md),
         Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(4)),
+          padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
+          decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
           child: Row(
             children: [
               Expanded(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(_newKey!.secret!, style: const TextStyle(fontFamily: 'monospace', fontSize: 14)),
+                    padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
+                    child: Text(_newKey!.secret!, style: OmiType.subhead.copyWith(fontFamily: 'monospace')),
                   ),
                 ),
               ),
-              IconButton(
+              OmiIconButton(
                 icon: const Icon(Icons.copy, size: 18),
-                onPressed: () => _copyToClipboard(_newKey!.secret!),
-                tooltip: context.l10n.copyToClipboard,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
+                label: l10n.copyToClipboard,
+                onPressed: () => OmiClipboard.copy(dialogContext, _newKey!.secret!, what: dialogContext.l10n.apiKey),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: Text.rich(
-                TextSpan(
-                  children: [
-                    TextSpan(
-                      text: context.l10n.pleaseCopyKeyNow,
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    TextSpan(
-                      text: context.l10n.willNotSeeAgain,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+        const SizedBox(height: OmiSpacing.md),
+        Text.rich(
+          TextSpan(
+            children: [
+              TextSpan(text: l10n.pleaseCopyKeyNow),
+              TextSpan(text: l10n.willNotSeeAgain, style: const TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
         ),
       ],
     );
   }
 
   Widget _buildKeysList(AddAppProvider provider) {
+    final l10n = context.l10n;
     return ListView.separated(
       padding: EdgeInsets.zero,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: provider.apiKeys.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 12),
+      separatorBuilder: (context, index) => const SizedBox(height: OmiSpacing.sm),
       itemBuilder: (context, index) {
         final key = provider.apiKeys[index];
         return Container(
-          decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(10.0)),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-            title: Text(key.label, style: const TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: Text(
-              '${DateFormat('MMM d, yyyy HH:mm', Localizations.localeOf(context).languageCode).format(key.createdAt)}',
-              style: Theme.of(context).textTheme.labelMedium,
-            ),
-            trailing: SizedBox(
-              width: 42,
-              height: 42,
-              child: _deletingKeyId == key.id
-                  ? const Center(
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(color: Colors.red, strokeWidth: 2),
-                      ),
-                    )
-                  : IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      onPressed: () => _showDeleteConfirmation(key.id),
-                      tooltip: context.l10n.revokeKey,
+          decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(key.label, style: OmiType.callout.copyWith(fontWeight: FontWeight.bold)),
+                    Text(
+                      OmiDateFormat.of(context).dateTime(key.createdAt),
+                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
                     ),
-            ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: kOmiMinTapTarget,
+                height: kOmiMinTapTarget,
+                child: _deletingKeyId == key.id
+                    ? const Center(child: OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.danger))
+                    : OmiIconButton(
+                        icon: const Icon(Icons.delete_outline),
+                        label: l10n.revokeKey,
+                        isDestructive: true,
+                        onPressed: () => _showDeleteConfirmation(key.id),
+                      ),
+              ),
+            ],
           ),
         );
       },
     );
   }
 
-  void _showDeleteConfirmation(String keyId) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1F25),
-        title: Text(context.l10n.revokeApiKeyQuestion),
-        content: Text(context.l10n.revokeApiKeyWarning),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: Text(context.l10n.cancel, style: Theme.of(dialogContext).textTheme.bodyMedium),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              _deleteApiKey(keyId);
-            },
-            child: Text(context.l10n.revoke, style: const TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+  Future<void> _showDeleteConfirmation(String keyId) async {
+    final l10n = context.l10n;
+    final confirmed = await showOmiConfirm(
+      context,
+      title: l10n.revokeApiKeyQuestion,
+      message: l10n.revokeApiKeyWarning,
+      confirmLabel: l10n.revoke,
+      destructive: true,
     );
+    if (confirmed) _deleteApiKey(keyId);
   }
 }

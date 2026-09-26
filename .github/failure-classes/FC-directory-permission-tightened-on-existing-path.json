@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-directory-permission-tightened-on-existing-path",
+  "violated_contract": "A tool must not narrow permissions on a filesystem path it did not create and does not own, even in service of protecting its own credential material. Omi CLI's config save() unconditionally chmod'd config.path.parent to 0o700 on every save, including a pre-existing, user-selected directory passed via $OMI_CONFIG (e.g. a shared 0o750 or setgid directory), silently tightening access to every other file under it, not only the credential file.",
+  "canonical_prevention": "Before creating a directory, record whether it already existed; only apply owner-only permissions to a directory this invocation just created via mkdir. Leave a pre-existing parent's mode untouched, and rely on the credential file's own owner-only creation primitive (e.g. open_owner_only) for the actual secret.",
+  "canonical_prevention_artifact": [
+    "sdks/python-cli/omi_cli/config.py",
+    "sdks/python-cli/tests/test_config.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "sdks/python-cli/omi_cli/config.py",
+    "backend/database/google_credentials.py"
+  ],
+  "status": "open"
+}

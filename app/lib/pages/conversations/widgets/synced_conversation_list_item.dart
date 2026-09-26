@@ -8,7 +8,8 @@ import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart'
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
 class SyncedConversationListItem extends StatefulWidget {
@@ -112,13 +113,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                         child: isReprocessing
                             ? const Center(
                                 child: Padding(
-                                  padding: EdgeInsets.all(8.0),
-                                  child: SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(color: Colors.white),
-                                  ),
-                                ),
+                                    padding: EdgeInsets.all(8.0), child: OmiSpinner(size: OmiSpinnerSize.small)),
                               )
                             : Padding(
                                 padding: const EdgeInsets.all(8.0),
@@ -166,7 +161,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  dateTimeFormat('h:mm a', conversation.startedAt ?? conversation.createdAt),
+                  OmiDateFormat.of(context).time(conversation.startedAt ?? conversation.createdAt),
                   style: const TextStyle(color: Color(0xFF6A6B71), fontSize: 14),
                   maxLines: 1,
                   textAlign: TextAlign.end,
@@ -200,6 +195,6 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
     int durationSeconds = conversation.getDurationInSeconds();
     if (durationSeconds <= 0) return '';
 
-    return secondsToCompactDuration(durationSeconds, context);
+    return OmiDuration.compact(durationSeconds, context.l10n);
   }
 }

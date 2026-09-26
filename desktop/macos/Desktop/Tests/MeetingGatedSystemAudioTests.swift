@@ -6,6 +6,13 @@ import XCTest
   // omi-release-compile: this suite drives DEBUG-only test seams; the release-mode
   // notification regression step must compile the bundle without them.
 
+  private func meetingProbeSnapshot(detected: Bool) -> CallAudioSnapshot {
+    CallAudioSnapshot(
+      processes: [],
+      defaultInputDeviceID: 0,
+      browserWindowTitles: detected ? ["Meet - abc-defg-hij"] : [])
+  }
+
   private final class Box<T>: @unchecked Sendable {
     var value: T
     init(_ v: T) { self.value = v }
@@ -30,6 +37,10 @@ import XCTest
       XCTAssertTrue(ConferencingApps.isCallWindow(ownerName: "Discord", title: nil))
       XCTAssertTrue(ConferencingApps.isCallWindow(ownerName: "Slack", title: "#general | Acme"))
       XCTAssertTrue(ConferencingApps.isCallWindow(ownerName: "WhatsApp", title: nil))
+      XCTAssertTrue(ConferencingApps.isCallWindow(ownerName: "Telegram", title: nil))
+      XCTAssertTrue(ConferencingApps.isMessagingCallApp(appName: "Telegram"))
+      XCTAssertTrue(ConferencingApps.isMessagingCallApp(appName: "discord"))
+      XCTAssertFalse(ConferencingApps.isMessagingCallApp(appName: "Google Chrome"))
     }
 
     /// A *joined* Google Meet tab is titled with the bare meeting code and contains none of
@@ -85,6 +96,18 @@ import XCTest
       // fires while in a Discord voice channel, Slack huddle, or WhatsApp call.
       XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.hnc.Discord"))
       XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.hnc.discord"))  // case-insensitive
+      // A Discord call holds the mic in the Electron renderer helper (probe, 2026-09-26).
+      XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.hnc.Discord.helper.Renderer"))
+      XCTAssertEqual(
+        ConferencingApps.nativeCallAppID(bundleID: "com.hnc.Discord.helper.Renderer"), "com.hnc.discord")
+      XCTAssertEqual(ConferencingApps.nativeCallAppID(bundleID: "com.hnc.Discord.helper"), "com.hnc.discord")
+      XCTAssertEqual(
+        ConferencingApps.nativeCallAppID(bundleID: "com.tinyspeck.slackmacgap.helper"), "com.tinyspeck.slackmacgap")
+      // Sibling apps are not helpers: a dotted prefix is required.
+      XCTAssertEqual(ConferencingApps.nativeCallAppID(bundleID: "com.hnc.DiscordPTB"), "com.hnc.discordptb")
+      XCTAssertEqual(ConferencingApps.nativeCallAppID(bundleID: "com.microsoft.teams2.helper"), "com.microsoft.teams2")
+      XCTAssertNil(ConferencingApps.nativeCallAppID(bundleID: "com.hnc.discordian"))
+      XCTAssertNil(ConferencingApps.nativeCallAppID(bundleID: "com.google.Chrome.helper"))
       XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.tinyspeck.slackmacgap"))
       XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "net.whatsapp.WhatsApp"))
       // Omi itself and browsers are not native call apps (browser calls are matched
@@ -283,10 +306,10 @@ import XCTest
       let detector = MeetingDetector(
         pollInterval: 60.0,
         offGracePeriod: 8.0,
-        isMeetingNow: {
+        snapshot: {
           probeStarted.signal()
           _ = releaseProbe.wait(timeout: .now() + 2)
-          return true
+          return meetingProbeSnapshot(detected: true)
         },
         now: { [weak self] in self?.now ?? Date(timeIntervalSince1970: 0) },
         onInitialStateObserved: {
@@ -326,7 +349,7 @@ import XCTest
       let detector = MeetingDetector(
         pollInterval: 60.0,
         offGracePeriod: 8.0,
-        isMeetingNow: {
+        snapshot: {
           probeLock.lock()
           probeCount.value += 1
           let probeIndex = probeCount.value
@@ -335,12 +358,12 @@ import XCTest
           if probeIndex == 1 {
             firstProbeStarted.signal()
             _ = releaseFirstProbe.wait(timeout: .now() + 2)
-            return true
+            return meetingProbeSnapshot(detected: true)
           }
 
           secondProbeStarted.signal()
           _ = releaseSecondProbe.wait(timeout: .now() + 2)
-          return false
+          return meetingProbeSnapshot(detected: false)
         },
         now: { [weak self] in self?.now ?? Date(timeIntervalSince1970: 0) },
         onInitialStateObserved: { initialObservedCount += 1 },

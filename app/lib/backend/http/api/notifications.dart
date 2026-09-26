@@ -5,6 +5,15 @@ import 'package:omi/backend/schema/gen/misc_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
+Future<void> syncUserTimeZoneServer({required String timeZone}) async {
+  await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/users/time-zone',
+    headers: {},
+    method: 'PUT',
+    body: jsonEncode({'time_zone': timeZone}),
+  );
+}
+
 Future<void> saveFcmTokenServer({required String token, required String timeZone}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/fcm-token',

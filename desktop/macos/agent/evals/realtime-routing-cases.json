@@ -2,13 +2,13 @@
   {
     "id": "explicit-think-minimal",
     "prompt": "Think carefully: should I take a new job?",
-    "expected": ["think_deeper"],
+    "expected": ["web_search"],
     "kind": "hard"
   },
   {
     "id": "explicit-think-hard",
     "prompt": "Think carefully and really reason this out: should I take a new job? Don't just guess.",
-    "expected": ["think_deeper"],
+    "expected": ["web_search"],
     "kind": "hard"
   },
   {
@@ -51,7 +51,29 @@
     "id": "current-facts-then-judgment",
     "prompt": "Look up the latest mortgage rates, then think carefully about whether I should refinance given a seven-year horizon.",
     "expected": ["web_search"],
+    "expectedArgsContain": {"scope": ["historical_research"]},
     "kind": "composed"
+  },
+  {
+    "id": "single-current-weather-fact",
+    "prompt": "What's the weather in New York right now?",
+    "expected": ["web_search"],
+    "expectedArgsContain": {"scope": ["narrow_current"]},
+    "kind": "fast-tool"
+  },
+  {
+    "id": "historical-product-build-time",
+    "prompt": "How long did Whisper Flow take to build the first version of their product, like the desktop app?",
+    "expected": ["web_search"],
+    "expectedArgsContain": {"query": ["Wispr Flow"], "scope": ["historical_research"]},
+    "kind": "hard"
+  },
+  {
+    "id": "historical-company-origin",
+    "prompt": "How did Granola build and launch its first version?",
+    "expected": ["web_search"],
+    "expectedArgsContain": {"scope": ["historical_research"]},
+    "kind": "hard"
   },
   {
     "id": "chit-chat",

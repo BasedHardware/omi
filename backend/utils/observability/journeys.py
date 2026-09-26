@@ -27,6 +27,7 @@ from utils.journey_metrics_contract import (
     ClientJourneyName,
     ClientJourneyOutcome,
     ClientKind,
+    bounded_app_build,
     bounded_client_journey,
     bounded_client_journey_issue_class,
     bounded_client_journey_outcome,
@@ -160,7 +161,7 @@ def _record_fail_open(what: str, record: Callable[[], None]) -> None:
             logger.warning('client_journey_metric_record_failed what=%s', what, exc_info=True)
 
 
-def record_client_journey_accepted(journey: object, client_kind: object) -> None:
+def record_client_journey_accepted(journey: object, client_kind: object, app_build: object = 'unknown') -> None:
     """Record a bounded acceptance event without creating labels from raw input."""
 
     _record_fail_open(
@@ -168,6 +169,7 @@ def record_client_journey_accepted(journey: object, client_kind: object) -> None
         lambda: OMI_CLIENT_JOURNEY_ACCEPTED_TOTAL.labels(
             journey=bounded_client_journey(journey),
             client_kind=bounded_client_kind(client_kind),
+            app_build=bounded_app_build(app_build),
         ).inc(),
     )
 
@@ -179,21 +181,25 @@ def record_client_journey_terminal(
     elapsed_seconds: float,
     *,
     issue_class: object | None = None,
+    app_build: object = 'unknown',
 ) -> None:
     """Record one bounded terminal event plus duration and optional issue detail.
 
     This function is also the cross-process API: a durable worker can pass an
     elapsed duration derived from persisted acceptance time. These counters are
     not queue state and must never be subtracted to infer in-flight work.
+    WebSocket and server-to-server emitters omit app_build (unknown).
     """
 
     def _record() -> None:
         journey_label = bounded_client_journey(journey)
         client_kind_label = bounded_client_kind(client_kind)
         outcome_label = bounded_client_journey_outcome(outcome)
+        build_label = bounded_app_build(app_build)
         OMI_CLIENT_JOURNEY_TERMINAL_TOTAL.labels(
             journey=journey_label,
             client_kind=client_kind_label,
+            app_build=build_label,
             outcome=outcome_label,
         ).inc()
         OMI_CLIENT_JOURNEY_DURATION_SECONDS.labels(
@@ -204,6 +210,7 @@ def record_client_journey_terminal(
             OMI_CLIENT_JOURNEY_ISSUES_TOTAL.labels(
                 journey=journey_label,
                 client_kind=client_kind_label,
+                app_build=build_label,
                 issue_class=bounded_client_journey_issue_class(issue_class),
             ).inc()
 
@@ -223,10 +230,12 @@ class ClientJourneyAttempt:
         journey: ClientJourneyName,
         client_kind: ClientKind,
         *,
+        app_build: object = 'unknown',
         clock: Callable[[], float] = monotonic,
     ) -> None:
         self.journey = bounded_client_journey(journey)
         self.client_kind = bounded_client_kind(client_kind)
+        self.app_build = bounded_app_build(app_build)
         self._clock = clock
         self.started_at = clock()
         self._outcome: ClientJourneyOutcome | None = None
@@ -234,7 +243,7 @@ class ClientJourneyAttempt:
         self._stream_active = False
         self._stream_attached = False
         self._stream_success_requested = False
-        record_client_journey_accepted(self.journey, self.client_kind)
+        record_client_journey_accepted(self.journey, self.client_kind, self.app_build)
 
     @property
     def finished(self) -> bool:
@@ -277,6 +286,7 @@ class ClientJourneyAttempt:
             outcome_label,
             self._clock() - self.started_at,
             issue_class=self._issue_class,
+            app_build=self.app_build,
         )
 
     def succeed(self) -> None:

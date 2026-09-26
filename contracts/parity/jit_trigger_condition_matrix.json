@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "description": "Model-facing standing-trigger payloads shared with the backend compiler.",
+  "valid_payloads": [
+    {
+      "description": "Notify me about incident discussions.",
+      "condition": {
+        "keywords": ["incident"]
+      }
+    },
+    {
+      "description": "Notify me when Slack mentions the budget.",
+      "condition": {
+        "match_mode": "all",
+        "apps": ["Slack"],
+        "keywords": ["budget"]
+      }
+    },
+    {
+      "description": "Notify me during release review hours.",
+      "condition": {
+        "time": {
+          "start": "09:00",
+          "end": "17:00",
+          "timezone": "UTC"
+        }
+      }
+    },
+    {
+      "description": "Notify me about release review meetings.",
+      "condition": {
+        "calendar": {
+          "event_keywords": ["release review"]
+        }
+      }
+    },
+    {
+      "description": "Notify me when the release owner is mentioned.",
+      "condition": {
+        "entity_aliases": {
+          "release_owner": ["David", "Dave"]
+        }
+      }
+    },
+    {
+      "description": "Notify me when an incident phrase appears.",
+      "condition": {
+        "regex": ["\\bincident\\b"]
+      }
+    },
+    {
+      "description": "Notify me in the release channel.",
+      "condition": {
+        "windows": ["#release"]
+      }
+    }
+  ]
+}

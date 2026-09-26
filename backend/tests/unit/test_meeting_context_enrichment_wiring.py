@@ -37,6 +37,7 @@ _STUBBED = [
     'anthropic',
     'av',
     'database._client',
+    'database.firestore_read_metrics',
     'database.cache',
     'database.redis_db',
     'database.conversations',
@@ -76,6 +77,7 @@ _STUBBED = [
     'tiktoken',
     'typesense',
     'modal',
+    'utils.cloud_tasks',
     'utils.other.storage',
     'utils.other.hume',
     'utils.webhooks',
@@ -329,7 +331,10 @@ class TestDegradation:
 class TestNeverMutatesTheUsersCalendar:
     def test_enrichment_does_not_write_back_to_google_calendar(self):
         conversation = _desktop_conversation()
-        with patch.object(pc, 'write_conversation_link_to_calendar_event', MagicMock()) as write_back:
+        # `process_conversation` no longer imports the write-back helper; spy on the
+        # stubbed provider module so any future re-wiring is caught instead.
+        calendar_linking = sys.modules['utils.conversations.calendar_linking']
+        with patch.object(calendar_linking, 'write_conversation_link_to_calendar_event', MagicMock()) as write_back:
             _enrich(
                 conversation,
                 meetings=[_meeting_record()],

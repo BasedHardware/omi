@@ -131,7 +131,7 @@ def test_memory_pinecone_validation_execute_requires_namespace_prefix_and_confir
 
 def test_memory_pinecone_validation_docs_reference_commands_and_non_claims():
     root = Path(__file__).resolve().parents[2].parent
-    doc = (root / "docs" / "epics" / "memory_firestore_iam_deployment.md").read_text()
+    doc = (root / "backend" / "docs" / "epics" / "memory_firestore_iam_deployment.md").read_text()
 
     assert "python3 backend/scripts/pinecone_repair_validation_readiness.py" in doc
     assert "--allow-throwaway-mutation" in doc

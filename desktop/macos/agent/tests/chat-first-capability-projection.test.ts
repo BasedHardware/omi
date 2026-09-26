@@ -56,6 +56,153 @@ describe("chat-first admitted capability projection", () => {
     store.close();
   });
 
+  /// The desktop never sends `admittedContextSnapshot` — it is an internal
+  /// kernel field, absent from the wire protocol — so every real Main Chat run
+  /// takes the branch that builds its own snapshot. That branch dropped the
+  /// capability, and the adapter metadata is derived from that snapshot, so the
+  /// spawned model was offered the 41 base tools and never `render_chat_blocks`.
+  /// Every existing test here passed a snapshot in by hand and so never
+  /// exercised the path the product uses.
+  it("projects the capability onto a run that arrives without a context snapshot", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "acp");
+    const resolved = kernel.resolveSurfaceSession({
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "no-snapshot" },
+      defaultAdapterId: "acp",
+      chatFirstCapability: { chatFirstUi: true, controlGeneration: 7 },
+    });
+
+    await kernel.executeRun({
+      ownerId: "owner",
+      sessionId: resolved.agentSessionId,
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "no-snapshot",
+      defaultAdapterId: "acp",
+      adapterId: "acp",
+      clientId: "no-snapshot-client",
+      prompt: "Show me three open tasks I could pick up right now.",
+      cwd: "/tmp/chat-first-no-snapshot",
+      requestId: "no-snapshot-request-1",
+    });
+
+    expect(adapter.opened[0]?.metadata).toMatchObject({
+      surfaceKind: "main_chat",
+      chatFirstUi: true,
+      chatFirstControlGeneration: 7,
+    });
+    store.close();
+  });
+
+  /// One shell: main Chat and the floating bar project the same conversation,
+  /// so the session row can carry `floating_chat` while a main-Chat run executes
+  /// on it. Every chat-first gate admits `main_chat` only, so the adapter has to
+  /// be told the run's surface, not the session's registration.
+  it("stamps the run surface on a session the floating bar registered first", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "acp");
+    const resolved = kernel.resolveSurfaceSession({
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "floating_chat", externalRefKind: "chat", externalRefId: "shared-shell" },
+      defaultAdapterId: "acp",
+    });
+    kernel.resolveSurfaceSession({
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "shared-shell" },
+      defaultAdapterId: "acp",
+      chatFirstCapability: { chatFirstUi: true, controlGeneration: 0 },
+    });
+
+    await kernel.executeRun({
+      ownerId: "owner",
+      sessionId: resolved.agentSessionId,
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "shared-shell",
+      defaultAdapterId: "acp",
+      adapterId: "acp",
+      clientId: "shared-shell-client",
+      prompt: "List three of my open tasks.",
+      cwd: "/tmp/chat-first-shared-shell",
+      requestId: "shared-shell-request-1",
+    });
+
+    expect(adapter.opened[0]?.metadata).toMatchObject({ surfaceKind: "main_chat" });
+    store.close();
+  });
+
+  /// The tool being advertised is not the same as the tool being allowed. The
+  /// broker re-checks the surface when the model actually calls it, and it read
+  /// the session's registration rather than the run's surface — so a shared
+  /// shell offered `render_chat_blocks` and then answered
+  /// `tool_not_allowed: Tool is unavailable for this run execution profile`.
+  it("allows the chat-first tools on a main-Chat run of a floating-registered session", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath(), "acp");
+    const resolved = kernel.resolveSurfaceSession({
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "floating_chat", externalRefKind: "chat", externalRefId: "shared-allow" },
+      defaultAdapterId: "acp",
+    });
+    kernel.resolveSurfaceSession({
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "shared-allow" },
+      defaultAdapterId: "acp",
+      chatFirstCapability: { chatFirstUi: true, controlGeneration: 0 },
+    });
+
+    await kernel.executeRun({
+      ownerId: "owner",
+      sessionId: resolved.agentSessionId,
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "shared-allow",
+      defaultAdapterId: "acp",
+      adapterId: "acp",
+      clientId: "shared-allow-client",
+      prompt: "Render my tasks as cards.",
+      cwd: "/tmp/chat-first-shared-allow",
+      requestId: "shared-allow-request-1",
+    });
+
+    const runRow = store.getRow(
+      "SELECT input_json FROM runs WHERE session_id = ? ORDER BY rowid DESC LIMIT 1",
+      [resolved.agentSessionId],
+    );
+    const runInput = JSON.parse(String(runRow.input_json));
+    expect(runInput.surfaceKind).toBe("main_chat");
+    expect(runInput.admittedContextSnapshot.capabilities.allowedToolNames).toContain("render_chat_blocks");
+    store.close();
+  });
+
+  it("leaves a run capability-off when the shell never sampled one", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "acp");
+    const resolved = kernel.resolveSurfaceSession({
+      ownerId: "owner",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "unsampled" },
+      defaultAdapterId: "acp",
+    });
+
+    await kernel.executeRun({
+      ownerId: "owner",
+      sessionId: resolved.agentSessionId,
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "unsampled",
+      defaultAdapterId: "acp",
+      adapterId: "acp",
+      clientId: "unsampled-client",
+      prompt: "Anything.",
+      cwd: "/tmp/chat-first-unsampled",
+      requestId: "unsampled-request-1",
+    });
+
+    expect(adapter.opened[0]?.metadata).toMatchObject({
+      surfaceKind: "main_chat",
+      chatFirstUi: false,
+      chatFirstControlGeneration: null,
+    });
+    store.close();
+  });
+
   it("preserves the enabled main-Chat generation through run admission for both dynamic tools", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "acp");
     const resolved = kernel.resolveSurfaceSession({

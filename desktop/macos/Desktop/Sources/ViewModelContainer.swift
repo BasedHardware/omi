@@ -8,7 +8,7 @@ class ViewModelContainer: ObservableObject {
   let tasksStore = TasksStore.shared
   /// Universal canonical goal projection. It is injected only by the
   /// capability-gated chat-first shell.
-  let canonicalGoalsStore = CanonicalGoalsStore()
+  let canonicalGoalsStore = CanonicalGoalsStore.shared
   /// Process-launch anchor for startup warmups. Captured at container init
   /// (≈ app launch) so post-onboarding / late main-content appearance does
   /// not re-pay launch-protection delays.

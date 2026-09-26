@@ -69,6 +69,8 @@ enum MemoryAssistantTelemetry {
     /// Analysis succeeded and produced a memory that was below the confidence
     /// threshold (filtered out before persistence).
     case filteredLowConfidence = "filtered_low_confidence"
+    /// Subject-admission gate refused the memory before persist/notify.
+    case filteredSubjectAdmission = "filtered_subject_admission"
     /// Analysis succeeded but produced no new memory (model decided nothing to
     /// extract, or returned an empty result set).
     case noNewMemory = "no_new_memory"
@@ -122,13 +124,18 @@ struct MemoryAssistantDurabilityRequest: Sendable {
   let sourceApp: String
   let confidence: Double
   let screenshotId: Int64?
+  let captureTime: Date?
   let contextSummary: String
   let windowTitle: String?
   let ownerID: String
+  /// Provenance of the source frame. Only known origin fields are sent; the
+  /// client deliberately does not invent an independence group or lineage.
+  let captureContext: APIClient.MemoryCaptureContext
 
   init(
     memory: ExtractedMemory,
     screenshotId: Int64?,
+    captureTime: Date? = nil,
     contextSummary: String,
     windowTitle: String?,
     ownerID: String
@@ -138,9 +145,18 @@ struct MemoryAssistantDurabilityRequest: Sendable {
     sourceApp = memory.sourceApp
     confidence = memory.confidence
     self.screenshotId = screenshotId
+    self.captureTime = captureTime
     self.contextSummary = contextSummary
     self.windowTitle = windowTitle
     self.ownerID = ownerID
+    captureContext = APIClient.MemoryCaptureContext(
+      sourceType: "screen",
+      capturedAt: captureTime,
+      sourceId: screenshotId.map(String.init),
+      sourceSignal: "ocr",
+      sourceVersion: nil,
+      attribution: "screen"
+    )
   }
 }
 
@@ -304,6 +320,7 @@ actor MemoryAssistantLiveDurabilityOperations: MemoryAssistantDurabilityOperatin
         sourceApp: request.sourceApp,
         contextSummary: request.contextSummary,
         windowTitle: request.windowTitle,
+        captureContext: request.captureContext,
         expectedOwnerId: request.ownerID
       )
       guard RuntimeOwnerIdentity.currentOwnerId() == request.ownerID else {

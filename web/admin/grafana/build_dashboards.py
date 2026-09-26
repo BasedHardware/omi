@@ -35,7 +35,7 @@ HERE = Path(__file__).resolve().parent
 DASH_DIR = HERE / "dashboards"
 BASE_PATH = DASH_DIR / "omi-tv.json"
 
-PROFIT_PATH = "/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3"
+PROFIT_PATH = "/api/omi/stats/profitability?days=30"
 VIRAL_PATH = "/api/omi/stats/viral-metrics?days=60"
 PROXY = "http://127.0.0.1:8899"
 RFC3339 = "2006-01-02T15:04:05Z07:00"
@@ -49,7 +49,7 @@ PLATFORM_ROUTES = ("viral-metrics", "dau-trends", "retention/posthog", "k-factor
 # panel-for-panel identical without mislabeling desktop data as mobile.
 # (Floating bar is a macOS-only feature; mobile sends no crash telemetry.)
 DESKTOP_ONLY_TITLES = {
-    "Floating bar sessions per user", "Floating bar queries",
+    "Floating bar queries per user", "Floating bar queries",
     "Floating bar notification CTR", "Crash-free rate (today)",
     "Crash-free rate", "Omi Desktop rating — daily",
 }
@@ -59,6 +59,8 @@ DESKTOP_ONLY_TITLES = {
 # "Notifications enabled" counts all user docs and defaults missing fields to
 # enabled, so scoping it to a platform would silently lie.
 ACCOUNT_LEVEL_TITLES = {
+    "Plan economics — data coverage", "Cost and margin by plan — 30-day run rate",
+    "Per-user economics by plan", "Cost by plan — 30-day run rate",
     "Daily notifications sent", "Notifications sent — last 168 hours",
     "Weekly notification reach", "Notifications enabled",
 }
@@ -408,6 +410,19 @@ def build_platform_board(base, scope: str) -> dict:
     })
     if scope == "mobile":
         placeholder_panels(dash, DESKTOP_ONLY_TITLES)
+        # Mobile has the saved-conversation event but does not emit the
+        # macOS-only transcript-output or assistant-completion events. Remove
+        # those series instead of turning missing telemetry into zeros.
+        usage = panel_by_title(dash, "Successful usage / capture output")
+        usage["description"] = (
+            "Saved conversation creators from Memory Created (mobile PostHog telemetry). "
+            "The transcribed-speech and completed-assistant series are macOS-only and "
+            "are intentionally omitted from this board; Recording Started is not a success metric."
+        )
+        usage["targets"][0]["columns"] = [
+            column for column in usage["targets"][0]["columns"]
+            if column.get("selector") in {"date", "conversationCreators"}
+        ]
 
     ticker = panel_by_title(dash, "Total users")
     ticker["title"] = f"{label} users (all-time)"
@@ -474,8 +489,10 @@ def build_platform_board(base, scope: str) -> dict:
         # The stat tile is already platform-neutral ("Activation"); board
         # context makes the All board's "macOS only" marker redundant here.
         panel_by_title(dash, "Activation")["description"] = (
-            "Firestore: % of signups with a conversation within 7 days — the aha "
-            "moment. Biggest controllable lever — first-5-minutes work."
+            "% of first-seen macOS users who asked 2+ questions (typed chat or "
+            "push-to-talk) after completing onboarding, within their "
+            "first 48 hours (PostHog; matured signups only). The aha moment — "
+            "biggest controllable lever, first-5-minutes work."
         )
         chart = panel_by_title(dash, "Activation (signup → activated, macOS)")
         chart["title"] = "Activation (signup → activated)" + (
@@ -504,6 +521,16 @@ def build_platform_board(base, scope: str) -> dict:
             "All and macOS boards use."
         )
         set_stat_query(rate, viral_mobile, "summary", "activationRate", "Activation")
+        # Mobile daily activation: viral-metrics' daily telemetry series (its
+        # own definition, Memory Created <=7d) — honest, not the macOS 2q/48h.
+        daily_chart = panel_by_title(dash, "Activation rate — daily")
+        daily_chart["description"] = (
+            "PostHog telemetry: daily % of first-seen mobile users with a Memory "
+            "Created within 7 days (not the macOS 2-questions/48h definition)."
+        )
+        dtarget = daily_chart["targets"][0]
+        dtarget["url"] = add_query_param(f"{PROXY}{viral_mobile}", "_tzdates", "date")
+        dtarget["root_selector"] = "activationDaily"
         chart = panel_by_title(dash, "Activation (signup → activated, macOS)")
         chart["title"] = "Activation (signup → activated)  ·  ${d_act}"
         target = chart["targets"][0]

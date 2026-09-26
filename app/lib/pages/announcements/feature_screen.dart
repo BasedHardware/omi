@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 import 'package:omi/models/announcement.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/pages/announcements/announcement_dialog.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/ui.dart';
 
 class FeatureScreen extends StatefulWidget {
   final Announcement feature;
@@ -10,36 +12,22 @@ class FeatureScreen extends StatefulWidget {
 
   const FeatureScreen({super.key, required this.feature, this.onComplete});
 
-  /// Show the feature screen as a full-screen modal.
-  static Future<void> show(BuildContext context, Announcement feature) {
-    return Navigator.of(context).push(
-      PageRouteBuilder(
-        fullscreenDialog: true,
-        pageBuilder: (context, animation, secondaryAnimation) => FeatureScreen(feature: feature),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(
-            opacity: animation,
-            child: SlideTransition(
-              position: Tween<Offset>(
-                begin: const Offset(0, 0.1),
-                end: Offset.zero,
-              ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
-              child: child,
-            ),
-          );
-        },
-        transitionDuration: const Duration(milliseconds: 300),
-      ),
+  /// Show the feature screen as a full-screen modal (it floats over the app, so it leaves by its
+  /// trailing close X). Resolves [AnnouncementOutcome.closed] when the reader closed or finished it,
+  /// [AnnouncementOutcome.none] on system back.
+  static Future<AnnouncementOutcome> show(BuildContext context, Announcement feature) async {
+    final outcome = await Navigator.of(context).push<AnnouncementOutcome>(
+      omiPageRoute(fullscreenDialog: true, builder: (context) => FeatureScreen(feature: feature)),
     );
+    return outcome ?? AnnouncementOutcome.none;
   }
 
   @override
   State<FeatureScreen> createState() => _FeatureScreenState();
 }
 
-class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProviderStateMixin {
+class _FeatureScreenState extends State<FeatureScreen> {
   late PageController _pageController;
-  late AnimationController _buttonAnimationController;
   int _currentPage = 0;
 
   FeatureContent get content => widget.feature.featureContent;
@@ -66,13 +54,11 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
   void initState() {
     super.initState();
     _pageController = PageController();
-    _buttonAnimationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 200));
   }
 
   @override
   void dispose() {
     _pageController.dispose();
-    _buttonAnimationController.dispose();
     super.dispose();
   }
 
@@ -86,13 +72,13 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
 
   void _complete() {
     widget.onComplete?.call();
-    Navigator.of(context).pop();
+    Navigator.of(context).pop(AnnouncementOutcome.closed);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: ResponsiveHelper.backgroundPrimary,
+      backgroundColor: OmiColors.surface0,
       body: SafeArea(
         child: Column(
           children: [
@@ -156,13 +142,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
               Center(
                 child: Text(
                   content.title,
-                  style: const TextStyle(
-                    color: ResponsiveHelper.textPrimary,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
-                    height: 1.25,
-                    letterSpacing: -0.5,
-                  ),
+                  style: OmiType.title2.copyWith(fontWeight: FontWeight.w700, height: 1.25, letterSpacing: -0.5),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -192,13 +172,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
           Center(
             child: Text(
               content.title,
-              style: const TextStyle(
-                color: ResponsiveHelper.textPrimary,
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
-                height: 1.25,
-                letterSpacing: -0.5,
-              ),
+              style: OmiType.title2.copyWith(fontWeight: FontWeight.w700, height: 1.25, letterSpacing: -0.5),
               textAlign: TextAlign.center,
             ),
           ),
@@ -224,13 +198,13 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
           width: 32,
           height: 32,
           decoration: BoxDecoration(
-            color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(10),
+            color: OmiColors.accent.withValues(alpha: 0.15),
+            borderRadius: OmiRadius.mdAll,
           ),
           child: Center(
             child: Text(
               '$number',
-              style: const TextStyle(color: ResponsiveHelper.purplePrimary, fontSize: 15, fontWeight: FontWeight.w700),
+              style: OmiType.subhead.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
         ),
@@ -242,12 +216,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
             children: [
               Text(
                 step.title,
-                style: const TextStyle(
-                  color: ResponsiveHelper.textPrimary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                  height: 1.3,
-                ),
+                style: OmiType.headline.copyWith(height: 1.3),
               ),
               const SizedBox(height: 6),
               _buildListDescription(step),
@@ -266,15 +235,15 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
       final parts = description.split(highlightText);
       return RichText(
         text: TextSpan(
-          style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 15, height: 1.5),
+          style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.5),
           children: [
             TextSpan(text: parts.first),
             TextSpan(
               text: highlightText,
               style: TextStyle(
-                color: ResponsiveHelper.purplePrimary,
+                color: OmiColors.accent,
                 fontWeight: FontWeight.w600,
-                backgroundColor: ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
+                backgroundColor: OmiColors.accent.withValues(alpha: 0.15),
               ),
             ),
             if (parts.length > 1) TextSpan(text: parts.sublist(1).join(highlightText)),
@@ -283,7 +252,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
       );
     }
 
-    return Text(description, style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 15, height: 1.5));
+    return Text(description, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.5));
   }
 
   Widget _buildHeader() {
@@ -296,23 +265,12 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
           Expanded(
             child: Text(
               content.title,
-              style: const TextStyle(color: ResponsiveHelper.textTertiary, fontSize: 14, fontWeight: FontWeight.w500),
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
-          // Close button
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: _complete,
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                child: const Icon(Icons.close, color: ResponsiveHelper.textSecondary, size: 24),
-              ),
-            ),
-          ),
+          OmiCloseButton(color: OmiColors.textSecondary, onPressed: _complete),
         ],
       ),
     );
@@ -340,13 +298,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
                 // Title with better typography
                 Text(
                   step.title,
-                  style: const TextStyle(
-                    color: ResponsiveHelper.textPrimary,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w700,
-                    height: 1.25,
-                    letterSpacing: -0.5,
-                  ),
+                  style: OmiType.title1.copyWith(height: 1.25, letterSpacing: -0.5),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 14),
@@ -366,27 +318,27 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
       height: height,
       width: double.infinity,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: OmiRadius.xlAll,
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 20, offset: const Offset(0, 8))],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: OmiRadius.xlAll,
         child: CachedNetworkImage(
           imageUrl: imageUrl,
           fit: BoxFit.cover,
           placeholder: (context, url) => Container(
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.backgroundSecondary,
-              borderRadius: BorderRadius.circular(20),
+            decoration: const BoxDecoration(
+              color: OmiColors.surface1,
+              borderRadius: OmiRadius.xlAll,
             ),
-            child: const Center(child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 2)),
+            child: const Center(child: OmiSpinner(color: OmiColors.textSecondary)),
           ),
           errorWidget: (context, url, error) => Container(
-            decoration: BoxDecoration(
-              color: ResponsiveHelper.backgroundSecondary,
-              borderRadius: BorderRadius.circular(20),
+            decoration: const BoxDecoration(
+              color: OmiColors.surface1,
+              borderRadius: OmiRadius.xlAll,
             ),
-            child: const Icon(Icons.image_not_supported_outlined, color: ResponsiveHelper.textQuaternary, size: 48),
+            child: const Icon(Icons.image_not_supported_outlined, color: OmiColors.textTertiary, size: 48),
           ),
         ),
       ),
@@ -398,8 +350,8 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
       height: height,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary,
-        borderRadius: BorderRadius.circular(20),
+        color: OmiColors.surface1,
+        borderRadius: OmiRadius.xlAll,
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 20, offset: const Offset(0, 8))],
       ),
       child: Stack(
@@ -430,15 +382,15 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
       return RichText(
         textAlign: TextAlign.center,
         text: TextSpan(
-          style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 16, height: 1.6, letterSpacing: 0.1),
+          style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.6, letterSpacing: 0.1),
           children: [
             TextSpan(text: parts.first),
             TextSpan(
               text: highlightText,
               style: TextStyle(
-                color: ResponsiveHelper.purplePrimary,
+                color: OmiColors.accent,
                 fontWeight: FontWeight.w600,
-                backgroundColor: ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
+                backgroundColor: OmiColors.accent.withValues(alpha: 0.15),
               ),
             ),
             if (parts.length > 1) TextSpan(text: parts.sublist(1).join(highlightText)),
@@ -449,7 +401,7 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
 
     return Text(
       description,
-      style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 16, height: 1.6, letterSpacing: 0.1),
+      style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.6, letterSpacing: 0.1),
       textAlign: TextAlign.center,
     );
   }
@@ -478,51 +430,12 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
   }
 
   Widget _buildActionButton(bool isLastStep) {
-    return GestureDetector(
-      onTapDown: (_) => _buttonAnimationController.forward(),
-      onTapUp: (_) {
-        _buttonAnimationController.reverse();
-        _nextPage();
-      },
-      onTapCancel: () => _buttonAnimationController.reverse(),
-      child: AnimatedBuilder(
-        animation: _buttonAnimationController,
-        builder: (context, child) {
-          final scale = 1.0 - (_buttonAnimationController.value * 0.03);
-          return Transform.scale(
-            scale: scale,
-            child: Container(
-              width: double.infinity,
-              height: 56,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 12, offset: const Offset(0, 4)),
-                ],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    isLastStep ? 'Got it' : 'Continue',
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                  if (!isLastStep) ...[
-                    const SizedBox(width: 8),
-                    const Icon(Icons.arrow_forward_rounded, color: Colors.black, size: 20),
-                  ],
-                ],
-              ),
-            ),
-          );
-        },
-      ),
+    final l10n = context.l10n;
+    return OmiButton(
+      label: isLastStep ? l10n.gotIt : l10n.continueAction,
+      icon: isLastStep ? null : Icons.arrow_forward_rounded,
+      expand: true,
+      onPressed: _nextPage,
     );
   }
 
@@ -540,8 +453,8 @@ class _FeatureScreenState extends State<FeatureScreen> with SingleTickerProvider
             ? Colors.white
             : isPast
                 ? Colors.white54
-                : ResponsiveHelper.backgroundTertiary,
-        borderRadius: BorderRadius.circular(4),
+                : OmiColors.surface2,
+        borderRadius: OmiRadius.smAll,
       ),
     );
   }

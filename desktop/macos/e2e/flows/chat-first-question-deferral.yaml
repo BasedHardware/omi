@@ -28,6 +28,8 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/ChatFirstPromptMaterializationDriver.swift
   - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/Blocks/ChatFirstContentBlockViews.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider+AutomationSnapshot.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentQueryResult.swift
   - desktop/macos/Desktop/Sources/Chat/ChatFirstDeferralOutboxDriver.swift
 preconditions:
   - automation_bridge_ready

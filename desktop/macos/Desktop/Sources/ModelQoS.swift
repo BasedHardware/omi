@@ -110,6 +110,16 @@ struct ModelQoS {
     /// commitments on that lane.
     static var lightweight: String { "gemini-2.5-flash-lite" }
 
+    /// Voice-typing cleanup: the dictated transcript rewritten as the user
+    /// would have typed it, on the critical path between key-up and paste.
+    ///
+    /// Flash on both tiers, deliberately. Measured live (2026-09-04, named
+    /// bundle): Flash-Lite rewrote "hello there" as "hello then" and left a
+    /// name lowercase — a wording change in text the user is about to send is
+    /// the one failure this feature cannot have. Pro would add seconds of
+    /// thinking to every paste for no gain on a cleanup task.
+    static var dictation: String { "gemini-2.5-flash" }
+
     /// Live notch suggestions.
     ///
     /// Deliberately a tier below the other proactive assistants. This one is triggered by

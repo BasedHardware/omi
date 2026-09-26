@@ -17,6 +17,7 @@ from google.api_core.exceptions import InvalidArgument
 
 from database import conversation_finalization_jobs as jobs_db
 from database._client import is_document_size_limit_error
+from services.conversation_selfheal import run_selfheal_tick
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
     get_listen_finalization_tasks_max_attempts,
@@ -43,6 +44,33 @@ from utils.observability.journeys import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _skip_capture_wedge(**_: Any) -> dict[str, int]:
+    """The API reconciler owns conversation GC, not user-notification nudges."""
+
+    return {'nudged': 0, 'undeliverable': 0, 'errors': 0}
+
+
+def reconcile_stale_in_progress_conversations(*, firestore_client: Any = None) -> dict[str, Any]:
+    """Admit stale content-bearing ``in_progress`` rows to durable finalization.
+
+    This is the always-on owner for the recovery primitive otherwise exposed by
+    the optional conversation-selfheal job. It deliberately reuses that
+    primitive's bounded scan, persisted CAS cursor, SERVER_RECOVERY admission
+    fences, per-tick cap, and next-tick verification. Capture-wedge notification
+    work remains owned by the dedicated job and is skipped here.
+    """
+
+    if not is_listen_finalization_dispatch_enabled():
+        return {'scanned': 0, 'enqueued': 0, 'verified': 0, 'refused': 0, 'errors': 0, 'mode': 'off'}
+    return run_selfheal_tick(
+        firestore_client=firestore_client,
+        mode='heal',
+        dry_run=False,
+        use_configured_uid_allowlist=False,
+        wedge_runner=_skip_capture_wedge,
+    )
 
 
 def is_meeting_receipt_reconciler_enabled() -> bool:
@@ -443,6 +471,20 @@ def final_attempt_failed(
             # Dead-lettering is authoritative; a best-effort metric lookup must
             # never change its terminal outcome.
             logger.exception('listen finalization terminal metric lookup failed job=%s', job_id)
+        # Dead-lettering flips the bound conversation to discarded inside its
+        # own transaction, bypassing the update hooks; converge the search
+        # projection. Fail-open: never change the terminal outcome.
+        try:
+            job = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
+            if job:
+                uid = job.get('uid')
+                conversation_id = job.get('conversation_id')
+                if isinstance(uid, str) and uid and isinstance(conversation_id, str) and conversation_id:
+                    from utils.conversations.typesense_index import sync_conversation_index_after_write
+
+                    sync_conversation_index_after_write(uid, conversation_id)
+        except Exception:
+            logger.warning('listen finalization dead-letter index sync failed job=%s', job_id)
     return marked
 
 

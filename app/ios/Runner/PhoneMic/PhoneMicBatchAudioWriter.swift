@@ -14,12 +14,15 @@ import Foundation
 /// from the tap's audioQueue block and close from `audioQueue.sync`).
 final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
     private let dir: String
+    private let defaults: UserDefaults
 
     private let maxFileBytes: Int64 = 32 * 1024 * 1024 // ~32 MB per file
     private let maxFileSeconds: Int64 = 900 // 15 min per file
     private let gapMs: Int64 = 30_000 // start a new file after this silence gap
 
     private var lastAppendMs: Int64 = 0
+    private var currentAudioURL: URL?
+    private var geolocationSidecarPersisted = false
     /// Session total of frames durably written (each = one 20ms opus packet). Drives
     /// onBatchProgress; muted/interrupted/storage-full periods never advance it.
     private(set) var sessionFramesWritten: Int64 = 0
@@ -28,13 +31,30 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
     private var pendingStorageFullReport = false
     private var wasStorageFull = false
 
+    override func onOpenedLocked(_ partURL: URL) {
+        currentAudioURL = partURL.deletingPathExtension()
+        geolocationSidecarPersisted = false
+        persistCurrentGeolocationSidecar()
+    }
+
+    private func persistCurrentGeolocationSidecar() {
+        guard !geolocationSidecarPersisted, let currentAudioURL else { return }
+        // Location can arrive after capture starts. Retry absent/invalid metadata
+        // and failed writes, but stop rereading it once this recording owns a snapshot.
+        geolocationSidecarPersisted = persistRecordingGeolocationSidecar(
+            rawGeolocation: defaults.string(forKey: "flutter.phoneBatchGeolocation"),
+            audioURL: currentAudioURL
+        )
+    }
+
     /// `dir` is resolved once at bring-up (a missing/empty `flutter.batchAudioDir`
     /// fails the session with batch_dir_unavailable before this writer is created),
     /// so it is never re-checked per append. The recovery prefix `audio_omibatchphone`
     /// intentionally matches both the manual (`omibatchphone`) and auto
     /// (`omibatchphoneauto`) markers, and nothing else.
-    init(dir: String, queue: DispatchQueue) {
+    init(dir: String, queue: DispatchQueue, defaults: UserDefaults = .standard) {
         self.dir = dir
+        self.defaults = defaults
         super.init(
             tag: "PhoneBatchWriter",
             queueLabel: "com.omi.phoneBatchWriter",
@@ -50,15 +70,16 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
     /// (`omibatchphone` / `omibatchphoneauto`) and only shapes the file name.
     func append(opusPackets: [Data], marker: String) {
         if opusPackets.isEmpty { return }
-        let d = UserDefaults.standard
+        let admission = CaptureAdmissionPolicy.load(from: defaults)
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
 
         // Muted: drop packets but keep the open file's gap timer fresh so unmute
         // resumes the same recording instead of opening a new file.
-        if d.bool(forKey: "flutter.batchMuted") {
+        if admission.muted {
             if isOpen { lastAppendMs = nowMs }
             return
         }
+        let d = defaults
         // Manual "New recording": finalize now so these packets open a fresh file.
         if d.bool(forKey: "flutter.batchCutRequested") {
             d.set(false, forKey: "flutter.batchCutRequested")
@@ -76,10 +97,22 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
             closeCurrentLocked("rotate")
         }
 
+        // A policy transition can race the audio queue after ingress. Retire
+        // the packet before opening a file or admitting any encoded bytes.
+        let beforeOpen = CaptureAdmissionPolicy.load(from: defaults)
+        guard beforeOpen.permits(admittedRevision: admission.revision) else {
+            if beforeOpen.muted, isOpen { lastAppendMs = nowMs }
+            return
+        }
+
         if !isOpen {
-            let startSec = nowMs / 1000
             // codec opus_fs320 (20ms frames), 16kHz mono — mirrors the BLE/pendant
             // batch naming so the Dart scanner (`audio_omibatch*`) and backend both match.
+            var startSec = nowMs / 1000
+            while FileManager.default.fileExists(atPath: "\(dir)/audio_\(marker)_opus_fs320_16000_1_fs320_\(startSec).bin") ||
+                FileManager.default.fileExists(atPath: "\(dir)/audio_\(marker)_opus_fs320_16000_1_fs320_\(startSec).bin.\(partSuffix)") {
+                startSec += 1
+            }
             let name = "audio_\(marker)_opus_fs320_16000_1_fs320_\(startSec).bin.\(partSuffix)"
             guard openLocked(dirPath: dir, fileName: name, startSec: startSec, nowMs: nowMs) else {
                 noteStorageFullTransition() // open refused — most likely the free-space guard tripped
@@ -88,7 +121,17 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
             wasStorageFull = false // a successful open means storage recovered
         }
 
+        // Re-read at the write boundary so work already queued on the audio
+        // queue cannot leak after mute or any revision change.
+        let beforeWrite = CaptureAdmissionPolicy.load(from: defaults)
+        guard beforeWrite.permits(admittedRevision: admission.revision) else {
+            if beforeWrite.muted, isOpen { lastAppendMs = nowMs }
+            return
+        }
         guard writeFramesLocked(opusPackets) else { return }
+        // Location capture intentionally starts after native audio. Retry until
+        // its fenced preference arrives; an existing sidecar always wins.
+        persistCurrentGeolocationSidecar()
         sessionFramesWritten += Int64(opusPackets.count)
         lastAppendMs = nowMs
         maybeFsyncLocked(nowMs: nowMs)
@@ -111,6 +154,8 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
     }
 
     override func onClosedLocked() {
+        persistCurrentGeolocationSidecar()
+        currentAudioURL = nil
         lastAppendMs = 0
     }
 
@@ -118,7 +163,7 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
         // The base sets flutter.batchStorageFull when the free-space guard trips;
         // read it back to distinguish a storage-full refusal from a transient open
         // failure, and latch only the false->true edge.
-        if UserDefaults.standard.bool(forKey: "flutter.batchStorageFull"), !wasStorageFull {
+        if defaults.bool(forKey: "flutter.batchStorageFull"), !wasStorageFull {
             wasStorageFull = true
             pendingStorageFullReport = true
         }

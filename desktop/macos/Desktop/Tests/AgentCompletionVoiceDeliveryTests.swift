@@ -13,7 +13,7 @@ final class AgentCompletionVoiceDeliveryTests: XCTestCase {
     var voiceLive = true
     var delta: AgentCompletionVoiceDelivery.Delta? = AgentCompletionVoiceDelivery.Delta(
       ids: ["run-1"], prompt: "agent finished", completedAtHighWaterMs: 42)
-    var injectResult = true
+    var injectResult = RealtimeBackgroundContextDeliveryResult.delivered
     let hasStarted: Bool
 
     private(set) var peekCount = 0
@@ -89,9 +89,36 @@ final class AgentCompletionVoiceDeliveryTests: XCTestCase {
     XCTAssertEqual(harness.acknowledged, [["run-1"]])
   }
 
+  func testRealtimeExternalFloatingChatTerminalDeliversAndAcknowledges() async {
+    let harness = Harness()
+    let surface = AgentSurfaceReference.externalRun(
+      surfaceKind: "floating_chat", runId: "run-realtime-external")
+
+    harness.sut.observe([surface.key: projection(surface: surface, status: .running)])
+    harness.sut.observe([surface.key: projection(surface: surface, status: .succeeded)])
+    await harness.drainScheduledWork()
+
+    XCTAssertEqual(harness.peekCount, 1)
+    XCTAssertEqual(harness.injectedPrompts, ["agent finished"])
+    XCTAssertEqual(harness.acknowledged, [["run-1"]])
+  }
+
+  func testOrdinaryFloatingChatTerminalDoesNotTriggerDelivery() async {
+    let harness = Harness()
+    let surface = AgentSurfaceReference.floatingChat(chatId: "shared")
+
+    harness.sut.observe([surface.key: projection(surface: surface, status: .running)])
+    harness.sut.observe([surface.key: projection(surface: surface, status: .succeeded)])
+    await harness.drainScheduledWork()
+
+    XCTAssertEqual(harness.peekCount, 0)
+    XCTAssertTrue(harness.injectedPrompts.isEmpty)
+    XCTAssertTrue(harness.acknowledged.isEmpty)
+  }
+
   func testInjectFailureLeavesCheckpointUnadvanced() async {
     let harness = Harness()
-    harness.injectResult = false
+    harness.injectResult = .retry
     let surface = AgentSurfaceReference.floatingBarRun(runId: "run-1")
 
     harness.sut.observe([surface.key: projection(surface: surface, status: .succeeded)])
@@ -101,25 +128,38 @@ final class AgentCompletionVoiceDeliveryTests: XCTestCase {
     XCTAssertTrue(harness.acknowledged.isEmpty, "checkpoint must not advance on failed delivery")
   }
 
-  func testConnectedIdleGeminiRetriesDeliveryWhenInputWindowOpens() async {
+  func testRetryableDeliveryDrainsWhenInputWindowOpens() async {
     let harness = Harness()
     let surface = AgentSurfaceReference.floatingBarRun(runId: "run-1")
 
-    // Completion finishes while the warm session is idle (no activity window):
-    // sendBackgroundAgentContext refuses, injectContext reports false, and the
-    // checkpoint stays unadvanced (nothing is buffered or acked).
-    harness.injectResult = false
+    // A retryable transport refusal leaves the checkpoint unadvanced: nothing is
+    // buffered or acknowledged.
+    harness.injectResult = .retry
     harness.sut.observe([surface.key: projection(surface: surface, status: .running)])
     harness.sut.observe([surface.key: projection(surface: surface, status: .succeeded)])
     await harness.drainScheduledWork()
     XCTAssertTrue(harness.acknowledged.isEmpty, "a refused completion must not advance the checkpoint")
 
-    // The activity window opens (Gemini beginInputTurn) → capability signal →
-    // retry; the send now succeeds and the checkpoint advances exactly once.
-    harness.injectResult = true
+    // A later capability signal retries; the send now succeeds and the checkpoint
+    // advances exactly once.
+    harness.injectResult = .delivered
     harness.sut.voiceSessionDidOpenInputWindow()
     await harness.drainScheduledWork()
     XCTAssertEqual(harness.acknowledged, [["run-1"]], "window-open retry delivers and acks exactly once")
+  }
+
+  func testUnsupportedProviderAcknowledgesWithoutInjectingIntoAFutureUserTurn() async {
+    let harness = Harness()
+    harness.injectResult = .unsupported
+    let surface = AgentSurfaceReference.floatingBarRun(runId: "run-1")
+
+    harness.sut.observe([surface.key: projection(surface: surface, status: .succeeded)])
+    await harness.drainScheduledWork()
+
+    XCTAssertEqual(harness.injectedPrompts, ["agent finished"])
+    XCTAssertEqual(
+      harness.acknowledged, [["run-1"]],
+      "unsupported mid-session injection must be consumed, not replayed into an unrelated later turn")
   }
 
   func testNoLiveVoiceSessionDoesNotPeekOrAcknowledge() async {

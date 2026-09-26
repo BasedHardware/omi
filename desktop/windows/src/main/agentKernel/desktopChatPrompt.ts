@@ -29,6 +29,8 @@
 // subprocess every message (isBindingCompatible keys on the system-prompt hash).
 // The builder therefore interpolates only stable inputs — no volatile datetime.
 
+import { formatUserFacingTimestamp } from '../../shared/chatTimestamp'
+
 /** Inputs interpolated into the prompt. All optional and stable per session. */
 export interface DesktopChatPromptOptions {
   /** The signed-in user's display/given name, when available. Falls back to a
@@ -251,23 +253,12 @@ const TASKS_CAP = 20
 function formatDueAt(dueAt: number, timezone?: string): string {
   if (timezone) {
     try {
-      const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hourCycle: 'h23'
-      }).formatToParts(new Date(dueAt))
-      const at = (type: Intl.DateTimeFormatPartTypes): string =>
-        parts.find((p) => p.type === type)?.value ?? ''
-      return `${at('year')}-${at('month')}-${at('day')} ${at('hour')}:${at('minute')}`
+      return formatUserFacingTimestamp(new Date(dueAt), timezone)
     } catch {
       // Invalid timezone id → fall through to the marked-UTC path below.
     }
   }
-  return `${new Date(dueAt).toISOString().slice(0, 16).replace('T', ' ')} UTC`
+  return formatUserFacingTimestamp(new Date(dueAt), 'UTC')
 }
 
 /**

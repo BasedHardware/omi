@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-shadowed-route-handler",
+  "violated_contract": "A path registered by two routers must not silently resolve to the first-mounted handler: FastAPI first-match wins, so the second (richer) handler — and any cleanup-only-it-performs — is unreachable while tests written against it stay green.",
+  "canonical_prevention": "Fail on duplicate path registrations across routers before merge: parse every @router decorator (method + resolved prefix + path) and diff the full registered-path set per mounted app, the same way route_policy/tooling resolves paths; a collision must force dedupe or an explicit mount-order decision in the PR.",
+  "canonical_prevention_artifact": [
+    ".github/scripts/check_duplicate_routes.py",
+    ".github/scripts/test_check_duplicate_routes.py"
+  ],
+  "evidence_prs": [12697],
+  "scope_hints": [
+    "backend/routers/",
+    "backend/main.py",
+    "backend/desktop_backend.py",
+    "backend/pusher/main.py"
+  ],
+  "status": "open"
+}

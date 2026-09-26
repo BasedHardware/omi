@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from enum import Enum
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query, Request
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -13,14 +13,18 @@ import database.conversations as conversations_db
 import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
+import database.daily_summaries as daily_summaries_db
 from database._client import db
 from database.firestore_read_metrics import FirestoreReadSite
 
 from models.folder import Folder
 from models.goal import GoalHistoryEntryResponse, GoalMetric
+from models.daily_summary import DailySummariesResponse, DailySummaryResponse
 from utils.client_device import resolve_client_device_from_request
+from utils.product_metrics import extract_app_build, extract_client_kind, record_product_event
 from utils.goals_response import normalize_goal_history_entry
 from models.memories import MemoryCategory, Memory, MemoryDB
+from models.client_processing import ClientProcessing
 from models.conversation import (
     Conversation as OmiConversation,
     CreateConversation,
@@ -43,10 +47,12 @@ from dependencies import (
     get_auth_with_conversations_read,
     get_uid_with_conversations_read,
     get_uid_with_conversations_read_ask,
+    get_uid_with_conversations_from_segments_write,
     get_uid_with_conversations_write,
     get_developer_memory_default_memory_batch_write_context,
     get_developer_memory_default_memory_read_context,
     get_developer_memory_default_memory_write_context,
+    get_developer_memory_default_memory_create_context,
     get_uid_with_action_items_read,
     get_uid_with_action_items_write,
     get_uid_with_goals_read,
@@ -57,6 +63,17 @@ from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
+from utils.conversations.projection_payload import (
+    client_processing_mutation,
+    omit_null_processing_state,
+    sanitize_untrusted_provenance_field,
+    strip_client_processing,
+)
+from utils.conversations.transcript_hash import (
+    stored_transcript_segment,
+    transcript_sha256,
+    transcript_sha256_for_binding,
+)
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.location import resolve_geolocation
 from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
@@ -467,7 +484,7 @@ def search_memories_vector(
 @router.post("/v1/dev/user/memories", response_model=DeveloperMemory, tags=["Memories"], operation_id="createMemory")
 def create_memory(
     request: CreateMemoryRequest,
-    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_create_context),
 ):
     """
     Create a new memory for the authenticated user.
@@ -476,6 +493,11 @@ def create_memory(
     - **category**: Memory category (auto-categorized if not provided)
     - **visibility**: Visibility: public or private (default: private)
     - **tags**: List of tags associated with the memory
+
+    A memory is identified by its text. Sending text the user already has (ignoring surrounding
+    whitespace; case-sensitive) returns that memory unchanged, so retries are safe without extra
+    headers. Use PATCH to change an existing memory's fields. After a delete, the same text creates
+    a new memory.
     """
     if not request.content or len(request.content.strip()) == 0:
         raise HTTPException(status_code=422, detail="content cannot be empty")
@@ -544,6 +566,10 @@ def create_memories_batch(
     Create multiple memories in a batch.
 
     - **memories**: List of memories to create (max 25)
+
+    Items follow the single-create rule: text the user already has returns the existing memory at
+    that position, so a retried batch creates nothing twice. `created_count` is the number of
+    memories returned.
     """
     # Fail closed: a legacy/read-only Developer key (no persisted memories.write
     # grant) must not mutate canonical memories. Gated before any memory
@@ -737,12 +763,28 @@ class CreateActionItemRequest(BaseModel):
     )
 
 
+def _optional_patch_text(value: Optional[str], field_name: str) -> Optional[str]:
+    """Shared guard for optional PATCH text fields: an omitted field (None) leaves the stored value
+    unchanged, but a provided value must contain non-whitespace text and is stored stripped (#13933)."""
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError(f'{field_name} cannot be blank')
+    return stripped
+
+
 class UpdateActionItemRequest(BaseModel):
     model_config = ConfigDict(title='UpdateActionItemRequest')
 
     description: Optional[str] = Field(default=None, description="New description", min_length=1, max_length=500)
     completed: Optional[bool] = Field(default=None, description="New completion status")
     due_at: Optional[datetime] = Field(default=None, description="New due date (ISO format with timezone)")
+
+    @field_validator('description')
+    @classmethod
+    def description_cannot_be_blank(cls, value: Optional[str]) -> Optional[str]:
+        return _optional_patch_text(value, 'description')
 
 
 class BatchActionItemsRequest(BaseModel):
@@ -943,6 +985,7 @@ def delete_action_item(
         raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
 
     action_items_db.delete_action_item(uid, action_item_id)
+    sync_action_item_reminder(user_id=uid, action_item_id=action_item_id, description='', completed=True, due_at=None)
     return {"success": True}
 
 
@@ -972,7 +1015,7 @@ def update_action_item(
     if action_item.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this action item.")
 
-    # Build update data from non-None fields
+    # Build update data from explicitly provided fields so due_at=null can clear the date.
     update_data = {}
     if request.description is not None:
         update_data['description'] = request.description.strip()
@@ -983,7 +1026,7 @@ def update_action_item(
             update_data['completed_at'] = datetime.now(timezone.utc)
         else:
             update_data['completed_at'] = None
-    if request.due_at is not None:
+    if 'due_at' in request.model_fields_set:
         update_data['due_at'] = request.due_at
 
     if not update_data:
@@ -1109,6 +1152,11 @@ class UpdateConversationRequest(BaseModel):
     )
     discarded: Optional[bool] = Field(default=None, description="Whether the conversation is discarded")
 
+    @field_validator('title')
+    @classmethod
+    def title_cannot_be_blank(cls, value: Optional[str]) -> Optional[str]:
+        return _optional_patch_text(value, 'title')
+
 
 class DevTranscriptSegment(BaseModel):
     model_config = ConfigDict(title='CreateConversationTranscriptSegment')
@@ -1129,6 +1177,14 @@ class CreateConversationFromTranscriptRequest(BaseModel):
 
     transcript_segments: List[DevTranscriptSegment] = Field(
         description="List of transcript segments with speaker and timing info", min_length=1, max_length=500
+    )
+    client_processing: Optional[Any] = Field(
+        default=None,
+        description=(
+            "Untrusted client-authored display projection. Accepted as a raw payload "
+            "and validated in the handler: a malformed projection is dropped and the "
+            "conversation still lands. Display only — never an input to intelligence."
+        ),
     )
     client_session_id: Optional[str] = Field(
         default=None,
@@ -1175,6 +1231,20 @@ class CreateConversationFromTranscriptRequest(BaseModel):
             raise ValueError('client_session_id cannot be empty')
         return value
 
+    @field_validator('started_at', 'finished_at')
+    @classmethod
+    def require_timezone_offset(cls, value: Optional[datetime]) -> Optional[datetime]:
+        """Reject offset-naive timestamps with a 422 instead of a 500.
+
+        A naive ``finished_at`` against the tz-aware ``started_at`` default (or
+        the reverse) makes the handler's ``finished_at <= started_at`` check
+        raise TypeError — an uncaught 500 on a malformed body. Both from-segments
+        routes (developer and first-party) share this model, so both get the 422.
+        """
+        if value is not None and value.tzinfo is None:
+            raise ValueError('must include a timezone offset (e.g. 2026-09-11T12:00:00Z)')
+        return value
+
 
 class DeveloperFolder(BaseModel):
     model_config = ConfigDict(title='DeveloperFolder')
@@ -1190,6 +1260,83 @@ class DeveloperFolder(BaseModel):
     is_default: bool = False
     is_system: bool = False
     conversation_count: int = 0
+
+
+@router.get(
+    "/v1/dev/user/daily-summaries",
+    response_model=DailySummariesResponse,
+    tags=["Daily Summaries"],
+    operation_id="listDailySummaries",
+)
+def get_developer_daily_summaries(
+    limit: int = Query(30, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    start_date: Optional[str] = Query(default=None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
+    end_date: Optional[str] = Query(default=None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
+    auth: ApiKeyAuth = Depends(get_auth_with_conversations_read),
+    request: Request = None,
+):
+    """List the authenticated user's stored daily recaps.
+
+    Daily summaries are derived from conversations, so this read uses the same
+    `conversations:read` scope and aggregate read budget as conversation lists.
+    """
+    status = 500
+    returned_count = 0
+    try:
+        summaries = daily_summaries_db.get_daily_summaries(
+            auth.uid,
+            limit=limit,
+            offset=offset,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        returned_count = len(summaries)
+        status = 200
+        return {'summaries': summaries}
+    finally:
+        _audit_developer_read(
+            request=request,
+            auth=auth,
+            operation='list_daily_summaries',
+            status=status,
+            limit=limit,
+            offset=offset,
+            returned_count=returned_count,
+        )
+
+
+@router.get(
+    "/v1/dev/user/daily-summaries/{summary_id}",
+    response_model=DailySummaryResponse,
+    tags=["Daily Summaries"],
+    operation_id="getDailySummary",
+)
+def get_developer_daily_summary(
+    summary_id: str,
+    auth: ApiKeyAuth = Depends(get_auth_with_conversation_detail_read),
+    request: Request = None,
+):
+    """Get one stored daily recap by ID."""
+    status = 500
+    returned_count = 0
+    try:
+        summary = daily_summaries_db.get_daily_summary(auth.uid, summary_id)
+        if not summary:
+            status = 404
+            raise HTTPException(status_code=404, detail='Daily summary not found')
+        status = 200
+        returned_count = 1
+        return summary
+    finally:
+        _audit_developer_read(
+            request=request,
+            auth=auth,
+            operation='get_daily_summary',
+            status=status,
+            returned_count=returned_count,
+            resource_id=summary_id,
+        )
 
 
 @router.get("/v1/dev/user/folders", response_model=List[DeveloperFolder], tags=["Folders"], operation_id="listFolders")
@@ -1601,12 +1748,160 @@ def _conversation_response_from_data(conversation: dict) -> ConversationResponse
     )
 
 
+def _projection_provenance_for_log(raw: Any) -> tuple[str, str, str]:
+    """Pull and sanitize provenance for logs. Never raises; never returns body text.
+
+    Rejected-payload provenance is untrusted input. Control characters (including
+    newlines), non-strings, and oversize values are bounded or replaced so the
+    warning stays one line and cannot inject a forged log entry.
+    """
+    empty = (
+        sanitize_untrusted_provenance_field(None),
+        sanitize_untrusted_provenance_field(None),
+        sanitize_untrusted_provenance_field(None),
+    )
+    try:
+        if raw is None or isinstance(raw, (str, bytes, list, tuple, int, float, bool)):
+            return empty
+        if isinstance(raw, dict):
+            provenance = raw.get('provenance')
+        else:
+            provenance = getattr(raw, 'provenance', None)
+        if provenance is None or isinstance(provenance, (str, bytes, list, tuple, int, float, bool)):
+            return empty
+        if isinstance(provenance, dict):
+            return (
+                sanitize_untrusted_provenance_field(provenance.get('model_id')),
+                sanitize_untrusted_provenance_field(provenance.get('runtime')),
+                sanitize_untrusted_provenance_field(provenance.get('device_class')),
+            )
+        return (
+            sanitize_untrusted_provenance_field(getattr(provenance, 'model_id', None)),
+            sanitize_untrusted_provenance_field(getattr(provenance, 'runtime', None)),
+            sanitize_untrusted_provenance_field(getattr(provenance, 'device_class', None)),
+        )
+    except Exception:
+        return empty
+
+
+def _log_client_projection_rejected(reason: str, raw: Any) -> None:
+    """Content-free reject log. Provenance is sanitized; never transcript or body."""
+    try:
+        model_id, runtime, device_class = _projection_provenance_for_log(raw)
+        logger.warning(
+            'client_processing rejected reason=%s model_id=%s runtime=%s device_class=%s',
+            reason,
+            model_id,
+            runtime,
+            device_class,
+        )
+    except Exception:
+        logger.warning('client_processing rejected reason=%s', reason)
+
+
+def _parse_client_projection(raw: Any) -> Optional[ClientProcessing]:
+    """Validate an untrusted projection payload. Invalid means drop, never 422."""
+    if raw is None:
+        return None
+    try:
+        return ClientProcessing.model_validate(raw)
+    except (TypeError, ValidationError, ValueError):
+        _log_client_projection_rejected('schema_invalid', raw)
+        return None
+
+
+def _bind_projection_to_segments(
+    projection: ClientProcessing,
+    segments: Any,
+    raw: Any,
+    *,
+    stored: bool,
+) -> Optional[ClientProcessing]:
+    """Bind a projection to a transcript, or drop it.
+
+    ``stored`` says whether these segments came off a persisted row. A stored
+    row must bind through ``transcript_sha256_for_binding``, which refuses a
+    legacy row whose identity was written before canonicalization: there, a
+    matching digest would not imply matching rendered attribution. Request
+    segments are not stored yet -- they are canonicalized on write -- so they
+    bind with the plain client-reproducible digest.
+    """
+    if stored:
+        expected = transcript_sha256_for_binding(segments or [])
+        if expected is None:
+            _log_client_projection_rejected('stored_transcript_not_canonical', raw)
+            return None
+    else:
+        expected = transcript_sha256(segments or [])
+    if expected != projection.transcript_sha256:
+        _log_client_projection_rejected('hash_mismatch', raw)
+        return None
+    return projection
+
+
+def _accepted_client_projection(
+    request: CreateConversationFromTranscriptRequest,
+    segments: List[TranscriptSegment],
+) -> Optional[ClientProcessing]:
+    """Bind a client projection to the stored transcript, or drop it.
+
+    Schema failure and hash mismatch are not request errors: the conversation
+    still lands, with the projection discarded and the coordinator storing the
+    deterministic minimum. The warning is content-free (reason plus provenance
+    only — never transcript or body). Provenance itself may be missing.
+    The digest is over ``segments`` — the canonical rows ingest persists —
+    so a client hashing the same canonicalization as ``canonical_segment``
+    matches what is stored and later rendered.
+    """
+    raw = getattr(request, 'client_processing', None)
+    projection = _parse_client_projection(raw)
+    if projection is None:
+        return None
+    return _bind_projection_to_segments(projection, segments, raw, stored=False)
+
+
+def _bind_late_client_projection(
+    uid: str,
+    existing_conversation: dict,
+    request: CreateConversationFromTranscriptRequest,
+) -> dict:
+    """Idempotency hit: bind a late projection to the stored transcript.
+
+    Updates only ``client_processing``. Never touches ``structured``, never
+    re-runs processing, never re-enters the coordinator. Invalid, mismatched,
+    or missing projection: return the existing document unchanged.
+    The write re-checks the digest against the transactional snapshot so a
+    T2 segment update cannot resurrect a T1 projection.
+    """
+    raw = getattr(request, 'client_processing', None)
+    if raw is None:
+        return existing_conversation
+    projection = _parse_client_projection(raw)
+    if projection is None:
+        return existing_conversation
+    stored_segments = existing_conversation.get('transcript_segments') or []
+    bound = _bind_projection_to_segments(projection, stored_segments, raw, stored=True)
+    if bound is None:
+        return existing_conversation
+    payload = client_processing_mutation(bound)
+    # Route-level hash is a fast drop. The write re-checks the stored
+    # transcript inside the same transaction so a T2 segment update that
+    # landed after this snapshot cannot resurrect a T1 projection.
+    if not conversations_db.bind_client_processing(uid, existing_conversation['id'], payload):
+        return existing_conversation
+    updated = dict(existing_conversation)
+    updated.update(payload)
+    return updated
+
+
 def _create_conversation_from_segments(
     uid: str,
     request: CreateConversationFromTranscriptRequest,
     *,
     client_device_id: Optional[str] = None,
     client_platform: Optional[str] = None,
+    client_kind: Optional[str] = None,
+    app_build: Optional[str] = None,
 ) -> ConversationResponse:
     """Shared impl: validate already-transcribed segments, build a CreateConversation, run the full
     processing pipeline (title, memories, action items, sync), and return the result. Used by both
@@ -1626,20 +1921,15 @@ def _create_conversation_from_segments(
         if not segment.text or len(segment.text.strip()) == 0:
             raise HTTPException(status_code=422, detail=f"Segment {idx}: text cannot be empty")
 
-    # Convert DevTranscriptSegment to TranscriptSegment
+    # Persist the canonical identity the digest binds. Hashing, storage, and
+    # rendering must see one value: a padded person_id is stored stripped, not
+    # hashed stripped and stored raw.
     transcript_segments = []
-    for seg in request.transcript_segments:
-        transcript_segments.append(
-            TranscriptSegment(
-                text=seg.text.strip(),
-                speaker=seg.speaker or 'SPEAKER_00',
-                speaker_id=seg.speaker_id,
-                is_user=seg.is_user,
-                person_id=seg.person_id,
-                start=seg.start,
-                end=seg.end,
-            )
-        )
+    for idx, seg in enumerate(request.transcript_segments):
+        stored = stored_transcript_segment(seg)
+        if stored is None:
+            raise HTTPException(status_code=422, detail=f"Segment {idx}: text cannot be empty")
+        transcript_segments.append(stored)
 
     # Calculate started_at and finished_at
     # started_at defaults to now
@@ -1692,6 +1982,7 @@ def _create_conversation_from_segments(
                     request.client_session_id,
                     conversation_id,
                 )
+                existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
                 receipt = record_and_persist_finalized_meeting_receipt(uid, existing_conversation)
                 if receipt is not None:
                     existing_conversation['meeting_treatment_eligible'] = bool(
@@ -1701,6 +1992,11 @@ def _create_conversation_from_segments(
 
     resolved_client_device_id = client_device_id or request.client_device_id
     resolved_client_platform = client_platform or request.client_platform
+
+    # Bind before any persist so the ingest-owner mutation can stamp the
+    # projection onto the processing row. The coordinator's generic persists
+    # never write this field.
+    client_projection = _accepted_client_projection(request, transcript_segments)
 
     # Create conversation object with transcript segments
     if conversation_id:
@@ -1728,9 +2024,12 @@ def _create_conversation_from_segments(
             },
             status=ConversationStatus.processing,
         )
-        if not lifecycle_service.create_processing_conversation(
-            uid, create_conversation_obj.model_dump(), idempotent=True
-        ):
+        # A null modeled field must not become an explicit Firestore key
+        # (persist is merge=True); the generic-payload helper drops it.
+        create_payload = omit_null_processing_state(strip_client_processing(create_conversation_obj.model_dump()))
+        if client_projection is not None:
+            create_payload.update(client_processing_mutation(client_projection))
+        if not lifecycle_service.create_processing_conversation(uid, create_payload, idempotent=True):
             existing_conversation = conversations_db.get_conversation(uid, conversation_id)
             if existing_conversation:
                 logger.info(
@@ -1739,6 +2038,7 @@ def _create_conversation_from_segments(
                     request.client_session_id,
                     conversation_id,
                 )
+                existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
                 receipt = record_and_persist_finalized_meeting_receipt(uid, existing_conversation)
                 if receipt is not None:
                     existing_conversation['meeting_treatment_eligible'] = bool(
@@ -1770,16 +2070,28 @@ def _create_conversation_from_segments(
     # processing row; the admission guard's lease heartbeat keeps it fresh so the
     # crash-orphan sweep can never terminalize active work. rollback_on_failure is
     # False because this path owns its own recovery (delete on exception below).
+    # Only pass client_projection when accepted: mocks and other callers that
+    # still use a 3-positional signature stay compatible, and omitting it is
+    # the same as None on the coordinator.
+    process_kwargs: dict = {}
+    if client_projection is not None:
+        process_kwargs['client_projection'] = client_projection
     try:
         if conversation_id:
             with lifecycle_service.processing_admission_guard(uid, conversation_id, rollback_on_failure=False):
-                conversation = process_conversation(uid, language_code, create_conversation_obj)
+                conversation = process_conversation(uid, language_code, create_conversation_obj, **process_kwargs)
         else:
-            conversation = process_conversation(uid, language_code, create_conversation_obj)
+            conversation = process_conversation(uid, language_code, create_conversation_obj, **process_kwargs)
     except Exception:
         if request.client_session_id and conversation_id:
             conversations_db.delete_conversation(uid, conversation_id)
         raise
+    # Non-idempotent ingest: the coordinator's generic persist stripped the
+    # field (paid / flag-off deferred). Stamp it now. The session-id path
+    # already wrote at create_processing and must not write again after a
+    # concurrent late-bind.
+    if client_projection is not None and not request.client_session_id:
+        conversations_db.bind_client_processing(uid, conversation.id, client_processing_mutation(client_projection))
     if request.client_session_id:
         logger.info(
             "from-segments idempotency persisted returned conversation uid=%s client_session_id=%s conversation_id=%s",
@@ -1787,7 +2099,9 @@ def _create_conversation_from_segments(
             request.client_session_id,
             conversation.id,
         )
-        lifecycle_service.persist_processed_conversation(uid, conversation.model_dump())
+        lifecycle_service.persist_processed_conversation(
+            uid, omit_null_processing_state(strip_client_processing(conversation.model_dump()))
+        )
 
     conversation.external_data = {
         **(conversation.external_data or {}),
@@ -1801,6 +2115,13 @@ def _create_conversation_from_segments(
     receipt = record_and_persist_finalized_meeting_receipt(uid, conversation)
     meeting_treatment_eligible = bool(receipt and receipt.get('meeting_treatment_eligible'))
 
+    # Only new successful ingests reach here; idempotent replays return above.
+    record_product_event(
+        "conversation_created",
+        client_kind=client_kind,
+        app_build=app_build,
+        uid=uid,
+    )
     return ConversationResponse(
         id=conversation.id,
         status=conversation.status.value if conversation.status else 'completed',
@@ -1826,6 +2147,8 @@ def create_conversation_from_segments_user(
         request,
         client_device_id=device_ctx.client_device_id,
         client_platform=device_ctx.platform,
+        client_kind=extract_client_kind(http_request),
+        app_build=extract_app_build(http_request),
     )
 
 
@@ -1838,7 +2161,7 @@ def create_conversation_from_segments_user(
 def create_conversation_from_segments(
     request: CreateConversationFromTranscriptRequest,
     http_request: Request,
-    uid: str = Depends(get_uid_with_conversations_write),
+    uid: str = Depends(get_uid_with_conversations_from_segments_write),
 ):
     """
     Create a new conversation from structured transcript segments.
@@ -1893,6 +2216,8 @@ def create_conversation_from_segments(
         request,
         client_device_id=device_ctx.client_device_id,
         client_platform=device_ctx.platform,
+        client_kind='unknown',
+        app_build='unknown',
     )
 
 
@@ -1919,7 +2244,11 @@ def delete_conversation_endpoint(
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
-    conversations_db.delete_conversation(uid, conversation_id)
+    # Lazy: keep developer routes off the merge/memory import graph so stubbed
+    # ``utils.memory.*`` tests can load this module without a complete retraction_scope.
+    from utils.conversations.merge_conversations import delete_conversation_with_sync_sources
+
+    delete_conversation_with_sync_sources(uid, conversation_id)
     return {"success": True}
 
 
@@ -2002,7 +2331,7 @@ class GoalResponse(BaseModel):
 
 
 class CreateGoalRequest(BaseModel):
-    model_config = ConfigDict(title='CreateGoalRequest')
+    model_config = ConfigDict(title='CreateGoalRequest', allow_inf_nan=False)
 
     title: str = Field(description="The goal title/description", min_length=1, max_length=500)
     desired_outcome: Optional[str] = Field(default=None, max_length=2000)
@@ -2018,7 +2347,7 @@ class CreateGoalRequest(BaseModel):
 
 
 class UpdateGoalRequest(BaseModel):
-    model_config = ConfigDict(title='UpdateGoalRequest')
+    model_config = ConfigDict(title='UpdateGoalRequest', allow_inf_nan=False)
 
     title: Optional[str] = Field(default=None, description="New title", min_length=1, max_length=500)
     desired_outcome: Optional[str] = Field(default=None, max_length=2000)
@@ -2189,7 +2518,7 @@ def update_goal(
 )
 def update_goal_progress(
     goal_id: str,
-    current_value: float = Query(..., description="New progress value"),
+    current_value: float = Query(..., description="New progress value", allow_inf_nan=False),
     uid: str = Depends(get_uid_with_goals_write),
 ):
     """

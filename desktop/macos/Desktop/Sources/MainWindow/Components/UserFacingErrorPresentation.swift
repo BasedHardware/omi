@@ -119,17 +119,26 @@ enum UserFacingErrorPresentation {
     return fallback(for: context)
   }
 
+  /// Raw-system-error fingerprints. Copy that carries none of them is copy this
+  /// app wrote, and is shown verbatim.
+  ///
+  /// This deliberately does not judge by sentence shape. A previous version also
+  /// required a trailing period and fewer than 120 characters, which flattened
+  /// five real connector messages into the generic fallback — including the
+  /// Calendar not-signed-in guidance, at exactly 120 characters, which is the
+  /// single most common Google connect failure and the one that most needs its
+  /// next step shown. Length and punctuation do not separate curated copy from
+  /// raw system text; the fingerprints below do.
   private static func shouldPreserveCuratedCopy(_ text: String) -> Bool {
     let lowered = text.lowercased()
     if text.count > 160 { return false }
-    if text.contains("://") || text.contains("Error Domain=") { return false }
-    if lowered.contains("nsurlerror") || lowered.contains("cfstream") { return false }
+    if text.contains("://") { return false }
+    // Catches `Error Domain=` and every bare `NS*ErrorDomain` spelling.
+    if lowered.contains("errordomain") { return false }
+    if lowered.contains("cfstream") { return false }
     if lowered.range(of: #"\b[45]\d{2}\b"#, options: .regularExpression) != nil { return false }
     if text.filter({ $0 == ":" }).count > 1 { return false }
-    if lowered.hasPrefix("omi ") || lowered.hasPrefix("couldn't ") || lowered.hasPrefix("didn't ") {
-      return true
-    }
-    return text.hasSuffix(".") && text.count < 120
+    return true
   }
 
   private static func fallback(for context: Context) -> String {

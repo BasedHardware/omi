@@ -43,14 +43,16 @@ function makeQuery(filters: Filters): any {
         async get() {
           if (failEverything) throw new Error("UNAVAILABLE");
           if (rejectPayerFilter && filters.payer) {
-            throw new Error("FAILED_PRECONDITION: The query requires an index.");
+            throw new Error(
+              "FAILED_PRECONDITION: The query requires an index."
+            );
           }
           queries.push(filters);
           const key = filters.provider
             ? `provider:${filters.provider}`
             : filters.feature
-              ? `feature:${filters.feature}`
-              : "";
+            ? `feature:${filters.feature}`
+            : "";
           const hit = SUMS[key] ?? { micro: 0, count: 0 };
           return { data: () => hit };
         },
@@ -109,7 +111,10 @@ describe("fetchGatewayLedgerDays", () => {
       expect(q.date).toBe(DAY);
       expect(q.payer).toBe("omi");
     }
-    expect(mockSetPayload).toHaveBeenCalledWith(`gateway-ledger:v1:${DAY}`, day);
+    expect(mockSetPayload).toHaveBeenCalledWith(
+      `gateway-ledger:v1:${DAY}`,
+      day
+    );
   });
 
   it("credits unclassified spend to unknown rather than to a class", async () => {
@@ -139,12 +144,20 @@ describe("fetchGatewayLedgerDays", () => {
       date: DAY,
       totalUsd: 7,
       byProvider: {},
-      byClass: { desktop: 7, mobile: 0, sharedExtraction: 0, sharedChat: 0, unknown: 0 },
+      byClass: {
+        desktop: 7,
+        mobile: 0,
+        sharedExtraction: 0,
+        sharedChat: 0,
+        unknown: 0,
+      },
       attemptCount: 1,
       byokIncluded: false,
     };
     mockGetPayload.mockImplementation(async (key: unknown) =>
-      key === `gateway-ledger:v1:${DAY}` ? ({ data: cached, freshAt: 1 } as any) : null,
+      key === `gateway-ledger:v1:${DAY}`
+        ? ({ data: cached, freshAt: 1 } as any)
+        : null
     );
     const { fetchGatewayLedgerDays } = await load();
 
@@ -160,6 +173,8 @@ describe("fetchGatewayLedgerDays", () => {
 
     // Desktop-only surfaces.
     expect(FEATURE_CLASS.workstream_association).toBe("desktop");
+    expect(FEATURE_CLASS.desktop_proactivity).toBe("desktop");
+    expect(FEATURE_CLASS.desktop_chat_realtime).toBe("desktop");
     expect(FEATURE_CLASS.chat_structured).toBe("desktop");
     // Coarse usage-context names that override the model_config feature on the
     // wire (backend/utils/llm/gateway_client.py `_gateway_usage_headers`).
@@ -172,8 +187,12 @@ describe("fetchGatewayLedgerDays", () => {
     // Gateway-side fallback labels and shadow runs.
     expect(FEATURE_CLASS.image_generation).toBe("sharedExtraction");
     expect(FEATURE_CLASS.public_shared_conversation_chat).toBe("sharedChat");
-    expect(FEATURE_CLASS["conversation_structure.extract.shadow"]).toBe("sharedExtraction");
-    expect(FEATURE_CLASS["conversation_action_items.extract.shadow"]).toBe("sharedExtraction");
+    expect(FEATURE_CLASS["conversation_structure.extract.shadow"]).toBe(
+      "sharedExtraction"
+    );
+    expect(FEATURE_CLASS["conversation_action_items.extract.shadow"]).toBe(
+      "sharedExtraction"
+    );
   });
 
   it("aggregates every classified feature, including the newly added ones", async () => {

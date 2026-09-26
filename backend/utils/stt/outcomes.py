@@ -12,6 +12,12 @@ _KNOWN_PROVIDERS = {
     PrerecordedSTTService.DEEPGRAM,
     PrerecordedSTTService.MODULATE,
     PrerecordedSTTService.PARAKEET,
+    # Live-path provider tokens (config.stt_provider_policy). The live socket
+    # and failover paths label failures with these; omitting them laundered
+    # every soniox and deepgram_cloud terminal failure to provider='unknown'
+    # in omi_live_stt_terminal_failures_total.
+    'soniox',
+    'deepgram_cloud',
 }
 
 _PUBLIC_FAILURES: dict[TranscriptionOutcome, tuple[int, str, str]] = {
@@ -121,6 +127,25 @@ def failure_from_exception(error: BaseException, *, provider: str | None = None)
             retryable=False,
         )
     return TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider)
+
+
+def is_destructive_operation_in_progress(error: BaseException) -> bool:
+    '''True when a transient account-level destructive-op fence is in the chain.'''
+
+    # Match by type name so Cloud Tasks tests (MagicMock `database`) and the
+    # real legal-hold fence both stay identifiable without an issubclass guard
+    # pyright rejects as always-true.
+    return any(type(item).__name__ == 'DestructiveOperationInProgress' for item in _exception_chain(error))
+
+
+def sync_failure_from_exception(error: BaseException, *, provider: str | None = None) -> TranscriptionFailure:
+    '''Map a sync-job exception without collapsing a transient fence to generic STT failure.'''
+
+    if is_destructive_operation_in_progress(error):
+        failure = TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider, retryable=True)
+        failure.error_code = 'destructive_operation_in_progress'
+        return failure
+    return failure_from_exception(error, provider=provider)
 
 
 def empty_unexpected_failure(provider: str | None = None) -> TranscriptionFailure:

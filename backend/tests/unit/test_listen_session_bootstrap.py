@@ -96,3 +96,38 @@ async def test_load_listen_connect_context_returns_offloaded_state():
     assert ctx.transcription_prefs == prefs
     assert ctx.language == "en"
     assert mock_run_blocking.await_count >= 3
+
+
+@pytest.mark.asyncio
+async def test_custom_stt_skips_stt_credits_but_still_admits(monkeypatch):
+    """#7690: custom-STT never asks has_transcription_credits; connect still admits."""
+    from utils import listen_session_bootstrap as bootstrap
+
+    called: list[str] = []
+
+    async def fake_run_blocking(_executor, fn, *args, **kwargs):
+        name = getattr(fn, "__name__", "")
+        called.append(name)
+        if name == "has_transcription_credits":
+            raise AssertionError("custom-STT must skip STT credits")
+        if name == "is_exists_user":
+            return True
+        if name == "get_user_transcription_preferences":
+            return {"single_language_mode": True, "vocabulary": [], "language": "en", "uses_custom_stt": True}
+        raise AssertionError(f"unexpected offload {name}")
+
+    monkeypatch.setattr(bootstrap, "FAIR_USE_ENABLED", False)
+    monkeypatch.setattr(bootstrap, "run_blocking", fake_run_blocking)
+
+    ctx = await bootstrap.load_listen_connect_context(
+        "uid-custom-stt",
+        language="en",
+        source="omi",
+        use_custom_stt=True,
+        onboarding_mode=False,
+        stt_language="en",
+    )
+
+    assert ctx.user_has_credits is True
+    assert "has_transcription_credits" not in called
+    assert "is_exists_user" in called

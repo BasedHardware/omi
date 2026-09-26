@@ -14,6 +14,33 @@ enum JITProactivityLane: String, Equatable, Sendable {
   case ambient
 }
 
+/// Whether the current owner's proactivity is routed through the JIT lanes.
+///
+/// Set by `JITProactivityCoordinator` from the backend rollout verdict on every
+/// context visit. Legacy per-frame producers that the JIT lanes replace (the
+/// focus-nudge assistant) read it so the two never run side by side for one
+/// owner. It is derived state, never authority: the backend flag and kill
+/// switch remain the only enrolment path.
+@MainActor
+enum JITProactivityLaneState {
+  private static var activeOwnerID: String?
+
+  /// True only for the owner the backend last admitted. A different or absent
+  /// owner reads false, so sign-out and account transitions need no reset.
+  static func isActive(ownerID: String?) -> Bool {
+    guard let ownerID, !ownerID.isEmpty else { return false }
+    return activeOwnerID == ownerID
+  }
+
+  static func update(ownerID: String, active: Bool) {
+    if active {
+      activeOwnerID = ownerID
+    } else if activeOwnerID == ownerID {
+      activeOwnerID = nil
+    }
+  }
+}
+
 enum JITAmbientNanoTriage: Equatable, Sendable {
   case approved
   case rejected
@@ -31,17 +58,22 @@ struct JITProactivityFlags: Equatable, Sendable {
   /// field is wire compatibility, not an unknown-off veto; a present
   /// `unknown` still fails closed.
   let killSwitchPresent: Bool
+  /// Optional server capability for the qualification-only full-turn budget.
+  /// Older servers omit it; omission keeps the released JIT route unchanged.
+  let budgetContractVersion: String?
 
   init(
     rollout: JITProactivityRolloutState,
     killSwitch: JITProactivityRolloutState,
     effective: JITProactivityRolloutState = .unknown,
-    killSwitchPresent: Bool = true
+    killSwitchPresent: Bool = true,
+    budgetContractVersion: String? = nil
   ) {
     self.rollout = rollout
     self.killSwitch = killSwitch
     self.effective = effective
     self.killSwitchPresent = killSwitchPresent
+    self.budgetContractVersion = budgetContractVersion
   }
 
   /// The server-computed `effective` verdict owns admission: the client must

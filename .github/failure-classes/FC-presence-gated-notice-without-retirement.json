@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-presence-gated-notice-without-retirement",
+  "violated_contract": "A per-event notice whose delivery is gated on the consumer being present must carry a rule that retires it when it stops being worth delivering. Without one the producer writes a row per event and nothing ever removes it, so the queue grows for exactly as long as the consumer is absent and the eventual arrival replays the whole backlog in one batch -- stamped with the consumer's own clock, which makes a week of late notices read as a burst sent just now rather than as late ones. The defect is invisible to everyone who is watching: a present consumer drains each notice before a second can accumulate, so every test, demo, and dogfood session sees the correct one-notice-per-event behaviour, and only an account that stepped away ever meets the failure. A staleness threshold that is measured and reported but never acted on is not a retirement rule; it makes the backlog observable without bounding it.",
+  "canonical_prevention": "Decide retirement in the one place that decides deliverability, and express it as two bounds on the notice itself: superseded -- an older notice about the same subject class has been overtaken by a newer one -- and expired -- the notice is older than the window in which a consumer could still have acted on it. Retire transactionally, re-reading the row so a notice another consumer already claimed is never taken from under it, bound the retirement writes per pass so a long backlog cannot make one fetch linear in its size, and emit a lifecycle metric for each retirement so the drop is reported rather than silent. Pin it with a test that a backlog collapses to one deliverable notice and a test that the live one-at-a-time path is unchanged.",
+  "canonical_prevention_artifact": [
+    "backend/database/chat_first_intents.py",
+    "backend/tests/unit/test_chat_first_proactive_intents.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/chat_first_intents.py",
+    "backend/routers/chat_first.py",
+    "backend/utils/task_intelligence/proactive_engine.py"
+  ],
+  "status": "open"
+}

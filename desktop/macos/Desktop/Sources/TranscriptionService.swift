@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 /// Service for real-time speech-to-text transcription.
@@ -93,6 +94,8 @@ class TranscriptionService: @unchecked Sendable {
 
   private let apiKey: String
   private var webSocketTask: URLSessionWebSocketTask?
+  /// Main-actor owned; see attachClientState().
+  private var clientStateSubscription: AnyCancellable?
   private var urlSession: URLSession?
   private var webSocketDelegate: WebSocketConnectionDelegate?
   // Internal for @testable import access in unit tests
@@ -313,6 +316,34 @@ class TranscriptionService: @unchecked Sendable {
     }
   }
 
+  /// Report foreground / live-transcript visibility for the backend's real-time
+  /// demand measurement. Subscribed on every socket open, so reconnects re-send
+  /// the current state; `@Published` replays it on subscription.
+  @MainActor private func attachClientState() {
+    clientStateSubscription = ListenClientState.shared.$snapshot
+      .removeDuplicates()
+      .sink { [weak self] snapshot in self?.sendClientState(snapshot) }
+  }
+
+  @MainActor private func detachClientState() {
+    clientStateSubscription?.cancel()
+    clientStateSubscription = nil
+  }
+
+  private func sendClientState(_ snapshot: ListenClientState.Snapshot) {
+    guard streamingMode == .conversation,
+      isConnected,
+      let webSocketTask,
+      let data = try? JSONSerialization.data(withJSONObject: snapshot.jsonObject),
+      let message = String(data: data, encoding: .utf8)
+    else { return }
+    webSocketTask.send(.string(message)) { error in
+      if let error {
+        logError("TranscriptionService: Failed to send client state", error: error)
+      }
+    }
+  }
+
   /// Send audio data to the backend (buffered for efficiency)
   func sendAudio(_ data: Data) {
     guard isConnected else { return }
@@ -527,6 +558,9 @@ class TranscriptionService: @unchecked Sendable {
     lastDataReceivedAt = Date()
     log("TranscriptionService: WebSocket opened (handshake complete)")
     startWatchdog()
+    if streamingMode == .conversation {
+      MainActor.assumeIsolated { attachClientState() }
+    }
     onConnected?()
   }
 
@@ -552,6 +586,7 @@ class TranscriptionService: @unchecked Sendable {
 
   private func disconnect() {
     isConnected = false
+    Task { @MainActor [weak self] in self?.detachClientState() }
     watchdogTask?.cancel()
     watchdogTask = nil
     webSocketTask?.cancel(with: .normalClosure, reason: nil)
@@ -567,6 +602,7 @@ class TranscriptionService: @unchecked Sendable {
     guard isConnected else { return }
 
     isConnected = false
+    Task { @MainActor [weak self] in self?.detachClientState() }
     watchdogTask?.cancel()
     watchdogTask = nil
     webSocketTask = nil
@@ -645,7 +681,15 @@ class TranscriptionService: @unchecked Sendable {
 
       case .failure(let error):
         guard self.isConnected else { return }
-        logError("TranscriptionService: Receive error", error: error)
+        // The server's close frame, when there was one, is the only thing that
+        // says *why* the socket went away; `handleDisconnection` drops the task
+        // and its delegate, so it has to be read here or not at all.
+        let task = self.webSocketTask
+        let reason = task?.closeReason.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        logError(
+          "TranscriptionService: Receive error (closeCode=\(task?.closeCode.rawValue ?? -1)"
+            + (reason.isEmpty ? ")" : " reason=\(reason))"),
+          error: error)
         self.handleDisconnection()
       }
     }
@@ -770,6 +814,10 @@ extension TranscriptionService {
     request.httpMethod = "POST"
     request.setValue(authHeader, forHTTPHeaderField: "Authorization")
     request.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+    // Same provenance header the WebSocket upgrade sends (see connect):
+    // without it the backend labels desktop PTT dictation journeys
+    // client_platform=unknown on the voice_rest_pcm route.
+    request.setValue("macos", forHTTPHeaderField: "X-App-Platform")
     if let entry = APIKeyService.activeBYOKSnapshot[.deepgram] {
       request.setValue(entry.key, forHTTPHeaderField: BYOKProvider.deepgram.headerName)
     }

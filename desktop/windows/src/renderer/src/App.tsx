@@ -9,6 +9,7 @@ import { TitleBar } from './components/layout/TitleBar'
 import { Spinner } from './components/ui/Spinner'
 import { DbRecoveryNotice } from './components/ui/DbRecoveryNotice'
 import { DegradedModeNotice } from './components/ui/DegradedModeNotice'
+import { RewindCaptureNotice } from './components/ui/RewindCaptureNotice'
 import { ToastHost } from './components/ui/ToastHost'
 import { purgeAppMemoriesOnce } from './lib/appMemories'
 import { AppStateProvider } from './state/AppStateProvider'
@@ -132,6 +133,8 @@ function AppShellInner(): React.JSX.Element {
       <DbRecoveryNotice />
       {/* Only renders during a backend 429 storm; self-clears on recovery. */}
       <DegradedModeNotice />
+      {/* Only renders when Rewind is enabled but can't get a screen source. */}
+      <RewindCaptureNotice />
       <AppChrome>
         <MainViews />
       </AppChrome>

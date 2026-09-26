@@ -1,9 +1,9 @@
 from datetime import datetime, timezone
 from enum import Enum
 import re
-from typing import Any, Dict, List, Mapping, Optional, Sequence, cast
+from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, cast
 
-from pydantic import BaseModel, Field, computed_field, field_validator
+from pydantic import AwareDatetime, BaseModel, Field, computed_field, field_validator
 
 from config.memory_confidence import (
     CONFIDENCE_BANDS,
@@ -87,6 +87,22 @@ CATEGORY_BOOSTS = {
 }
 
 
+class MemoryCaptureContext(BaseModel):
+    """Original capture metadata, separate from API transport and device."""
+
+    source_type: str = Field(max_length=64)
+    captured_at: Optional[AwareDatetime] = None
+    source_id: Optional[str] = Field(default=None, max_length=512)
+    source_version: Optional[str] = Field(default=None, max_length=128)
+    source_signal: Optional[str] = Field(default=None, max_length=64)
+    independence_group: Optional[str] = Field(default=None, max_length=512)
+    lineage_id: Optional[str] = Field(default=None, max_length=512)
+    attribution: Optional[
+        Literal["unknown", "assistant", "inferred", "third_party", "screen", "user_spoken", "user_written"]
+    ] = None
+    quote_refs: List[Dict[str, Any]] = Field(default_factory=list, max_length=5)
+
+
 class Memory(BaseModel):
     content: str = Field(description="The content of the memory")
     category: MemoryCategory = Field(description="The category of the memory", default=MemoryCategory.interesting)
@@ -120,6 +136,11 @@ class Memory(BaseModel):
         description="Reasons this fact needs caution or review", default_factory=list
     )
     durability: Optional[str] = Field(description="Expected durability horizon for the fact", default=None)
+    subject_scope: Optional[MemorySubjectScope] = Field(default=None)
+    belief_class: Optional[str] = Field(default=None)
+    half_life_days: Optional[float] = Field(default=None)
+    valid_to: Optional[datetime] = Field(default=None)
+    capture_context: Optional[MemoryCaptureContext] = Field(default=None)
 
     @field_validator('category', mode='before')
     @classmethod
@@ -163,9 +184,10 @@ class Memory(BaseModel):
         for f in memories:
             content = getattr(f, 'content', '')
             created_at = getattr(f, 'created_at', None)
-            # Include created_at if available (for MemoryDB objects)
-            if isinstance(created_at, datetime):
-                date_str = created_at.strftime('%Y-%m-%d %H:%M:%S UTC')
+            as_of = getattr(f, 'as_of', None)
+            stamp = as_of if isinstance(as_of, datetime) else created_at
+            if isinstance(stamp, datetime):
+                date_str = stamp.strftime('%Y-%m-%d %H:%M:%S UTC')
                 result += f"- {content} ({date_str})\n"
             else:
                 result += f"- {content}\n"
@@ -361,6 +383,11 @@ class Evidence(BaseModel):
     redaction_status: str = "active"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     client_device_id: Optional[str] = None
+    source_version: Optional[str] = None
+    lineage_id: Optional[str] = None
+    attribution: Optional[str] = None
+    quote_refs: List[Dict[str, Any]] = Field(default_factory=list)
+    captured_at: Optional[AwareDatetime] = None
 
     @staticmethod
     def from_source(
@@ -614,6 +641,14 @@ class MemoryDB(Memory):
     trigger_condition: Dict[str, Any] = Field(default_factory=dict)
     intent_backed: bool = False
     write_reason: Optional[LedgerWriteReason] = None
+    half_life_days: Optional[float] = None
+    belief_class: Optional[str] = None
+    currency: Optional[float] = None
+    currency_band: Optional[str] = None
+    as_of: Optional[datetime] = None
+    # Assessment time is distinct from as_of (the original evidence clock).
+    # Clients retain it when caching a read-side belief projection.
+    belief_computed_at: Optional[datetime] = None
 
     def __init__(self, **data: Any) -> None:
         super().__init__(**data)
@@ -648,6 +683,7 @@ class MemoryDB(Memory):
         source_id: Optional[str] = None,
         source_type: Optional[str] = None,
         source_signal: Optional[str] = None,
+        source_captured_at: Optional[datetime] = None,
         artifact_ref: Optional[Dict[str, Any]] = None,
         extractor_id: str = "memory_extractor",
         extractor_version: str = "v1",
@@ -683,6 +719,31 @@ class MemoryDB(Memory):
             created_at=now,
             client_device_id=client_device_id,
         )
+        evidence.captured_at = source_captured_at
+        if memory.capture_context is not None:
+            context = memory.capture_context
+            evidence = Evidence.from_source(
+                source_id=context.source_id,
+                source_type=context.source_type,
+                source_signal=context.source_signal or "unknown",
+                extractor_id=extractor_id,
+                extractor_version=extractor_version,
+                artifact_ref=artifact_ref,
+                capture_confidence=capture_confidence,
+                # An omitted family stays unknown; don't create corroboration
+                # identity from a fresh screenshot timestamp or memory ID.
+                independence_group=context.independence_group or context.lineage_id or "unknown",
+                created_at=now,
+                client_device_id=client_device_id,
+            ).model_copy(
+                update={
+                    "captured_at": context.captured_at or source_captured_at,
+                    "source_version": context.source_version,
+                    "lineage_id": context.lineage_id,
+                    "attribution": context.attribution,
+                    "quote_refs": context.quote_refs,
+                }
+            )
         confidence_fields = confidence_fields_for_evidence([evidence], resolved_attribution)
         memory_db = MemoryDB(
             id=memory_id,
@@ -710,6 +771,10 @@ class MemoryDB(Memory):
             uncertainty_reasons=confidence_fields['uncertainty_reasons'],
             durability=memory.durability,
             memory_tier=decide_initial_memory_tier(manually_added, memory.durability),
+            subject_scope=memory.subject_scope,
+            belief_class=memory.belief_class,
+            half_life_days=memory.half_life_days,
+            invalid_at=memory.valid_to,
         )
         memory_db.scoring = MemoryDB.calculate_score(memory_db)
         return memory_db

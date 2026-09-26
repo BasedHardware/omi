@@ -28,8 +28,9 @@ final class PhoneMicController {
     private let audioQueue = DispatchQueue(label: "com.omi.phonemic.audio", qos: .userInitiated)
     private let generation = PhoneMicGeneration()
     private let emitter: PhoneMicEventEmitter
-    private var monitor: PhoneMicInterruptionMonitor?
-    private var engine: PhoneMicCaptureEngine?
+    private let environment: PhoneMicControllerEnvironment
+    private var monitor: PhoneMicInterruptionSource?
+    private var engine: PhoneMicEngineControlling?
 
     private var state: State = .idle
     private var pendingStop = false
@@ -48,15 +49,16 @@ final class PhoneMicController {
     // event the emitter sends carries it; a start() onto a live session adopts the
     // new caller's id here so future events converge to that caller's Dart session.
     private var currentSessionId: Int64 = 0
-    private var batchEncoder: PhoneMicOpusEncoder?
-    private var batchWriter: PhoneMicBatchAudioWriter?
+    private var batchEncoder: PhoneMicBatchEncoding?
+    private var batchWriter: PhoneMicBatchWriting?
     private var batchMarker = "omibatchphone"
     private var progressTimer: DispatchSourceTimer?
 
-    init(flutterApi: PhoneMicFlutterApi) {
-        self.emitter = PhoneMicEventEmitter(api: flutterApi, generation: generation)
-        self.monitor = PhoneMicInterruptionMonitor(controlQueue: controlQueue) { [weak self] event in
-            self?.handleMonitorEvent(event)
+    init(environment: PhoneMicControllerEnvironment) {
+        self.environment = environment
+        self.emitter = PhoneMicEventEmitter(sink: environment.sink, generation: generation)
+        self.monitor = environment.makeMonitor(controlQueue) { [weak self] signal in
+            self?.handleMonitorSignal(signal)
         }
     }
 
@@ -116,7 +118,7 @@ final class PhoneMicController {
             monitor?.startObserving()
             emitter.emitState(.starting, sessionId: sessionId)
             NSLog("[PhoneMic] starting mode=%@, route %@",
-                  mode == .batch ? "batch" : "stream", PhoneMicSessionConfigurator.describeCurrentRoute())
+                  mode == .batch ? "batch" : "stream", environment.describeRoute())
             checkPermissionThenBringUp()
         }
     }
@@ -139,13 +141,13 @@ final class PhoneMicController {
     // MARK: - Bring-up (initial start)
 
     private func checkPermissionThenBringUp() {
-        switch PhoneMicPermissionGate.current() {
+        switch environment.permission.current() {
         case .granted:
             performStartBringUp()
         case .denied:
             failStart(code: "permission_denied", message: "Microphone permission denied")
         case .undetermined:
-            PhoneMicPermissionGate.request { [weak self] granted in
+            environment.permission.request { [weak self] granted in
                 self?.controlQueue.async {
                     guard let self, self.state == .starting else { return }
                     if granted {
@@ -188,7 +190,7 @@ final class PhoneMicController {
             return failure
         }
         do {
-            try PhoneMicSessionConfigurator.configureAndActivate()
+            try environment.configureSession()
         } catch {
             return ("session_config_failed", error.localizedDescription)
         }
@@ -196,15 +198,11 @@ final class PhoneMicController {
         teardownEngine()
         let epoch = generation.advance()
         let onConvertedData = makeConvertedDataSink(epoch: epoch)
-        let newEngine = PhoneMicCaptureEngine(
-            audioQueue: audioQueue,
-            onConvertedData: onConvertedData,
-            onConvertError: { [weak self] error, epoch in
-                self?.controlQueue.async {
-                    self?.handleConvertError(error, epoch: epoch)
-                }
+        let newEngine = environment.makeEngine(audioQueue, onConvertedData, { [weak self] error, epoch in
+            self?.controlQueue.async {
+                self?.handleConvertError(error, epoch: epoch)
             }
-        )
+        })
         do {
             try newEngine.buildAndInstallTap(epoch: epoch)
         } catch PhoneMicCaptureEngine.EngineError.formatInvalid {
@@ -221,14 +219,14 @@ final class PhoneMicController {
             return ("engine_start_failed", error.localizedDescription)
         }
         engine = newEngine
-        monitor?.bindEngine(newEngine.engine)
+        monitor?.bindEngine(newEngine.audioEngineForMonitor)
         return nil
     }
 
     private func enterRunning() {
         cancelResumeTicker()
         state = .running
-        NSLog("[PhoneMic] running, route %@", PhoneMicSessionConfigurator.describeCurrentRoute())
+        NSLog("[PhoneMic] running, route %@", environment.describeRoute())
         emitter.emitState(.running, sessionId: currentSessionId)
         // Batch progress ticker: armed once on first reach of running, kept alive
         // across interruptions/rebuilds (its arrival is the Dart liveness signal),
@@ -314,8 +312,8 @@ final class PhoneMicController {
 
     // MARK: - Monitor events (controlQueue)
 
-    private func handleMonitorEvent(_ event: PhoneMicInterruptionMonitor.Event) {
-        switch event {
+    private func handleMonitorSignal(_ signal: PhoneMicInterruptionSignal) {
+        switch signal {
         case .interruptionBegan:
             guard state == .running || state == .rebuilding else { return }
             NSLog("[PhoneMic] interruption began")
@@ -350,10 +348,10 @@ final class PhoneMicController {
                 break
             }
 
-        case .routeChanged(let reason):
+        case .routeChanged(let reasonDescription):
             guard state == .running else { return }
-            NSLog("[PhoneMic] route changed (%lu), rebuilding: %@",
-                  reason.rawValue, PhoneMicSessionConfigurator.describeCurrentRoute())
+            NSLog("[PhoneMic] route changed (%@), rebuilding: %@",
+                  reasonDescription, environment.describeRoute())
             beginRebuild()
 
         case .engineConfigChanged:
@@ -483,16 +481,15 @@ final class PhoneMicController {
     /// existing retry/fail path surface it as the start() error.
     private func ensureBatchResources() -> (code: String, message: String)? {
         if batchEncoder != nil, batchWriter != nil { return nil }
-        let defaults = UserDefaults.standard
-        guard let dir = defaults.string(forKey: "flutter.batchAudioDir"), !dir.isEmpty else {
+        guard let dir = environment.batchDirectory(), !dir.isEmpty else {
             return ("batch_dir_unavailable", "flutter.batchAudioDir is unset or empty")
         }
-        guard let encoder = PhoneMicOpusEncoder() else {
+        guard let encoder = environment.makeEncoder() else {
             return ("opus_init_failed", "could not create the opus encoder")
         }
-        batchMarker = defaults.bool(forKey: "flutter.phoneBatchAuto") ? "omibatchphoneauto" : "omibatchphone"
+        batchMarker = environment.batchAutoMarker() ? "omibatchphoneauto" : "omibatchphone"
         batchEncoder = encoder
-        batchWriter = PhoneMicBatchAudioWriter(dir: dir, queue: audioQueue)
+        batchWriter = environment.makeWriter(dir, audioQueue)
         return nil
     }
 

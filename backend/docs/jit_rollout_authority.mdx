@@ -1,0 +1,127 @@
+---
+title: JIT rollout authority
+description: Read-only, backend-authoritative rollout decisions for just-in-time processing.
+---
+
+The backend owns JIT rollout eligibility. Clients cannot opt themselves in and
+cannot choose the identity evaluated by the control plane. Both the main API
+and desktop backend expose `GET /v1/jit/rollout-decision`; the route derives its
+only identity from the verified Firebase bearer token.
+
+## Decision contract
+
+The response reports three tri-state values: `rollout`, `kill_switch`, and
+`effective`. Each is `enabled`, `disabled`, or `unknown`. Work is permitted
+only when `effective` is `enabled`: the authenticated UID is on the
+code-owned two-UID allowlist, or PostHog `jit-processing-v1` is boolean
+`true` for that UID.
+
+The single admission flag is `jit-processing-v1`.
+`jit-processing-kill-switch-v1` is live and is the only allowlist revoke: a
+known-true kill switch disables work even for the hardcoded two-UID allowlist.
+`permits_work` is the authorizer for ledger migration, the daily-sweep job
+cohort, trigger snapshots, and prompt/mirror snapshots. Sweep's
+`MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG` is not.
+
+These keys are not admission authority and are not read:
+
+- `jit-processing-ledger-migration-v1`
+- `daily-memory-sweep-v1` (decoy flag name on the sweep job)
+
+The allowlist still admits when PostHog is down **unless** the kill switch is
+known-true. A known-false or absent `jit-processing-v1` is `disabled` for
+everyone else. Provider timeouts, missing configuration, and malformed values
+stay `unknown` and fail closed for non-allowlist users.
+
+Fully known answers may be cached per authenticated UID for at most 30
+seconds; unknown/error answers use a short negative cache. Query parameters
+and client feature state have no authority. The `kill_switch` field on the
+wire reports `jit-processing-kill-switch-v1`; it is not always `disabled`.
+
+## Knowledge-writer transition contract
+
+PostHog decides whether JIT work is eligible; it is not the durable memory
+writer switch. Each user's canonical apply-control record owns a monotonically
+increasing writer epoch and one of four modes:
+
+| Mode | Ordinary compatibility writes | Ordinary ledger writes | Direct user mutations | Internal migration writes |
+| --- | --- | --- | --- | --- |
+| `compatibility` | allowed | blocked | allowed | allowed with migration authority |
+| `transitioning_to_ledger` | blocked | blocked | blocked | allowlisted schema adaptation only |
+| `ledger` | blocked | allowed | allowed | no-op/resume validation only |
+| `transitioning_to_compatibility` | blocked | blocked | blocked | blocked |
+
+Missing writer fields on a pre-bridge control record decode as
+`compatibility` at epoch zero. Unknown modes, negative epochs, a transition
+without its owner, or a stable mode with a transition owner fail closed.
+Privacy and account-deletion authority is independent and continues to win in
+every mode.
+
+Migration may adapt bounded batches while compatibility writers remain live.
+Those internal mutations preserve canonical row identity and physical legacy
+history. Final cutover is a drain:
+
+1. Enter `transitioning_to_ledger` with an exact control fence. This increments
+   the writer epoch and source generation, invalidating every older prompt
+   receipt and causing any late compatibility write to lose its transaction.
+2. Re-scan the complete bounded compatibility union and migrate any write that
+   won before the transition. Both ordinary writer classes remain blocked.
+   Only the dedicated pre-ledger schema-adaptation field set is admitted, and
+   cumulative migrated/adjudicated counters advance in the same transaction as
+   each row so resumed batches cannot undercount completion.
+3. Atomically publish migration completion and the prompt receipt at the exact
+   transitioning epoch, then atomically publish the content-free union proof
+   with the move to `ledger`. Readers accept the receipts only after the
+   control record is stably `ledger`, so the two control transactions have one
+   externally visible cutover point. Rollout authority is resolved again at
+   both transactions, including immediately before activating ledger mode.
+   Failure, authorization revocation, or an
+   exhausted bound aborts to `compatibility`; a later authorized run resumes
+   from the preserved canonical rows.
+
+Rollback does not reverse-migrate, down-convert, copy, overwrite, or delete
+ledger rows. It is supported only by a bridge-capable backend containing this
+state machine:
+
+1. Enter `transitioning_to_compatibility`, invalidating ledger prompt authority
+   and rejecting late ledger writes at the canonical transaction fence.
+2. Prove a complete bounded union under that exact epoch: current facts remain
+   readable, playbooks remain bounded handles, triggers remain preserved but
+   inert, and closed/rejected/superseded/migrated rows remain history.
+3. Publish a content-free receipt and enter `compatibility` atomically.
+   Compatibility writers append non-ledger rows to the same canonical store;
+   readers serve the ledger/non-ledger union without a second authority.
+   Direct user edits, corrections/reverts, review, visibility, and product
+   metadata remain admitted in stable compatibility mode and preserve migrated
+   ledger rows; they are fenced while either transition is in progress.
+4. A later roll-forward pre-migrates only new active non-ledger rows, repeats
+   the drain, and publishes a new ledger receipt.
+
+An arbitrary binary from before the bridge contract is not a supported
+rollback target. Deployment, real-user transition, cohort draining, and live
+rollback/roll-forward remain separately authorized operations. Never infer
+writer mode from a client flag, delete physical legacy documents, or reuse a
+user-deletion tombstone as rollback state.
+
+## Paid-work enforcement
+
+`POST /v1/desktop/proactivity/completions` resolves the decision before quota
+reservation or provider selection. It then bypasses the cache and refreshes
+the exposure flag immediately before constructing or calling the model
+provider. A late disable releases the quota reservation and makes no model
+call.
+
+The implementation is dark by default. It does not create or enable PostHog
+flags or cohorts, deploy a service, or enroll a user. The desktop backend's
+development and production deploy contracts bind
+`POSTHOG_PROJECT_API_KEY` from Secret Manager so the authority can query
+server-owned flags when operators enable the rollout; the binding itself does
+not enroll users or turn the feature on. PostHog decide calls use an isolated,
+bounded control-plane bulkhead and same-UID coalescing so flag fanout cannot
+starve the shared sync executor.
+
+## Telemetry boundary
+
+Decision logs contain only bounded values for decision, reason, stage, latency,
+cost class, and error class. They never contain UID, prompt, memory, transcript,
+OCR, image, URL, or exception text.

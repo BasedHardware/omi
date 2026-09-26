@@ -8,6 +8,8 @@ import { motion } from 'framer-motion';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { cn } from '@/lib/utils';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { TextSwap } from '@/components/ui/TextSwap';
+import { replayErrorShake } from '@/lib/transitionsDev';
 import { isFirebaseAuthConfigured } from '@/lib/firebase';
 import {
   claimReferralTrial,
@@ -17,7 +19,7 @@ import {
 
 export function getAuthErrorMessage(
   error: unknown,
-  provider: 'Google' | 'Apple',
+  provider?: 'Google' | 'Apple',
 ): string {
   const code =
     typeof error === 'object' && error !== null && 'code' in error
@@ -29,13 +31,18 @@ export function getAuthErrorMessage(
   if (code === 'auth/popup-blocked') {
     return 'Your browser blocked the sign-in window. Allow pop-ups and try again.';
   }
-  if (code === 'auth/popup-closed-by-user') {
+  if (code === 'auth/popup-closed-by-user' || code === 'auth/redirect-cancelled-by-user') {
     return 'The sign-in window was closed before sign-in finished.';
+  }
+  if (code === 'auth/operation-not-supported-in-this-environment') {
+    return 'This browser cannot open the sign-in window. Open app.omi.me in Safari or Chrome and try again.';
   }
   if (code === 'auth/configuration-not-found') {
     return 'Sign-in is not configured in this local preview.';
   }
-  return `Failed to sign in with ${provider}. Please try again.`;
+  return provider
+    ? `Failed to sign in with ${provider}. Please try again.`
+    : 'Sign-in failed. Please try again.';
 }
 
 const omiMarkDots = [
@@ -50,7 +57,14 @@ const omiMarkDots = [
 ] as const;
 
 export function LoginClient() {
-  const { user, loading, signInWithGoogle, signInWithApple } = useAuth();
+  const {
+    user,
+    loading,
+    signInWithGoogle,
+    signInWithApple,
+    redirectSignInError,
+    clearRedirectSignInError,
+  } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isSigningIn, setIsSigningIn] = useState<'google' | 'apple' | null>(null);
@@ -63,7 +77,14 @@ export function LoginClient() {
   const signInUnavailable = !isFirebaseAuthConfigured;
   const statusMessage =
     error ??
+    (redirectSignInError ? getAuthErrorMessage(redirectSignInError) : null) ??
     (signInUnavailable ? 'Sign-in is not configured in this local preview.' : null);
+  const authActionsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!statusMessage || !authActionsRef.current) return;
+    return replayErrorShake(authActionsRef.current);
+  }, [statusMessage]);
 
   // Track page view
   useEffect(() => {
@@ -106,6 +127,7 @@ export function LoginClient() {
   const handleGoogleSignIn = async () => {
     setIsSigningIn('google');
     setError(null);
+    clearRedirectSignInError();
     try {
       await signInWithGoogle();
       if (!isReferralFlow) router.push('/home');
@@ -120,6 +142,7 @@ export function LoginClient() {
   const handleAppleSignIn = async () => {
     setIsSigningIn('apple');
     setError(null);
+    clearRedirectSignInError();
     try {
       await signInWithApple();
       if (!isReferralFlow) router.push('/home');
@@ -292,11 +315,13 @@ export function LoginClient() {
             <div aria-hidden="true" className="mb-16 hidden h-16 w-16 sm:block" />
 
             {/* Auth buttons */}
+            <div className={cn('t-input-wrap w-full', statusMessage && 'is-error')}>
             <motion.div
+              ref={authActionsRef}
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 1.25, ease: 'easeOut' }}
-              className="w-full space-y-2"
+              className={cn('t-input w-full space-y-2', statusMessage && 'is-error')}
             >
               {/* Apple Sign In */}
               <button
@@ -319,9 +344,9 @@ export function LoginClient() {
                     <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" />
                   </svg>
                 )}
-                <span>
-                  {isSigningIn === 'apple' ? 'Connecting...' : 'Continue with Apple'}
-                </span>
+                <TextSwap
+                  text={isSigningIn === 'apple' ? 'Connecting...' : 'Continue with Apple'}
+                />
               </button>
 
               {/* Google Sign In */}
@@ -360,26 +385,22 @@ export function LoginClient() {
                     />
                   </svg>
                 )}
-                <span>
-                  {isSigningIn === 'google' ? 'Connecting...' : 'Continue with Google'}
-                </span>
+                <TextSwap
+                  text={
+                    isSigningIn === 'google' ? 'Connecting...' : 'Continue with Google'
+                  }
+                />
               </button>
             </motion.div>
-
             <div
               role="status"
               aria-live="polite"
               className="absolute inset-x-0 top-full mt-3 h-[72px] w-full"
             >
-              {statusMessage && (
-                <motion.p
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="w-full rounded-lg border border-red-300/20 bg-red-500/10 px-3 py-2 text-center text-sm text-error"
-                >
-                  {statusMessage}
-                </motion.p>
-              )}
+              <p className="t-error-msg w-full rounded-lg border border-red-300/20 bg-red-500/10 px-3 py-2 text-center text-sm text-error">
+                {statusMessage}
+              </p>
+            </div>
             </div>
           </div>
         </motion.div>

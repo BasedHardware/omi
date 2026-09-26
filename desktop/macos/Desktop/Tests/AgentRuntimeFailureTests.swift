@@ -24,4 +24,16 @@ final class AgentRuntimeFailureTests: XCTestCase {
 
     XCTAssertEqual(failure?.failureCode, .unknown)
   }
+
+  func testJITFailureCarriesExplicitUnknownGatewayCost() {
+    let failure = AgentRuntimeFailure.parse(from: [
+      "code": "jit_gateway_receipt_unavailable",
+      "userMessage": "JIT gateway receipt unavailable or unpriced",
+      "jitCostStatus": "unknown",
+      "jitEstimatedCostUsd": NSNull(),
+    ])
+
+    XCTAssertEqual(failure?.jitCostStatus, "unknown")
+    XCTAssertNil(failure?.jitEstimatedCostUsd)
+  }
 }

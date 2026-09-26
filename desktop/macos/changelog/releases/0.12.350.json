@@ -1,0 +1,8 @@
+{
+  "version": "0.12.350",
+  "date": "2026-09-14",
+  "changes": [
+    "Always-on listening no longer switches itself off when your microphone is briefly taken by another audio app — Omi now keeps trying to reconnect for several minutes instead of giving up after six seconds",
+    "Fixed chat-only apps not opening their own conversation and improved delegated agent provider and file-path reliability"
+  ]
+}

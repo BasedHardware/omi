@@ -1,0 +1,11 @@
+{
+  "area": "backend",
+  "comment": "Ratchet floor of unreachable/zero-importer files tolerated at seed time. Shrink by deleting files and re-running check_dead_code.py --update-baseline --area backend; new entries fail CI.",
+  "unreachable": [
+    "backend/utils/llm/trends.py",
+    "backend/utils/memory/canonical_kg_promotion.py",
+    "backend/utils/memory/legacy_backfill_inventory.py",
+    "backend/utils/memory/projections.py",
+    "backend/utils/other/task.py"
+  ]
+}

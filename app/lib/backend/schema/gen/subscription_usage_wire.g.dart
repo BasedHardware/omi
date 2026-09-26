@@ -227,6 +227,34 @@ class GeneratedPhoneCallQuota {
   }
 }
 
+class GeneratedTranscriptionAllowanceSnapshot {
+  final String mode;
+  final String reason;
+  final int? remainingSeconds;
+
+  const GeneratedTranscriptionAllowanceSnapshot({
+    required this.mode,
+    this.reason = "",
+    this.remainingSeconds,
+  });
+
+  factory GeneratedTranscriptionAllowanceSnapshot.fromJson(Map<String, dynamic> json) {
+    return GeneratedTranscriptionAllowanceSnapshot(
+      mode: _required(_readFieldValue<String>(_readField(json, const ["mode"]), "mode", _readString, requiredField: true, nullable: false), "mode"),
+      reason: _required(_readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: false, nullable: false, defaultValue: ""), "reason"),
+      remainingSeconds: _readFieldValue<int>(_readField(json, const ["remaining_seconds"]), "remaining_seconds", _readInt, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'mode': mode,
+      'reason': reason,
+      'remaining_seconds': remainingSeconds,
+    };
+  }
+}
+
 class GeneratedUserSubscriptionResponse {
   final List<GeneratedSubscriptionPlan> availablePlans;
   final bool chatQuotaAllowed;
@@ -240,6 +268,7 @@ class GeneratedUserSubscriptionResponse {
   final GeneratedPhoneCallQuota? phoneCallQuota;
   final bool showSubscriptionUi;
   final GeneratedSubscription subscription;
+  final GeneratedTranscriptionAllowanceSnapshot? transcriptionAllowance;
   final int transcriptionSecondsLimit;
   final int transcriptionSecondsUsed;
   final int wordsTranscribedLimit;
@@ -258,6 +287,7 @@ class GeneratedUserSubscriptionResponse {
     this.phoneCallQuota,
     this.showSubscriptionUi = true,
     required this.subscription,
+    this.transcriptionAllowance,
     required this.transcriptionSecondsLimit,
     required this.transcriptionSecondsUsed,
     required this.wordsTranscribedLimit,
@@ -278,6 +308,7 @@ class GeneratedUserSubscriptionResponse {
       phoneCallQuota: _readFieldValue<GeneratedPhoneCallQuota>(_readField(json, const ["phone_call_quota"]), "phone_call_quota", (value) => _readObject(value, GeneratedPhoneCallQuota.fromJson), requiredField: false, nullable: true),
       showSubscriptionUi: _required(_readFieldValue<bool>(_readField(json, const ["show_subscription_ui"]), "show_subscription_ui", _readBool, requiredField: false, nullable: false, defaultValue: true), "show_subscription_ui"),
       subscription: _required(_readFieldValue<GeneratedSubscription>(_readField(json, const ["subscription"]), "subscription", (value) => _readObject(value, GeneratedSubscription.fromJson), requiredField: true, nullable: false), "subscription"),
+      transcriptionAllowance: _readFieldValue<GeneratedTranscriptionAllowanceSnapshot>(_readField(json, const ["transcription_allowance"]), "transcription_allowance", (value) => _readObject(value, GeneratedTranscriptionAllowanceSnapshot.fromJson), requiredField: false, nullable: true),
       transcriptionSecondsLimit: _required(_readFieldValue<int>(_readField(json, const ["transcription_seconds_limit"]), "transcription_seconds_limit", _readInt, requiredField: true, nullable: false), "transcription_seconds_limit"),
       transcriptionSecondsUsed: _required(_readFieldValue<int>(_readField(json, const ["transcription_seconds_used"]), "transcription_seconds_used", _readInt, requiredField: true, nullable: false), "transcription_seconds_used"),
       wordsTranscribedLimit: _required(_readFieldValue<int>(_readField(json, const ["words_transcribed_limit"]), "words_transcribed_limit", _readInt, requiredField: true, nullable: false), "words_transcribed_limit"),
@@ -299,6 +330,7 @@ class GeneratedUserSubscriptionResponse {
       'phone_call_quota': phoneCallQuota?.toJson(),
       'show_subscription_ui': showSubscriptionUi,
       'subscription': subscription.toJson(),
+      'transcription_allowance': transcriptionAllowance?.toJson(),
       'transcription_seconds_limit': transcriptionSecondsLimit,
       'transcription_seconds_used': transcriptionSecondsUsed,
       'words_transcribed_limit': wordsTranscribedLimit,

@@ -1,14 +1,20 @@
-import 'package:omi/utils/platform/platform_manager.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import 'package:provider/provider.dart';
 
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/services/integrations/apple_health_service.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/widgets/animated_loading_button.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
+
+/// Apple Health's brand pink, used only for its own feature icons.
+const Color _healthPink = Color(0xFFFF2D55); // omi-ux-allow: color-literal -- Apple Health brand colour
 
 class AppleHealthDetailPage extends StatefulWidget {
   const AppleHealthDetailPage({super.key});
@@ -19,22 +25,16 @@ class AppleHealthDetailPage extends StatefulWidget {
 
 class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
   bool _isConnecting = false;
+  bool _isDisconnecting = false;
 
   Future<void> _connect() async {
     final service = AppleHealthService();
     if (!service.isAvailable) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.appleHealthNotAvailable),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      OmiFeedback.error(context, context.l10n.appleHealthNotAvailable);
       return;
     }
 
     setState(() => _isConnecting = true);
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
     final integrationProvider = context.read<IntegrationProvider>();
 
     PlatformManager.instance.analytics.integrationConnectAttempted(integrationName: 'Apple Health');
@@ -52,95 +52,43 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
       }
       await integrationProvider.saveConnection(IntegrationApp.appleHealth.key, {});
       if (!mounted) return;
-      scaffoldMessenger.showSnackBar(SnackBar(content: Text(result.message), duration: const Duration(seconds: 2)));
+      OmiFeedback.confirm(context, result.message);
     } else {
       PlatformManager.instance.analytics.integrationConnectFailed(integrationName: 'Apple Health');
       if (result == AppleHealthResult.permissionDenied) {
-        _showDeniedDialog();
-      } else {
-        scaffoldMessenger.showSnackBar(
-          SnackBar(content: Text(result.message), backgroundColor: Colors.red, duration: const Duration(seconds: 3)),
+        unawaited(
+          showOmiAlert(context,
+              title: context.l10n.appleHealthDeniedTitle, message: context.l10n.appleHealthDeniedBody),
         );
+      } else {
+        OmiFeedback.error(context, result.message);
       }
     }
 
     if (mounted) setState(() => _isConnecting = false);
   }
 
-  Future<void> _showDeniedDialog() async {
-    await showDialog<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1C1C1E),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(context.l10n.appleHealthDeniedTitle, style: const TextStyle(color: Colors.white)),
-          content: Text(
-            context.l10n.appleHealthDeniedBody,
-            style: const TextStyle(color: Color(0xFF8E8E93), height: 1.4),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(context.l10n.ok, style: const TextStyle(color: Colors.white)),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
+  /// Confirms first; the button shows its spinner only while the disconnect itself runs.
   Future<void> _disconnect() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1C1C1E),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(
-            context.l10n.disconnectAppTitle(IntegrationApp.appleHealth.displayName),
-            style: const TextStyle(color: Colors.white),
-          ),
-          content: Text(
-            context.l10n.disconnectAppMessage(IntegrationApp.appleHealth.displayName),
-            style: const TextStyle(color: Color(0xFF8E8E93)),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(context.l10n.cancel, style: const TextStyle(color: Color(0xFF8E8E93))),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(context.l10n.disconnect, style: const TextStyle(color: Colors.red)),
-            ),
-          ],
-        );
-      },
+    final confirmed = await showOmiConfirm(
+      context,
+      title: context.l10n.disconnectAppTitle(IntegrationApp.appleHealth.displayName),
+      message: context.l10n.disconnectAppMessage(IntegrationApp.appleHealth.displayName),
+      confirmLabel: context.l10n.disconnect,
+      destructive: true,
     );
-    if (confirmed != true || !mounted) return;
+    if (!confirmed || !mounted) return;
 
     final integrationProvider = context.read<IntegrationProvider>();
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-
+    setState(() => _isDisconnecting = true);
     final success = await integrationProvider.deleteConnection(IntegrationApp.appleHealth.key);
     if (!mounted) return;
+    setState(() => _isDisconnecting = false);
     if (success) {
       PlatformManager.instance.analytics.integrationDisconnected(integrationName: 'Apple Health');
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.disconnectedFrom(IntegrationApp.appleHealth.displayName)),
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      OmiFeedback.confirm(context, context.l10n.disconnectedFrom(IntegrationApp.appleHealth.displayName));
     } else {
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.failedToDisconnect),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      OmiFeedback.error(context, context.l10n.failedToDisconnect);
     }
   }
 
@@ -150,32 +98,20 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
     final isConnected = provider.isAppConnected(IntegrationApp.appleHealth);
 
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
+      appBar: AppBar(leading: const OmiBackButton()),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+          padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 0, OmiSpacing.xl, OmiSpacing.xl),
           child: Column(
             children: [
               Expanded(
                 child: SingleChildScrollView(
                   child: Column(
                     children: [
-                      const SizedBox(height: 20),
+                      const SizedBox(height: OmiSpacing.lg),
                       _logoPair(),
-                      const SizedBox(height: 32),
-                      Text(
-                        context.l10n.appleHealthConnectCta,
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-                        textAlign: TextAlign.center,
-                      ),
+                      const SizedBox(height: OmiSpacing.xxl),
+                      Text(context.l10n.appleHealthConnectCta, style: OmiType.title2, textAlign: TextAlign.center),
                       if (isConnected) ...[
                         const SizedBox(height: 10),
                         Row(
@@ -184,16 +120,12 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
                             Container(
                               width: 8,
                               height: 8,
-                              decoration: const BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle),
+                              decoration: const BoxDecoration(color: OmiColors.success, shape: BoxShape.circle),
                             ),
                             const SizedBox(width: 6),
                             Text(
                               context.l10n.appleHealthConnectedBadge,
-                              style: const TextStyle(
-                                color: Colors.greenAccent,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
+                              style: OmiType.footnote.copyWith(color: OmiColors.success, fontWeight: FontWeight.w500),
                             ),
                           ],
                         ),
@@ -204,41 +136,44 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
                         title: context.l10n.appleHealthFeatureChatTitle,
                         description: context.l10n.appleHealthFeatureChatDesc,
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: OmiSpacing.xl),
                       _buildFeatureRow(
                         icon: Icons.lock_outline,
                         title: context.l10n.appleHealthFeatureReadOnlyTitle,
                         description: context.l10n.appleHealthFeatureReadOnlyDesc,
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: OmiSpacing.xl),
                       _buildFeatureRow(
                         icon: Icons.cloud_sync_outlined,
                         title: context.l10n.appleHealthFeatureSecureTitle,
                         description: context.l10n.appleHealthFeatureSecureDesc,
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: OmiSpacing.xl),
                     ],
                   ),
                 ),
               ),
               Text(
                 context.l10n.appleHealthManageNote,
-                style: TextStyle(color: Colors.grey[400], fontSize: 13, height: 1.4),
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.4),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 16),
-              AnimatedLoadingButton(
-                text: isConnected ? context.l10n.appleHealthDisconnectCta : context.l10n.appleHealthConnectCta,
-                loaderColor: isConnected ? Colors.white : Colors.black,
-                color: isConnected ? Colors.red.withValues(alpha: 0.15) : Colors.white,
-                textStyle: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: isConnected ? Colors.red : Colors.black,
+              const SizedBox(height: OmiSpacing.md),
+              if (isConnected)
+                OmiButton.destructive(
+                  label: context.l10n.appleHealthDisconnectCta,
+                  // Not the future: the spinner covers the disconnect, not the confirm dialog.
+                  onPressed: _isConnecting ? null : () => unawaited(_disconnect()),
+                  isLoading: _isDisconnecting,
+                  expand: true,
+                )
+              else
+                OmiButton(
+                  label: context.l10n.appleHealthConnectCta,
+                  onPressed: _connect,
+                  isLoading: _isConnecting,
+                  expand: true,
                 ),
-                width: MediaQuery.of(context).size.width * 0.8,
-                onPressed: _isConnecting ? () async {} : (isConnected ? _disconnect : _connect),
-              ),
             ],
           ),
         ),
@@ -253,14 +188,14 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
         const SizedBox(width: 18),
         Container(
           padding: const EdgeInsets.all(10),
-          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-          child: Image.asset(Assets.images.herologo.path, width: 36, color: Colors.black),
+          decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+          child: Image.asset(Assets.images.herologo.path, width: 36, color: OmiColors.onAccent),
         ),
         Transform.translate(
           offset: const Offset(-18, 0),
           child: Container(
             padding: const EdgeInsets.all(10),
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+            decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
             child: ClipOval(
               child: Image.asset(
                 'assets/integration_app_logos/apple-health-logo.png',
@@ -270,8 +205,8 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
                 errorBuilder: (_, __, ___) => Container(
                   width: 36,
                   height: 36,
-                  decoration: const BoxDecoration(color: Color(0xFFFF2D55), shape: BoxShape.circle),
-                  child: const Icon(Icons.favorite, color: Colors.white, size: 22),
+                  decoration: const BoxDecoration(color: _healthPink, shape: BoxShape.circle),
+                  child: const Icon(Icons.favorite, color: OmiColors.textPrimary, size: 22),
                 ),
               ),
             ),
@@ -288,22 +223,19 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: const Color(0xFFFF2D55).withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8),
+            color: _healthPink.withValues(alpha: 0.12),
+            borderRadius: OmiRadius.smAll,
           ),
-          child: Icon(icon, color: const Color(0xFFFF2D55), size: 22),
+          child: Icon(icon, color: _healthPink, size: 22),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: OmiSpacing.md),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.white),
-              ),
-              const SizedBox(height: 4),
-              Text(description, style: TextStyle(fontSize: 14, color: Colors.grey[400], height: 1.35)),
+              Text(title, style: OmiType.callout.copyWith(fontWeight: FontWeight.w500)),
+              const SizedBox(height: OmiSpacing.xxs),
+              Text(description, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.35)),
             ],
           ),
         ),

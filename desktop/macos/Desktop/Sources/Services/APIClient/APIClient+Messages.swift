@@ -39,13 +39,29 @@ extension APIClient {
   /// - Parameters:
   ///   - messageId: The message ID to rate
   ///   - rating: 1 for thumbs up, -1 for thumbs down, nil to clear rating
-  func rateMessage(messageId: String, rating: Int?) async throws {
+  ///   - reason: why the answer was rated down; nil when not asked or skipped
+  ///   - surface: "text" for main-window chat, "voice" for floating-bar answers
+  func rateMessage(
+    messageId: String,
+    rating: Int?,
+    reason: ChatFeedbackReason? = nil,
+    surface: String = "text"
+  ) async throws {
     struct RateRequest: Encodable {
       let rating: Int?
       let app_version: String?
+      let reason: String?
+      let surface: String
     }
     let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-    let body = RateRequest(rating: rating, app_version: version)
+    // A reason only ever accompanies a thumbs-down. Sending one with a
+    // thumbs-up or a cleared rating would put a nonsense row in the report.
+    let body = RateRequest(
+      rating: rating,
+      app_version: version,
+      reason: rating == -1 ? reason?.rawValue : nil,
+      surface: surface
+    )
     let _: MessageStatusResponse = try await patch(
       "v2/desktop/messages/\(messageId)/rating", body: body)
   }

@@ -24,6 +24,7 @@ from models.import_job import ImportJob, ImportJobStatus, ImportSourceType
 from models.transcript_segment import TranscriptSegment
 from utils.notifications import send_notification
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.projection_payload import omit_null_processing_state
 import logging
 
 logger = logging.getLogger(__name__)
@@ -250,6 +251,11 @@ def find_legacy_limitless_conversation_id(uid: str, started_at: datetime) -> Opt
     return None
 
 
+def _job_cancelled(job_id: str) -> bool:
+    current = import_jobs_db.get_import_job(job_id)
+    return bool(current and current.get('status') == ImportJobStatus.cancelled.value)
+
+
 def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code: str = 'en') -> None:
     """
     Background worker to process a Limitless ZIP export using LIGHT IMPORT mode.
@@ -396,7 +402,9 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                     if legacy_id and legacy_id != conversation_id:
                         conversations_skipped += 1
                         logger.info("[Limitless Import] Skipped already-imported lifelog")
-                    elif lifecycle_service.persist_imported_conversation(uid, conversation.model_dump()):
+                    elif lifecycle_service.persist_imported_conversation(
+                        uid, omit_null_processing_state(conversation.model_dump())
+                    ):
                         conversations_created += 1
                     else:
                         conversations_skipped += 1
@@ -419,6 +427,13 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                             'conversations_skipped': conversations_skipped,
                         },
                     )
+                    # A cancel has to stop the work, not just the final status write, or
+                    # conversations keep appearing after the user cancelled the import.
+                    if processed_files != total_files and _job_cancelled(job_id):
+                        logger.info(
+                            f"Import job {job_id} was cancelled; stopped after {processed_files} of {total_files} files"
+                        )
+                        return
 
             logger.info(
                 f"[Limitless Import] Done: {conversations_created} created, "
@@ -441,8 +456,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
 
             # A user cancel during processing must stick: don't overwrite a cancelled job with the
             # final completed/failed status.
-            current = import_jobs_db.get_import_job(job_id)
-            if current and current.get('status') == ImportJobStatus.cancelled.value:
+            if _job_cancelled(job_id):
                 logger.info(f"Import job {job_id} was cancelled; skipping final status write")
                 return
 

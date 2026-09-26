@@ -23,6 +23,39 @@ final class STTSessionStateTests: XCTestCase {
     XCTAssertEqual(mode, .cloud)
   }
 
+  func testResolveMode_bleDevice_basicAppleSilicon_isLocal() {
+    let session = STTSessionState()
+    let mode = session.resolveMode(
+      audioSource: .bleDevice,
+      isAppleSilicon: true,
+      debugForceCloud: false,
+      preferLocalOnBasic: true
+    )
+    XCTAssertEqual(mode, .local)
+  }
+
+  func testResolveMode_bleDevice_basicIntel_isCloud() {
+    let session = STTSessionState()
+    let mode = session.resolveMode(
+      audioSource: .bleDevice,
+      isAppleSilicon: false,
+      debugForceCloud: false,
+      preferLocalOnBasic: true
+    )
+    XCTAssertEqual(mode, .cloud)
+  }
+
+  func testResolveMode_bleDevice_basicDebugForceCloud_isCloud() {
+    let session = STTSessionState()
+    let mode = session.resolveMode(
+      audioSource: .bleDevice,
+      isAppleSilicon: true,
+      debugForceCloud: true,
+      preferLocalOnBasic: true
+    )
+    XCTAssertEqual(mode, .cloud)
+  }
+
   func testResolveMode_intelMac_isCloud() {
     let session = STTSessionState()
     let mode = session.resolveMode(

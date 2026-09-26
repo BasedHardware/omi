@@ -33,8 +33,12 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Sequence
 
-FIREBASE_API_KEY_SECRET = 'FIREBASE_API_KEY'
+# This script runs standalone (`python3 backend/scripts/...` from the repo
+# root), so it cannot import the backend package. Keep the probe uid in
+# exact lockstep with backend/utils/release_probe.py:RELEASE_PROBE_UID —
+# tests/unit/test_release_probe_exemption.py asserts the two literals match.
 PROBE_UID = 'omi-release-probe'
+FIREBASE_API_KEY_SECRET = 'FIREBASE_API_KEY'
 CUSTOM_TOKEN_AUDIENCE = 'https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit'
 IAM_CREDENTIALS_URL = 'https://iamcredentials.googleapis.com/v1'
 IDENTITY_TOOLKIT_URL = 'https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken'
@@ -86,9 +90,11 @@ def _access_secret(project: str) -> str:
     return value
 
 
-def _validated_service_account(account: str, stage: str) -> str:
+def _validated_service_account(account: str, stage: str, *, firebase_project: str | None = None) -> str:
     if '\n' in account or '@' not in account or not account.endswith('.gserviceaccount.com') or len(account) > 320:
         raise ProbeTokenError(stage)
+    if firebase_project is not None and not account.endswith(f'@{firebase_project}.iam.gserviceaccount.com'):
+        raise ProbeTokenError(stage, 'project_mismatch')
     return account
 
 
@@ -368,10 +374,24 @@ def mint_probe_token(
             # roles/iam.serviceAccountTokenCreator on that account) resolves
             # the mismatch without moving the runtime off production auth.
             service_account = (
-                _validated_service_account(signer_service_account, 'signer_service_account')
+                _validated_service_account(
+                    signer_service_account,
+                    'signer_service_account',
+                    firebase_project=firebase_project,
+                )
                 if signer_service_account
-                else _active_service_account()
+                else _validated_service_account(
+                    _active_service_account(),
+                    'service_account',
+                    firebase_project=firebase_project,
+                )
             )
+            if signer_service_account and not service_account.endswith(f'@{firebase_project}.iam.gserviceaccount.com'):
+                # Same fail-closed pairing as the credentials-file path: a
+                # named signer from another project cannot mint a token
+                # Identity Toolkit accepts for this Firebase project, so
+                # reject before any IAM call.
+                raise ProbeTokenError('signer_service_account', 'project_mismatch')
             access_token = _access_token()
             custom_token = _signed_custom_token(service_account, access_token)
         else:
@@ -428,6 +448,46 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _print_signing_permission_remediation(signer: str, firebase_project: str) -> None:
+    """Name the active identity and both denial causes for a 403 signJwt (stderr only).
+
+    The machine-readable FAIL report on stdout stays exactly as it was; this
+    guidance goes to stderr and never includes a credential or upstream body.
+    A rotated credential for the wrong service account produces the same 403
+    as a missing grant, so the remediation must name the resolved caller and
+    not prescribe a grant unconditionally.
+    """
+    if not signer:
+        print(
+            'IAM denied custom-token signing for the active deploy identity.',
+            file=sys.stderr,
+        )
+        return
+    try:
+        caller = _active_service_account()
+    except (ProbeTokenError, OSError):
+        caller = ''
+    caller_label = caller if caller else '<unresolved deploy identity>'
+    print(
+        'IAM denied custom-token signing as the Firebase project signer '
+        f'{signer} (active identity: {caller_label}).',
+        file=sys.stderr,
+    )
+    print(
+        'Either the active credential is not this lane\'s deploy identity (a rotated'
+        ' GCP_CREDENTIALS key for another service account produces this same denial),'
+        ' or the identity lacks the one-time token-creator grant:',
+        file=sys.stderr,
+    )
+    member = f'serviceAccount:{caller}' if caller else 'serviceAccount:<this deploy identity>'
+    print(
+        '  gcloud iam service-accounts add-iam-policy-binding '
+        f'{signer} --member=\'{member}\' '
+        f'--role=\'roles/iam.serviceAccountTokenCreator\' --project={firebase_project}',
+        file=sys.stderr,
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
     token = ''
@@ -444,6 +504,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         write_token(args.token_output, token)
     except ProbeTokenError as error:
+        if error.stage == 'custom_token_signing' and error.error_class == 'permission_denied':
+            _print_signing_permission_remediation(args.signer_service_account or '', args.firebase_project)
         print(
             json.dumps(
                 {

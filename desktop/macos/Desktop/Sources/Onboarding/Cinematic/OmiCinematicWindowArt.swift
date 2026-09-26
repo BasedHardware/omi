@@ -4,7 +4,7 @@ import SwiftUI
 //
 //  These windows are *drawn*, always, for everyone. There is no capture-store read on this path, no
 //  image decode, and therefore no fallback branch and nothing to record — the honest way to satisfy
-//  `docs/agents/fallback-telemetry.md` is to not have a second path. A full-screen intro that
+//  `.github/agent-docs/fallback-telemetry.md` is to not have a second path. A full-screen intro that
 //  flashed the user's own recent screenshots would also be a shoulder-surfing hazard in a product
 //  whose pitch is privacy, and a composition that changes with the store cannot be reviewed against
 //  a screenshot.

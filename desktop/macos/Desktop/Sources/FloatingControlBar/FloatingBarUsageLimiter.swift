@@ -127,6 +127,12 @@ final class FloatingBarUsageLimiter: ObservableObject {
       // No server data yet — allow the query (server will enforce).
       return false
     }
+    // An overage plan bills the excess instead of refusing it: the server serves
+    // the request and `enforce_chat_quota` never raises, so blocking here would
+    // deny a send the backend would have answered.
+    if quota.isOveragePlan == true {
+      return false
+    }
     if quota.allowed {
       // Optimistic delta only applies to question-based quotas.
       // For cost_usd (Architect/Pro), we can't estimate cost per query

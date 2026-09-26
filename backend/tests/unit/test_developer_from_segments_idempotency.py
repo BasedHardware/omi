@@ -702,3 +702,128 @@ def test_from_segments_renews_processing_lease_during_live_processing(monkeypatc
     developer._create_conversation_from_segments('uid1', _request(client_session_id='local-session-lease'))
 
     assert lease_renewed.is_set()
+
+
+def test_from_segments_rejects_timezone_naive_timestamps_with_422():
+    """GH #13505: a naive finished_at against the tz-aware started_at default made
+    the handler's finished_at <= started_at check raise TypeError — an uncaught
+    500 on a malformed body (the scripted-client failure shape). The shared model
+    now rejects offset-naive timestamps at validation, so both the developer and
+    first-party from-segments routes answer 422 instead."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match='timezone offset'):
+        developer.CreateConversationFromTranscriptRequest.model_validate(
+            {**_request_data(), 'finished_at': '2026-01-01T00:00:01'}
+        )
+
+    with pytest.raises(ValidationError, match='timezone offset'):
+        developer.CreateConversationFromTranscriptRequest.model_validate(
+            {**_request_data(), 'started_at': '2026-01-01T00:00:00'}
+        )
+
+    # Offset-aware values still validate.
+    assert developer.CreateConversationFromTranscriptRequest.model_validate(_request_data()).finished_at is not None
+
+
+def _request_data():
+    return {
+        'transcript_segments': [_segment()],
+        'source': 'desktop',
+        'started_at': NOW,
+        'finished_at': NOW.replace(second=2),
+        'language': 'en',
+    }
+
+
+def test_dev_from_segments_route_uses_the_dedicated_rate_limited_dependency():
+    """GH #13505: the developer from-segments route must not ride the bare
+    conversations:write dependency — it needs the dedicated
+    dev:conversations_from_segments budget on top of the shared ceiling."""
+    import inspect
+
+    parameter = inspect.signature(developer.create_conversation_from_segments).parameters['uid']
+    # fastapi.Depends is a factory, so assert on the resolved dependency itself.
+    assert parameter.default.dependency is developer.get_uid_with_conversations_from_segments_write
+
+
+@pytest.mark.parametrize(
+    'platform,client_kind',
+    [('ios', 'mobile_ios'), ('macos', 'desktop_macos'), ('', 'unknown')],
+)
+@pytest.mark.parametrize('metric_failure', [False, True])
+@pytest.mark.parametrize('developer_auth', [False, True])
+def test_product_creation_metric_through_http(monkeypatch, platform, client_kind, metric_failure, developer_auth):
+    from prometheus_client import CollectorRegistry, Counter
+    from utils import product_metrics
+
+    registry = CollectorRegistry()
+    counter = Counter(
+        'omi_product_event_total',
+        'Events',
+        ['event', 'client_kind', 'app_build', 'outcome', 'source', 'op'],
+        registry=registry,
+    )
+    if metric_failure:
+        counter.labels = MagicMock(side_effect=RuntimeError('metrics unavailable'))
+    monkeypatch.setattr(product_metrics, 'OMI_PRODUCT_EVENT_TOTAL', counter)
+    monkeypatch.setattr(product_metrics, '_builds', set())
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', MagicMock())
+    monkeypatch.setattr(developer, 'process_conversation', lambda _uid, _language, conversation: conversation)
+    app = FastAPI()
+    app.include_router(developer.router)
+    route = '/v1/conversations/from-segments'
+    if developer_auth:
+        app.dependency_overrides[developer.get_uid_with_conversations_from_segments_write] = lambda: 'uid1'
+        route = '/v1/dev/user/conversations/from-segments'
+        client_kind = 'unknown'
+    client = TestClient(app)
+    payload = _request(client_session_id='metric-session').model_dump(mode='json')
+    response = client.post(
+        route,
+        json=payload,
+        headers={'X-App-Version': '0.12.365', 'X-App-Platform': platform},
+    )
+    assert response.status_code == 200, response.text
+    labels = dict(
+        event='conversation_created',
+        client_kind=client_kind,
+        app_build='unknown' if developer_auth else '0.12.365',
+        outcome='none',
+        source='none',
+        op='none',
+    )
+    if not metric_failure:
+        assert registry.get_sample_value('omi_product_event_total', labels) == 1
+
+    # Replaying an existing row must not count a new creation.
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation',
+        MagicMock(
+            return_value={
+                'id': response.json()['id'],
+                'status': 'completed',
+                'discarded': False,
+            }
+        ),
+    )
+    replay = client.post(
+        route,
+        json=payload,
+        headers={'X-App-Version': '0.12.365', 'X-App-Platform': platform},
+    )
+    assert replay.status_code == 200, replay.text
+    if not metric_failure:
+        assert registry.get_sample_value('omi_product_event_total', labels) == 1
+
+
+def test_failed_creation_does_not_record_product_metric(monkeypatch):
+    record = MagicMock()
+    monkeypatch.setattr(developer, 'record_product_event', record)
+    monkeypatch.setattr(developer, 'process_conversation', MagicMock(side_effect=RuntimeError('processing failed')))
+    with pytest.raises(RuntimeError, match='processing failed'):
+        developer._create_conversation_from_segments('uid1', _request())
+    record.assert_not_called()

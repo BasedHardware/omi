@@ -29,20 +29,10 @@ private final class SortOrderSyncProbe {
 private actor SortOrderMigrationProbe {
   private var storageCalls = 0
   private var storageIDs: [String] = []
-  private var storageWaiter: CheckedContinuation<Void, Never>?
 
   func recordStorage(_ ids: [String]) {
     storageCalls += 1
     storageIDs = ids
-    storageWaiter?.resume()
-    storageWaiter = nil
-  }
-
-  func waitForStorage() async {
-    if storageCalls > 0 { return }
-    await withCheckedContinuation { continuation in
-      storageWaiter = continuation
-    }
   }
 
   func snapshot() -> (calls: Int, ids: [String]) {
@@ -158,20 +148,24 @@ final class TasksSortOrderSyncFailureTests: XCTestCase {
     )
 
     let probe = SortOrderMigrationProbe()
+    let storageWrite = expectation(description: "legacy ordering reaches persistence")
     let viewModel = TasksViewModel(
       ownerIDProvider: { "sort-migration-failure-owner" },
       sortOrderSyncOperations: .init(
         updateStorage: { updates, _ in
           await probe.recordStorage(updates.map(\.id))
+          storageWrite.fulfill()
           throw NSError(domain: "TasksSortOrderSyncFailureTests", code: 1)
         },
         updateBackend: { _, _ in }
       ),
       orderingDefaults: defaults
     )
-    _ = viewModel
+    // Migration captures the view model weakly. Keep its owner alive across
+    // suspension so ARC cannot remove the operation this test is observing.
+    defer { withExtendedLifetime(viewModel) {} }
 
-    await probe.waitForStorage()
+    await fulfillment(of: [storageWrite], timeout: 5)
     let snapshot = await probe.snapshot()
 
     XCTAssertEqual(snapshot.calls, 1)

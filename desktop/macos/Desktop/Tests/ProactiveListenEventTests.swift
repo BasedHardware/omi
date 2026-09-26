@@ -12,6 +12,42 @@ import XCTest
 @MainActor
 final class ProactiveListenEventTests: XCTestCase {
 
+  private var originalAuthOwner: String?
+  private var originalOwnerOverride: String?
+  private var originalOwnerBackup: String?
+
+  // These tests assert what the handler does with *no* runtime owner, and they
+  // relied on the process simply never having had one. That held by luck: this
+  // suite shares a CI batch with `AppStateOwnerFenceTests` and
+  // `AuthorizedToolOwnerBoundAuthTests`, both of which write owner defaults, and
+  // an owner left behind sends `testHandlerRecognisesProactiveMessageType` past
+  // its owner guard into `NotificationService.shared` — which constructs
+  // `UNUserNotificationCenter.current()` and raises
+  // `bundleProxyForCurrentProcess is nil` under SwiftPM's command-line test host.
+  // The premise is now established rather than inherited.
+  override func setUp() async throws {
+    originalAuthOwner = UserDefaults.standard.string(forKey: .authUserId)
+    originalOwnerOverride = UserDefaults.standard.string(forKey: .automationOwnerOverride)
+    originalOwnerBackup = UserDefaults.standard.string(forKey: .automationOwnerABackup)
+    UserDefaults.standard.removeObject(forKey: .authUserId)
+    UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+    UserDefaults.standard.removeObject(forKey: .automationOwnerABackup)
+  }
+
+  override func tearDown() async throws {
+    restore(originalAuthOwner, forKey: .authUserId)
+    restore(originalOwnerOverride, forKey: .automationOwnerOverride)
+    restore(originalOwnerBackup, forKey: .automationOwnerABackup)
+  }
+
+  private func restore(_ value: String?, forKey key: DefaultsKey) {
+    if let value {
+      UserDefaults.standard.set(value, forKey: key)
+    } else {
+      UserDefaults.standard.removeObject(forKey: key)
+    }
+  }
+
   // MARK: - Event parsing round-trip (backend model → ListenEvent)
 
   func testProactiveMessageEventRoundTrip() throws {
@@ -135,6 +171,13 @@ final class ProactiveListenEventTests: XCTestCase {
 
   func testHandlerRecognisesProactiveMessageType() {
     let state = AppState()
+
+    // The guard this test leans on. If an owner is present the handler proceeds
+    // into the system notification centre, which cannot be constructed here — so
+    // fail with the reason rather than as an opaque ObjC exception.
+    XCTAssertNil(
+      RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
+      "this test requires no runtime owner; a sibling suite leaked one")
 
     // Without a runtime owner, the handler logs and exits after the owner
     // guard. The important contract is that "proactive_message" does NOT

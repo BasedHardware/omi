@@ -262,4 +262,19 @@ final class RealtimeHubCloseClassifierTests: XCTestCase {
 
     XCTAssertEqual(category, .providerQuotaExceeded)
   }
+
+  func testUsageLimitPopupIsOnlyForQuotaCloseAfterFailoverExhausts() {
+    XCTAssertTrue(
+      RealtimeHubUsageLimitPresentation.shouldPresent(
+        category: .providerQuotaExceeded, failoverStarted: false))
+    XCTAssertFalse(
+      RealtimeHubUsageLimitPresentation.shouldPresent(
+        category: .providerQuotaExceeded, failoverStarted: true))
+    XCTAssertFalse(
+      RealtimeHubUsageLimitPresentation.shouldPresent(
+        category: .expectedIdleTeardown, failoverStarted: false))
+    XCTAssertFalse(
+      RealtimeHubUsageLimitPresentation.shouldPresent(
+        category: .providerPolicyCloseFast, failoverStarted: false))
+  }
 }

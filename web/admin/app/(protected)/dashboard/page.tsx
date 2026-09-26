@@ -2,6 +2,7 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { grafanaBoardSrc } from "@/lib/grafana-board";
 
 // The analytics dashboard IS the Grafana "Omi TV" board, embedded full-bleed.
 // Non-kiosk so Grafana's own Edit mode (drag, resize, remove, save) works
@@ -15,28 +16,23 @@ import { useSearchParams } from "next/navigation";
 //
 // Platform boards: /dashboard?platform=macos|mobile opens that platform's
 // board directly instead of the All-platforms one.
-const GRAFANA_URL = process.env.NEXT_PUBLIC_GRAFANA_URL ?? "";
-const BOARD_UIDS: Record<string, string> = {
-  macos: "omi-tv-macos",
-  mobile: "omi-tv-mobile",
-};
-
 export function boardUrl(platform: string | null): string {
-  if (GRAFANA_URL) return GRAFANA_URL;
-  const uid = BOARD_UIDS[platform ?? ""] ?? "omi-tv";
-  return `/grafana/d/${uid}/?refresh=5m`;
+  return grafanaBoardSrc(platform, false);
 }
 
 function GrafanaFrame() {
   const params = useSearchParams();
   const tvParam = params?.get("tv") ?? null;
-  const base = boardUrl(params?.get("platform") ?? null);
-  const scale = tvParam ? Math.min(Math.max(parseFloat(tvParam) || 1, 0.25), 1) : 1;
-  const src = tvParam ? `${base}&kiosk` : base;
+  const kiosk = Boolean(tvParam);
+  const base = grafanaBoardSrc(params?.get("platform") ?? null, kiosk);
+  const scale = tvParam
+    ? Math.min(Math.max(parseFloat(tvParam) || 1, 0.25), 1)
+    : 1;
+  const src = base;
   const pct = `${(100 / scale).toFixed(4)}%`;
 
   return (
-    <div className="-m-4 md:-m-6 h-[calc(100vh-3.5rem)] overflow-hidden">
+    <div className="-m-4 h-[calc(100vh-3.5rem)] overflow-hidden md:-m-6">
       <iframe
         src={src}
         title="Omi analytics (Grafana)"

@@ -192,7 +192,9 @@ class TestTelemetry:
 class TestDeploymentContract:
     def test_memory_vector_repair_outbox_cloud_deployment_contract_is_disabled_and_oidc_ready(self):
         root = Path(__file__).resolve().parents[2].parent
-        contract_path = root / "docs" / "epics" / "memory_vector_repair_outbox_cloud_deployment_contract.yaml"
+        contract_path = (
+            root / "backend" / "docs" / "epics" / "memory_vector_repair_outbox_cloud_deployment_contract.yaml"
+        )
 
         assert contract_path.exists(), "missing checked-in Cloud Run/Tasks/Scheduler contract artifact"
         contract = contract_path.read_text()
@@ -298,7 +300,9 @@ class TestOidcIamProof:
 
     def test_memory_vector_repair_outbox_deployment_contract_references_oidc_iam_proof_runner(self):
         root = Path(__file__).resolve().parents[2].parent
-        contract_path = root / "docs" / "epics" / "memory_vector_repair_outbox_cloud_deployment_contract.yaml"
+        contract_path = (
+            root / "backend" / "docs" / "epics" / "memory_vector_repair_outbox_cloud_deployment_contract.yaml"
+        )
         contract = contract_path.read_text()
 
         assert "python3 backend/scripts/vector_repair_outbox_oidc_iam_proof.py" in contract

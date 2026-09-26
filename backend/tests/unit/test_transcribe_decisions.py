@@ -29,7 +29,6 @@ from utils.transcribe_decisions import (
     should_process_on_disconnect,
     should_queue_speaker_embedding,
     should_remove_in_progress_pointer,
-    should_skip_custom_stt_postprocessing,
     should_skip_speaker_detection,
     should_spawn_speaker_match,
     stt_buffer_flush_size,
@@ -174,16 +173,6 @@ def test_speech_profile_and_speaker_id_gates():
         )
         is False
     )
-
-
-def test_custom_stt_postprocessing_skip_gate():
-    # Custom-STT without an LLM BYOK key: skip Omi-paid post-processing.
-    assert should_skip_custom_stt_postprocessing(uses_custom_stt=True, has_llm_byok_key=False) is True
-    # Custom-STT with an LLM BYOK key: the user pays their own bill, allow it.
-    assert should_skip_custom_stt_postprocessing(uses_custom_stt=True, has_llm_byok_key=True) is False
-    # Omi-STT conversations are unaffected by this gate.
-    assert should_skip_custom_stt_postprocessing(uses_custom_stt=False, has_llm_byok_key=False) is False
-    assert should_skip_custom_stt_postprocessing(uses_custom_stt=False, has_llm_byok_key=True) is False
 
 
 def test_conversation_lifecycle_actions():
@@ -613,6 +602,17 @@ def test_speaker_detection_gates():
         )
         is False
     )
+    assert (
+        should_queue_speaker_embedding(
+            speaker_id=1,
+            person_id='',
+            is_user=False,
+            speaker_id_enabled=True,
+            has_person_embeddings=False,
+            speaker_already_mapped=False,
+        )
+        is False
+    )
     assert should_spawn_speaker_match(speaker_already_mapped=False, duration=2.0, min_audio_seconds=2.0) is True
     assert should_spawn_speaker_match(speaker_already_mapped=False, duration=1.99, min_audio_seconds=2.0) is False
     assert should_spawn_speaker_match(speaker_already_mapped=True, duration=4.0, min_audio_seconds=2.0) is False
@@ -651,3 +651,13 @@ def test_text_speaker_assignment_create_speakers_compatibility():
     assert no_create.should_create_person is False
     assert no_create.event_person_id == ''
     assert no_create.update_maps is False
+
+
+def test_default_boundary_agrees_with_capture_coverage():
+    from utils.conversation_continuity import DEFAULT_GAP_SECONDS, intervals_connect
+
+    for gap in (0, 119.99, 120, 120.01):
+        action = decide_existing_conversation_action(
+            seconds_since_last_segment=gap, conversation_creation_timeout=DEFAULT_GAP_SECONDS
+        )
+        assert intervals_connect(0, 70, 70 + gap, 140 + gap) == (action == ConversationLifecycleAction.continue_current)

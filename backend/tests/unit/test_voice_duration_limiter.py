@@ -479,3 +479,65 @@ class TestConstants:
         from utils.voice_duration_limiter import DAILY_BUDGET_MS
 
         assert DAILY_BUDGET_MS == 7_200_000  # 2 hours
+
+
+# ===========================================================================
+# Concurrent WS admission (real Lua via fakeredis)
+# ===========================================================================
+
+
+class TestConcurrentSessionReservation:
+    """Prove probe+force overspend and that reserve-up-to prevents it."""
+
+    def _bind_lua(self):
+        import fakeredis
+        import utils.voice_duration_limiter as limiter
+
+        fake = fakeredis.FakeRedis(decode_responses=True)
+        script = fake.register_script(limiter._CONSUME_LUA_SRC)
+        return limiter, script
+
+    def test_legacy_probe_and_force_overspends_under_concurrency(self):
+        """Pre-fix failure class: two probe admits + two force-records past budget."""
+        limiter, script = self._bind_lua()
+        key = 'voice_duration:concurrent_probe'
+        now = 1_700_000_000.0
+        # Seed: 60s remaining
+        script(keys=[key], args=[now, 86400, limiter.DAILY_BUDGET_MS, limiter.DAILY_BUDGET_MS - 60_000, 1])
+
+        a = script(keys=[key], args=[now, 86400, limiter.DAILY_BUDGET_MS, 0, 0])
+        b = script(keys=[key], args=[now, 86400, limiter.DAILY_BUDGET_MS, 0, 0])
+        assert int(a[0]) == 1 and int(b[0]) == 1
+        assert int(a[2]) == 60_000 and int(b[2]) == 60_000
+
+        script(keys=[key], args=[now, 86400, limiter.DAILY_BUDGET_MS, 60_000, 1])
+        final = script(keys=[key], args=[now, 86400, limiter.DAILY_BUDGET_MS, 60_000, 1])
+        assert int(final[1]) == limiter.DAILY_BUDGET_MS + 60_000
+
+    def test_reserve_up_to_admits_only_remaining_under_concurrency(self):
+        """Two concurrent reserve-up-to calls cannot both take the same remaining slice."""
+        limiter, script = self._bind_lua()
+        key = 'voice_duration:concurrent_reserve'
+        now = 1_700_000_000.0
+        script(keys=[key], args=[now, 86400, limiter.DAILY_BUDGET_MS, limiter.DAILY_BUDGET_MS - 60_000, 1])
+
+        a = script(keys=[key], args=[now, 86400, limiter.DAILY_BUDGET_MS, 120_000, 2])
+        b = script(keys=[key], args=[now, 86400, limiter.DAILY_BUDGET_MS, 120_000, 2])
+        assert int(a[0]) == 1 and int(a[1]) == 60_000
+        assert int(b[0]) == 0 and int(b[1]) == 0
+        assert int(a[2]) == limiter.DAILY_BUDGET_MS
+
+    def test_settle_refunds_unused_reservation(self):
+        limiter, script = self._bind_lua()
+        with patch('utils.voice_duration_limiter._consume_lua', script):
+            with patch('utils.voice_duration_limiter._budget_key', return_value='voice_duration:settle'):
+                allowed, reserved, used, remaining = limiter.try_reserve_session_budget('settle', 120_000)
+                assert allowed is True
+                assert reserved == 120_000
+                assert used == 120_000
+                assert remaining == limiter.DAILY_BUDGET_MS - 120_000
+
+                assert limiter.settle_reserved_duration('settle', reserved, 1_000) is True
+                status = limiter.get_budget_status('settle')
+                assert status['used_ms'] == 1_000
+                assert status['remaining_ms'] == limiter.DAILY_BUDGET_MS - 1_000

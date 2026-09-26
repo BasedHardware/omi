@@ -78,9 +78,11 @@ def merge():
     models_pkg.__path__ = []  # type: ignore[attr-defined]
     model_submods = {
         "models.audio_file": ["AudioFile"],
+        "models.client_processing": ["PROJECTION_FAMILY_FIELDS"],
         "models.conversation": ["Conversation"],
         "models.conversation_enums": ["ConversationStatus"],
         "models.structured": ["Structured"],
+        "models.client_processing": ["PROJECTION_FAMILY_FIELDS"],
     }
     model_stubs: dict[str, ModuleType] = {}
     for _modname, _attrs in model_submods.items():
@@ -88,6 +90,7 @@ def merge():
         for _attr in _attrs:
             setattr(_mod, _attr, MagicMock())
         model_stubs[_modname] = _mod
+    model_stubs["models.client_processing"].PROJECTION_FAMILY_FIELDS = frozenset({"client_processing"})
 
     memory_service_stub = ModuleType("utils.memory.memory_service")
     setattr(memory_service_stub, "MemoryService", MagicMock())
@@ -769,3 +772,117 @@ class TestCopyAudioChunksForMergeBatchAware:
         paths = [call[0][2] for call in mock_bucket.copy_blob.call_args_list]
         assert 'chunks/uid/conv-new/1000.000.enc' in paths
         assert 'chunks/uid/conv-new/1010.000-1070.000.batch.enc' in paths
+
+
+class TestBatchUploadNoOverwriteByContent:
+    """The v2 no-overwrite check must compare content, never size alone.
+
+    Equal plaintext length is not identity: two different 60 s PCM batches
+    share a size. And for enhanced protection the stored object is ciphertext
+    (random nonce), so only a plaintext-domain digest — decrypt the existing
+    blob, or compare raw bytes for standard — can prove an identical retry.
+    """
+
+    def _bucket_with_existing(self, initial_bytes):
+        bucket = MagicMock()
+        blob = MagicMock()
+        blob.exists.return_value = initial_bytes is not None
+        blob.download_as_bytes.return_value = initial_bytes
+        written = bytearray()
+
+        file = MagicMock()
+        file.write.side_effect = lambda data: written.extend(data)
+        blob.open.return_value.__enter__.return_value = file
+        bucket.blob.return_value = blob
+        storage_mod.storage_client.bucket.return_value = bucket
+        return bucket, blob, written
+
+    @staticmethod
+    def _chunks(data: bytes, timestamp: float = 1000.0):
+        return [
+            {
+                'data': data,
+                'timestamp': timestamp,
+                'span': {'start': timestamp, 'samples': len(data) // 2, 'sample_rate': 16000},
+            }
+        ]
+
+    @patch.object(storage_mod, 'users_db')
+    def test_standard_identical_retry_is_idempotent(self, mock_users_db):
+        mock_users_db.get_data_protection_level.return_value = 'standard'
+        payload = b'\x05' * 200
+        _bucket, _blob, written = self._bucket_with_existing(payload)
+
+        paths = storage_mod.upload_audio_chunks_batch(self._chunks(payload), 'uid', 'conv')
+
+        assert paths == ['chunks/uid/conv/1000.000.batch.bin']
+        assert bytes(written) == b'', 'an identical retry must not rewrite the blob'
+
+    @patch.object(storage_mod, 'users_db')
+    def test_standard_conflicting_same_size_fails_closed(self, mock_users_db):
+        mock_users_db.get_data_protection_level.return_value = 'standard'
+        _bucket, _blob, written = self._bucket_with_existing(b'\x05' * 200)
+
+        with pytest.raises(ValueError):
+            storage_mod.upload_audio_chunks_batch(self._chunks(b'\x06' * 200), 'uid', 'conv')
+        assert bytes(written) == b'', 'a conflict must never overwrite the stored bytes'
+
+    @patch.object(storage_mod, 'users_db')
+    def test_enhanced_identical_retry_decrypts_and_matches(self, mock_users_db):
+        mock_users_db.get_data_protection_level.return_value = 'enhanced'
+        # Ciphertext domain: stored bytes differ from the plaintext payload.
+        _bucket, _blob, written = self._bucket_with_existing(b'ENC' + b'\x05' * 200)
+
+        with (
+            patch.object(storage_mod.encryption, 'encrypt_audio_chunk', side_effect=lambda data, uid: b'ENC' + data),
+            patch.object(storage_mod.encryption, 'decrypt_audio_file', side_effect=lambda data, uid: data[3:]),
+        ):
+            paths = storage_mod.upload_audio_chunks_batch(self._chunks(b'\x05' * 200), 'uid', 'conv')
+
+        assert paths == ['chunks/uid/conv/1000.000.batch.enc']
+        assert bytes(written) == b'', 'an identical enhanced retry must not re-encrypt and rewrite'
+
+    @patch.object(storage_mod, 'users_db')
+    def test_enhanced_conflicting_same_plaintext_size_fails_closed(self, mock_users_db):
+        mock_users_db.get_data_protection_level.return_value = 'enhanced'
+        _bucket, _blob, written = self._bucket_with_existing(b'ENC' + b'\x05' * 200)
+
+        with (
+            patch.object(storage_mod.encryption, 'encrypt_audio_chunk', side_effect=lambda data, uid: b'ENC' + data),
+            patch.object(storage_mod.encryption, 'decrypt_audio_file', side_effect=lambda data, uid: data[3:]),
+        ):
+            with pytest.raises(ValueError):
+                storage_mod.upload_audio_chunks_batch(self._chunks(b'\x06' * 200), 'uid', 'conv')
+        assert bytes(written) == b''
+
+    @patch.object(storage_mod, 'users_db')
+    def test_unreadable_existing_blob_fails_closed(self, mock_users_db):
+        mock_users_db.get_data_protection_level.return_value = 'standard'
+        bucket = MagicMock()
+        blob = MagicMock()
+        blob.exists.return_value = True
+        blob.download_as_bytes.side_effect = RuntimeError('network partition')
+        bucket.blob.return_value = blob
+        storage_mod.storage_client.bucket.return_value = bucket
+
+        with pytest.raises(ValueError):
+            storage_mod.upload_audio_chunks_batch(self._chunks(b'\x05' * 200), 'uid', 'conv')
+
+    @patch.object(storage_mod, 'users_db')
+    def test_exists_probe_failure_fails_closed(self, mock_users_db):
+        """An existence probe that errors cannot prove the object absent.
+
+        Treating a raised ``exists()`` as "not there" would open the blob for
+        write and replace whatever object actually sits at the colliding
+        3-decimal key; it must fail closed exactly like an unreadable blob.
+        """
+        mock_users_db.get_data_protection_level.return_value = 'standard'
+        bucket = MagicMock()
+        blob = MagicMock()
+        blob.exists.side_effect = RuntimeError('probe timeout')
+        bucket.blob.return_value = blob
+        storage_mod.storage_client.bucket.return_value = bucket
+
+        with pytest.raises(ValueError):
+            storage_mod.upload_audio_chunks_batch(self._chunks(b'\x05' * 200), 'uid', 'conv')
+        blob.open.assert_not_called()

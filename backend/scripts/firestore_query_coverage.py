@@ -465,13 +465,73 @@ def check_ratchet(report: Mapping[str, Any], baseline: Mapping[str, Any]) -> lis
         errors.append(f'new unsupported serving compound query shape(s): {", ".join(new_unsupported)}')
     baseline_registered = int(baseline.get('registered_serving', 0))
     baseline_eligible = int(baseline.get('eligible_serving', 0))
-    if current['registered_serving'] < baseline_registered:
+    live_registered = current['registered_serving']
+    live_eligible = current['eligible_serving']
+    if live_registered < baseline_registered:
         errors.append('registered serving-query coverage count decreased')
-    if current['registered_serving'] * max(baseline_eligible, 1) < baseline_registered * max(
-        current['eligible_serving'], 1
-    ):
+    if live_registered * max(baseline_eligible, 1) < baseline_registered * max(live_eligible, 1):
         errors.append('registered serving-query coverage percentage decreased')
     return errors
+
+
+REGENERATE_HINT = (
+    'regenerate with: python3 backend/scripts/firestore_query_coverage.py --format baseline '
+    '> backend/scripts/firestore_query_coverage_baseline.json'
+)
+
+
+def check_baseline_freshness(report: Mapping[str, Any], baseline: Mapping[str, Any]) -> list[str]:
+    """Report holes in the committed baseline relative to the current inventory.
+
+    The ratchet only asks whether today's debt is a subset of the baselined debt, so a
+    baseline drifts silently in the safe direction: shapes that were registered or
+    rewritten stay listed as permitted debt, and the summary counts keep reporting an
+    older, lower coverage floor. Stale *entries* are still a real hole — they
+    re-permit the exact shape they were recorded for — so a baselined debt id that
+    is gone still fails.
+
+    Summary counts are different. Exact equality with the live inventory is what
+    turned every newly registered query into a red `main` until someone regenerated
+    the file, and two PRs merging in the same hour raced each other. Count
+    *decreases* still fail (they lower the floor). Count *increases* pass; the
+    check runner prints ``REGENERATE_HINT`` as a ``::notice`` so the committed
+    floor can catch up without blocking the change that improved coverage.
+    ``check_ratchet`` already compares percentage against the committed counts,
+    so a stale lower baseline cannot re-permit a percentage drop below that
+    committed ratio.
+    """
+    errors: list[str] = []
+    if baseline.get('schema_version') != 1:
+        return ['Firestore query coverage baseline has an unsupported schema version']
+    current = baseline_for(report)
+    for key in ('raw_unregistered', 'unsupported'):
+        stale = sorted(set(baseline.get(key, [])) - set(current[key]))
+        if stale:
+            errors.append(f'baselined {key} shape(s) no longer present: {", ".join(stale)}')
+    for key in ('registered_serving', 'eligible_serving'):
+        baseline_count = int(baseline.get(key, 0))
+        live_count = current[key]
+        if live_count < baseline_count:
+            errors.append(f'baseline {key} is {baseline.get(key)}, current inventory reports {live_count}')
+    if errors:
+        errors.append(REGENERATE_HINT)
+    return errors
+
+
+def baseline_count_increase_notices(report: Mapping[str, Any], baseline: Mapping[str, Any]) -> list[str]:
+    """Advisory notices when live serving counts have pulled ahead of the file."""
+    if baseline.get('schema_version') != 1:
+        return []
+    current = baseline_for(report)
+    notices: list[str] = []
+    for key in ('registered_serving', 'eligible_serving'):
+        baseline_count = int(baseline.get(key, 0))
+        live_count = current[key]
+        if live_count > baseline_count:
+            notices.append(f'baseline {key} is {baseline.get(key)}, current inventory reports {live_count}')
+    if notices:
+        notices.append(REGENERATE_HINT)
+    return notices
 
 
 def _render_human(report: Mapping[str, Any]) -> str:
@@ -504,7 +564,9 @@ def main() -> int:
         report = report_for(inventory(waiver_ids=_load_waivers(args.waivers.resolve())))
         if args.check_ratchet:
             baseline = json.loads(args.baseline.resolve().read_text(encoding='utf-8'))
-            errors = check_ratchet(report, baseline)
+            for notice in baseline_count_increase_notices(report, baseline):
+                print(f'::notice title=Firestore query coverage::{notice}')
+            errors = check_ratchet(report, baseline) + check_baseline_freshness(report, baseline)
             if errors:
                 for error in errors:
                     print(f'ERROR: {error}', file=sys.stderr)

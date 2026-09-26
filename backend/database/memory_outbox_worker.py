@@ -20,6 +20,13 @@ from google.cloud.firestore_v1 import FieldFilter
 from google.cloud.firestore_v1 import transactional as _firestore_transactional  # type: ignore[reportAssignmentType,reportUnknownMemberType]
 
 from database.account_deletion_projection_fence import read_account_deletion_projection_fence
+from database.durable_queue import (
+    ProcessOutcome,
+    QueuePolicy,
+    decide_attempt,
+    drain_isolated,
+    oldest_ready_age_seconds,
+)
 from database.firestore_index_registry import (
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
@@ -184,7 +191,12 @@ def run_canonical_memory_outbox_worker_tick(
         return summary
 
     summary["leased_count"] = len(leases)
-    for lease in leases:
+    created_ats = [
+        lease.raw_event.get("created_at") for lease in leases if isinstance(lease.raw_event.get("created_at"), datetime)
+    ]
+    summary["oldest_ready_age_seconds"] = oldest_ready_age_seconds(created_ats, now=observed_now)
+
+    def process_one(lease: Any) -> ProcessOutcome:
         try:
             outcome = _process_leased_event(
                 db_client=db_client,
@@ -201,7 +213,7 @@ def run_canonical_memory_outbox_worker_tick(
                 now=observed_now,
                 summary=summary,
             )
-            continue
+            return ProcessOutcome.retry(exc.code, reason=exc.code)
         except Exception:
             _settle_failure(
                 db_client=db_client,
@@ -211,7 +223,7 @@ def run_canonical_memory_outbox_worker_tick(
                 now=observed_now,
                 summary=summary,
             )
-            continue
+            return ProcessOutcome.retry("processing_failed", reason="processing_failed")
 
         delivered = _ack_leased_event(
             db_client=db_client,
@@ -237,7 +249,7 @@ def run_canonical_memory_outbox_worker_tick(
                     "code": "lease_ownership_lost",
                 }
             )
-            continue
+            return ProcessOutcome.retry("lease_ownership_lost", reason="lease_ownership_lost")
 
         summary["delivered_count"] += 1
         summary["stale_settled_count"] += int(outcome.stale)
@@ -248,6 +260,9 @@ def run_canonical_memory_outbox_worker_tick(
                 "action": outcome.side_effect_action or outcome.settled_reason,
             }
         )
+        return ProcessOutcome.ack()
+
+    drain_isolated(leases, process_one)
     return summary
 
 
@@ -674,21 +689,32 @@ def _settle_failure(
     summary: Dict[str, Any],
 ) -> None:
     prior_attempt_count = _safe_nonnegative_int(lease.raw_event.get("attempt_count"))
-    next_attempt_count = prior_attempt_count + 1
-    dead_letter = next_attempt_count >= config.max_attempts
-    status = MemoryOutboxStatus.dead_letter.value if dead_letter else MemoryOutboxStatus.retryable_failure.value
+    decision = decide_attempt(
+        attempt_count=prior_attempt_count + 1,
+        outcome=ProcessOutcome.retry(error_code, reason=error_code),
+        policy=QueuePolicy(
+            max_attempts=config.max_attempts,
+            base_backoff_seconds=float(config.base_backoff_seconds),
+            max_backoff_seconds=float(config.max_backoff_seconds),
+        ),
+        now=now,
+    )
+    status = MemoryOutboxStatus.dead_letter.value if decision.terminal else MemoryOutboxStatus.retryable_failure.value
     patch: Dict[str, Any] = {
         "status": status,
-        "attempt_count": next_attempt_count,
+        "attempt_count": decision.attempt_count,
         "last_error": None,
         "last_error_code": error_code,
+        "last_error_text": decision.error_text,
         "failed_at": now,
         "updated_at": now,
         "lease_owner": None,
         "lease_expires_at": None,
     }
-    if not dead_letter:
-        patch["available_at"] = now + _retry_delay(config=config, attempt_count=next_attempt_count)
+    if decision.available_at is not None:
+        patch["available_at"] = decision.available_at
+    if decision.terminal:
+        patch["dead_letter_reason"] = decision.reason
 
     acknowledged = _ack_leased_event(db_client=db_client, lease=lease, patch=patch)
     if not acknowledged:
@@ -702,7 +728,7 @@ def _settle_failure(
         )
         return
 
-    count_key = "dead_letter_count" if dead_letter else "retryable_failure_count"
+    count_key = "dead_letter_count" if decision.terminal else "retryable_failure_count"
     summary[count_key] += 1
     summary["errors"].append(
         {
@@ -756,15 +782,6 @@ def _ack_event_transaction(
         return False
     transaction.update(ref, dict(patch))
     return True
-
-
-def _retry_delay(*, config: CanonicalMemoryOutboxWorkerConfig, attempt_count: int) -> timedelta:
-    exponent = min(max(attempt_count - 1, 0), 30)
-    delay_seconds = min(
-        config.max_backoff_seconds,
-        config.base_backoff_seconds * (2**exponent),
-    )
-    return timedelta(seconds=delay_seconds)
 
 
 def _run_transaction(db_client: Any, callback: Callable[..., Any], *args: Any) -> Any:

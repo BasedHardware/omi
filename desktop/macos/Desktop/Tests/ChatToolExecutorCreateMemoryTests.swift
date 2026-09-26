@@ -174,6 +174,26 @@ final class ChatToolExecutorCreateMemoryTests: XCTestCase {
     )
   }
 
+  func testRuntimeClockPreambleDoesNotMaskExplicitMemorySaveIntent() {
+    let preamble = "# Current Time\n2026-09-16T17:58:58+07:00 (Asia/Ho_Chi_Minh)\n\n"
+    XCTAssertTrue(
+      ChatToolExecutor.isExplicitMemorySaveIntent(
+        userText: "remember that my favorite color is red",
+        surfaceKind: "main_chat"))
+    XCTAssertTrue(
+      ChatToolExecutor.isExplicitMemorySaveIntent(
+        userText: preamble + "remember that my favorite color is red",
+        surfaceKind: "main_chat"))
+    XCTAssertFalse(
+      ChatToolExecutor.isExplicitMemorySaveIntent(
+        userText: preamble + "my favorite color is red",
+        surfaceKind: "main_chat"))
+    XCTAssertFalse(
+      ChatToolExecutor.isExplicitMemorySaveIntent(
+        userText: preamble,
+        surfaceKind: "main_chat"))
+  }
+
   func testMemorySaveIntentCorpusMatchesRuntimePolicy() throws {
     let corpus = try Self.loadMemorySaveIntentCorpus()
     for prompt in corpus.authorized {

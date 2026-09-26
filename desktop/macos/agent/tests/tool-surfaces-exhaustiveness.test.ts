@@ -87,14 +87,25 @@ describe("tool surface exhaustiveness", () => {
     expect(description).toContain("proactively on the first turn");
     expect(description).toContain("If unsure whether deeper thought would improve the answer, call it");
     expect(description).toContain("Skip only chit-chat");
-    expect(description).toContain("call web_search first and pass its result as context");
+    expect(description).toContain("first web_search, then this tool");
     expect(bullets).toContain("When unsure, escalate");
-    expect(bullets).toContain("single fast realtime tool");
+    expect(bullets).toContain("one narrow current fact");
     expect(bullets).toContain("call web_search first");
     expect(description).toContain("app acknowledges the delay as soon as the tool is accepted");
     expect(description).toContain("Never describe internal model, tool, delegation, or routing choices");
     expect(description.toLowerCase()).not.toContain("higher model");
     expect(description).toContain("do not add a delayed status line");
+  });
+
+  it("requires explicit retrieval depth for realtime web search", () => {
+    const tool = omiToolManifest.find((entry) => entry.name === "web_search");
+    const schema = tool?.voice?.schemaOverride;
+    const scope = schema?.properties.scope as { type?: string; enum?: string[] } | undefined;
+
+    expect(schema?.required).toEqual(["query", "scope"]);
+    expect(scope?.type).toBe("string");
+    expect(scope?.enum).toEqual(["narrow_current", "historical_research"]);
+    expect(tool?.voice?.realtimeDescription).toContain("scope=historical_research");
   });
 
   it("declares and generates both permission tools across pi-mono and realtime", () => {

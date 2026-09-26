@@ -20,10 +20,18 @@ final class AgentCompletionVoiceDelivery {
   static let shared = AgentCompletionVoiceDelivery()
 
   /// Background surfaces whose terminal transitions can carry a user-facing
-  /// completion. Primary conversational surfaces (main_chat, realtime_voice,
-  /// task_chat, …) reach a terminal state on every ordinary answer and must
-  /// not trigger kernel delta reads.
+  /// completion. Primary conversational surfaces reach a terminal state on
+  /// every ordinary answer and must not trigger kernel delta reads.
   static let triggerSurfaceKinds: Set<String> = ["floating_bar", "service", "workstream"]
+
+  private static func canTriggerDelivery(_ surface: AgentSurfaceReference) -> Bool {
+    if triggerSurfaceKinds.contains(surface.surfaceKind) { return true }
+    // Realtime-owned runs use a run-scoped projection on the persisted shared
+    // chat surface. Ordinary floating/realtime chat projections use `chat` and
+    // must not wake the background-completion dispatcher.
+    return surface.externalRefKind == "run"
+      && ["floating_chat", "realtime_voice", "realtime"].contains(surface.surfaceKind)
+  }
 
   struct Delta {
     let ids: [String]
@@ -33,7 +41,7 @@ final class AgentCompletionVoiceDelivery {
 
   private let isVoiceSessionLive: @MainActor () -> Bool
   private let peekDelta: @MainActor () async -> Delta?
-  private let injectContext: @MainActor (String) async -> Bool
+  private let injectContext: @MainActor (String) async -> RealtimeBackgroundContextDeliveryResult
   private let acknowledge: @MainActor (Delta) -> Void
   private let scheduleWork: @MainActor (@escaping @MainActor () async -> Void) -> Void
 
@@ -51,7 +59,7 @@ final class AgentCompletionVoiceDelivery {
   init(
     isVoiceSessionLive: (@MainActor () -> Bool)? = nil,
     peekDelta: (@MainActor () async -> Delta?)? = nil,
-    injectContext: (@MainActor (String) async -> Bool)? = nil,
+    injectContext: (@MainActor (String) async -> RealtimeBackgroundContextDeliveryResult)? = nil,
     acknowledge: (@MainActor (Delta) -> Void)? = nil,
     scheduleWork: (@MainActor (@escaping @MainActor () async -> Void) -> Void)? = nil,
     hasStarted: Bool = false
@@ -124,7 +132,7 @@ final class AgentCompletionVoiceDelivery {
         projection.status.isTerminal,
         previous != projection.status,
         previous?.isTerminal != true,
-        Self.triggerSurfaceKinds.contains(projection.surface.surfaceKind)
+        Self.canTriggerDelivery(projection.surface)
       else { continue }
       fired = true
     }
@@ -157,11 +165,16 @@ final class AgentCompletionVoiceDelivery {
     }
     guard isVoiceSessionLive() else { return }
     guard let delta = await peekDelta() else { return }
-    guard await injectContext(delta.prompt) else {
+    switch await injectContext(delta.prompt) {
+    case .retry:
       log("AgentCompletionVoiceDelivery: completion context not delivered; checkpoint unadvanced")
       return
+    case .unsupported:
+      acknowledge(delta)
+      log("AgentCompletionVoiceDelivery: provider has no safe background-context role; completion stays tool-backed")
+    case .delivered:
+      acknowledge(delta)
+      log("AgentCompletionVoiceDelivery: delivered \(delta.ids.count) completion(s) to live voice session")
     }
-    acknowledge(delta)
-    log("AgentCompletionVoiceDelivery: delivered \(delta.ids.count) completion(s) to live voice session")
   }
 }

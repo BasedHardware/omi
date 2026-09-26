@@ -1,0 +1,7 @@
+{
+  "version": "0.12.311",
+  "date": "2026-09-07",
+  "changes": [
+    "Fixed planned reminders not firing when a matching app was on screen but that context was not independently notification-worthy"
+  ]
+}

@@ -44,6 +44,7 @@ afterAll(() => {
 const editMemory = vi.fn()
 const deleteMemory = vi.fn()
 const setMemoryVisibility = vi.fn()
+const setMemoryUse = vi.fn()
 const createMemory = vi.fn()
 const refresh = vi.fn()
 let memoriesList: Memory[] = []
@@ -53,10 +54,12 @@ vi.mock('../hooks/useMemories', () => ({
     memories: memoriesList,
     loading: false,
     error: null,
+    beliefEnabled: true,
     canonicalLifecycleExposed: false,
     createMemory,
     editMemory,
     setMemoryVisibility,
+    setMemoryUse,
     deleteMemory,
     refresh
   })
@@ -101,6 +104,7 @@ async function renderPage(strict = false): Promise<void> {
 beforeEach(() => {
   memoriesList = []
   editMemory.mockReset().mockResolvedValue(undefined)
+  setMemoryUse.mockReset().mockResolvedValue(undefined)
   deleteMemory.mockReset().mockResolvedValue(undefined)
   setMemoryVisibility.mockReset().mockResolvedValue(undefined)
   createMemory.mockReset().mockResolvedValue(undefined)
@@ -176,5 +180,26 @@ describe('Memories — a delete commits at most once (FIX 2)', () => {
 
     await waitFor(() => expect(deleteMemory).toHaveBeenCalledWith('a'))
     expect(deleteMemory.mock.calls.filter((c) => c[0] === 'a')).toHaveLength(1)
+  })
+})
+
+describe('Memories — detail sheet stays in sync after a use action (FIX 3)', () => {
+  it("flips the sheet header to 'Allow use' after suppressing, with the sheet still open", async () => {
+    memoriesList = [mem('m1', 'Suppression target')]
+    await renderPage()
+
+    // Open the detail sheet and suppress the memory from its header.
+    fireEvent.click(screen.getByText('Suppression target'))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByText("Don't use"))
+
+    await waitFor(() => expect(setMemoryUse).toHaveBeenCalledWith('m1', 'suppress'))
+
+    // Before the fix, detailMemory kept the pre-suppression row, so the sheet
+    // kept offering "Don't use" (and re-clicking would re-suppress).
+    expect(await within(dialog).findByText('Allow use')).toBeTruthy()
+    expect(within(dialog).queryByText("Don't use")).toBeNull()
+    // The click on the feedback control must not have closed the sheet.
+    expect(screen.getByRole('dialog')).toBeTruthy()
   })
 })

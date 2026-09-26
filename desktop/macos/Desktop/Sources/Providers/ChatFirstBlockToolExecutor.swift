@@ -71,8 +71,14 @@ enum ChatFirstBlockToolExecutor {
         return ChatToolExecutor.authorizedOwnerChangedResult()
       }
       guard let journalBlocks = ChatFirstBlockWire.journalBlocks(from: receipt) else {
+        log(
+          "ChatFirstBlockToolExecutor: backend rejected \(backendBlocks.count) block(s) "
+            + "[\(backendBlocks.compactMap { $0["type"] as? String }.joined(separator: ","))]")
         return #"{"ok":false,"error":{"code":"chat_first_blocks_rejected"}}"#
       }
+      log(
+        "ChatFirstBlockToolExecutor: appending \(journalBlocks.count) block(s) "
+          + "[\(journalBlocks.compactMap { $0["type"] as? String }.joined(separator: ","))]")
       let journalBlocksData = try JSONSerialization.data(withJSONObject: journalBlocks)
       guard let journalBlocksJSON = String(data: journalBlocksData, encoding: .utf8) else {
         return #"{"ok":false,"error":{"code":"chat_first_blocks_unavailable"}}"#
@@ -93,7 +99,9 @@ enum ChatFirstBlockToolExecutor {
         backendBlocks.compactMap { citationSelection(from: $0) }.filter { !$0.sourceID.isEmpty },
         runID: runID,
         attemptID: attemptID)
-      return #"{"ok":true,"rendered":#(journalBlocks.count)}"#
+      // `#(...)` is not interpolation in a raw string — the count was being
+      // reported to the model as the literal text `#(journalBlocks.count)`.
+      return #"{"ok":true,"rendered":\#(journalBlocks.count)}"#
     } catch {
       guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot)
       else {

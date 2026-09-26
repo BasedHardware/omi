@@ -734,3 +734,50 @@ async def test_file_chat_gateway_block_is_typed_not_generic_canned():
     assert callback_data['answer'] == agentic.FILE_CHAT_GATEWAY_BLOCKED_MESSAGE
     assert callback_data['route'] == 'file'
     assert agentic.AGENT_STREAM_FAILURE_MESSAGE not in (chunks[0] or '')
+
+
+async def test_router_error_state_does_not_leak_into_the_next_defaulted_call():
+    """A call that omits ``callback_data`` must not inherit the previous call's error.
+
+    ``execute_chat_stream`` used to declare ``callback_data: Dict[str, Any] = {}``. That dict
+    is built once, when the module is imported, so every caller that omits the argument shares
+    one object -- and the router's setup-timeout branch writes ``error`` / ``route`` / ``answer``
+    into it. The first timeout therefore poisoned the default for the rest of the process: a
+    later defaulted call reached the agentic path already carrying a stale ``answer``, and
+    ``execute_graph_chat``-shaped readers (``callback_data.get('answer')``) would return the
+    previous request's text. Same defect and same cure as #12094 on
+    ``execute_agent_chat_stream``; this is its sibling in the router.
+
+    Driven through the production seam rather than by inspecting ``__defaults__``: call once so
+    the timeout branch fires, then call again -- both omitting ``callback_data`` -- and read the
+    dict the second call actually hands to the agentic stream.
+    """
+    message = SimpleNamespace(sender='human', text='hello', files_id=[])
+    seen = {}
+
+    async def capture_agentic(*_args, **kwargs):
+        seen['callback_data'] = kwargs.get('callback_data')
+        yield None
+
+    async def stalled_metadata(*_args, **_kwargs):
+        await asyncio.sleep(0.05)
+        return ('<dt/>', 'UTC')
+
+    # 1. A defaulted call whose router setup times out, writing error state.
+    with patch.object(graph, '_current_prompt_metadata', stalled_metadata), patch.object(
+        graph, 'AGENT_STREAM_SETUP_TIMEOUT_SECONDS', 0.01
+    ):
+        chunks = [chunk async for chunk in graph.execute_chat_stream('uid1', [message])]
+    assert chunks[0].startswith('error: '), 'test needs the setup-timeout branch to have fired'
+
+    # 2. A second defaulted call that completes normally.
+    with patch.object(graph, '_current_prompt_metadata', AsyncMock(return_value=('<dt/>', 'UTC'))), patch.object(
+        graph, 'execute_agentic_chat_stream', capture_agentic
+    ):
+        assert [chunk async for chunk in graph.execute_chat_stream('uid1', [message])] == [None]
+
+    carried = seen.get('callback_data')
+    assert carried is not None, 'agentic path must receive a callback_data mapping'
+    assert 'error' not in carried, f'stale router error leaked into the next call: {carried}'
+    assert 'answer' not in carried, f'stale router answer leaked into the next call: {carried}'
+    assert carried == {}

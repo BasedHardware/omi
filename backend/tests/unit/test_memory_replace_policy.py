@@ -24,6 +24,8 @@ os.environ.setdefault(
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 
+from utils.conversations.owner_attribution import OwnerAttributionEvidence
+
 from tests.unit.memory_import_isolation import (
     CLIENT_BINDING_DATABASE_MODULES,
     WS_I_HEAVY_STUB_MODULE_NAMES,
@@ -234,6 +236,65 @@ def test_canonical_capture_preserves_prior_state_when_candidate_has_any_unground
     # files and created webhook are not collateral of an extraction verdict.
     assert result.count == 0
     mock_service.replace_conversation_memories.assert_not_called()
+
+
+def test_canonical_capture_persists_candidate_predicate_and_arguments(monkeypatch):
+    """Object qualifiers and decision states carried by the extraction
+    candidate must reach the persisted Memory, not be silently dropped."""
+    pc = _load_process_conversation()
+    from models.conversation import Conversation
+    from models.conversation_enums import CategoryEnum, ConversationSource
+    from models.structured import Structured
+    from models.transcript_segment import TranscriptSegment
+
+    mock_service = MagicMock()
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    monkeypatch.setattr(
+        pc,
+        "extract_canonical_l1_memory_candidates",
+        MagicMock(
+            return_value=[
+                SimpleNamespace(
+                    content="I am moving to Boston.",
+                    evidence_quotes=["I am moving to Boston."],
+                    speaker_label="SPEAKER_00",
+                    speaker_scope="session-local",
+                    about="the user",
+                    risk_flags=[],
+                    archive_class="general",
+                    predicate="moving_to",
+                    arguments={"decision": "proposed", "object": "Boston"},
+                )
+            ]
+        ),
+    )
+    monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
+
+    conversation = Conversation(
+        id="conv-predicate-persist",
+        created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 6, 1, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title="Test", overview="Overview", category=CategoryEnum.personal),
+        transcript_segments=[
+            TranscriptSegment(
+                text="I am moving to Boston.",
+                speaker="SPEAKER_00",
+                is_user=True,
+                start=0.0,
+                end=4.0,
+            )
+        ],
+    )
+
+    result = pc._extract_memories_canonical("uid-predicate-persist", conversation, db_client=MagicMock())
+
+    assert result.count == 1
+    written = mock_service.replace_conversation_memories.call_args.args[2]
+    assert len(written) == 1
+    assert written[0]["predicate"] == "moving_to"
+    assert written[0]["arguments"] == {"decision": "proposed", "object": "Boston"}
 
 
 def test_canonical_capture_preserves_prior_state_when_the_extractor_never_returns_a_batch(monkeypatch):
@@ -447,6 +508,7 @@ def test_canonical_capture_requires_every_grounded_segment_to_resolve_to_one_sub
     subject_id, attribution, subject_kind = pc._l1_subject_from_matched_segments(
         source_id="conv-mixed-subject",
         matched_segments=matched_segments,
+        owner_evidence=OwnerAttributionEvidence.from_segments(matched_segments),
     )
 
     assert subject_id is None
@@ -591,12 +653,15 @@ def test_canonical_capture_logs_text_free_regime_and_attribution_decision(monkey
         # whether anything from this conversation can ever be promoted, and neither
         # is derivable from distinct_speaker_ids.
         "owner_speaker_ids": 1,
+        "owner_trust": "unique_owner",
         "stage": "capture",
         "subject_attribution": "third_party",
         "uid": "uid-decision-log",
     }
     assert memory_text not in messages[0]
     assert quote_text not in messages[0]
+    payload = mock_service.replace_conversation_memories.call_args.args[2][0]
+    assert payload["evidence"][0]["attribution"] == "third_party"
 
 
 def test_canonical_capture_rejection_feedback_fetch_is_bounded_to_the_orchestration_boundary(monkeypatch):
@@ -689,6 +754,106 @@ def test_canonical_capture_maps_rendered_contact_name_back_to_person_id(monkeypa
     assert payload["evidence"][0]["quote_refs"][0]["speaker_label"] == "SPEAKER_01"
 
 
+def test_canonical_voice_payload_preserves_owner_lineage_and_capture_provenance(monkeypatch):
+    pc = _load_process_conversation()
+    from models.conversation import Conversation
+    from models.conversation_enums import CategoryEnum, ConversationSource
+    from models.structured import Structured
+    from models.transcript_segment import TranscriptSegment
+
+    mock_service = MagicMock()
+    monkeypatch.setattr(pc, "MemoryService", lambda db_client: mock_service)
+    monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
+    monkeypatch.setattr(
+        pc,
+        "extract_canonical_l1_memory_candidates",
+        MagicMock(
+            return_value=[
+                SimpleNamespace(
+                    content="The user prefers early flights.",
+                    evidence_quotes=["I prefer early flights."],
+                    speaker_label="SPEAKER_00",
+                    speaker_scope="session-local",
+                    about="the user",
+                    risk_flags=[],
+                    archive_class="general",
+                )
+            ]
+        ),
+    )
+    captured_at = datetime(2026, 6, 1, 9, 30, tzinfo=timezone.utc)
+    conversation = Conversation(
+        id="conv-owner-lineage",
+        created_at=datetime(2026, 6, 1, 10, tzinfo=timezone.utc),
+        started_at=captured_at,
+        finished_at=datetime(2026, 6, 1, 10, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title="Test", overview="Overview", category=CategoryEnum.personal),
+        transcript_segments=[
+            TranscriptSegment(
+                text="I prefer early flights.",
+                speaker="SPEAKER_00",
+                speaker_id=0,
+                speaker_id_scope="conv-owner-lineage:0",
+                is_user=True,
+                start=0.0,
+                end=4.0,
+            ),
+            TranscriptSegment(
+                text="The meeting starts at noon.",
+                speaker="SPEAKER_01",
+                speaker_id=1,
+                speaker_id_scope="conv-owner-lineage:1",
+                is_user=False,
+                start=4.0,
+                end=8.0,
+            ),
+        ],
+    )
+
+    result = pc._extract_memories_canonical("uid-owner-lineage", conversation, db_client=MagicMock())
+
+    assert result.count == 1
+    evidence = mock_service.replace_conversation_memories.call_args.args[2][0]["evidence"][0]
+    assert evidence["source_id"] == "conv-owner-lineage"
+    assert evidence["source_type"] == "conversation"
+    assert evidence["source_signal"] == "transcription"
+    assert evidence["attribution"] == "user_spoken"
+    assert evidence["lineage_id"] == "conv-owner-lineage"
+    assert evidence["independence_group"] == "conv-owner-lineage"
+    assert evidence["captured_at"] == captured_at.isoformat().replace("+00:00", "Z")
+
+
+def test_owner_source_attribution_never_uses_subject_fallback_without_owner_quote():
+    pc = _load_process_conversation()
+    from models.transcript_segment import TranscriptSegment
+
+    segments = [
+        TranscriptSegment(
+            text="I own this account.",
+            speaker="SPEAKER_00",
+            speaker_id=0,
+            speaker_id_scope="conv-owner-fallback:0",
+            is_user=True,
+            start=0.0,
+            end=1.0,
+        ),
+        TranscriptSegment(
+            text="I prefer a different schedule.",
+            speaker="SPEAKER_01",
+            speaker_id=1,
+            speaker_id_scope="conv-owner-fallback:1",
+            is_user=False,
+            start=1.0,
+            end=2.0,
+        ),
+    ]
+
+    assert not pc._l1_owner_spoken_for_grounded_quotes([], segments)
+    assert not pc._l1_owner_spoken_for_grounded_quotes(["I prefer a different schedule."], segments)
+    assert pc._l1_owner_spoken_for_grounded_quotes(["I own this account."], segments)
+
+
 def test_canonical_capture_quote_speaker_overrides_hallucinated_user_label(monkeypatch):
     pc = _load_process_conversation()
     from models.conversation import Conversation
@@ -746,7 +911,8 @@ def test_canonical_capture_quote_speaker_overrides_hallucinated_user_label(monke
     assert payload["subject_attribution"] == "third_party"
 
 
-def test_canonical_capture_source_scopes_unidentified_subject_from_matched_speaker(monkeypatch):
+@pytest.mark.parametrize("about", ["the user", "speaker_1"])
+def test_canonical_capture_source_scopes_unidentified_subject_from_matched_speaker(monkeypatch, about):
     pc = _load_process_conversation()
     from models.conversation import Conversation
     from models.conversation_enums import CategoryEnum, ConversationSource
@@ -765,7 +931,7 @@ def test_canonical_capture_source_scopes_unidentified_subject_from_matched_speak
                     evidence_quotes=["I work at Acme!"],
                     speaker_label="SPEAKER_00",
                     speaker_scope="session-local",
-                    about="the user",
+                    about=about,
                     risk_flags=[],
                     archive_class="general",
                 )
@@ -810,9 +976,15 @@ def test_canonical_capture_source_scopes_unidentified_subject_from_matched_speak
         kind="speaker",
         label="SPEAKER_00",
     )
-    assert payload["subject_entity_id"] == expected_subject
-    assert payload["subject_entity_id"] != model_authored_subject
-    assert payload["subject_kind"] == "speaker"
+    if about == "the user":
+        # Measured no-owner transcripts cannot ground the model's owner claim.
+        assert payload["subject_entity_id"] is None
+        assert payload["subject_attribution"] == "unknown"
+        assert payload["subject_kind"] == "unknown"
+    else:
+        assert payload["subject_entity_id"] == expected_subject
+        assert payload["subject_entity_id"] != model_authored_subject
+        assert payload["subject_kind"] == "speaker"
     assert payload["evidence"][0]["quote_refs"][0]["speaker_label"] == "SPEAKER_01"
 
 

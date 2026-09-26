@@ -6,9 +6,10 @@ and chat tools for managing issues, projects, and workflows.
 """
 import os
 import base64
+import re
 import urllib.parse
 from datetime import datetime
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 
 import requests
 from dotenv import load_dotenv
@@ -151,12 +152,41 @@ def linear_graphql_request(
             return {"error": f"API error: {response.status_code}"}
         
         result = response.json()
-        if "errors" in result:
-            return {"error": result["errors"][0].get("message", "GraphQL error")}
+        errors = result.get("errors")
+        if errors:
+            if isinstance(errors, list) and errors and isinstance(errors[0], dict):
+                return {"error": errors[0].get("message", "GraphQL error")}
+            return {"error": "GraphQL error"}
         
         return result.get("data", {})
     except requests.RequestException as e:
         return {"error": f"Request failed: {str(e)}"}
+
+
+def get_issue_by_identifier(uid: str, issue_identifier: str) -> Dict[str, Any]:
+    """Resolve an exact shorthand identifier, never a ranked search result."""
+    query = """
+    query($id: String!) {
+        issue(id: $id) {
+            id
+            identifier
+            title
+            description
+            priority
+            estimate
+            state { name type }
+            assignee { name }
+            creator { name }
+            team { id name }
+            project { name }
+            labels { nodes { name } }
+            url
+            createdAt
+            updatedAt
+        }
+    }
+    """
+    return linear_graphql_request(uid, query, {"id": issue_identifier.upper()})
 
 
 def get_user_teams(uid: str) -> List[LinearTeam]:
@@ -179,11 +209,11 @@ def get_user_teams(uid: str) -> List[LinearTeam]:
         return []
     
     teams = []
-    for team in result.get("teams", {}).get("nodes", []):
+    for team in ((result.get("teams") or {}).get("nodes")) or []:
         teams.append(LinearTeam(
             id=team["id"],
-            name=team["name"],
-            key=team["key"],
+            name=team.get("name") or "",
+            key=team.get("key") or "",
             description=team.get("description") or ""
         ))
     return teams
@@ -212,7 +242,7 @@ def get_team_states(uid: str, team_id: str) -> List[WorkflowState]:
         return []
     
     states = []
-    for state in result.get("team", {}).get("states", {}).get("nodes", []):
+    for state in ((result.get("team") or {}).get("states") or {}).get("nodes") or []:
         states.append(WorkflowState(
             id=state["id"],
             name=state["name"],
@@ -223,47 +253,131 @@ def get_team_states(uid: str, team_id: str) -> List[WorkflowState]:
     return sorted(states, key=lambda s: s.position)
 
 
-def find_state_by_name(uid: str, team_id: str, state_name: str) -> Optional[WorkflowState]:
-    """Find a workflow state by name (case-insensitive partial match)."""
-    states = get_team_states(uid, team_id)
-    state_name_lower = state_name.lower()
-    
-    # Map common names to Linear state types
-    state_mapping = {
-        "backlog": "backlog",
-        "todo": "unstarted",
-        "to do": "unstarted",
-        "to-do": "unstarted",
-        "in progress": "started",
-        "in-progress": "started",
-        "working": "started",
-        "doing": "started",
-        "done": "completed",
-        "complete": "completed",
-        "completed": "completed",
-        "finished": "completed",
-        "cancelled": "canceled",
-        "canceled": "canceled",
-    }
-    
-    # First try exact match
-    for state in states:
-        if state.name.lower() == state_name_lower:
-            return state
-    
-    # Then try partial match
-    for state in states:
-        if state_name_lower in state.name.lower():
-            return state
-    
-    # Then try type match
-    mapped_type = state_mapping.get(state_name_lower)
-    if mapped_type:
-        for state in states:
-            if state.type == mapped_type:
-                return state
-    
+ISSUE_IDENTIFIER_RE = re.compile(r"([A-Za-z][A-Za-z0-9_]*)-([0-9]+)")
+
+
+def sanitize_issue_identifier(raw: Any) -> Optional[str]:
+    """Extract a Linear issue identifier (e.g. ENG-123) from a dirty value.
+
+    Callers and chat tools hand over ``#ENG-123``, ``issue: #ENG-123``,
+    full web URLs (``https://linear.app/workspace/issue/ENG-123/slug``),
+    lowercase variants, or untyped primitives. Returns the canonical
+    uppercase identifier, or None when the value holds no identifier at
+    all so callers can reject it with a clean message.
+    """
+    if raw is None:
+        return None
+    if isinstance(raw, (dict, list)):
+        return None
+    candidate = str(raw).strip()
+    if not candidate:
+        return None
+    match = ISSUE_IDENTIFIER_RE.search(candidate)
+    if match:
+        return f"{match.group(1)}-{match.group(2)}".upper()
     return None
+
+
+def resolve_team(uid: str, team_target: Any) -> Dict[str, Any]:
+    """Resolve a caller-supplied team target to exactly one team.
+
+    Accepts a Linear UUID, a team key (e.g. ``ENG``), a team name, or a
+    close substring of either. Tiers: UUID exact, key/name exact,
+    substring. Returns ``{"team": <LinearTeam>}`` on an unambiguous match
+    or ``{"error": ..., "candidates": [...]}`` when the target is empty,
+    unknown, or matches several teams — never an arbitrary fallback.
+    """
+    target = str(team_target).strip() if team_target is not None else ""
+    if not target:
+        return {"error": "Team target is empty", "candidates": []}
+
+    teams = get_user_teams(uid)
+    if not teams:
+        return {"error": "No teams found in your Linear workspace.", "candidates": []}
+
+    target_lower = target.lower()
+
+    by_id = [t for t in teams if (t.id or "") == target]
+    if len(by_id) == 1:
+        return {"team": by_id[0]}
+
+    by_key = [t for t in teams if (t.key or "").lower() == target_lower]
+    by_name = [t for t in teams if (t.name or "").lower() == target_lower]
+    exact = by_key + [t for t in by_name if t not in by_key]
+    if len(exact) == 1:
+        return {"team": exact[0]}
+    if len(exact) > 1:
+        names = ", ".join(f"'{t.name}' (key: {t.key})" for t in exact)
+        return {"error": f"'{target}' matches more than one team: {names}. Say the full team name or key.", "candidates": exact}
+
+    substring = [
+        t for t in teams
+        if target_lower in (t.name or "").lower() or target_lower in (t.key or "").lower()
+    ]
+    if len(substring) == 1:
+        return {"team": substring[0]}
+    if len(substring) > 1:
+        names = ", ".join(f"'{t.name}' (key: {t.key})" for t in substring)
+        return {"error": f"'{target}' matches more than one team: {names}. Say the full team name or key.", "candidates": substring}
+
+    return {"error": f"No team matches '{target}'.", "candidates": []}
+
+
+STATE_TYPE_ALIASES = {
+    "backlog": "backlog",
+    "todo": "unstarted",
+    "to do": "unstarted",
+    "to-do": "unstarted",
+    "in progress": "started",
+    "in-progress": "started",
+    "working": "started",
+    "doing": "started",
+    "done": "completed",
+    "complete": "completed",
+    "completed": "completed",
+    "finished": "completed",
+    "cancelled": "canceled",
+    "canceled": "canceled",
+}
+
+
+def find_state_by_name(uid: str, team_id: str, state_name: str) -> Tuple[Optional[WorkflowState], List[WorkflowState]]:
+    """Find a workflow state by name.
+
+    Returns (state, candidates). A single unambiguous match at any tier
+    (exact name, workflow type alias, partial name) wins. Multiple matches
+    at a tier are ambiguous: candidates lists them for the caller and the
+    weaker tiers below are not tried, so an issue is never silently moved
+    to whichever state a team happens to have listed first. A Linear team
+    can have more than one state of the same type (two "started" columns,
+    for example), so the type alias tier needs the same check the name
+    tiers already needed.
+    """
+    if not isinstance(state_name, str) or not state_name.strip():
+        # whitespace-only or untyped status values must not leak into
+        # partial matching (an int has no .lower(), '' matches nothing)
+        return None, []
+    states = get_team_states(uid, team_id)
+    state_name_lower = state_name.lower().strip()
+
+    exact = [s for s in states if s.name.lower() == state_name_lower]
+    if len(exact) == 1:
+        return exact[0], exact
+    if len(exact) > 1:
+        return None, exact
+
+    mapped_type = STATE_TYPE_ALIASES.get(state_name_lower)
+    if mapped_type:
+        typed = [s for s in states if s.type == mapped_type]
+        if len(typed) == 1:
+            return typed[0], typed
+        if len(typed) > 1:
+            return None, typed
+
+    partial = [s for s in states if state_name_lower in s.name.lower()]
+    if len(partial) == 1:
+        return partial[0], partial
+    return None, partial
 
 
 def get_user_profile(uid: str) -> Optional[LinearUser]:
@@ -328,7 +442,7 @@ async def home(request: Request, uid: Optional[str] = None):
         "user_profile": user_profile,
         "teams": teams,
         "default_team": default_team,
-        "oauth_url": f"/auth/linear?uid={uid}"
+        "oauth_url": f"/auth/linear?uid={urllib.parse.quote(uid, safe='')}"
     })
 
 
@@ -402,7 +516,7 @@ async def linear_callback(request: Request, code: str = None, state: str = None,
     )
     
     # Redirect to home with uid
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
 
 @app.get("/setup/linear", tags=["setup"])
@@ -423,7 +537,7 @@ async def set_default_team(uid: str, team_id: str, team_name: str):
 async def disconnect_linear(uid: str):
     """Disconnect Linear account."""
     delete_linear_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
 
 # ============================================
@@ -442,7 +556,8 @@ async def tool_create_issue(request: Request):
         title = body.get("title", "")
         description = body.get("description", "")
         priority = body.get("priority")  # 0 = No priority, 1 = Urgent, 2 = High, 3 = Medium, 4 = Low
-        team_id = body.get("team_id")
+        team_target = body.get("team_id") or body.get("team")
+        status = body.get("status") or body.get("state")
         
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -454,19 +569,34 @@ async def tool_create_issue(request: Request):
         if not get_linear_tokens(uid):
             return ChatToolResponse(error="Please connect your Linear account first in the app settings.")
         
-        # Get team ID if not provided
-        if not team_id:
+        # Resolve the team: explicit target (UUID, key, or name) first, then
+        # the caller's default team, then a single-team workspace. Never
+        # silently pick teams[0] when the user belongs to several teams.
+        if team_target:
+            resolved = resolve_team(uid, team_target)
+            if "error" in resolved:
+                candidates = resolved.get("candidates") or []
+                suffix = f" Teams available: {', '.join(t.name for t in candidates)}." if candidates else ""
+                return ChatToolResponse(error=resolved["error"] + suffix)
+            team_id = resolved["team"].id
+        else:
             default = get_default_team(uid)
             if default:
                 team_id = default["id"]
             else:
-                # Use first team
                 teams = get_user_teams(uid)
                 if not teams:
                     return ChatToolResponse(error="No teams found in your Linear workspace.")
-                team_id = teams[0].id
-        
-        # Map priority text to number
+                if len(teams) == 1:
+                    team_id = teams[0].id
+                else:
+                    team_list = ", ".join(f"'{t.name}' (key: {t.key})" for t in teams)
+                    return ChatToolResponse(
+                        error=f"Which team should own this issue? You belong to several: {team_list}. Say the team name or key, or set a default team in the app settings."
+                    )
+
+        # Map priority text to number; numeric strings ("1") map to their
+        # integer value, out-of-range values fall back to 0.
         priority_map = {
             "urgent": 1,
             "high": 2,
@@ -476,7 +606,13 @@ async def tool_create_issue(request: Request):
             "none": 0,
         }
         if isinstance(priority, str):
-            priority = priority_map.get(priority.lower(), 0)
+            cleaned = priority.strip()
+            if cleaned.isdigit():
+                priority = int(cleaned)
+            else:
+                priority = priority_map.get(cleaned.lower(), 0)
+        if isinstance(priority, bool) or not isinstance(priority, int) or not 0 <= priority <= 4:
+            priority = 0
         
         # Create the issue
         mutation = """
@@ -508,6 +644,23 @@ async def tool_create_issue(request: Request):
         if priority:
             variables["input"]["priority"] = priority
         
+        # Optional workflow-state binding on creation: an explicit state
+        # name resolves against the target team's workflow states.
+        if status:
+            target_state, state_candidates = find_state_by_name(uid, team_id, status)
+            if not target_state:
+                if state_candidates:
+                    names = ", ".join(f"'{s.name}'" for s in state_candidates)
+                    return ChatToolResponse(
+                        error=f"'{status}' matches more than one status: {names}. Say the full status name."
+                    )
+                states = get_team_states(uid, team_id)
+                state_names = [s.name for s in states]
+                return ChatToolResponse(
+                    error=f"Could not find status '{status}'. Available states: {', '.join(state_names)}"
+                )
+            variables["input"]["stateId"] = target_state.id
+
         result = linear_graphql_request(uid, mutation, variables)
         
         if "error" in result:
@@ -520,7 +673,7 @@ async def tool_create_issue(request: Request):
         issue = issue_data.get("issue", {})
         identifier = issue.get("identifier", "")
         url = issue.get("url", "")
-        state_name = issue.get("state", {}).get("name", "Unknown")
+        state_name = (issue.get("state") or {}).get("name", "Unknown")
         
         return ChatToolResponse(
             result=f"✅ Created issue **{identifier}**: {title}\n\n"
@@ -532,6 +685,26 @@ async def tool_create_issue(request: Request):
         return ChatToolResponse(error=f"Failed to create issue: {str(e)}")
 
 
+def coerce_limit(value: Any, default: int = 10, min_val: int = 1, max_val: int = 50) -> int:
+    """Coerce a caller-supplied limit to an int clamped between min_val and max_val.
+
+    Chat tool parameters arrive as loosely-typed JSON (null when the backend
+    omits an optional parameter, or strings like "10" from LLM callers), so
+    anything that is not numeric falls back to default.
+    """
+    if value is None:
+        return default
+    try:
+        val = int(value)
+    except (ValueError, TypeError, OverflowError):
+        return default
+    if val < min_val:
+        return min_val
+    if val > max_val:
+        return max_val
+    return val
+
+
 @app.post("/tools/list_my_issues", tags=["chat_tools"], response_model=ChatToolResponse)
 async def tool_list_my_issues(request: Request):
     """
@@ -541,7 +714,7 @@ async def tool_list_my_issues(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        limit = body.get("limit", 10)
+        limit = coerce_limit(body.get("limit"), default=10, min_val=1, max_val=50)
         status_filter = body.get("status")  # Optional: filter by status
         
         if not uid:
@@ -551,10 +724,10 @@ async def tool_list_my_issues(request: Request):
         if not get_linear_tokens(uid):
             return ChatToolResponse(error="Please connect your Linear account first in the app settings.")
         
-        # Build filter
-        filter_clause = '{ assignee: { isMe: { eq: true } } }'
+        # Build filter as a structured variables object, never interpolated text
+        filter_obj: Dict[str, Any] = {"assignee": {"isMe": {"eq": True}}}
         if status_filter:
-            status_lower = status_filter.lower()
+            status_lower = str(status_filter).lower()
             state_types = {
                 "backlog": "backlog",
                 "todo": "unstarted",
@@ -564,28 +737,28 @@ async def tool_list_my_issues(request: Request):
             }
             state_type = state_types.get(status_lower)
             if state_type:
-                filter_clause = f'{{ assignee: {{ isMe: {{ eq: true }} }}, state: {{ type: {{ eq: "{state_type}" }} }} }}'
+                filter_obj["state"] = {"type": {"eq": state_type}}
         
-        query = f"""
-        query {{
-            issues(first: {limit}, filter: {filter_clause}, orderBy: updatedAt) {{
-                nodes {{
+        query = """
+        query($first: Int!, $filter: IssueFilter) {
+            issues(first: $first, filter: $filter, orderBy: updatedAt) {
+                nodes {
                     id
                     identifier
                     title
                     priority
-                    state {{
+                    state {
                         name
                         type
-                    }}
+                    }
                     url
                     updatedAt
-                }}
-            }}
-        }}
+                }
+            }
+        }
         """
         
-        result = linear_graphql_request(uid, query)
+        result = linear_graphql_request(uid, query, {"first": limit, "filter": filter_obj})
         
         if "error" in result:
             return ChatToolResponse(error=f"Failed to get issues: {result['error']}")
@@ -624,7 +797,7 @@ async def tool_list_recent_issues(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        limit = body.get("limit", 5)
+        limit = coerce_limit(body.get("limit"), default=5, min_val=1, max_val=50)
         team_key = body.get("team")  # Optional: filter by team key like "OMI", "ENG"
         
         if not uid:
@@ -634,51 +807,56 @@ async def tool_list_recent_issues(request: Request):
         if not get_linear_tokens(uid):
             return ChatToolResponse(error="Please connect your Linear account first in the app settings.")
         
-        # Build query - get recent issues ordered by created date
-        if team_key:
-            query = f"""
-            query {{
-                issues(first: {limit}, orderBy: createdAt, filter: {{ team: {{ key: {{ eq: "{team_key.upper()}" }} }} }}) {{
-                    nodes {{
+        # Build query - get recent issues ordered by created date.
+        # The team key travels as a structured filter variable, never as
+        # interpolated GraphQL text, so quotes/braces stay inert data.
+        clean_team = team_key.strip().upper() if isinstance(team_key, str) and team_key.strip() else None
+        if clean_team:
+            query = """
+            query($first: Int!, $filter: IssueFilter) {
+                issues(first: $first, orderBy: createdAt, filter: $filter) {
+                    nodes {
                         id
                         identifier
                         title
                         priority
-                        state {{
+                        state {
                             name
-                        }}
-                        assignee {{
+                        }
+                        assignee {
                             name
-                        }}
+                        }
                         createdAt
                         url
-                    }}
-                }}
-            }}
+                    }
+                }
+            }
             """
+            variables = {"first": limit, "filter": {"team": {"key": {"eq": clean_team}}}}
         else:
-            query = f"""
-            query {{
-                issues(first: {limit}, orderBy: createdAt) {{
-                    nodes {{
+            query = """
+            query($first: Int!) {
+                issues(first: $first, orderBy: createdAt) {
+                    nodes {
                         id
                         identifier
                         title
                         priority
-                        state {{
+                        state {
                             name
-                        }}
-                        assignee {{
+                        }
+                        assignee {
                             name
-                        }}
+                        }
                         createdAt
                         url
-                    }}
-                }}
-            }}
+                    }
+                }
+            }
             """
+            variables = {"first": limit}
         
-        result = linear_graphql_request(uid, query)
+        result = linear_graphql_request(uid, query, variables)
         
         if "error" in result:
             return ChatToolResponse(error=f"Failed to get issues: {result['error']}")
@@ -701,7 +879,7 @@ async def tool_list_recent_issues(request: Request):
                 f"   └ {state} • {assignee_name}"
             )
         
-        team_msg = f" in {team_key.upper()}" if team_key else ""
+        team_msg = f" in {clean_team}" if clean_team else ""
         return ChatToolResponse(
             result=f"📋 Latest {len(issues)} issues{team_msg} in Linear:\n\n" + "\n\n".join(results)
         )
@@ -719,7 +897,7 @@ async def tool_update_issue_status(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        issue_identifier = body.get("issue_identifier", "")  # e.g., "ENG-123"
+        issue_identifier = sanitize_issue_identifier(body.get("issue_identifier"))
         new_status = body.get("new_status", "")  # e.g., "In Progress", "Done"
         
         if not uid:
@@ -735,40 +913,31 @@ async def tool_update_issue_status(request: Request):
         if not get_linear_tokens(uid):
             return ChatToolResponse(error="Please connect your Linear account first in the app settings.")
         
-        # Search for the issue by identifier using searchIssues
-        search_query = """
-        query($term: String!) {
-            searchIssues(term: $term, first: 1) {
-                nodes {
-                    id
-                    identifier
-                    title
-                    team {
-                        id
-                    }
-                }
-            }
-        }
-        """
-        
-        result = linear_graphql_request(uid, search_query, {
-            "term": issue_identifier.upper()
-        })
+        result = get_issue_by_identifier(uid, issue_identifier)
         
         if "error" in result:
             return ChatToolResponse(error=f"Failed to find issue: {result['error']}")
         
-        issues = result.get("searchIssues", {}).get("nodes", [])
-        if not issues:
+        issue = result.get("issue")
+        if not issue:
             return ChatToolResponse(error=f"Could not find issue: {issue_identifier}")
         
-        issue = issues[0]
-        team_id = issue["team"]["id"]
+        # A GraphQL response with null optional fields (team/state/project)
+        # must degrade to a clean error, never an unhandled KeyError.
+        team = issue.get("team") or {}
+        team_id = team.get("id")
+        if not team_id:
+            return ChatToolResponse(error=f"Issue {issue.get('identifier', issue_identifier)} has no team; cannot resolve statuses.")
         issue_id = issue["id"]
         
         # Find the target state
-        target_state = find_state_by_name(uid, team_id, new_status)
+        target_state, candidates = find_state_by_name(uid, team_id, new_status)
         if not target_state:
+            if candidates:
+                names = ", ".join(f"'{s.name}'" for s in candidates)
+                return ChatToolResponse(
+                    error=f"'{new_status}' matches more than one status: {names}. Say the full status name."
+                )
             states = get_team_states(uid, team_id)
             state_names = [s.name for s in states]
             return ChatToolResponse(
@@ -805,8 +974,8 @@ async def tool_update_issue_status(request: Request):
         if not update_data.get("success"):
             return ChatToolResponse(error="Failed to update issue status")
         
-        updated_issue = update_data.get("issue", {})
-        new_state = updated_issue.get("state", {}).get("name", target_state.name)
+        updated_issue = update_data.get("issue") or {}
+        new_state = (updated_issue.get("state") or {}).get("name") or target_state.name
         
         return ChatToolResponse(
             result=f"✅ Updated **{issue['identifier']}** to **{new_state}**\n\n"
@@ -827,7 +996,7 @@ async def tool_search_issues(request: Request):
         body = await request.json()
         uid = body.get("uid")
         query_text = body.get("query", "")
-        limit = body.get("limit", 5)
+        limit = coerce_limit(body.get("limit"), default=5, min_val=1, max_val=50)
         
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -930,7 +1099,7 @@ async def tool_get_issue(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        issue_identifier = body.get("issue_identifier", "")
+        issue_identifier = sanitize_issue_identifier(body.get("issue_identifier"))
         
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -942,72 +1111,30 @@ async def tool_get_issue(request: Request):
         if not get_linear_tokens(uid):
             return ChatToolResponse(error="Please connect your Linear account first in the app settings.")
         
-        query = """
-        query($term: String!) {
-            searchIssues(term: $term, first: 1) {
-                nodes {
-                    id
-                    identifier
-                    title
-                    description
-                    priority
-                    estimate
-                    state {
-                        name
-                        type
-                    }
-                    assignee {
-                        name
-                    }
-                    creator {
-                        name
-                    }
-                    team {
-                        name
-                    }
-                    project {
-                        name
-                    }
-                    labels {
-                        nodes {
-                            name
-                        }
-                    }
-                    url
-                    createdAt
-                    updatedAt
-                }
-            }
-        }
-        """
-        
-        result = linear_graphql_request(uid, query, {
-            "term": issue_identifier.upper()
-        })
+        result = get_issue_by_identifier(uid, issue_identifier)
         
         if "error" in result:
             return ChatToolResponse(error=f"Failed to get issue: {result['error']}")
         
-        issues = result.get("searchIssues", {}).get("nodes", [])
-        if not issues:
+        issue = result.get("issue")
+        if not issue:
             return ChatToolResponse(error=f"Could not find issue: {issue_identifier}")
-        
-        issue = issues[0]
         
         # Format the issue details
         priority_map = {0: "No priority", 1: "🔴 Urgent", 2: "🟠 High", 3: "🟡 Medium", 4: "🔵 Low"}
         priority = priority_map.get(issue.get("priority", 0), "No priority")
         
-        state = issue.get("state", {}).get("name", "Unknown")
-        assignee = issue.get("assignee", {})
+        state = (issue.get("state") or {}).get("name", "Unknown")
+        assignee = issue.get("assignee") or {}
         assignee_name = assignee.get("name", "Unassigned") if assignee else "Unassigned"
-        creator = issue.get("creator", {})
+        creator = issue.get("creator") or {}
         creator_name = creator.get("name", "Unknown") if creator else "Unknown"
-        team = issue.get("team", {}).get("name", "")
-        project = issue.get("project", {})
+        team = issue.get("team") or {}
+        team_name = team.get("name", "")
+        project = issue.get("project") or {}
         project_name = project.get("name", "No project") if project else "No project"
         
-        labels = [l["name"] for l in issue.get("labels", {}).get("nodes", [])]
+        labels = [l["name"] for l in ((issue.get("labels") or {}).get("nodes")) or []]
         labels_str = ", ".join(labels) if labels else "None"
         
         description = issue.get("description", "")
@@ -1020,7 +1147,7 @@ async def tool_get_issue(request: Request):
             f"**Status:** {state}",
             f"**Priority:** {priority}",
             f"**Assignee:** {assignee_name}",
-            f"**Team:** {team}",
+            f"**Team:** {team_name}",
             f"**Project:** {project_name}",
             f"**Labels:** {labels_str}",
             f"**Created by:** {creator_name}",
@@ -1049,7 +1176,7 @@ async def tool_add_comment(request: Request):
     try:
         body = await request.json()
         uid = body.get("uid")
-        issue_identifier = body.get("issue_identifier", "")
+        issue_identifier = sanitize_issue_identifier(body.get("issue_identifier"))
         comment_body = body.get("comment", "")
         
         if not uid:
@@ -1065,31 +1192,14 @@ async def tool_add_comment(request: Request):
         if not get_linear_tokens(uid):
             return ChatToolResponse(error="Please connect your Linear account first in the app settings.")
         
-        # First, get the issue ID using search
-        query = """
-        query($term: String!) {
-            searchIssues(term: $term, first: 1) {
-                nodes {
-                    id
-                    identifier
-                    title
-                }
-            }
-        }
-        """
-        
-        result = linear_graphql_request(uid, query, {
-            "term": issue_identifier.upper()
-        })
+        result = get_issue_by_identifier(uid, issue_identifier)
         
         if "error" in result:
             return ChatToolResponse(error=f"Failed to find issue: {result['error']}")
         
-        issues = result.get("searchIssues", {}).get("nodes", [])
-        if not issues:
+        issue = result.get("issue")
+        if not issue:
             return ChatToolResponse(error=f"Could not find issue: {issue_identifier}")
-        
-        issue = issues[0]
         
         # Add the comment
         mutation = """
@@ -1160,6 +1270,14 @@ async def get_omi_tools_manifest():
                         "priority": {
                             "type": "string",
                             "description": "Priority level: 'urgent', 'high', 'medium', 'low', or 'none'"
+                        },
+                        "team": {
+                            "type": "string",
+                            "description": "Team to create the issue in: team key (e.g. 'ENG'), team name, or team UUID. Optional when the user has a default team or exactly one team."
+                        },
+                        "status": {
+                            "type": "string",
+                            "description": "Optional initial workflow state, e.g. 'Todo', 'In Progress', 'Done'"
                         }
                     },
                     "required": ["title"]

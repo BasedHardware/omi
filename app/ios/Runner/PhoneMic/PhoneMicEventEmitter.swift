@@ -1,4 +1,3 @@
-import Flutter
 import Foundation
 
 /// Monotonic capture epoch shared between the controller (writer) and the
@@ -40,30 +39,30 @@ final class PhoneMicGeneration {
 /// an epoch invalidation that happens-before a state emission means no frame
 /// can arrive after that state event.
 final class PhoneMicEventEmitter {
-    private let api: PhoneMicFlutterApi
+    private let sink: PhoneMicEventSink
     private let generation: PhoneMicGeneration
 
-    init(api: PhoneMicFlutterApi, generation: PhoneMicGeneration) {
-        self.api = api
+    init(sink: PhoneMicEventSink, generation: PhoneMicGeneration) {
+        self.sink = sink
         self.generation = generation
     }
 
     func emitFrame(_ data: Data, epoch: UInt64, sessionId: Int64) {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.generation.matches(epoch) else { return }
-            self.api.onAudioFrame(pcm16leMono16k: FlutterStandardTypedData(bytes: data), sessionId: sessionId) { _ in }
+            self.sink.onAudioFrame(pcm16leMono16k: data, sessionId: sessionId)
         }
     }
 
     func emitState(_ state: PhoneMicCaptureState, sessionId: Int64) {
         DispatchQueue.main.async { [weak self] in
-            self?.api.onStateChanged(state: state, sessionId: sessionId) { _ in }
+            self?.sink.onStateChanged(state: state, sessionId: sessionId)
         }
     }
 
     func emitError(code: String, message: String, sessionId: Int64) {
         DispatchQueue.main.async { [weak self] in
-            self?.api.onCaptureError(code: code, message: message, sessionId: sessionId) { _ in }
+            self?.sink.onCaptureError(code: code, message: message, sessionId: sessionId)
         }
     }
 
@@ -71,7 +70,7 @@ final class PhoneMicEventEmitter {
     /// no audio, and its steady arrival is the Dart watchdog's liveness signal.
     func emitBatchProgress(_ capturedSeconds: Double, sessionId: Int64) {
         DispatchQueue.main.async { [weak self] in
-            self?.api.onBatchProgress(capturedSeconds: capturedSeconds, sessionId: sessionId) { _ in }
+            self?.sink.onBatchProgress(capturedSeconds: capturedSeconds, sessionId: sessionId)
         }
     }
 }

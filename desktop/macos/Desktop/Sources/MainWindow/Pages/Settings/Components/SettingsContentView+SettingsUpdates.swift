@@ -126,7 +126,7 @@ extension SettingsContentView {
         UserDefaults.standard.set(deletionOwner, forKey: .acceptedAccountDeletionOwnerId)
         await MainActor.run {
           appState.stopTranscription()
-          ProactiveAssistantsPlugin.shared.stopMonitoring()
+          ProactiveAssistantsPlugin.shared.stopMonitoring(reason: .accountDeleted)
         }
         do {
           try await AuthService.shared.signOut(acceptedAccountDeletion: true)

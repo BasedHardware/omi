@@ -30,6 +30,9 @@ struct AgentRuntimeFailure: Equatable, Sendable {
   let recoveryAction: String?
   let recoveryOutcome: String?
   let retryDisposition: String?
+  /// Qualification-only gateway attribution; nil means unavailable.
+  let jitCostStatus: String?
+  let jitEstimatedCostUsd: Double?
 
   init(
     code: String,
@@ -42,7 +45,9 @@ struct AgentRuntimeFailure: Equatable, Sendable {
     retryable: Bool? = nil,
     recoveryAction: String? = nil,
     recoveryOutcome: String? = nil,
-    retryDisposition: String? = nil
+    retryDisposition: String? = nil,
+    jitCostStatus: String? = nil,
+    jitEstimatedCostUsd: Double? = nil
   ) {
     self.code = code
     self.failureCode = failureCode
@@ -55,6 +60,8 @@ struct AgentRuntimeFailure: Equatable, Sendable {
     self.recoveryAction = recoveryAction
     self.recoveryOutcome = recoveryOutcome
     self.retryDisposition = retryDisposition
+    self.jitCostStatus = jitCostStatus
+    self.jitEstimatedCostUsd = jitEstimatedCostUsd
   }
 
   var displayMessage: String {
@@ -90,7 +97,9 @@ struct AgentRuntimeFailure: Equatable, Sendable {
       retryable: payload["retryable"] as? Bool,
       recoveryAction: payload["recoveryAction"] as? String,
       recoveryOutcome: payload["recoveryOutcome"] as? String,
-      retryDisposition: payload["retryDisposition"] as? String
+      retryDisposition: payload["retryDisposition"] as? String,
+      jitCostStatus: payload["jitCostStatus"] as? String,
+      jitEstimatedCostUsd: payload["jitEstimatedCostUsd"] as? Double
     )
   }
 }

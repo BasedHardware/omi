@@ -1310,3 +1310,104 @@ class TestShouldPreserveFillerWords:
 
     def test_arabic_true(self):
         assert should_preserve_filler_words('ar') is True
+
+
+class TestIsSttAvailable:
+    """is_stt_available() backs the speech-profile pre-flight check
+    (routers/speech_profile.py's /v3/speech-profile/stt-availability) that
+    keeps the client out of a dead recording screen when the configured
+    streaming primary is down.
+
+    It must track whichever provider STT_SERVICE_MODELS actually leads with,
+    not a provider named at the call site: checking Deepgram's breaker after
+    Modulate became the configured primary would report availability for a
+    provider the session would never use.
+    """
+
+    @pytest.fixture(autouse=True)
+    def reset_circuits(self):
+        # The breakers are module-level singletons shared with real streaming
+        # code; leaving one open would poison unrelated tests/requests in the
+        # same process.
+        from utils.stt.streaming import _deepgram_circuit, _modulate_circuit
+
+        _deepgram_circuit.record_success()
+        _modulate_circuit.record_success()
+        yield
+        _deepgram_circuit.record_success()
+        _modulate_circuit.record_success()
+
+    def test_tracks_configured_primary_not_a_fixed_provider(self, monkeypatch):
+        """The default deployment config leads with Modulate; the check must
+        follow that ordering rather than a provider hardcoded at the call site.
+        """
+        from utils.stt.streaming import _deepgram_circuit, _modulate_circuit, is_stt_available
+
+        monkeypatch.setattr('utils.stt.streaming.stt_service_models', ['modulate-velma-2', 'dg-nova-3'])
+        for _ in range(_modulate_circuit._failure_threshold):
+            _modulate_circuit.record_failure()
+
+        # Modulate leads and is down; a healthy Deepgram breaker must not mask that.
+        assert is_stt_available() is False
+
+        _modulate_circuit.record_success()
+        for _ in range(_deepgram_circuit._failure_threshold):
+            _deepgram_circuit.record_failure()
+
+        # Modulate leads and is healthy; a down Deepgram (not the primary) is irrelevant.
+        assert is_stt_available() is True
+
+    def test_available_when_circuit_closed(self):
+        from utils.stt.streaming import is_stt_available
+
+        assert is_stt_available() is True
+
+    def test_unavailable_once_circuit_trips_open(self, monkeypatch):
+        from utils.stt.streaming import _modulate_circuit, is_stt_available
+
+        monkeypatch.setattr('utils.stt.streaming.stt_service_models', ['modulate-velma-2'])
+        # MODULATE_CIRCUIT_FAILURE_THRESHOLD is env-configurable; read the
+        # breaker's own configured threshold instead of assuming a count, so
+        # this can't flake against an env that sets it above a hardcoded loop.
+        for _ in range(_modulate_circuit._failure_threshold):
+            _modulate_circuit.record_failure()
+
+        assert is_stt_available() is False
+
+    def test_available_again_after_recovery(self, monkeypatch):
+        from utils.stt.streaming import _modulate_circuit, is_stt_available
+
+        monkeypatch.setattr('utils.stt.streaming.stt_service_models', ['modulate-velma-2'])
+        for _ in range(_modulate_circuit._failure_threshold):
+            _modulate_circuit.record_failure()
+        assert is_stt_available() is False
+
+        _modulate_circuit.record_success()
+        assert is_stt_available() is True
+
+    def test_unavailable_immediately_after_open_then_available_after_cooldown(self, monkeypatch):
+        from utils.stt.streaming import _modulate_circuit, is_stt_available
+
+        monkeypatch.setattr('utils.stt.streaming.stt_service_models', ['modulate-velma-2'])
+        for _ in range(_modulate_circuit._failure_threshold):
+            _modulate_circuit.record_failure()
+        assert is_stt_available() is False
+
+        # No live-listen traffic has called allow_request() to flip
+        # open->half_open — is_stt_available() must still resolve this
+        # itself once the cooldown elapses, not stay stuck on stale state.
+        _modulate_circuit._opened_at -= _modulate_circuit._cooldown_seconds + 1
+        assert is_stt_available() is True
+
+    def test_legacy_deepgram_only_config_still_checks_deepgram(self, monkeypatch):
+        """A principal still deployed with a Deepgram-only STT_SERVICE_MODELS
+        (pre-migration config, or a BYOK-style override) must keep resolving
+        against Deepgram's own breaker, not silently start reporting Modulate's.
+        """
+        from utils.stt.streaming import _deepgram_circuit, is_stt_available
+
+        monkeypatch.setattr('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
+        for _ in range(_deepgram_circuit._failure_threshold):
+            _deepgram_circuit.record_failure()
+
+        assert is_stt_available() is False

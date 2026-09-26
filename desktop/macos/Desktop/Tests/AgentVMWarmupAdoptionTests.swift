@@ -87,7 +87,7 @@ final class AgentVMWarmupAdoptionTests: XCTestCase {
     XCTAssertTrue(home.contains("AgentVMService.shared.ensureProvisioned()"))
     XCTAssertFalse(home.contains("AgentVMService.shared.startPipeline()"))
 
-    let onboarding = try sourceFile("Onboarding/OnboardingView.swift")
+    let onboarding = try sourceFile("Onboarding/SecondBrain/SBOnboardingModel.swift")
     XCTAssertTrue(
       onboarding.contains("AgentVMService.shared.startPipeline()"),
       "onboarding must remain the explicit create path")

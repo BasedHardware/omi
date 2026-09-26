@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict, Iterable, Iterator, List, Literal, Typed
 from google.cloud.firestore_v1 import FieldFilter
 
 from database._client import get_firestore_client
-from database.chat_first_intents import INTENTS_COLLECTION
+from database.chat_first_intents import DEAD_LETTERS_COLLECTION, INTENTS_COLLECTION
 
 DEFAULT_STALE_AFTER_HOURS = 48
 SCHEDULED_WEEKDAY_UTC = 0  # Monday
@@ -89,18 +89,24 @@ def _documents(
     """
 
     client = firestore_client or get_firestore_client()
-    if uid:
-        query: Any = client.collection('users').document(uid).collection(INTENTS_COLLECTION)
-    else:
-        query = client.collection_group(INTENTS_COLLECTION)
-    if min_created_at is not None:
-        query = query.where(filter=FieldFilter('created_at', '>=', min_created_at))
-    if limit is not None:
-        query = query.limit(limit)
-    for snapshot in query.stream():
-        raw: object = snapshot.to_dict()
-        if isinstance(raw, dict):
-            yield cast(Dict[str, Any], raw)
+    remaining = limit
+    for collection_name in (INTENTS_COLLECTION, DEAD_LETTERS_COLLECTION):
+        if uid:
+            query: Any = client.collection('users').document(uid).collection(collection_name)
+        else:
+            query = client.collection_group(collection_name)
+        if min_created_at is not None:
+            query = query.where(filter=FieldFilter('created_at', '>=', min_created_at))
+        if remaining is not None:
+            query = query.limit(remaining)
+        for snapshot in query.stream():
+            raw: object = snapshot.to_dict()
+            if isinstance(raw, dict):
+                yield cast(Dict[str, Any], raw)
+                if remaining is not None:
+                    remaining -= 1
+                    if remaining == 0:
+                        return
 
 
 def _created_at(document: Dict[str, Any]) -> datetime | None:

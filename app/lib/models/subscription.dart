@@ -1,4 +1,5 @@
 import 'package:omi/backend/schema/gen/subscription_usage_wire.g.dart' as wire;
+import 'package:omi/models/transcription_allowance.dart';
 
 enum SubscriptionStatus { active, inactive }
 
@@ -345,6 +346,7 @@ class UserSubscriptionResponse {
   final bool chatQuotaAllowed;
   final int? chatQuotaResetAt;
   final PhoneCallQuota? phoneCallQuota;
+  final TranscriptionAllowanceSnapshot? transcriptionAllowance;
 
   UserSubscriptionResponse({
     required this.subscription,
@@ -362,6 +364,7 @@ class UserSubscriptionResponse {
     this.chatQuotaAllowed = true,
     this.chatQuotaResetAt,
     this.phoneCallQuota,
+    this.transcriptionAllowance,
   });
 
   factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) {
@@ -385,6 +388,9 @@ class UserSubscriptionResponse {
       chatQuotaAllowed: generated.chatQuotaAllowed,
       chatQuotaResetAt: generated.chatQuotaResetAt,
       phoneCallQuota: generated.phoneCallQuota == null ? null : PhoneCallQuota.fromGenerated(generated.phoneCallQuota!),
+      transcriptionAllowance: generated.transcriptionAllowance == null
+          ? null
+          : TranscriptionAllowanceSnapshot.fromGenerated(generated.transcriptionAllowance!),
     );
   }
 
@@ -405,6 +411,7 @@ class UserSubscriptionResponse {
       chatQuotaAllowed: chatQuotaAllowed,
       chatQuotaResetAt: chatQuotaResetAt,
       phoneCallQuota: phoneCallQuota?.toGenerated(),
+      transcriptionAllowance: transcriptionAllowance?.toGenerated(),
     );
   }
 

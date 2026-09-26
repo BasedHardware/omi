@@ -53,7 +53,9 @@ class _DocumentReference:
     def collection(self, name: str) -> "_Collection":
         return self._collection._db.collection(f"{self._collection.name}/{self.id}/{name}")
 
-    def get(self) -> _DocumentSnapshot:
+    # ``**_read_options`` mirrors the real Firestore signature: reads on the MCP
+    # auth path pass retry/timeout to bound their deadline (database/mcp_auth_read.py).
+    def get(self, **_read_options: object) -> _DocumentSnapshot:
         record = self._collection._records.get(self.id)
         return _DocumentSnapshot(
             self,
@@ -98,7 +100,7 @@ class _Query:
     def limit(self, limit: int) -> "_Query":
         return _Query(self._collection, self._conditions, limit)
 
-    def stream(self) -> list[_DocumentSnapshot]:
+    def stream(self, **_read_options: object) -> list[_DocumentSnapshot]:
         docs = []
         for doc_id, record in self._collection._records.items():
             data = record["data"]
@@ -394,6 +396,45 @@ def test_developer_key_authentication_metadata_projection_and_revocation_share_d
 
     assert removed_grants == [("user-1", "canonical-dev-id")]
     assert dev_api_key_db.get_user_and_scopes_by_api_key(raw_token) is None
+
+
+def test_malformed_dev_api_keys_are_rejected_before_any_redis_or_firestore_io(monkeypatch):
+    """GH #13505: junk Bearer tokens on /v1/dev/* must cost nothing.
+
+    Every issued Developer API key is ``omi_dev_`` + 32 lowercase hex chars, so
+    anything else can never match a stored row. Scripted abuse presents
+    prefixed junk; rejecting it at the format gate keeps the Redis read and the
+    Firestore ``where(hashed_key)`` query off the hot path entirely.
+    """
+
+    def _forbidden_lookup() -> None:
+        raise AssertionError("malformed key must not reach the Firestore client")
+
+    monkeypatch.setattr(dev_api_key_db, "get_firestore_client", _forbidden_lookup)
+    # A plain MagicMock would silently absorb Redis reads, so the test could
+    # pass even if a regression routed malformed tokens through the cache. The
+    # Redis handle must be a MagicMock (attribute access works) whose read
+    # method fails loudly: the format gate has to short-circuit before any IO.
+    forbidden_redis = MagicMock()
+    forbidden_redis.read_cached_dev_api_key_data.side_effect = AssertionError(
+        "malformed key must not reach the Redis cache"
+    )
+    monkeypatch.setattr(dev_api_key_db, "redis_db", forbidden_redis)
+
+    malformed = [
+        "",  # no credential at all
+        "omi_dev_secret",  # right family, not hex, wrong length
+        "omi_dev_0123456789ABCDEF0123456789ABCDEF",  # uppercase is never issued
+        "omi_dev_" + "0" * 31,  # one char short
+        "omi_dev_" + "0" * 33,  # one char long
+        "omi_mcp_" + "0" * 32,  # wrong family
+        "firebase-id-token",  # not an API key
+    ]
+    for token in malformed:
+        assert dev_api_key_db.get_api_key_auth_result(token).context is None, token
+
+    well_formed = "omi_dev_0123456789abcdef0123456789abcdef"
+    assert dev_api_key_db._DEV_API_KEY_PATTERN.fullmatch(well_formed)
 
 
 def test_mcp_present_poisoned_app_identity_fails_auth_but_remains_safely_listable(monkeypatch):

@@ -7,7 +7,7 @@
 ## Product invariants affected
 
 <!-- Name locked invariant IDs this PR touches (e.g. INV-CHAT-1), or "none".
-     Registry: docs/product/invariants/ — required when changing paths listed
+     Registry: product/invariants/ — required when changing paths listed
      on a locked invariant. -->
 
 ## How it was verified
@@ -61,5 +61,4 @@ Failure-Class: none
 
 ## Scoped cleanups (optional)
 
-<!-- Related fixes you made along the way (see AGENTS.md → "Leave It Better
-     Than You Found It"). Each should be its own commit and verifiable. -->
+<!-- Mention any related cleanup included in this PR and how it was verified. -->

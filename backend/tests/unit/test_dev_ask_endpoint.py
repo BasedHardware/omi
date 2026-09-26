@@ -152,8 +152,8 @@ def test_ask_lives_on_public_developer_api_not_app_client_firebase():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[3]
-    public = json.loads((root / "docs/api-reference/openapi.json").read_text())
-    app_client = json.loads((root / "docs/api-reference/app-client-openapi.json").read_text())
+    public = json.loads((root / "docs/api-reference/openapi.json").read_text(encoding='utf-8'))
+    app_client = json.loads((root / "docs/api-reference/app-client-openapi.json").read_text(encoding='utf-8'))
 
     ask = public["paths"]["/v1/dev/user/ask"]["post"]
     assert ask["security"] == [{"developerApiKey": []}]

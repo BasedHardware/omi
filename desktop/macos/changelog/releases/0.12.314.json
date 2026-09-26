@@ -1,0 +1,10 @@
+{
+  "version": "0.12.314",
+  "date": "2026-09-07",
+  "changes": [
+    "You can now attach a file, image, or conversation and press Return without typing anything; Omi responds to the attachment directly.",
+    "Attached files, images, and conversations are now treated as the subject of your message, so Omi answers about the attachment instead of describing your screen.",
+    "Voice typing now capitalizes sentence starts and the pronoun \"I\" even when the AI cleanup is unavailable",
+    "Completed realtime voice conversations now keep their final answer in conversation history"
+  ]
+}

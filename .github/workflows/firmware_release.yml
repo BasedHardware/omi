@@ -68,7 +68,7 @@ jobs:
       group: firmware-release-cv1
       cancel-in-progress: false
     env:
-      # Zephyr CI image blessed by omi/firmware/omi/BUILD.md; bundles the
+      # Zephyr CI image blessed by omi/firmware/BUILD_AND_OTA_FLASH.md; bundles the
       # toolchain for the NCS 2.9.0 sysbuild + MCUboot signing build.
       # Pinned by digest for reproducible, supply-chain-safe builds (tag kept
       # for readability). Digest = the v0.26.13 multi-arch index; re-resolve with

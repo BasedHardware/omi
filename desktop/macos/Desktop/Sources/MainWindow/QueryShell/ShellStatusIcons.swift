@@ -8,9 +8,10 @@
 //  needs-attention at a glance, and a **tooltip**, which says the whole sentence to anyone who asks.
 //
 //  A wordless control has to be legible without its label, so the dot is not optional and it is not
-//  decorative. Every button here is on when its dot is filled green, off when the dot is hollow, and
-//  blocked when it is filled with the error colour — one vocabulary across all of them, which is what
-//  makes the cluster readable at all.
+//  decorative. Every button here is capturing when its dot is filled green, off when the dot is
+//  hollow, and blocked when it is filled with the error colour; the microphone adds one state, armed
+//  (a green ring around a hollow centre), for Only Meetings waiting for a call. Green therefore always
+//  means "recording now", one vocabulary across the cluster.
 //
 //  **The glyph names the capability; the slash says it is not running; the dot says why.** A dot is a
 //  9.5 pt mark that has to be *decoded* — hollow-versus-filled is a real distinction, but it is a
@@ -26,6 +27,11 @@
 //  silhouette. `ShellStatusSlash` adds to it: the base glyph is byte-identical in every state and the
 //  diagonal is additional ink on top, so the capability still reads from the shape and only the
 //  running/not-running bit moves. `ShellStatusIconLegibilityTests` measures both halves of that claim.
+//
+//  The listening **mode** follows the same rule: the mic stays a mic in every mode, and Only Meetings
+//  adds a small badge (`ShellStatusGlyph.listeningBadge`) at its foot rather than swapping the
+//  silhouette. Clicking the mic opens `ShellListeningModeMenu`, which names all three modes; it never
+//  cycles, because one stray click must not turn on room recording.
 //
 //  It drives `CaptureListeningLogic` — the same functions the old pills and Home's header call — so
 //  this is a second *rendering* of the capture state and never a second copy of the behaviour.
@@ -81,6 +87,12 @@ struct ShellStatusDot: View {
   /// `ShellStatusIconLegibilityTests` reads the value back off the rendered pixels for this reason.
   static let ring = Ink.primary.opacity(0.72)
 
+  /// The green band the armed state draws inside the ring, leaving a hollow centre of
+  /// `diameter - 2 * armedBand` (3.5 pt). Armed is on but not recording: it shares green with
+  /// `.active` so it reads as switched on, and shares the hollow centre with `.inactive` so it does
+  /// not read as recording. `ShellStatusIconLegibilityTests` measures both halves apart.
+  static let armedBand: CGFloat = 1.5
+
   /// The whole vocabulary of a wordless control, as a function rather than a `switch` inside a
   /// `body`: three states must land on three *distinguishable* fills, and "off" must never resolve
   /// to something a glance reads as "on". That is a claim a test can hold only if it can call this.
@@ -93,9 +105,14 @@ struct ShellStatusDot: View {
   static func fill(for state: HomeStatusState) -> Color {
     switch state {
     case .active: return Ink.listeningGreen
-    case .inactive: return .clear
+    case .armed, .inactive: return .clear
     case .blocked: return Ink.errorRed
     }
+  }
+
+  /// The band inside the ring: green for `.armed`, nothing for every other state.
+  static func band(for state: HomeStatusState) -> Color {
+    state == .armed ? Ink.listeningGreen : .clear
   }
 
   private static var outerDiameter: CGFloat { diameter + ringWidth * 2 }
@@ -104,6 +121,9 @@ struct ShellStatusDot: View {
     ZStack {
       Circle()
         .fill(Self.fill(for: state))
+        .frame(width: Self.diameter, height: Self.diameter)
+      Circle()
+        .strokeBorder(Self.band(for: state), lineWidth: Self.armedBand)
         .frame(width: Self.diameter, height: Self.diameter)
       Circle()
         .strokeBorder(Self.ring, lineWidth: Self.ringWidth)
@@ -205,26 +225,14 @@ enum ShellStatusGlyph {
   /// screenshot was in, and it is fixed by `listening` above rather than by this line.
   static let screen = "display"
 
-  /// The corner mark the listening control wears while its mode is Only Meetings.
+  /// The badge the listening control wears at the mic's foot for a mode, or `nil` for none.
   ///
-  /// **This is not the swap the header rejects.** `listening` above is still the only listening
-  /// silhouette and is still byte-identical in every state; this rides *outside* it, in the corner,
-  /// exactly as `ShellStatusDot` does. The header's distinction is between ink that *replaces* the
-  /// glyph and ink that is *added* to it, and both marks this control wears are the second kind.
-  ///
-  /// **It is also not a new vocabulary.** `person.2.fill` is already the mark Home's listening
-  /// control uses for this mode, so one mode reads the same on both shells rather than growing a
-  /// second symbol for one idea.
-  static let meetingsOnly = "person.2.fill"
-
-  /// Which modes wear a mark, as a function rather than a ternary inside a `body`, so the rule —
-  /// *exactly one* of the three modes is badged — is something a test can state directly instead of
-  /// scraping it back out of the view.
-  ///
-  /// `.always` and `.off` are deliberately unbadged: the dot and the slash already say everything
-  /// true about them, and a mark on every state is a mark that distinguishes nothing.
-  static func modeBadge(for mode: AssistantSettings.AudioRecordingMode) -> String? {
-    mode == .onlyMeetings ? meetingsOnly : nil
+  /// The mic stays the mic in every mode (the silhouette used to become `person.2.fill` for Only
+  /// Meetings, which read as a People button). Only Meetings is the one mode the dot and slash cannot
+  /// name, so it alone gets a mark: a handset, because calls are what it records. Always On is the
+  /// plain mic, and Off is said by the slash.
+  static func listeningBadge(for mode: AssistantSettings.AudioRecordingMode) -> String? {
+    mode == .onlyMeetings ? "phone.fill" : nil
   }
 }
 
@@ -241,37 +249,33 @@ enum ShellStatusGlyph {
 /// Free functions over plain values rather than computed properties on the view, so the wording is
 /// reachable from a test without standing up an `AppState`.
 enum ShellStatusTooltip {
-  /// `mode` is `CaptureListeningLogic.listeningModeTitle` — "In meeting", "Always", a named mic. The
-  /// mode is not decoration: "listening" with no qualifier is a claim the meetings-only mode does not
-  /// actually make.
-  ///
-  /// `isAwaitingMeeting` is the Only Meetings wait: the session is armed, the mic is paused, and a
-  /// click turns listening *off* rather than starting it. That must not reuse the "off / click to
-  /// start" sentence.
-  /// `next` names the mode a click moves to. It is a parameter rather than the fixed "Click to
-  /// stop" / "Click to start" this shipped with, because the control is a three-mode cycle: from
-  /// Always On a click does not stop anything, it selects Only Meetings, and a tooltip on a
-  /// wordless control is the only place that promise is written down. Naming the destination also
-  /// makes the third mode discoverable without clicking twice to find it.
+  /// What a click on the audio control does in every state but blocked. It opens the mode menu, so
+  /// the sentence promises the menu, never a particular next mode.
+  static let audioOpensMenu = "Click to choose what Omi records"
+
+  /// `mode` is `CaptureListeningLogic.listeningModeTitle`: "Always On", "Only Meetings", "In
+  /// Meeting", or a named mic. `.armed` is the Only Meetings wait: switched on, nothing recorded
+  /// until a call starts, so the sentence says that rather than "recording" or "off".
   static func audio(
-    state: HomeStatusState, mode: String, isAwaitingMeeting: Bool = false, next: String,
-    hasMicrophonePermission: Bool = true
+    state: HomeStatusState, mode: String, hasMicrophonePermission: Bool = true
   ) -> String {
     switch state {
     case .blocked:
-      return "Audio — transcription unavailable. Open Settings to reconnect."
-    case .active:
-      return "Audio — listening (\(mode)). Click for \(next)."
-    case .inactive:
-      // Without the microphone grant a click spends itself on the permission prompt and the mode
-      // does not move, so promising the next mode here would be a promise the click cannot keep.
+      return "Audio — transcription unavailable. Click to open Audio Settings"
+    case .armed:
+      // Without the grant no call can be recorded, so the sentence names what is missing instead
+      // of promising a recording that cannot start.
       guard hasMicrophonePermission else {
-        return "Audio — off. Omi needs microphone access. Click to grant it."
+        return "Audio — \(mode), but Omi needs microphone access to record a call. \(audioOpensMenu)"
       }
-      if isAwaitingMeeting {
-        return "Audio — waiting for a call (\(mode)). Nothing is being transcribed. Click for \(next)."
+      return "Audio — \(mode), waiting for a call. Recording starts when one is detected. \(audioOpensMenu)"
+    case .active:
+      return "Audio — recording (\(mode)). \(audioOpensMenu)"
+    case .inactive:
+      guard hasMicrophonePermission else {
+        return "Audio — off. Omi needs microphone access to record. \(audioOpensMenu)"
       }
-      return "Audio — off. Nothing is being transcribed. Click for \(next)."
+      return "Audio — off. Nothing is being recorded. \(audioOpensMenu)"
     }
   }
 
@@ -279,7 +283,7 @@ enum ShellStatusTooltip {
     switch state {
     case .blocked:
       return "Screen — capture needs permission. Click to grant it."
-    case .active:
+    case .active, .armed:
       return "Screen — capturing. Rewind is recording. Click to stop."
     case .inactive:
       return "Screen — off. Nothing is being recorded. Click to start."
@@ -308,27 +312,26 @@ struct ShellStatusIconButton: View {
   /// is exact only while this flag moves nothing else. Product code leaves it alone and passes
   /// `state: nil` for a control that has no badge to draw.
   var showsDot: Bool = true
-  /// A corner mark naming the *mode* a capability is running in, for a control that has more than
-  /// one. `nil` on every control that does not — screen capture has no modes, and a mark it never
-  /// wears is not a mark it should be able to draw.
-  ///
-  /// It follows `showsDot`'s contract, not the glyph's: additive ink outside the silhouette, so
-  /// `ShellStatusGlyph.listening` stays byte-identical across every state and the swap guard in
-  /// `ShellStatusIconLegibilityTests` still measures what it was written to measure. It sits on the
-  /// leading edge because the dot owns the trailing corner, and the two answer different questions —
-  /// the dot whether it is capturing, this one which mode it is set to.
-  var badge: String? = nil
   var isSelected: Bool = false
+  /// A small mark at the glyph's foot naming a *mode* (`ShellStatusGlyph.listeningBadge`). Added to
+  /// the glyph like the slash, never in place of it.
+  var badge: String?
   let action: () -> Void
+
+  /// The badge's side, and the clearance punched around it so it reads as a separate mark laid
+  /// against the glyph rather than fused into it.
+  static let badgeSize: CGFloat = 7
+  static let badgeClearance: CGFloat = 1.5
 
   /// Not running: switched off, or blocked. A control with no live capability is never "off" — it has
   /// nothing to be off — which is what keeps the slash off the settings gear.
   private var isOff: Bool {
     guard let state else { return false }
-    return state != .active
+    return !state.isOn
   }
 
-  private var isActive: Bool { state == .active }
+  /// Switched on: capturing, or armed to capture.
+  private var isActive: Bool { state?.isOn == true }
 
   var body: some View {
     Button(action: action) {
@@ -341,8 +344,10 @@ struct ShellStatusIconButton: View {
             // Punch the clearance out of the glyph, close the group so the hole cannot reach the
             // panel's own chrome, then lay the diagonal into it.
             .overlay { ShellStatusSlash(isOff: isOff, isClearance: true).blendMode(.destinationOut) }
+            .overlay(alignment: .bottomTrailing) { badgeMark(isClearance: true) }
             .compositingGroup()
             .overlay { ShellStatusSlash(isOff: isOff, isClearance: false) }
+            .overlay(alignment: .bottomTrailing) { badgeMark(isClearance: false) }
         }
       }
       .overlay(alignment: .topTrailing) {
@@ -350,18 +355,29 @@ struct ShellStatusIconButton: View {
           ShellStatusDot(state: state).offset(x: 6, y: -5)
         }
       }
-      .overlay(alignment: .bottomLeading) {
-        if let badge {
-          Image(systemName: badge)
-            .scaledFont(size: OmiType.micro, weight: .bold)
-            .offset(x: -5, y: 4)
-        }
-      }
     }
     .buttonStyle(GlassIconButtonStyle(isActive: isSelected || isActive))
     .help(tooltip)
     .accessibilityLabel(Text(tooltip))
     .accessibilityAddTraits(isActive ? .isSelected : [])
+  }
+
+  /// The badge, or the hole punched for it. Both are offset the same so the hole sits under the mark.
+  @ViewBuilder
+  private func badgeMark(isClearance: Bool) -> some View {
+    if let badge {
+      let side = Self.badgeSize + (isClearance ? Self.badgeClearance * 2 : 0)
+      Group {
+        if isClearance {
+          Circle().blendMode(.destinationOut)
+        } else {
+          Image(systemName: badge).resizable().scaledToFit()
+        }
+      }
+      .frame(width: side, height: side)
+      .frame(width: Self.badgeSize, height: Self.badgeSize)
+      .offset(x: Self.badgeSize / 2 + 1, y: Self.badgeSize / 2 - 1)
+    }
   }
 }
 
@@ -378,12 +394,7 @@ struct ShellStatusIcons: View {
   @State private var isCaptureMonitoring = false
   @State private var isTogglingCapture = false
   @State private var isTogglingListening = false
-  /// Shown for a beat when a click *selects* Only Meetings, never on hover and never at rest.
-  /// Only Meetings is the one mode whose behaviour no glyph can state — the control is switched
-  /// on while the microphone is deliberately held shut until a call starts — so selecting it is
-  /// the one moment that earns a sentence. Tying it to the transition keeps the cluster wordless.
-  @State private var showsMeetingsHint = false
-  @State private var meetingsHintDismissal: DispatchWorkItem?
+  @State private var showsListeningMenu = false
 
   @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
   @AppStorage(AssistantSettings.audioRecordingModeDefaultsKey) private var audioRecordingModeRaw =
@@ -396,17 +407,16 @@ struct ShellStatusIcons: View {
         tooltip: listeningTooltip,
         state: listeningState,
         isBusy: isTogglingListening,
-        badge: ShellStatusGlyph.modeBadge(for: listeningMode),
-        action: cycleListening
+        badge: ShellStatusGlyph.listeningBadge(for: listeningMode),
+        action: openListeningMenu
       )
       .accessibilityIdentifier("shell-status-listening")
-      .popover(isPresented: $showsMeetingsHint, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
-        Text(Self.meetingsHint)
-          .scaledFont(size: OmiType.caption)
-          .foregroundStyle(Ink.primary)
-          .multilineTextAlignment(.leading)
-          .frame(width: 232, alignment: .leading)
-          .padding(OmiSpacing.sm)
+      .popover(isPresented: $showsListeningMenu, attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
+        ShellListeningModeMenu(
+          current: listeningMode,
+          onSelect: selectListeningMode,
+          onOpenSettings: openAudioSettings,
+          onDismiss: { showsListeningMenu = false })
       }
 
       ShellStatusIconButton(
@@ -433,26 +443,17 @@ struct ShellStatusIcons: View {
     CaptureListeningLogic.listeningStatus(appState: appState)
   }
 
-  /// What the control is *set to* — distinct from `listeningState`, which is whether it is
-  /// currently capturing. Only Meetings is exactly the case where those two disagree, so the
-  /// button needs both.
+  /// What the control is *set to*, distinct from `listeningState` (whether it is capturing now).
+  /// The mode picks the badge and the menu's checkmark; the state picks the dot and slash.
   private var listeningMode: AssistantSettings.AudioRecordingMode {
     CaptureListeningLogic.audioRecordingMode(raw: audioRecordingModeRaw)
   }
-
-  /// The sentence Only Meetings earns, kept beside the mode it explains. Static so a test can
-  /// read the wording without standing up an `AppState`.
-  static let meetingsHint =
-    "Only Meetings — the microphone stays closed until Omi detects a call, then records until it ends."
 
   private var listeningTooltip: String {
     ShellStatusTooltip.audio(
       state: listeningState,
       mode: CaptureListeningLogic.listeningModeTitle(
         appState: appState, raw: audioRecordingModeRaw),
-      isAwaitingMeeting: appState.isAwaitingMeeting,
-      next: CaptureListeningLogic.audioRecordingModeTitle(
-        CaptureListeningLogic.nextAudioRecordingMode(after: listeningMode)),
       hasMicrophonePermission: appState.hasMicrophonePermission)
   }
 
@@ -464,22 +465,35 @@ struct ShellStatusIcons: View {
 
   // MARK: Actions — the shared logic, never a second copy
 
-  private func cycleListening() {
-    let landed = CaptureListeningLogic.cycleListening(
-      appState: appState,
-      audioRecordingModeRaw: $audioRecordingModeRaw,
-      isTogglingListening: $isTogglingListening)
-
-    // A click spent on the permission prompt moved nothing, so it explains nothing.
-    meetingsHintDismissal?.cancel()
-    guard landed == .onlyMeetings else {
-      showsMeetingsHint = false
+  private func openListeningMenu() {
+    // Blocked means transcription itself is down, so no mode fixes it. The tooltip says "Click to
+    // open Audio Settings"; the click does exactly that, as the screen control's blocked click opens
+    // its permission flow.
+    guard listeningState != .blocked else {
+      openAudioSettings()
       return
     }
-    showsMeetingsHint = true
-    let dismissal = DispatchWorkItem { showsMeetingsHint = false }
-    meetingsHintDismissal = dismissal
-    DispatchQueue.main.asyncAfter(deadline: .now() + 4, execute: dismissal)
+    showsListeningMenu = true
+  }
+
+  private func selectListeningMode(_ mode: AssistantSettings.AudioRecordingMode) {
+    // Close first: a choice that needs the microphone raises the permission prompt, which must not
+    // appear under a menu that is still open.
+    showsListeningMenu = false
+    CaptureListeningLogic.selectListeningMode(
+      mode, appState: appState,
+      audioRecordingModeRaw: $audioRecordingModeRaw,
+      isTogglingListening: $isTogglingListening)
+  }
+
+  private func openAudioSettings() {
+    showsListeningMenu = false
+    NotificationCenter.default.post(
+      name: .navigateToSidebarItem, object: nil,
+      userInfo: [
+        "rawValue": SidebarNavItem.settings.rawValue,
+        "settingsSection": SettingsContentView.SettingsSection.transcription.rawValue,
+      ])
   }
 
   private func toggleCapture() {

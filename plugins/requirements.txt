@@ -106,7 +106,7 @@ marshmallow==3.26.2
 matplotlib-inline==0.2.2
 mdurl==0.1.2
 memo==0.2.4
-mistune==3.3.0
+mistune==3.3.3
 monotonic==1.6
 multidict==6.7.1
 mypy-extensions==1.1.0

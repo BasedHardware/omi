@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-shared-eligibility-gate-collapses-distinct-lanes",
+  "violated_contract": "When two lanes share a visit entry point but have different admission contracts, the outer gate must not require the stricter lane's precondition before the cheaper lane can evaluate.",
+  "canonical_prevention": "Route visits by validated facts for planned JIT and keep positive worthiness on the legacy director and ambient nano locallyRelevant gate. Pin both with hermetic tests that zero-worthiness validated facts reach planned admission while ambient cannot purchase nano.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/ContextProactivityEngineTests.swift",
+    "desktop/macos/Desktop/Tests/JITProactivityRuntimeTests.swift",
+    "desktop/macos/Desktop/Tests/ContextBucketDirectorProbeTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextProactivityEngine.swift",
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITProactivityCoordinator.swift",
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITProactivityRuntime.swift"
+  ],
+  "status": "open"
+}

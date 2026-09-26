@@ -19,6 +19,10 @@ class CustomSttConfig {
   final Map<String, dynamic>? schemaJson;
   final bool sendRawAudioToOmi;
 
+  /// Overrides [sttConfigId] when set. Used for synthesized freemium configs so
+  /// a plan change mid-session forces a reconnect (`freemium:on-device`).
+  final String? identity;
+
   const CustomSttConfig({
     required this.provider,
     this.apiKey,
@@ -33,6 +37,7 @@ class CustomSttConfig {
     this.audioFieldName,
     this.schemaJson,
     this.sendRawAudioToOmi = true,
+    this.identity,
   });
 
   /// Determine if live/streaming based on request_type
@@ -104,6 +109,7 @@ class CustomSttConfig {
   }
 
   String get sttConfigId {
+    if (identity != null && identity!.isNotEmpty) return identity!;
     if (!isEnabled) return 'omi:default';
 
     final configData = {
@@ -186,6 +192,7 @@ class CustomSttConfig {
     String? audioFieldName,
     Map<String, dynamic>? schemaJson,
     bool? sendRawAudioToOmi,
+    String? identity,
   }) {
     return CustomSttConfig(
       provider: provider ?? this.provider,
@@ -201,6 +208,7 @@ class CustomSttConfig {
       audioFieldName: audioFieldName ?? this.audioFieldName,
       schemaJson: schemaJson ?? this.schemaJson,
       sendRawAudioToOmi: sendRawAudioToOmi ?? this.sendRawAudioToOmi,
+      identity: identity ?? this.identity,
     );
   }
 

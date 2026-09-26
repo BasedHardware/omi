@@ -218,7 +218,6 @@ class Stack:
                 'HTTP_SYNC_JOBS_RUN_TIMEOUT': '30',
                 'FAIR_USE_ENABLED': 'true',
                 'MAX_DAILY_AUDIO_HOURS': '30',
-                'TRIAL_PAYWALL_ENABLED': 'false',
                 'STT_PRERECORDED_MODEL': 'parakeet',
                 'STT_SERVICE_MODELS': 'parakeet',
                 'HOSTED_PARAKEET_API_URL': 'http://127.0.0.1:1',
@@ -525,6 +524,7 @@ def _assert_task_contract(stack: Stack, job_id: str, uid: str, conversation_id: 
         body.get('job_id') != job_id
         or body.get('uid') != uid
         or body.get('conversation_id') != conversation_id
+        or body.get('geolocation') is not None
         or body.get('client_device_id') != DEVICE_ID
         or body.get('client_platform') != 'ios'
         or body.get('lane') != 'fresh'

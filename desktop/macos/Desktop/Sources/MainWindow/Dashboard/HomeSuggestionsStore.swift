@@ -18,7 +18,10 @@ enum HomeSuggestionComposer {
     "what should i focus on today to achieve my goals?",
   ]
 
-  static let staticFallbacks = [
+  /// Retired top-ups. Both ask about data a new user does not have, and were
+  /// the chips stoppers pasted verbatim on day 0; kept only so the sanitizer's
+  /// legacy tests still name them. `DayZeroChips` replaced them as the top-up.
+  static let retiredStaticFallbacks = [
     "What did I spend my time on this week?",
     "What's the highest-leverage thing I can do next?",
   ]
@@ -40,10 +43,14 @@ enum HomeSuggestionComposer {
   }
 
   /// The three chips: universal first, then personalized questions, topped up
-  /// from onboarding-scan suggestions and static fallbacks when fewer than
-  /// two personalized questions are available.
-  static func compose(personalized: [String], onboarding: [String]) -> [String] {
-    let rest = sanitize(personalized + onboarding + staticFallbacks)
+  /// from onboarding-scan suggestions and then the state-gated day-0 chips
+  /// (`DayZeroChips`) when fewer than two personalized questions exist. The
+  /// day-0 gates are point-in-time (screen permission, system language), so
+  /// callers pass live signals rather than caching a composed list.
+  static func compose(
+    personalized: [String], onboarding: [String], dayZero: DayZeroChipSignals = DayZeroChipSignals()
+  ) -> [String] {
+    let rest = sanitize(personalized + onboarding + DayZeroChips.chips(for: dayZero))
     return [universalFirstQuestion] + rest.prefix(2)
   }
 }

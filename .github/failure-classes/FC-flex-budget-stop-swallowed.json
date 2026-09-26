@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "FC-flex-budget-stop-swallowed",
+  "violated_contract": "When Flex can no longer fit a reservation in the one-hour memory-maintenance budget, the current UID must stop after the deferred batch is recorded and the cron page must leave the durable registry cursor on that unfinished UID. Swallowing PromotionFlexDeferred as a per-item continue lets the job scan the rest of the 400-user page until Cloud Run kills it at 3600s (Completed=False, exit 0).",
+  "canonical_prevention": "Re-raise PromotionFlexDeferred after recording the deferred batch and releasing leases without spending the quality-retry budget. Keep the cron's existing page-stop and cursor contract. Prove a later consolidation batch on the same UID is not entered.",
+  "canonical_prevention_artifact": [
+    "backend/utils/memory/canonical_consolidation.py",
+    "backend/tests/unit/test_canonical_consolidation.py",
+    "backend/tests/unit/test_canonical_short_term_maintenance_cron.py",
+    "backend/utils/memory/short_term_promotion.py",
+    "backend/utils/memory/promotion_flex.py",
+    "backend/modal/memory_maintenance_job.py",
+    "backend/tests/unit/test_short_term_maintenance_job_budget.py",
+    "backend/tests/unit/test_notifications_job_orchestrator.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/memory/canonical_consolidation.py",
+    "backend/utils/memory/canonical_short_term_maintenance_cron.py",
+    "backend/modal/memory_maintenance_job.py"
+  ],
+  "status": "open"
+}

@@ -93,7 +93,23 @@ describe("AgentRuntimeKernel cancellation", () => {
   it("cascades cancellation to in-flight delegated children", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     adapter.deferResult();
-    const runningParent = kernel.executeRun(baseRunInput);
+    const runningParent = kernel.executeRun({
+      ...baseRunInput,
+      jitCostEvidenceProjection: {
+        schema_version: "omi.jit.proactivity.source_projection.v1",
+        owner_id: "owner",
+        execution_id: "execution-parent",
+        producer_lane: "ambient",
+        matched_input: {
+          evaluation_time: "2026-09-05T10:00:00-04:00",
+          timezone: "America/New_York",
+          context_id: "bucket-parent",
+        },
+        legacy: { prompt: "legacy", uncached_prompt: "legacy-uncached" },
+        nano: { prompt: "nano" },
+        full: { prompt: "hello" },
+      },
+    });
     await waitUntil(() => adapter.executed.length === 1);
     const parentRunId = adapter.executed[0].runId;
 
@@ -106,6 +122,21 @@ describe("AgentRuntimeKernel cancellation", () => {
     });
     await waitUntil(() => adapter.executed.length === 2);
     const childRunId = spawned.childRun.runId;
+
+    const parentInput = JSON.parse(String(store.getRow(
+      "SELECT input_json FROM runs WHERE run_id = ?",
+      [parentRunId],
+    ).input_json));
+    const childInput = JSON.parse(String(store.getRow(
+      "SELECT input_json FROM runs WHERE run_id = ?",
+      [childRunId],
+    ).input_json));
+    expect(parentInput.jitCostEvidenceProjection.execution_id).toBe("execution-parent");
+    expect(parentInput.metadata.jitCostEvidenceProjection).toBeUndefined();
+    expect(childInput.jitCostEvidenceProjection).toBeUndefined();
+    expect(childInput.metadata.jitCostEvidenceProjection).toBeUndefined();
+    expect(adapter.executed[0].metadata?.jitCostEvidenceProjection).toBeUndefined();
+    expect(adapter.executed[1].metadata?.jitCostEvidenceProjection).toBeUndefined();
 
     const ack = await kernel.cancelRun(parentRunId);
 

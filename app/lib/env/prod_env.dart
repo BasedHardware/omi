@@ -17,10 +17,6 @@ final class ProdEnv implements EnvFields {
   final String? apiBaseUrl = _ProdEnv.apiBaseUrl;
 
   @override
-  @EnviedField(varName: 'GOOGLE_MAPS_API_KEY', obfuscate: true)
-  final String? googleMapsApiKey = _ProdEnv.googleMapsApiKey;
-
-  @override
   @EnviedField(varName: 'INTERCOM_APP_ID', obfuscate: true)
   final String? intercomAppId = _ProdEnv.intercomAppId;
 

@@ -241,6 +241,63 @@ class TestPrecisionFirst:
         )
         assert context is None
 
+    def test_telegram_call_window_title_with_call_control_yields_participant(self):
+        context = context_from_screen_activity(
+            [
+                {
+                    'appName': 'Telegram',
+                    'windowTitle': 'Alice Chen',
+                    'ocrText': 'Mute\nEnd Call\nVideo',
+                }
+            ],
+            started_at=CONVERSATION_START,
+            finished_at=CONVERSATION_END,
+        )
+        assert context is not None
+        assert [p.name for p in context.participants] == ['Alice Chen']
+        assert context.platform == 'Telegram'
+        assert context.calendar_source == 'screen_activity'
+
+    def test_telegram_chat_titles_without_call_control_yield_no_participants(self):
+        context = context_from_screen_activity(
+            [
+                {'appName': 'Telegram', 'windowTitle': 'Saved Messages', 'ocrText': 'sticker'},
+                {'appName': 'Telegram', 'windowTitle': 'Alice Chen', 'ocrText': 'yesterday'},
+                {'appName': 'Telegram', 'windowTitle': 'Bob Martinez', 'ocrText': 'photo'},
+                {'appName': 'Telegram', 'windowTitle': 'Design Review', 'ocrText': 'ok'},
+                {'appName': 'Telegram', 'windowTitle': 'Nikita Petrov', 'ocrText': 'typing'},
+            ],
+            started_at=CONVERSATION_START,
+            finished_at=CONVERSATION_END,
+        )
+        assert context is None
+
+    def test_chrome_calendar_tile_without_meet_roster_yields_no_participants(self):
+        context = context_from_screen_activity(
+            [
+                {
+                    'appName': 'Google Chrome',
+                    'windowTitle': 'Meet - amc-iajq-asx',
+                    'ocrText': 'Aryan Gupta and Nik\nBlocked users\nCoinflow Portal',
+                }
+            ],
+            started_at=CONVERSATION_START,
+            finished_at=CONVERSATION_END,
+        )
+        assert context is None
+
+    def test_telegram_call_control_does_not_ingest_unrelated_chat_titles(self):
+        context = context_from_screen_activity(
+            [
+                {'appName': 'Telegram', 'windowTitle': 'Alice Chen', 'ocrText': 'Mute\nEnd Call'},
+                {'appName': 'Telegram', 'windowTitle': 'Bob Martinez', 'ocrText': 'hey'},
+            ],
+            started_at=CONVERSATION_START,
+            finished_at=CONVERSATION_END,
+        )
+        assert context is not None
+        assert [p.name for p in context.participants] == ['Alice Chen']
+
     def test_participants_are_capped(self):
         roster = ', '.join(f'Person Number{index}' for index in range(20)) + ' are in this call'
         assert len(participants_from_ocr([roster])) <= 12

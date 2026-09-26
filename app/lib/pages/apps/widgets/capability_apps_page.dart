@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
@@ -8,7 +7,8 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/widgets/capability_category_section.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/ui_guidelines.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class CapabilityAppsPage extends StatefulWidget {
   final AppCapability capability;
@@ -23,6 +23,7 @@ class CapabilityAppsPage extends StatefulWidget {
 class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
   List<Map<String, dynamic>> _categoryGroups = [];
   bool _isLoading = true;
+  bool _loadFailed = false;
   int _totalCount = 0;
 
   @override
@@ -34,6 +35,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
   Future<void> _loadCapabilityApps() async {
     setState(() {
       _isLoading = true;
+      _loadFailed = false;
     });
 
     try {
@@ -57,6 +59,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
           _categoryGroups = [];
           _totalCount = 0;
           _isLoading = false;
+          _loadFailed = true;
         });
       }
     }
@@ -64,8 +67,8 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
 
   Widget _buildShimmerCategorySection() {
     return ShimmerWithTimeout(
-      baseColor: AppStyles.backgroundSecondary,
-      highlightColor: AppStyles.backgroundTertiary,
+      baseColor: OmiColors.surface1,
+      highlightColor: OmiColors.surface2,
       child: Container(
         margin: const EdgeInsets.only(top: 12, bottom: 14),
         child: Column(
@@ -79,18 +82,18 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                   Container(
                     width: 140,
                     height: 20,
-                    decoration: BoxDecoration(
-                      color: AppStyles.backgroundSecondary,
-                      borderRadius: BorderRadius.circular(4),
+                    decoration: const BoxDecoration(
+                      color: OmiColors.surface1,
+                      borderRadius: OmiRadius.smAll,
                     ),
                   ),
                   const Spacer(),
                   Container(
                     width: 40,
                     height: 20,
-                    decoration: BoxDecoration(
-                      color: AppStyles.backgroundSecondary,
-                      borderRadius: BorderRadius.circular(8),
+                    decoration: const BoxDecoration(
+                      color: OmiColors.surface1,
+                      borderRadius: OmiRadius.smAll,
                     ),
                   ),
                 ],
@@ -118,9 +121,9 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                       Container(
                         width: 60,
                         height: 60,
-                        decoration: BoxDecoration(
-                          color: AppStyles.backgroundSecondary,
-                          borderRadius: BorderRadius.circular(8),
+                        decoration: const BoxDecoration(
+                          color: OmiColors.surface1,
+                          borderRadius: OmiRadius.smAll,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -132,18 +135,18 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                             Container(
                               width: double.infinity,
                               height: 16,
-                              decoration: BoxDecoration(
-                                color: AppStyles.backgroundSecondary,
-                                borderRadius: BorderRadius.circular(4),
+                              decoration: const BoxDecoration(
+                                color: OmiColors.surface1,
+                                borderRadius: OmiRadius.smAll,
                               ),
                             ),
                             const SizedBox(height: 4),
                             Container(
                               width: 80,
                               height: 12,
-                              decoration: BoxDecoration(
-                                color: AppStyles.backgroundSecondary,
-                                borderRadius: BorderRadius.circular(4),
+                              decoration: const BoxDecoration(
+                                color: OmiColors.surface1,
+                                borderRadius: OmiRadius.smAll,
                               ),
                             ),
                           ],
@@ -153,9 +156,9 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                       Container(
                         width: 60,
                         height: 28,
-                        decoration: BoxDecoration(
-                          color: AppStyles.backgroundSecondary,
-                          borderRadius: BorderRadius.circular(14),
+                        decoration: const BoxDecoration(
+                          color: OmiColors.surface1,
+                          borderRadius: OmiRadius.pillAll,
                         ),
                       ),
                     ],
@@ -178,66 +181,68 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
     );
   }
 
+  /// A page-filling message that still lets pull-to-refresh reach the loader.
+  Widget _buildScrollableState(Widget state) {
+    return CustomScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      slivers: [SliverFillRemaining(hasScrollBody: false, child: state)],
+    );
+  }
+
+  Widget _buildContent() {
+    if (_totalCount == 0 && _loadFailed) {
+      return _buildScrollableState(
+        OmiErrorState(message: context.l10n.unableToLoadApps, onRetry: _loadCapabilityApps),
+      );
+    }
+    if (_totalCount == 0) {
+      return _buildScrollableState(
+        OmiEmptyState(
+          icon: Icons.apps_outlined,
+          title: context.l10n.noAppsFound,
+          message: context.l10n.checkBackLaterForNewApps,
+        ),
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.only(top: OmiSpacing.xs, bottom: 100),
+      itemCount: _categoryGroups.length,
+      itemBuilder: (context, index) {
+        final group = _categoryGroups[index];
+        final categoryMap = group['category'] as Map<String, dynamic>?;
+        final categoryTitle = Category(
+          id: categoryMap?['id'] as String? ?? '',
+          title: categoryMap?['title'] as String? ?? context.l10n.categoryOther,
+        ).getLocalizedTitle(context);
+        final apps = group['data'] as List<App>? ?? [];
+
+        if (apps.isEmpty) return const SizedBox.shrink();
+
+        return CapabilityCategorySection(categoryName: categoryTitle, apps: apps);
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: OmiColors.surface0,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        title: Text(
-          widget.capability.getLocalizedTitle(context),
-          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
+        backgroundColor: OmiColors.surface0,
+        leading: const OmiBackButton(),
+        title: Text(widget.capability.getLocalizedTitle(context)),
       ),
       body: _isLoading
           ? _buildShimmerView()
           : RefreshIndicator(
               onRefresh: () async {
-                HapticFeedback.mediumImpact();
+                OmiHaptics.medium();
                 await _loadCapabilityApps();
               },
               // The arc is drawn on backgroundColor, so it must not also be white.
-              color: Colors.black,
-              backgroundColor: Colors.white,
-              child: _totalCount == 0
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.apps_outlined, size: 64, color: Colors.grey.shade600),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'No apps found',
-                            style: TextStyle(fontSize: 18, color: Colors.white70),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Check back later for new apps',
-                            style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-                            textAlign: TextAlign.center,
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.only(top: 8, bottom: 100),
-                      itemCount: _categoryGroups.length,
-                      itemBuilder: (context, index) {
-                        final group = _categoryGroups[index];
-                        final categoryMap = group['category'] as Map<String, dynamic>?;
-                        final categoryTitle = categoryMap?['title'] as String? ?? 'Other';
-                        final apps = group['data'] as List<App>? ?? [];
-
-                        if (apps.isEmpty) return const SizedBox.shrink();
-
-                        return CapabilityCategorySection(categoryName: categoryTitle, apps: apps);
-                      },
-                    ),
+              color: OmiColors.onAccent,
+              backgroundColor: OmiColors.accent,
+              child: _buildContent(),
             ),
     );
   }

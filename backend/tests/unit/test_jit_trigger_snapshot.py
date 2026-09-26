@@ -14,11 +14,30 @@ from models.product_memory import (
     ProcessingState,
 )
 from utils.memory.jit_trigger_snapshot import (
+    _budget_authority,
     is_authoritative_trigger_for_paid_work,
     read_authoritative_trigger_snapshot,
 )
 
 NOW = datetime(2026, 8, 24, tzinfo=timezone.utc)
+
+
+def test_budget_authority_uses_profile_timezone_across_local_midnight_and_dst():
+    class _ProfileClient:
+        def document(self, path):
+            assert path == 'users/owner'
+            return _Document(_Snapshot('owner', {'time_zone': 'America/Los_Angeles'}))
+
+    # 05:30 UTC is already Aug 24 in New York but still Aug 23 in Los Angeles.
+    assert _budget_authority('owner', datetime(2026, 8, 24, 5, 30, tzinfo=timezone.utc), _ProfileClient()) == (
+        '2026-08-23',
+        'America/Los_Angeles',
+    )
+    # The DST jump does not change the local-day contract.
+    assert _budget_authority('owner', datetime(2026, 3, 8, 8, 30, tzinfo=timezone.utc), _ProfileClient()) == (
+        '2026-03-08',
+        'America/Los_Angeles',
+    )
 
 
 class _Snapshot:
@@ -227,7 +246,7 @@ def test_missing_head_returns_complete_empty_watchlist():
     assert result.rows == ()
     assert result.failure_reason is None
     assert len(result.snapshot_revision) == 64
-    assert client.head_reads == 2, 'absence must be fenced by a trailing re-read'
+    assert client.head_reads == 3, 'absence must be fenced by a trailing re-read and budget authority read'
 
 
 def test_empty_watchlist_revision_is_stable_and_owner_bound():

@@ -18,6 +18,7 @@ from services.conversation_finalization import (
 from utils.cloud_tasks import verify_listen_finalization_cloud_tasks_oidc
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.processing_trigger import trigger_for_finalization_job
 from utils.conversations.finalizer import (
     ConversationFinalizationDisposition,
     ConversationFinalizationError,
@@ -114,8 +115,18 @@ async def run_listen_finalization_job(
         claim_status = claim['status']
         if claim_status == 'completed':
             return JSONResponse(status_code=200, content={'status': 'acked', 'job_status': 'completed'})
-        if claim_status in {'leased', 'stale_generation'}:
+        if claim_status == 'leased':
             return JSONResponse(status_code=409, content={'status': claim_status})
+        if claim_status == 'stale_generation':
+            # The reconciler has already enqueued the newer generation. An old
+            # named task is no longer actionable and must be acknowledged so
+            # Cloud Tasks does not retry this permanently fenced payload.
+            logger.info(
+                'listen finalization stale generation task acknowledged job=%s dispatch_generation=%s',
+                job_id,
+                dispatch_generation,
+            )
+            return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': claim_status})
         if claim_status != 'claimed':
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': claim_status})
         claimed_lease_epoch = claim['lease_epoch']
@@ -155,7 +166,7 @@ async def run_listen_finalization_job(
                 finalization_job_id=job_id,
                 dispatch_generation=dispatch_generation,
                 lease_epoch=claimed_lease_epoch,
-                force_process=bool(job.get('force_process')),
+                trigger=trigger_for_finalization_job(job),
                 final_attempt=task_retry_count >= get_listen_finalization_tasks_max_attempts_for_worker() - 1,
             )
         except ConversationFinalizationError:

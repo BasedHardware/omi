@@ -18,7 +18,8 @@ import {
   startCheckout,
   createCheckoutSession,
   upgradeSubscription,
-  openCustomerPortal
+  openCustomerPortal,
+  OPERATOR_DEPRECATION_FALLBACK_PRICE
 } from '../../../lib/billing'
 import type {
   UserSubscriptionResponse,
@@ -225,7 +226,7 @@ export function PlanUsageTab(): React.JSX.Element {
           title="Plan Retiring"
           subtitle={
             subscription.deprecation_message ??
-            'Your Unlimited plan is being retired. Try the new Operator plan — same great features at $49/mo.'
+            `Your Unlimited plan is being retired. Try the new Operator plan — same great features at ${OPERATOR_DEPRECATION_FALLBACK_PRICE}.`
           }
           trailing={
             showCatalog ? (

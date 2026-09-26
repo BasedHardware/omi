@@ -34,6 +34,8 @@ def _load_modules():
     client_stub = ModuleType("database._client")
     client_stub.db = MagicMock(name="db")
     client_stub.get_firestore_client = lambda: client_stub.db
+    client_stub.get_data_plane_firestore_client = lambda: client_stub.db
+    client_stub.data_plane_db = client_stub.db
     client_stub.document_id_from_seed = lambda seed: "id-" + str(abs(hash(seed)) % (10**12))
 
     legal_holds_stub = ModuleType("database.legal_holds")
@@ -103,6 +105,7 @@ class _LedgerDocument:
         return _LedgerCollection(self._db, f"{self.path}/{name}")
 
     def get(self, transaction=None):
+        self._db.gets.append(self.path)
         return _LedgerSnapshot(self._db.docs.get(self.path))
 
 
@@ -118,6 +121,7 @@ class _LedgerCollection:
 class _LedgerDb:
     def __init__(self, docs):
         self.docs = dict(docs)
+        self.gets = []
 
     def collection(self, name):
         return _LedgerCollection(self, name)
@@ -921,3 +925,39 @@ def test_process_projection_repairs_dead_letters_after_max_attempts(monkeypatch)
     assert result == {"repaired": [], "failed": ["repair1"], "processed": 1}
     assert updates[0]["status"] == "dead_letter"
     assert updates[0]["attempt_count"] == 2
+
+
+def test_legacy_commit_live_item_with_override_tombstone_is_fenced():
+    uid = "u1"
+    database = _LedgerDb(
+        {
+            f"users/{uid}/memory_items/m1": {"status": "active"},
+            f"users/{uid}/memory_historical_overrides/m1": {"status": "tombstoned"},
+        }
+    )
+
+    with pytest.raises(memory_ledger.LegacyCommitPrivacyFence):
+        memory_ledger._assert_legacy_commit_privacy_fences(
+            transaction=_LedgerTransaction(),
+            database=database,
+            uid=uid,
+            mutations=[memory_ledger.add_fact(_fact("m1", "Lives in NYC"))],
+        )
+
+    assert f"users/{uid}/memory_items/m1" in database.gets
+    assert f"users/{uid}/memory_historical_overrides/m1" in database.gets
+
+
+def test_legacy_commit_override_only_tombstone_is_fenced():
+    uid = "u1"
+    database = _LedgerDb({f"users/{uid}/memory_historical_overrides/m1": {"status": "tombstoned"}})
+
+    with pytest.raises(memory_ledger.LegacyCommitPrivacyFence):
+        memory_ledger._assert_legacy_commit_privacy_fences(
+            transaction=_LedgerTransaction(),
+            database=database,
+            uid=uid,
+            mutations=[memory_ledger.add_fact(_fact("m1", "Lives in NYC"))],
+        )
+
+    assert f"users/{uid}/memory_historical_overrides/m1" in database.gets

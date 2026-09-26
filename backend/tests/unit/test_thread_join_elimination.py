@@ -177,21 +177,16 @@ class TestAsyncSTTVariants:
         source = _read_source(filepath)
         assert 'async def async_vad_is_empty(' in source
 
-    def test_async_speech_profile_exists(self):
-        filepath = os.path.join(BACKEND_DIR, 'utils', 'stt', 'speech_profile.py')
-        source = _read_source(filepath)
-        assert 'async def async_get_speech_profile_matching_predictions(' in source
-
     def test_stt_async_uses_httpx_client(self):
         """Async STT variants should use shared httpx client, not create per-call clients."""
-        for filename in ['speaker_embedding.py', 'vad.py', 'speech_profile.py']:
+        for filename in ['speaker_embedding.py', 'vad.py']:
             filepath = os.path.join(BACKEND_DIR, 'utils', 'stt', filename)
             source = _read_source(filepath)
             assert 'get_stt_client' in source, f"{filename} should use shared get_stt_client()"
 
     def test_stt_async_offloads_file_io(self):
         """Async STT variants should offload file reads via run_blocking."""
-        for filename in ['speaker_embedding.py', 'vad.py', 'speech_profile.py']:
+        for filename in ['speaker_embedding.py', 'vad.py']:
             filepath = os.path.join(BACKEND_DIR, 'utils', 'stt', filename)
             source = _read_source(filepath)
             assert 'run_blocking(storage_executor' in source, f"{filename} should offload file I/O via storage_executor"

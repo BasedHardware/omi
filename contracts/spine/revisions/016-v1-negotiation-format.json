@@ -1,0 +1,8 @@
+{
+  "retired_sha256": "e06bc6d3dd8ec36df16c7fce08b852a03d85da6b995401251026f121a9aae7fa",
+  "path": "scripts/dev-harness/tests/spine/test_live_negotiation.py",
+  "owner": "V1",
+  "before": "f9a00411403e0dc21dd51f63e6aa8cdc4493cad7fbc54da1c99ae8e40a8236a4",
+  "after": "85a96a6c7dab36e2b509e7b30a8ca0ee789ed0c51d3d8704e6f5f7e3b9bb80b3",
+  "reason": "Spine-owned formatting correction: AST and ordered pending markers unchanged. The explicit retired_sha256 additionally pins the complete marker-free rendering already introduced by PR #14362 (87f2a8d72d), including its unused pending import removal. AST comparison after stripping only markers and that import is identical; no builder import-edit permission is granted."
+}

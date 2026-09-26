@@ -9,10 +9,12 @@ from utils.translation import (
     TranslationService,
     TranslationStatus,
     classify_translation_need,
+    detect_language,
     detect_language_with_confidence,
     split_into_sentences,
 )
 from utils.translation_cache import should_persist_translation
+from utils.translation_language import detection_cache
 
 
 def test_sentence_splitter_preserves_abbreviations_and_decimals():
@@ -63,6 +65,26 @@ def test_confident_language_detection_handles_short_fillers_and_real_text():
     )
     assert language == 'en'
     assert confidence > 0.5
+
+
+def test_language_detection_cache_keys_do_not_collide_for_conf_prefixed_text():
+    """detect_language and detect_language_with_confidence share detection_cache; their keys
+    must not overlap even when a caller's raw text happens to start with 'conf:'."""
+    detection_cache.clear()
+    text = 'The weather forecast predicts sunshine tomorrow across the region'
+
+    # Prime the plain cache with the literal string that the confidence API used to key on.
+    detect_language('conf:' + text, remove_non_lexical=False)
+
+    language, confidence = detect_language_with_confidence(text, remove_non_lexical=False)
+    assert isinstance(language, str)
+    assert isinstance(confidence, float)
+
+    # And the reverse order: confidence result must not leak into the plain string API.
+    detection_cache.clear()
+    detect_language_with_confidence(text, remove_non_lexical=False)
+    plain_result = detect_language('conf:' + text, remove_non_lexical=False)
+    assert plain_result is None or isinstance(plain_result, str)
 
 
 @pytest.mark.parametrize(

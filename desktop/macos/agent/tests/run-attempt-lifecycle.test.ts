@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "n
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { baseRunInput, createKernelHarness, waitUntil } from "./kernel-fakes.js";
+import { baseRunInput, createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
 import { OmiArtifactStorage } from "../src/runtime/artifact-storage.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 
@@ -15,6 +15,35 @@ afterEach(() => {
 });
 
 describe("AgentRuntimeKernel run and attempt lifecycle", () => {
+  it("persists served model ids for hermes when the adapter reports model_used", async () => {
+    const { store, kernel } = createKernelHarness(
+      newDatabasePath(),
+      "hermes",
+      4,
+      undefined,
+      undefined,
+      () => {
+        const fake = new FakeRuntimeAdapter("hermes");
+        const baseExecute = fake.executeAttempt.bind(fake);
+        fake.executeAttempt = async (context, sink, signal) => {
+          sink({ type: "model_used", model: "gpt-5.5" });
+          return baseExecute(context, sink, signal);
+        };
+        return fake;
+      },
+    );
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "hermes",
+      defaultAdapterId: "hermes",
+    });
+
+    expect(result.run.status).toBe("succeeded");
+    expect(store.getRow("SELECT requested_model_id FROM runs WHERE run_id = ?", [result.run.runId]).requested_model_id)
+      .toBe("gpt-5.5");
+    store.close();
+  });
+
   it("creates one run per accepted query and one attempt per adapter execution", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
 

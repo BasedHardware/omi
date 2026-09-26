@@ -259,6 +259,9 @@ struct BrowserGoogleSession: Equatable {
 
 /// Browser Safe Storage strategy for Chromium cookie scraping.
 ///
+/// Production-family bundles only: developer builds return nil without calling
+/// SecItem (login-keychain prompts are production-only).
+///
 /// Primary path: read the browser-created generic-password item in-process via
 /// `SecItemCopyMatching`. macOS attributes the keychain prompt to the *requesting
 /// process*, so the in-process read shows "<this app> wants to access …" — the app
@@ -278,6 +281,27 @@ struct BrowserGoogleSession: Equatable {
 /// We do not duplicate browser Safe Storage secrets into app preferences.
 final class BrowserKeychainCache: @unchecked Sendable {
   static let shared = BrowserKeychainCache()
+
+  /// Test seam: shipped bundles import browser Safe Storage from the login keychain;
+  /// every other bundle must return nil without calling SecItem.
+  nonisolated(unsafe) static var allowsBrowserKeychainImport: (() -> Bool)?
+  /// Test seam: replace the SecItem read so unit tests never touch the real keychain.
+  nonisolated(unsafe) static var safeStoragePasswordProvider:
+    ((_ service: String, _ account: String, _ userInitiated: Bool) -> String?)?
+  private nonisolated(unsafe) static var didLogProductionOnlyRestriction = false
+  private static let productionOnlyLogLock = NSLock()
+
+  static func resetTestHooks() {
+    allowsBrowserKeychainImport = nil
+    safeStoragePasswordProvider = nil
+    productionOnlyLogLock.lock()
+    didLogProductionOnlyRestriction = false
+    productionOnlyLogLock.unlock()
+  }
+
+  static var isBrowserKeychainImportAllowed: Bool {
+    allowsBrowserKeychainImport?() ?? AppBuild.isProductionBundle
+  }
 
   private enum CacheEntry {
     case found(String)
@@ -342,11 +366,18 @@ final class BrowserKeychainCache: @unchecked Sendable {
 
   /// Reads the browser Safe Storage key in-process so the prompt and any durable
   /// "Always Allow" grant belong to this app rather than `/usr/bin/security`.
-  private static func nativeSafeStoragePassword(
+  static func nativeSafeStoragePassword(
     for service: String,
     account: String,
     userInitiated: Bool
   ) -> String? {
+    guard isBrowserKeychainImportAllowed else {
+      logBrowserKeychainImportRestrictedOnce()
+      return nil
+    }
+    if let safeStoragePasswordProvider {
+      return safeStoragePasswordProvider(service, account, userInitiated)
+    }
     // A background connector probe may discover a browser profile, but it must
     // fail closed rather than ask for the login keychain password. An explicit
     // import/read passes userInitiated=true and may show the normal one-time
@@ -369,6 +400,14 @@ final class BrowserKeychainCache: @unchecked Sendable {
       return nil
     }
     return password
+  }
+
+  private static func logBrowserKeychainImportRestrictedOnce() {
+    productionOnlyLogLock.lock()
+    defer { productionOnlyLogLock.unlock() }
+    guard !didLogProductionOnlyRestriction else { return }
+    didLogProductionOnlyRestriction = true
+    log("browser keychain import is production-only")
   }
 
   func password(

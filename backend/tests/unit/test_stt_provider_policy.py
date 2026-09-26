@@ -53,7 +53,7 @@ def test_self_hosted_deepgram_is_explicitly_limited_to_streaming():
 
 def test_policy_owns_the_safe_model_order_for_every_serving_surface():
     expected = {
-        STTServingSurface.STREAMING: 'dg-nova-3,modulate-velma-2,parakeet',
+        STTServingSurface.STREAMING: 'modulate-velma-2,soniox,dg-nova-3,parakeet',
         STTServingSurface.PRERECORDED: 'parakeet,modulate-velma-2',
         STTServingSurface.PTT: 'modulate-velma-2,parakeet',
     }

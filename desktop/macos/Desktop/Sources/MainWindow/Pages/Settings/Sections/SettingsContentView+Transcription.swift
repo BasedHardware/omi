@@ -39,7 +39,7 @@ extension SettingsContentView {
               Image(systemName: autoDetectIsActive ? "checkmark.circle.fill" : "circle")
                 .scaledFont(size: OmiType.heading)
                 .foregroundColor(
-                  autoDetectIsActive ? Ink.accent : Ink.secondary)
+                  SettingsSelection.optionMark(isSelected: autoDetectIsActive))
 
               VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 Text("Auto-Detect (Multi-Language)")
@@ -80,13 +80,10 @@ extension SettingsContentView {
             .padding(OmiSpacing.md)
             .background(
               RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
-                .fill(autoDetectIsActive ? Ink.accent.opacity(0.1) : Color.clear)
+                .fill(autoDetectIsActive ? SettingsSelection.optionFill(isSelected: true) : Color.clear)
                 .overlay(
                   RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
-                    .stroke(
-                      autoDetectIsActive
-                        ? Ink.accent.opacity(0.3) : Ink.hairline,
-                      lineWidth: 1)
+                    .stroke(SettingsSelection.optionStroke(isSelected: autoDetectIsActive), lineWidth: 1)
                 )
             )
             .contentShape(RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous))
@@ -105,7 +102,7 @@ extension SettingsContentView {
               Image(systemName: !autoDetectIsActive ? "checkmark.circle.fill" : "circle")
                 .scaledFont(size: OmiType.heading)
                 .foregroundColor(
-                  !autoDetectIsActive ? Ink.accent : Ink.secondary)
+                  SettingsSelection.optionMark(isSelected: !autoDetectIsActive))
 
               VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 Text("Single Language (Better Accuracy)")
@@ -146,13 +143,10 @@ extension SettingsContentView {
             .padding(OmiSpacing.md)
             .background(
               RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
-                .fill(!autoDetectIsActive ? Ink.accent.opacity(0.1) : Color.clear)
+                .fill(!autoDetectIsActive ? SettingsSelection.optionFill(isSelected: true) : Color.clear)
                 .overlay(
                   RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
-                    .stroke(
-                      !autoDetectIsActive
-                        ? Ink.accent.opacity(0.3) : Ink.hairline,
-                      lineWidth: 1)
+                    .stroke(SettingsSelection.optionStroke(isSelected: !autoDetectIsActive), lineWidth: 1)
                 )
             )
             .contentShape(RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous))
@@ -238,7 +232,7 @@ extension SettingsContentView {
 
           // Add new word input
           HStack(spacing: OmiSpacing.sm) {
-            TextField("Add a word...", text: $newVocabularyWord)
+            TextField("Add a word…", text: $newVocabularyWord)
               .settingsTextInputStyle()
               .onSubmit {
                 addVocabularyWord()
@@ -292,6 +286,62 @@ extension SettingsContentView {
                 AssistantSettings.shared.vadGateEnabled = newValue
                 restartTranscriptionIfNeeded()
               }
+          }
+        }
+      }
+
+      // Silent Type
+      settingsCard(settingId: "transcription.silenttype") {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          HStack {
+            Image(systemName: "keyboard.badge.eye")
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
+
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+              Text("Silent Type")
+                .scaledFont(size: OmiType.subheading, weight: .medium)
+                .foregroundColor(Ink.primary)
+
+              Text("Keeps what you dictate with Omi Type out of the chat.")
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(Ink.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: $shortcutSettings.silentTypeEnabled)
+              .toggleStyle(OmiToggleStyle())
+          }
+        }
+      }
+
+      // Ignore dictation apps
+      settingsCard(settingId: "transcription.ignoredictationapps") {
+        VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          HStack {
+            Image(systemName: "mic.slash")
+              .scaledFont(size: OmiType.subheading)
+              .foregroundColor(Ink.secondary)
+
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+              Text("Ignore Dictation Apps")
+                .scaledFont(size: OmiType.subheading, weight: .medium)
+                .foregroundColor(Ink.primary)
+
+              Text(
+                "While Wispr Flow, superwhisper, or macOS Dictation is using the microphone, Omi stops listening so dictations don't become conversations. Calls are never muted."
+              )
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            Toggle("", isOn: $shortcutSettings.ambientIgnoresDictationApps)
+              .toggleStyle(OmiToggleStyle())
           }
         }
       }

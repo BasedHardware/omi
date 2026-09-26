@@ -24,6 +24,11 @@ enum ChatFirstPromptMaterializationPolicy {
 /// state remain on the backend/kernel respectively.
 @MainActor
 final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
+  /// The one coordinator. Auxiliary Chat surfaces bind it so they cannot start a
+  /// second materialization lane; only the mounted main transcript ever reports
+  /// its first page to it.
+  static let shared = ChatFirstPromptMaterializationCoordinator()
+
   private var driver: (any ChatFirstPromptMaterializationDriving)?
   private var didLoadTranscriptFirstPage = false
   private var lastAttemptAt: Date?
@@ -32,9 +37,11 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
   private var pendingCompletionWindowForeground = false
   private var requestGeneration = 0
   private let now: () -> Date
+  private let logger: (String) -> Void
 
-  init(now: @escaping () -> Date = Date.init) {
+  init(now: @escaping () -> Date = Date.init, logger: @escaping (String) -> Void = log) {
     self.now = now
+    self.logger = logger
   }
 
   func activate(using chatProvider: ChatProvider) {
@@ -165,12 +172,28 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
         windowForeground: windowForeground,
         isCurrent: { [weak self] in
           self?.isCurrentMaterialization(generation) ?? false
+        },
+        onFailure: { [weak self] error, batch in
+          let failure: String
+          if case APIError.httpError(let statusCode, _) = error {
+            failure = "status=\(statusCode)"
+          } else if let urlError = error as? URLError {
+            failure =
+              "error_type=\(String(describing: type(of: error))) "
+              + "url_error_code=\(urlError.code.rawValue)"
+          } else {
+            failure = "error_type=\(String(describing: type(of: error)))"
+          }
+          self?.logger(
+            "Chat-first prompt materialization deferred: \(failure) "
+              + "receipts=\(batch.materializationReceipts.count) "
+              + "rejections=\(batch.materializationRejections.count) "
+              + "deferrals=\(batch.materializationDeferrals.count)")
         }
       )
     } catch {
       // Failure is intentionally quiet and retryable on the next debounced
       // foreground/open. Do not create a notification, badge, or Chat row.
-      log("Chat-first prompt materialization deferred")
     }
   }
 

@@ -147,13 +147,6 @@ import { conversationIdForSession } from "./conversation-turns.js";
 import type { AuthorizedRunToolInvocation } from "./run-tool-capability.js";
 
 export class KernelSessions extends KernelArtifacts {
-  /** Process-local only: never back this with SQLite or a user preference. */
-  private readonly chatFirstCapabilities = new Map<string, ChatFirstCapabilityProjection>();
-
-  private chatFirstCapability(sessionId: string, ownerId: string, surfaceKind?: string): ChatFirstCapabilityProjection | undefined {
-    if (surfaceKind !== "main_chat") return undefined;
-    return this.chatFirstCapabilities.get(`${ownerId}:${sessionId}`);
-  }
   ownedSession(sessionId: string, ownerId: string): AgentSession {
     const session = this.readSession(sessionId);
     this.assertSessionOwner(session, ownerId);

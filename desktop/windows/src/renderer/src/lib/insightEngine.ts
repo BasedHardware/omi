@@ -6,7 +6,7 @@
 // ONE Insight engine now runs — the main one — so there is never a duplicate
 // toast. The renderer-side single-shot summarize+schema engine that used to live
 // here (runInsightOnce) is gone; its pure helpers (insightPrompt / insightGate /
-// insightActivity) remain importable but unused.
+// insightActivity) were deleted as unused.
 //
 // This bootstrap survives ONLY to start the renderer→main session relays that
 // the main-process services need (they are inert without a Firebase token): the

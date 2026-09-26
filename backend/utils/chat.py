@@ -19,7 +19,7 @@ from utils.conversation_helpers import extract_memory_ids
 from utils.conversations.factory import deserialize_conversation
 from utils.llm.chat import initial_chat_message
 from utils.llm.persona import initial_persona_chat_message
-from utils.notifications import send_notification, send_notification_async
+from utils.notifications import send_client_displayed_notification, send_client_displayed_notification_async
 from utils.observability.fallback import record_fallback
 from utils.other.storage import get_syncing_file_temporal_signed_url, schedule_syncing_temporal_file_deletion
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
@@ -665,7 +665,9 @@ def _chat_message_notification(
 
 def send_chat_message_notification(user_id: str, app_name: str, app_id: str, message: str, message_id: str):
     ai_message = _chat_message_notification(app_id, message, message_id)
-    send_notification(user_id, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
+    send_client_displayed_notification(
+        user_id, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message)
+    )
 
 
 async def send_chat_message_notification_async(
@@ -677,7 +679,7 @@ async def send_chat_message_notification_async(
 ) -> None:
     """Async notification boundary for streaming chat responses."""
     ai_message = _chat_message_notification(app_id, message, message_id)
-    await send_notification_async(
+    await send_client_displayed_notification_async(
         user_id,
         app_name + ' says',
         message,

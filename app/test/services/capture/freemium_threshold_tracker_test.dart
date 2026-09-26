@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 
 void main() {
@@ -29,5 +30,40 @@ void main() {
     expect(tracker.reached, isFalse);
     expect(tracker.remainingSeconds, 0);
     expect(tracker.requiresUserAction, isFalse);
+  });
+
+  test('plus meter paywall is Plus-only', () {
+    expect(
+      FreemiumThresholdTracker.shouldShowPlusMeterPaywall(
+        reached: true,
+        requiresUserAction: true,
+        plan: PlanType.plus,
+      ),
+      isTrue,
+    );
+    expect(
+      FreemiumThresholdTracker.shouldShowPlusMeterPaywall(
+        reached: true,
+        requiresUserAction: true,
+        plan: PlanType.basic,
+      ),
+      isFalse,
+    );
+    expect(
+      FreemiumThresholdTracker.shouldShowPlusMeterPaywall(
+        reached: true,
+        requiresUserAction: true,
+        plan: null,
+      ),
+      isFalse,
+    );
+    expect(
+      FreemiumThresholdTracker.shouldShowPlusMeterPaywall(
+        reached: true,
+        requiresUserAction: false,
+        plan: PlanType.plus,
+      ),
+      isFalse,
+    );
   });
 }

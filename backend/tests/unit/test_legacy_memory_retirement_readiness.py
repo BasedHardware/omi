@@ -93,7 +93,11 @@ def test_daily_replacement_has_a_distinct_retained_resource_contract() -> None:
     assert len(daily_images) == 1
     assert daily_images[0]["dockerfile"] == "backend/modal/Dockerfile.daily_memory_sweep_job"
     assert daily_images[0]["entrypoints"] == ["daily_memory_sweep_job"]
-    assert all("gcp_daily_memory_sweep_job" in workflow for workflow in daily_images[0]["deployment_workflows"])
+    assert set(daily_images[0]["deployment_workflows"]) == {
+        ".github/workflows/gcp_daily_memory_sweep_job_auto_dev.yml",
+        ".github/workflows/gcp_daily_memory_sweep_job.yml",
+        ".github/workflows/jit_qa_cloud_run.yml",
+    }
 
 
 def test_daily_manual_deploy_is_main_only_admitted_and_provisions_scheduler() -> None:
@@ -153,6 +157,17 @@ def test_daily_scheduler_provisioner_creates_or_updates_only_the_retained_contra
     assert commands[0][3] == "describe"
     assert commands[1][3:6] == ["create", "http", "daily-memory-sweep-hourly"]
     assert "jobs/daily-memory-sweep-job:run" in " ".join(commands[1])
+
+    ledger_args = daily_scheduler.scheduler_http_args(
+        "create",
+        project="based-hardware-dev",
+        region="us-central1",
+        scheduler_job="knowledge-ledger-drain-hourly",
+        cloud_run_job="knowledge-ledger-drain-job",
+        service_account="scheduler@based-hardware-dev.iam.gserviceaccount.com",
+    )
+    assert "knowledge-ledger-drain-hourly" in ledger_args
+    assert "jobs/knowledge-ledger-drain-job:run" in " ".join(ledger_args)
 
     with pytest.raises(ValueError, match="retained contract"):
         daily_scheduler.scheduler_http_args(

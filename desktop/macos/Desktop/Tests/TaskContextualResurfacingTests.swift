@@ -1102,17 +1102,40 @@ final class TaskContextualResurfacingTests: XCTestCase {
       ).reason, .minimumSpacing)
   }
 
-  func testDogfoodAndShippedEnrollmentRemainIndependent() {
-    let dogfood = configuration(enabled: true, shipped: false)
-    XCTAssertTrue(dogfood.isEnrolled(cohort: .dogfood))
-    XCTAssertFalse(dogfood.isEnrolled(cohort: .beta))
-    XCTAssertFalse(dogfood.isEnrolled(cohort: .production))
+  func testEnrollmentIsDogfoodOnlyAndRequiresOptIn() {
+    let optedIn = configuration(enabled: true)
+    XCTAssertTrue(optedIn.isEnrolled(cohort: .dogfood))
+    XCTAssertFalse(optedIn.isEnrolled(cohort: .beta))
+    XCTAssertFalse(optedIn.isEnrolled(cohort: .production))
 
-    let shipped = configuration(enabled: true, shipped: true)
-    XCTAssertTrue(shipped.isEnrolled(cohort: .dogfood))
-    XCTAssertTrue(shipped.isEnrolled(cohort: .beta))
-    XCTAssertTrue(shipped.isEnrolled(cohort: .production))
-    XCTAssertFalse(configuration(enabled: false, shipped: true).isEnrolled(cohort: .production))
+    let optedOut = configuration(enabled: false)
+    for cohort in [ProactiveTaskCohort.dogfood, .beta, .production] {
+      XCTAssertFalse(optedOut.isEnrolled(cohort: cohort))
+    }
+  }
+
+  func testLegacyShippedCohortsPayloadCannotEnrollBetaOrProduction() throws {
+    let legacyOptedIn = Data(
+      """
+      {"schemaVersion":1,"userOptedIn":true,"shippedCohortsEnabled":true,\
+      "dailyLimit":2,"minimumSpacing":5400,"allowedPreparationKinds":[]}
+      """.utf8)
+    let decoded = try JSONDecoder().decode(
+      ProactiveTaskInterruptionConfiguration.self, from: legacyOptedIn)
+    XCTAssertTrue(decoded.isEnrolled(cohort: .dogfood))
+    XCTAssertFalse(decoded.isEnrolled(cohort: .beta))
+    XCTAssertFalse(decoded.isEnrolled(cohort: .production))
+
+    let legacyOptedOut = Data(
+      """
+      {"schemaVersion":1,"userOptedIn":false,"shippedCohortsEnabled":true,\
+      "dailyLimit":2,"minimumSpacing":5400,"allowedPreparationKinds":[]}
+      """.utf8)
+    let decodedOptedOut = try JSONDecoder().decode(
+      ProactiveTaskInterruptionConfiguration.self, from: legacyOptedOut)
+    for cohort in [ProactiveTaskCohort.dogfood, .beta, .production] {
+      XCTAssertFalse(decodedOptedOut.isEnrolled(cohort: cohort))
+    }
   }
 
   @MainActor
@@ -1365,13 +1388,11 @@ final class TaskContextualResurfacingTests: XCTestCase {
 
   private func configuration(
     enabled: Bool = true,
-    shipped: Bool = false,
     dailyLimit: Int = 2,
     spacing: TimeInterval = 90 * 60
   ) -> ProactiveTaskInterruptionConfiguration {
     ProactiveTaskInterruptionConfiguration(
       userOptedIn: enabled,
-      shippedCohortsEnabled: shipped,
       dailyLimit: dailyLimit,
       minimumSpacing: spacing,
       allowedPreparationKinds: []

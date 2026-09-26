@@ -172,7 +172,7 @@ struct DesktopUpdateStatusChipLabel: View {
 }
 
 /// Compact chip shown in `DesktopTopBar` so chat-first shell users see Sparkle
-/// progress (the legacy sidebar widget is unreachable when `usesChatFirstShell`).
+/// progress (the legacy sidebar widget it used to share this job with is gone).
 struct DesktopUpdateStatusChip: View {
   @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
   @State private var glowAnimating = false

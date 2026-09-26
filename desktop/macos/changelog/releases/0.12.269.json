@@ -1,0 +1,7 @@
+{
+  "version": "0.12.269",
+  "date": "2026-09-02",
+  "changes": [
+    "Thumbs on proactive notification cards (focus, insights, tasks, memories) are now tracked separately from ratings of regular Omi answers."
+  ]
+}

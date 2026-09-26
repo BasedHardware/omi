@@ -612,4 +612,106 @@ void main() {
     }
     expect(requests, 0);
   });
+
+  test('a locked memory absent from the loaded list is not reviewed', () async {
+    final reviews = <String>[];
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          const GetMemoriesResult([], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
+      reviewMemoryRequest: (id, value) async {
+        reviews.add(id);
+        return true;
+      },
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    final locked = _ledgerMemory(id: 'locked-absent', kind: KnowledgeLedgerKind.fact, isLocked: true);
+    expect(await provider.reviewMemory(locked, false), isFalse);
+    expect(reviews, isEmpty, reason: 'locked rows are immutable even when the id is not in the loaded list');
+  });
+
+  test('clearUserData resets the review-card hydration budget', () async {
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          const GetMemoriesResult([], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
+      reviewMemoryRequest: (id, value) async => true,
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    // Spend the whole budget for an id the settled list does not resolve.
+    expect(provider.consumeHydrationAsk('mem-a'), isTrue);
+    expect(provider.consumeHydrationAsk('mem-a'), isFalse);
+    provider.clearUserData();
+
+    // A new account session restores eligibility.
+    expect(provider.consumeHydrationAsk('mem-a'), isTrue);
+  });
+
+  test('clearUserData clears settled verdicts recorded for unresolved ids', () async {
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          const GetMemoriesResult([], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
+      reviewMemoryRequest: (id, value) async => true,
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    final absent = _ledgerMemory(id: 'mem-absent', kind: KnowledgeLedgerKind.fact);
+    expect(await provider.reviewMemory(absent, true), isTrue);
+    expect(provider.settledReviewFor('mem-absent'), isTrue);
+
+    provider.clearUserData();
+    expect(provider.settledReviewFor('mem-absent'), isNull);
+  });
+
+  test('a settled verdict for an unresolved id is recorded and overwritable', () async {
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
+          const GetMemoriesResult([], true),
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
+      reviewMemoryRequest: (id, value) async => true,
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+
+    final absent = _ledgerMemory(id: 'mem-absent', kind: KnowledgeLedgerKind.fact);
+    expect(await provider.reviewMemory(absent, false), isTrue);
+    expect(provider.settledReviewFor('mem-absent'), isFalse);
+
+    // The same user can change their mind; the last persisted verdict stands.
+    expect(await provider.reviewMemory(absent, true), isTrue);
+    expect(provider.settledReviewFor('mem-absent'), isTrue);
+  });
+
+  test('concurrent same-parameter loads are coalesced instead of racing', () async {
+    var fetches = 0;
+    final provider = MemoriesProvider(
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+        fetches++;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        return GetMemoriesResult([_ledgerMemory(id: 'fact', kind: KnowledgeLedgerKind.fact)], true);
+      },
+      fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: true),
+      reviewMemoryRequest: (id, value) async => true,
+    );
+    addTearDown(provider.dispose);
+
+    // Several review cards mount while the first fetch is still in flight
+    // (`hasLoaded` still false). They must join the one load, not start
+    // races the sequence guard would discard.
+    await Future.wait([provider.loadMemories(), provider.loadMemories(), provider.loadMemories()]);
+
+    expect(fetches, 1);
+    expect(provider.memories.map((item) => item.id), ['fact']);
+  });
 }

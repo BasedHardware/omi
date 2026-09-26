@@ -307,3 +307,15 @@ def test_router_defers_instead_of_using_standard_when_flex_cannot_fit_job_budget
     with pytest.raises(promotion_flex.PromotionFlexDeferred, match="job_budget"):
         model.invoke("late")
     assert calls == []
+
+
+def test_require_job_budget_raises_when_the_one_hour_clock_is_gone():
+    control = promotion_flex.PromotionFlexControl(enabled=True, generation=1)
+    router = promotion_flex.PromotionFlexRunRouter(
+        db_client=object(),
+        control_reader=lambda **_kwargs: control,
+        monotonic=lambda: 2_401.0,
+        started_at=0.0,
+    )
+    with pytest.raises(promotion_flex.PromotionFlexDeferred, match="job_budget"):
+        router.require_job_budget()

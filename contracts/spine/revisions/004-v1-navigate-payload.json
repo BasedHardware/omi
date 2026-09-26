@@ -1,0 +1,7 @@
+{
+  "path": "scripts/dev-harness/tests/spine/fake_flutter.py",
+  "owner": "V1",
+  "before": "ded5dc8e8172496630c3d2a6f662f8a6ccbcb30b593e7a5bc490711ef69ff9cd",
+  "after": "a61402868348d17d071021cca34d0e5cd87e6ed476e6d428a362131d7ea51bd0",
+  "reason": "Spine A turn 5 Harness review: strengthen real RPC delivery, failure classification, lifecycle ordering, worktree exclusion and seed identity; match actual semantic_controls.navigate payload. Local Flutter 3.44.5 source and loopback custom-extension probe establish wire expectations."
+}

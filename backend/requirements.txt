@@ -151,7 +151,10 @@ proto-plus==1.24.0
 protobuf==5.29.6
 ptyprocess==0.7.0
 pure_eval==0.2.3
-pyarrow==23.0.1
+# TODO(#12758): pin for GCP Functions Framework buildpack (rmgpgab) — pyarrow>=23
+# only ships manylinux_2_28 wheels so the builder falls back to sdist and fails.
+# Remove this pin when rmgpgab is retargeted/disabled to backend/Dockerfile (uv/pylock).
+pyarrow==19.0.1
 pyasn1==0.6.4
 pyasn1_modules==0.4.0
 pycparser==2.22

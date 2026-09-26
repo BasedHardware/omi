@@ -168,7 +168,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 - [Backend Deep Dive](https://docs.omi.me/doc/developer/backend/backend_deepdive)
 - [Transcription Pipeline](https://docs.omi.me/doc/developer/backend/transcription)
 - [Chat System](https://docs.omi.me/doc/developer/backend/chat_system)
-- [Audio Streaming Pipeline](https://docs.omi.me/doc/developer/backend/listen_pusher_pipeline)
+- [Audio Streaming Pipeline](https://docs.omi.me/doc/developer/backend/backend_deepdive)
 - [BLE Protocol](https://docs.omi.me/doc/developer/Protocol)
 
 ## Omi Hardware

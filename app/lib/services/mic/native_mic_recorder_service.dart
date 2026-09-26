@@ -33,6 +33,7 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
   static const Duration _batchStallThreshold = Duration(seconds: 10);
 
   final PhoneMicHostApi _hostApi;
+  final Timer Function(Duration, void Function(Timer)) _periodic;
   final DateTime Function() _now;
 
   Function(Uint8List bytes)? _onByteReceived;
@@ -61,8 +62,10 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
     PhoneMicHostApi? hostApi,
     bool registerFlutterApi = true,
     DateTime Function() now = DateTime.now,
+    Timer Function(Duration, void Function(Timer))? periodic,
   })  : _hostApi = hostApi ?? PhoneMicHostApi(),
-        _now = now {
+        _now = now,
+        _periodic = periodic ?? Timer.periodic {
     if (registerFlutterApi) {
       PhoneMicFlutterApi.setUp(this);
     }
@@ -254,7 +257,7 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
     _cancelStallWatchdog();
     _lastByteAt = _now();
     _stallReported = false;
-    _stallTimer = Timer.periodic(_stallCheckInterval, (_) {
+    _stallTimer = _periodic(_stallCheckInterval, (_) {
       if (_stallReported || _lastByteAt == null || _interrupted || !_sessionActive) return;
       if (_now().difference(_lastByteAt!) >= _stallThreshold) {
         _stallReported = true;
@@ -274,7 +277,7 @@ class NativeMicRecorderService implements IMicRecorderService, PhoneMicFlutterAp
     _cancelBatchWatchdog();
     _lastBatchProgressAt = _now();
     _batchStallReported = false;
-    _batchStallTimer = Timer.periodic(_stallCheckInterval, (_) {
+    _batchStallTimer = _periodic(_stallCheckInterval, (_) {
       if (_batchStallReported || _lastBatchProgressAt == null || !_sessionActive) return;
       if (_now().difference(_lastBatchProgressAt!) >= _batchStallThreshold) {
         _batchStallReported = true;

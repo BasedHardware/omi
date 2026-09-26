@@ -25,7 +25,7 @@ import tiktoken
 
 from models.structured_extraction import StructuredExtraction
 from utils.byok import get_byok_key
-from utils.llm.byok_errors import handle_llm_error
+from utils.llm.byok_errors import handle_llm_error, handle_llm_error_async
 from utils.observability.fallback import record_fallback
 from utils.llm.model_config import (
     MODEL_QOS_PROFILES,
@@ -38,7 +38,7 @@ from utils.llm.model_config import (
     _active_profile_name,
     _byok_profile,
     _byok_profile_name,
-    get_default_config,
+    feature_request_timeout,
     get_active_profile,
     get_active_profile_name,
     get_all_configured_features,
@@ -52,6 +52,7 @@ from utils.llm.model_config import (
     is_structured_output_feature,
     supports_cache_retention,
     supports_prompt_cache,
+    uses_explicit_cache_and_chat_sanitizer,
     _get_model_config,
 )  # noqa: F401 - legacy clients-module QoS re-exports
 from utils.llm.providers import (
@@ -244,14 +245,26 @@ _gateway_embeddings_route_absent_warned = False
 
 
 def _warn_gateway_embeddings_route_absent(operation: str) -> None:
-    """Report gateway/backend deploy skew once per process.
+    """Report gateway/backend deploy skew: one metric per degrade, one log per process.
 
-    Once per process, not per call: this condition holds until the gateway is
-    redeployed, and the callers behind it run thousands of embeddings an hour.
-    The gateway's own access log keeps counting the 404s, so nothing is lost by
-    not repeating ourselves here.
+    The fallback telemetry fires on every degrade (``backend/AGENTS.md`` rule
+    10 / ``docs/agents/fallback-telemetry.md``: a branch that changes mode MUST
+    call ``record_fallback``), because ``omi_fallback_total`` is how operators
+    see how much embeddings traffic and ledger spend is bypassing the gateway
+    while the skew lasts. The narrative ERROR log stays once per process: the
+    condition holds until the gateway is redeployed, the callers behind it run
+    thousands of embeddings an hour, and the gateway's own access log keeps
+    counting the 404s, so nothing is lost by not repeating ourselves there.
     """
     global _gateway_embeddings_route_absent_warned
+    record_fallback(
+        component='llm_gateway',
+        from_mode='gateway_embeddings',
+        to_mode='direct_embeddings',
+        reason='capability_mismatch',
+        outcome='degraded',
+        log=logger,
+    )
     if _gateway_embeddings_route_absent_warned:
         return
     _gateway_embeddings_route_absent_warned = True
@@ -372,7 +385,9 @@ class _OpenAIEmbeddingsProxy:
             return await ainvoke_openai_embeddings_gateway(texts, byok_api_key=byok)
         except Exception as e:
             if byok:
-                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='aembed_documents')
+                await handle_llm_error_async(
+                    e, 'openai', feature='embeddings', model=self._model, operation='aembed_documents'
+                )
                 if self._is_gateway_key_failure(e):
                     logger.warning(
                         "BYOK gateway OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__
@@ -425,7 +440,9 @@ class _OpenAIEmbeddingsProxy:
             return await inst.aembed_query(text)
         except Exception as e:
             if inst is not self._default:
-                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='aembed_query')
+                await handle_llm_error_async(
+                    e, 'openai', feature='embeddings', model=self._model, operation='aembed_query'
+                )
                 if self._is_key_failure(e):
                     logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
                     return await self._default_client().aembed_query(text)
@@ -442,7 +459,9 @@ class _OpenAIEmbeddingsProxy:
             return await inst.aembed_documents(texts)
         except Exception as e:
             if inst is not self._default:
-                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='aembed_documents')
+                await handle_llm_error_async(
+                    e, 'openai', feature='embeddings', model=self._model, operation='aembed_documents'
+                )
                 if self._is_key_failure(e):
                     logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
                     return await self._default_client().aembed_documents(texts)
@@ -460,7 +479,9 @@ class _OpenAIEmbeddingsProxy:
                     return await attr(*args, **kwargs)
                 except Exception as e:
                     if inst is not self._default:
-                        handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation=name)
+                        await handle_llm_error_async(
+                            e, 'openai', feature='embeddings', model=self._model, operation=name
+                        )
                         if self._is_key_failure(e):
                             logger.warning(
                                 "BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__
@@ -651,6 +672,13 @@ def get_llm(
             f"Feature '{feature}' is Perplexity — use get_model('{feature}') with the Perplexity HTTP client instead of get_llm()"
         )
 
+    if request_timeout is None:
+        # The deadline is a property of the feature, not of the call site: a feature that
+        # summarizes a whole conversation while a user waits cannot answer inside the
+        # background gateway transport deadline. Three separate call-site fixes proved that
+        # leaving this to each caller loses the user's summary (see model_config).
+        request_timeout = feature_request_timeout(feature)
+
     model, provider = _get_model_config(feature)
     # The feature lane (feature_auto_lane_id) is pinned to the feature's
     # resolved provider. When BYOK selection below switches providers, the
@@ -736,11 +764,20 @@ def get_llm(
     # OpenAI-compatible client, not the gateway lane.
     gateway_accepts_byok = effective_provider != "gemini"
     if byok_key and route_through_gateway and effective_provider == lane_provider and gateway_accepts_byok:
+        # A BYOK user's request runs the same feature prompt on the same lane, so it needs the
+        # same deadline as the omi-managed branch below; without this it silently kept the
+        # background transport deadline.
+        byok_gateway_options: Dict[str, Any] = {}
+        if request_timeout is not None:
+            byok_gateway_options["request_timeout"] = request_timeout
+        if max_retries is not None:
+            byok_gateway_options["max_retries"] = max_retries
         result = get_or_create_omi_gateway_llm_for_byok(
             feature_auto_lane_id(feature),
             provider=effective_provider,
             api_key=byok_key,
             streaming=streaming,
+            options=byok_gateway_options or None,
             feature=feature,
         )
     elif byok_key:
@@ -778,7 +815,7 @@ def get_llm(
     cache_params: Dict[str, Any] = {}
     if cache_key and supports_prompt_cache(model):
         cache_params['prompt_cache_key'] = cache_key
-    if prompt_cache_options and model.startswith('gpt-5.6'):
+    if prompt_cache_options and uses_explicit_cache_and_chat_sanitizer(model):
         # This is a provider request field, not a ChatOpenAI constructor field.
         # extra_body lets the OpenAI client merge it into the wire payload. It
         # must be sent even without a cache key: explicit mode with no

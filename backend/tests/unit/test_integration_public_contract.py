@@ -42,7 +42,7 @@ EXPECTED_OPERATIONS: Set[Tuple[str, str]] = {
 def _load_spec() -> Dict:
     import json
 
-    return json.loads(SPEC_PATH.read_text())
+    return json.loads(SPEC_PATH.read_text(encoding='utf-8'))
 
 
 def _operations(spec: Dict) -> Set[Tuple[str, str]]:

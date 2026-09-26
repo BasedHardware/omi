@@ -1,8 +1,11 @@
 name: Promote public-build candidate
-description: Browser-smoke an exact Cloud Run candidate before shifting traffic; existing services start with no traffic and first creates receive initial traffic.
+description: Browser-smoke an exact Cloud Run candidate before shifting traffic. A service whose ingress hides the tagged candidate URL from CI is promoted first, smoked through its declared public URL, and rolled back when that smoke fails. Existing services start with no traffic and first creates receive initial traffic.
 inputs:
   target:
     description: Canonical public-build target name.
+    required: true
+  environment:
+    description: Deployment environment; selects the declared public URL when the tagged candidate URL is unreachable.
     required: true
   service:
     description: Cloud Run service name.
@@ -19,6 +22,9 @@ inputs:
   tag:
     description: Cloud Run tag that must resolve to the exact candidate revision.
     required: true
+  sha:
+    description: Full candidate commit SHA baked into the image; asserted when the target's acceptance command declares {sha}.
+    required: true
 runs:
   using: composite
   steps:
@@ -34,7 +40,23 @@ runs:
           --timeout-seconds=150 \
           --poll-interval-seconds=5
 
+    - name: Resolve acceptance route from the service ingress
+      id: route
+      shell: bash
+      run: |
+        set -euo pipefail
+        ingress="$(gcloud run services describe "${{ inputs.service }}" \
+          --project="${{ inputs.project_id }}" \
+          --region="${{ inputs.region }}" \
+          --format='value(metadata.annotations."run.googleapis.com/ingress")')"
+        python3 .github/scripts/public_build_acceptance_route.py route \
+          --target "${{ inputs.target }}" \
+          --environment "${{ inputs.environment }}" \
+          --ingress "${ingress}" \
+          --github-output "$GITHUB_OUTPUT"
+
     - name: Resolve and browser-smoke exact candidate
+      if: steps.route.outputs.route == 'candidate_url'
       shell: bash
       run: |
         set -euo pipefail
@@ -46,7 +68,8 @@ runs:
           --tag="${{ inputs.tag }}")"
         python3 .github/scripts/smoke_public_build_browser.py \
           --target "${{ inputs.target }}" \
-          --base-url "$candidate_url"
+          --base-url "$candidate_url" \
+          --expect-sha "${{ inputs.sha }}"
 
     - name: Verify candidate is still latest
       shell: bash
@@ -58,6 +81,18 @@ runs:
           --format='value(status.latestCreatedRevisionName)')"
         test "$latest" = "${{ inputs.revision }}"
 
+    - name: Record the revision currently serving traffic
+      id: previous
+      shell: bash
+      run: |
+        set -euo pipefail
+        previous_serving_revision="$(gcloud run services describe "${{ inputs.service }}" \
+          --project="${{ inputs.project_id }}" \
+          --region="${{ inputs.region }}" \
+          --format=json | python3 .github/scripts/public_build_acceptance_route.py serving-revision)"
+        echo "previous serving revision: ${previous_serving_revision:-<none>}"
+        echo "previous_serving_revision=${previous_serving_revision}" >> "$GITHUB_OUTPUT"
+
     - name: Promote browser-accepted candidate
       shell: bash
       run: |
@@ -66,3 +101,35 @@ runs:
           --region="${{ inputs.region }}" \
           --to-revisions="${{ inputs.revision }}=100" \
           --quiet
+
+    - name: Browser-smoke the promoted candidate through its public URL, rolling back on failure
+      if: steps.route.outputs.route == 'public_url'
+      shell: bash
+      run: |
+        set -euo pipefail
+        public_url='${{ steps.route.outputs.public_url }}'
+        previous='${{ steps.previous.outputs.previous_serving_revision }}'
+        attempt=0
+        # The balancer can lag the traffic change by a few seconds; retry before judging.
+        until python3 .github/scripts/smoke_public_build_browser.py \
+          --target "${{ inputs.target }}" \
+          --base-url "$public_url" \
+          --expect-sha "${{ inputs.sha }}"; do
+          attempt=$((attempt + 1))
+          if (( attempt >= 6 )); then
+            echo "promoted candidate ${{ inputs.revision }} failed browser acceptance at ${public_url}" >&2
+            if [[ -n "$previous" && "$previous" != '${{ inputs.revision }}' ]]; then
+              echo "rolling traffic back to ${previous}" >&2
+              gcloud run services update-traffic "${{ inputs.service }}" \
+                --project="${{ inputs.project_id }}" \
+                --region="${{ inputs.region }}" \
+                --to-revisions="${previous}=100" \
+                --quiet
+            else
+              echo "no previous serving revision to roll back to; candidate stays live" >&2
+            fi
+            exit 1
+          fi
+          sleep 10
+        done
+        echo "promoted candidate ${{ inputs.revision }} accepted at ${public_url}"

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-replay-idempotency-keyed-on-advancing-state",
+  "violated_contract": "A write that promises duplicate-submission idempotency must derive its idempotency identity only from the logical request, never from ambient state that advances with unrelated writes. Folding the observed head commit into the operation id makes duplicate handling correct only while the account is otherwise idle: the same submission after any other write proposes a fresh operation, and when row ids are content-deterministic its add collides with the existing row instead of resolving as already-done.",
+  "canonical_prevention": "When deterministic row identity makes duplicates collide by construction, resolve the collision at the write boundary by proving the existing row is the same logical write (identical content, still active) and reporting the write complete with the existing id; keep different-content and non-active collisions failing. Keep a regression test that resubmits the identical payload after the account head has advanced, and one that a reused id with different content still fails.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_ws_j_delete_privacy.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/memory/canonical_memory_adapter.py",
+    "backend/database/memory_apply_store.py",
+    "backend/models/memory_operations.py"
+  ],
+  "status": "open"
+}

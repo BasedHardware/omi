@@ -126,6 +126,22 @@ SH
   chmod +x "$fixture/backend/test-preflight.sh"
 }
 
+# A port nothing is listening on. Readiness verifies a launched bundle's /health
+# whenever --port is bound, and these cases are offline-only: on a Mac with any
+# dev bundle up on the default 47777 the harness reached that check and sourced
+# app-config.sh, which the fixture never provides. Probe with /dev/tcp so the
+# stubbed python3 on PATH cannot answer for the kernel.
+closed_port() {
+  local port
+  for port in $(seq 47901 47999); do
+    if ! (echo >/dev/tcp/127.0.0.1/"$port") >/dev/null 2>&1; then
+      printf '%s\n' "$port"
+      return 0
+    fi
+  done
+  return 1
+}
+
 run_readiness_case() {
   local scenario="$1"
   local keep_stack="${2:-0}"
@@ -135,7 +151,9 @@ run_readiness_case() {
   local dev_up_marker="$fixture/dev-up.marker"
   local output="$fixture/output.txt"
   local status=0
-  local args=(--readiness)
+  local port
+  port="$(closed_port)" || fail "no closed port available for the offline readiness fixture"
+  local args=(--readiness --port "$port")
 
   rm -rf "$fixture"
   prepare_fixture_repo "$fixture"

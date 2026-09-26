@@ -1,0 +1,139 @@
+<title>Three Doors</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{--fh:clamp(280px,42vh,420px);--bg:#0e0c0a;--stone:#2b2622;--stone2:#1d1a17;--ink:#e9dcc3;--dim:#8d7d63;--wood:#4a2e17;--wood2:#3a2310;--iron:#6b6660;--glow:#ffd88a;--line:#3a322b;
+    --serif:"Cinzel",Georgia,serif;--mono:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:20px;font:16px var(--mono)}
+  .hint{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center;color:var(--dim);font:16px var(--mono);margin-top:6px}
+  .hint .lead{font:600 17px var(--serif);color:#b9a785;letter-spacing:.03em}
+  .key{display:inline-block;min-width:40px;text-align:center;font:500 18px/1 var(--mono);padding:9px 12px;border:1px solid var(--line);border-bottom-width:3px;border-radius:6px;background:var(--stone2);color:var(--ink)}
+  .said{font:500 19px var(--mono);color:var(--ink);background:var(--stone2);padding:11px 16px;border:1px solid var(--glow);border-radius:16px 16px 16px 4px;box-shadow:0 0 24px rgba(255,216,138,.12)}
+
+  .wall{position:relative;width:min(900px,96vw);height:min(660px,82vh);border-radius:8px;overflow:hidden;
+    background:
+      radial-gradient(ellipse at 50% 30%, rgba(255,216,138,.10), transparent 55%),
+      repeating-linear-gradient(0deg, transparent 0 58px, rgba(0,0,0,.35) 58px 62px),
+      repeating-linear-gradient(90deg, transparent 0 118px, rgba(0,0,0,.28) 118px 122px),
+      linear-gradient(var(--stone),var(--stone2));
+    box-shadow:inset 0 0 120px rgba(0,0,0,.8), 0 30px 80px rgba(0,0,0,.6);display:flex;flex-direction:column;align-items:center}
+  .count{position:absolute;top:14px;left:18px;font:500 12px var(--mono);letter-spacing:.12em;color:var(--dim);text-transform:uppercase}
+  .riddle{margin-top:clamp(24px,4.5vh,44px);padding:0 40px;text-align:center;font:800 clamp(19px,2.7vw,32px)/1.3 var(--serif);text-wrap:balance;letter-spacing:.02em;color:#d9c9a8;
+    text-shadow:0 1px 0 rgba(255,255,255,.08), 0 -1px 0 rgba(0,0,0,.9), 0 2px 6px rgba(0,0,0,.8);max-width:30ch}
+  .hourglass{width:min(420px,70%);height:6px;margin-top:18px;background:rgba(0,0,0,.55);border:1px solid var(--line);border-radius:999px;overflow:hidden}
+  .hourglass i{display:block;height:100%;width:100%;background:var(--glow)}
+  .scene{flex:1;display:flex;align-items:flex-end;justify-content:center;width:100%;perspective:1400px;position:relative}
+  .frame{position:relative;width:clamp(200px,27vw,290px);height:var(--fh);border-radius:150px 150px 0 0;background:#151210;box-shadow:inset 0 0 40px #000,0 0 0 12px #26211c,0 0 0 16px #14110e;overflow:hidden}
+  .keystone{position:absolute;left:50%;bottom:calc(var(--fh) + 20px);transform:translateX(-50%);z-index:2;width:54px;height:34px;background:linear-gradient(#3a332c,#241f1a);border:2px solid #14110e;display:flex;align-items:center;justify-content:center;font:800 15px var(--serif);color:#b9a785;letter-spacing:.06em;text-shadow:0 -1px 0 #000;clip-path:polygon(12% 0,88% 0,100% 100%,0 100%)}
+  .light{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 40%, #fff3d0 0%, var(--glow) 35%, #b58a3a 70%, #4a3612 100%);opacity:0;transition:opacity .9s ease .3s}
+  .door{position:absolute;inset:0;transform-origin:left center;transition:transform 1.4s cubic-bezier(.6,0,.3,1);border-radius:150px 150px 0 0;
+    --n:7;
+    background:
+      repeating-linear-gradient(90deg, transparent 0 calc(100%/var(--n) - 5px), rgba(0,0,0,.55) calc(100%/var(--n) - 5px) calc(100%/var(--n))),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.04) 0 6px, transparent 6px 18px),
+      linear-gradient(90deg, var(--wood), #5a381c 50%, var(--wood2))}
+  .door::before,.door::after{content:"";position:absolute;left:0;right:0;height:14px;background:linear-gradient(var(--iron),#3d3a36);box-shadow:0 2px 0 #000}
+  .door::before{top:36%}.door::after{top:66%}
+  .knob{position:absolute;right:18%;top:52%;width:22px;height:22px;border-radius:50%;background:radial-gradient(circle at 35% 35%,#d8c8a5,#6b5a3a 70%);box-shadow:0 2px 4px #000}
+  .slot{position:absolute;left:50%;top:22%;transform:translateX(-50%);width:62%;height:34px;background:#0a0806;border:2px solid var(--iron);border-radius:4px;box-shadow:inset 0 0 12px #000}
+  .open .door{transform:rotateY(-108deg)}
+  .open .light{opacity:1}
+  .shake{animation:shake .4s}
+  @keyframes shake{20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+
+  form{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center}
+  input{width:min(360px,70vw);background:rgba(10,8,6,.85);border:2px solid var(--iron);color:var(--ink);font:800 clamp(18px,2.4vw,26px)/1 var(--serif);letter-spacing:.1em;text-transform:uppercase;text-align:center;padding:14px 16px;border-radius:6px;outline:0}
+  input:focus{border-color:var(--glow)}
+  input::placeholder{color:var(--dim);font-weight:600;letter-spacing:.04em}
+
+  .plaques{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);display:grid;grid-template-columns:1fr 1fr;gap:10px;width:min(560px,92%)}
+  .plaque{appearance:none;cursor:pointer;background:linear-gradient(#3b332b,#24201b);border:2px solid var(--iron);color:var(--ink);font:800 clamp(16px,2vw,22px)/1 var(--serif);letter-spacing:.06em;padding:16px 14px;border-radius:6px;display:flex;gap:12px;align-items:center;text-shadow:0 -1px 0 #000;box-shadow:0 3px 0 #0a0806}
+  .plaque b{color:var(--glow);font-weight:800}
+  .plaque:hover{border-color:var(--glow)}
+  .plaque:focus-visible{outline:2px solid var(--glow);outline-offset:2px}
+  .plaque.wrong{border-color:#8a2f1f;color:var(--dim)}
+
+  .gate{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;background:linear-gradient(var(--stone),var(--stone2));text-align:center;padding:24px;z-index:3}
+  .gate p{margin:0;font:800 clamp(22px,3vw,36px)/1.3 var(--serif);color:#d9c9a8;text-wrap:balance;max-width:24ch;text-shadow:0 2px 6px rgba(0,0,0,.8)}
+  .gate button{appearance:none;border:2px solid var(--glow);background:transparent;color:var(--glow);font:800 15px var(--serif);letter-spacing:.16em;padding:14px 30px;border-radius:6px;cursor:pointer}
+  .gate button:hover{background:var(--glow);color:#1a1200}
+  .gate button:focus{outline:none}
+  .gate button:focus-visible{outline:2px solid var(--glow);outline-offset:4px}
+  .done{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:radial-gradient(ellipse at 50% 40%,#fff3d0,#e0b970 40%,#5c4416 100%);color:#2a1d08;text-align:center;padding:24px}
+  .done h2{margin:0;font:800 clamp(34px,6vw,60px)/1.05 var(--serif)}
+  .done p{margin:0;font:500 14px var(--mono);color:#4a3612}
+  .doneActions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+  .done button{appearance:none;border:2px solid #2a1d08;background:transparent;color:#2a1d08;font:800 14px var(--serif);letter-spacing:.14em;padding:12px 22px;border-radius:6px;cursor:pointer}
+  .done #back{background:#2a1d08;color:#fff3d0}
+  .done button:hover{background:#2a1d08;color:#fff3d0}
+  [hidden]{display:none!important}
+  @media (max-width:560px){.plaques{grid-template-columns:1fr}}
+  @media (prefers-reduced-motion:reduce){.door,.light{transition:none}.shake{animation:none}}
+</style>
+
+<div class="wall" id="wall">
+  <div class="count" id="count">Door 1 of 3</div>
+  <div class="riddle" id="riddle"></div>
+  <div class="hourglass" id="hourglass" hidden><i id="sand"></i></div>
+  <div class="scene">
+    <div class="keystone" id="keystone"></div>
+    <div class="frame" id="frame">
+      <div class="light"></div>
+      <div class="door" id="door"><div class="slot"></div><div class="knob"></div></div>
+    </div>
+  </div>
+  <form id="form" autocomplete="off"><input id="ans" type="text" placeholder="type the word" autofocus spellcheck="false" maxlength="24"></form>
+  <div class="plaques" id="plaques" hidden></div>
+  <div class="gate" id="gate" hidden><p id="gateText">The next door gives you twenty seconds.</p><button id="ready">READY</button></div>
+  <div class="done" id="done" hidden data-return="omi-computer-dev://onboarding/doors-complete"><h2>You're out.</h2><p id="doneText"></p><div class="doneActions"><button id="back">BACK TO OMI</button><button id="again">AGAIN</button></div></div>
+</div>
+
+<div class="hint"><span class="lead">Stuck? Hold</span><span id="keys"><span class="key">⌥</span></span><span class="lead">and say</span><span class="said" id="say">Yo, what's the answer to this riddle?</span></div>
+
+<script>
+(function(){
+  // Door 3 asks about door 1's text. Text is what Omi can recover from screen history; counts and pixels are not.
+  const DOORS=[
+    { kind:'type', planks:7, keystone:'VII', say:"Yo, what's the answer to this riddle?",
+      r:'I have keys but open no locks. I have space but no room. You can enter, but never go inside.',
+      a:['keyboard','a keyboard','piano'] },
+    { kind:'type', planks:4, keystone:'', say:"Yo, what's the answer to this riddle?", timed:20,
+      r:'Which planet has a day longer than its year?',
+      a:['venus','planet venus'] },
+    { kind:'type', planks:5, keystone:'', say:'Yo, what was the last word of the first riddle?',
+      r:'What was the last word of the first riddle? There is no way back.',
+      a:['inside','go inside','never go inside'], placeholder:'type the word' },
+  ];
+  let i=0, busy=false, tmr=null, tLeft=0;
+  const $=id=>document.getElementById(id);
+  function show(){
+    const d=DOORS[i]; busy=false;
+    $('count').textContent='Door '+(i+1)+' of 3'; $('riddle').textContent=d.r; $('say').textContent=d.say;
+    $('door').style.setProperty('--n', d.planks); $('keystone').textContent=d.keystone; $('keystone').hidden=!d.keystone;
+    $('frame').classList.remove('open');
+    if(d.kind==='type'){ $('form').hidden=false; $('plaques').hidden=true; $('ans').value=''; $('ans').disabled=false; $('ans').placeholder=d.placeholder||'type the word'; $('ans').focus(); }
+    else { $('form').hidden=true; $('plaques').hidden=false; $('plaques').innerHTML='';
+      d.opts.forEach((o,k)=>{ const b=document.createElement('button'); b.className='plaque'; b.innerHTML='<b>'+'ABCD'[k]+'</b><span>'+o+'</span>'; b.onclick=()=>pick(k); $('plaques').appendChild(b); }); }
+    clearInterval(tmr); $('hourglass').hidden=!d.timed; $('sand').style.width='100%';
+    if(d.timed){ $('gate').hidden=false; $('ready').focus(); } else $('gate').hidden=true;
+  }
+  function startTimer(sec){ tLeft=sec; const t0=performance.now(); $('sand').style.width='100%'; $('sand').style.background='var(--glow)';
+    clearInterval(tmr); tmr=setInterval(()=>{ const left=Math.max(0,sec-(performance.now()-t0)/1000); $('sand').style.width=(left/sec*100)+'%'; if(left<3) $('sand').style.background='#c2410c';
+      if(left<=0){ clearInterval(tmr); fail(); $('ans').value=''; $('ans').placeholder='too slow. ask omi.'; $('ans').disabled=true; setTimeout(()=>{ if(busy) return; $('ans').disabled=false; $('ans').focus(); startTimer(sec); },1800); } },100); }
+  function openDoor(){ clearInterval(tmr); busy=true; $('frame').classList.add('open'); setTimeout(()=>{ i++; if(i>=DOORS.length){ $('doneText').textContent='"Inside." Omi read it. You did not have to remember.'; $('done').hidden=false; setTimeout(backToOmi,1500); } else show(); },2000); }
+  function fail(){ $('frame').classList.add('shake'); setTimeout(()=>$('frame').classList.remove('shake'),420); }
+  $('form').addEventListener('submit',e=>{ e.preventDefault(); if(busy) return;
+    const v=$('ans').value.trim().toLowerCase().replace(/[^a-z0-9 ]/g,'');
+    if(DOORS[i].a.includes(v)) openDoor(); else { fail(); $('ans').select(); } });
+  function pick(k){ if(busy) return; if(k===DOORS[i].c) openDoor(); else { fail(); $('plaques').children[k].classList.add('wrong'); } }
+  $('ready').onclick=()=>{ $('gate').hidden=true; $('ans').focus(); startTimer(DOORS[i].timed); };
+  $('again').onclick=()=>{ i=0; $('done').hidden=true; show(); };
+  // Finishing hands the user back to Omi: the app registers this URL scheme and brings its window forward.
+  const returnURL=$('done').dataset.return;
+  function backToOmi(){ if(returnURL) location.href=returnURL; }
+  $('back').onclick=backToOmi;
+  document.addEventListener('keydown',e=>{ if(!$('gate').hidden && (e.key==='Enter'||e.key===' ')){ e.preventDefault(); $('ready').click(); return; } if(DOORS[i] && DOORS[i].kind==='pick' && $('done').hidden){ const k='ABCD'.indexOf(e.key.toUpperCase()); if(k>-1) pick(k); } });
+  document.addEventListener('click',()=>{ if($('done').hidden && $('gate').hidden && DOORS[i].kind==='type') $('ans').focus(); });
+  show();
+})();
+</script>

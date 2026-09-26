@@ -19,11 +19,13 @@ import {
   Truck,
   Bell,
   ShieldAlert,
+  ThumbsDown,
   FlaskConical,
   Rocket,
   Handshake,
   Star,
   MessageSquarePlus,
+  Tv,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -54,6 +56,11 @@ export function DashboardSidebar() {
       title: "Dashboard",
       href: "/dashboard",
       icon: LayoutGrid,
+    },
+    {
+      title: "TV wall links",
+      href: "/dashboard/tv-links",
+      icon: Tv,
     },
     {
       title: "Apps",
@@ -134,6 +141,11 @@ export function DashboardSidebar() {
       title: "Fair Use",
       href: "/dashboard/fair-use",
       icon: ShieldAlert,
+    },
+    {
+      title: "Negative Feedback",
+      href: "/dashboard/feedback",
+      icon: ThumbsDown,
     },
   ];
 

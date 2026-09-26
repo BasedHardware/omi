@@ -5,6 +5,7 @@ import time
 
 import httpx
 import pytest
+from pydantic import BaseModel
 
 from llm_gateway.gateway import providers as provider_module
 from llm_gateway.gateway.auth import ServiceCaller
@@ -13,8 +14,8 @@ from llm_gateway.gateway.providers import (
     ProviderFailure,
     VertexAccessTokenSupplier,
     VertexGeminiProvider,
-    _vertex_request,
 )
+from llm_gateway.gateway.vertex_wire import _json_schema_to_vertex_response_schema, _vertex_request
 from llm_gateway.gateway.schemas import FailureClass, ProviderRef
 from llm_gateway.routers import dependencies
 from utils.executors import critical_executor
@@ -418,6 +419,97 @@ def test_vertex_request_never_emits_a_message_with_zero_parts():
     assert payload["contents"][1] == {"role": "user", "parts": [{"text": ""}]}
 
 
+def test_vertex_response_schema_inlines_nested_translation_json_schema():
+    """Nested Pydantic json_schema must not be copied into Vertex responseSchema.
+
+    Vertex responseSchema is an OpenAPI subset. JSON Schema $defs/$ref is the
+    400 that made omi:auto:translation 100% InvalidArgument. Local models match
+    GeminiTranslationBatch / GeminiTranslationItem so this stays a cheap unit
+    test (importing translation providers pulls langchain into call-phase CPU).
+    """
+
+    class GeminiTranslationItem(BaseModel):
+        text: str
+        detected_language: str
+
+    class GeminiTranslationBatch(BaseModel):
+        translations: list[GeminiTranslationItem]
+
+    schema = GeminiTranslationBatch.model_json_schema()
+    assert '$defs' in schema
+    assert schema['properties']['translations']['items'] == {'$ref': '#/$defs/GeminiTranslationItem'}
+
+    converted = _json_schema_to_vertex_response_schema(schema)
+    dumped = json.dumps(converted)
+    assert '$ref' not in dumped
+    assert '$defs' not in dumped
+    assert converted['type'] == 'object'
+    assert converted['properties']['translations']['items'] == {
+        'properties': {
+            'text': {'title': 'Text', 'type': 'string'},
+            'detected_language': {'title': 'Detected Language', 'type': 'string'},
+        },
+        'required': ['text', 'detected_language'],
+        'title': 'GeminiTranslationItem',
+        'type': 'object',
+    }
+
+    payload = _vertex_request(
+        {
+            'messages': [{'role': 'user', 'content': 'translate'}],
+            'response_format': {
+                'type': 'json_schema',
+                'json_schema': {'name': 'GeminiTranslationBatch', 'schema': schema},
+            },
+        }
+    )
+    response_schema = payload['generationConfig']['responseSchema']
+    assert '$ref' not in json.dumps(response_schema)
+    assert '$defs' not in json.dumps(response_schema)
+    assert response_schema['properties']['translations']['items']['type'] == 'object'
+
+
+def test_vertex_response_schema_inlines_openai_strict_nested_schema():
+    schema = {
+        '$defs': {
+            'GeminiTranslationItem': {
+                'properties': {
+                    'text': {'title': 'Text', 'type': 'string'},
+                    'detected_language': {'title': 'Detected Language', 'type': 'string'},
+                },
+                'required': ['text', 'detected_language'],
+                'title': 'GeminiTranslationItem',
+                'type': 'object',
+                'additionalProperties': False,
+            }
+        },
+        'properties': {
+            'translations': {
+                'items': {'$ref': '#/$defs/GeminiTranslationItem'},
+                'title': 'Translations',
+                'type': 'array',
+            }
+        },
+        'required': ['translations'],
+        'title': 'GeminiTranslationBatch',
+        'type': 'object',
+        'additionalProperties': False,
+    }
+
+    converted = _json_schema_to_vertex_response_schema(schema)
+    dumped = json.dumps(converted)
+    assert '$ref' not in dumped
+    assert '$defs' not in dumped
+    assert converted['additionalProperties'] is False
+    assert converted['properties']['translations']['items']['additionalProperties'] is False
+    assert converted['properties']['translations']['items']['required'] == ['text', 'detected_language']
+
+
+def test_vertex_response_schema_leaves_flat_schemas_unchanged():
+    schema = {'type': 'object', 'properties': {'title': {'type': 'string'}}}
+    assert _json_schema_to_vertex_response_schema(schema) == schema
+
+
 # --- Desktop company-paid PT policy (moved from the desktop proxy) ---------
 
 
@@ -517,6 +609,107 @@ async def test_vertex_provider_overflows_to_on_demand_when_dedicated_is_exhauste
     later_models = [str(r.url.path).split('/models/')[-1] for r in seen[1:]]
     assert 'dedicated' not in later_capacities
     assert later_models[0].startswith('gemini-3.1-flash-lite')
+
+
+@pytest.mark.asyncio
+async def test_vertex_provider_origin_ceiling_skips_3_1_on_the_wire(monkeypatch):
+    """A flash-lite origin admitted to flash PT overflows to flash-lite, never 3.1."""
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'test-project')
+    monkeypatch.setenv('GCP_LOCATION', 'us-central1')
+    monkeypatch.delenv('OMI_GEMINI_OVERFLOW_ENABLED', raising=False)
+    monkeypatch.delenv('OMI_GEMINI_OVERFLOW_MODEL', raising=False)
+    monkeypatch.delenv('OMI_VERTEX_PT_MODEL', raising=False)
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        if len(seen) == 1:
+            return httpx.Response(
+                429,
+                json={'error': {'message': 'Exceeded the Provisioned Throughput dedicated capacity'}},
+            )
+        return httpx.Response(200, json=_ok_vertex_response())
+
+    provider = _pt_provider(handler)
+    result = await provider.create_chat_completion(
+        {
+            'model': 'gemini-2.5-flash',
+            'messages': [{'role': 'user', 'content': 'hi'}],
+            provider_module.ptr.OVERFLOW_ORIGIN_OPTION: 'gemini-2.5-flash-lite',
+        },
+        provider_ref=ProviderRef(provider='gemini', model='gemini-2.5-flash'),
+        credentials=_omi_credentials(),
+        timeout_ms=60_000,
+    )
+
+    assert result.response['choices'][0]['message']['content'] == 'ok'
+    models = [str(request.url.path).split('/models/')[-1] for request in seen]
+    assert models == ['gemini-2.5-flash:generateContent', 'gemini-2.5-flash-lite:generateContent']
+    assert seen[1].headers[provider_module.ptr.REQUEST_TYPE_HEADER] == 'shared'
+    assert provider_module.ptr.OVERFLOW_ORIGIN_OPTION.encode() not in seen[1].content
+
+
+@pytest.mark.asyncio
+async def test_vertex_provider_fails_closed_on_a_prohibited_pt_pin(monkeypatch):
+    """SCA-481: a Pro/image operator pin must fail the request closed at
+    resolution time — no provider dispatch, typed invalid-config failure."""
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'test-project')
+    monkeypatch.setenv('GCP_LOCATION', 'us-central1')
+    monkeypatch.setenv('OMI_VERTEX_PT_MODEL', 'gemini-3-pro-preview')
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=_ok_vertex_response())
+
+    provider = _pt_provider(handler)
+    with pytest.raises(ProviderFailure) as excinfo:
+        await provider.create_chat_completion(
+            {'model': 'gemini-2.5-flash', 'messages': [{'role': 'user', 'content': 'hi'}]},
+            provider_ref=ProviderRef(provider='gemini', model='gemini-2.5-flash'),
+            credentials=_omi_credentials(),
+            timeout_ms=30_000,
+        )
+
+    assert excinfo.value.failure_class == FailureClass.INVALID_CONFIG
+    assert 'SCA-481' in excinfo.value.safe_message
+    assert seen == []
+
+
+@pytest.mark.asyncio
+async def test_vertex_provider_never_overflows_onto_a_prohibited_model(monkeypatch):
+    """A prohibited overflow pin yields no overflow plan: the reservation 429
+    is surfaced instead of buying the work on an image-output model."""
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'test-project')
+    monkeypatch.setenv('GCP_LOCATION', 'us-central1')
+    monkeypatch.delenv('OMI_GEMINI_OVERFLOW_ENABLED', raising=False)
+    monkeypatch.setenv('OMI_GEMINI_OVERFLOW_MODEL', 'gemini-3.1-flash-image')
+    monkeypatch.delenv('OMI_VERTEX_PT_MODEL', raising=False)
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(
+            429,
+            json={
+                'error': {
+                    'message': 'Resource has been exhausted. provisioned throughput dedicated capacity is exhausted'
+                }
+            },
+        )
+
+    provider = _pt_provider(handler)
+    with pytest.raises(ProviderFailure):
+        await provider.create_chat_completion(
+            {'model': 'gemini-2.5-flash', 'messages': [{'role': 'user', 'content': 'hi'}]},
+            provider_ref=ProviderRef(provider='gemini', model='gemini-2.5-flash'),
+            credentials=_omi_credentials(),
+            timeout_ms=30_000,
+        )
+
+    dispatched = [str(r.url.path).split('/models/')[-1] for r in seen]
+    assert dispatched == ['gemini-2.5-flash:generateContent']
+    assert all('image' not in model for model in dispatched)
 
 
 @pytest.mark.asyncio
@@ -629,3 +822,117 @@ def test_vertex_tools_and_tool_config_translate_to_gemini_native():
     assert model_turn['parts'] == [{'functionCall': {'name': 'take_photo', 'args': {'q': 'the park'}}}]
     assert tool_turn['role'] == 'user'
     assert tool_turn['parts'] == [{'functionResponse': {'name': 'take_photo', 'response': {'status': 'ok'}}}]
+
+
+@pytest.mark.asyncio
+async def test_vertex_function_call_only_response_emits_openai_tool_calls(monkeypatch):
+    """#13666: Insight/Task die if Vertex functionCall parts are dropped as empty text."""
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'test-project')
+    monkeypatch.setenv('GCP_LOCATION', 'us-central1')
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                'responseId': 'vertex-tool-call',
+                'modelVersion': 'gemini-2.5-pro',
+                'candidates': [
+                    {
+                        'content': {
+                            'parts': [
+                                {
+                                    'functionCall': {
+                                        'name': 'extract_task',
+                                        'args': {'title': 'Email Sam the deck', 'confidence': 0.9},
+                                    }
+                                }
+                            ]
+                        },
+                        'finishReason': 'STOP',
+                    }
+                ],
+                'usageMetadata': {
+                    'promptTokenCount': 200,
+                    'candidatesTokenCount': 40,
+                    'totalTokenCount': 240,
+                },
+            },
+        )
+
+    provider = VertexGeminiProvider(
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        access_token_supplier=_access_token,
+    )
+    response = await provider.create_chat_completion(
+        {
+            'model': 'gemini-2.5-pro',
+            'messages': [{'role': 'user', 'content': 'extract'}],
+            'tools': [
+                {
+                    'type': 'function',
+                    'function': {'name': 'extract_task', 'parameters': {'type': 'object'}},
+                }
+            ],
+            'tool_choice': 'required',
+        },
+        provider_ref=ProviderRef(provider='gemini', model='gemini-2.5-pro'),
+        credentials=_omi_credentials(),
+        timeout_ms=8000,
+    )
+
+    choice = response['choices'][0]
+    message = choice['message']
+    assert choice['finish_reason'] == 'tool_calls'
+    assert message.get('content') in (None, '')
+    assert message['tool_calls'][0]['type'] == 'function'
+    assert message['tool_calls'][0]['function']['name'] == 'extract_task'
+    assert json.loads(message['tool_calls'][0]['function']['arguments']) == {
+        'title': 'Email Sam the deck',
+        'confidence': 0.9,
+    }
+
+
+@pytest.mark.asyncio
+async def test_vertex_function_call_sse_emits_openai_tool_call_delta(monkeypatch):
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'test-project')
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=(
+                b'data: {"responseId":"tool","candidates":[{"content":{"parts":'
+                b'[{"functionCall":{"name":"no_advice","args":{"context_summary":"idle"}}}]},'
+                b'"finishReason":"STOP"}]}\n\n'
+            ),
+            headers={'content-type': 'text/event-stream'},
+        )
+
+    provider = VertexGeminiProvider(
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        access_token_supplier=_access_token,
+    )
+    chunks = [
+        chunk
+        async for chunk in provider.stream_chat_completion(
+            {
+                'model': 'gemini-2.5-flash-lite',
+                'messages': [{'role': 'user', 'content': 'hello'}],
+                'stream': True,
+                'tools': [
+                    {
+                        'type': 'function',
+                        'function': {'name': 'no_advice', 'parameters': {'type': 'object'}},
+                    }
+                ],
+                'tool_choice': 'required',
+            },
+            provider_ref=ProviderRef(provider='gemini', model='gemini-2.5-flash-lite'),
+            credentials=_omi_credentials(),
+            timeout_ms=8000,
+        )
+    ]
+    streamed = b''.join(chunks)
+    assert b'"finish_reason":"tool_calls"' in streamed
+    assert b'"name":"no_advice"' in streamed
+    assert b'"tool_calls"' in streamed
+    assert streamed.endswith(b'data: [DONE]\n\n')

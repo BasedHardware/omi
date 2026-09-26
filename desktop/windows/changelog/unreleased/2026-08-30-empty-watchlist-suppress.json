@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Stopped ambient proactive notifications when you have no standing watches, and stopped running the older Insight pipeline while just-in-time assistance is on"
+  ]
+}

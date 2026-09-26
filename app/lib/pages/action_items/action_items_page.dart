@@ -1,23 +1,28 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 
+import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
-import 'package:omi/services/app_review_service.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
+import 'package:omi/widgets/bottom_nav_bar.dart';
 
 import 'task_categorization.dart';
+import 'task_delete_undo.dart';
 import 'widgets/action_item_form_sheet.dart';
 import 'widgets/action_item_shimmer_widget.dart';
+import 'widgets/goal_form_sheet.dart';
+import 'widgets/task_row_parts.dart';
 
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
@@ -33,7 +38,6 @@ class ActionItemsPage extends StatefulWidget {
 
 class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAliveClientMixin {
   final ScrollController _scrollController = ScrollController();
-  final AppReviewService _appReviewService = AppReviewService();
 
   // Task -> goal mapping
   final Map<String, String> _taskGoalLinks = {};
@@ -80,7 +84,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       if (!mounted) return;
       PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-      if (provider.actionItems.isEmpty) {
+      final phase = provider.apiViewState.phase;
+      final typedResultAlreadyProjected = phase == ApiViewPhase.error ||
+          phase == ApiViewPhase.locked ||
+          phase == ApiViewPhase.terminal ||
+          phase == ApiViewPhase.authenticationRequired ||
+          phase == ApiViewPhase.empty;
+      if (provider.actionItems.isEmpty && !typedResultAlreadyProjected) {
         provider.ensureLoaded(showShimmer: true);
       }
       final taskIntegrationProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
@@ -147,52 +157,32 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   Future<void> _onActionItemCompleted() async {
     PlatformManager.instance.analytics.actionItemCompleted(fromTab: 'Tasks');
-
-    final hasCompletedFirst = await _appReviewService.hasCompletedFirstActionItem();
-
-    if (!hasCompletedFirst) {
-      await _appReviewService.markFirstActionItemCompleted();
-
-      if (mounted) {
-        await _appReviewService.showReviewPromptIfNeeded(context, isProcessingFirstConversation: false);
-      }
-    }
   }
 
   void _showCreateActionItemSheet({DateTime? defaultDueDate}) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => ActionItemFormSheet(defaultDueDate: defaultDueDate),
-    );
+    showActionItemFormSheet(context, defaultDueDate: defaultDueDate);
   }
 
   void _showCreateGoalSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (sheetContext) => _GoalCreateSheet(
-        onSave: (title, current, target) async {
-          // Create goal via provider
-          final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-          final created = await goalsProvider.createGoal(
-            title: title,
-            goalType: 'numeric',
+    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+    showGoalFormSheet(
+      context,
+      onSave: (title, current, target, _) async {
+        final created = await goalsProvider.createGoal(
+          title: title,
+          goalType: 'numeric',
+          targetValue: target,
+          currentValue: current,
+        );
+        if (created != null) {
+          PlatformManager.instance.analytics.goalCreated(
+            goalId: created.id,
+            titleLength: title.length,
             targetValue: target,
-            currentValue: current,
+            source: 'tasks_page',
           );
-          if (created != null) {
-            PlatformManager.instance.analytics.goalCreated(
-              goalId: created.id,
-              titleLength: title.length,
-              targetValue: target,
-              source: 'tasks_page',
-            );
-          }
-        },
-      ),
+        }
+      },
     );
   }
 
@@ -205,15 +195,24 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         if (provider.isSelectionMode) return const SizedBox.shrink();
         return Positioned(
           right: 20,
-          bottom: 100,
-          child: FloatingActionButton(
-            heroTag: 'action_items_fab',
-            onPressed: () {
-              HapticFeedback.lightImpact();
-              _showCreateActionItemSheet(defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today));
-            },
-            backgroundColor: Colors.deepPurple,
-            child: const Icon(Icons.add, color: Colors.white),
+          // Rides on top of the nav bar, so it follows the bar's height and the
+          // system inset the bar reserves rather than a literal tuned to one device.
+          bottom: bottomNavBarClearance(context),
+          child: Semantics(
+            button: true,
+            label: context.l10n.newTask,
+            excludeSemantics: true,
+            onTap: () => _showCreateActionItemSheet(defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today)),
+            child: FloatingActionButton(
+              heroTag: 'action_items_fab',
+              onPressed: () {
+                OmiHaptics.light();
+                _showCreateActionItemSheet(defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today));
+              },
+              backgroundColor: OmiColors.accent,
+              foregroundColor: OmiColors.onAccent,
+              child: const Icon(Icons.add),
+            ),
           ),
         );
       },
@@ -222,11 +221,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   Widget _buildPageHeader(ActionItemsProvider provider) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 8, 12, 4),
       child: Row(
         children: [
           Expanded(
-            child: TextFormField(
+            child: OmiSearchField(
+              placeholder: context.l10n.searchActionItems,
               controller: _searchController,
               focusNode: _searchFocusNode,
               onChanged: (value) {
@@ -235,34 +235,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   provider.setSearchQuery(value);
                 });
               },
-              decoration: InputDecoration(
-                hintText: context.l10n.searchActionItems,
-                hintStyle: const TextStyle(color: Colors.white60, fontSize: 14),
-                filled: true,
-                fillColor: const Color(0xFF1F1F25),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
-                prefixIcon: const Icon(Icons.search, color: Colors.white60),
-                suffixIcon: ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: _searchController,
-                  builder: (_, val, __) => val.text.isNotEmpty
-                      ? GestureDetector(
-                          onTap: () {
-                            _searchController.clear();
-                            _searchDebouncer.cancel();
-                            provider.clearSearchQuery();
-                          },
-                          child: const Icon(Icons.close, color: Colors.white),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-              ),
-              style: const TextStyle(color: Colors.white),
+              onCleared: () {
+                _searchDebouncer.cancel();
+                provider.clearSearchQuery();
+              },
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
           _buildOverflowMenu(provider),
         ],
       ),
@@ -280,7 +259,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           title: context.l10n.selectActionItems,
           iconWidget: const Icon(Icons.check_box_outlined, size: 18),
           onTap: () {
-            HapticFeedback.lightImpact();
+            OmiHaptics.light();
             _searchFocusNode.unfocus();
             provider.startSelection();
           },
@@ -289,7 +268,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           title: allSelected ? context.l10n.deselectAllTasksMenu : context.l10n.selectAllTasksMenu,
           iconWidget: Icon(allSelected ? Icons.deselect_rounded : Icons.select_all_rounded, size: 18),
           onTap: () {
-            HapticFeedback.lightImpact();
+            OmiHaptics.light();
             _searchFocusNode.unfocus();
             if (allSelected) {
               provider.clearSelection();
@@ -303,41 +282,26 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           title: showingCompleted ? context.l10n.hideCompletedTasks : context.l10n.showCompletedTasks,
           iconWidget: Icon(showingCompleted ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
           onTap: () {
-            HapticFeedback.lightImpact();
+            OmiHaptics.light();
             provider.toggleShowCompletedView();
           },
         ),
       ],
-      buttonBuilder: (context, showMenu) => GestureDetector(
-        onTap: () {
-          HapticFeedback.mediumImpact();
+      buttonBuilder: (context, showMenu) => OmiIconButton.filled(
+        icon: const Icon(Icons.more_horiz_rounded),
+        label: context.l10n.moreOptions,
+        color: OmiColors.textSecondary,
+        diameter: 40,
+        onPressed: () {
+          OmiHaptics.selection();
           showMenu();
         },
-        child: Container(
-          width: 48,
-          height: 48,
-          decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
-          child: const Center(child: Icon(Icons.more_horiz_rounded, color: Colors.white70, size: 20)),
-        ),
       ),
     );
   }
 
   Widget _buildNoSearchResultsContent() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.search_off_rounded, size: 48, color: Colors.grey[600]),
-          const SizedBox(height: 12),
-          Text(
-            context.l10n.noResultsFound,
-            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
-    );
+    return OmiEmptyState(icon: Icons.search_off_rounded, title: context.l10n.noResultsFound);
   }
 
   // Categorize items by deadline
@@ -389,32 +353,18 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     provider.updateActionItemDueDate(item, newDueDate);
   }
 
+  /// Deleting a whole section at once cannot be undone: confirm every time (contract §4).
   Future<void> _confirmClearCompleted(ActionItemsProvider provider, List<ActionItemWithMetadata> items) async {
-    HapticFeedback.lightImpact();
-    final shouldClear = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1F22),
-        title: Text(
-          context.l10n.tasksClearCompleted,
-          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        content: Text(context.l10n.tasksCleanTodayMessage, style: TextStyle(color: Colors.grey[300], fontSize: 14)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey[400])),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: Text(context.l10n.delete, style: const TextStyle(fontWeight: FontWeight.w600)),
-          ),
-        ],
-      ),
+    OmiHaptics.light();
+    final l10n = context.l10n;
+    final shouldClear = await showOmiConfirm(
+      context,
+      title: l10n.deleteTasksTitle(items.length),
+      message: l10n.thisActionCannotBeUndone,
+      confirmLabel: l10n.delete,
+      destructive: true,
     );
-
-    if (shouldClear != true) return;
+    if (!shouldClear) return;
     await Future.wait(items.map((item) => provider.deleteActionItem(item)));
   }
 
@@ -430,7 +380,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     if (current < 3) {
       provider.updateItemIndentLevel(itemId, current + 1);
     }
-    HapticFeedback.lightImpact();
+    OmiHaptics.light();
   }
 
   void _decrementIndent(String itemId) {
@@ -441,7 +391,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     if (current > 0) {
       provider.updateItemIndentLevel(itemId, current - 1);
     }
-    HapticFeedback.lightImpact();
+    OmiHaptics.light();
   }
 
   // Get ordered items for a category, respecting sort_order from model
@@ -497,14 +447,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     setState(() {
       _hoveredItemId = null;
     });
-    HapticFeedback.mediumImpact();
+    OmiHaptics.medium();
   }
 
-  // Delete task with swipe
+  /// Every single-task delete: immediate, with Undo (D5).
   void _deleteTask(ActionItemWithMetadata item) {
-    HapticFeedback.mediumImpact();
     final provider = Provider.of<ActionItemsProvider>(context, listen: false);
-    provider.deleteActionItem(item);
+    deleteTaskWithUndo(context, provider, item);
   }
 
   @override
@@ -515,29 +464,44 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       builder: (context, provider, child) {
         final showCompleted = provider.showCompletedView;
         final categorizedItems = _categorizeItems(provider.actionItems, showCompleted);
+        final apiPhase = provider.apiViewState.phase;
+        final showTypedStatus = apiPhase == ApiViewPhase.error ||
+            apiPhase == ApiViewPhase.locked ||
+            apiPhase == ApiViewPhase.terminal ||
+            apiPhase == ApiViewPhase.authenticationRequired ||
+            apiPhase == ApiViewPhase.empty;
 
         return Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.primary,
           body: Stack(
             children: [
               GestureDetector(
+                excludeFromSemantics: true,
                 onTap: () {},
                 child: RefreshIndicator(
                   onRefresh: () async {
-                    HapticFeedback.mediumImpact();
+                    OmiHaptics.medium();
                     return provider.forceRefreshActionItems();
                   },
-                  color: Colors.deepPurple,
-                  backgroundColor: Colors.white,
                   child: provider.isLoading && provider.actionItems.isEmpty
                       ? _buildLoadingState()
-                      : categorizedItems.values.every((l) => l.isEmpty)
-                          ? _buildEmptyTasksList()
-                          : _buildTasksList(categorizedItems, provider),
+                      : showTypedStatus
+                          ? CustomScrollView(
+                              controller: _scrollController,
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              slivers: [
+                                SliverFillRemaining(
+                                  hasScrollBody: false,
+                                  child: Center(child: ActionItemsApiStatus(provider: provider)),
+                                ),
+                              ],
+                            )
+                          : categorizedItems.values.every((l) => l.isEmpty)
+                              ? _buildEmptyTasksList()
+                              : _buildTasksList(categorizedItems, provider),
                 ),
               ),
-              // Hide the purple corner FAB when the empty-state already
-              // shows its own "Create Action Item" pill — otherwise we
+              // Hide the corner FAB when the empty state already
+              // shows its own "Create Task" button — otherwise we
               // render two competing add buttons on top of each other.
               if (!categorizedItems.values.every((l) => l.isEmpty)) _buildFab(),
               // Selection-mode action bar is mounted at the home page's outer
@@ -554,10 +518,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return CustomScrollView(
       controller: _scrollController,
       physics: const NeverScrollableScrollPhysics(),
-      slivers: const [
-        SliverPadding(padding: EdgeInsets.only(top: 16)),
-        ActionItemsShimmerList(itemCount: 7),
-        SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+      slivers: [
+        const SliverPadding(padding: EdgeInsets.only(top: 16)),
+        const ActionItemsShimmerList(itemCount: 7),
+        SliverPadding(padding: EdgeInsets.only(bottom: bottomNavBarClearance(context))),
       ],
     );
   }
@@ -577,105 +541,24 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   Widget _buildEmptyTasksContent() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(32, 0, 32, 120),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Layered icon: soft purple aura behind a tactile glassy tile.
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(
-                width: 160,
-                height: 160,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [Colors.deepPurple.withValues(alpha: 0.35), Colors.deepPurple.withValues(alpha: 0.0)],
-                    stops: const [0.0, 1.0],
-                  ),
-                ),
-              ),
-              Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(26),
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF7B5CFF), Color(0xFF5733E0)],
-                  ),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.deepPurple.withValues(alpha: 0.45),
-                      blurRadius: 30,
-                      spreadRadius: 2,
-                      offset: const Offset(0, 12),
-                    ),
-                  ],
-                ),
-                child: const Icon(Icons.task_alt_rounded, size: 42, color: Colors.white),
-              ),
-            ],
-          ),
-          const SizedBox(height: 28),
-          Text(
-            context.l10n.noTasksYet,
-            style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: -0.3),
-          ),
-          const SizedBox(height: 10),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 280),
-            child: Text(
-              context.l10n.tasksEmptyStateMessage,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 15, height: 1.5),
-            ),
-          ),
-          const SizedBox(height: 28),
-          // Primary action: open the new-task sheet so users have an obvious next step.
-          GestureDetector(
-            onTap: () {
-              HapticFeedback.lightImpact();
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (_) => const ActionItemFormSheet(),
-              );
+      padding: const EdgeInsets.only(bottom: 120),
+      child: KeyedSubtree(
+        key: const ValueKey('omi.action_items.empty'),
+        child: OmiEmptyState(
+          icon: Icons.task_alt_rounded,
+          title: context.l10n.noTasksYet,
+          message: context.l10n.tasksEmptyStateMessage,
+          // Primary action: the obvious next step is to write a task.
+          action: OmiButton(
+            label: context.l10n.createActionItem,
+            icon: Icons.add_rounded,
+            size: OmiButtonSize.compact,
+            onPressed: () {
+              OmiHaptics.light();
+              showActionItemFormSheet(context);
             },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(28),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 18, offset: const Offset(0, 6)),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.add_rounded, color: Color(0xFF1F1F25), size: 20),
-                  const SizedBox(width: 8),
-                  Text(
-                    context.l10n.createActionItem,
-                    style: const TextStyle(
-                      color: Color(0xFF1F1F25),
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.1,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -734,8 +617,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             ),
         ],
 
-        // Bottom padding
-        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+        // Bottom padding so the last row scrolls clear of the nav bar
+        SliverPadding(padding: EdgeInsets.only(bottom: bottomNavBarClearance(context))),
       ],
     );
   }
@@ -755,34 +638,33 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             children: [
               // Header
               Padding(
-                padding: const EdgeInsets.fromLTRB(4, 12, 4, 8),
-                child: Row(
-                  children: [
-                    Text(
-                      context.l10n.goals,
-                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
-                    const Spacer(),
-                    if (!actionProvider.isSelectionMode) ...[
-                      if (goals.length < 4)
-                        GestureDetector(
-                          onTap: () {
-                            HapticFeedback.lightImpact();
-                            PlatformManager.instance.analytics.track('Add Goal Clicked from Tasks Page');
-                            _showCreateGoalSheet();
-                          },
-                          child: Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.withValues(alpha: 0.12),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(Icons.add, size: 18, color: Colors.grey[400]),
+                // The row is as tall as its 44pt add button; 6pt comes off each
+                // side so the header keeps the height it had with a 32pt button,
+                // and keeps it when the button is hidden instead of jumping.
+                padding: const EdgeInsets.fromLTRB(4, 6, 0, 2),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
+                  child: Row(
+                    children: [
+                      Semantics(header: true, child: Text(context.l10n.goals, style: OmiType.headline)),
+                      const Spacer(),
+                      if (!actionProvider.isSelectionMode) ...[
+                        if (goals.length < 4)
+                          OmiIconButton.filled(
+                            label: context.l10n.addGoal,
+                            diameter: 32,
+                            fillColor: OmiColors.surface2,
+                            color: OmiColors.textSecondary,
+                            icon: const Icon(Icons.add),
+                            onPressed: () {
+                              OmiHaptics.light();
+                              PlatformManager.instance.analytics.track('Add Goal Clicked from Tasks Page');
+                              _showCreateGoalSheet();
+                            },
                           ),
-                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
               // Goal items
@@ -818,8 +700,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           return AnimatedContainer(
             duration: const Duration(milliseconds: 200),
             decoration: BoxDecoration(
-              color: isHovering ? const Color(0xFF252528) : Colors.transparent,
-              borderRadius: BorderRadius.circular(12),
+              color: isHovering ? OmiColors.surface1 : Colors.transparent,
+              borderRadius: OmiRadius.mdAll,
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -827,67 +709,69 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 // Section header — quieter than the page title; reads as a label,
                 // not a heading.
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 16, 4, 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: Row(
                     children: [
                       if (category == TaskCategory.noDeadline)
-                        GestureDetector(
+                        _SectionHeaderTapTarget(
+                          reach: const EdgeInsets.only(right: 24),
                           onTap: () => setState(() => _noDeadlineExpanded = !_noDeadlineExpanded),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
                                 _noDeadlineExpanded ? Icons.expand_less : Icons.expand_more,
-                                color: Colors.grey[500],
+                                color: OmiColors.textTertiary,
                                 size: 16,
                               ),
                               const SizedBox(width: 4),
                               Text(
                                 title.toUpperCase(),
-                                style: TextStyle(
-                                  color: Colors.grey[500],
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 0.8,
-                                ),
+                                style: _sectionLabelStyle,
                               ),
                               if (orderedItems.isNotEmpty) ...[
                                 const SizedBox(width: 8),
-                                Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                                _SectionCount(orderedItems.length),
                               ],
                             ],
                           ),
                         )
                       else
-                        Text(
-                          title.toUpperCase(),
-                          style: TextStyle(
-                            color: Colors.grey[500],
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.8,
+                        Padding(
+                          padding: _sectionHeaderLinePadding,
+                          child: Text(
+                            title.toUpperCase(),
+                            style: _sectionLabelStyle,
                           ),
                         ),
                       const Spacer(),
                       if (category != TaskCategory.noDeadline) ...[
                         if (provider.showCompletedView && orderedItems.isNotEmpty)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                              const SizedBox(width: 8),
-                              GestureDetector(
-                                onTap: () => _confirmClearCompleted(provider, orderedItems),
-                                child: Icon(Icons.close, size: 14, color: Colors.grey[600]),
-                              ),
-                            ],
+                          // The count and the ✕ are one control: "clear these N".
+                          _SectionHeaderTapTarget(
+                            semanticLabel: context.l10n.tasksClearCompleted,
+                            reach: const EdgeInsets.only(left: 16),
+                            onTap: () => _confirmClearCompleted(provider, orderedItems),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _SectionCount(orderedItems.length),
+                                const SizedBox(width: 8),
+                                const Icon(Icons.close, size: 14, color: OmiColors.textTertiary),
+                              ],
+                            ),
                           )
                         else if (orderedItems.isNotEmpty)
-                          Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                          Padding(
+                            padding: _sectionHeaderLinePadding,
+                            child: _SectionCount(orderedItems.length),
+                          ),
                       ] else if (provider.showCompletedView && orderedItems.isNotEmpty && _noDeadlineExpanded)
-                        GestureDetector(
+                        _SectionHeaderTapTarget(
+                          semanticLabel: context.l10n.tasksClearCompleted,
+                          reach: const EdgeInsets.only(left: 30),
                           onTap: () => _confirmClearCompleted(provider, orderedItems),
-                          child: Icon(Icons.close, size: 14, color: Colors.grey[600]),
+                          child: const Icon(Icons.close, size: 14, color: OmiColors.textTertiary),
                         ),
                     ],
                   ),
@@ -922,10 +806,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(4, 16, 4, 4),
+            padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Row(
               children: [
-                GestureDetector(
+                _SectionHeaderTapTarget(
+                  reach: const EdgeInsets.only(right: 24),
                   onTap: () {
                     setState(() {
                       _overdueExpanded = !_overdueExpanded;
@@ -934,19 +819,15 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(_overdueExpanded ? Icons.expand_less : Icons.expand_more, color: Colors.grey[500], size: 16),
+                      Icon(_overdueExpanded ? Icons.expand_less : Icons.expand_more,
+                          color: OmiColors.textTertiary, size: 16),
                       const SizedBox(width: 4),
                       Text(
                         context.l10n.tasksOverdue.toUpperCase(),
-                        style: TextStyle(
-                          color: Colors.grey[500],
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.8,
-                        ),
+                        style: _sectionLabelStyle,
                       ),
                       const SizedBox(width: 8),
-                      Text('${orderedItems.length}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                      _SectionCount(orderedItems.length),
                     ],
                   ),
                 ),
@@ -1013,8 +894,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           height: showIndicator ? 6 : (isDragging ? 20 : 4),
           margin: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
-            color: showIndicator ? Colors.deepPurple : Colors.transparent,
-            borderRadius: BorderRadius.circular(2),
+            color: showIndicator ? OmiColors.accent : Colors.transparent,
+            borderRadius: OmiRadius.pillAll,
           ),
         );
       },
@@ -1040,7 +921,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     setState(() {
       _hoveredItemId = null;
     });
-    HapticFeedback.mediumImpact();
+    OmiHaptics.medium();
   }
 
   Widget _buildTaskItem(
@@ -1131,7 +1012,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               Container(
                 height: 2,
                 margin: EdgeInsets.only(left: barLeft, right: 4),
-                decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(1)),
+                decoration: const BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.pillAll),
               ),
             _buildDraggableTaskItem(item, provider, indentLevel, indentWidth, categoryItems),
             // Drop indicator below
@@ -1139,7 +1020,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               Container(
                 height: 2,
                 margin: EdgeInsets.only(left: barLeft, right: 4),
-                decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(1)),
+                decoration: const BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.pillAll),
               ),
           ],
         );
@@ -1195,146 +1076,149 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       return taskContent;
     }
 
-    Widget makeDraggable(Widget child) {
-      return LongPressDraggable<ActionItemWithMetadata>(
-        data: item,
-        delay: const Duration(milliseconds: 400),
-        hapticFeedbackOnStart: true,
-        onDragStarted: () {
+    // Long-press and hold still opens the row menu; long-press and move drags (reorder, and
+    // indent by horizontal travel).
+    final draggable = LongPressDraggable<ActionItemWithMetadata>(
+      data: item,
+      delay: const Duration(milliseconds: 400),
+      hapticFeedbackOnStart: true,
+      onDragStarted: () {
+        _dragHasMoved = false;
+        _dragStartX = null;
+        _hoverIndent = item.indentLevel;
+        OmiHaptics.medium();
+      },
+      onDragUpdate: (_) {
+        _dragHasMoved = true;
+      },
+      onDragEnd: (details) {
+        if (!_dragHasMoved) _showTaskMenu(item, categoryItems);
+        setState(() {
+          _hoveredItemId = null;
           _dragHasMoved = false;
+          _hoverIndent = 0;
           _dragStartX = null;
-          _hoverIndent = item.indentLevel;
-          HapticFeedback.mediumImpact();
-        },
-        onDragUpdate: (_) {
-          _dragHasMoved = true;
-        },
-        onDragEnd: (details) {
-          if (!_dragHasMoved) {
-            // Long-press without movement → enter selection mode
-            final p = Provider.of<ActionItemsProvider>(context, listen: false);
-            p.startSelectionWithItem(item.id);
-          }
-          setState(() {
-            _hoveredItemId = null;
-            _dragHasMoved = false;
-            _hoverIndent = 0;
-            _dragStartX = null;
-          });
-        },
-        feedback: Material(
-          color: Colors.transparent,
-          child: Container(
-            width: MediaQuery.of(context).size.width - 64,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF2C2C2E),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4)),
-              ],
-            ),
-            child: Row(
-              children: [
-                _buildCheckbox(item.completed),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    item.description,
-                    style: const TextStyle(color: Colors.white, fontSize: 15),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        childWhenDragging: Opacity(opacity: 0.3, child: child),
-        child: child,
-      );
-    }
-
-    // If at indent 0, allow swipe-right to mark complete and swipe-left to delete.
-    if (indentLevel == 0) {
-      return Dismissible(
-        key: Key('dismiss_${item.id}'),
-        direction: provider.isSelectionMode ? DismissDirection.none : DismissDirection.horizontal,
-        dismissThresholds: const {DismissDirection.startToEnd: 0.3, DismissDirection.endToStart: 0.3},
-        confirmDismiss: (direction) async {
-          if (direction == DismissDirection.startToEnd) {
-            HapticFeedback.lightImpact();
-            await provider.updateActionItemState(item, !item.completed);
-            if (!item.completed) _onActionItemCompleted();
-            return false;
-          }
-          return true;
-        },
-        background: Container(
-          alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.only(left: 20.0),
+        });
+      },
+      feedback: Material(
+        color: Colors.transparent,
+        child: Container(
+          width: MediaQuery.of(context).size.width - 64,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: item.completed ? Colors.grey[700] : Colors.green[700],
-            borderRadius: BorderRadius.circular(8),
+            color: OmiColors.surface2,
+            borderRadius: OmiRadius.mdAll,
+            boxShadow: [
+              BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4)),
+            ],
           ),
-          child: Icon(item.completed ? Icons.undo : Icons.check, color: Colors.white),
+          child: Row(
+            children: [
+              TaskCompletionMark(completed: item.completed),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(item.description, style: OmiType.subhead, maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+            ],
+          ),
         ),
-        secondaryBackground: Container(
-          alignment: Alignment.centerRight,
-          padding: const EdgeInsets.only(right: 20.0),
-          decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(8)),
-          child: const Icon(Icons.delete, color: Colors.white),
-        ),
-        onDismissed: (direction) {
-          if (direction == DismissDirection.endToStart) {
-            _deleteTask(item);
-          }
-        },
-        child: provider.isSelectionMode ? taskContent : makeDraggable(taskContent),
-      );
-    }
+      ),
+      childWhenDragging: Opacity(opacity: 0.3, child: taskContent),
+      child: taskContent,
+    );
 
-    // If indented, use GestureDetector for indent changes + draggable
-    return GestureDetector(
-      onHorizontalDragEnd: provider.isSelectionMode
-          ? null
-          : (details) {
-              if (details.primaryVelocity != null) {
-                if (details.primaryVelocity! > 200) {
-                  _incrementIndent(item.id);
-                } else if (details.primaryVelocity! < -200) {
-                  _decrementIndent(item.id);
-                }
-              }
-            },
-      child: provider.isSelectionMode ? taskContent : makeDraggable(taskContent),
+    // One meaning on every row, at every indent level: swipe right completes (or reopens), swipe
+    // left deletes with Undo. Indenting lives in the long-press menu and in drag.
+    return Dismissible(
+      key: Key('dismiss_${item.id}'),
+      direction: DismissDirection.horizontal,
+      dismissThresholds: const {DismissDirection.startToEnd: 0.3, DismissDirection.endToStart: 0.3},
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.startToEnd) {
+          await _toggleCompleted(provider, item);
+          return false;
+        }
+        return true;
+      },
+      background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 20.0),
+        decoration: BoxDecoration(
+          color: item.completed ? OmiColors.surface3 : OmiColors.success,
+          borderRadius: OmiRadius.smAll,
+        ),
+        child: Icon(item.completed ? Icons.undo : Icons.check, color: OmiColors.textPrimary),
+      ),
+      secondaryBackground: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20.0),
+        decoration: const BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.smAll),
+        child: const Icon(Icons.delete_outline, color: OmiColors.textPrimary),
+      ),
+      onDismissed: (direction) {
+        if (direction == DismissDirection.endToStart) {
+          _deleteTask(item);
+        }
+      },
+      child: draggable,
     );
   }
 
-  TaskCategory _getCategoryForItem(ActionItemWithMetadata item) {
-    final now = DateTime.now();
-    final startOfToday = DateTime(now.year, now.month, now.day);
-    final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
-    final startOfDayAfterTomorrow = DateTime(now.year, now.month, now.day + 2);
-
-    if (item.dueAt == null) {
-      final sevenDaysAgo = now.subtract(const Duration(days: 7));
-      if (item.createdAt != null && item.createdAt!.isBefore(sevenDaysAgo)) {
-        return TaskCategory.overdue;
-      }
-      return TaskCategory.noDeadline;
-    }
-    final dueDate = item.dueAt!;
-    if (dueDate.isBefore(startOfToday)) {
-      return TaskCategory.overdue;
-    } else if (dueDate.isBefore(startOfTomorrow)) {
-      return TaskCategory.today;
-    } else if (dueDate.isBefore(startOfDayAfterTomorrow)) {
-      return TaskCategory.tomorrow;
-    } else {
-      return TaskCategory.later;
-    }
+  Future<void> _toggleCompleted(ActionItemsProvider provider, ActionItemWithMetadata item) async {
+    OmiHaptics.light();
+    await provider.updateActionItemState(item, !item.completed);
+    if (!item.completed) _onActionItemCompleted();
   }
+
+  /// Long-press menu: the same shape as memories and conversations, with Select for multi-select
+  /// and the indent controls that used to hide behind a swipe.
+  void _showTaskMenu(ActionItemWithMetadata item, List<ActionItemWithMetadata> categoryItems) {
+    final l10n = context.l10n;
+    final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+    final index = categoryItems.indexWhere((i) => i.id == item.id);
+    final maxIndent = index <= 0 ? 0 : (categoryItems[index - 1].indentLevel + 1).clamp(0, 3);
+    showOmiRowMenu(
+      context,
+      title: item.description,
+      actions: [
+        OmiMenuAction(icon: Icons.open_in_full_rounded, label: l10n.open, onSelected: () => _showEditSheet(item)),
+        OmiMenuAction(
+          icon: item.completed ? Icons.undo_rounded : Icons.check_circle_outline,
+          label: item.completed ? l10n.markIncomplete : l10n.markComplete,
+          onSelected: () => _toggleCompleted(provider, item),
+        ),
+        if (item.indentLevel < maxIndent)
+          OmiMenuAction(
+            icon: Icons.format_indent_increase_rounded,
+            label: l10n.indentTask,
+            onSelected: () => _incrementIndent(item.id),
+          ),
+        if (item.indentLevel > 0)
+          OmiMenuAction(
+            icon: Icons.format_indent_decrease_rounded,
+            label: l10n.outdentTask,
+            onSelected: () => _decrementIndent(item.id),
+          ),
+        OmiMenuAction(
+          icon: Icons.check_box_outlined,
+          label: l10n.selectOption,
+          onSelected: () {
+            _searchFocusNode.unfocus();
+            provider.startSelectionWithItem(item.id);
+          },
+        ),
+        OmiMenuAction(
+          icon: Icons.delete_outline,
+          label: l10n.delete,
+          isDestructive: true,
+          onSelected: () => _deleteTask(item),
+        ),
+      ],
+    );
+  }
+
+  TaskCategory _getCategoryForItem(ActionItemWithMetadata item) =>
+      categoryForItem(item, Provider.of<ActionItemsProvider>(context, listen: false).showCompletedView);
 
   Widget _buildTaskItemContent(
     ActionItemWithMetadata item,
@@ -1350,18 +1234,18 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       behavior: HitTestBehavior.opaque,
       onTap: () {
         if (provider.isSelectionMode) {
-          HapticFeedback.selectionClick();
+          OmiHaptics.selection();
           provider.toggleItemSelection(item.id, cascadeIds: _visibleDescendantIds(item, categoryItems));
         } else {
           _showEditSheet(item);
         }
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
+        duration: OmiMotion.of(context).quick,
         margin: EdgeInsets.zero,
         decoration: BoxDecoration(
-          color: isSelected ? Colors.deepPurple.withValues(alpha: 0.15) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
+          color: isSelected ? OmiColors.surface2 : Colors.transparent,
+          borderRadius: OmiRadius.smAll,
         ),
         child: Padding(
           padding: EdgeInsets.only(left: 4 + indentWidth, right: 4, top: 0, bottom: 0),
@@ -1375,21 +1259,21 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: Container(
                     width: 1.5,
                     height: 20,
-                    decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(1)),
+                    decoration: const BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.pillAll),
                   ),
                 ),
               // Completion circle — always shown. Read-only in selection mode
               // (the row tap drives selection there); tappable otherwise.
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: provider.isSelectionMode
-                    ? null
-                    : () async {
-                        HapticFeedback.lightImpact();
-                        await provider.updateActionItemState(item, !item.completed);
-                        if (!item.completed) _onActionItemCompleted();
-                      },
-                child: SizedBox(width: 44, height: 48, child: Center(child: _buildCheckbox(item.completed))),
+              Semantics(
+                button: !provider.isSelectionMode,
+                checked: item.completed,
+                label: item.completed ? context.l10n.markIncomplete : context.l10n.markComplete,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: provider.isSelectionMode ? null : () => _toggleCompleted(provider, item),
+                  child: SizedBox(
+                      width: 44, height: 48, child: Center(child: TaskCompletionMark(completed: item.completed))),
+                ),
               ),
               // Task text
               Expanded(
@@ -1401,28 +1285,27 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     children: [
                       Text(
                         item.description,
-                        style: TextStyle(
-                          color: item.completed ? Colors.grey[500] : Colors.white,
-                          fontSize: 16,
+                        style: OmiType.callout.copyWith(
+                          color: item.completed ? OmiColors.textTertiary : OmiColors.textPrimary,
                           fontWeight: FontWeight.w500,
                           letterSpacing: -0.2,
                           decoration: item.completed ? TextDecoration.lineThrough : null,
-                          decorationColor: Colors.grey[600],
+                          decorationColor: OmiColors.textTertiary,
                         ),
                       ),
                       if (goalTitle != null) ...[
                         const SizedBox(height: 4),
-                        Text(goalTitle, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                        Text(goalTitle, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
                       ],
                       if (item.exported && item.exportPlatform != null) ...[
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            Icon(Icons.check_circle_outline, size: 12, color: Colors.grey[600]),
+                            const Icon(Icons.check_circle_outline, size: 12, color: OmiColors.textTertiary),
                             const SizedBox(width: 4),
                             Text(
-                              'Exported to ${_exportPlatformLabel(item.exportPlatform!)}',
-                              style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                              context.l10n.exportedToPlatform(_exportPlatformLabel(item.exportPlatform!)),
+                              style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
                             ),
                           ],
                         ),
@@ -1435,45 +1318,14 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               // Different shape + position from the leading completion circle
               // so completion vs. selection cannot be confused.
               if (provider.isSelectionMode)
-                Padding(padding: const EdgeInsets.only(left: 8, right: 8), child: _buildSelectionSquare(isSelected)),
+                Padding(
+                  padding: const EdgeInsets.only(left: 8, right: 8),
+                  child: TaskSelectionSquare(selected: isSelected),
+                ),
             ],
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildCheckbox(bool isCompleted) {
-    if (isCompleted) {
-      return Container(
-        width: 22,
-        height: 22,
-        decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.amber),
-        child: const Icon(Icons.check, size: 14, color: Colors.black),
-      );
-    }
-    // Incomplete: dashed outline circle (Joi-inspired). Quieter than a solid
-    // gray ring so the task title carries the visual weight.
-    return CustomPaint(
-      size: const Size(22, 22),
-      painter: _DashedCirclePainter(color: Colors.grey[500]!, strokeWidth: 1.5, dashLength: 3, gapLength: 3),
-    );
-  }
-
-  /// Trailing selection box rendered only in selection mode. Rounded **square**
-  /// — different shape from the leading completion circle so users can't
-  /// confuse "selected for bulk action" with "marked as done".
-  Widget _buildSelectionSquare(bool isSelected) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      width: 22,
-      height: 22,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: isSelected ? Colors.deepPurple : Colors.grey[600]!, width: 2),
-        color: isSelected ? Colors.deepPurple : Colors.transparent,
-      ),
-      child: isSelected ? const Icon(Icons.check, size: 14, color: Colors.white) : null,
     );
   }
 
@@ -1494,18 +1346,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     }
   }
 
-  Future<void> _deleteGoal(Goal goal) async {
-    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-    await goalsProvider.deleteGoal(goal.id);
+  void _deleteGoal(Goal goal) {
+    deleteGoalWithUndo(context, Provider.of<GoalsProvider>(context, listen: false), goal);
   }
 
   void _showEditSheet(ActionItemWithMetadata item) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => ActionItemFormSheet(actionItem: item),
-    );
+    showActionItemFormSheet(context, actionItem: item);
   }
 
   Widget _buildGoalItem(Goal goal, ActionItemsProvider provider) {
@@ -1536,9 +1382,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   width: 22,
                   height: 22,
                   child: CustomPaint(
-                    painter: _CircularProgressPainter(
+                    painter: GoalProgressPainter(
                       progress: progress.clamp(0.0, 1.0),
-                      color: progress >= 1.0 ? Colors.amber : Colors.grey.shade600,
+                      color: progress >= 1.0 ? TaskCompletionMark.doneColor : OmiColors.textTertiary,
                     ),
                   ),
                 ),
@@ -1548,9 +1394,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
             Expanded(
               child: Text(
                 displayTitle,
-                style: TextStyle(
-                  color: progress >= 1.0 ? Colors.grey.shade600 : Colors.white,
-                  fontSize: 15,
+                style: OmiType.subhead.copyWith(
+                  color: progress >= 1.0 ? OmiColors.textTertiary : OmiColors.textPrimary,
                   decoration: progress >= 1.0 ? TextDecoration.lineThrough : null,
                   height: 1.4,
                 ),
@@ -1565,549 +1410,99 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
     if (provider.isSelectionMode) return goalContent;
 
+    // Restorable: delete at once with Undo, no dialog (D5).
     return Dismissible(
       key: Key('goal_${goal.id}'),
       direction: DismissDirection.endToStart,
-      confirmDismiss: (direction) async {
-        HapticFeedback.mediumImpact();
-        return await showDialog<bool>(
-              context: context,
-              builder: (context) => AlertDialog(
-                backgroundColor: const Color(0xFF1F1F25),
-                title: Text(context.l10n.deleteGoal, style: const TextStyle(color: Colors.white)),
-                content: Text('Delete "${goal.title}"?', style: const TextStyle(color: Colors.white70)),
-                actions: [
-                  TextButton(onPressed: () => Navigator.pop(context, false), child: Text(context.l10n.cancel)),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, true),
-                    style: TextButton.styleFrom(foregroundColor: Colors.red),
-                    child: Text(context.l10n.delete),
-                  ),
-                ],
-              ),
-            ) ??
-            false;
-      },
-      onDismissed: (direction) async {
+      onDismissed: (direction) {
         PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'swipe');
-        await _deleteGoal(goal);
+        _deleteGoal(goal);
       },
       background: Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
-        decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(8)),
+        decoration: const BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.smAll),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
-        child: const Icon(Icons.delete_outline, color: Colors.white),
+        child: const Icon(Icons.delete_outline, color: OmiColors.textPrimary),
       ),
       child: goalContent,
     );
   }
 
   void _showEditGoalSheet(Goal goal) {
-    HapticFeedback.lightImpact();
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (sheetContext) => _GoalEditSheet(
-        goal: goal,
-        onSave: (title, current, target) async {
-          // Update goal via provider
-          final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-          await goalsProvider.updateGoal(goal.id, title: title, currentValue: current, targetValue: target);
-          PlatformManager.instance.analytics.goalUpdated(goalId: goal.id, source: 'tasks_page');
-        },
-        onDelete: () {
-          PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'button');
-          _deleteGoal(goal);
-        },
-      ),
+    OmiHaptics.light();
+    final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
+    showGoalFormSheet(
+      context,
+      goal: goal,
+      onSave: (title, current, target, _) async {
+        await goalsProvider.updateGoal(goal.id, title: title, currentValue: current, targetValue: target);
+        PlatformManager.instance.analytics.goalUpdated(goalId: goal.id, source: 'tasks_page');
+      },
+      onDelete: () {
+        PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'tasks_page', method: 'button');
+        _deleteGoal(goal);
+      },
     );
   }
 }
 
-/// Stateful widget for goal creation sheet that properly manages TextEditingController lifecycle
-class _GoalCreateSheet extends StatefulWidget {
-  final Function(String title, double current, double target) onSave;
+/// Vertical padding of a task section header: the space above the label line
+/// and the sliver of space between it and the first task row.
+const EdgeInsets _sectionHeaderLinePadding = EdgeInsets.only(top: 16, bottom: 4);
 
-  const _GoalCreateSheet({required this.onSave});
+/// A section header's label ("TODAY", "OVERDUE").
+final TextStyle _sectionLabelStyle =
+    OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600, letterSpacing: 0.8);
 
-  @override
-  State<_GoalCreateSheet> createState() => _GoalCreateSheetState();
-}
+/// The count beside a section header, read out as "3 tasks" rather than a bare number.
+class _SectionCount extends StatelessWidget {
+  const _SectionCount(this.count);
 
-class _GoalCreateSheetState extends State<_GoalCreateSheet> {
-  late final TextEditingController titleController;
-  late final TextEditingController currentController;
-  late final TextEditingController targetController;
-
-  @override
-  void initState() {
-    super.initState();
-    titleController = TextEditingController();
-    currentController = TextEditingController(text: '0');
-    targetController = TextEditingController(text: '100');
-  }
-
-  @override
-  void dispose() {
-    titleController.dispose();
-    currentController.dispose();
-    targetController.dispose();
-    super.dispose();
-  }
+  final int count;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(2)),
-              ),
-              Text(
-                context.l10n.addGoal,
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 24),
-              // Title field
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    context.l10n.goalTitle,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: titleController,
-                    autofocus: true,
-                    style: const TextStyle(color: Colors.white, fontSize: 16),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.08),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              // Current & Target fields
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          context.l10n.current,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: currentController,
-                          keyboardType: TextInputType.number,
-                          style: const TextStyle(color: Colors.white, fontSize: 16),
-                          decoration: InputDecoration(
-                            filled: true,
-                            fillColor: Colors.white.withValues(alpha: 0.08),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          context.l10n.target,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: targetController,
-                          keyboardType: TextInputType.number,
-                          style: const TextStyle(color: Colors.white, fontSize: 16),
-                          decoration: InputDecoration(
-                            filled: true,
-                            fillColor: Colors.white.withValues(alpha: 0.08),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    final title = titleController.text.trim();
-                    if (title.isEmpty) {
-                      Navigator.pop(context);
-                      return;
-                    }
-
-                    final current = double.tryParse(currentController.text) ?? 0;
-                    final target = double.tryParse(targetController.text) ?? 100;
-
-                    if (!context.mounted) return;
-                    Navigator.pop(context);
-
-                    widget.onSave(title, current, target);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF22C55E),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: Text(context.l10n.addGoal),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return Text(
+      '$count',
+      semanticsLabel: context.l10n.tasksCountLabel(count),
+      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
     );
   }
 }
 
-/// Stateful widget for goal edit sheet that properly manages TextEditingController lifecycle
-class _GoalEditSheet extends StatefulWidget {
-  final Goal goal;
-  final Function(String title, double current, double target) onSave;
-  final Function() onDelete;
-
-  const _GoalEditSheet({required this.goal, required this.onSave, required this.onDelete});
-
-  @override
-  State<_GoalEditSheet> createState() => _GoalEditSheetState();
-}
-
-class _GoalEditSheetState extends State<_GoalEditSheet> {
-  late final TextEditingController titleController;
-  late final TextEditingController currentController;
-  late final TextEditingController targetController;
-
-  @override
-  void initState() {
-    super.initState();
-    titleController = TextEditingController(text: widget.goal.title);
-    currentController = TextEditingController(text: widget.goal.currentValue.toInt().toString());
-    targetController = TextEditingController(text: widget.goal.targetValue.toInt().toString());
-  }
-
-  @override
-  void dispose() {
-    titleController.dispose();
-    currentController.dispose();
-    targetController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.all(24),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 20),
-                decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(2)),
-              ),
-              Text(
-                context.l10n.editGoal,
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 24),
-              // Title field
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    context.l10n.goalTitle,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: titleController,
-                    autofocus: true,
-                    style: const TextStyle(color: Colors.white, fontSize: 16),
-                    decoration: InputDecoration(
-                      filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.08),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              // Current & Target fields
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          context.l10n.current,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: currentController,
-                          keyboardType: TextInputType.number,
-                          style: const TextStyle(color: Colors.white, fontSize: 16),
-                          decoration: InputDecoration(
-                            filled: true,
-                            fillColor: Colors.white.withValues(alpha: 0.08),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          context.l10n.target,
-                          style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: targetController,
-                          keyboardType: TextInputType.number,
-                          style: const TextStyle(color: Colors.white, fontSize: 16),
-                          decoration: InputDecoration(
-                            filled: true,
-                            fillColor: Colors.white.withValues(alpha: 0.08),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  // Delete button
-                  Expanded(
-                    child: TextButton(
-                      onPressed: () async {
-                        Navigator.pop(context);
-                        // Confirm and delete
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            backgroundColor: const Color(0xFF1F1F25),
-                            title: Text(context.l10n.deleteGoal, style: const TextStyle(color: Colors.white)),
-                            content: Text(
-                              'Delete "${widget.goal.title}"?',
-                              style: const TextStyle(color: Colors.white70),
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: Text(context.l10n.cancel),
-                              ),
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, true),
-                                style: TextButton.styleFrom(foregroundColor: Colors.red),
-                                child: Text(context.l10n.delete),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (confirm == true) {
-                          widget.onDelete();
-                        }
-                      },
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      child: Text(context.l10n.delete),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Save button
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton(
-                      onPressed: () async {
-                        final title = titleController.text.trim();
-                        if (title.isEmpty) {
-                          Navigator.pop(context);
-                          return;
-                        }
-
-                        final current = double.tryParse(currentController.text) ?? widget.goal.currentValue;
-                        final target = double.tryParse(targetController.text) ?? widget.goal.targetValue;
-
-                        if (!context.mounted) return;
-                        Navigator.pop(context);
-
-                        widget.onSave(title, current, target);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF22C55E),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: Text(context.l10n.save),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Custom painter for circular progress indicator (pie chart style)
-class _CircularProgressPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-
-  _CircularProgressPainter({required this.progress, required this.color});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2;
-
-    // Draw background circle (empty part)
-    final bgPaint = Paint()
-      ..color = color.withValues(alpha: 0.2)
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, radius, bgPaint);
-
-    // Draw progress arc (filled part)
-    if (progress > 0) {
-      final progressPaint = Paint()
-        ..color = color
-        ..style = PaintingStyle.fill;
-
-      final rect = Rect.fromCircle(center: center, radius: radius);
-      const startAngle = -90 * 3.14159 / 180; // Start from top
-      final sweepAngle = progress * 2 * 3.14159; // Full circle is 2π
-
-      canvas.drawArc(rect, startAngle, sweepAngle, true, progressPaint);
-    }
-
-    // Draw border circle
-    final borderPaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-    canvas.drawCircle(center, radius - 1, borderPaint);
-  }
-
-  @override
-  bool shouldRepaint(_CircularProgressPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.color != color;
-  }
-}
-
-/// Paints a dashed circle outline. Used for incomplete-task indicators —
-/// signals "open" without competing with the title for visual weight.
-class _DashedCirclePainter extends CustomPainter {
-  final Color color;
-  final double strokeWidth;
-  final double dashLength;
-  final double gapLength;
-
-  _DashedCirclePainter({
-    required this.color,
-    required this.strokeWidth,
-    required this.dashLength,
-    required this.gapLength,
+/// A tappable part of a task section header.
+///
+/// Section headers are one 12pt line of text, which made the collapse chevrons
+/// ~19pt targets and the "clear completed" ✕ a 14pt one. A task row starts 4pt
+/// below the line, so there is no room to grow a target downwards. Instead the
+/// header's vertical padding moves inside each child ([_sectionHeaderLinePadding])
+/// and the tappable ones own it, plus [reach] of width on the side that faces
+/// the header's Spacer. The child stays where it was on the text line and
+/// nothing in the list moves; the target becomes the header's full 36pt height.
+class _SectionHeaderTapTarget extends StatelessWidget {
+  const _SectionHeaderTapTarget({
+    required this.onTap,
+    required this.child,
+    required this.reach,
+    this.semanticLabel,
   });
 
+  final VoidCallback onTap;
+  final Widget child;
+  final EdgeInsets reach;
+  final String? semanticLabel;
+
   @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = (size.width / 2) - (strokeWidth / 2);
-    final circumference = 2 * 3.141592653589793 * radius;
-    final segmentLength = dashLength + gapLength;
-    final segments = (circumference / segmentLength).floor();
-    final adjustedSegment = circumference / segments;
-    final dashAngle = (dashLength / adjustedSegment) * (2 * 3.141592653589793 / segments);
-    final stepAngle = 2 * 3.141592653589793 / segments;
-
-    for (var i = 0; i < segments; i++) {
-      final startAngle = i * stepAngle;
-      canvas.drawArc(Rect.fromCircle(center: center, radius: radius), startAngle, dashAngle, false, paint);
-    }
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Padding(padding: _sectionHeaderLinePadding + reach, child: child),
+      ),
+    );
   }
-
-  @override
-  bool shouldRepaint(_DashedCirclePainter oldDelegate) =>
-      oldDelegate.color != color ||
-      oldDelegate.strokeWidth != strokeWidth ||
-      oldDelegate.dashLength != dashLength ||
-      oldDelegate.gapLength != gapLength;
 }

@@ -70,7 +70,7 @@ def _parse_value(raw: str) -> Any:
     value = raw.strip()
     if not value:
         return ""
-    if value.startswith(("[", '"')) or value in {"true", "false", "null"}:
+    if value.startswith(("[", "{", '"')) or value in {"true", "false", "null"}:
         return json.loads(value)
     return value
 
@@ -91,6 +91,12 @@ def _parse_yaml_subset(path: Path) -> dict[str, list[dict[str, Any]]]:
             continue
         if section is None:
             raise ValueError(f"{path}:{lineno}: entry appears before a section")
+        if stripped.startswith("- {"):
+            current = json.loads(stripped[2:])
+            if not isinstance(current, dict):
+                raise ValueError(f"{path}:{lineno}: expected an object")
+            sections[section].append(current)
+            continue
         if stripped.startswith("- "):
             current = {}
             sections[section].append(current)
@@ -225,11 +231,20 @@ def merge_base(root: Path, base: str, head: str) -> str:
 
 
 def changed_files(root: Path, base: str, head: str, include_worktree: bool = False) -> list[str]:
-    resolved_base = merge_base(root, base, head)
-    files = set(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", f"{resolved_base}...{head}").splitlines())
+    """PR file list: three-dot *base*...*head*. Never first-parent or HEAD~."""
+    files = set(
+        run_git(
+            root,
+            "diff",
+            "--name-only",
+            "--no-renames",
+            "--diff-filter=ACMRTD",
+            f"{base}...{head}",
+        ).splitlines()
+    )
     if include_worktree and head == "HEAD":
-        files.update(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", "HEAD").splitlines())
-        files.update(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", "--cached").splitlines())
+        files.update(run_git(root, "diff", "--name-only", "--no-renames", "--diff-filter=ACMRTD", "HEAD").splitlines())
+        files.update(run_git(root, "diff", "--name-only", "--no-renames", "--diff-filter=ACMRTD", "--cached").splitlines())
         files.update(run_git(root, "ls-files", "--others", "--exclude-standard").splitlines())
     return sorted(path for path in files if path)
 
@@ -241,8 +256,15 @@ def trigger_matches(pattern: str, path: str) -> bool:
         return True
     if fnmatch.fnmatchcase(path, pattern) or PurePath(path).match(pattern):
         return True
-    if "/**/" in pattern:
-        return fnmatch.fnmatchcase(path, pattern.replace("/**/", "/"))
+    if "/**/" in pattern and fnmatch.fnmatchcase(path, pattern.replace("/**/", "/")):
+        return True
+    # `**/x` means "x at any depth, the repository root included" -- the reading
+    # git, .gitignore and Actions path filters share. fnmatch needs the literal
+    # `/`, so a trigger list written only as `**/*.json` selects nothing for a
+    # root-level file it is meant to cover. Collapse a leading `**/` to nothing,
+    # exactly as the interior `/**/` is collapsed above.
+    if pattern.startswith("**/") and fnmatch.fnmatchcase(path, pattern[3:]):
+        return True
     return False
 
 
@@ -417,6 +439,7 @@ def execute_checks(
     pr_body_file: Path,
     target_base: str | None = None,
     skip_changelog: bool = False,
+    keep_going: bool = False,
 ) -> int:
     failures: list[str] = []
     for check in checks:
@@ -437,7 +460,8 @@ def execute_checks(
         print(f"<== {status} {check.id} ({time.monotonic() - started:.2f}s)", flush=True)
         if returncode:
             failures.append(check.id)
-            break
+            if not keep_going:
+                break
     if failures:
         print(f"Manifest checks failed: {', '.join(failures)}", file=sys.stderr)
         return 1
@@ -459,6 +483,11 @@ def parse_args() -> argparse.Namespace:
         help="Exclude checks declared as requiring pull-request metadata.",
     )
     parser.add_argument("--skip-changelog", action="store_true")
+    parser.add_argument(
+        "--metadata-only",
+        action="store_true",
+        help="Run only selected checks that consume PR metadata and report all their failures.",
+    )
     parser.add_argument(
         "--check-id",
         action="append",
@@ -489,6 +518,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.metadata_only and (args.skip_pr_body_checks or args.check_id):
+        print("FAIL: --metadata-only cannot combine with --skip-pr-body-checks or --check-id", file=sys.stderr)
+        return 2
     root = (args.root or Path(run_git(Path.cwd(), "rev-parse", "--show-toplevel"))).resolve()
     manifest_path = (args.manifest or root / ".github/checks-manifest.yaml").resolve()
     try:
@@ -539,6 +571,8 @@ def main() -> int:
     except ValueError as exc:
         print(f"FAIL: could not select manifest checks: {exc}", file=sys.stderr)
         return 2
+    if args.metadata_only:
+        selections = [selection for selection in selections if selection.check.requires_pr_body]
     checks = [selection.check for selection in selections]
     if args.output == "json":
         print(
@@ -590,6 +624,7 @@ def main() -> int:
             head=args.head,
             pr_body_file=body_path,
             skip_changelog=args.skip_changelog,
+            keep_going=args.metadata_only,
         )
 
 

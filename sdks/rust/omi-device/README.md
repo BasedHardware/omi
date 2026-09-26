@@ -4,6 +4,10 @@
 
 The crate deliberately does not choose a BLE runtime. Implement `BleAdapter` and `BleConnection` with the platform/runtime your application already uses, then call `discover_omi` and `connect_omi`.
 
+`Device::audio_codec()` recognizes the shared protocol's PCM16 (0), PCM8 (1),
+Opus (20), and Opus FS320 (21) codec IDs. Other bytes remain `AudioCodec::Unknown(id)`;
+an empty characteristic read returns a truncated-protocol error.
+
 ```rust
 use omi_device::{connect_omi, discover_omi, BleAdapter};
 

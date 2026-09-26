@@ -1,5 +1,7 @@
 import html
-from typing import Any
+import re
+import xml.etree.ElementTree as ET
+from typing import Any, Optional
 
 import httpx
 from fastapi import FastAPI, Request
@@ -10,7 +12,7 @@ from models import ChatToolResponse
 app = FastAPI(
     title="Omi PubMed App",
     description="PubMed chat tools for Omi",
-    version="1.0.1",
+    version="1.0.3",
 )
 
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
@@ -25,6 +27,38 @@ def _is_valid_pmid(pmid: str) -> bool:
     return pmid.isdigit() and len(pmid) <= 12
 
 
+def _normalize_pmid(raw: Any) -> Optional[str]:
+    """Normalize a user/agent supplied PubMed identifier to a bare numeric PMID.
+
+    Accepts:
+    - Bare numeric strings: '34567890'
+    - Formatted prefixes: 'PMID: 34567890', 'pmid:34567890', 'PMID 34567890'
+    - PubMed URLs: 'https://pubmed.ncbi.nlm.nih.gov/34567890/', 'https://www.ncbi.nlm.nih.gov/pubmed/34567890'
+    Returns bare numeric PMID string if valid, else None.
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    val = raw.strip()
+
+    # Match PubMed URLs: pubmed.ncbi.nlm.nih.gov/<pmid> or /pubmed/<pmid>
+    url_match = re.search(r"(?:pubmed\.ncbi\.nlm\.nih\.gov|/pubmed)/(\d+)", val)
+    if url_match:
+        candidate = url_match.group(1)
+        return candidate if _is_valid_pmid(candidate) else None
+
+    # Match PMID prefixes: 'PMID: 12345', 'pmid:12345', 'PMID 12345'
+    prefix_match = re.match(r"^(?:pmid\s*:?\s*)(\d+)$", val, re.IGNORECASE)
+    if prefix_match:
+        candidate = prefix_match.group(1)
+        return candidate if _is_valid_pmid(candidate) else None
+
+    # Direct numeric PMID
+    if _is_valid_pmid(val):
+        return val
+
+    return None
+
+
 def _clamp_max_results(value: Any, default: int = 5) -> int:
     try:
         parsed = int(value)
@@ -33,22 +67,59 @@ def _clamp_max_results(value: Any, default: int = 5) -> int:
     return max(1, min(parsed, 10))
 
 
+def _extract_abstract_from_efetch_xml(xml_text: str) -> str:
+    """Parse efetch XML and return the abstract text for the first article."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return ""
+    abstract_parts = root.findall(".//AbstractText")
+    if not abstract_parts:
+        return ""
+    chunks = []
+    for part in abstract_parts:
+        label = (part.get("Label") or "").strip()
+        text = "".join(part.itertext()).strip()
+        if not text:
+            continue
+        chunks.append(f"{label}: {text}" if label else text)
+    return " ".join(chunks).strip()
+
+
+async def _fetch_abstract(client: httpx.AsyncClient, pmid: str) -> str:
+    """ESummary has no abstract field; efetch XML does."""
+    resp = await client.get(
+        f"{EUTILS}/efetch.fcgi",
+        params={"db": "pubmed", "id": pmid, "retmode": "xml"},
+    )
+    resp.raise_for_status()
+    return _extract_abstract_from_efetch_xml(resp.text)
+
+
 def _extract_article_fields(record: dict) -> dict:
+    if not isinstance(record, dict):
+        record = {}
     title = _safe(record.get("title", "Untitled"))
     pubdate = _safe(record.get("pubdate", ""))
     source = _safe(record.get("source", ""))
     doi = _safe(record.get("elocationid", ""))
     authors = []
-    for author in record.get("authors", [])[:8]:
-        name = _safe(author.get("name"))
-        if name:
-            authors.append(name)
+    raw_authors = record.get("authors")
+    if isinstance(raw_authors, list):
+        for author in raw_authors[:8]:
+            if isinstance(author, dict):
+                name = _safe(author.get("name"))
+                if name:
+                    authors.append(name)
+            elif isinstance(author, str) and author.strip():
+                authors.append(_safe(author.strip()))
 
     abstract = ""
-    if isinstance(record.get("abstract"), list):
-        abstract = " ".join(_safe(x) for x in record["abstract"] if x)
-    elif record.get("abstract"):
-        abstract = _safe(record["abstract"])
+    raw_abstract = record.get("abstract")
+    if isinstance(raw_abstract, list):
+        abstract = " ".join(_safe(x) for x in raw_abstract if x)
+    elif isinstance(raw_abstract, str):
+        abstract = _safe(raw_abstract)
 
     return {
         "title": title,
@@ -79,6 +150,13 @@ async def _search_ids(client: httpx.AsyncClient, query: str, retmax: int = 5) ->
         },
     )
     return data.get("esearchresult", {}).get("idlist", [])
+
+
+def _select_related_pmids(links: list, source_pmid: str, max_results: int) -> list[str]:
+    """NCBI's pubmed_pubmed linkset includes the source PMID among the results;
+    exclude it before applying the limit so max_results counts only articles
+    actually related to it."""
+    return [str(x) for x in links if str(x) != str(source_pmid)][:max_results]
 
 
 async def _fetch_summaries(client: httpx.AsyncClient, ids: list[str]) -> dict:
@@ -131,12 +209,12 @@ async def manifest():
             },
             {
                 "name": "get_pubmed_article",
-                "description": "Get detailed citation and abstract for a PubMed ID.",
+                "description": "Get detailed citation and abstract for a PubMed ID or URL.",
                 "endpoint": "/tools/get_pubmed_article",
                 "method": "POST",
                 "parameters": {
                     "properties": {
-                        "pmid": {"type": "string", "description": "PubMed ID (numeric)"},
+                        "pmid": {"type": "string", "description": "PubMed ID (numeric, PMID prefix, or pubmed.ncbi.nlm.nih.gov URL)"},
                     },
                     "required": ["pmid"],
                 },
@@ -145,12 +223,12 @@ async def manifest():
             },
             {
                 "name": "get_related_pubmed",
-                "description": "Find related PubMed articles from a PubMed ID.",
+                "description": "Find related PubMed articles from a PubMed ID or URL.",
                 "endpoint": "/tools/get_related_pubmed",
                 "method": "POST",
                 "parameters": {
                     "properties": {
-                        "pmid": {"type": "string", "description": "PubMed ID (numeric)"},
+                        "pmid": {"type": "string", "description": "PubMed ID (numeric, PMID prefix, or pubmed.ncbi.nlm.nih.gov URL)"},
                         "max_results": {"type": "integer", "description": "1-10, default 5"},
                     },
                     "required": ["pmid"],
@@ -185,10 +263,14 @@ async def search_pubmed(request: Request):
         lines = [f"Top PubMed results for: {query}"]
         for idx, result_pmid in enumerate(ids, start=1):
             row = summaries.get(result_pmid, {})
+            if not isinstance(row, dict) or row.get("error"):
+                continue
             title = _safe(row.get("title", "Untitled"))
             journal = _safe(row.get("fulljournalname", row.get("source", "")))
             date = _safe(row.get("pubdate", ""))
             lines.append(f"{idx}. PMID {result_pmid}: {title} ({journal}, {date})")
+        if len(lines) == 1:
+            return ChatToolResponse(result=f"No PubMed results found for: {query}")
         return ChatToolResponse(result="\n".join(lines))
     except Exception as e:
         return ChatToolResponse(error=f"PubMed search failed: {e}")
@@ -198,19 +280,31 @@ async def search_pubmed(request: Request):
 async def get_pubmed_article(request: Request):
     try:
         body = await request.json()
-        pmid = (body.get("pmid") or "").strip()
-        if not pmid:
+        raw_pmid = body.get("pmid")
+        if not raw_pmid or not str(raw_pmid).strip():
             return ChatToolResponse(error="pmid is required")
-        if not _is_valid_pmid(pmid):
+
+        pmid = _normalize_pmid(str(raw_pmid))
+        if not pmid:
             return ChatToolResponse(error="pmid must be a numeric PubMed ID")
 
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
             summaries = await _fetch_summaries(client, [pmid])
+            record_data = summaries.get(pmid) if isinstance(summaries.get(pmid), dict) else None
+            if record_data and not record_data.get("error"):
+                # Prefer a real efetch abstract; ESummary never includes one.
+                # Abstract enrichment is optional so ESummary still works if efetch fails.
+                try:
+                    abstract = await _fetch_abstract(client, pmid)
+                except Exception:
+                    abstract = ""
+                if abstract:
+                    record_data["abstract"] = abstract
 
-        if pmid not in summaries:
+        if not record_data or record_data.get("error"):
             return ChatToolResponse(error=f"No PubMed record found for PMID {pmid}")
 
-        record = _extract_article_fields(summaries[pmid])
+        record = _extract_article_fields(record_data)
         lines = [
             f"PMID {pmid}",
             f"Title: {record['title']}",
@@ -229,11 +323,13 @@ async def get_pubmed_article(request: Request):
 async def get_related_pubmed(request: Request):
     try:
         body = await request.json()
-        pmid = (body.get("pmid") or "").strip()
+        raw_pmid = body.get("pmid")
         max_results = _clamp_max_results(body.get("max_results", 5))
-        if not pmid:
+        if not raw_pmid or not str(raw_pmid).strip():
             return ChatToolResponse(error="pmid is required")
-        if not _is_valid_pmid(pmid):
+
+        pmid = _normalize_pmid(str(raw_pmid))
+        if not pmid:
             return ChatToolResponse(error="pmid must be a numeric PubMed ID")
 
         async with httpx.AsyncClient(timeout=TIMEOUT) as client:
@@ -254,7 +350,7 @@ async def get_related_pubmed(request: Request):
             if linksets:
                 dbs = linksets[0].get("linksetdbs", [])
                 if dbs:
-                    related = [str(x) for x in dbs[0].get("links", [])[:max_results]]
+                    related = _select_related_pmids(dbs[0].get("links", []), pmid, max_results)
 
             if not related:
                 return ChatToolResponse(result=f"No related articles found for PMID {pmid}")
@@ -262,12 +358,16 @@ async def get_related_pubmed(request: Request):
             summaries = await _fetch_summaries(client, related)
 
         lines = [f"Related PubMed articles for PMID {pmid}:"]
-        for idx, related_pmid in enumerate(related, start=1):
+        for related_pmid in related:
             row = summaries.get(related_pmid, {})
+            if not isinstance(row, dict) or row.get("error"):
+                continue
             title = _safe(row.get("title", "Untitled"))
             journal = _safe(row.get("fulljournalname", row.get("source", "")))
             date = _safe(row.get("pubdate", ""))
-            lines.append(f"{idx}. PMID {related_pmid}: {title} ({journal}, {date})")
+            lines.append(f"{len(lines)}. PMID {related_pmid}: {title} ({journal}, {date})")
+        if len(lines) == 1:
+            return ChatToolResponse(result=f"No related articles found for PMID {pmid}")
         return ChatToolResponse(result="\n".join(lines))
     except Exception as e:
         return ChatToolResponse(error=f"Failed to fetch related PubMed articles: {e}")

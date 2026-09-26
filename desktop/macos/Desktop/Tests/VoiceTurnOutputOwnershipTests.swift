@@ -159,6 +159,63 @@ final class VoiceTurnOutputOwnershipTests: XCTestCase {
         turnID: VoiceTurnID()))
   }
 
+  func testFallbackStopForActiveTurnIsNeverStale() {
+    let turnID = VoiceTurnID()
+    let lease = syntheticLease(.selectedVoiceFallback, turnID: turnID)
+
+    XCTAssertEqual(
+      VoiceOutputHandoffPolicy.playbackStopAdmission(
+        activeLease: lease,
+        requestedLeaseID: lease.id,
+        activeTurnID: turnID),
+      .apply)
+    XCTAssertEqual(
+      VoiceOutputHandoffPolicy.playbackStopAdmission(
+        activeLease: lease,
+        requestedLeaseID: VoiceLeaseID(),
+        activeTurnID: turnID),
+      .apply)
+    XCTAssertEqual(
+      VoiceOutputHandoffPolicy.playbackStopAdmission(
+        activeLease: nil,
+        requestedLeaseID: lease.id,
+        activeTurnID: turnID),
+      .alreadyComplete)
+    XCTAssertEqual(
+      VoiceOutputHandoffPolicy.playbackStopAdmission(
+        activeLease: syntheticLease(.selectedVoiceFallback, turnID: VoiceTurnID()),
+        requestedLeaseID: lease.id,
+        activeTurnID: turnID),
+      .stale)
+  }
+
+  func testPlaybackDrainAdmissionKeepsFallbackOwnerAndFailsClosedForNative() {
+    let turnID = VoiceTurnID()
+    let fallback = syntheticLease(.selectedVoiceFallback, turnID: turnID)
+    let native = syntheticLease(.nativeRealtime, turnID: turnID)
+
+    XCTAssertEqual(
+      VoiceOutputHandoffPolicy.playbackDrainAdmission(
+        phase: .playing(.selectedVoiceFallback),
+        activeLease: fallback),
+      .keepPlaying)
+    XCTAssertEqual(
+      VoiceOutputHandoffPolicy.playbackDrainAdmission(
+        phase: .playing(.nativeRealtime),
+        activeLease: native),
+      .failClosed)
+    XCTAssertEqual(
+      VoiceOutputHandoffPolicy.playbackDrainAdmission(
+        phase: .playing(.selectedVoiceFallback),
+        activeLease: nil),
+      .alreadyComplete)
+    XCTAssertEqual(
+      VoiceOutputHandoffPolicy.playbackDrainAdmission(
+        phase: .awaitingResponse,
+        activeLease: fallback),
+      .alreadyComplete)
+  }
+
   func testFillerReleaseDoesNotFinishProviderAndRealOutputCanTakeLease() throws {
     let (coordinator, turnID) = awaitingCoordinator()
     let filler = try XCTUnwrap(tryLease(coordinator.acquireOutput(.filler, turnID: turnID)))

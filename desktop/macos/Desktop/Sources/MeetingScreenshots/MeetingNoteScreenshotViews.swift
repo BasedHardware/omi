@@ -270,11 +270,15 @@ struct MeetingNoteScreenshotsSection: View {
       // `Color.clear` is a real view and keeps the modifier alive.
       Color.clear.frame(height: 0)
 
+    // Visible states carry the note's section spacing themselves; the hidden ones stay zero-height
+    // so a note without screenshots has no gap where the strip would be.
     case .selecting:
       label("Looking through what was on screen…")
+        .padding(.top, OmiSpacing.xxl)
 
     case .judging(let candidates):
       label("Reviewing \(candidates) moment\(candidates == 1 ? "" : "s")…")
+        .padding(.top, OmiSpacing.xxl)
 
     case .noCapture:
       // Deliberately silent. A meeting with no screen capture, or none of it approved, is the
@@ -299,6 +303,7 @@ struct MeetingNoteScreenshotsSection: View {
         }
         MeetingScreenshotStripRow(frames: store.frames, onOpen: onOpen, onDelete: onDelete)
       }
+      .padding(.top, OmiSpacing.xxl)
     }
   }
 
@@ -410,17 +415,17 @@ struct MeetingScreenshotTile: View {
       Button("Delete Screenshot…", role: .destructive) { isConfirmingDelete = true }
         .disabled(isDeleting)
     }
-    .alert("Delete Screenshot", isPresented: $isConfirmingDelete) {
-      Button("Cancel", role: .cancel) {}
-      Button("Delete", role: .destructive) {
-        isDeleting = true
-        Task {
-          await onDelete()
-          isDeleting = false
-        }
+    .shellConfirmation(
+      isPresented: $isConfirmingDelete,
+      title: "Delete Screenshot?",
+      message: "This removes the screenshot from this meeting's note. It can't be undone.",
+      confirmTitle: "Delete"
+    ) {
+      isDeleting = true
+      Task {
+        await onDelete()
+        isDeleting = false
       }
-    } message: {
-      Text("This removes the screenshot from this meeting's note. This cannot be undone.")
     }
     .accessibilityLabel(
       Text(frame.caption.isEmpty ? "Screenshot from this meeting" : frame.caption)

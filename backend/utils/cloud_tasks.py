@@ -16,7 +16,7 @@ import logging
 import hashlib
 import os
 import uuid
-from typing import Any, Dict, Literal, NamedTuple, Optional
+from typing import Any, Dict, NamedTuple, Optional
 
 from fastapi import HTTPException, Request
 from google.api_core.exceptions import AlreadyExists, NotFound
@@ -33,6 +33,30 @@ logger = logging.getLogger(__name__)
 # (HTTP_SYNC_JOBS_RUN_TIMEOUT); see the run-lock TTL invariant in sync_jobs.py.
 DISPATCH_DEADLINE_SECONDS = 1500
 
+# Shared by the production admission boundary and the hermetic recorder. A
+# recorder-local allowlist previously rejected new durable fields only after
+# admission had already returned 202.
+SYNC_JOB_TASK_PAYLOAD_KEYS = frozenset(
+    {
+        'schema_version',
+        'job_id',
+        'uid',
+        'raw_blob_paths',
+        'source',
+        'should_lock',
+        'conversation_id',
+        'geolocation',
+        'client_device_id',
+        'client_platform',
+        'enqueued_at',
+        'lane',
+        'capture_time_trust',
+        'recording_age_seconds',
+        'content_id',
+        'ledger_fence_mode',
+    }
+)
+
 _tasks_client: Optional[tasks_v2.CloudTasksClient] = None
 _google_auth_request: Optional[google_auth_requests.Request] = None
 
@@ -41,7 +65,6 @@ class AccountDeletionTaskAuthentication(NamedTuple):
     """Verified Cloud Tasks identity plus its narrowly scoped audience lane."""
 
     retry_count: int
-    audience: Literal['account_deletion', 'legacy_sync']
 
 
 def _get_tasks_client() -> tasks_v2.CloudTasksClient:
@@ -64,6 +87,10 @@ def _handler_url() -> str:
 
 def _oidc_audience() -> str:
     return os.getenv('SYNC_TASKS_OIDC_AUDIENCE') or _handler_url()
+
+
+def _audio_merge_handler_url() -> str:
+    return os.getenv('AUDIO_MERGE_HANDLER_URL', '')
 
 
 def _account_deletion_oidc_audience() -> str:
@@ -92,7 +119,7 @@ def is_audio_merge_dispatch_enabled() -> bool:
 
 
 # The production customer data plane, per INV-DATA-1
-# (docs/product/invariants/data-plane-continuity.md).
+# (product/invariants/data-plane-continuity.md).
 PRODUCTION_DATA_PROJECTS = frozenset({'based-hardware'})
 
 
@@ -258,6 +285,8 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
     (request-based) rather than the ~4-dispatch lane that caused the incident.
     The lane label is always carried on the payload for metering and reporting.
     """
+    if frozenset(payload) != SYNC_JOB_TASK_PAYLOAD_KEYS:
+        raise ValueError('sync job payload does not match the durable worker schema')
     if payload.get('lane') == 'backfill' and is_sync_backfill_routing_enabled():
         queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
         handler_url = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '').strip()
@@ -278,8 +307,12 @@ def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:
 
     Task name am-{conversation_id}-{audio_file_id} dedupes concurrent enqueues
     from /urls polling; the handler's artifact-exists check covers the rest.
-    Tokens are minted with the same audience as sync tasks so a single
-    verify_cloud_tasks_oidc dependency covers both handlers.
+
+    The OIDC audience is the merge handler URL, not the sync-jobs audience.
+    backend-sync-backfill clones backend-sync's env and overlays
+    SYNC_TASKS_HANDLER_URL / SYNC_TASKS_OIDC_AUDIENCE onto the backfill
+    worker; AUDIO_MERGE_HANDLER_URL still names backend-sync. Minting the
+    sync-jobs audience for a merge task makes backend-sync reject it 403.
 
     schema_version 2 = conversation-level artifact build: the name embeds the
     audio_files fingerprint so a rebuild after late chunks gets a fresh name
@@ -290,11 +323,13 @@ def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:
         task_id = f"amc-{payload['conversation_id']}-{payload['fingerprint']}"
     else:
         task_id = f"am-{payload['conversation_id']}-{payload['audio_file_id']}"
+    handler_url = _audio_merge_handler_url()
     _enqueue_named_task(
         os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
-        os.getenv('AUDIO_MERGE_HANDLER_URL', ''),
+        handler_url,
         task_id,
         payload,
+        audience=handler_url,
     )
 
 
@@ -380,37 +415,30 @@ def _verify_cloud_tasks_oidc(request: Request, *, audience: str, invoker_sa: str
 
 
 def verify_cloud_tasks_oidc(request: Request) -> int:
-    """FastAPI dependency for sync and merge task routes."""
+    """FastAPI dependency for sync-job task routes."""
     return _verify_cloud_tasks_oidc(request, audience=_oidc_audience(), invoker_sa=_invoker_sa())
 
 
-def verify_account_deletion_cloud_tasks_oidc(request: Request) -> AccountDeletionTaskAuthentication:
-    """Verify deletion tasks, with a bounded compatibility path for queued legacy UID tasks.
+def verify_audio_merge_cloud_tasks_oidc(request: Request) -> int:
+    """FastAPI dependency for audio-merge task routes.
 
-    Before opaque job IDs, account-deletion tasks inherited sync's OIDC
-    audience. Verify that former audience only during the queue drain window;
-    the route rejects it for new job-ID payloads before any lookup or mutation.
+    Audience is the merge handler URL so an enqueuer whose SYNC_TASKS_*
+    audience names a different service (backend-sync-backfill) can still
+    mint a token the merge worker will accept.
     """
-    deletion_audience = _account_deletion_oidc_audience()
-    try:
-        retry_count = _verify_cloud_tasks_oidc(
-            request,
-            audience=deletion_audience,
-            invoker_sa=_invoker_sa(),
-            log_failure=False,
-        )
-        return AccountDeletionTaskAuthentication(retry_count=retry_count, audience='account_deletion')
-    except HTTPException as deletion_error:
-        legacy_sync_audience = _oidc_audience()
-        if not deletion_audience or not legacy_sync_audience or legacy_sync_audience == deletion_audience:
-            raise deletion_error
+    return _verify_cloud_tasks_oidc(request, audience=_audio_merge_handler_url(), invoker_sa=_invoker_sa())
 
-        retry_count = _verify_cloud_tasks_oidc(
-            request,
-            audience=legacy_sync_audience,
-            invoker_sa=_invoker_sa(),
-        )
-        return AccountDeletionTaskAuthentication(retry_count=retry_count, audience='legacy_sync')
+
+def verify_account_deletion_cloud_tasks_oidc(request: Request) -> AccountDeletionTaskAuthentication:
+    """Verify deletion tasks."""
+    deletion_audience = _account_deletion_oidc_audience()
+    retry_count = _verify_cloud_tasks_oidc(
+        request,
+        audience=deletion_audience,
+        invoker_sa=_invoker_sa(),
+        log_failure=False,
+    )
+    return AccountDeletionTaskAuthentication(retry_count=retry_count)
 
 
 def verify_listen_finalization_cloud_tasks_oidc(request: Request) -> int:

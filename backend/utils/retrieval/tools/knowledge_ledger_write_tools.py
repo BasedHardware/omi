@@ -20,7 +20,7 @@ from typing import Any, Dict, Mapping, Optional, cast
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 
-from database._client import get_firestore_client
+from database._client import get_data_plane_firestore_client
 from models.knowledge_ledger_policy import PLAYBOOK_HANDLE_CHARACTER_LIMIT
 from models.memory_contracts import deterministic_contract_id
 from models.product_memory import MAX_LEDGER_PLAYBOOK_BODY_CHARACTERS, MemoryKind, MemorySubjectScope
@@ -182,7 +182,7 @@ def save_playbook(description: str, body: str, config: RunnableConfig = None) ->
         return f"Error: body must be at most {MAX_SAVE_PLAYBOOK_BODY_CHARACTERS} characters"
 
     try:
-        firestore_client = get_firestore_client()
+        firestore_client = get_data_plane_firestore_client()
     except Exception as exc:
         logger.error("Failed to resolve playbook storage error_type=%s", type(exc).__name__)
         return "Error saving playbook"
@@ -255,7 +255,7 @@ def create_standing_trigger(
         return f"Error: {exc}"
 
     try:
-        firestore_client = get_firestore_client()
+        firestore_client = get_data_plane_firestore_client()
     except Exception as exc:
         logger.error("Failed to resolve trigger storage error_type=%s", type(exc).__name__)
         return "Error creating standing trigger"
@@ -319,7 +319,7 @@ def close_fact_tool(memory_id: str, reason: str, config: RunnableConfig = None) 
         return f"Error: reason must be at most {MAX_CLOSE_FACT_REASON_CHARACTERS} characters"
 
     try:
-        firestore_client = get_firestore_client()
+        firestore_client = get_data_plane_firestore_client()
     except Exception as exc:
         logger.error("Failed to resolve fact storage error_type=%s", type(exc).__name__)
         return "Fact could not be closed"

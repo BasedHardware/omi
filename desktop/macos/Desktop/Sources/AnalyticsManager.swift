@@ -132,10 +132,40 @@ class AnalyticsManager {
   /// it drops a notification for lack of authorization.
   private var notificationDeliveryTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
 
+  /// Capture-attempt outcome seam: nil in production; tests install a scoped
+  /// capture to observe the real event/payload the ambient-capture lifecycle
+  /// emits at `AnalyticsManager`'s PostHog boundary.
+  private var captureAttemptTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  func setCaptureAttemptTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    captureAttemptTelemetryCaptureForTests = capture
+  }
+
+  private func captureCaptureAttemptTelemetryForTests(_ event: String, properties: [String: Any]) {
+    captureAttemptTelemetryCaptureForTests?(event, properties)
+  }
+
   func setNotificationDeliveryTelemetryCaptureForTests(
     _ capture: (@MainActor (String, [String: Any]) -> Void)?
   ) {
     notificationDeliveryTelemetryCaptureForTests = capture
+  }
+
+  /// Monitoring-duration seam: nil in production; tests install a scoped
+  /// capture to observe the real event names/payloads these methods emit.
+  private var monitoringTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+
+  func setMonitoringTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    monitoringTelemetryCaptureForTests = capture
+  }
+
+  private func trackMonitoring(_ event: String, properties: [String: Any]) {
+    monitoringTelemetryCaptureForTests?(event, properties)
+    PostHogManager.shared.track(event, properties: properties)
   }
 
   func setDevicePairingTelemetryCaptureForTests(
@@ -147,11 +177,31 @@ class AnalyticsManager {
   /// Scoped observation of floating-bar query telemetry. Nil in production;
   /// tests install a capture at the same boundary as PostHog.
   private var floatingBarQueryTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+  /// Test seam for `question_asked` / `question_answered`; the emitters live in
+  /// `Analytics/AnalyticsManager+Questions.swift`, so this is internal, not private.
+  var questionTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+  /// Test seam for search events; emitters live in `Analytics/AnalyticsManager+Search.swift`.
+  var searchTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
+  /// Scoped observation of floating-bar PTT terminal telemetry. Nil in
+  /// production; tests install a capture at the same boundary as PostHog.
+  private var floatingBarPTTTelemetryCaptureForTests: (@MainActor (String, [String: Any]) -> Void)?
 
   func setFloatingBarQueryTelemetryCaptureForTests(
     _ capture: (@MainActor (String, [String: Any]) -> Void)?
   ) {
     floatingBarQueryTelemetryCaptureForTests = capture
+  }
+
+  func setSearchTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    searchTelemetryCaptureForTests = capture
+  }
+
+  func setFloatingBarPTTTelemetryCaptureForTests(
+    _ capture: (@MainActor (String, [String: Any]) -> Void)?
+  ) {
+    floatingBarPTTTelemetryCaptureForTests = capture
   }
 
   // MARK: - Initialization
@@ -375,27 +425,82 @@ class AnalyticsManager {
 
   // MARK: - Monitoring Events
 
-  func monitoringStarted() {
-    PostHogManager.shared.monitoringStarted()
+  func monitoringStarted(sessionID: String) {
+    trackMonitoring(
+      MonitoringTelemetry.startedEventName,
+      properties: MonitoringTelemetry.startedPayload(sessionID: sessionID))
   }
 
-  func monitoringStopped() {
-    PostHogManager.shared.monitoringStopped()
+  func monitoringStopped(summary: MonitoringSummary) {
+    trackMonitoring(
+      MonitoringTelemetry.stoppedEventName,
+      properties: MonitoringTelemetry.stoppedPayload(summary: summary))
+  }
+
+  /// Emits the missing `Monitoring Stopped` for a session recovered from disk
+  /// at launch (crash or quit — see `MonitoringSessionRecovery`). Shares the
+  /// `Monitoring Stopped` event name with a live stop; `duration_source`
+  /// (`recovered_clean` / `recovered_heartbeat`) is what distinguishes a
+  /// recovered row in analysis.
+  func monitoringSessionRecovered(_ outcome: MonitoringSessionRecovery.Outcome) {
+    trackMonitoring(
+      MonitoringTelemetry.stoppedEventName,
+      properties: MonitoringTelemetry.recoveredStoppedPayload(outcome))
+  }
+
+  /// Recovers a monitoring session that never got to emit its live
+  /// `Monitoring Stopped` — either the app quit (`applicationWillTerminate`
+  /// stamped `endedAt`/`endReason` synchronously; there is no synchronous
+  /// PostHog flush available at terminate time) or crashed outright (no
+  /// stamp at all; the last heartbeat is the only evidence). Call once at
+  /// launch, adjacent to `detectAndReportCrash()`.
+  ///
+  /// Ownership is enforced in the store, not here: a rewind-only process reads
+  /// nil and writes nothing, so this is a no-op there without needing its own
+  /// launch-mode check. See `MonitoringSessionDefaultsStore.shared`.
+  func recoverMonitoringSessionIfNeeded() {
+    guard let record = MonitoringSessionDefaultsStore.shared.load() else { return }
+    let outcome = MonitoringSessionRecovery.recover(record, now: Date())
+    monitoringSessionRecovered(outcome)
+    MonitoringSessionDefaultsStore.shared.clear()
   }
 
   // MARK: - Recording Events
 
-  func transcriptionStarted() {
+  func transcriptionStarted(attemptId: String? = nil, mode: String? = nil, intent: String? = nil) {
     // Debounce: skip if called within 5 seconds (catches rapid wake/reconnect double-fires)
     if let last = lastTranscriptionStartedAt, Date().timeIntervalSince(last) < 5 {
       return
     }
     lastTranscriptionStartedAt = Date()
-    PostHogManager.shared.transcriptionStarted()
+    PostHogManager.shared.transcriptionStarted(attemptId: attemptId, mode: mode, intent: intent)
   }
 
-  func transcriptionStopped(wordCount: Int) {
-    PostHogManager.shared.transcriptionStopped(wordCount: wordCount)
+  func transcriptionStopped(wordCount: Int, attemptId: String? = nil, reason: String? = nil) {
+    PostHogManager.shared.transcriptionStopped(wordCount: wordCount, attemptId: attemptId, reason: reason)
+  }
+
+  /// Terminal outcome of one armed ambient-capture attempt. Observes the
+  /// acceptance registry first so `conversation_accepted` reflects every
+  /// accepted conversation of this attempt observed before emission.
+  func captureAttemptOutcome(
+    _ attempt: inout CaptureAttemptOutcomeState,
+    finalizationReason: TranscriptionFinalizationReason
+  ) {
+    if CaptureAttemptAcceptanceRegistry.consumeAccepted(attempt.attemptId) {
+      attempt.noteConversationAccepted()
+    }
+    let properties = PostHogManager.captureAttemptOutcomeProperties(attempt, finalizationReason: finalizationReason)
+    captureCaptureAttemptTelemetryForTests(PostHogManager.captureAttemptOutcomeEventName, properties: properties)
+    PostHogManager.shared.captureAttemptOutcome(properties: properties)
+  }
+
+  /// Mid-flight process death discovered by next-run crash recovery: only the
+  /// persisted join key is knowable, so the payload is deliberately minimal.
+  func captureAttemptPendingOutcome(attemptId: String) {
+    let properties = PostHogManager.captureAttemptPendingProperties(attemptId: attemptId)
+    captureCaptureAttemptTelemetryForTests(PostHogManager.captureAttemptOutcomeEventName, properties: properties)
+    PostHogManager.shared.captureAttemptOutcome(properties: properties)
   }
 
   func recordingError(
@@ -506,6 +611,30 @@ class AnalyticsManager {
       PostHogManager.shared.track("Device Paired", properties: eventProperties)
     }
     PostHogManager.shared.setUserProperties(userProperties)
+  }
+
+  private var deviceConnectionTelemetryCaptureForTests: (@MainActor (String) -> Void)?
+
+  func setDeviceConnectionTelemetryCaptureForTests(
+    _ capture: (@MainActor (String) -> Void)?
+  ) {
+    deviceConnectionTelemetryCaptureForTests = capture
+  }
+
+  func deviceConnected(device: BtDevice) {
+    let vendor = device.type.analyticsVendorSlug
+    let eventProperties: [String: Any] = [
+      "device_vendor": vendor,
+      "device_type": device.type.rawValue,
+    ]
+    deviceConnectionTelemetryCaptureForTests?("Device Connected")
+    PostHogManager.shared.track("Device Connected", properties: eventProperties)
+    PostHogManager.shared.setUserProperties(["device_vendor": vendor])
+  }
+
+  func deviceDisconnected() {
+    deviceConnectionTelemetryCaptureForTests?("Device Disconnected")
+    PostHogManager.shared.track("Device Disconnected")
   }
 
   /// Report when ScreenCaptureKit broken state is detected (TCC granted but capture failing).
@@ -742,9 +871,17 @@ class AnalyticsManager {
   // Note: The event is named "Memory Created" in analytics for historical reasons,
   // but it actually tracks when a conversation/recording is created, not a "memory".
 
-  func conversationCreated(conversationId: String, source: String, durationSeconds: Int? = nil) {
+  func conversationCreated(
+    conversationId: String,
+    source: String,
+    durationSeconds: Int? = nil,
+    attemptId: String? = nil
+  ) {
+    if let attemptId {
+      CaptureAttemptAcceptanceRegistry.noteAccepted(attemptId)
+    }
     PostHogManager.shared.conversationCreated(
-      conversationId: conversationId, source: source, durationSeconds: durationSeconds)
+      conversationId: conversationId, source: source, durationSeconds: durationSeconds, attemptId: attemptId)
   }
 
   func memoryDeleted(conversationId: String) {
@@ -769,7 +906,7 @@ class AnalyticsManager {
 
   func chatMessageSent(
     messageLength: Int, hasSelectedAppContext: Bool = false, source: String,
-    countsAsQuestion: Bool = true
+    countsAsQuestion: Bool = true, attemptID: String? = nil
   ) {
     PostHogManager.shared.chatMessageSent(
       messageLength: messageLength, hasSelectedAppContext: hasSelectedAppContext, source: source)
@@ -779,9 +916,7 @@ class AnalyticsManager {
     // question (retries of a failed turn, busy no-op paths) so the one-time
     // prompt trigger counts each logical question exactly once.
     guard countsAsQuestion else { return }
-    Task { @MainActor in
-      RatingPromptManager.shared.recordQuestionAsked()
-    }
+    questionAsked(surface: .chatWindow, source: source, messageLength: messageLength, attemptID: attemptID)
   }
 
   func desktopRatingSubmitted(rating: Int, revision: Int? = nil) {
@@ -802,16 +937,6 @@ class AnalyticsManager {
   func desktopPromptDismissed(promptId: String, promptType: String) {
     PostHogManager.shared.track(
       "Desktop Prompt Dismissed", properties: ["prompt_id": promptId, "prompt_type": promptType])
-  }
-
-  // MARK: - Search Events
-
-  func searchQueryEntered(query: String) {
-    PostHogManager.shared.searchQueryEntered(query: query)
-  }
-
-  func searchBarFocused() {
-    PostHogManager.shared.searchBarFocused()
   }
 
   // MARK: - Settings Events
@@ -860,33 +985,13 @@ class AnalyticsManager {
     PostHogManager.shared.chatCleared()
   }
 
-  func chatSessionCreated() {
-    PostHogManager.shared.track("chat_session_created", properties: [:])
-  }
-
-  func chatSessionDeleted() {
-    PostHogManager.shared.track("chat_session_deleted", properties: [:])
-  }
-
-  func messageRated(rating: Int) {
+  func messageRated(rating: Int, surface: String = "text") {
     let ratingString = rating == 1 ? "thumbs_up" : "thumbs_down"
-    PostHogManager.shared.track("message_rated", properties: ["rating": ratingString])
-  }
-
-  func initialMessageGenerated(hasApp: Bool) {
-    PostHogManager.shared.track("initial_message_generated", properties: ["has_app": hasApp])
-  }
-
-  func sessionTitleGenerated() {
-    PostHogManager.shared.track("session_title_generated", properties: [:])
-  }
-
-  func chatStarredFilterToggled(enabled: Bool) {
-    PostHogManager.shared.track("chat_starred_filter_toggled", properties: ["enabled": enabled])
-  }
-
-  func sessionRenamed() {
-    PostHogManager.shared.track("session_renamed", properties: [:])
+    // `source` splits the admin thumbs-ratio chart: "text" = main-window
+    // chat, "voice" = floating-bar responses. Events before this dimension
+    // existed chart as the combined series only.
+    PostHogManager.shared.track(
+      "message_rated", properties: ["rating": ratingString, "source": surface])
   }
 
   // MARK: - Claude Agent Events
@@ -905,6 +1010,7 @@ class AnalyticsManager {
   func chatQueryTelemetry(_ event: ChatQueryTelemetryEvent) {
     let payload = event.analyticsPayload
     PostHogManager.shared.track(payload.eventName, properties: payload.properties)
+    questionAnswered(forChatEvent: event)
     if case .failed(_, _, let errorClass, _, _, _) = event {
       DesktopDiagnosticsManager.shared.recordChatFailure(errorClass: errorClass.rawValue)
     }
@@ -1463,11 +1569,13 @@ class AnalyticsManager {
 
   func suggestionFeedbackRecorded(
     verb: String,
-    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil
+    suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
+    provenance: InterjectFeedbackProvenance? = nil
   ) {
     if let suggestionIdentity {
       var properties = SuggestionAssistantTelemetry.notificationPayload(suggestionIdentity)
       properties["verb"] = verb
+      appendInterjectFeedbackProvenance(provenance, to: &properties)
       captureSuggestionAssistantTelemetryForTests(
         "Suggestion Feedback Recorded",
         properties: properties
@@ -1475,8 +1583,23 @@ class AnalyticsManager {
     }
     PostHogManager.shared.suggestionFeedbackRecorded(
       verb: verb,
-      suggestionIdentity: suggestionIdentity
+      suggestionIdentity: suggestionIdentity,
+      provenance: provenance
     )
+  }
+
+  private func appendInterjectFeedbackProvenance(
+    _ provenance: InterjectFeedbackProvenance?,
+    to properties: inout [String: Any]
+  ) {
+    guard let provenance else { return }
+    // Owner identity remains in the local owner fence and is never sent as an
+    // analytics property. The opaque delivery/candidate joins are enough to
+    // correlate the event with the bounded JIT receipt.
+    properties["feedback_lane"] = provenance.lane
+    properties["feedback_delivery_id"] = provenance.deliveryID
+    properties["feedback_candidate_id"] = provenance.candidateID
+    properties["feedback_account_generation"] = provenance.accountGeneration
   }
 
   func notificationWillPresent(notificationId: String, title: String) {
@@ -1532,7 +1655,14 @@ class AnalyticsManager {
   }
 
   /// Track when an AI query is sent from the floating bar
-  func floatingBarQuerySent(messageLength: Int, hasScreenshot: Bool, source: FloatingBarQuerySource) {
+  ///
+  /// `attemptID` is the voice turn id when the query came from push-to-talk,
+  /// so `question_asked` joins the coordinator's terminal record. Every call
+  /// here is one accepted question; the voice paths only reach it once the
+  /// transcript (or the realtime commit) exists.
+  func floatingBarQuerySent(
+    messageLength: Int, hasScreenshot: Bool, source: FloatingBarQuerySource, attemptID: String? = nil
+  ) {
     let props: [String: Any] = [
       "message_length": messageLength,
       "has_screenshot": hasScreenshot,
@@ -1540,6 +1670,9 @@ class AnalyticsManager {
     ]
     floatingBarQueryTelemetryCaptureForTests?("floating_bar_query_sent", props)
     PostHogManager.shared.track("floating_bar_query_sent", properties: props)
+    questionAsked(
+      surface: QuestionSurface(source), source: source.rawValue, messageLength: messageLength,
+      attemptID: attemptID)
   }
 
   /// Track when push-to-talk starts listening
@@ -1560,14 +1693,44 @@ class AnalyticsManager {
   ///
   /// The wire property names are deliberately unchanged: existing dashboards and
   /// the PTT quality baseline join on them.
-  func floatingBarPTTEnded(mode: String, committed: Bool, transcriptLength: Int?) {
+  ///
+  /// `turn_kind` classifies the terminal by user intent, not route mechanics:
+  /// `dictation` (the voice-typing pipeline ran, paste succeeded or not),
+  /// `question` (committed or attempted agent answer), or `unknown`
+  /// (cancelled / too-short / silent discard before intent was knowable).
+  /// Deliberately absent from `floating_bar_ptt_started`: a dictation is only
+  /// recognized mid-hold. Optional bounded extras follow the same rule —
+  /// `audioSeconds` collapses into the closed `audio_seconds_bucket` when the
+  /// site already knows the length, and `dictationTranscriber` is the dictation
+  /// pipeline's bounded transcriber id (`route` when the STT route already
+  /// produced the transcript; otherwise `backend_batch_stt` / `on_device_asr`
+  /// from `DictationTranscriber.Source`). No deeper provider split here.
+  func floatingBarPTTEnded(
+    mode: String,
+    committed: Bool,
+    transcriptLength: Int?,
+    turnKind: PTTAttemptLifecycleRecorder.TurnKind = .unknown,
+    audioSeconds: Double? = nil,
+    dictationTranscriber: String? = nil
+  ) {
     var props: [String: Any] = [
       "mode": mode,
       "had_transcript": committed,
+      "turn_kind": turnKind.rawValue,
     ]
     if let transcriptLength {
       props["transcript_length"] = transcriptLength
     }
+    if let audioSecondsBucket = PTTAttemptLifecycleRecorder.AudioSecondsBucket.bucket(fromSeconds: audioSeconds) {
+      props["audio_seconds_bucket"] = audioSecondsBucket.rawValue
+    }
+    if turnKind == .dictation,
+      let dictationTranscriber,
+      ["route", "backend_batch_stt", "on_device_asr"].contains(dictationTranscriber)
+    {
+      props["dictation_transcriber"] = dictationTranscriber
+    }
+    floatingBarPTTTelemetryCaptureForTests?("floating_bar_ptt_ended", props)
     PostHogManager.shared.track("floating_bar_ptt_ended", properties: props)
   }
 

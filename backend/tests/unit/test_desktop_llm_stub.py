@@ -6,6 +6,7 @@ import json
 
 import pytest
 
+from utils.chat_followup import FOLLOWUP_DELIMITER, split_followup_tail
 from utils.llm import desktop_llm_stub as stub
 
 
@@ -93,3 +94,31 @@ def test_gemini_proxy_stub_echoes_marker():
     )
     payload = stub.stub_gemini_proxy_json(body)
     assert payload['candidates'][0]['content']['parts'][0]['text'] == 'Stub saw marker: gemini-stub'
+
+
+def test_followup_probe_emits_a_separable_tail():
+    """The one stub answer `chat-hermetic.yaml` drives its follow-up chip from.
+
+    Asserted against the shared splitter, not against a hand-written expectation:
+    a tail the backend's own rules reject is a tail the desktop client rejects
+    too, and the flow would then assert a chip that never appears.
+    """
+    body = _user_body('Recap the storage migration and end with a grounded follow-up question.')
+    directive = stub.stub_directive(body)
+    assert isinstance(directive, stub._TextDirective)
+    assert FOLLOWUP_DELIMITER in directive.text
+
+    visible, question = split_followup_tail(directive.text)
+    assert visible == stub.FOLLOWUP_PROBE_ANSWER
+    assert question == stub.FOLLOWUP_PROBE_QUESTION
+    # The flow asserts the visible answer verbatim; the question must not survive
+    # anywhere inside it, which is the defect the chip exists to prevent.
+    assert stub.FOLLOWUP_PROBE_QUESTION not in visible
+
+
+def test_followup_probe_beats_the_exact_reply_path():
+    """`exact_reply_token` strips the trailing `?`, so it must not claim this query."""
+    body = _user_body('Reply with a recap and end with a grounded follow-up question.')
+    directive = stub.stub_directive(body)
+    assert isinstance(directive, stub._TextDirective)
+    assert directive.text == stub.followup_probe_answer()

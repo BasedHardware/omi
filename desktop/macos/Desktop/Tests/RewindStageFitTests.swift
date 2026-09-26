@@ -3,16 +3,15 @@ import XCTest
 
 @testable import Omi_Computer
 
-/// Where Rewind's photograph lands on its stage, and therefore where the controls that belong to it
-/// have to be.
+/// Where Rewind's photograph lands on its stage.
 ///
-/// **The defect this holds shut.** The timestamp pill, the zoom cluster and the two segment chevrons
-/// are an overlay on the stage, so they used to pin to the *stage's* edges. That is right only while
-/// the picture fills the stage, and it does not: a screen capture is around 1.8 wide while the stage
-/// at the app's own default window width is around 2.55, so the picture is height-bound with a wide
-/// band of empty glass down each side. The chevron then sat a long way from the frame it steps
-/// through. Everything below is stated as a ratio or a relation rather than a measured point, so it
-/// survives the next padding change and still fails if the fit stops being a fit.
+/// **The defect this holds shut.** The picture is aspect-fit into a stage that is almost never its
+/// own shape: a screen capture is around 1.8 wide while the stage at the app's own default window
+/// width is around 2.55, so the picture is height-bound with a wide band of empty glass down each
+/// side. `RewindPage` sizes the frame from this fit, and a fit that drifted would stretch, crop or
+/// off-centre the picture. Everything below is stated as a ratio or a relation rather than a
+/// measured point, so it survives the next padding change and still fails if the fit stops being a
+/// fit.
 final class RewindStageFitTests: XCTestCase {
 
   /// Shapes worth fitting: taller than wide, square, 4:3, 16:10, 16:9, the stage's own measured
@@ -116,58 +115,10 @@ final class RewindStageFitTests: XCTestCase {
       "the two bands of glass are the same width")
   }
 
-  /// The same claim in the coordinate space the chrome is actually laid out in.
-  func testThePicturesEdgeIsNotTheStagesEdgeWhenTheShapesDisagree() {
-    let stageSize = CGSize(width: 1_418, height: 565)
-    let stage = RewindStageFit.stageRect(in: stageSize)
-    let picture = RewindStageFit.pictureRectInStage(image: image(ratio: 16.0 / 9.0), stage: stageSize)
-
-    XCTAssertGreaterThan(
-      picture.minX - stage.minX, RewindStageFit.horizontalInset,
-      "pinning a chevron to the stage would put it further from the frame than the stage's own inset")
-    XCTAssertTrue(stage.contains(picture), "the picture still lives inside the stage")
-  }
-
-  // MARK: - The two coordinate spaces
-
-  func testTheStageIsTheOuterRectLessItsOwnInsets() {
-    let outer = CGSize(width: 1_000, height: 600)
-    let stage = RewindStageFit.stageRect(in: outer)
-
-    XCTAssertEqual(stage.minX, RewindStageFit.horizontalInset, accuracy: 0.001)
-    XCTAssertEqual(stage.minY, RewindStageFit.verticalInset, accuracy: 0.001)
-    XCTAssertEqual(stage.width, outer.width - RewindStageFit.horizontalInset * 2, accuracy: 0.001)
-    XCTAssertEqual(stage.height, outer.height - RewindStageFit.verticalInset * 2, accuracy: 0.001)
-  }
-
-  func testTheStageNeverInvertsOnAWindowSmallerThanItsOwnInsets() {
-    let stage = RewindStageFit.stageRect(in: CGSize(width: 4, height: 4))
-
-    XCTAssertGreaterThanOrEqual(stage.width, 0)
-    XCTAssertGreaterThanOrEqual(stage.height, 0)
-  }
-
-  /// `pictureRectInStage` is the composition of the two, and a caller cannot apply one and forget
-  /// the other.
-  func testThePictureInTheStageIsThePictureOffsetByTheInsets() {
-    let outer = CGSize(width: 1_418, height: 565)
-    for ratio in Self.ratios {
-      let stage = RewindStageFit.stageRect(in: outer)
-      let inner = RewindStageFit.pictureRect(image: image(ratio: ratio), in: stage.size)
-      let composed = RewindStageFit.pictureRectInStage(image: image(ratio: ratio), stage: outer)
-
-      XCTAssertEqual(composed.minX, inner.minX + stage.minX, accuracy: 0.001)
-      XCTAssertEqual(composed.minY, inner.minY + stage.minY, accuracy: 0.001)
-      XCTAssertEqual(composed.size.width, inner.size.width, accuracy: 0.001)
-      XCTAssertEqual(composed.size.height, inner.size.height, accuracy: 0.001)
-    }
-  }
-
   // MARK: - Nothing degenerate escapes
 
   /// An empty rect at the stage's centre, not at its origin: before the first frame decodes there is
-  /// no picture, and chrome that parks in the top-left corner for a frame and then jumps is worse
-  /// than chrome that is simply not there yet.
+  /// no picture, and "nothing, in the middle" is the answer a caller can place without jumping.
   func testAnUndecodedImageIsAnEmptyRectAtTheCentre() {
     let container = CGSize(width: 800, height: 400)
     let rect = RewindStageFit.pictureRect(image: .zero, in: container)

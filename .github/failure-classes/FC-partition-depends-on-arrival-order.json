@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-partition-depends-on-arrival-order",
+  "violated_contract": "A grouping computed over an input that is already complete — clustering, deduplication, bucketing — must be a function of its members and the distance or key that defines the grouping, never of the order those members were visited. Folding each element into mutable accumulated state as it is visited makes that accumulator a function of history instead, so the same members in a different order yield a different grouping and neither result can be defended as the correct one.",
+  "canonical_prevention": "Collect the whole input first, then derive the grouping in one pass over the complete set using an algorithm whose output depends only on the members. Keep incremental matching only where input genuinely arrives over time and a partial answer must be emitted before the rest exists; where a streaming and a batch consumer both exist, the batch path recomputes from the full set rather than replaying the streaming path's accumulation.",
+  "canonical_prevention_artifact": [
+    "backend/parakeet/transcribe.py",
+    "backend/tests/unit/test_parakeet_offline_diarization.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/parakeet/transcribe.py",
+    "backend/parakeet/speaker_math.py",
+    "backend/utils/stt/speaker_clustering.py"
+  ],
+  "status": "open"
+}

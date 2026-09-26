@@ -145,8 +145,8 @@ def test_write_plan_requires_execute_and_allow_write_and_rejects_unknown_scopes(
 
 def test_docs_reference_non_claims_and_server_owned_scope_assignment():
     root = Path(__file__).resolve().parents[2].parent
-    readiness_doc = root / "docs" / "epics" / "memory_mcp_app_key_scope_readiness.md"
-    evidence_markers_doc = root / "docs" / "operational" / "memory_readiness_evidence_markers.md"
+    readiness_doc = root / "backend" / "docs" / "epics" / "memory_mcp_app_key_scope_readiness.md"
+    evidence_markers_doc = root / "backend" / "docs" / "operational" / "memory_readiness_evidence_markers.md"
     readiness = readiness_doc.read_text()
     evidence_markers = evidence_markers_doc.read_text()
 

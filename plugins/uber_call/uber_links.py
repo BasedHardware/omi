@@ -39,7 +39,26 @@ def _clean_text(value: str | None) -> str | None:
 def _normalize_float(value: float | int | str | None) -> float | None:
     if value in (None, ""):
         return None
-    return float(value)
+    try:
+        return float(value)
+    except TypeError as exc:
+        # The Omi backend forwards ``geolocation`` as free-form JSON, so a
+        # coordinate can arrive as a list or object. float() raises TypeError
+        # for those, which is not part of this module's contract and would
+        # escape the caller's ValueError handling.
+        raise ValueError(
+            "Coordinates must be a number or a numeric string, got "
+            f"{type(value).__name__}."
+        ) from exc
+
+
+def _valid_lat_lng(lat: float | None, lng: float | None) -> bool:
+    # Validate each supplied coordinate independently.
+    if lat is not None and not (-90.0 <= lat <= 90.0):
+        return False
+    if lng is not None and not (-180.0 <= lng <= 180.0):
+        return False
+    return True
 
 
 def build_location(
@@ -51,6 +70,11 @@ def build_location(
 ) -> UberLocation:
     lat = _normalize_float(latitude)
     lng = _normalize_float(longitude)
+    if not _valid_lat_lng(lat, lng):
+        raise ValueError(
+            f"Invalid coordinates: latitude={lat}, longitude={lng}. "
+            "Latitude must be in [-90, 90] and longitude in [-180, 180]."
+        )
     return UberLocation(
         latitude=lat,
         longitude=lng,

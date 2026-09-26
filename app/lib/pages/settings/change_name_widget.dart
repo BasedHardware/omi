@@ -4,9 +4,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth_service.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
+/// The "Edit Name" dialog, shown with `showDialog(builder: (_) => const ChangeNameWidget())`.
 class ChangeNameWidget extends StatefulWidget {
   const ChangeNameWidget({super.key});
 
@@ -25,112 +26,73 @@ class _ChangeNameWidgetState extends State<ChangeNameWidget> {
     nameController = TextEditingController(
       text: SharedPreferencesUtil().givenName.isNotEmpty ? SharedPreferencesUtil().givenName : user?.displayName ?? '',
     );
+    nameController.addListener(_onNameChanged);
     super.initState();
   }
 
   @override
   void dispose() {
+    nameController.removeListener(_onNameChanged);
     nameController.dispose();
     super.dispose();
   }
 
+  void _onNameChanged() => setState(() {});
+
+  bool get _canSave => !isSaving && nameController.text.trim().isNotEmpty;
+
+  void _save() {
+    final name = nameController.text.trim();
+    if (name.isEmpty) return;
+    setState(() => isSaving = true);
+    SharedPreferencesUtil().givenName = name;
+    AuthService.instance.updateGivenName(name);
+    OmiFeedback.confirm(context, context.l10n.nameUpdatedSuccessfully);
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: const Color(0xFF1C1C1E),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              context.l10n.editName,
-              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+    return OmiAlertDialog(
+      title: context.l10n.editName,
+      message: context.l10n.howShouldOmiCallYou,
+      // The Cupertino dialog has no Material ancestor; the text field needs one.
+      content: Material(
+        type: MaterialType.transparency,
+        child: TextField(
+          controller: nameController,
+          autofocus: true,
+          enabled: !isSaving,
+          textCapitalization: TextCapitalization.words,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) {
+            if (_canSave) _save();
+          },
+          style: OmiType.body,
+          decoration: InputDecoration(
+            hintText: context.l10n.enterYourName,
+            hintStyle: OmiType.body.copyWith(color: OmiColors.textTertiary),
+            filled: true,
+            fillColor: OmiColors.surface2,
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.sm),
+            border: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
+            enabledBorder: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
+            focusedBorder: const OutlineInputBorder(
+              borderRadius: OmiRadius.smAll,
+              borderSide: BorderSide(color: OmiColors.textTertiary),
             ),
-            const SizedBox(height: 8),
-            Text(context.l10n.howShouldOmiCallYou, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
-            const SizedBox(height: 20),
-            Container(
-              decoration: BoxDecoration(color: const Color(0xFF2C2C2E), borderRadius: BorderRadius.circular(10)),
-              child: TextField(
-                controller: nameController,
-                autofocus: true,
-                style: const TextStyle(color: Colors.white, fontSize: 16),
-                decoration: InputDecoration(
-                  hintText: context.l10n.enterYourName,
-                  hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 16),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Colors.white24, width: 1),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => Navigator.of(context).pop(),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2A2A2E),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Center(
-                        child: Text(
-                          context.l10n.cancel,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: isSaving
-                        ? null
-                        : () {
-                            if (nameController.text.isEmpty || nameController.text.trim().isEmpty) {
-                              AppSnackbar.showSnackbarError(context.l10n.nameCannotBeEmpty);
-                              return;
-                            }
-                            setState(() => isSaving = true);
-                            SharedPreferencesUtil().givenName = nameController.text.trim();
-                            AuthService.instance.updateGivenName(nameController.text.trim());
-                            AppSnackbar.showSnackbar(context.l10n.nameUpdatedSuccessfully);
-                            Navigator.of(context).pop();
-                          },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
-                      child: Center(
-                        child: isSaving
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
-                              )
-                            : Text(
-                                context.l10n.save,
-                                style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
-                              ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+          ),
         ),
       ),
+      actions: [
+        OmiDialogAction(label: context.l10n.cancel, onPressed: () => Navigator.of(context).pop()),
+        OmiDialogAction(
+          label: isSaving ? context.l10n.saving : context.l10n.save,
+          isDefault: true,
+          onPressed: _canSave ? _save : null,
+        ),
+      ],
     );
   }
 }

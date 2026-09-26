@@ -56,7 +56,7 @@ export function registerJitAssistant(): void {
   )
   setWindowsJitAgentTurnExecutor(createWindowsJitAgentTurnExecutor())
   setWindowsJitNanoTriageExecutor(createWindowsJitNanoTriageExecutor())
-  setJitLegacyAmbientGate(() => runtime?.isAuthoritativeEnabled() === true)
+  setJitLegacyAmbientGate(() => runtime?.shouldSuppressLegacyInsight() === true)
   registerAssistant(new WindowsJitAssistant(runtime))
   // Keyframe pins outlive renderer/session processes. Retry file/reference
   // cleanup independently on launch and on a bounded interval.
