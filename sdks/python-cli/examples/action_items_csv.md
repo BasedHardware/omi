@@ -2,10 +2,9 @@
 
 Use this recipe to review action items and tasks in a spreadsheet. It reads a
 saved JSON export, makes no network requests, and stays completely dependency-free
-using Python's standard `csv` module. It complements
-[`action_items_xlsx.md`](action_items_xlsx.md) when you want a simple, portable
-text export without installing extra packages. You need Python 3.10+ and an
-authenticated `omi-cli` for the initial export.
+using Python's standard `csv` module. It provides a simple, portable text export
+without installing extra packages. You need Python 3.10+ and an authenticated
+`omi-cli` for the initial export.
 
 Export up to 200 action items:
 
@@ -45,7 +44,7 @@ def spreadsheet_text(value):
     clean = " ".join(value.split())
     # Avoid treating common formula prefixes as formulas on spreadsheet import.
     # The apostrophe is intentional and prevents formula execution in Excel/Sheets.
-    if clean.lstrip().startswith(("=", "+", "-", "@")) or clean.startswith(("\t", "\r", "\n")):
+    if clean.startswith(("=", "+", "-", "@")):
         return "'" + clean
     return clean
 
