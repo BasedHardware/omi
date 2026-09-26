@@ -15,7 +15,7 @@ from urllib.parse import urlencode
 
 import requests
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Query, HTTPException
+from fastapi import Depends, FastAPI, Request, Query, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 
 from db import (
@@ -30,6 +30,7 @@ from db import (
     get_user_setting,
 )
 from models import ChatToolResponse
+from whoop_tools_auth import disconnect_sig, require_whoop_tools_auth, verify_disconnect_sig
 
 load_dotenv()
 
@@ -611,7 +612,7 @@ async def get_omi_tools_manifest():
 # ============================================
 
 @app.post("/tools/get_recovery", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_recovery(request: Request):
+async def tool_get_recovery(request: Request, _auth: None = Depends(require_whoop_tools_auth)):
     """Get recovery score and metrics."""
     try:
         body = await request.json()
@@ -665,7 +666,7 @@ async def tool_get_recovery(request: Request):
 
 
 @app.post("/tools/get_strain", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_strain(request: Request):
+async def tool_get_strain(request: Request, _auth: None = Depends(require_whoop_tools_auth)):
     """Get daily strain score."""
     try:
         body = await request.json()
@@ -715,7 +716,7 @@ async def tool_get_strain(request: Request):
 
 
 @app.post("/tools/get_sleep", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_sleep(request: Request):
+async def tool_get_sleep(request: Request, _auth: None = Depends(require_whoop_tools_auth)):
     """Get sleep data."""
     try:
         body = await request.json()
@@ -765,7 +766,7 @@ async def tool_get_sleep(request: Request):
 
 
 @app.post("/tools/get_workouts", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_workouts(request: Request):
+async def tool_get_workouts(request: Request, _auth: None = Depends(require_whoop_tools_auth)):
     """Get recent workouts."""
     try:
         body = await request.json()
@@ -827,7 +828,7 @@ async def tool_get_workouts(request: Request):
 
 
 @app.post("/tools/get_weekly_summary", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_weekly_summary(request: Request):
+async def tool_get_weekly_summary(request: Request, _auth: None = Depends(require_whoop_tools_auth)):
     """Get weekly summary of recovery, strain, and sleep."""
     try:
         body = await request.json()
@@ -942,7 +943,7 @@ async def tool_get_weekly_summary(request: Request):
 
 
 @app.post("/tools/get_body_measurements", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_body_measurements(request: Request):
+async def tool_get_body_measurements(request: Request, _auth: None = Depends(require_whoop_tools_auth)):
     """Get body measurements."""
     try:
         body = await request.json()
@@ -991,7 +992,7 @@ async def tool_get_body_measurements(request: Request):
 
 
 @app.post("/tools/get_profile", tags=["chat_tools"], response_model=ChatToolResponse)
-async def tool_get_profile(request: Request):
+async def tool_get_profile(request: Request, _auth: None = Depends(require_whoop_tools_auth)):
     """Get Whoop profile."""
     try:
         body = await request.json()
@@ -1115,7 +1116,7 @@ async def root(uid: str = Query(None)):
                     <div class="example">"Show my recent workouts"</div>
                 </div>
 
-                <a href="/disconnect?uid={uid}" class="btn btn-secondary btn-block">
+                <a href="/disconnect?uid={uid}&sig={disconnect_sig(uid)}" class="btn btn-secondary btn-block">
                     Disconnect Whoop
                 </a>
 
@@ -1286,8 +1287,9 @@ async def check_setup(uid: str = Query(...)):
 
 
 @app.get("/disconnect")
-async def disconnect(uid: str = Query(...)):
+async def disconnect(uid: str = Query(...), sig: str = Query("")):
     """Disconnect Whoop."""
+    verify_disconnect_sig(uid, sig)
     delete_whoop_tokens(uid)
     return RedirectResponse(url=f"/?uid={uid}")
 
