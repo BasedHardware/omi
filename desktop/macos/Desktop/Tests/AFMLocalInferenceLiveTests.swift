@@ -35,9 +35,8 @@ final class AFMLocalInferenceLiveTests: XCTestCase {
   func testLiveConversationChunkSummarizerProducesStoredProjection() async throws {
     try skipUnlessLiveRequested()
     try XCTSkipUnless(isLiveAFMAvailable(), "Apple Foundation Models is not available on this Mac")
-    let runtime = LocalInferenceRuntime.makeDefault(
-      killSwitches: LocalInferenceKillSwitches(isDisabled: false, forcedEngineRaw: "afm")
-    )
+    let runtime = LocalInferenceRuntime.makeDefault(killSwitches: .enabled)
+    XCTAssertEqual(runtime.defaultEngineID, .afm, "a Mac that can run AFM must select it without a force overlay")
     let window = try XCTUnwrap(runtime.selectedContextWindowTokens())
     #if canImport(FoundationModels)
       guard #available(macOS 26.0, *) else {

@@ -289,3 +289,6 @@ pnpm-workspace.yaml
 # (files self-describe as "Generated file. Do not edit."); tracking them made
 # every worktree dirty and failed diff-hygiene on the regenerated whitespace.
 **/ios/Flutter/ephemeral/
+
++# amp orb portal links (generated); .amp/services.yaml stays tracked
++.amp/portals/

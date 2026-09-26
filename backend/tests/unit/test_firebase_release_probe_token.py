@@ -326,6 +326,67 @@ def test_remote_signing_permission_denial_has_bounded_classification(monkeypatch
         raise AssertionError('expected permission denial')
 
 
+def test_remote_signing_permission_denial_names_the_exact_iam_grant_on_stderr(monkeypatch, tmp_path, capsys):
+    """Every development Pusher run from the named-signer cutover (2026-09-13)
+    to the secret re-rotation (2026-09-20) failed at
+    custom_token_signing/permission_denied -- the TokenCreator grant existed
+    all along, but the GCP_CREDENTIALS key had been rotated to another service
+    account. The remediation goes to stderr so the stdout JSON report stays
+    machine-parsable; it must name the resolved caller identity, present a
+    rotated credential as a cause equal to a missing grant, and never echo the
+    upstream body or the access token."""
+    module = _load_module()
+    upstream_body = io.BytesIO(b'credential and request details that must not be read or printed')
+    monkeypatch.setattr(
+        module.urllib.request,
+        'urlopen',
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            urllib.error.HTTPError('https://iamcredentials.googleapis.com', 403, 'forbidden', {}, upstream_body)
+        ),
+    )
+    monkeypatch.setattr(module, '_access_secret', lambda _project: 'firebase-api-key')
+    monkeypatch.setattr(module, '_access_token', lambda: 'deploy-identity-access-token')
+    monkeypatch.setattr(
+        module,
+        '_active_service_account',
+        lambda: 'deploy-identity@based-hardware-dev.iam.gserviceaccount.com',
+    )
+    output = tmp_path / 'probe-token'
+    signer = 'firebase-adminsdk-4z2mm@based-hardware.iam.gserviceaccount.com'
+
+    exit_code = module.main(
+        [
+            '--secret-project',
+            'based-hardware-dev',
+            '--firebase-project',
+            'based-hardware',
+            '--signer-service-account',
+            signer,
+            '--token-output',
+            str(output),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert json.loads(captured.out) == {
+        'suite': 'omi_firebase_release_probe_token',
+        'stage': 'custom_token_signing',
+        'error_class': 'permission_denied',
+        'status': 'FAIL',
+    }
+    assert not output.exists()
+    assert '(active identity: deploy-identity@based-hardware-dev.iam.gserviceaccount.com)' in captured.err
+    assert 'rotated' in captured.err
+    assert 'roles/iam.serviceAccountTokenCreator' in captured.err
+    assert (
+        "gcloud iam service-accounts add-iam-policy-binding "
+        f"{signer} --member='serviceAccount:deploy-identity@based-hardware-dev.iam.gserviceaccount.com' "
+        "--role='roles/iam.serviceAccountTokenCreator' --project=based-hardware"
+    ) in captured.err
+    assert 'must not be read' not in captured.err
+
+
 def test_mint_probe_token_prefers_explicit_local_signer(monkeypatch, tmp_path):
     module = _load_module()
     signer = tmp_path / 'signer.json'
@@ -432,6 +493,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PROBE_ACTION = REPOSITORY_ROOT / '.github/actions/transcription-release-candidate-probe/action.yml'
 DEPLOY_BACKEND_STACK_ACTION = REPOSITORY_ROOT / '.github/actions/deploy-backend-stack/action.yml'
 GCP_BACKEND_WORKFLOW = REPOSITORY_ROOT / '.github/workflows/gcp_backend.yml'
+SYNC_LEDGER_WORKFLOW = REPOSITORY_ROOT / '.github/workflows/sync_ledger_fence_cutover.yml'
 
 
 def test_development_backend_deploy_supplies_a_firebase_project_signer():
@@ -439,14 +501,31 @@ def test_development_backend_deploy_supplies_a_firebase_project_signer():
 
     A development deploy identity cannot sign for that project, so the lane
     failed at custom_token_signing until it named its own signer. Losing this
-    wiring silently re-blocks every development backend deploy.
+    wiring silently re-blocks every development backend deploy. The signer is
+    the named no-role service account reached through IAM signJwt; the lane no
+    longer stages the GCP_SERVICE_ACCOUNT key, which was a production Owner
+    key (credential incident 2026-09-23).
     """
     workflow = GCP_BACKEND_WORKFLOW.read_text(encoding='utf-8')
-    assert 'firebase_probe_signer_credentials:' in workflow
-    assert 'secrets.GCP_SERVICE_ACCOUNT' in workflow
+    assert 'firebase_probe_signer_service_account: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}' in workflow
+    assert 'firebase_probe_signer_credentials:' not in workflow
+    assert 'secrets.GCP_SERVICE_ACCOUNT' not in workflow
 
     stack = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
-    assert 'firebase_signer_credentials: ${{ inputs.firebase_probe_signer_credentials }}' in stack
+    assert (
+        "firebase_signer_service_account: ${{ inputs.firebase_probe_signer_credentials == '' "
+        "&& inputs.firebase_probe_signer_service_account || '' }}"
+    ) in stack
+
+
+def test_sync_ledger_cutover_signs_the_development_probe_without_a_key():
+    workflow = SYNC_LEDGER_WORKFLOW.read_text(encoding='utf-8')
+    assert (
+        "firebase_signer_service_account: ${{ github.event.inputs.environment == 'prod' && '' "
+        "|| vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}"
+    ) in workflow
+    assert 'firebase_signer_credentials:' not in workflow
+    assert 'secrets.GCP_SERVICE_ACCOUNT' not in workflow
 
 
 def test_probe_action_stages_the_signer_key_as_transient_owner_only_material():

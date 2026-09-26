@@ -39,10 +39,7 @@ void main() {
     expect(payload['memory_id'], 'mem-saved-1');
     expect(payload['memory_result'], 'saved');
     expectNoTranscriptDerivedCounts(payload);
-    expect(
-      payload.values.whereType<String>().join(' '),
-      isNot(contains('UNIQUE_ANALYTICS_TRANSCRIPT_TOKEN')),
-    );
+    expect(payload.values.whereType<String>().join(' '), isNot(contains('UNIQUE_ANALYTICS_TRANSCRIPT_TOKEN')));
   });
 
   test('Memory Created discarded conversations still emit memory_result without transcript-derived counts', () async {

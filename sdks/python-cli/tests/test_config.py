@@ -578,7 +578,10 @@ def test_profile_field_invalid_expiry_type_records_load_error(
     assert config.active_profile == cfg.DEFAULT_PROFILE_NAME
     assert config.profiles == {}
     assert config.load_error is not None
-    assert f"profile 'default' field 'id_token_expires_at' must be finite numeric, got {expected_type}" in config.load_error
+    assert (
+        f"profile 'default' field 'id_token_expires_at' must be finite numeric, got {expected_type}"
+        in config.load_error
+    )
 
 
 def test_profile_field_valid_numeric_expiry_loads_normally(config_path: Path) -> None:
@@ -628,3 +631,67 @@ def test_profile_invalid_field_config_show_and_diagnostics_succeed(config_path: 
 
     result_path = cli_runner.invoke(app, ["config", "path"])
     assert result_path.exit_code == 0, result_path.output
+
+
+# -- Tests for URL scheme and token validation in `omi config set` --
+
+
+@pytest.mark.parametrize("key", ["api_base", "local_api_url"])
+@pytest.mark.parametrize(
+    "invalid_url",
+    [
+        "not-a-url",
+        "ftp://example.com",
+        "http://",
+        "https://",
+        "javascript:alert(1)",
+        "   ",
+    ],
+)
+def test_config_set_rejects_invalid_urls(config_path: Path, cli_runner, key: str, invalid_url: str) -> None:
+    result = cli_runner.invoke(app, ["config", "set", key, invalid_url])
+    assert result.exit_code != 0
+    assert "Invalid URL" in result.output
+    # The config file should remain uncorrupted
+    config = cfg.load()
+    profile = config.get_profile("default")
+    if key == "api_base":
+        assert profile.api_base == cfg.DEFAULT_API_BASE
+    else:
+        assert profile.local_api_url is None
+
+
+@pytest.mark.parametrize(
+    "key,valid_url,expected_saved",
+    [
+        ("api_base", "https://api.staging.omi.me", "https://api.staging.omi.me"),
+        ("api_base", "https://api.staging.omi.me/", "https://api.staging.omi.me"),
+        ("local_api_url", "http://localhost:8000/", "http://localhost:8000"),
+        ("local_api_url", "http://127.0.0.1:47778", "http://127.0.0.1:47778"),
+    ],
+)
+def test_config_set_accepts_valid_urls_and_normalizes_trailing_slash(
+    config_path: Path, cli_runner, key: str, valid_url: str, expected_saved: str
+) -> None:
+    result = cli_runner.invoke(app, ["--json", "config", "set", key, valid_url])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["ok"] is True
+    assert payload["key"] == key
+    assert payload["value"] == expected_saved
+
+    config = cfg.load()
+    profile = config.get_profile("default")
+    if key == "api_base":
+        assert profile.api_base == expected_saved
+    else:
+        assert profile.local_api_url == expected_saved
+
+
+@pytest.mark.parametrize("empty_token", ["", "   "])
+def test_config_set_rejects_empty_or_whitespace_local_token(config_path: Path, cli_runner, empty_token: str) -> None:
+    result = cli_runner.invoke(app, ["config", "set", "local_token", empty_token])
+    assert result.exit_code != 0
+    assert "Invalid value for 'local_token'" in result.output
+    config = cfg.load()
+    assert config.get_profile("default").local_token is None

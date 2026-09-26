@@ -5067,7 +5067,7 @@
           "root_selector": "users",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -5186,7 +5186,7 @@
           "root_selector": "revenue",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -5305,7 +5305,7 @@
           "root_selector": "cost",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -5424,7 +5424,7 @@
           "root_selector": "costPerUser",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -5543,7 +5543,7 @@
           "root_selector": "conversion",
           "source": "url",
           "type": "json",
-          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&desktop_cost=1.2&mobile_cost=0.3&_tzdates=date",
+          "url": "http://127.0.0.1:8899/api/omi/stats/profitability?days=30&_tzdates=date",
           "url_options": {
             "data": "",
             "method": "GET"
@@ -6895,6 +6895,732 @@
           ]
         }
       ]
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "N/A",
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "wrapText": true,
+            "wrapHeaderText": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 300
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 140,
+        "w": 24,
+        "h": 6
+      },
+      "id": 1003,
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "status",
+              "text": "Status",
+              "type": "string"
+            },
+            {
+              "selector": "window",
+              "text": "Cost window",
+              "type": "string"
+            },
+            {
+              "selector": "revenueAsOf",
+              "text": "Revenue snapshot",
+              "type": "string"
+            },
+            {
+              "selector": "basis",
+              "text": "Method and exclusions",
+              "type": "string"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "format": "table",
+          "parser": "backend",
+          "refId": "A",
+          "root_selector": "status",
+          "source": "url",
+          "type": "json",
+          "url": "http://127.0.0.1:8899/api/omi/stats/plan-economics",
+          "url_options": {
+            "data": "",
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "Plan economics \u2014 data coverage",
+      "type": "table",
+      "description": "Cost and revenue snapshot freshness. Latest cost must be D\u22122 or D\u22123, with seven consecutive reconciled days. Monetary values become N/A when data is stale. Seven settled usage days normalized to a 30-day cost run rate. See the data coverage panel for dates and limitations. Costs include shared allocation and fixed commitments; STT is estimated, SaaS and one-time charges excluded. Unlimited and Neo are combined by the existing cost feed. N/A means unavailable, stale, or no denominator.",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "Status": 0,
+              "Cost window": 1,
+              "Revenue snapshot": 2,
+              "Method and exclusions": 3
+            }
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "N/A",
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "wrapText": true,
+            "wrapHeaderText": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Plan"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 220
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MRR snapshot"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Allocated / 30d"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Est. STT / 30d"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Est. total / 30d"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Est. margin"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 0
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "High-STT margin"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 0
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 146,
+        "w": 24,
+        "h": 11
+      },
+      "id": 1004,
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "planName",
+              "text": "Plan",
+              "type": "string"
+            },
+            {
+              "selector": "mrr",
+              "text": "MRR snapshot",
+              "type": "number"
+            },
+            {
+              "selector": "allocatedMonthly",
+              "text": "Allocated / 30d",
+              "type": "number"
+            },
+            {
+              "selector": "estimatedSttMonthly",
+              "text": "Est. STT / 30d",
+              "type": "number"
+            },
+            {
+              "selector": "estimatedCostMonthly",
+              "text": "Est. total / 30d",
+              "type": "number"
+            },
+            {
+              "selector": "estimatedMarginPct",
+              "text": "Est. margin",
+              "type": "number"
+            },
+            {
+              "selector": "highSttMarginPct",
+              "text": "High-STT margin",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "format": "table",
+          "parser": "backend",
+          "refId": "A",
+          "root_selector": "rows",
+          "source": "url",
+          "type": "json",
+          "url": "http://127.0.0.1:8899/api/omi/stats/plan-economics",
+          "url_options": {
+            "data": "",
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "Cost and margin by plan \u2014 30-day run rate",
+      "type": "table",
+      "description": "Seven settled usage days normalized to a 30-day cost run rate. See the data coverage panel for dates and limitations. Costs include shared allocation and fixed commitments; STT is estimated, SaaS and one-time charges excluded. Unlimited and Neo are combined by the existing cost feed. N/A means unavailable, stale, or no denominator.",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "Plan": 0,
+              "MRR snapshot": 1,
+              "Allocated / 30d": 2,
+              "Est. STT / 30d": 3,
+              "Est. total / 30d": 4,
+              "Est. margin": 5,
+              "High-STT margin": 6
+            }
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "N/A",
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "wrapText": true,
+            "wrapHeaderText": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Plan"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 220
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Paying subs"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Revenue/sub/mo"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Est. cost/sub/30d"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Contribution/sub/30d"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "thresholds"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "green",
+                      "value": 0
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cost-active/day"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Est. cost/active-day"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "currencyUSD"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 157,
+        "w": 24,
+        "h": 11
+      },
+      "id": 1005,
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "planName",
+              "text": "Plan",
+              "type": "string"
+            },
+            {
+              "selector": "activeUsersPerDay",
+              "text": "Cost-active/day",
+              "type": "number"
+            },
+            {
+              "selector": "costPerActiveDay",
+              "text": "Est. cost/active-day",
+              "type": "number"
+            },
+            {
+              "selector": "subscribers",
+              "text": "Paying subs",
+              "type": "number"
+            },
+            {
+              "selector": "revenuePerSubscriber",
+              "text": "Revenue/sub/mo",
+              "type": "number"
+            },
+            {
+              "selector": "costPerSubscriber",
+              "text": "Est. cost/sub/30d",
+              "type": "number"
+            },
+            {
+              "selector": "contributionPerSubscriber",
+              "text": "Contribution/sub/30d",
+              "type": "number"
+            },
+            {
+              "selector": "unitBasis",
+              "text": "Subscriber basis",
+              "type": "string"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "format": "table",
+          "parser": "backend",
+          "refId": "A",
+          "root_selector": "rows",
+          "source": "url",
+          "type": "json",
+          "url": "http://127.0.0.1:8899/api/omi/stats/plan-economics",
+          "url_options": {
+            "data": "",
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "Per-user economics by plan",
+      "type": "table",
+      "description": "Seven settled usage days normalized to a 30-day cost run rate. See the data coverage panel for dates and limitations. Costs include shared allocation and fixed commitments; STT is estimated, SaaS and one-time charges excluded. Unlimited and Neo are combined by the existing cost feed. N/A means unavailable, stale, or no denominator. Free has costs but no paid subscriber denominator. Unmapped plans retain active-user costs; subscriber economics require a matching revenue snapshot.",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "indexByName": {
+              "Plan": 0,
+              "Cost-active/day": 1,
+              "Est. cost/active-day": 2,
+              "Paying subs": 3,
+              "Revenue/sub/mo": 4,
+              "Est. cost/sub/30d": 5,
+              "Contribution/sub/30d": 6,
+              "Subscriber basis": 7
+            }
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "description": "Allocated billed cost (including fixed Vertex PT) plus the low estimated vendor STT, per plan, as a 30-day run rate from the settled finops feed. Mirrors the MRR-by-product donut; methodology in the coverage and margin tables below.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "noValue": "N/A",
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 12,
+        "x": 0,
+        "y": 168
+      },
+      "id": 1006,
+      "options": {
+        "displayLabels": [
+          "name",
+          "percent"
+        ],
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value"
+          ]
+        },
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "planName",
+              "text": "Plan",
+              "type": "string"
+            },
+            {
+              "selector": "estimatedCostMonthly",
+              "text": "Est. monthly cost",
+              "type": "number"
+            }
+          ],
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "format": "table",
+          "parser": "backend",
+          "refId": "A",
+          "root_selector": "rows",
+          "source": "url",
+          "type": "json",
+          "url": "http://127.0.0.1:8899/api/omi/stats/plan-economics",
+          "url_options": {
+            "data": "",
+            "method": "GET"
+          }
+        }
+      ],
+      "title": "Cost by plan \u2014 30-day run rate",
+      "type": "piechart"
     }
   ],
   "refresh": "1h",
@@ -7521,7 +8247,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=users&fields=desktop%2Cmobile&agg=sum&window=15&label=vs+prev+15d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30&root=users&fields=desktop%2Cmobile&agg=sum&window=15&label=vs+prev+15d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -7558,7 +8284,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=revenue&fields=desktop%2Cmobile&agg=sum&window=15&label=vs+prev+15d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30&root=revenue&fields=desktop%2Cmobile&agg=sum&window=15&label=vs+prev+15d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -7595,7 +8321,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=cost&fields=desktop%2Cmobile&agg=sum&window=15&label=vs+prev+15d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30&root=cost&fields=desktop%2Cmobile&agg=sum&window=15&label=vs+prev+15d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -7632,7 +8358,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=costPerUser&fields=desktop%2Cmobile&agg=avg&window=15&label=vs+prev+15d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30&root=costPerUser&fields=desktop%2Cmobile&agg=avg&window=15&label=vs+prev+15d",
             "url_options": {
               "data": "",
               "method": "GET"
@@ -7669,7 +8395,7 @@
             "root_selector": "",
             "source": "url",
             "type": "json",
-            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30%26desktop_cost%3D1.2%26mobile_cost%3D0.3&root=conversion&fields=desktop%2Cmobile&agg=avg&window=15&label=vs+prev+15d",
+            "url": "http://127.0.0.1:8899/compare?path=%2Fapi%2Fomi%2Fstats%2Fprofitability%3Fdays%3D30&root=conversion&fields=desktop%2Cmobile&agg=avg&window=15&label=vs+prev+15d",
             "url_options": {
               "data": "",
               "method": "GET"

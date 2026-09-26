@@ -8,7 +8,11 @@
     "backend/tests/unit/test_canonical_maintenance_ordering.py",
     "contracts/parity/conversation_summary.json",
     "backend/tests/unit/test_conversation_summary_mutation.py",
-    "desktop/macos/Desktop/Tests/ConversationSummaryCompositionTests.swift"
+    "desktop/macos/Desktop/Tests/ConversationSummaryCompositionTests.swift",
+    "app/test/fixtures/capture_policy.json",
+    "app/test/unit/capture_mute_admission_test.dart",
+    "backend/tests/unit/test_manual_speaker_assignments.py",
+    "app/test/unit/transcript_speaker_identity_test.dart"
   ],
   "evidence_prs": [
     9365,

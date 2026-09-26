@@ -1436,12 +1436,27 @@ class TestSpeechThreshold:
         with patch('utils.stt.vad_gate.VAD_GATE_SPEECH_THRESHOLD', 0.3):
             gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active')
             assert gate._speech_threshold == 0.3
+            assert gate._continue_threshold == 0.3
 
     def test_threshold_from_env_high(self):
         """High threshold should require stronger speech signal."""
         with patch('utils.stt.vad_gate.VAD_GATE_SPEECH_THRESHOLD', 0.8):
             gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active')
             assert gate._speech_threshold == 0.8
+            assert gate._continue_threshold == 0.8
+
+    def test_constructor_threshold_overrides_module_default(self):
+        gate = VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode='active',
+            speech_threshold=0.5,
+            continue_threshold=0.35,
+            hangover_ms=300,
+        )
+        assert gate._speech_threshold == 0.5
+        assert gate._continue_threshold == 0.35
+        assert gate._hangover_ms == 300
 
     def test_threshold_boundary_exact(self):
         """Probability exactly equal to threshold should NOT trigger speech (strict >)."""
@@ -1466,6 +1481,92 @@ class TestSpeechThreshold:
         out = gate.process_audio(_make_pcm(40), t)
         assert gate._state == GateState.SPEECH
         assert len(out.audio_to_send) > 0
+
+
+class TestHysteresis:
+    """Start vs continue thresholds: quiet far-field must continue once started."""
+
+    def _windowed_gate(self):
+        return VADStreamingGate(
+            sample_rate=16000,
+            channels=1,
+            mode='active',
+            speech_threshold=0.5,
+            continue_threshold=0.35,
+            hangover_ms=300,
+        )
+
+    def test_default_gate_has_no_hysteresis(self):
+        gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active')
+        assert gate._speech_threshold == 0.65
+        assert gate._continue_threshold == 0.65
+        assert gate._hangover_ms == 4000
+
+    def test_continue_threshold_cannot_exceed_start(self):
+        gate = VADStreamingGate(
+            sample_rate=16000, channels=1, mode='active', speech_threshold=0.5, continue_threshold=0.8
+        )
+        assert gate._continue_threshold == 0.5
+
+    def test_quiet_frame_does_not_start_speech(self):
+        gate = self._windowed_gate()
+        _set_vad_prob(0.40)
+        out = gate.process_audio(_make_pcm(40), 1000.0)
+        assert gate._state == GateState.SILENCE
+        assert out.audio_to_send == b''
+        assert out.is_speech is False
+
+    def test_once_started_quiet_frame_continues(self):
+        gate = self._windowed_gate()
+        _set_vad_prob(0.51)
+        out = gate.process_audio(_make_pcm(40), 1000.0)
+        assert gate._state == GateState.SPEECH
+        assert len(out.audio_to_send) > 0
+        _set_vad_prob(0.40)
+        out = gate.process_audio(_make_pcm(40), 1000.04)
+        assert out.is_speech is True
+        assert gate._state == GateState.SPEECH
+        assert len(out.audio_to_send) > 0
+
+    def test_hangover_resumes_on_continue_threshold(self):
+        gate = self._windowed_gate()
+        _set_vad_prob(0.90)
+        gate.process_audio(_make_pcm(40), 1000.0)
+        _set_vad_prob(0.10)
+        out = gate.process_audio(_make_pcm(40), 1000.04)
+        assert out.state == GateState.HANGOVER
+        _set_vad_prob(0.40)
+        out = gate.process_audio(_make_pcm(40), 1000.08)
+        assert out.state == GateState.SPEECH
+        assert out.is_speech is True
+        assert len(out.audio_to_send) > 0
+
+    def test_below_continue_in_silence_never_admits(self):
+        gate = self._windowed_gate()
+        _set_vad_prob(0.34)
+        sent = 0
+        t = 1000.0
+        for i in range(50):
+            out = gate.process_audio(_make_pcm(40), t + i * 0.04)
+            sent += len(out.audio_to_send)
+        assert sent == 0
+        assert gate._state == GateState.SILENCE
+
+    def test_score_pcm_drives_vad_original_is_forwarded(self):
+        gate = self._windowed_gate()
+        seen: list[bytes] = []
+
+        def _capture(data: bytes) -> bool:
+            seen.append(data)
+            return True
+
+        gate._run_vad = _capture  # type: ignore[method-assign]
+        original = _make_pcm_with_amplitude(40, 0.05)
+        score = _make_pcm_with_amplitude(40, 0.4)
+        assert original != score
+        out = gate.process_audio(original, 1000.0, score)
+        assert seen == [score]
+        assert original in out.audio_to_send
 
 
 class TestTimeBasedPreRoll:

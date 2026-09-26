@@ -399,6 +399,7 @@ class StorageSyncImpl implements StorageSync {
     int fileIndex = 0,
     int totalFiles = 1,
   }) async {
+    final admittedGeneration = _localSync?.sessionGeneration ?? -1;
     Logger.debug(
       'StorageSync._syncSingleFile: fileNum=${wal.fileNum} size=${wal.storageTotalBytes} offset=${wal.storageOffset}',
     );
@@ -596,14 +597,14 @@ class StorageSyncImpl implements StorageSync {
       var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
       bytesLeft += chunkSize;
       var file = await _flushToDisk(wal, chunk, timerStart);
-      await _registerWithLocalSync(wal, file, timerStart, chunk.length);
+      await _registerWithLocalSync(wal, file, timerStart, chunk.length, admittedGeneration);
       timerStart += chunk.length ~/ wal.codec.getFramesPerSecond();
     }
 
     if (bytesLeft < bytesData.length) {
       var chunk = bytesData.sublist(bytesLeft);
       var file = await _flushToDisk(wal, chunk, timerStart);
-      await _registerWithLocalSync(wal, file, timerStart, chunk.length);
+      await _registerWithLocalSync(wal, file, timerStart, chunk.length, admittedGeneration);
     }
 
     Logger.debug(
@@ -639,7 +640,8 @@ class StorageSyncImpl implements StorageSync {
   }
 
   /// Register a downloaded chunk with LocalWalSync so it gets uploaded to backend.
-  Future<void> _registerWithLocalSync(Wal wal, File file, int timerStart, int frameCount) async {
+  Future<void> _registerWithLocalSync(
+      Wal wal, File file, int timerStart, int frameCount, int admittedGeneration) async {
     if (_localSync == null) {
       Logger.debug("StorageSync: WARNING - Cannot register file, LocalWalSync not available");
       return;
@@ -664,7 +666,7 @@ class StorageSyncImpl implements StorageSync {
       originalStorage: WalStorage.sdcard,
     );
 
-    await _localSync!.addExternalWal(localWal);
+    await _localSync!.addExternalWal(localWal, admittedGeneration: admittedGeneration);
     Logger.debug('StorageSync: Registered chunk (ts=$timerStart, ${seconds}s, $frameCount frames) with LocalWalSync');
   }
 }

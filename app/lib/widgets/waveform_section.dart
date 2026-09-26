@@ -8,6 +8,7 @@ import 'package:omi/models/playback_state.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/waveform_painter.dart';
+import 'package:omi/ui/ui.dart';
 
 class WaveformSection extends StatefulWidget {
   final int seconds;
@@ -90,9 +91,9 @@ class _WaveformSectionState extends State<WaveformSection> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const CircularProgressIndicator(color: Colors.white70, strokeWidth: 2),
+            const OmiSpinner(color: OmiColors.textSecondary),
             const SizedBox(height: 12),
-            Text(context.l10n.loadingYourRecording, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            Text(context.l10n.loadingYourRecording, style: OmiType.caption.copyWith(color: OmiColors.textSecondary)),
           ],
         ),
       );

@@ -219,8 +219,9 @@ async def oauth_token(
                     db_executor, safe_request_target, app.external_integration.setup_completed_url
                 )
                 client = get_auth_client()
+                separator = '&' if '?' in pinned_url else '?'
                 res = await client.get(
-                    pinned_url + f'?uid={uid}',
+                    f'{pinned_url}{separator}uid={uid}',
                     headers=pin_kwargs['headers'],
                     extensions=pin_kwargs['extensions'],
                     follow_redirects=False,
@@ -255,9 +256,10 @@ async def oauth_token(
             )
 
         try:
-            await run_blocking(db_executor, enable_app, uid, app_id)
+            newly_enabled = await run_blocking(db_executor, enable_app, uid, app_id)
             if (
-                (app.private is None or not app.private)
+                newly_enabled
+                and (app.private is None or not app.private)
                 and (app.uid is None or app.uid != uid)
                 and not await run_blocking(db_executor, is_tester, uid)
             ):

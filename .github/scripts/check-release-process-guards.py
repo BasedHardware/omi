@@ -1056,6 +1056,8 @@ def check_mobile_codemagic_release_triggers() -> list[str]:
             runs = [step.get("run", "") for step in steps if isinstance(step, dict)] if isinstance(steps, list) else []
             if not any("python3 .github/scripts/dispatch_mobile_internal_builds.py" in run for run in runs):
                 errors.append("mobile internal build dispatcher must invoke dispatch_mobile_internal_builds.py")
+            if not any("set -euo pipefail" in run for run in runs):
+                errors.append("mobile internal build dispatcher must enable pipefail")
 
         if not dispatcher_script.exists():
             errors.append("mobile internal build dispatcher script is missing")

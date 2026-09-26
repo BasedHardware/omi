@@ -5,97 +5,52 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/folder.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
+/// The folder picker inside the Move to Folder sheet. Pops the chosen folder id.
+///
+/// With [conversationId] it also moves that conversation (fire and forget, as before); without
+/// one it only picks, and the caller moves (the selection bar's bulk move).
 class MoveToFolderSheet extends StatelessWidget {
-  final String conversationId;
+  final String? conversationId;
   final String? currentFolderId;
 
-  const MoveToFolderSheet({super.key, required this.conversationId, this.currentFolderId});
+  const MoveToFolderSheet({super.key, this.conversationId, this.currentFolderId});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Consumer<FolderProvider>(
-        builder: (context, provider, child) {
-          if (provider.isLoading) {
-            return const SizedBox(
-              height: 200,
-              child: Center(
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(ResponsiveHelper.purplePrimary),
-                ),
-              ),
-            );
-          }
-
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      context.l10n.moveToFolder,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: ResponsiveHelper.textPrimary,
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: const Icon(Icons.close, color: ResponsiveHelper.textTertiary, size: 24),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Folder list
-              if (provider.folders.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Center(
-                    child: Text(
-                      context.l10n.noFoldersAvailable,
-                      style: const TextStyle(color: ResponsiveHelper.textTertiary),
-                    ),
-                  ),
-                )
-              else
-                ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.5),
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.only(bottom: 20),
-                    itemCount: provider.folders.length,
-                    itemBuilder: (context, index) {
-                      final folder = provider.folders[index];
-                      final isCurrentFolder = folder.id == currentFolderId;
-
-                      return _FolderListItem(
-                        folder: folder,
-                        isCurrentFolder: isCurrentFolder,
-                        onTap: isCurrentFolder ? null : () => _moveToFolder(context, provider, folder.id),
-                      );
-                    },
-                  ),
-                ),
-            ],
+    return Consumer<FolderProvider>(
+      builder: (context, provider, child) {
+        if (provider.isLoading) {
+          return const SizedBox(height: 200, child: OmiLoadingState());
+        }
+        if (provider.folders.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: OmiSpacing.lg),
+            child: OmiEmptyState(icon: Icons.folder_outlined, title: context.l10n.noFoldersAvailable),
           );
-        },
-      ),
+        }
+        return ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.5),
+          child: ListView.builder(
+            shrinkWrap: true,
+            padding: const EdgeInsets.only(top: OmiSpacing.xxs, bottom: OmiSpacing.md),
+            itemCount: provider.folders.length,
+            itemBuilder: (context, index) {
+              final folder = provider.folders[index];
+              final isCurrentFolder = folder.id == currentFolderId;
+              return _FolderListItem(
+                folder: folder,
+                isCurrentFolder: isCurrentFolder,
+                onTap: isCurrentFolder ? null : () => _moveToFolder(context, provider, folder.id),
+              );
+            },
+          ),
+        );
+      },
     );
   }
 
@@ -104,7 +59,8 @@ class MoveToFolderSheet extends StatelessWidget {
     // Close sheet immediately with the folder ID
     Navigator.of(context).pop(folderId);
     // Fire and forget - API call in background
-    provider.moveConversation(conversationId, folderId);
+    final id = conversationId;
+    if (id != null) provider.moveConversation(id, folderId);
   }
 }
 
@@ -117,66 +73,61 @@ class _FolderListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: isCurrentFolder ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.1) : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        border: isCurrentFolder
-            ? Border.all(color: ResponsiveHelper.purplePrimary, width: 1.5)
-            : Border.all(color: ResponsiveHelper.backgroundTertiary, width: 1),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            child: Row(
-              children: [
-                // Folder icon
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: folder.colorValue.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(10),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xxs),
+      child: Semantics(
+        selected: isCurrentFolder,
+        button: onTap != null,
+        child: Material(
+          color: isCurrentFolder ? OmiColors.surface2 : Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: OmiRadius.mdAll,
+            side: BorderSide(color: isCurrentFolder ? OmiColors.accent : OmiColors.border),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.sm),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: folder.colorValue.withValues(alpha: 0.15),
+                      borderRadius: OmiRadius.smAll,
+                    ),
+                    child: Center(child: FaIcon(folderIconToFa(folder.icon), size: 18, color: folder.colorValue)),
                   ),
-                  child: Center(child: FaIcon(folderIconToFa(folder.icon), size: 18, color: folder.colorValue)),
-                ),
-                const SizedBox(width: 14),
-
-                // Folder info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        folder.name,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: isCurrentFolder ? FontWeight.w600 : FontWeight.w500,
-                          color: isCurrentFolder ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textPrimary,
-                        ),
-                      ),
-                      if (folder.description != null && folder.description!.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 3),
-                          child: Text(
-                            folder.description!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12, color: ResponsiveHelper.textTertiary),
+                  const SizedBox(width: OmiSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          folder.name,
+                          style: OmiType.subhead.copyWith(
+                            fontWeight: isCurrentFolder ? FontWeight.w600 : FontWeight.w500,
                           ),
                         ),
-                    ],
+                        if (folder.description != null && folder.description!.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 3),
+                            child: Text(
+                              folder.description!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-
-                // Check mark for current folder
-                if (isCurrentFolder) const Icon(Icons.check_circle, color: ResponsiveHelper.purplePrimary, size: 22),
-              ],
+                  if (isCurrentFolder)
+                    const ExcludeSemantics(child: Icon(Icons.check_circle, color: OmiColors.accent, size: 22)),
+                ],
+              ),
             ),
           ),
         ),
@@ -185,19 +136,28 @@ class _FolderListItem extends StatelessWidget {
   }
 }
 
-/// Shows the move to folder bottom sheet.
-/// Returns the new folder ID if moved, or 'no_folder' if removed from folders, null if cancelled.
+/// Shows the Move to Folder sheet for one conversation and moves it.
+/// Returns the new folder ID if moved, null if dismissed.
 Future<String?> showMoveToFolderSheet(
   BuildContext context, {
   required String conversationId,
   String? currentFolderId,
-}) async {
-  final result = await showModalBottomSheet<String?>(
+}) {
+  return showOmiSheet<String?>(
     context: context,
-    backgroundColor: Colors.transparent,
-    isScrollControlled: true,
+    title: context.l10n.moveToFolder,
     useRootNavigator: true,
     builder: (context) => MoveToFolderSheet(conversationId: conversationId, currentFolderId: currentFolderId),
   );
-  return result;
+}
+
+/// Shows the Move to Folder sheet for [count] selected conversations and returns the picked folder
+/// ID (the caller moves them), or null if dismissed.
+Future<String?> showMoveConversationsToFolderSheet(BuildContext context, {required int count}) {
+  return showOmiSheet<String?>(
+    context: context,
+    title: context.l10n.moveConversationsTo(count),
+    useRootNavigator: true,
+    builder: (context) => const MoveToFolderSheet(),
+  );
 }

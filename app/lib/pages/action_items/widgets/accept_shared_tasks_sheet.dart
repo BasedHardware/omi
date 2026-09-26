@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
-import 'package:intl/intl.dart';
-
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
+import 'package:omi/pages/action_items/widgets/task_row_parts.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class AcceptSharedTasksSheet extends StatefulWidget {
   final String token;
@@ -31,144 +29,108 @@ class _AcceptSharedTasksSheetState extends State<AcceptSharedTasksSheet> {
 
   Future<void> _acceptTasks() async {
     setState(() => _isAccepting = true);
+    final l10n = context.l10n;
 
     final result = await action_items_api.acceptSharedActionItems(widget.token);
 
     if (!mounted) return;
 
     if (result != null) {
-      final count = result['count'] ?? 0;
-      HapticFeedback.mediumImpact();
+      final count = (result['count'] as num?)?.toInt() ?? 0;
+      OmiHaptics.success();
       Navigator.pop(context);
-      AppSnackbar.showSnackbar('Added $count task${count == 1 ? '' : 's'} to your list');
+      AppSnackbar.showSnackbar(l10n.sharedTasksAdded(count));
       widget.onAccepted?.call();
     } else {
       setState(() => _isAccepting = false);
-      AppSnackbar.showSnackbarError('Failed to accept tasks. You may have already accepted this share.');
+      AppSnackbar.showSnackbarError(l10n.sharedTasksAcceptFailed);
     }
   }
 
   String _formatDueDate(String dateStr) {
-    try {
-      final date = DateTime.parse(dateStr);
-      return DateFormat.yMMMd().format(date);
-    } catch (_) {
-      return dateStr;
-    }
+    final date = DateTime.tryParse(dateStr);
+    if (date == null) return dateStr;
+    return OmiDateFormat.of(context).date(date.toLocal());
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final l10n = context.l10n;
+    // Paints its own surface so it also works under a transparent showModalBottomSheet; the shell
+    // (title, close X, insets) is the shared one.
+    return ConstrainedBox(
       constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
-      decoration: const BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle bar
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 20),
-              decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(2)),
-            ),
+      child: Material(
+        color: OmiColors.surface1,
+        shape: const RoundedRectangleBorder(borderRadius: OmiRadius.sheetTop),
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.only(top: OmiSpacing.sm),
+          child: OmiSheetScaffold(
+            title: l10n.sharedTasksTitle(widget.senderName, widget.tasks.length),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(l10n.addToYourTaskList, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                const SizedBox(height: OmiSpacing.md),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: widget.tasks.length,
+                    itemBuilder: (context, index) {
+                      final task = widget.tasks[index];
+                      final description = task['description'] as String? ?? '';
+                      final dueAt = task['due_at'] as String?;
 
-            // Header
-            Text(
-              '${widget.senderName} shared ${widget.tasks.length} task${widget.tasks.length == 1 ? '' : 's'}',
-              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 6),
-            Text(context.l10n.addToYourTaskList, style: TextStyle(color: Colors.grey.shade400, fontSize: 15)),
-            const SizedBox(height: 20),
-
-            // Task list
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: widget.tasks.length,
-                itemBuilder: (context, index) {
-                  final task = widget.tasks[index];
-                  final description = task['description'] as String? ?? '';
-                  final dueAt = task['due_at'] as String?;
-
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 20,
-                          height: 20,
-                          margin: const EdgeInsets.only(top: 2),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.grey.shade600, width: 2),
-                          ),
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: OmiSpacing.xs),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: OmiSpacing.sm),
+                        decoration: BoxDecoration(
+                          color: OmiColors.surface2,
+                          borderRadius: OmiRadius.mdAll,
+                          border: Border.all(color: OmiColors.border),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(description, style: const TextStyle(color: Colors.white, fontSize: 15)),
-                              if (dueAt != null) ...[
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Due ${_formatDueDate(dueAt)}',
-                                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                                ),
-                              ],
-                            ],
-                          ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Padding(
+                              padding: EdgeInsets.only(top: 1),
+                              child: TaskCompletionMark(completed: false, size: 20),
+                            ),
+                            const SizedBox(width: OmiSpacing.sm),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(description, style: OmiType.subhead),
+                                  if (dueAt != null) ...[
+                                    const SizedBox(height: OmiSpacing.xxs),
+                                    Text(
+                                      l10n.taskDueDate(_formatDueDate(dueAt)),
+                                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Accept button
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _isAccepting ? null : _acceptTasks,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.deepPurple,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  disabledBackgroundColor: Colors.deepPurple.withValues(alpha: 0.5),
+                      );
+                    },
+                  ),
                 ),
-                child: _isAccepting
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : Text(
-                        'Add ${widget.tasks.length} task${widget.tasks.length == 1 ? '' : 's'} to my list',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
-              ),
+                const SizedBox(height: OmiSpacing.lg),
+                OmiButton(
+                  label: l10n.sharedTasksAddButton(widget.tasks.length),
+                  expand: true,
+                  isLoading: _isAccepting,
+                  onPressed: _isAccepting ? null : _acceptTasks,
+                ),
+                const SizedBox(height: OmiSpacing.xs),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

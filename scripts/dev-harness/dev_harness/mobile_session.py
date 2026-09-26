@@ -164,6 +164,36 @@ def _save_json_atomic(path: Path, data: Mapping[str, Any]) -> None:
 # Ownership guards
 # ---------------------------------------------------------------------------
 
+HELD_SESSION_LIVE_REMEDY = "pick another --name, or wait for that pid to finish; do not release a live foreign lease"
+HELD_SESSION_DEAD_REMEDY = "pick another --name, or run recover on that session before retrying"
+
+
+def held_session_message(session_id: str, existing: Mapping[str, Any]) -> str:
+    """Name the lease and holder immediately. Never imply the controls extension failed."""
+
+    owner = existing.get("owner") if isinstance(existing.get("owner"), Mapping) else {}
+    try:
+        pid = int(owner.get("pid", -1))
+    except (TypeError, ValueError):
+        pid = -1
+    user = owner.get("user") or "?"
+    host = owner.get("host") or "?"
+    if pid > 0 and safety.process_exists(pid):
+        return f"session {session_id} held by live pid {pid} ({user}@{host}); {HELD_SESSION_LIVE_REMEDY}"
+    return f"session {session_id} already exists (owner pid {pid} is dead); {HELD_SESSION_DEAD_REMEDY}"
+
+
+def refuse_live_foreign_session(session_id: str, lease: Mapping[str, Any]) -> None:
+    """Fail closed when another live process owns this session. Does not wait."""
+
+    owner = lease.get("owner") if isinstance(lease.get("owner"), Mapping) else {}
+    try:
+        pid = int(owner.get("pid", -1))
+    except (TypeError, ValueError):
+        pid = -1
+    if pid > 0 and pid != os.getpid() and safety.process_exists(pid):
+        raise SessionError(held_session_message(session_id, lease))
+
 
 def check_ownership(lease: Mapping[str, Any], *, allow_dead_owner: bool = True) -> None:
     """Refuse to act on a lease this caller does not own.
@@ -443,15 +473,7 @@ def acquire(
         handle = os.open(lease_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
     except FileExistsError:
         existing = _load_lease(lease_path)
-        owner = existing.get("owner", {})
-        hint = (
-            "its owner is live — do not take it over"
-            if safety.process_exists(int(owner.get("pid", -1)))
-            else "its owner is dead — run recover"
-        )
-        raise SessionError(
-            f"session {session_id} already exists ({hint}); pick another --name or release it first"
-        ) from None
+        raise SessionError(held_session_message(session_id, existing)) from None
     with os.fdopen(handle, "w", encoding="utf-8") as stream:
         stream.write("")
 
@@ -498,9 +520,16 @@ def acquire(
 
 
 def recover(repo_root: Path, session_id: str, env: Mapping[str, str] | None = None) -> dict[str, Any]:
+    from . import cli as harness_cli
+    from . import live_session
+
     directory = session_dir(repo_root, session_id, env)
     lease = _load_lease(directory / LEASE_FILENAME)
     check_ownership(lease, allow_dead_owner=True)
+    live_session.teardown(repo_root, session_id, env)
+    code = _harness_call(lease, harness_cli.cmd_down)
+    if code != 0:
+        raise SessionError(f"session harness down failed during recover (exit {code}); generation was not bumped")
     lease = {**lease, "generation": int(lease.get("generation", 1)) + 1, "owner": owner_identity()}
     lease["recovered_at"] = session_evidence.utc_now()
     _save_json_atomic(directory / LEASE_FILENAME, lease)
@@ -628,6 +657,9 @@ def reset(
     directory = session_dir(repo_root, session_id, env)
     lease = _load_lease(directory / LEASE_FILENAME)
     check_ownership(lease)
+    from . import live_session
+
+    live_session.teardown(repo_root, session_id, env)
     # The harness reset validates the instance sentinel itself, so the blast
     # radius is exactly this session's instance state root.
     code = _harness_call(lease, harness_reset or harness_cli.cmd_reset)
@@ -656,14 +688,15 @@ def stop(
     directory = session_dir(repo_root, session_id, env)
     lease = _load_lease(directory / LEASE_FILENAME)
     check_ownership(lease, allow_dead_owner=True)
+    from . import live_session
 
-    device = lease.get("device")
-    if isinstance(device, Mapping) and device.get("kind") == "simulator" and device.get("udid"):
-        (devices or DeviceController()).detach(str(lease["platform"]), str(device["udid"]))
-
+    live_session.teardown(repo_root, session_id, env)
     code = _harness_call(lease, harness_cli.cmd_down)
     if code != 0:
         raise SessionError(f"session harness down failed (exit {code}); session services may still run")
+    device = lease.get("device")
+    if isinstance(device, Mapping) and device.get("kind") == "simulator" and device.get("udid"):
+        (devices or DeviceController()).detach(str(lease["platform"]), str(device["udid"]))
     lease = {**lease, "status": "stopped", "stopped_at": session_evidence.utc_now(), "device": None}
     _save_json_atomic(directory / LEASE_FILENAME, lease)
     return lease

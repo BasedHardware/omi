@@ -123,6 +123,22 @@ def with_cache_write_opt_out(runnable: Any) -> Any:
     return runnable.bind(extra_body={'prompt_cache_options': options})
 
 
+def bind_explicit_cache(runnable: Any, *, cache_key: str | None = None) -> Any:
+    """Bind the GPT-5.6 explicit-cache contract AFTER ``with_structured_output``.
+
+    Same bind-last rule as :func:`with_cache_write_opt_out`. ``get_llm(...,
+    prompt_cache_options=..., cache_key=...)`` binds first, and a subsequent
+    ``with_structured_output`` silently drops those kwargs — the request then
+    carries a breakpoint in the messages and no ``prompt_cache_options``, which
+    GPT-5.6 does not treat as a cacheable explicit prefix. Bind the already-
+    structured runnable instead.
+    """
+    params: dict[str, Any] = {'extra_body': {'prompt_cache_options': dict(EXPLICIT_CACHE_OPTIONS)}}
+    if cache_key:
+        params['prompt_cache_key'] = cache_key
+    return runnable.bind(**params)
+
+
 def prefix_cache_key(namespace: str, stable_text: str) -> str:
     """Routing key derived from the prefix bytes themselves.
 

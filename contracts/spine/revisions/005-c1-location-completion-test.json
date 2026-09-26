@@ -1,0 +1,7 @@
+{
+  "path": "app/test/spine/c1_location_completion_test.dart",
+  "owner": "C1",
+  "before": "02a78d9105e881eb822a8637700b566c5c55c2b4f7d81ac83f3545dd38cc2ca7",
+  "after": "c71d62911ef51ad192c2a2b6597899f3cb00f4a99985eb3c4221487fc189d227",
+  "reason": "Spine A turn 5 App core builder review: scope capture adoption before C2/Home handoffs, remove AnalyticsManager dependency, narrow BLE listener seam, replace duplicate helper parametrization and require autonomous production keepalive reconnect. Dart analyzer disproves alleged noSuchMethod compile failure."
+}

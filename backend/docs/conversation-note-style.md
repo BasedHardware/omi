@@ -44,15 +44,16 @@ for the component verification contract.
 
 The model, reasoning setting, call count and cache behavior are unchanged from
 the base branch. The prompt is longer, and generated-note length varies, so this
-is not a promise of identical token usage. Published standard Luna pricing on
-September 7, 2026 is $0.20 per million input tokens and $1.20 per million output
+is not a promise of identical token usage. gpt-6-luna is priced at half of
+gpt-5.6-luna per operator directive (David Zhang, 2026-09-23), pending official
+published rates: $0.10 per million input tokens and $0.60 per million output
 tokens; cached input has a separate lower rate. See the [official Luna model
-documentation](https://developers.openai.com/api/docs/models/gpt-5.6-luna).
+documentation](https://developers.openai.com/api/docs/models/gpt-6-luna).
 
 Seven previously inspected difficult conversations were replayed with the same
 prompt at low and high reasoning on Chat Completions. Each arm used 33,585 input
 tokens. Low used 4,165 output tokens; high used 12,223. At uncached standard rates,
-that is approximately $0.0117 versus $0.0214 for all seven (about 1.83x). Median
+that is approximately $0.0059 versus $0.0107 for all seven (about 1.83x). Median
 direct-call time was 7.7 versus 15.3 seconds. These are diagnostic estimates,
 including reported reasoning usage, not invoices or production forecasts.
 

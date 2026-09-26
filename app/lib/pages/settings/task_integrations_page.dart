@@ -1,14 +1,16 @@
-import 'package:omi/utils/platform/platform_manager.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
-import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
 import 'package:omi/pages/settings/clickup_settings_page.dart';
 import 'package:omi/pages/settings/google_tasks_settings_page.dart';
+import 'package:omi/pages/settings/integration_selection_card.dart';
 import 'package:omi/pages/settings/todoist_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/integrations/apple_reminders_service.dart';
@@ -16,9 +18,13 @@ import 'package:omi/services/integrations/asana_service.dart';
 import 'package:omi/services/integrations/clickup_service.dart';
 import 'package:omi/services/integrations/google_tasks_service.dart';
 import 'package:omi/services/integrations/todoist_service.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 enum TaskIntegrationApp { appleReminders, todoist, clickup, asana, googleTasks, trello, monday }
 
@@ -102,19 +108,19 @@ extension TaskIntegrationAppExtension on TaskIntegrationApp {
   Color get iconColor {
     switch (this) {
       case TaskIntegrationApp.appleReminders:
-        return const Color(0xFF007AFF);
+        return const Color(0xFF007AFF); // omi-ux-allow: color-literal -- third-party brand colour
       case TaskIntegrationApp.googleTasks:
-        return const Color(0xFF4285F4);
+        return const Color(0xFF4285F4); // omi-ux-allow: color-literal -- third-party brand colour
       case TaskIntegrationApp.clickup:
-        return const Color(0xFF7B68EE);
+        return const Color(0xFF7B68EE); // omi-ux-allow: color-literal -- third-party brand colour
       case TaskIntegrationApp.asana:
-        return const Color(0xFFF06A6A);
+        return const Color(0xFFF06A6A); // omi-ux-allow: color-literal -- third-party brand colour
       case TaskIntegrationApp.trello:
-        return const Color(0xFF0079BF);
+        return const Color(0xFF0079BF); // omi-ux-allow: color-literal -- third-party brand colour
       case TaskIntegrationApp.todoist:
-        return const Color(0xFFE44332);
+        return const Color(0xFFE44332); // omi-ux-allow: color-literal -- third-party brand colour
       case TaskIntegrationApp.monday:
-        return const Color(0xFFFF3D57);
+        return const Color(0xFFFF3D57); // omi-ux-allow: color-literal -- third-party brand colour
     }
   }
 
@@ -125,10 +131,6 @@ extension TaskIntegrationAppExtension on TaskIntegrationApp {
         this == TaskIntegrationApp.asana ||
         this == TaskIntegrationApp.googleTasks ||
         this == TaskIntegrationApp.clickup;
-  }
-
-  String get comingSoonText {
-    return 'Coming Soon';
   }
 }
 
@@ -181,16 +183,16 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     final selected = context.read<TaskIntegrationProvider>().selectedApp;
     if (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) {
       PlatformManager.instance.analytics.taskIntegrationSettingsOpened(appName: 'asana');
-      Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AsanaSettingsPage()));
+      routeToPage(context, const AsanaSettingsPage());
     } else if (selected == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated) {
       PlatformManager.instance.analytics.taskIntegrationSettingsOpened(appName: 'clickup');
-      Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ClickUpSettingsPage()));
+      routeToPage(context, const ClickUpSettingsPage());
     } else if (selected == TaskIntegrationApp.todoist && TodoistService().isAuthenticated) {
       PlatformManager.instance.analytics.taskIntegrationSettingsOpened(appName: 'todoist');
-      Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TodoistSettingsPage()));
+      routeToPage(context, const TodoistSettingsPage());
     } else if (selected == TaskIntegrationApp.googleTasks && GoogleTasksService().isAuthenticated) {
       PlatformManager.instance.analytics.taskIntegrationSettingsOpened(appName: 'google_tasks');
-      Navigator.of(context).push(MaterialPageRoute(builder: (context) => const GoogleTasksSettingsPage()));
+      routeToPage(context, const GoogleTasksSettingsPage());
     }
   }
 
@@ -203,7 +205,6 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     // Check if Apple Reminders requires permission
     if (app == TaskIntegrationApp.appleReminders) {
       final provider = context.read<TaskIntegrationProvider>();
-      final scaffoldMessenger = ScaffoldMessenger.of(context);
       final remindersService = AppleRemindersService();
       final hasPermission = await remindersService.hasPermission();
       if (!hasPermission) {
@@ -218,12 +219,11 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
           Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key})');
         } else {
           if (mounted) {
-            scaffoldMessenger.showSnackBar(
-              SnackBar(
-                content: Text(context.l10n.enableRemindersAccess),
-                backgroundColor: Colors.orange,
-                duration: const Duration(seconds: 3),
-              ),
+            OmiFeedback.error(
+              context,
+              context.l10n.enableRemindersAccess,
+              actionLabel: context.l10n.openSettings,
+              onAction: () => unawaited(openAppSettings()),
             );
           }
         }
@@ -241,13 +241,11 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       if (!todoistService.isAuthenticated) {
         final provider = context.read<TaskIntegrationProvider>();
         final shouldAuth = await _showAuthDialog(app);
-        if (shouldAuth == true) {
+        if (shouldAuth) {
           final success = await todoistService.authenticate();
           if (success) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(context.l10n.completeAuthBrowser), duration: const Duration(seconds: 5)),
-              );
+              OmiFeedback.info(context, context.l10n.completeAuthBrowser);
             }
             await provider.setSelectedApp(app);
             // Note: OAuth callback will save connection to Firebase
@@ -258,13 +256,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'todoist');
 
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(context.l10n.failedToStartAppAuth('Todoist')),
-                  backgroundColor: Colors.red,
-                  duration: const Duration(seconds: 3),
-                ),
-              );
+              OmiFeedback.error(context, context.l10n.failedToStartAppAuth('Todoist'));
             }
           }
         }
@@ -278,13 +270,11 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       if (!asanaService.isAuthenticated) {
         final provider = context.read<TaskIntegrationProvider>();
         final shouldAuth = await _showAuthDialog(app);
-        if (shouldAuth == true) {
+        if (shouldAuth) {
           final success = await asanaService.authenticate();
           if (success) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(context.l10n.completeAuthBrowser), duration: const Duration(seconds: 5)),
-              );
+              OmiFeedback.info(context, context.l10n.completeAuthBrowser);
             }
             await provider.setSelectedApp(app);
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
@@ -293,13 +283,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'asana');
 
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(context.l10n.failedToStartAppAuth('Asana')),
-                  backgroundColor: Colors.red,
-                  duration: const Duration(seconds: 3),
-                ),
-              );
+              OmiFeedback.error(context, context.l10n.failedToStartAppAuth('Asana'));
             }
           }
         }
@@ -313,13 +297,11 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       if (!googleTasksService.isAuthenticated) {
         final provider = context.read<TaskIntegrationProvider>();
         final shouldAuth = await _showAuthDialog(app);
-        if (shouldAuth == true) {
+        if (shouldAuth) {
           final success = await googleTasksService.authenticate();
           if (success) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(context.l10n.completeAuthBrowser), duration: const Duration(seconds: 5)),
-              );
+              OmiFeedback.info(context, context.l10n.completeAuthBrowser);
             }
             await provider.setSelectedApp(app);
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
@@ -328,13 +310,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'google_tasks');
 
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(context.l10n.failedToStartAppAuth('Google Tasks')),
-                  backgroundColor: Colors.red,
-                  duration: const Duration(seconds: 3),
-                ),
-              );
+              OmiFeedback.error(context, context.l10n.failedToStartAppAuth('Google Tasks'));
             }
           }
         }
@@ -348,13 +324,11 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       if (!clickupService.isAuthenticated) {
         final provider = context.read<TaskIntegrationProvider>();
         final shouldAuth = await _showAuthDialog(app);
-        if (shouldAuth == true) {
+        if (shouldAuth) {
           final success = await clickupService.authenticate();
           if (success) {
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(context.l10n.completeAuthBrowser), duration: const Duration(seconds: 5)),
-              );
+              OmiFeedback.info(context, context.l10n.completeAuthBrowser);
             }
             await provider.setSelectedApp(app);
             Logger.debug('✓ Task integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
@@ -363,13 +337,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'clickup');
 
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(context.l10n.failedToStartAppAuth('ClickUp')),
-                  backgroundColor: Colors.red,
-                  duration: const Duration(seconds: 3),
-                ),
-              );
+              OmiFeedback.error(context, context.l10n.failedToStartAppAuth('ClickUp'));
             }
           }
         }
@@ -384,53 +352,21 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     Logger.debug('✓ Task integration selected: ${app.displayName} (${app.key})');
   }
 
-  Future<bool?> _showAuthDialog(TaskIntegrationApp app) {
-    return showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1C1C1E),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(context.l10n.connectToAppTitle(app.displayName), style: const TextStyle(color: Colors.white)),
-          content: Text(
-            context.l10n.authorizeOmiForTasks(app.displayName),
-            style: const TextStyle(color: Color(0xFF8E8E93)),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(context.l10n.cancel, style: const TextStyle(color: Color(0xFF8E8E93))),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(context.l10n.continueButton, style: const TextStyle(color: Colors.white)),
-            ),
-          ],
-        );
-      },
+  Future<bool> _showAuthDialog(TaskIntegrationApp app) {
+    return showOmiConfirm(
+      context,
+      title: context.l10n.connectToAppTitle(app.displayName),
+      message: context.l10n.authorizeOmiForTasks(app.displayName),
+      confirmLabel: context.l10n.continueButton,
     );
   }
 
   void _showComingSoonDialog(TaskIntegrationApp app) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1C1C1E),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(context.l10n.appIntegration(app.displayName), style: const TextStyle(color: Colors.white)),
-          content: Text(
-            context.l10n.integrationComingSoon(app.displayName),
-            style: const TextStyle(color: Color(0xFF8E8E93)),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: Text(context.l10n.gotIt, style: const TextStyle(color: Colors.white)),
-            ),
-          ],
-        );
-      },
+    showOmiAlert(
+      context,
+      title: context.l10n.appIntegration(app.displayName),
+      message: context.l10n.integrationComingSoon(app.displayName),
+      okLabel: context.l10n.gotIt,
     );
   }
 
@@ -456,12 +392,12 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
   Widget _buildShimmerButton() {
     return ShimmerWithTimeout(
-      baseColor: Colors.grey.shade800,
-      highlightColor: Colors.grey.shade600,
+      baseColor: OmiColors.surface2,
+      highlightColor: OmiColors.surface3,
       child: Container(
         width: 70,
         height: 28,
-        decoration: BoxDecoration(color: Colors.grey.shade800, borderRadius: BorderRadius.circular(16)),
+        decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
       ),
     );
   }
@@ -471,100 +407,91 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     final isAvailable = app.isAvailable;
     final isConnected = _isAppConnected(app);
 
-    return GestureDetector(
-      onTap: isAvailable && !isLoading
-          ? () {
-              // If already connected and selected, open settings
-              if (isConnected && isSelected) {
-                if (app == TaskIntegrationApp.asana) {
-                  Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AsanaSettingsPage()));
-                } else if (app == TaskIntegrationApp.clickup) {
-                  Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ClickUpSettingsPage()));
-                } else if (app == TaskIntegrationApp.todoist) {
-                  Navigator.of(context).push(MaterialPageRoute(builder: (context) => const TodoistSettingsPage()));
-                } else if (app == TaskIntegrationApp.googleTasks) {
-                  Navigator.of(context).push(MaterialPageRoute(builder: (context) => const GoogleTasksSettingsPage()));
-                }
-              } else {
-                _selectApp(app);
+    final VoidCallback? onTap = isAvailable && !isLoading
+        ? () {
+            // If already connected and selected, open settings
+            if (isConnected && isSelected) {
+              if (app == TaskIntegrationApp.asana) {
+                routeToPage(context, const AsanaSettingsPage());
+              } else if (app == TaskIntegrationApp.clickup) {
+                routeToPage(context, const ClickUpSettingsPage());
+              } else if (app == TaskIntegrationApp.todoist) {
+                routeToPage(context, const TodoistSettingsPage());
+              } else if (app == TaskIntegrationApp.googleTasks) {
+                routeToPage(context, const GoogleTasksSettingsPage());
               }
+            } else {
+              _selectApp(app);
             }
-          : null,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 16),
-        child: Row(
-          children: [
-            // App Icon (with Hero animation for banner icons)
-            Hero(
-              tag: _getHeroTag(app),
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
-                child: app.logoPath != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.asset(app.logoPath!, width: 40, height: 40, fit: BoxFit.contain),
-                      )
-                    : Container(
-                        decoration: BoxDecoration(
-                          color:
-                              isAvailable ? app.iconColor.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: FaIcon(app.icon, color: isAvailable ? app.iconColor : Colors.grey, size: 24),
-                      ),
-              ),
+          }
+        : null;
+
+    final Widget trailing;
+    if (isLoading && app != TaskIntegrationApp.appleReminders) {
+      // Shimmer while loading (except for Apple Reminders, which is always connected)
+      trailing = _buildShimmerButton();
+    } else if (!isAvailable) {
+      trailing = IntegrationStatusChip(context.l10n.comingSoon, tone: IntegrationChipTone.muted);
+    } else if (!isConnected) {
+      trailing = IntegrationStatusChip(context.l10n.connect);
+    } else if (isSelected) {
+      // Radio mark for connected services
+      trailing = const FaIcon(FontAwesomeIcons.solidCircleCheck, color: OmiColors.success, size: 24);
+    } else {
+      trailing = Container(
+        width: 24,
+        height: 24,
+        decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: OmiColors.border, width: 2)),
+      );
+    }
+
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        selected: isConnected ? isSelected : null,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: OmiSpacing.md),
+            child: Row(
+              children: [
+                // App Icon (with Hero animation for banner icons)
+                ExcludeSemantics(
+                  child: Hero(
+                    tag: _getHeroTag(app),
+                    child: SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: app.logoPath != null
+                          ? ClipRRect(
+                              borderRadius: OmiRadius.smAll,
+                              child: Image.asset(app.logoPath!, width: 40, height: 40, fit: BoxFit.contain),
+                            )
+                          : Container(
+                              decoration: BoxDecoration(
+                                color: isAvailable ? app.iconColor.withValues(alpha: 0.2) : OmiColors.surface2,
+                                borderRadius: OmiRadius.smAll,
+                              ),
+                              child: FaIcon(
+                                app.icon,
+                                color: isAvailable ? app.iconColor : OmiColors.textTertiary,
+                                size: 24,
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: OmiSpacing.md),
+                Expanded(
+                  child: Text(
+                    app.displayName,
+                    style: OmiType.body.copyWith(color: isAvailable ? OmiColors.textPrimary : OmiColors.textTertiary),
+                  ),
+                ),
+                trailing,
+              ],
             ),
-            const SizedBox(width: 16),
-            // App Name
-            Expanded(
-              child: Text(
-                app.displayName,
-                style: TextStyle(
-                  color: isAvailable ? Colors.white : Colors.grey,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-            ),
-            // Action Button - Show shimmer while loading (except for Apple Reminders which is always connected)
-            if (isLoading && app != TaskIntegrationApp.appleReminders)
-              _buildShimmerButton()
-            else if (!isAvailable)
-              // Coming Soon button
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(16)),
-                child: Text(
-                  context.l10n.comingSoon,
-                  style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 12, fontWeight: FontWeight.w500),
-                ),
-              )
-            else if (!isConnected)
-              // Connect button
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-                child: Text(
-                  context.l10n.connect,
-                  style: const TextStyle(color: Colors.black, fontSize: 12, fontWeight: FontWeight.w500),
-                ),
-              )
-            else
-            // Radio button for connected services
-            if (isSelected)
-              const FaIcon(FontAwesomeIcons.solidCircleCheck, color: Colors.green, size: 24)
-            else
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF3C3C43), width: 2),
-                ),
-              ),
-          ],
+          ),
         ),
       ),
     );
@@ -577,32 +504,22 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     final isLoading = provider.isLoading || !provider.hasLoaded;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF000000),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF000000),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          context.l10n.taskIntegrations,
-          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        centerTitle: true,
+        leading: const OmiBackButton(),
+        title: Text(context.l10n.taskIntegrations),
         actions: [
           // Settings icon for apps that have configuration options
           if (_shouldShowSettingsIcon())
-            IconButton(
-              icon: const Icon(Icons.settings, color: Colors.white),
+            OmiIconButton(
+              icon: const Icon(Icons.settings),
+              label: context.l10n.configureSettings,
               onPressed: _openSelectedAppSettings,
-              tooltip: context.l10n.configureSettings,
             ),
         ],
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(OmiSpacing.lg),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -621,23 +538,20 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                       .toList(),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: OmiSpacing.md),
 
               // Footer Note
               Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.yellow.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                padding: const EdgeInsets.all(OmiSpacing.md),
+                decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
                 child: Row(
                   children: [
-                    FaIcon(FontAwesomeIcons.solidLightbulb, color: Colors.yellow.withValues(alpha: 0.5), size: 20),
-                    const SizedBox(width: 12),
+                    const FaIcon(FontAwesomeIcons.solidLightbulb, color: OmiColors.textTertiary, size: 20),
+                    const SizedBox(width: OmiSpacing.sm),
                     Expanded(
                       child: Text(
                         context.l10n.tasksExportedOneApp,
-                        style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14, fontWeight: FontWeight.w400),
+                        style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
                       ),
                     ),
                   ],

@@ -38,7 +38,11 @@ REQUIRED_IDENTICAL_LITERALS = (
     "CONVERSATION_NOTES_V2_ENABLED",
     "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED",
     "CONVERSATION_OCR_CONTEXT_ENABLED",
+    "MEETING_NOTES_RICH_CONTEXT_ENABLED",
+    "MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED",
     "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED",
+    "FREE_TIER_LOCAL_PROCESSING",
+    "FREE_TIER_EMERGENCY_STOP",
     # Both process_conversation hosts must read the same managed-spend ledger
     # switch; a listen-only value would leave pusher-hosted direct-provider
     # spend invisible to llm_gateway_attempts (free-tier program, Move 1).
@@ -51,8 +55,19 @@ REQUIRED_IDENTICAL_LITERALS = (
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
+            # Managed listen-only STT rollout; pusher is not a live audio receiver.
+            "PARAKEET_WINDOW_ALLOCATION_PERCENT",
+            "PARAKEET_WINDOW_DIARIZATION",
+            "PARAKEET_WINDOW_MAX_SESSIONS",
+            "PARAKEET_WINDOW_MAX_CONTEXT_SECONDS",
+            "PARAKEET_WINDOW_PACE_SECONDS",
+            "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
+            "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
+            "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
+            "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
+            "STT_CIRCUIT_HALF_OPEN_PROBES",
+            "STT_CONNECT_ORDER_FROM_CONFIG",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
-            "DEEPGRAM_API_KEY",
             "DEEPGRAM_SELF_HOSTED_ENABLED",
             "DESKTOP_UPDATE_POINTERS_MODE",
             "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE",
@@ -72,8 +87,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "FAIR_USE_WEEKLY_SPEECH_MS",
             "GCP_LOCATION",
             "GEMINI_API_KEY",
-            "GOOGLE_APPLICATION_CREDENTIALS",
-            "GOOGLE_CALENDAR_AUTO_LINK_ENABLED",
             "GROQ_API_KEY",
             "HOSTED_PUSHER_API_URL",
             "HOSTED_TRANSLATION_API_URL",
@@ -113,6 +126,18 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     ),
     "prod": frozenset(
         {
+            # Managed listen-only STT rollout; pusher is not a live audio receiver.
+            "PARAKEET_WINDOW_ALLOCATION_PERCENT",
+            "PARAKEET_WINDOW_DIARIZATION",
+            "PARAKEET_WINDOW_MAX_SESSIONS",
+            "PARAKEET_WINDOW_MAX_CONTEXT_SECONDS",
+            "PARAKEET_WINDOW_PACE_SECONDS",
+            "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
+            "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
+            "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
+            "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
+            "STT_CIRCUIT_HALF_OPEN_PROBES",
+            "STT_CONNECT_ORDER_FROM_CONFIG",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "ACCOUNT_DELETION_DISPATCH_MODE",
             "ACCOUNT_DELETION_TASKS_QUEUE",
@@ -167,14 +192,39 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
 
 PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset({"GOOGLE_CLIENT_ID", "REDIS_DB_HOST", "TYPESENSE_HOST"}),
-    "prod": frozenset({"DEEPGRAM_SELF_HOSTED_URL", "REDIS_DB_HOST", "TYPESENSE_HOST"}),
+    # DEEPGRAM_API_KEY: pusher reaches self-hosted dg.omi.me with it; the
+    # backend-listen managed (cloud) credential was retired 2026-09-18 — no
+    # streaming session selects Deepgram cloud, and a spent managed key made
+    # the fallback hops dial a 402 account for days (FC-deterministic-provider-
+    # rejection-burns-connect-retries).
+    "prod": frozenset({"DEEPGRAM_API_KEY", "DEEPGRAM_SELF_HOSTED_URL", "REDIS_DB_HOST", "TYPESENSE_HOST"}),
 }
 
 # Shared keys whose *literal* values are allowed to differ. Name-only diffs
 # belong in the only-allowed sets above, not here.
 SHARED_VALUE_DIFF_ALLOWED: dict[str, frozenset[str]] = {
-    "dev": frozenset({"DD_SERVICE", "STRIPE_ARCHITECT_MONTHLY_PRICE_ID"}),
+    # Live TDT is a listen-only experiment; pusher retains its existing STT route.
+    # Final-pass shadow runs on the dev pusher finalizer only. Backend-listen
+    # dispatches finalization but cannot own this process-local shadow worker.
+    "dev": frozenset(
+        {
+            "DD_SERVICE",
+            "STRIPE_ARCHITECT_MONTHLY_PRICE_ID",
+            "STT_SERVICE_MODELS",
+            "TRANSCRIPTION_SHADOW_ENABLED",
+            "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
+            "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
+        }
+    ),
     "prod": frozenset({"BUCKET_SPEECH_PROFILES", "DD_SERVICE", "DEEPGRAM_SELF_HOSTED_ENABLED"}),
+}
+
+DEV_SHADOW_VALUES = {
+    "TRANSCRIPTION_SHADOW_ENABLED": ("true", "false"),
+    "TRANSCRIPTION_SHADOW_KILL_SWITCH": ("false", "false"),
+    "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": ("omi-release-probe", ""),
+    "TRANSCRIPTION_SHADOW_PERCENT": ("0", "0"),
+    "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": ("1", "0"),
 }
 
 
@@ -337,6 +387,15 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
 
         allowed_value_diff = SHARED_VALUE_DIFF_ALLOWED[env]
         shared = set(pusher_env) & set(listen_env)
+        if env == "dev":
+            for name, (expected_pusher, expected_listen) in DEV_SHADOW_VALUES.items():
+                actual_pusher = pusher_env[name].value if name in pusher_env else None
+                actual_listen = listen_env[name].value if name in listen_env else None
+                if (actual_pusher, actual_listen) != (expected_pusher, expected_listen):
+                    errors.append(
+                        f"[dev] shadow scope {name} must be pusher={expected_pusher!r} "
+                        f"listen={expected_listen!r}, got pusher={actual_pusher!r} listen={actual_listen!r}"
+                    )
         for name in sorted(shared):
             pusher_value = pusher_env[name].value
             listen_value = listen_env[name].value

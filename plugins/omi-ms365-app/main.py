@@ -14,9 +14,11 @@ Exposes:
 """
 from __future__ import annotations
 
+import html
 import json
 import logging
 import secrets
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -56,7 +58,8 @@ async def root() -> str:
 @app.get("/setup/ms365", response_class=HTMLResponse)
 async def setup_page(uid: str = Query(..., description="OMI user id")) -> str:
     """OMI loads this page inside its in-app webview when the user taps 'Setup'."""
-    redirect = f"/auth/microsoft?uid={uid}"
+    safe_uid = urllib.parse.quote(uid, safe="")
+    redirect = f"/auth/microsoft?uid={safe_uid}"
     return f"""
     <html><body style="font-family: system-ui; max-width: 640px; margin: 40px auto;">
       <h2>Connect Microsoft 365</h2>
@@ -84,8 +87,10 @@ async def auth_callback(
     error_description: str | None = None,
 ) -> HTMLResponse:
     if error:
+        safe_error = html.escape(error)
+        safe_desc = html.escape(error_description or "")
         return HTMLResponse(
-            f"<h3>Authorization failed</h3><pre>{error}: {error_description}</pre>",
+            f"<h3>Authorization failed</h3><pre>{safe_error}: {safe_desc}</pre>",
             status_code=400,
         )
     if not code or not state:

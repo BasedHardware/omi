@@ -1,11 +1,8 @@
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
-import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -14,13 +11,14 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/apps/widgets/ai_app_generator_banner.dart';
+import 'package:omi/pages/apps/widgets/app_form_fields.dart';
 import 'package:omi/pages/apps/widgets/app_metadata_widget.dart';
 import 'package:omi/pages/apps/widgets/external_trigger_fields_widget.dart';
-import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/pages/apps/widgets/notification_scopes_chips_widget.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
 import 'widgets/capabilities_chips_widget.dart';
@@ -37,6 +35,8 @@ class AddAppPage extends StatefulWidget {
 }
 
 class _AddAppPageState extends State<AddAppPage> {
+  static const _docsUrl = 'https://docs.omi.me/doc/developer/apps/Introduction';
+
   late bool showSubmitAppConfirmation;
 
   @override
@@ -51,43 +51,127 @@ class _AddAppPageState extends State<AddAppPage> {
     super.initState();
   }
 
+  Future<void> _startEarningSheet(BuildContext context) async {
+    final l10n = context.l10n;
+    await showOmiSheet<void>(
+      context: context,
+      showCloseButton: false,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(l10n.startEarning, style: OmiType.title2),
+            const SizedBox(height: OmiSpacing.sm),
+            Text(
+              l10n.connectStripeOrPayPal,
+              textAlign: TextAlign.center,
+              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+            ),
+            const SizedBox(height: OmiSpacing.xl),
+            OmiButton(
+              label: l10n.connectNow,
+              expand: true,
+              onPressed: () {
+                Navigator.pop(sheetContext);
+                routeToPage(context, const PaymentsPage());
+              },
+            ),
+            const SizedBox(height: OmiSpacing.xs),
+            OmiButton.tertiary(
+              label: l10n.notNow,
+              expand: true,
+              onPressed: () => Navigator.pop(sheetContext),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmAndSubmit(BuildContext context, AddAppProvider provider) async {
+    final l10n = context.l10n;
+    if (!provider.validateForm()) return;
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return ConfirmationDialog(
+          title: l10n.submitAppQuestion,
+          description: provider.makeAppPublic ? l10n.submitAppPublicDescription : l10n.submitAppPrivateDescription,
+          checkboxText: l10n.dontShowAgain,
+          confirmText: l10n.submitApp,
+          checkboxValue: !showSubmitAppConfirmation,
+          onCheckboxChanged: (value) {
+            setState(() {
+              showSubmitAppConfirmation = !value;
+            });
+          },
+          onConfirm: () async {
+            if (provider.makeAppPublic) {
+              PlatformManager.instance.analytics.publicAppSubmitted({
+                'app_name': provider.appNameController.text,
+                'app_category': provider.appCategory,
+                'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
+                'is_paid': provider.isPaid,
+              });
+            } else {
+              PlatformManager.instance.analytics.privateAppSubmitted({
+                'app_name': provider.appNameController.text,
+                'app_category': provider.appCategory,
+                'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
+                'is_paid': provider.isPaid,
+              });
+            }
+            SharedPreferencesUtil().showSubmitAppConfirmation = showSubmitAppConfirmation;
+            Navigator.pop(context);
+            String? appId = await provider.submitApp();
+            App? app;
+            if (appId != null && context.mounted) {
+              app = await context.read<AppProvider>().getAppFromId(appId);
+            }
+            var paymentProvider = PaymentMethodProvider();
+            await paymentProvider.getPaymentMethodsStatus();
+
+            if (app != null && mounted && context.mounted) {
+              if (app.isPaid && paymentProvider.activeMethod == null) {
+                await _startEarningSheet(context);
+              } else {
+                Navigator.pop(context);
+                routeToPage(context, AppDetailPage(app: app));
+              }
+            }
+          },
+          onCancel: () {
+            Navigator.pop(context);
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Consumer<AddAppProvider>(
       builder: (context, provider, child) {
         return Scaffold(
-          backgroundColor: Theme.of(context).colorScheme.primary,
+          backgroundColor: OmiColors.surface0,
           appBar: AppBar(
-            title: Text(context.l10n.submitApp),
-            backgroundColor: Theme.of(context).colorScheme.primary,
+            leading: const OmiBackButton(),
+            title: Text(l10n.submitApp),
+            backgroundColor: OmiColors.surface0,
             actions: [
               Center(
                 child: Padding(
-                  padding: const EdgeInsets.only(right: 16.0),
-                  child: Material(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    child: InkWell(
-                      onTap: () {
-                        PlatformManager.instance.analytics.pageOpened('App Submission Help');
-                        launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Introduction'));
-                      },
-                      borderRadius: BorderRadius.circular(20),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              context.l10n.docs,
-                              style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600, fontSize: 12),
-                            ),
-                            const SizedBox(width: 4),
-                            const FaIcon(FontAwesomeIcons.arrowUpRightFromSquare, color: Colors.black, size: 10),
-                          ],
-                        ),
-                      ),
-                    ),
+                  padding: const EdgeInsets.only(right: OmiSpacing.md),
+                  child: OmiButton(
+                    label: l10n.docs,
+                    leading: const FaIcon(FontAwesomeIcons.arrowUpRightFromSquare),
+                    size: OmiButtonSize.compact,
+                    onPressed: () {
+                      PlatformManager.instance.analytics.pageOpened('App Submission Help');
+                      launchUrl(Uri.parse(_docsUrl));
+                    },
                   ),
                 ),
               ),
@@ -95,28 +179,14 @@ class _AddAppPageState extends State<AddAppPage> {
           ),
           extendBody: true,
           body: provider.isLoading || provider.isSubmitting
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-                      const SizedBox(height: 14),
-                      Text(
-                        provider.isSubmitting ? context.l10n.submittingYourApp : context.l10n.holdOnPreparingForm,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ],
-                  ),
-                )
+              ? OmiLoadingState(label: provider.isSubmitting ? l10n.submittingYourApp : l10n.holdOnPreparingForm)
               : GestureDetector(
                   onTap: () {
                     FocusScope.of(context).unfocus();
                   },
                   child: SingleChildScrollView(
                     child: Padding(
-                      padding: const EdgeInsets.all(16.0),
+                      padding: const EdgeInsets.all(OmiSpacing.md),
                       child: Form(
                         key: provider.formKey,
                         onChanged: () {
@@ -127,7 +197,7 @@ class _AddAppPageState extends State<AddAppPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const AiAppGeneratorBanner(),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: OmiSpacing.xxs),
                             AppMetadataWidget(
                               pickImage: () async {
                                 await provider.pickImage();
@@ -143,191 +213,16 @@ class _AddAppPageState extends State<AddAppPage> {
                               category: provider.mapCategoryIdToName(provider.appCategory),
                             ),
                             const SizedBox(height: 18),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1F1F25),
-                                borderRadius: BorderRadius.circular(18.0),
-                              ),
-                              padding: const EdgeInsets.all(14.0),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    crossAxisAlignment: CrossAxisAlignment.center,
-                                    children: [
-                                      Padding(
-                                        padding: EdgeInsets.fromLTRB(
-                                          8,
-                                          provider.thumbnailUrls.isNotEmpty ? 8 : 0,
-                                          0,
-                                          0,
-                                        ),
-                                        child: Text(
-                                          context.l10n.previewScreenshots,
-                                          style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                                        ),
-                                      ),
-                                      if (provider.thumbnailUrls.isEmpty)
-                                        GestureDetector(
-                                          onTap: provider.isUploadingThumbnail ? null : provider.pickThumbnail,
-                                          child: Container(
-                                            width: 36,
-                                            height: 36,
-                                            decoration: BoxDecoration(
-                                              color: Colors.grey.withValues(alpha: 0.3),
-                                              shape: BoxShape.circle,
-                                            ),
-                                            child: Center(
-                                              child: provider.isUploadingThumbnail
-                                                  ? const SizedBox(
-                                                      width: 16,
-                                                      height: 16,
-                                                      child: CircularProgressIndicator(
-                                                        strokeWidth: 2,
-                                                        color: Colors.white,
-                                                      ),
-                                                    )
-                                                  : const FaIcon(FontAwesomeIcons.image, size: 16, color: Colors.white),
-                                            ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                  if (provider.thumbnailUrls.isNotEmpty)
-                                    SizedBox(
-                                      height: 180,
-                                      child: Padding(
-                                        padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
-                                        child: ListView.builder(
-                                          scrollDirection: Axis.horizontal,
-                                          itemCount: provider.thumbnailUrls.length + 1,
-                                          itemBuilder: (context, index) {
-                                            // Add button at the end
-                                            if (index == provider.thumbnailUrls.length) {
-                                              return GestureDetector(
-                                                onTap: provider.isUploadingThumbnail ? null : provider.pickThumbnail,
-                                                child: Container(
-                                                  width: 120,
-                                                  height: 180,
-                                                  margin: const EdgeInsets.only(right: 8),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(0xFF35343B),
-                                                    borderRadius: BorderRadius.circular(8),
-                                                  ),
-                                                  child: provider.isUploadingThumbnail
-                                                      ? const Center(
-                                                          child: SizedBox(
-                                                            width: 16,
-                                                            height: 16,
-                                                            child: CircularProgressIndicator(
-                                                              strokeWidth: 2,
-                                                              color: Colors.white,
-                                                            ),
-                                                          ),
-                                                        )
-                                                      : const Center(
-                                                          child: FaIcon(
-                                                            FontAwesomeIcons.image,
-                                                            size: 28,
-                                                            color: Colors.white,
-                                                          ),
-                                                        ),
-                                                ),
-                                              );
-                                            }
-                                            return Stack(
-                                              children: [
-                                                GestureDetector(
-                                                  onTap: () {
-                                                    Navigator.push(
-                                                      context,
-                                                      MaterialPageRoute(
-                                                        builder: (context) => MediaViewerPage(
-                                                          items: provider.thumbnailUrls
-                                                              .map((url) => MediaViewerItem(
-                                                                    imageUrl: url,
-                                                                  ))
-                                                              .toList(),
-                                                          initialIndex: index,
-                                                          maxScaleMultiplier: 2,
-                                                          showCloseButton: true,
-                                                          wrapBodyInSafeArea: false,
-                                                        ),
-                                                      ),
-                                                    );
-                                                  },
-                                                  child: CachedNetworkImage(
-                                                    imageUrl: provider.thumbnailUrls[index],
-                                                    imageBuilder: (context, imageProvider) => Container(
-                                                      width: 120,
-                                                      height: 180, // 2:3 ratio (120 * 1.5)
-                                                      margin: const EdgeInsets.only(right: 8),
-                                                      decoration: BoxDecoration(
-                                                        borderRadius: BorderRadius.circular(8),
-                                                        border: Border.all(color: const Color(0xFF424242), width: 1),
-                                                        image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
-                                                      ),
-                                                    ),
-                                                    placeholder: (context, url) => ShimmerWithTimeout(
-                                                      baseColor: Colors.grey[900]!,
-                                                      highlightColor: Colors.grey[800]!,
-                                                      child: Container(
-                                                        width: 120,
-                                                        height: 180,
-                                                        margin: const EdgeInsets.only(right: 8),
-                                                        decoration: BoxDecoration(
-                                                          color: Colors.black,
-                                                          borderRadius: BorderRadius.circular(8),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    errorWidget: (context, url, error) => Container(
-                                                      width: 120,
-                                                      height: 180,
-                                                      margin: const EdgeInsets.only(right: 8),
-                                                      decoration: BoxDecoration(
-                                                        color: Colors.grey[900],
-                                                        borderRadius: BorderRadius.circular(8),
-                                                      ),
-                                                      child: const FaIcon(FontAwesomeIcons.triangleExclamation),
-                                                    ),
-                                                  ),
-                                                ),
-                                                Positioned(
-                                                  top: 6,
-                                                  right: 14,
-                                                  child: GestureDetector(
-                                                    onTap: () => provider.removeThumbnail(index),
-                                                    child: Container(
-                                                      padding: const EdgeInsets.all(4),
-                                                      decoration: const BoxDecoration(
-                                                        color: Colors.white,
-                                                        shape: BoxShape.circle,
-                                                      ),
-                                                      child: const FaIcon(
-                                                        FontAwesomeIcons.xmark,
-                                                        size: 10,
-                                                        color: Colors.black,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            );
-                                          },
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
+                            AppScreenshotsSection(
+                              title: l10n.previewScreenshots,
+                              urls: provider.thumbnailUrls,
+                              isUploading: provider.isUploadingThumbnail,
+                              onAdd: provider.pickThumbnail,
+                              onRemove: provider.removeThumbnail,
+                              collapseWhenEmpty: true,
                             ),
                             const SizedBox(height: 18),
-                            Container(
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1F1F25),
-                                borderRadius: BorderRadius.circular(18.0),
-                              ),
+                            AppFormCard(
                               padding: const EdgeInsets.fromLTRB(14.0, 20.0, 14.0, 14.0),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -337,28 +232,8 @@ class _AddAppPageState extends State<AddAppPage> {
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
-                                        Text.rich(
-                                          TextSpan(
-                                            text: context.l10n.capabilities,
-                                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                                            children: const [
-                                              TextSpan(
-                                                text: '*',
-                                                style: TextStyle(color: Colors.red),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        GestureDetector(
-                                          onTap: () {
-                                            launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Introduction'));
-                                          },
-                                          child: FaIcon(
-                                            FontAwesomeIcons.solidCircleQuestion,
-                                            color: Colors.grey.shade500,
-                                            size: 18,
-                                          ),
-                                        ),
+                                        AppFormSectionTitle(l10n.capabilities, isRequired: true),
+                                        const AppFormDocsButton(url: _docsUrl),
                                       ],
                                     ),
                                   ),
@@ -382,19 +257,14 @@ class _AddAppPageState extends State<AddAppPage> {
                                       onChanged: () {
                                         provider.checkValidity();
                                       },
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF1F1F25),
-                                          borderRadius: BorderRadius.circular(18.0),
-                                        ),
-                                        padding: const EdgeInsets.all(14.0),
+                                      child: AppFormCard(
                                         child: Column(
                                           children: [
                                             if (provider.isCapabilitySelectedById('chat'))
                                               PromptTextField(
                                                 controller: provider.chatPromptController,
-                                                label: context.l10n.chatPrompt,
-                                                hint: context.l10n.chatPromptPlaceholder,
+                                                label: l10n.chatPrompt,
+                                                hint: l10n.chatPromptPlaceholder,
                                               ),
                                             if (provider.isCapabilitySelectedById('memories') &&
                                                 provider.isCapabilitySelectedById('chat'))
@@ -402,8 +272,8 @@ class _AddAppPageState extends State<AddAppPage> {
                                             if (provider.isCapabilitySelectedById('memories'))
                                               PromptTextField(
                                                 controller: provider.conversationPromptController,
-                                                label: context.l10n.conversationPrompt,
-                                                hint: context.l10n.conversationPromptPlaceholder,
+                                                label: l10n.conversationPrompt,
+                                                hint: l10n.conversationPromptPlaceholder,
                                               ),
                                           ],
                                         ),
@@ -417,22 +287,14 @@ class _AddAppPageState extends State<AddAppPage> {
                               Column(
                                 children: [
                                   const SizedBox(height: 12),
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF1F1F25),
-                                      borderRadius: BorderRadius.circular(18.0),
-                                    ),
+                                  AppFormCard(
                                     padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 20.0),
-                                    width: double.infinity,
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Padding(
                                           padding: const EdgeInsets.only(left: 8.0),
-                                          child: Text(
-                                            context.l10n.notificationScopes,
-                                            style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                                          ),
+                                          child: AppFormSectionTitle(l10n.notificationScopes),
                                         ),
                                         const SizedBox(height: 16),
                                         const NotificationScopesChipsWidget(),
@@ -446,244 +308,58 @@ class _AddAppPageState extends State<AddAppPage> {
                               Column(
                                 children: [
                                   const SizedBox(height: 12),
-                                  Container(
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF1F1F25),
-                                      borderRadius: BorderRadius.circular(18.0),
-                                    ),
-                                    padding: const EdgeInsets.all(14.0),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Padding(
-                                          padding: const EdgeInsets.only(left: 8.0),
-                                          child: Text.rich(
-                                            TextSpan(
-                                              text: 'GitHub Repository URL',
-                                              style: TextStyle(color: Colors.grey.shade300, fontSize: 16),
-                                              children: const [
-                                                TextSpan(
-                                                  text: ' *',
-                                                  style: TextStyle(color: Colors.red),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Padding(
-                                          padding: const EdgeInsets.only(left: 8.0),
-                                          child: Text(
-                                            'Link to your app\'s source code repository',
-                                            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 12),
-                                        TextFormField(
-                                          controller: provider.sourceCodeUrlController,
-                                          decoration: InputDecoration(
-                                            hintText: 'https://github.com/username/repo',
-                                            hintStyle: const TextStyle(color: Colors.grey),
-                                            border: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(12),
-                                              borderSide: const BorderSide(color: Colors.grey),
-                                            ),
-                                            enabledBorder: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(12),
-                                              borderSide: BorderSide(color: Colors.grey.shade800),
-                                            ),
-                                            focusedBorder: OutlineInputBorder(
-                                              borderRadius: BorderRadius.circular(12),
-                                              borderSide: const BorderSide(color: Colors.white),
-                                            ),
-                                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                          ),
-                                          style: const TextStyle(color: Colors.white),
-                                          keyboardType: TextInputType.url,
-                                          validator: (value) {
-                                            if (value == null || value.trim().isEmpty) {
-                                              return 'GitHub repository URL is required';
-                                            }
-                                            if (!Uri.tryParse(value.trim())!.isAbsolute) {
-                                              return 'Please enter a valid URL';
-                                            }
-                                            return null;
-                                          },
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                  AppSourceCodeUrlSection(controller: provider.sourceCodeUrlController),
                                 ],
                               ),
                             const SizedBox(height: 22),
                             // App Settings Card
-                            Container(
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1F1F25),
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Public toggle
-                                  Row(
-                                    children: [
-                                      Container(
-                                        width: 40,
-                                        height: 40,
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF2A2A2E),
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
-                                        child: Center(
-                                          child: FaIcon(
-                                            provider.makeAppPublic ? FontAwesomeIcons.globe : FontAwesomeIcons.lock,
-                                            color: Colors.grey.shade400,
-                                            size: 16,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 14),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              context.l10n.makePublic,
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              provider.makeAppPublic
-                                                  ? context.l10n.anyoneCanDiscover
-                                                  : context.l10n.onlyYouCanUse,
-                                              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      Switch(
-                                        value: provider.makeAppPublic,
-                                        onChanged: (value) {
-                                          provider.setIsPrivate(value);
-                                        },
-                                        activeThumbColor: const Color(0xFF6366F1),
-                                      ),
-                                    ],
+                            OmiSettingsGroup(
+                              children: [
+                                OmiSettingsRow.toggle(
+                                  leading:
+                                      FaIcon(provider.makeAppPublic ? FontAwesomeIcons.globe : FontAwesomeIcons.lock),
+                                  title: l10n.makePublic,
+                                  subtitle: provider.makeAppPublic ? l10n.anyoneCanDiscover : l10n.onlyYouCanUse,
+                                  value: provider.makeAppPublic,
+                                  onChanged: provider.setIsPrivate,
+                                ),
+                                if (provider.allowPaidApps)
+                                  OmiSettingsRow.toggle(
+                                    leading: const FaIcon(FontAwesomeIcons.dollarSign),
+                                    title: l10n.paidApp,
+                                    subtitle: provider.isPaid ? l10n.usersPayToUse : l10n.freeForEveryone,
+                                    value: provider.isPaid,
+                                    onChanged: provider.setIsPaid,
                                   ),
-
-                                  if (provider.allowPaidApps) ...[
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(vertical: 16),
-                                      child: Divider(color: Colors.grey.shade800, height: 1),
-                                    ),
-
-                                    // Paid toggle
-                                    Row(
-                                      children: [
-                                        Container(
-                                          width: 40,
-                                          height: 40,
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF2A2A2E),
-                                            borderRadius: BorderRadius.circular(10),
-                                          ),
-                                          child: Center(
-                                            child: FaIcon(
-                                              FontAwesomeIcons.dollarSign,
-                                              color: Colors.grey.shade400,
-                                              size: 16,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 14),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                context.l10n.paidApp,
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 16,
-                                                  fontWeight: FontWeight.w500,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                provider.isPaid
-                                                    ? context.l10n.usersPayToUse
-                                                    : context.l10n.freeForEveryone,
-                                                style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Switch(
-                                          value: provider.isPaid,
-                                          onChanged: (value) {
-                                            provider.setIsPaid(value);
-                                          },
-                                          activeThumbColor: const Color(0xFF22C55E),
-                                        ),
-                                      ],
-                                    ),
-
-                                    // Price input
-                                    if (provider.isPaid) ...[
-                                      const SizedBox(height: 16),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF2A2A2E),
-                                          borderRadius: BorderRadius.circular(14),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            const Text(
-                                              '\$',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                                fontSize: 20,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Expanded(
-                                              child: TextField(
-                                                controller: provider.priceController,
-                                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 20,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                                decoration: InputDecoration(
-                                                  hintText: '0.00',
-                                                  hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 20),
-                                                  border: InputBorder.none,
-                                                  isDense: true,
-                                                  contentPadding: EdgeInsets.zero,
-                                                ),
-                                              ),
-                                            ),
-                                            Text(
-                                              context.l10n.perMonth,
-                                              style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
-                                            ),
-                                          ],
+                              ],
+                            ),
+                            if (provider.allowPaidApps && provider.isPaid) ...[
+                              const SizedBox(height: OmiSpacing.sm),
+                              AppFormCard(
+                                child: Row(
+                                  children: [
+                                    const Text('\$', style: OmiType.title3),
+                                    const SizedBox(width: OmiSpacing.xs),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: provider.priceController,
+                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                        style: OmiType.title3,
+                                        decoration: InputDecoration(
+                                          hintText: '0.00',
+                                          hintStyle: OmiType.title3.copyWith(color: OmiColors.textTertiary),
+                                          border: InputBorder.none,
+                                          isDense: true,
+                                          contentPadding: EdgeInsets.zero,
                                         ),
                                       ),
-                                    ],
+                                    ),
+                                    Text(l10n.perMonth,
+                                        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
                                   ],
-                                ],
+                                ),
                               ),
-                            ),
+                            ],
                             const SizedBox(height: 106),
                           ],
                         ),
@@ -696,10 +372,10 @@ class _AddAppPageState extends State<AddAppPage> {
               : Container(
                   padding: const EdgeInsets.only(left: 16.0, right: 16, bottom: 30, top: 10),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12.0),
-                    color: const Color(0xFF1F1F25),
+                    borderRadius: OmiRadius.mdAll,
+                    color: OmiColors.surface1,
                     gradient: LinearGradient(
-                      colors: [Colors.black, Colors.black.withValues(alpha: 0)],
+                      colors: [OmiColors.surface0, OmiColors.surface0.withValues(alpha: 0)],
                       begin: Alignment.bottomCenter,
                       end: Alignment.topCenter,
                     ),
@@ -708,148 +384,17 @@ class _AddAppPageState extends State<AddAppPage> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      GestureDetector(
-                        onTap: !provider.isValid
-                            ? null
-                            : () {
-                                var isValid = provider.validateForm();
-                                if (isValid) {
-                                  showDialog(
-                                    context: context,
-                                    builder: (ctx) {
-                                      return ConfirmationDialog(
-                                        title: context.l10n.submitAppQuestion,
-                                        description: provider.makeAppPublic
-                                            ? context.l10n.submitAppPublicDescription
-                                            : context.l10n.submitAppPrivateDescription,
-                                        checkboxText: context.l10n.dontShowAgain,
-                                        checkboxValue: !showSubmitAppConfirmation,
-                                        onCheckboxChanged: (value) {
-                                          setState(() {
-                                            showSubmitAppConfirmation = !value;
-                                          });
-                                        },
-                                        onConfirm: () async {
-                                          if (provider.makeAppPublic) {
-                                            PlatformManager.instance.analytics.publicAppSubmitted({
-                                              'app_name': provider.appNameController.text,
-                                              'app_category': provider.appCategory,
-                                              'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
-                                              'is_paid': provider.isPaid,
-                                            });
-                                          } else {
-                                            PlatformManager.instance.analytics.privateAppSubmitted({
-                                              'app_name': provider.appNameController.text,
-                                              'app_category': provider.appCategory,
-                                              'app_capabilities': provider.capabilities.map((e) => e.id).toList(),
-                                              'is_paid': provider.isPaid,
-                                            });
-                                          }
-                                          SharedPreferencesUtil().showSubmitAppConfirmation = showSubmitAppConfirmation;
-                                          Navigator.pop(context);
-                                          String? appId = await provider.submitApp();
-                                          App? app;
-                                          if (appId != null && context.mounted) {
-                                            app = await context.read<AppProvider>().getAppFromId(appId);
-                                          }
-                                          var paymentProvider = PaymentMethodProvider();
-                                          await paymentProvider.getPaymentMethodsStatus();
-
-                                          if (app != null && mounted && context.mounted) {
-                                            if (app.isPaid && paymentProvider.activeMethod == null) {
-                                              showCupertinoModalPopup(
-                                                context: context,
-                                                builder: (ctx) => Container(
-                                                  padding: const EdgeInsets.all(20),
-                                                  decoration: const BoxDecoration(
-                                                    color: Color(0xFF1F1F25),
-                                                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                                                  ),
-                                                  child: Material(
-                                                    color: Colors.transparent,
-                                                    child: Column(
-                                                      mainAxisSize: MainAxisSize.min,
-                                                      children: [
-                                                        Container(
-                                                          width: 40,
-                                                          height: 4,
-                                                          margin: const EdgeInsets.only(bottom: 20),
-                                                          decoration: BoxDecoration(
-                                                            color: Colors.grey.shade700,
-                                                            borderRadius: BorderRadius.circular(2),
-                                                          ),
-                                                        ),
-                                                        const SizedBox(height: 20),
-                                                        Text(
-                                                          context.l10n.startEarning,
-                                                          style: const TextStyle(
-                                                            color: Colors.white,
-                                                            fontSize: 24,
-                                                            fontWeight: FontWeight.bold,
-                                                          ),
-                                                        ),
-                                                        const SizedBox(height: 12),
-                                                        Text(
-                                                          context.l10n.connectStripeOrPayPal,
-                                                          textAlign: TextAlign.center,
-                                                          style: const TextStyle(color: Colors.grey, fontSize: 16),
-                                                        ),
-                                                        const SizedBox(height: 32),
-                                                        CupertinoButton(
-                                                          color: Colors.white,
-                                                          borderRadius: BorderRadius.circular(12),
-                                                          onPressed: () {
-                                                            Navigator.pop(ctx);
-                                                            routeToPage(context, const PaymentsPage());
-                                                          },
-                                                          child: Text(
-                                                            context.l10n.connectNow,
-                                                            style: const TextStyle(
-                                                              color: Colors.black,
-                                                              fontWeight: FontWeight.w600,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                        const SizedBox(height: 8),
-                                                        CupertinoButton(
-                                                          onPressed: () => Navigator.pop(ctx),
-                                                          child: Text(
-                                                            context.l10n.maybeLater,
-                                                            style: TextStyle(color: Colors.grey.shade400),
-                                                          ),
-                                                        ),
-                                                        SizedBox(height: MediaQuery.of(context).padding.bottom),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                ),
-                                              );
-                                            } else {
-                                              Navigator.pop(context);
-                                              routeToPage(context, AppDetailPage(app: app));
-                                            }
-                                          }
-                                        },
-                                        onCancel: () {
-                                          Navigator.pop(context);
-                                        },
-                                      );
-                                    },
-                                  );
-                                }
-                              },
-                        child: Container(
-                          padding: const EdgeInsets.all(12.0),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(12.0),
-                            color: provider.isValid ? Colors.white : Colors.grey.shade700,
-                          ),
-                          child: Text(
-                            context.l10n.submitApp,
-                            style: const TextStyle(color: Colors.black, fontSize: 16),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
+                      OmiButton(
+                        label: l10n.submitApp,
+                        expand: true,
+                        // Not awaited: the confirmation dialog (and the submit it guards) run on their
+                        // own, the same as the pre-migration hand-drawn button. The page-level
+                        // OmiLoadingState above already covers provider.isSubmitting.
+                        onPressed: provider.isValid
+                            ? () {
+                                _confirmAndSubmit(context, provider);
+                              }
+                            : null,
                       ),
                       const SizedBox(height: 10),
                       GestureDetector(
@@ -858,14 +403,13 @@ class _AddAppPageState extends State<AddAppPage> {
                         },
                         child: Text.rich(
                           TextSpan(
-                            text: context.l10n.bySubmittingYouAgreeToOmi,
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 10),
+                            text: l10n.bySubmittingYouAgreeToOmi,
+                            style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
                             children: [
                               TextSpan(
-                                text: context.l10n.termsAndPrivacyPolicy,
-                                style: TextStyle(
-                                  color: Colors.grey.shade500,
-                                  fontSize: 10,
+                                text: l10n.termsAndPrivacyPolicy,
+                                style: OmiType.caption.copyWith(
+                                  color: OmiColors.textSecondary,
                                   decoration: TextDecoration.underline,
                                 ),
                               ),

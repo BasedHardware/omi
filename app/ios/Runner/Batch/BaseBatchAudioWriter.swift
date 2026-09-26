@@ -1,5 +1,146 @@
 import Foundation
 
+/// The persistent capture authorization shared by every live native batch sink.
+///
+/// Flutter writes this as JSON so native capture can continue making the
+/// admission decision while the Flutter engine is suspended or gone. A
+/// revision is stamped onto work admitted by a callback and checked again at
+/// the write boundary; this retires audio that was queued before a mute or
+/// policy transition became visible.
+struct CaptureAdmissionPolicy: Equatable {
+    static let defaultsKey = "flutter.capturePolicy"
+
+    enum ProcessUpdateResult: Equatable {
+        case applied
+        case stale(currentRevision: Int64)
+        case persistenceNotReady
+    }
+
+    let muted: Bool
+    let revision: Int64
+
+    // Native callbacks may arrive while Flutter is suspended, so this latch
+    // is process-scoped and protected independently of UserDefaults. It is
+    // reset only when the process exits; durable preferences initialize a new
+    // process.
+    private static let processLock = NSLock()
+    private static var processLatch: CaptureAdmissionPolicy?
+
+    /// Resolve the canonical policy, with a conservative compatibility path
+    /// for clients that have not started writing it yet. Once the canonical
+    /// key exists, every malformed or unsupported value denies new capture.
+    static func load(from defaults: UserDefaults) -> CaptureAdmissionPolicy {
+        let durable = durablePolicy(from: defaults)
+        processLock.lock()
+        defer { processLock.unlock() }
+        // A native mute remains authoritative until an explicit unmute command
+        // is accepted. This covers a failed SharedPreferences write: the old
+        // durable value may still be unmuted while this process remains muted.
+        if let latched = processLatch, latched.muted {
+            return CaptureAdmissionPolicy(muted: true, revision: max(latched.revision, durable.revision))
+        }
+        // The latch is deny-only. When it is clear, the durable preference
+        // remains authoritative, including malformed/muted fail-closed state.
+        return durable
+    }
+
+    /// Apply a process-lifetime native transition. Mute is applied before the
+    /// caller persists to UserDefaults. Unmute is released only when the
+    /// durable canonical value already matches the requested revision.
+    static func applyProcessUpdate(
+        muted: Bool,
+        revision: Int64,
+        defaults: UserDefaults
+    ) -> ProcessUpdateResult {
+        let durable = durablePolicy(from: defaults)
+        processLock.lock()
+        defer { processLock.unlock() }
+
+        let currentRevision = max(processLatch?.revision ?? 0, durable.revision)
+        guard revision >= currentRevision else {
+            return .stale(currentRevision: currentRevision)
+        }
+        if !muted, durable != CaptureAdmissionPolicy(muted: false, revision: revision) {
+            return .persistenceNotReady
+        }
+        processLatch = CaptureAdmissionPolicy(muted: muted, revision: revision)
+        return .applied
+    }
+
+    /// Returns the native high-water revision for a Flutter engine recreated
+    /// without restarting the process.
+    static func currentProcessRevision() -> Int64 {
+        processLock.lock()
+        defer { processLock.unlock() }
+        return processLatch?.revision ?? 0
+    }
+
+    /// Strictly decode the integer revision supplied over a Flutter channel.
+    /// NSNumber's boolean representation is intentionally rejected.
+    static func channelRevision(_ value: Any?) -> Int64? {
+        guard let number = value as? NSNumber else { return nil }
+        switch String(cString: number.objCType) {
+        case "s", "i", "l", "q":
+            return number.int64Value
+        case "S", "I", "L", "Q":
+            let unsigned = number.uint64Value
+            return unsigned <= UInt64(Int64.max) ? Int64(unsigned) : nil
+        default:
+            return nil
+        }
+    }
+
+    /// Test-only reset for the process-scoped state.
+    static func resetProcessLatchForTesting() {
+        processLock.lock()
+        processLatch = nil
+        processLock.unlock()
+    }
+
+    private static func durablePolicy(from defaults: UserDefaults) -> CaptureAdmissionPolicy {
+        guard defaults.object(forKey: defaultsKey) != nil else {
+            return CaptureAdmissionPolicy(
+                muted: defaults.bool(forKey: "flutter.deviceMuted") || defaults.bool(forKey: "flutter.batchMuted"),
+                revision: 0
+            )
+        }
+
+        guard let raw = defaults.object(forKey: defaultsKey) as? String,
+              let data = raw.data(using: .utf8),
+              !data.isEmpty,
+              data.count <= 4_096,
+              let json = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]),
+              let object = json as? [String: Any],
+              Set(object.keys) == Set(["version", "revision", "muted"]),
+              let version = strictInteger(object["version"]),
+              version == 1,
+              let revision = strictInteger(object["revision"]),
+              revision >= 0,
+              let muted = strictBoolean(object["muted"]) else {
+            // A present-but-invalid canonical policy must never reopen the
+            // microphone or BLE sink through a legacy boolean.
+            return CaptureAdmissionPolicy(muted: true, revision: 0)
+        }
+        return CaptureAdmissionPolicy(muted: muted, revision: revision)
+    }
+
+    /// Whether work admitted under `admittedRevision` may cross the native
+    /// write boundary under the current policy.
+    func permits(admittedRevision: Int64) -> Bool {
+        !muted && revision == admittedRevision
+    }
+
+    private static func strictInteger(_ value: Any?) -> Int64? {
+        guard let number = value as? NSNumber, String(cString: number.objCType) == "q" else { return nil }
+        return number.int64Value
+    }
+
+    private static func strictBoolean(_ value: Any?) -> Bool? {
+        guard let number = value as? NSNumber, String(cString: number.objCType) == "c" else { return nil }
+        return number.boolValue
+    }
+}
+
 /// Shared file mechanics for native batch (offline) capture sinks. Subclasses decide
 /// *policy* — which frames to write, file naming, and when to rotate/finalize — while
 /// this base owns the *mechanics* every sink must get right identically:

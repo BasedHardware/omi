@@ -89,6 +89,14 @@ def test_llm_gateway_is_a_bounded_fallback_component():
     assert fallback_mod.bucket_component('llm_gateway') == 'llm_gateway'
 
 
+def test_stt_live_session_is_a_bounded_fallback_component():
+    """Mid-session hops used component=stt_live_session; without the allowlist
+    they bucketed to other, so omi-stt-fallback-leg-dead (keyed on stt_selection)
+    could not see a 100% dead Soniox failover leg.
+    """
+    assert fallback_mod.bucket_component('stt_live_session') == 'stt_live_session'
+
+
 def test_firestore_malformed_document_labels_are_bounded():
     assert fallback_mod.bucket_component('firestore_read') == 'firestore_read'
     assert fallback_mod.bucket_reason('malformed_doc') == 'malformed_doc'

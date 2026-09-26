@@ -7,6 +7,7 @@ fallback.  Callers must first own a durable finalization job lease.
 from __future__ import annotations
 
 import logging
+import os
 from enum import Enum
 
 from database import conversations as conversations_db
@@ -16,7 +17,9 @@ from models.conversation_enums import ConversationStatus
 from models.geolocation import Geolocation
 from utils.app_integrations import trigger_external_integrations
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.location import async_resolve_geolocation
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.conversations.process_conversation import (
     DerivedEffectsDisposition,
@@ -35,6 +38,21 @@ from utils.retrieval.frame_request_authority import resolve_frame_request_author
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
+
+
+def _maybe_start_shadow(uid: str, conversation) -> None:
+    # Keep the optional provider/storage import chain off the canonical
+    # finalizer path, including when this module is loaded by isolated tests.
+    if os.getenv('TRANSCRIPTION_SHADOW_ENABLED', 'false').lower() != 'true':
+        return
+    if os.getenv('TRANSCRIPTION_SHADOW_KILL_SWITCH', 'false').lower() == 'true':
+        return
+    try:
+        from utils.conversations.transcription_shadow import maybe_start_shadow
+
+        maybe_start_shadow(uid, conversation)
+    except Exception as error:
+        logger.warning('event=transcription_shadow outcome=admission_failed exception_type=%s', type(error).__name__)
 
 
 class ConversationFinalizationError(RuntimeError):
@@ -58,7 +76,7 @@ async def finalize_persisted_conversation(
     finalization_job_id: str,
     dispatch_generation: int,
     lease_epoch: int,
-    force_process: bool = False,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     final_attempt: bool = False,
 ) -> ConversationFinalizationDisposition:
     """Finalize persisted data once the caller has acquired the job lease.
@@ -134,6 +152,10 @@ async def finalize_persisted_conversation(
         # validated live BYOK keys) while isolating this expensive sync path
         # from WebSocket and Cloud Tasks event loops.
         resolved_language = language or getattr(conversation, 'language', None) or 'en'
+        # Admission only schedules a bounded shadow job. It never awaits audio,
+        # STT or metric persistence and cannot alter this processing input.
+        if conversation.status != ConversationStatus.completed:
+            _maybe_start_shadow(uid, conversation)
         persistence: dict[str, bool] = {'owned': True}
         derived_effects: list = []
         derived_disposition: list[DerivedEffectsDisposition] = [DerivedEffectsDisposition.RUN]
@@ -144,7 +166,7 @@ async def finalize_persisted_conversation(
                 uid,
                 resolved_language,
                 conversation,
-                force_process=force_process,
+                trigger=trigger,
                 defer_derived_effects=True,
                 persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
                 derived_effects_observer=derived_effects.append,
@@ -183,6 +205,8 @@ async def finalize_persisted_conversation(
             dispatch_generation,
             lease_epoch,
         )
+        if fanout['status'] in {'claimed', 'completed'}:
+            await run_blocking(db_executor, link_duplicate_captures, uid, conversation)
         if fanout['status'] == 'completed':
             return ConversationFinalizationDisposition.completed
         if fanout['status'] == 'fenced':
@@ -268,7 +292,9 @@ async def finalize_persisted_conversation(
             try:
                 structured = getattr(conversation, 'structured', None)
                 summary = getattr(structured, 'title', '') or getattr(structured, 'overview', '') or ''
-                persist_capture_arrival_intent(uid, conversation_id=conversation_id, summary=summary)
+                await run_blocking(
+                    db_executor, persist_capture_arrival_intent, uid, conversation_id=conversation_id, summary=summary
+                )
             except Exception as error:
                 logger.warning(
                     'chat-first capture arrival intent failed during finalization uid=%s error=%s',

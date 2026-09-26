@@ -8,6 +8,8 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/pages/apps/widgets/app_actions.dart';
+import 'package:omi/ui/ui.dart';
 
 // Custom notification class to communicate with parent widgets
 class SelectAppNotification extends Notification {
@@ -40,7 +42,7 @@ class PopularAppsSection extends StatelessWidget {
             children: [
               Text(
                 context.l10n.popularApps,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
+                style: OmiType.title3,
               ),
               const Spacer(),
               Row(
@@ -48,10 +50,10 @@ class PopularAppsSection extends StatelessWidget {
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(8)),
+                    decoration: const BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
                     child: Text(
                       '${apps.length}',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade300, fontWeight: FontWeight.w600),
+                      style: OmiType.caption.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -71,46 +73,32 @@ class PopularAppsSection extends StatelessWidget {
           separatorBuilder: (context, index) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
             final app = displayedApps[index];
+            void openApp() {
+              final appProvider = context.read<AppProvider>();
+              appProvider.filterApps();
+              PlatformManager.instance.analytics.pageOpened('App Detail');
+              // clear any existing search
+              appProvider.searchApps('');
+              SelectAppNotification(app).dispatch(context);
+            }
+
             return GestureDetector(
-              onTap: () {
-                final appProvider = context.read<AppProvider>();
-
-                appProvider.filterApps();
-
-                PlatformManager.instance.analytics.pageOpened('App Detail');
-
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(context.l10n.openingApp(app.name)),
-                    duration: const Duration(milliseconds: 500),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-
-                // clear any existing search
-                appProvider.searchApps('');
-
-                final notification = SelectAppNotification(app);
-                notification.dispatch(context);
-              },
+              onTap: openApp,
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1F1F25).withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(12),
+                  color: OmiColors.surface1.withValues(alpha: 0.3),
+                  borderRadius: OmiRadius.mdAll,
                 ),
                 child: Row(
                   children: [
                     // App icon - Apple style square with rounded corners
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: OmiRadius.mdAll,
                       child: Container(
                         width: 60,
                         height: 60,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF35343B),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                        decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
                         child: CachedNetworkImage(
                           imageUrl: app.getImageUrl(),
                           httpHeaders: const {
@@ -119,18 +107,16 @@ class PopularAppsSection extends StatelessWidget {
                           },
                           fit: BoxFit.cover,
                           placeholder: (context, url) => ShimmerWithTimeout(
-                            baseColor: const Color(0xFF1F1F25),
-                            highlightColor: const Color(0xFF35343B),
+                            baseColor: OmiColors.surface1,
+                            highlightColor: OmiColors.surface2,
                             child: Container(
                               width: double.infinity,
                               height: double.infinity,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1F1F25),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
                             ),
                           ),
-                          errorWidget: (context, url, error) => Icon(Icons.apps, size: 30, color: Colors.grey.shade600),
+                          errorWidget: (context, url, error) =>
+                              const Icon(Icons.apps, size: 30, color: OmiColors.textTertiary),
                         ),
                       ),
                     ),
@@ -144,14 +130,14 @@ class PopularAppsSection extends StatelessWidget {
                         children: [
                           Text(
                             app.name,
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.white),
+                            style: OmiType.callout.copyWith(fontWeight: FontWeight.w500),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            app.description.length > 50 ? '${app.description.substring(0, 50)}...' : app.description,
-                            style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                            app.description,
+                            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -163,16 +149,15 @@ class PopularAppsSection extends StatelessWidget {
                                 const SizedBox(width: 4),
                                 Text(
                                   app.getRatingAvg()!,
-                                  style: TextStyle(
-                                    fontSize: 12,
+                                  style: OmiType.footnote.copyWith(
                                     fontWeight: FontWeight.w500,
-                                    color: Colors.grey.shade300,
+                                    color: OmiColors.textSecondary,
                                   ),
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
                                   '(${app.ratingCount})',
-                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                                  style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
                                 ),
                               ],
                             ),
@@ -183,26 +168,7 @@ class PopularAppsSection extends StatelessWidget {
 
                     const SizedBox(width: 12),
 
-                    // Action button - Apple style
-                    Container(
-                      width: 72,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: app.enabled ? Colors.grey.shade700 : Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Center(
-                        child: Text(
-                          app.enabled ? context.l10n.open : 'Enable',
-                          // Black on the white "Enable" fill, white on the grey "Open" one.
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: app.enabled ? Colors.white : Colors.black,
-                          ),
-                        ),
-                      ),
-                    ),
+                    AppListActionButton(app: app, onOpen: openApp),
                   ],
                 ),
               ),

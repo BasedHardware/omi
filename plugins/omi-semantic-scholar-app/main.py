@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from typing import Any, Dict
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import httpx
 from fastapi import FastAPI
@@ -67,6 +67,13 @@ def _to_int(value: Any) -> int:
     return 0
 
 
+def _coerce_limit(value: Any, default: int = 5) -> int:
+    val = _to_int(value) if value is not None else default
+    if val <= 0:
+        val = default
+    return min(max(val, 1), 10)
+
+
 def _paper_sort_key(paper: Any) -> tuple[int, int]:
     """Normalized (year, citationCount) sort key.
 
@@ -97,7 +104,14 @@ def normalize_identifier(raw: str) -> str:
     identifiers (doi:, arxiv:, pmid:, corpusid:, ...) in any casing. Anything
     else, e.g. a bare Semantic Scholar paper ID, is returned unchanged.
     """
+    if not isinstance(raw, str):
+        return ""
     value = raw.strip()
+    if "%" in value:
+        try:
+            value = unquote(value).strip()
+        except Exception:
+            pass
     lower = value.lower()
 
     for marker, namespace in _IDENTIFIER_URL_MARKERS:
@@ -121,12 +135,23 @@ def normalize_identifier(raw: str) -> str:
     return value
 
 
+_client: httpx.AsyncClient | None = None
+
+
+def get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or getattr(_client, "is_closed", False):
+        _client = httpx.AsyncClient(timeout=TIMEOUT)
+    return _client
+
+
 async def api_get(path: str, params: Dict[str, Any]) -> Dict[str, Any]:
     url = f"{API_BASE}{path}"
-    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        resp = await client.get(url, params=params)
-        resp.raise_for_status()
-        return resp.json()
+    client = get_client()
+    resp = await client.get(url, params=params)
+    resp.raise_for_status()
+    return resp.json()
+
 
 
 @app.get("/.well-known/omi-tools.json")
@@ -198,11 +223,12 @@ async def manifest() -> Dict[str, Any]:
 async def search_papers(req: SearchPapersRequest) -> ChatToolResponse:
     params: Dict[str, Any] = {
         "query": req.query,
-        "limit": req.max_results,
+        "limit": _coerce_limit(req.max_results),
         "fields": "title,year,authors,citationCount,url,venue",
     }
     if req.min_year:
         params["year"] = f"{req.min_year}-"
+
 
     try:
         data = await api_get("/paper/search", params)
@@ -290,7 +316,8 @@ async def get_author_papers(req: GetAuthorPapersRequest) -> ChatToolResponse:
         if not papers:
             return ChatToolResponse(result=f"No papers found for author {author_name}.")
 
-        papers_sorted = sorted(papers, key=_paper_sort_key, reverse=True)[: req.max_results]
+        limit = _coerce_limit(req.max_results)
+        papers_sorted = sorted(papers, key=_paper_sort_key, reverse=True)[:limit]
 
         lines = [f"Recent papers by {author_name}:"]
         for i, paper in enumerate(papers_sorted, start=1):

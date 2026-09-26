@@ -1022,6 +1022,13 @@ class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
 
 def get_prerecorded_provider(language: Optional[str] = 'en') -> PrerecordedSTTProvider:
     """Construct exactly the language-aware provider selected for telemetry."""
+    # Offline harness sessions swap the provider for a deterministic stub
+    # (selection/telemetry still resolve normally above them). Imported lazily:
+    # the stub module imports this one for the provider ABC.
+    from utils.stt.prerecorded_stub import PrerecordedStubProvider, prerecorded_stub_enabled
+
+    if prerecorded_stub_enabled():
+        return PrerecordedStubProvider()
     service, _provider_language, model = get_prerecorded_service(language)
     if service == PrerecordedSTTService.MODULATE:
         return ModulatePrerecordedProvider()

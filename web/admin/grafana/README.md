@@ -64,7 +64,48 @@ PostHog coverage for the macOS telemetry path stays on viral-metrics as
 `summary.activationTelemetryCoverage`; the Firestore compat overlay applies
 only to the macOS scope.
 
-## Apply
+## Plan cost and per-user economics
+
+The All platforms board has three account-level panels backed by the admin-authenticated
+`/api/omi/stats/plan-economics` route. They read only aggregate tables in
+`based-hardware.omi_finops`; the cost producer and allocation contract are documented in
+`backend/scripts/finops/README.md`. They are deliberately absent from the platform boards:
+the producer does not attribute every request to a platform.
+
+- Cost is the mean of seven consecutive settled usage days, multiplied by 30. The table
+  separates allocated billed cost (including fixed Vertex PT) from estimated vendor STT.
+  Margin includes the low STT estimate; the high-STT sensitivity appears alongside it.
+  One-time charges and SaaS without a feed are excluded, so this is an estimated contribution
+  view, not complete accounting profit.
+- Revenue and paying-subscription counts come from the producer's Stripe snapshot for the
+  last cost day. The coverage panel shows the actual snapshot date separately. These can
+  differ from the live product MRR donut (different timestamp, coupon treatment, and grouping).
+- Subscriber units divide by active/past-due subscriptions, not unique people. Active-user
+  cost divides total window cost by the sum of daily cost-active users, not WAU or MAU.
+  Free users keep their cost row; subscriber units and margin are N/A with no denominator.
+  The per-user table puts active-user cost first and explains the subscriber basis per row,
+  distinguishing Free's lack of paid subscriptions from an unavailable revenue mapping.
+- The producer joins on the backend plan, so Omi Unlimited and Neo are one row. Unmapped
+  plans remain visible with unavailable revenue; the reader never invents a split or $0.
+- Latest usage must be D−2 or D−3 (one daily-job scheduling grace day), with all seven days,
+  complete plan components, matching run IDs, plan/total conservation and all reconciliation
+  checks within 0.5%. Otherwise monetary figures are N/A and the coverage panel explains why.
+  Missing/stale revenue leaves valid costs visible but removes revenue and margins.
+- A 30-minute in-process cache coalesces panel reads. It has no stale-on-error fallback and
+  expires at UTC midnight. Queries are capped at 100 MB and never read user-level tables.
+
+Deployment prerequisite: the existing `GCP_BILLING_SA_JSON` identity (or explicitly selected
+ADC identity) needs BigQuery jobUser and read access to the three aggregate tables
+`omi_finops.unit_cost_daily`, `omi_finops.unit_cost_reconciliation`, and
+`omi_finops.plan_revenue_daily`, in addition to its existing billing-export access.
+Prefer table-scoped `roles/bigquery.dataViewer`; it needs neither write access nor access
+to `unit_cost_user_day`. The daily FinOps producer must also be
+running and current; a dashboard deployment cannot refresh its source tables.
+
+Validation: `npm test` and `npm run typecheck` in `web/admin`, plus
+`python3 web/admin/grafana/test_build_dashboards.py` from the repository root.
+
+## Apply dashboards
 
 Grafana's database is the layout master — drag/resize edits made in the UI
 persist there **and survive applies**: `apply_omi_tv_dashboard.py` fetches the

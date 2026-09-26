@@ -70,7 +70,7 @@ def _parse_value(raw: str) -> Any:
     value = raw.strip()
     if not value:
         return ""
-    if value.startswith(("[", '"')) or value in {"true", "false", "null"}:
+    if value.startswith(("[", "{", '"')) or value in {"true", "false", "null"}:
         return json.loads(value)
     return value
 
@@ -91,6 +91,12 @@ def _parse_yaml_subset(path: Path) -> dict[str, list[dict[str, Any]]]:
             continue
         if section is None:
             raise ValueError(f"{path}:{lineno}: entry appears before a section")
+        if stripped.startswith("- {"):
+            current = json.loads(stripped[2:])
+            if not isinstance(current, dict):
+                raise ValueError(f"{path}:{lineno}: expected an object")
+            sections[section].append(current)
+            continue
         if stripped.startswith("- "):
             current = {}
             sections[section].append(current)
@@ -225,11 +231,20 @@ def merge_base(root: Path, base: str, head: str) -> str:
 
 
 def changed_files(root: Path, base: str, head: str, include_worktree: bool = False) -> list[str]:
-    resolved_base = merge_base(root, base, head)
-    files = set(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", f"{resolved_base}...{head}").splitlines())
+    """PR file list: three-dot *base*...*head*. Never first-parent or HEAD~."""
+    files = set(
+        run_git(
+            root,
+            "diff",
+            "--name-only",
+            "--no-renames",
+            "--diff-filter=ACMRTD",
+            f"{base}...{head}",
+        ).splitlines()
+    )
     if include_worktree and head == "HEAD":
-        files.update(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", "HEAD").splitlines())
-        files.update(run_git(root, "diff", "--name-only", "--diff-filter=ACMRD", "--cached").splitlines())
+        files.update(run_git(root, "diff", "--name-only", "--no-renames", "--diff-filter=ACMRTD", "HEAD").splitlines())
+        files.update(run_git(root, "diff", "--name-only", "--no-renames", "--diff-filter=ACMRTD", "--cached").splitlines())
         files.update(run_git(root, "ls-files", "--others", "--exclude-standard").splitlines())
     return sorted(path for path in files if path)
 
@@ -241,8 +256,15 @@ def trigger_matches(pattern: str, path: str) -> bool:
         return True
     if fnmatch.fnmatchcase(path, pattern) or PurePath(path).match(pattern):
         return True
-    if "/**/" in pattern:
-        return fnmatch.fnmatchcase(path, pattern.replace("/**/", "/"))
+    if "/**/" in pattern and fnmatch.fnmatchcase(path, pattern.replace("/**/", "/")):
+        return True
+    # `**/x` means "x at any depth, the repository root included" -- the reading
+    # git, .gitignore and Actions path filters share. fnmatch needs the literal
+    # `/`, so a trigger list written only as `**/*.json` selects nothing for a
+    # root-level file it is meant to cover. Collapse a leading `**/` to nothing,
+    # exactly as the interior `/**/` is collapsed above.
+    if pattern.startswith("**/") and fnmatch.fnmatchcase(path, pattern[3:]):
+        return True
     return False
 
 

@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 enum _VerifyStatus { calling, inProgress, missedCall, verified, timedOut }
@@ -77,12 +77,12 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
       if (verified) {
         timer.cancel();
         setState(() => _status = _VerifyStatus.verified);
-        HapticFeedback.mediumImpact();
+        OmiHaptics.success();
         await Future.delayed(const Duration(milliseconds: 800));
         if (!mounted) return;
         Navigator.of(
           context,
-        ).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const PhoneCallsPage()), (route) => route.isFirst);
+        ).pushAndRemoveUntil(omiPageRoute(builder: (_) => const PhoneCallsPage()), (route) => route.isFirst);
       }
     });
   }
@@ -107,61 +107,44 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
+      appBar: AppBar(leading: const OmiBackButton()),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
           child: Column(
             children: [
-              const SizedBox(height: 32),
-              Text(
-                context.l10n.verifyYourNumber,
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
-                textAlign: TextAlign.center,
+              const SizedBox(height: OmiSpacing.xxl),
+              Semantics(
+                header: true,
+                child: Text(context.l10n.verifyYourNumber, style: OmiType.title2, textAlign: TextAlign.center),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: OmiSpacing.sm),
               _buildStatusChip(),
-              const SizedBox(height: 32),
+              const SizedBox(height: OmiSpacing.xxl),
               _buildStepCard(
                 icon: Icons.phone_callback_outlined,
                 label: context.l10n.answerTheCallFrom,
                 value: '+1 (415) 723-4000',
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: OmiSpacing.md),
               _buildCodeCard(),
-              const SizedBox(height: 32),
+              const SizedBox(height: OmiSpacing.xxl),
               Text(
                 widget.phoneNumber,
-                style: TextStyle(fontSize: 16, color: Colors.grey[500]),
+                style: OmiType.callout.copyWith(color: OmiColors.textSecondary),
                 textAlign: TextAlign.center,
               ),
               const Spacer(),
               if (_status == _VerifyStatus.missedCall || _status == _VerifyStatus.timedOut) ...[
-                GestureDetector(
-                  onTap: () {
-                    HapticFeedback.mediumImpact();
+                OmiButton(
+                  label: context.l10n.phoneTryAgain,
+                  expand: true,
+                  onPressed: () {
+                    OmiHaptics.medium();
                     _retry();
                   },
-                  child: Container(
-                    width: double.infinity,
-                    height: 56,
-                    decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(28)),
-                    alignment: Alignment.center,
-                    child: Text(
-                      context.l10n.phoneTryAgain,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
-                    ),
-                  ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: OmiSpacing.xxl),
               ],
             ],
           ),
@@ -174,102 +157,79 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
     Color bgColor;
     Widget content;
 
+    Widget pulsingRow(String label) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedBuilder(
+              animation: _pulseAnimation,
+              builder: (_, __) => Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: OmiColors.textPrimary.withValues(alpha: _pulseAnimation.value),
+                ),
+              ),
+            ),
+            const SizedBox(width: OmiSpacing.xs),
+            Text(label, style: OmiType.footnote),
+          ],
+        );
+
+    Widget iconRow(IconData icon, String label, Color color) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 16),
+            const SizedBox(width: 6),
+            Text(label, style: OmiType.footnote.copyWith(color: color, fontWeight: FontWeight.w500)),
+          ],
+        );
+
     switch (_status) {
       case _VerifyStatus.calling:
-        bgColor = const Color(0xFF1F1F25);
-        content = Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedBuilder(
-              animation: _pulseAnimation,
-              builder: (_, __) => Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: _pulseAnimation.value),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(context.l10n.statusCalling, style: const TextStyle(fontSize: 13, color: Colors.white)),
-          ],
-        );
+        bgColor = OmiColors.surface1;
+        content = pulsingRow(context.l10n.statusCalling);
       case _VerifyStatus.inProgress:
-        bgColor = const Color(0xFF1F1F25);
-        content = Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedBuilder(
-              animation: _pulseAnimation,
-              builder: (_, __) => Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: _pulseAnimation.value),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(context.l10n.statusCallInProgress, style: const TextStyle(fontSize: 13, color: Colors.white)),
-          ],
-        );
+        bgColor = OmiColors.surface1;
+        content = pulsingRow(context.l10n.statusCallInProgress);
       case _VerifyStatus.verified:
-        bgColor = Colors.green[700]!;
-        content = Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.check, color: Colors.white, size: 16),
-            const SizedBox(width: 6),
-            Text(
-              context.l10n.statusVerifiedLabel,
-              style: const TextStyle(fontSize: 13, color: Colors.white, fontWeight: FontWeight.w500),
-            ),
-          ],
-        );
+        bgColor = OmiColors.successSurface;
+        content = iconRow(Icons.check, context.l10n.statusVerifiedLabel, OmiColors.success);
       case _VerifyStatus.missedCall:
-        bgColor = const Color(0xFF3A2A00);
-        content = Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.phone_missed, color: Colors.orange, size: 16),
-            const SizedBox(width: 6),
-            Text(context.l10n.statusCallMissed, style: const TextStyle(fontSize: 13, color: Colors.orange)),
-          ],
-        );
+        bgColor = OmiColors.surface1;
+        content = iconRow(Icons.phone_missed, context.l10n.statusCallMissed, OmiColors.warning);
       case _VerifyStatus.timedOut:
-        bgColor = Colors.red.shade900;
-        content = Text(context.l10n.statusTimedOut, style: const TextStyle(fontSize: 13, color: Colors.white));
+        bgColor = OmiColors.dangerSurface;
+        content = iconRow(Icons.error_outline, context.l10n.statusTimedOut, OmiColors.danger);
     }
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(16)),
-      child: content,
+    return Semantics(
+      liveRegion: true,
+      child: AnimatedContainer(
+        duration: OmiMotion.of(context).standard,
+        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xs),
+        decoration: BoxDecoration(color: bgColor, borderRadius: OmiRadius.lgAll),
+        child: content,
+      ),
     );
   }
 
   Widget _buildStepCard({required IconData icon, required String label, required String value}) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(16)),
+      padding: const EdgeInsets.all(OmiSpacing.md),
+      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: Row(
         children: [
-          Icon(icon, color: Colors.white, size: 22),
-          const SizedBox(width: 16),
+          ExcludeSemantics(child: Icon(icon, color: OmiColors.textPrimary, size: 22)),
+          const SizedBox(width: OmiSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: TextStyle(fontSize: 14, color: Colors.grey[400])),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
+                Text(label, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                const SizedBox(height: OmiSpacing.xxs),
+                Text(value, style: OmiType.callout.copyWith(fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -283,33 +243,28 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(16)),
+      padding: const EdgeInsets.all(OmiSpacing.md),
+      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: Row(
         children: [
-          const Icon(Icons.dialpad, color: Colors.white, size: 22),
-          const SizedBox(width: 16),
+          const ExcludeSemantics(child: Icon(Icons.dialpad, color: OmiColors.textPrimary, size: 22)),
+          const SizedBox(width: OmiSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(context.l10n.onTheCallEnterThisCode, style: TextStyle(fontSize: 14, color: Colors.grey[400])),
-                const SizedBox(height: 8),
+                Text(
+                  context.l10n.onTheCallEnterThisCode,
+                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                ),
+                const SizedBox(height: OmiSpacing.xs),
                 if (code != null && code.isNotEmpty)
                   Text(
                     code.split('').join(' '),
-                    style: const TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      letterSpacing: 6,
-                    ),
+                    style: OmiType.largeTitle.copyWith(fontWeight: FontWeight.bold, letterSpacing: 6),
                   )
                 else
-                  Text(
-                    context.l10n.followTheVoiceInstructions,
-                    style: const TextStyle(fontSize: 16, color: Colors.white),
-                  ),
+                  Text(context.l10n.followTheVoiceInstructions, style: OmiType.callout),
               ],
             ),
           ),

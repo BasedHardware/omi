@@ -44,6 +44,7 @@ void main() {
     AnalyticsManager.configure(analytics);
     await AnalyticsManager.init();
     SharedPreferencesUtil().uid = 'test-user';
+    AnalyticsManager().identify();
     final provider = DeviceProvider();
     addTearDown(provider.dispose);
     final device = BtDevice(
@@ -68,10 +69,14 @@ void main() {
     expect(connectedProperties['device_vendor'], 'fieldlabs');
     expect(connectedProperties['hardware_family'], 'fieldy');
     expect(
-        connectedProperties['transport_device_id'], sha256.convert(utf8.encode(device.id)).toString().substring(0, 16));
+      connectedProperties['transport_device_id'],
+      sha256.convert(utf8.encode(device.id)).toString().substring(0, 16),
+    );
     expect(connectedProperties['transport_id_stability'], 'platform_dependent');
     expect(
-        connectedProperties['hardware_id'], sha256.convert(utf8.encode('OMI-SERIAL-001')).toString().substring(0, 16));
+      connectedProperties['hardware_id'],
+      sha256.convert(utf8.encode('OMI-SERIAL-001')).toString().substring(0, 16),
+    );
     expect(connectedProperties['hardware_id_kind'], 'manufacturer_serial');
     expect(connectedProperties['hardware_id_stable'], isTrue);
     expect(analytics.personProperties.any((properties) => properties['device_vendor'] == 'fieldlabs'), isTrue);
@@ -127,6 +132,7 @@ void main() {
     final analytics = _TestAnalyticsAdapter();
     AnalyticsManager.configure(analytics);
     await AnalyticsManager.init();
+    AnalyticsManager().identify();
     final provider = DeviceProvider();
     addTearDown(provider.dispose);
     final device = BtDevice(
@@ -141,7 +147,10 @@ void main() {
     await provider.setConnectedDevice(device);
     await provider.setConnectedDevice(null);
     await provider.setConnectedDevice(device);
+    await AnalyticsManager.flushPending(force: true);
     SharedPreferencesUtil().uid = 'user-b';
+    AnalyticsManager().bindIdentity('user-b');
+    AnalyticsManager().identify();
     await provider.setConnectedDevice(null);
     await provider.setConnectedDevice(device);
     await AnalyticsManager.flushPending(force: true);

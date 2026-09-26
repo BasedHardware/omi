@@ -104,13 +104,55 @@ parse_defines "$out"
 parse_defines "$out"
 [[ "$build" == "992" ]] || fail "CM_TAG +N: got $build"
 
-# CM_TAG without +N falls through to local
+# A mobile-looking tag without +N is malformed and cannot fall through to local.
+if (
+  cd "$repo"
+  env -u BUILD_NUMBER -u OMI_BUILD_NUMBER CM_TAG='v1.0.543-mobile-cm' "$SCRIPT" >"$out" 2>"$err"
+); then
+  fail "accepted mobile tag without a build number"
+fi
+grep -F "invalid mobile release tag" "$err" >/dev/null \
+  || fail "mobile tag without build did not fail loudly"
+grep -F -- '--__omi_build_provenance_failure__' "$out" >/dev/null \
+  || fail "malformed mobile tag did not emit Flutter-failing marker"
+
+# Platform-specific mobile tags are exact provenance inputs.
 (
   cd "$repo"
-  env -u BUILD_NUMBER -u OMI_BUILD_NUMBER CM_TAG='v1.0.543-mobile-cm' "$SCRIPT" >"$out"
+  env -u BUILD_NUMBER -u OMI_BUILD_NUMBER OMI_RELEASE_PLATFORM=ios CM_TAG='v1.2.3+456-ios-cm' "$SCRIPT" >"$out"
 )
 parse_defines "$out"
-[[ "$build" == "local" ]] || fail "CM_TAG without +N: got $build want local"
+[[ "$build" == "456" ]] || fail "iOS tag build: got $build"
+
+if (
+  cd "$repo"
+  env -u BUILD_NUMBER -u OMI_BUILD_NUMBER CM_TAG='v1.2.3+0-ios-cm' "$SCRIPT" >"$out" 2>"$err"
+); then
+  fail "accepted zero mobile tag build"
+fi
+grep -F "invalid mobile release tag" "$err" >/dev/null \
+  || fail "zero mobile tag did not fail loudly"
+grep -F -- '--__omi_build_provenance_failure__' "$out" >/dev/null \
+  || fail "failed provenance helper did not emit Flutter-failing marker"
+
+if (
+  cd "$repo"
+  env -u BUILD_NUMBER -u OMI_BUILD_NUMBER OMI_RELEASE_PLATFORM=android CM_TAG='v1.2.3+456-ios-cm' "$SCRIPT" >"$out" 2>"$err"
+); then
+  fail "accepted wrong-platform mobile tag"
+fi
+grep -F "does not match" "$err" >/dev/null \
+  || fail "wrong-platform tag did not fail loudly"
+
+# A failed source identity must not be silently replaced by local provenance.
+if (
+  cd "$repo"
+  env -u BUILD_NUMBER -u OMI_BUILD_NUMBER OMI_RELEASE_SOURCE_SHA="$(printf 'b%.0s' {1..40})" "$SCRIPT" >"$out" 2>"$err"
+); then
+  fail "accepted mismatched source identity"
+fi
+grep -F "does not match checked-out HEAD" "$err" >/dev/null \
+  || fail "mismatched source identity did not fail loudly"
 
 # Whitespace in BUILD_NUMBER fails the build
 if (

@@ -47,18 +47,27 @@ export default function MemoryWithTabs({ memory }: MemoryWithTabsProps) {
         onNewChat={handleNewChat}
         showNewChat={hasMessages}
       />
-      <div className="">
-        <div style={{ display: currentTab === 'sum' ? 'block' : 'none' }}>
+      <div>
+        <div
+          className="sn-tabpanel"
+          style={{ display: currentTab === 'sum' ? 'block' : 'none' }}
+        >
           <Summary memory={memory} />
         </div>
-        <div style={{ display: currentTab === 'trs' ? 'block' : 'none' }}>
+        <div
+          className="sn-tabpanel"
+          style={{ display: currentTab === 'trs' ? 'block' : 'none' }}
+        >
           <Transcription
             transcript={memory.transcript_segments}
             externalData={memory.external_data}
             people={memory.people}
           />
         </div>
-        <div style={{ display: currentTab === 'chat' ? 'block' : 'none' }}>
+        <div
+          className="sn-tabpanel"
+          style={{ display: currentTab === 'chat' ? 'block' : 'none' }}
+        >
           <Chat
             conversationId={memory.id}
             transcript={memory.transcript_segments}

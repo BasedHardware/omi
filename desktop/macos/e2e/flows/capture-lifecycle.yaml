@@ -7,6 +7,8 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/MeetingNoteTakingNotice.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+FinishedRecordingLifecycle.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
+  - desktop/macos/Desktop/Sources/AppState/ListenClientState.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+CaptureDeviceManagement.swift
   - desktop/macos/Desktop/Sources/Audio/PreferredMicrophoneReconnect.swift
   - desktop/macos/Desktop/Sources/AppState/SharedCaptureSilentMicRecoveryPolicy.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+ListenEvents.swift
@@ -33,6 +35,8 @@ covers:
   - desktop/macos/Desktop/Sources/ResourceMonitor.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionModels.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
+  - desktop/macos/Desktop/Sources/Rewind/Services/LocalEmbeddingIndexer.swift
+  - desktop/macos/Desktop/Sources/LocalInference/TranscriptChunker.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/ProactiveStorage.swift
   - desktop/macos/Desktop/Sources/LiveNotes/NoteStorage.swift
   - desktop/macos/Desktop/Sources/FileIndexing/KnowledgeGraphStorage.swift
@@ -56,6 +60,12 @@ covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
   - desktop/macos/Desktop/Sources/Rewind/Services/RewindIndexer.swift
   - desktop/macos/Desktop/Sources/MeetingDetector.swift
+  - desktop/macos/Desktop/Sources/Audio/CallAudioSnapshot.swift
+  - desktop/macos/Desktop/Sources/Audio/MeetingCallObservation.swift
+  - desktop/macos/Desktop/Sources/Audio/CallAppReleasePolicy.swift
+  - desktop/macos/Desktop/Sources/Audio/CallAudioSessionTracker.swift
+  - desktop/macos/Desktop/Sources/Audio/CallAppAudioSummaryTelemetry.swift
+  - desktop/macos/Desktop/Sources/Audio/CallAppAudioDailyLedger.swift
   # This hermetic flow only reaches the dictation-app mic monitor's teardown call
   # (stopDictationMicSuppressionMonitor runs with the meeting detector). The policy,
   # gate, and monitor state machine are unit-tested in DictationMicSuppressionTests;

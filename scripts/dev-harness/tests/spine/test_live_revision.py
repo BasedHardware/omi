@@ -7,7 +7,6 @@ from .test_live_session import rig  # shared hermetic subprocess fixture
 from dev_harness import live_session as live
 
 
-@pending("V1")
 def test_slow_machine_read_is_allowed_within_requested_deadline(rig):
     original = rig.factory
     timeouts = []
@@ -30,7 +29,6 @@ def test_slow_machine_read_is_allowed_within_requested_deadline(rig):
     assert timeouts and all(1 < value <= 30 for value in timeouts)
 
 
-@pending("V1")
 def test_verify_contacts_broker_then_refuses_missing_journey_adapter(rig, monkeypatch):
     from dev_harness import mobile_verify
     engine = rig.engine()
@@ -45,7 +43,6 @@ def test_verify_contacts_broker_then_refuses_missing_journey_adapter(rig, monkey
     assert calls == [('oms-fixture', 'status')]
 
 
-@pending("V1")
 def test_teardown_signals_owned_live_processes_and_confirms_death(tmp_path):
     from dataclasses import asdict
     import os
@@ -85,7 +82,6 @@ def test_teardown_signals_owned_live_processes_and_confirms_death(tmp_path):
         child.stdin.close()
 
 
-@pending("V1")
 def test_missing_or_wrong_seed_identity_never_claims_ready(rig):
     (rig.directory / 'seed.json').write_text(json.dumps({'uid': 'other-user', 'fixture_version': 'v1'}))
     engine = rig.engine()

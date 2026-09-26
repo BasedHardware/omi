@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -279,8 +280,13 @@ def test_search_screen_fallback_matches_literal_text(
     config_path: Path, cli_runner, literal: str, decoy: str, field: str
 ) -> None:
     _configure_local_profile(config_path)
+    now = datetime(2026, 9, 8, 12)
     with sqlite3.connect(":memory:") as db:
         db.row_factory = sqlite3.Row
+        # Keep the literal-match fixtures inside the search window on every run.
+        db.create_function(
+            "datetime", 2, lambda clock, modifier: (now + timedelta(days=int(modifier.split()[0]))).isoformat(" ")
+        )
         db.execute(
             "CREATE TABLE screenshots (id INTEGER, timestamp TEXT, appName TEXT, windowTitle TEXT, ocrText TEXT, isIndexed INTEGER)"
         )

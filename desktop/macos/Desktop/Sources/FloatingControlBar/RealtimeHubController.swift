@@ -365,6 +365,48 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Seam so tests/automation can substitute the HID idle sample.
   var presenceIdleProvider: () -> TimeInterval? = { UserInputPresence.secondsSinceLastInput() }
 
+  /// Cached `/v1/users/me/subscription` decision. Unknown/missing plan fails
+  /// open (the enum's own contract). Tests pin this; production reads the cache.
+  var entitlementDecision: () -> SubscriptionEntitlementDecision = {
+    SubscriptionEntitlementService.shared.cachedDecisionForManagedProactivity()
+  }
+  var entitlementNow: () -> Date = { Date() }
+  /// Optional cache refresh so an upgrade/BYOK change can unlatch without a
+  /// restart. Production `setup()` installs it; tests leave it nil (no network).
+  var refreshEntitlement: (@Sendable () async -> Void)?
+  /// Shared with LiveNotes — see `ManagedPlanGateLatch`.
+  var managedPlanGateLatch = ManagedPlanGateLatch()
+  var didLogPlanGateSkip = false
+  var entitlementRefreshInFlight = false
+  /// Test/automation observation after presence + plan admission, before mint.
+  var warmAdmissionProbe: ((Bool) -> Void)?
+  /// Fires at the start of a managed ephemeral mint. Tests pin that a plan-gated
+  /// automatic warm with an unusable voice key never reaches this.
+  var managedMintProbe: (() -> Void)?
+  /// Owner identity for the plan-gate latch. Defaults to the runtime owner so
+  /// a fail-open `.allow` on A cannot suppress B.
+  var managedPlanGateOwnerID: () -> String? = { RuntimeOwnerIdentity.currentOwnerId() }
+  /// Realtime BYOK key this warm would actually use, per provider. Tests pin it.
+  var realtimeBYOKKeyResolver: ((RealtimeHubProvider) -> String?)?
+  /// Caps a hung entitlement refresh so `entitlementRefreshInFlight` cannot stick.
+  /// Matches the production HTTP timeout. `0` lets tests observe the clear without sleep.
+  var entitlementRefreshTimeoutNanoseconds: UInt64 = 30_000_000_000
+  /// Same `canUseBYOK` the connect path consults. Tests pin known-bad keys.
+  var canUseRealtimeBYOK: (BYOKProvider, String) -> Bool = { provider, fingerprint in
+    CredentialHealthManager.shared.canUseBYOK(provider: provider, fingerprint: fingerprint)
+  }
+  var entitlementRefreshTask: Task<Void, Never>?
+  var entitlementRefreshGeneration: UInt64 = 0
+  /// Fires when an entitlement-refresh task reaches completion on the main
+  /// actor, including late completions whose generation is stale.
+  var planGateRefreshDidFinish: (() -> Void)?
+  /// One bounded re-drive after a typed server denial. `nil` disables (tests).
+  var planGateRetryDelayNanoseconds: UInt64? = UInt64(
+    ManagedPlanGateLatch.defaultLifetime * 1_000_000_000)
+  var planGateRetryTask: Task<Void, Never>?
+  /// Idle-close reconnect delay. Tests set 0 so drain is deterministic.
+  var lifecycleRewarmDelayNanoseconds: UInt64 = 1_500_000_000
+
   var fallbackProvider: RealtimeHubProvider?
   /// Reason passed to ``failoverToAlternateProvider``; cleared after a successful connect on the alternate.
   var pendingFailoverReason: String?
@@ -425,6 +467,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     prefetchedVoiceSemanticGuidance = ""
     prefetchedVoiceContextTurnIDs.removeAll()
     prefetchedVoiceContextOwnerScope = nil
+    resetManagedPlanGateForOwnerChange()
     replaceSessionAfterDrain()
   }
 
@@ -512,6 +555,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     prefetchedVoiceSemanticGuidance = ""
     prefetchedVoiceContextTurnIDs.removeAll()
     prefetchedVoiceContextOwnerScope = nil
+    resetManagedPlanGateForOwnerChange()
 
     if let detachedSession = detachPhysicalSessionForTeardown() {
       schedulePhysicalSessionTeardown(detachedSession)
@@ -985,6 +1029,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     NotificationCenter.default.addObserver(
       self, selector: #selector(voiceLanguagesChanged),
       name: .voiceLanguagesDidChange, object: nil)
+    if refreshEntitlement == nil {
+      refreshEntitlement = {
+        _ = await SubscriptionEntitlementService.shared.snapshot()
+      }
+    }
     // Expose the headless E2E action (omi-ctl action hub_test_turn pcm=… provider=…).
     RealtimeHubTestHarness.registerAutomationAction()
     registerPTTLanguageTestAction()

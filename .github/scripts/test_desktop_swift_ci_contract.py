@@ -66,9 +66,11 @@ MACOS_JOB_TIMEOUT_MINUTES = {
     # A notification-boundary change compiles release mode AND builds the
     # release test target for the regression (~50 min observed on
     # run 34239723019). Combined app/test build avoids the duplicate
-    # compilation in #13481; keep the existing release-compile ceiling until
-    # hosted timing proves otherwise.
-    "desktop-swift-release-compile": 60,
+    # compilation in #13481. A branch that grew the Desktop package pushed
+    # the whole-module compile to ~60 min — three attempts of #13456 were
+    # cancelled at the old 60m ceiling with the work already done (<1s
+    # before the kill), so the wedge-guard admits the grown branch.
+    "desktop-swift-release-compile": 90,
 }
 
 

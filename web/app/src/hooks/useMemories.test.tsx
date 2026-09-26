@@ -386,4 +386,32 @@ describe('useMemories beta capability negotiation and cache scope', () => {
     ).toBe(false);
     expect(mocks.getMemoriesPage.mock.calls[3][0]).toMatchObject({ view: 'all' });
   });
+
+  it('releases the fetch lock when IndexedDB warmup is abandoned by a category change', async () => {
+    let resolveCachedMemories: (value: null) => void = () => {};
+    const pendingCachedMemories = new Promise<null>((resolve) => {
+      resolveCachedMemories = resolve;
+    });
+    mocks.getCachedMemories.mockReturnValueOnce(pendingCachedMemories);
+    mocks.getMemoriesPage.mockResolvedValueOnce(page(null, 'Manual memory'));
+
+    const { result } = renderHook(() => useMemories({ limit: 25 }));
+
+    await waitFor(() => expect(mocks.getCachedMemories).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      result.current.setCategories(['manual']);
+    });
+
+    await act(async () => {
+      resolveCachedMemories(null);
+      await pendingCachedMemories;
+    });
+
+    await waitFor(() => expect(mocks.getMemoriesPage).toHaveBeenCalledTimes(1));
+    expect(mocks.getMemoriesPage.mock.calls[0][0]).toMatchObject({
+      categories: ['manual'],
+    });
+  });
+
 });

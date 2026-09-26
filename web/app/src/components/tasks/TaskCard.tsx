@@ -6,6 +6,7 @@ import { Check, Trash2, Calendar, Clock, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDueStatus } from '@/lib/taskDue';
 import type { ActionItem } from '@/types/conversation';
+import { formatDateInputValue } from '@/lib/dateInput';
 
 interface TaskCardProps {
   task: ActionItem;
@@ -18,13 +19,6 @@ interface TaskCardProps {
   onSelect?: (id: string, selected: boolean) => void;
   // Double-click to enter selection mode
   onEnterSelectionMode?: (id: string) => void;
-}
-
-/**
- * Format date for input[type="date"]
- */
-function formatDateForInput(date: Date): string {
-  return date.toISOString().split('T')[0];
 }
 
 export function TaskCard({
@@ -318,7 +312,7 @@ export function TaskCard({
                       <input
                         type="date"
                         value={
-                          task.due_at ? formatDateForInput(new Date(task.due_at)) : ''
+                          task.due_at ? formatDateInputValue(new Date(task.due_at)) : ''
                         }
                         onChange={handleDateChange}
                         className={cn(

@@ -178,6 +178,27 @@ async def test_accepted_live_attempt_terminals_once_with_the_same_failure_phase(
 
 
 @pytest.mark.asyncio
+async def test_pre_audio_terminal_counts_when_no_live_attempt_was_constructed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    websocket = FakeClientSocket()
+    session = FakeSession()
+    recorded: list[dict[str, Any]] = []
+    monkeypatch.setattr(live_failure, 'record_live_stt_failure', lambda **_labels: None)
+    monkeypatch.setattr(live_failure, 'record_live_stt_pre_audio_failure', lambda **labels: recorded.append(labels))
+
+    await terminate_live_stt_session(
+        websocket,
+        session,
+        failure=TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='deepgram'),
+        reason='initialization_failed',
+        platform='ios',
+    )
+
+    assert recorded == [{'provider': 'deepgram', 'platform': 'ios', 'phase': 'initialization'}]
+
+
+@pytest.mark.asyncio
 async def test_terminal_live_failure_still_closes_when_status_delivery_fails() -> None:
     websocket = FakeClientSocket(reject_status=True)
     session = FakeSession()

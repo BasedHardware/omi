@@ -29,6 +29,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from scripts import jit_qa_cloud_run_contract as qa_contract  # noqa: E402
+from utils.llm.model_config import LUNA_MODEL  # noqa: E402
 from utils.memory.daily_memory_sweep import (
     MODEL_INVOCATION_REPAIR_SCHEMA_VERSION,
     valid_no_dispatch_attestation,
@@ -37,7 +38,7 @@ from utils.memory.daily_memory_sweep import (
 QA_SWEEP_PROJECT = "based-hardware-dev"
 QA_SWEEP_DATABASE = "jit-qa"
 QA_SWEEP_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
-QA_SWEEP_MODEL_NAME = "gpt-5.6-luna"
+QA_SWEEP_MODEL_NAME = LUNA_MODEL
 QA_SWEEP_MAX_MODEL_CANDIDATES = 3
 QA_SWEEP_MAX_MODEL_COST_USD = 0.05
 QA_SWEEP_MAX_CATCH_UP_DAYS = 1
@@ -50,8 +51,8 @@ QA_SWEEP_MAX_SDK_RETRIES = 0
 QA_SWEEP_MAX_GATEWAY_ATTEMPTS = 1
 QA_SWEEP_MAX_PROVIDER_CALLS = 1
 # Keep these equal to the deployed memories route's QA request contract.  The
-# checked-in gpt-5.6-luna card ($0.20/M in, $1.20/M out) prices 24,576 input +
-# 2,048 output at $0.0073728, under the $0.05 cap; the gateway's durable
+# checked-in gpt-x-luna card ($0.10/M in, $0.60/M out) prices 24,576 input +
+# 2,048 output at $0.0036864, under the $0.05 cap; the gateway's durable
 # attempt row is the usage/cost authority.
 QA_SWEEP_MAX_INPUT_TOKENS = 24_576
 QA_SWEEP_MAX_OUTPUT_TOKENS = 2_048

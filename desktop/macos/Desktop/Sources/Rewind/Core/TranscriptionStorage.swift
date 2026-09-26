@@ -113,7 +113,35 @@ actor TranscriptionStorage {
       }
 
       let now = Date()
-      record.finishedAt = max(now, record.startedAt.addingTimeInterval(1.0))
+      if reason == .crashRecovery {
+        // Restart time is not capture evidence. Resolve the end in the same
+        // transaction as the transition so retries cannot extend the recording.
+        let persistedEnd = record.finishedAt.flatMap { end -> Date? in
+          end.timeIntervalSince1970.isFinite && end > record.startedAt && end <= now ? end : nil
+        }
+        let segments =
+          try TranscriptionSegmentRecord
+          .filter(Column("sessionId") == id)
+          .fetchAll(database)
+        let segmentEnd = segments.compactMap { segment -> Date? in
+          guard segment.startTime.isFinite, segment.endTime.isFinite,
+            segment.startTime >= 0, segment.endTime > segment.startTime
+          else { return nil }
+          let end = record.startedAt.addingTimeInterval(segment.endTime)
+          return end.timeIntervalSince1970.isFinite && end > record.startedAt && end <= now ? end : nil
+        }.max()
+        guard let captureEnd = persistedEnd ?? segmentEnd else {
+          // Keep legacy evidence intact, but out of the upload queue until a
+          // trustworthy capture boundary is available. Do not fabricate one.
+          log("TranscriptionStorage: Skipping crash recovery for session \(id): no valid capture end")
+          return false
+        }
+        // The upload format has whole-second precision. Retain the existing
+        // one-second minimum so a subsecond segment does not encode an empty interval.
+        record.finishedAt = max(captureEnd, record.startedAt.addingTimeInterval(1.0))
+      } else {
+        record.finishedAt = max(now, record.startedAt.addingTimeInterval(1.0))
+      }
       record.status = .pendingUpload
       if let strategy {
         record.finalizationStrategy = strategy
@@ -248,6 +276,7 @@ actor TranscriptionStorage {
 
     if result.accepted {
       log("TranscriptionStorage: Completed session \(id) (backendId: \(backendId))")
+      LocalEmbeddingIndexer.scheduleFinalizedSessionIndex(sessionId: id)
     }
     if let telemetry = result.telemetry {
       await AnalyticsManager.shared.conversationCreated(
@@ -978,6 +1007,9 @@ actor TranscriptionStorage {
 
         log("TranscriptionStorage: Upserted \(conversation.transcriptSegments.count) segments for session \(sessionId)")
       }
+    }
+    if let session = try await getSession(id: sessionId), session.status == .completed {
+      LocalEmbeddingIndexer.scheduleFinalizedSessionIndex(sessionId: sessionId)
     }
   }
 

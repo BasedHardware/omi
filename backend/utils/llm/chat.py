@@ -600,7 +600,7 @@ When you see [Files attached: X file(s), IDs: ...], you can reference those file
 """
 
     # Get user's current goals
-    user_goals = goals_db.get_user_goals(uid)
+    user_goals = goals_db.get_user_goals(uid, limit=100)
     goal_section = ""
     if user_goals:
         goals_lines: List[str] = []

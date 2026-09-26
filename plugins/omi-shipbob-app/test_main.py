@@ -537,17 +537,30 @@ def _headers_ok():
 class TestCancelWroRegression13183(unittest.TestCase):
     """Regression tests for cancel_wro error classification (#13183)."""
 
+    TOOLS_SECRET = "test-shipbob-tools-secret"
+
     def setUp(self):
         from fastapi.testclient import TestClient
 
+        self._old_secret = os.environ.get("SHIPBOB_TOOLS_SECRET")
+        os.environ["SHIPBOB_TOOLS_SECRET"] = self.TOOLS_SECRET
         self.client = TestClient(main.app)
+
+    def tearDown(self):
+        if self._old_secret is None:
+            os.environ.pop("SHIPBOB_TOOLS_SECRET", None)
+        else:
+            os.environ["SHIPBOB_TOOLS_SECRET"] = self._old_secret
+
+    def _auth_headers(self):
+        return {"Authorization": f"Bearer {self.TOOLS_SECRET}"}
 
     @patch("main.get_shipbob_headers", return_value=_headers_ok())
     @patch("main.refresh_token_if_needed")
     @patch("main.requests.post")
     def test_cancel_empty_body_500_is_error(self, mock_post, _refresh, _headers):
         mock_post.return_value = FakeResp(status_code=500, text="")
-        resp = self.client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"})
+        resp = self.client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"}, headers=self._auth_headers())
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
         self.assertTrue(body.get("error"))
@@ -557,7 +570,7 @@ class TestCancelWroRegression13183(unittest.TestCase):
     @patch("main.refresh_token_if_needed")
     @patch("main.make_shipbob_request", return_value=None)
     def test_cancel_none_result_is_error(self, mock_req, _refresh, _headers):
-        resp = self.client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"})
+        resp = self.client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"}, headers=self._auth_headers())
         body = resp.json()
         self.assertTrue(body.get("error"))
 
@@ -565,7 +578,7 @@ class TestCancelWroRegression13183(unittest.TestCase):
     @patch("main.refresh_token_if_needed")
     @patch("main.make_shipbob_request", return_value={"error": "forbidden", "status_code": 403})
     def test_cancel_nonempty_error_is_surfaced(self, mock_req, _refresh, _headers):
-        resp = self.client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"})
+        resp = self.client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"}, headers=self._auth_headers())
         body = resp.json()
         self.assertIn("forbidden", body.get("error", ""))
 
@@ -573,7 +586,7 @@ class TestCancelWroRegression13183(unittest.TestCase):
     @patch("main.refresh_token_if_needed")
     @patch("main.make_shipbob_request", return_value={"id": 123, "status": "cancelled"})
     def test_cancel_success_200_object(self, mock_req, _refresh, _headers):
-        resp = self.client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"})
+        resp = self.client.post("/tools/cancel_wro", json={"uid": "u1", "wro_id": "123"}, headers=self._auth_headers())
         body = resp.json()
         self.assertIn(body.get("error"), (None, ""))
         self.assertIn("cancelled", (body.get("result") or "").lower())
@@ -656,6 +669,73 @@ class TestToolGetFulfillmentCenters(unittest.TestCase):
         res = run_async(main.tool_get_fulfillment_centers(req))
         self.assertIsNone(res.error)
         self.assertIn("No fulfillment centers found", res.result)
+
+
+class TestPagination(unittest.TestCase):
+    """ShipBob list endpoints return one Page/Limit page per request. Anything
+    matching by name must aggregate pages or items past page 1 are invisible."""
+
+    def _pages(self, sizes, item):
+        """Return a make_shipbob_request side_effect yielding pages of `item`."""
+        calls = []
+
+        def fake(uid, method, endpoint, data=None, params=None):
+            page = params["Page"]
+            calls.append(page)
+            size = sizes[page - 1] if page - 1 < len(sizes) else 0
+            return [dict(item, id=page * 1000 + i) for i in range(size)]
+
+        return fake, calls
+
+    def test_get_all_products_aggregates_pages(self):
+        item = {"name": "Widget", "sku": "W1"}
+        fake, calls = self._pages([100, 100, 37], item)
+        with patch("main.make_shipbob_request", side_effect=fake):
+            products = main.get_all_products("u")
+        self.assertEqual(len(products), 237)
+        self.assertEqual(calls, [1, 2, 3])
+
+    def test_get_all_products_stops_on_short_page(self):
+        item = {"name": "Widget"}
+        fake, calls = self._pages([100, 42], item)
+        with patch("main.make_shipbob_request", side_effect=fake):
+            main.get_all_products("u")
+        self.assertEqual(calls, [1, 2])
+
+    def test_get_all_products_respects_cap(self):
+        item = {"name": "Widget"}
+        fake, calls = self._pages([100] * 40, item)
+        with patch("main.make_shipbob_request", side_effect=fake):
+            products = main.get_all_products("u")
+        self.assertEqual(len(calls), 25)
+        self.assertEqual(len(products), 2500)
+
+    def test_find_product_candidates_sees_past_page_one(self):
+        page1 = [{"name": f"Other {i}", "sku": f"O{i}"} for i in range(100)]
+        page2 = [{"name": "Blue Mug", "sku": "BM-1"}]
+        pages = {1: page1, 2: page2}
+
+        def fake(uid, method, endpoint, data=None, params=None):
+            return pages.get(params["Page"], [])
+
+        with patch("main.make_shipbob_request", side_effect=fake):
+            hits = main.find_product_candidates("u", "Blue Mug")
+        self.assertEqual(hits, [{"name": "Blue Mug", "sku": "BM-1"}])
+
+    @patch("main.get_shipbob_headers", return_value={"Authorization": "Bearer token"})
+    def test_search_finds_product_past_page_one(self, mock_headers):
+        page1 = [{"name": f"Other {i}"} for i in range(100)]
+        page2 = [{"name": "Red T-Shirt", "sku": "TSH-RED"}]
+        pages = {1: page1, 2: page2}
+
+        def fake(uid, method, endpoint, data=None, params=None):
+            return pages.get(params["Page"], [])
+
+        with patch("main.make_shipbob_request", side_effect=fake):
+            req = DummyRequest({"uid": "user1", "search": "shirt"})
+            res = run_async(main.tool_get_products(req))
+        self.assertIsNone(res.error)
+        self.assertIn("Red T-Shirt", res.result)
 
 
 if __name__ == "__main__":

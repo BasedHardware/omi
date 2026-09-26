@@ -76,6 +76,8 @@ export function generateStructuredData(plugin: Plugin, categoryName: string) {
   const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.friend.ios';
 
   return {
+    // Escape `<` so a `</script>` inside app metadata cannot break out of the
+    // JSON-LD script element; `\u003c` still parses back to `<` as JSON.
     __html: JSON.stringify([
       {
         '@context': 'https://schema.org',
@@ -137,7 +139,7 @@ export function generateStructuredData(plugin: Plugin, categoryName: string) {
           },
         ],
       },
-    ]),
+    ]).replace(/</g, '\\u003c'),
   };
 }
 

@@ -61,9 +61,12 @@ def _resolve_default_db_client() -> Any:
 
 
 def _resolve_firestore_client() -> Any:
-    from database._client import get_firestore_client as client
+    # Lazy import for the same stub-loading reasons as above; unlike
+    # `data_plane_db` above, `get_firestore_client` is a memoized factory,
+    # so it must be called, not returned.
+    from database._client import get_firestore_client
 
-    return client
+    return get_firestore_client()
 
 
 def _record_fallback_helper(component: str, *, from_mode: str, to_mode: str, reason: str) -> None:
@@ -99,6 +102,7 @@ _INDEXED_FIRESTORE_FIELDS = (
     "structured",
     "created_at",
     "discarded",
+    "deleted",
     "started_at",
     "finished_at",
     "geolocation",
@@ -229,6 +233,32 @@ def _geolocation_point(value: object) -> Optional[list[float]]:
     return None
 
 
+def _json_safe(value: object) -> Any:
+    """Make a Firestore projection JSON-serializable for Typesense upserts.
+
+    ``structured`` still carries ``DatetimeWithNanoseconds`` (a datetime
+    subclass) from ``snapshot.to_dict()``. The Typesense client json-encodes
+    the upsert body; an unsanitized datetime fail-opens the whole dual-write.
+    """
+    if value is None or isinstance(value, (str, bool)):
+        return value
+    if isinstance(value, datetime):
+        return _epoch_seconds(value)
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, (int, float)):
+        return value
+    geo = _geolocation_point(value)
+    if geo is not None:
+        return geo
+    epoch = _epoch_seconds(value)
+    if epoch is not None:
+        return epoch
+    return str(value)
+
+
 def build_conversation_index_document(uid: str, conversation_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """Build the Typesense document for one conversation, or None when unindexable.
 
@@ -256,7 +286,7 @@ def build_conversation_index_document(uid: str, conversation_data: Dict[str, Any
         document["finished_at"] = finished_at
     structured = conversation_data.get("structured")
     if isinstance(structured, dict) and structured:
-        document["structured"] = structured
+        document["structured"] = _json_safe(structured)
     geolocation = _geolocation_point(conversation_data.get("geolocation"))
     if geolocation is not None:
         document["geolocation"] = geolocation
@@ -348,6 +378,10 @@ def _sync_conversation_index_after_write(
         # The Firestore document is gone (deleted since the write that queued
         # this sync); converge the index to absence instead of upserting stale
         # content — the race the extension's delete trigger otherwise covered.
+        return delete_conversation_index_doc(uid, conversation_id)
+    if data.get("deleted"):
+        # Redirect tombstones must not stay searchable, including after a later
+        # discarded=True write that would otherwise upsert them again.
         return delete_conversation_index_doc(uid, conversation_id)
     document = build_conversation_index_document(uid, data)
     if document is None:

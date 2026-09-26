@@ -50,7 +50,7 @@ for line in sys.stdin:
                       'capabilities': ['capabilities', 'state', 'wait_ready', 'navigate', 'fault']}
         elif name in ('ext.omi.controls.state', 'ext.omi.controls.wait_ready'):
             state = {'contract_version': 'semantic-controls/v1',
-                     'profile': 'mobileBeta' if mode == 'wrong-runtime' else 'localDev',
+                     'profile': 'mobile_beta' if mode == 'wrong-runtime' else 'local_dev',
                      'readiness': {'signedIn': True, 'routed': mode != 'unready', 'captureIdle': True},
                      'principal': {'uid': 'fixture-user', 'signed_in': True}, 'route': '/home'}
             result = {'ok': True, 'state': state} if name.endswith('wait_ready') else state

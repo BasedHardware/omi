@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-recovery-time-used-as-event-time",
+  "violated_contract": "Recovery of an interrupted durable event must not assign the recovery wall clock as its event end. Desktop crash recovery passed crashRecovery to finishSession, but finishSession unconditionally stamped Date(), turning a short recording recovered four days later into a multi-day capture interval that from-segments uploaded unchanged.",
+  "canonical_prevention": "Resolve the recovered end at the transactional persistence boundary: preserve a valid persisted end, otherwise derive it from the maximum valid durable relative segment end. Withhold upload when no valid evidence exists; retain ordinary explicit-stop semantics. Exercise delayed and repeated recovery against an isolated production database and inspect the actual encoded upload through a hermetic transport.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/TranscriptionStorageRecoveryTests.swift",
+    "desktop/macos/Desktop/Tests/ConversationFinalizationLocalProjectionTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift",
+    "desktop/macos/Desktop/Sources/TranscriptionRetryService.swift"
+  ],
+  "status": "open"
+}

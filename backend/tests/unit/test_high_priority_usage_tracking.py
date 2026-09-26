@@ -158,6 +158,7 @@ database_mod = _stub_module("database")
 if not hasattr(database_mod, '__path__'):
     database_mod.__path__ = []
 for submodule in [
+    "auth",
     "redis_db",
     "memories",
     "conversations",
@@ -182,6 +183,7 @@ for submodule in [
     setattr(database_mod, submodule, mod)
 
 # Set needed attributes on db stubs
+sys.modules["database.auth"].get_user_name = MagicMock(return_value="User")
 # utils.conversations.location (imported by external_integrations for daily-summary
 # address fill) does `from database.redis_db import r`; the stub must provide it.
 sys.modules["database.redis_db"].r = MagicMock()
@@ -350,9 +352,11 @@ class TestGoalsTracking:
             'current_value': 5,
             'target_value': 20,
             'goal_type': 'numeric',
+            'is_active': True,
         }
         sys.modules["database.goals"].get_user_goal = MagicMock(return_value=_goal)
         sys.modules["database.goals"].get_user_goals = MagicMock(return_value=[_goal])
+        sys.modules["database.goals"].get_goal_by_id = MagicMock(return_value=_goal)
         try:
             from utils.llm.goals import get_goal_advice
 

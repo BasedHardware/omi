@@ -19,6 +19,39 @@ Omi uses a **dual-collection architecture** for storing user data:
 
 This separation allows for efficient retrieval of both full conversation context and quick access to key facts about the user.
 
+## On-device summaries in desktop reads
+
+The app conversation response may carry a display-only `client_processing` projection.
+Binding it does not modify canonical `structured` or create authoritative tasks or memories.
+The macOS `ServerConversation` adapter selects the projection once for every display consumer:
+only schema v1 is understood, and a response containing transcript segments must match the
+projection's `transcript_sha256` using encoding v5, including speaker identity and attribution.
+A list response omitting the transcript relies on the server's transactional binding and
+invalidation when the transcript changes; it cannot independently prove freshness.
+
+An enriched canonical overview, sections, events, or non-default category wins over a retained
+projection, including after an upgrade and cloud reprocessing. `processing_state` is not a
+cloud-origin discriminator: it can be absent with a projection, or remain `local_pending` after
+late binding. Title-only/default-field cloud results are indistinguishable from the deterministic
+minimum in this wire contract, so that ambiguous shape follows the projection-first rule.
+Canonical action items win exact-description collisions, preserving both completed and reopened
+state; unmatched projected items are display-only additions with no canonical task identity.
+
+Selected provenance remains available as `ServerConversation.localSummary` and is cached in
+`transcription_sessions.localSummaryJson`. The producer's `clientProcessingJson` retry bytes are
+separate. Revision-aware sync replaces the selected summary atomically; older or unversioned
+snapshots cannot fill fields across projection/canonical sources. A cached transcript whose hash
+differs from the selected projection is left unloaded until detail refresh.
+
+Run the desktop regressions from the repository root:
+
+```bash
+xcrun swift test --package-path desktop/macos/Desktop --filter 'ConversationProjection(Rendering|Persistence)Tests'
+```
+
+These hermetic tests exercise decode, reconciliation, and production SQLite storage. Named-bundle
+end-to-end acceptance remains a separate check.
+
 ## Architecture Diagram
 
 ```mermaid
@@ -406,3 +439,15 @@ Vectors are created ONCE during initial processing. Reprocessed conversations do
     Environment setup and configuration
   </Card>
 </CardGroup>
+
+### Manual speaker attribution during concurrent writes
+
+Manual speaker decisions live in a protected sparse receipt alongside the transcript.
+Live STT merging and both processing-result writers read that receipt in their
+commit transaction. Live merging preserves every manually covered speech span,
+including speaker-wide defaults, explicit clears, and training opt-outs. The
+committed transcript and deleted-ID delta are returned together for client delivery.
+Translation and inference-only writers patch current IDs without owning the segment
+set. Privacy-level migration re-encodes the transcript and receipt together.
+Changing attribution does not automatically regenerate a summary; refresh remains
+an explicit user action. Enrollment remains best-effort.

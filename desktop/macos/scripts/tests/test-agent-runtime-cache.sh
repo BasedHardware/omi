@@ -166,4 +166,128 @@ case "$trace" in
   *) fail "lock allowed interleaved critical sections: $trace" ;;
 esac
 
+assert_eq "$(arc_node_runtime_cache_policy "" 0)" "reuse"
+assert_eq "$(arc_node_runtime_cache_policy false 0)" "reuse"
+assert_eq "$(arc_node_runtime_cache_policy true 0)" "direct"
+assert_eq "$(arc_node_runtime_cache_policy 1 1)" "direct"
+assert_eq "$(arc_node_runtime_cache_policy "" 1)" "refresh"
+assert_eq "$(arc_node_runtime_cache_policy false 1)" "refresh"
+
+runtime_material="$(printf 'schema=1\nmode=universal\nversion=%s\narm64=%s\nx64=%s\n' v22.19.0 aaa bbb)"
+runtime_name="$(arc_node_runtime_cache_name v22.19.0 universal "$runtime_material")"
+assert_eq "$runtime_name" "$(arc_node_runtime_cache_name v22.19.0 universal "$runtime_material")"
+case "$runtime_name" in
+  v22.19.0-universal-*) ;;
+  *) fail "unexpected node runtime cache name: $runtime_name" ;;
+esac
+[ "$runtime_name" != "$(arc_node_runtime_cache_name v22.19.0 universal "${runtime_material}changed")" ] || fail "node runtime material did not change the cache name"
+[ "$runtime_name" != "$(arc_node_runtime_cache_name v22.19.0 local "$runtime_material")" ] || fail "node runtime mode did not change the cache name"
+runtime_file="$(arc_node_runtime_cache_file "$TMP_ROOT/node-runtime" v22.19.0 universal "$runtime_material")"
+assert_eq "$runtime_file" "$TMP_ROOT/node-runtime/$runtime_name/node"
+
+payload="$TMP_ROOT/clone-src.bin"
+python3 - "$payload" <<'PY'
+import sys
+with open(sys.argv[1], "wb") as handle:
+    handle.write(b"\0" * (4096 * 1024))
+PY
+arc_clone_or_copy_file "$payload" "$TMP_ROOT/clone-dst.bin"
+cmp -s "$payload" "$TMP_ROOT/clone-dst.bin" || fail "clone-or-copy changed file bytes"
+if [ "$(uname -s)" = "Darwin" ]; then
+  arc_same_clone "$payload" "$TMP_ROOT/clone-dst.bin" || fail "same-directory stage did not share an APFS clone"
+  cross_src="$TMP_ROOT/cross-src.bin"
+  cross_dst="/tmp/omi-node-runtime-cross-$$.bin"
+  src_vol="$(df -P "$payload" | awk 'NR==2 {print $1}')"
+  dst_vol="$(df -P /tmp | awk 'NR==2 {print $1}')"
+  if [ "$src_vol" != "$dst_vol" ]; then
+    cp -f "$payload" "$cross_src"
+    arc_clone_or_copy_file "$cross_src" "$cross_dst"
+    if arc_same_clone "$cross_src" "$cross_dst"; then
+      fail "cross-volume stage reported a shared clone"
+    fi
+    cmp -s "$cross_src" "$cross_dst" || fail "cross-volume fallback changed file bytes"
+    rm -f "$cross_dst"
+  fi
+fi
+
+# A missing parent must not spin: the lock helper creates it.
+missing_parent_lock="$TMP_ROOT/missing-parent/node.lock.d"
+arc_acquire_lock "$missing_parent_lock" 5
+[ -d "$missing_parent_lock" ] || fail "lock helper did not create a missing parent"
+arc_release_lock "$missing_parent_lock"
+[ ! -d "$missing_parent_lock" ] || fail "lock helper left the lock directory behind"
+
+# Same-volume APFS clones are allowed. A cross-volume destination, and a
+# symlink whose target is on another volume, are refused. cp -c would still
+# exit 0 in both refused cases.
+if [ "$(uname -s)" = "Darwin" ]; then
+  same_reason="$(arc_clone_block_reason "$payload" "$TMP_ROOT" || true)"
+  [ -z "$same_reason" ] || fail "same-directory clone was refused: $same_reason"
+  arc_can_clone "$payload" "$TMP_ROOT" || fail "arc_can_clone rejected a same-directory APFS path"
+
+  data_dir="$(mktemp -d /private/tmp/omi-clone-data.XXXXXX)"
+  data_file="$data_dir/payload.bin"
+  cp -f "$payload" "$data_file"
+  scratch_dev="$(stat -L -f '%d' "$payload")"
+  data_dev="$(stat -L -f '%d' "$data_file")"
+  if [ "$scratch_dev" != "$data_dev" ]; then
+    cross_reason="$(arc_clone_block_reason "$payload" "$data_dir" || true)"
+    [ -n "$cross_reason" ] || fail "cross-volume clone was allowed"
+    arc_can_clone "$payload" "$data_dir" && fail "arc_can_clone allowed a cross-volume destination"
+    case "$cross_reason" in
+      different\ devices*) ;;
+      *) fail "unexpected cross-volume reason: $cross_reason" ;;
+    esac
+    link_src="$TMP_ROOT/build-link"
+    ln -s "$data_dir" "$link_src"
+    link_reason="$(arc_clone_block_reason "$link_src" "$TMP_ROOT" || true)"
+    [ -n "$link_reason" ] || fail "symlink onto another volume was treated as cloneable"
+    same_data_reason="$(arc_clone_block_reason "$data_file" "$data_dir" || true)"
+    [ -z "$same_data_reason" ] || fail "Data-volume paths were not cloneable: $same_data_reason"
+
+    saved_cache_dir="${OMI_AGENT_RUNTIME_NODE_CACHE_DIR-}"
+    saved_xdg="${XDG_CACHE_HOME-}"
+    unset OMI_AGENT_RUNTIME_NODE_CACHE_DIR XDG_CACHE_HOME
+    data_cache="$(arc_node_runtime_cache_dir "$data_dir")"
+    assert_eq "$data_cache" "$HOME/Library/Caches/OmiDesktop/node-runtime"
+    scratch_cache="$(arc_node_runtime_cache_dir "$TMP_ROOT")"
+    case "$scratch_cache" in
+      */.omi-cache/OmiDesktop/node-runtime) ;;
+      *) fail "split layout did not select a volume-local cache: $scratch_cache" ;;
+    esac
+    scratch_cache_dev="$(stat -L -f '%d' "$(arc_existing_ancestor "$scratch_cache")")"
+    [ "$scratch_cache_dev" = "$scratch_dev" ] || fail "volume-local cache is not on the source device"
+    export OMI_AGENT_RUNTIME_NODE_CACHE_DIR="/explicit/node-runtime"
+    assert_eq "$(arc_node_runtime_cache_dir "$TMP_ROOT")" "/explicit/node-runtime"
+    if [ -n "$saved_cache_dir" ]; then
+      export OMI_AGENT_RUNTIME_NODE_CACHE_DIR="$saved_cache_dir"
+    else
+      unset OMI_AGENT_RUNTIME_NODE_CACHE_DIR
+    fi
+    if [ -n "$saved_xdg" ]; then
+      export XDG_CACHE_HOME="$saved_xdg"
+    else
+      unset XDG_CACHE_HOME
+    fi
+  fi
+  rm -rf "$data_dir"
+fi
+
+reap_root="$TMP_ROOT/reap"
+mkdir -p "$reap_root/run.dead" "$reap_root/run.live" "$reap_root/run.unowned" "$reap_root/run.notadir"
+printf 'marker\n' >"$reap_root/run.dead/keep.txt"
+printf 'marker\n' >"$reap_root/run.live/keep.txt"
+printf 'marker\n' >"$reap_root/run.unowned/keep.txt"
+dead_pid=999999
+while kill -0 "$dead_pid" 2>/dev/null; do
+  dead_pid=$((dead_pid - 1))
+done
+printf '%s\n' "$dead_pid" >"$reap_root/run.dead/owner.pid"
+printf '%s\n' "$$" >"$reap_root/run.live/owner.pid"
+arc_reap_dead_owner_dirs "$reap_root"
+[ ! -d "$reap_root/run.dead" ] || fail "dead owner run was not reaped"
+[ -d "$reap_root/run.live" ] || fail "live owner run was reaped"
+[ -f "$reap_root/run.unowned/keep.txt" ] || fail "run without owner.pid was reaped"
+[ -e "$reap_root/run.notadir" ] || fail "non-directory run entry was removed"
+
 echo "agent runtime cache hermetic tests passed"

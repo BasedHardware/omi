@@ -36,8 +36,35 @@ class FakeRunner:
         joined = " ".join(command)
         for needle, response in self.responses.items():
             if needle in joined:
+                if "--json-output" in command and response[0] == 0:
+                    Path(command[command.index("--json-output") + 1]).write_text(response[1])
+                    return 0, "human-readable output is deliberately ignored"
                 return response
+        if "--json-output" in command:
+            Path(command[command.index("--json-output") + 1]).write_text(ios_inventory())
         return 0, ""
+
+
+def ios_inventory(*devices: dict) -> str:
+    return json.dumps({"result": {"devices": list(devices)}})
+
+
+def ios_device(udid="00008110-000123456789ABCD", *, modern=False, **hardware):
+    groups = {
+        "hardwareProperties": {
+            "udid": udid,
+            "platform": "iOS",
+            "reality": "physical",
+            "deviceType": "iPhone",
+            "marketingName": "iPhone 15 Pro Max",
+            **hardware,
+        },
+        "deviceProperties": {"name": "Test Mac phone", "bootState": "booted"},
+        "connectionProperties": {"pairingState": "paired", "transportType": "wired", "tunnelState": "disconnected"},
+    }
+    if modern:
+        return {"properties": dict(zip(("hardware", "state", "connection"), groups.values()))}
+    return groups
 
 
 def _register_and_lease(env: dict, platform: str = "android", device_id: str = "TESTPHONE01") -> dict:
@@ -79,25 +106,40 @@ class TestDoctor:
         assert report["checks"][0]["status"] == "ready"
 
     def test_ios_no_device_is_operator_action(self, tmp_path: Path, env: dict) -> None:
-        runner = FakeRunner({"list devices": (0, "No devices found.")})
+        runner = FakeRunner({"list devices": (0, ios_inventory())})
         report = dr.device_doctor(REPO_ROOT, ios=dr.IosTooling(runner), env=env)
         check = report["checks"][0]
         assert check["status"] == "operator-action-needed"
         assert "Developer Mode" in check["remedy"]
 
-    def test_ios_dashed_separator_row_is_not_a_device(self, tmp_path: Path, env: dict) -> None:
-        runner = FakeRunner(
-            {
-                "list devices": (
-                    0,
-                    "Name           Hostname   Identifier                                    State               Model\n"
-                    "----------------------------   --------   -------------------------------------------   ------------------\n"
-                    "David's iPhone 15                         00008130-00060D893AE8001C (UDID)              available (paired)\n",
-                )
-            }
-        )
+    @pytest.mark.parametrize("modern", [False, True])
+    def test_ios_only_physical_paired_phones_and_table_names_do_not_matter(self, env: dict, modern: bool) -> None:
+        phone = ios_device(modern=modern)
+        simulator = ios_device("SIMULATED-1234", modern=modern, reality="simulated")
+        watch = ios_device("WATCH-1234", modern=modern, platform="watchOS", deviceType="appleWatch")
+        mac = ios_device("MAC-1234", modern=modern, platform="macOS", deviceType="mac")
+        unknown = ios_device("UNKNOWN-1234", modern=modern, reality=None)
+        runner = FakeRunner({"list devices": (0, ios_inventory(watch, simulator, phone, mac, unknown))})
         report = dr.device_doctor(REPO_ROOT, ios=dr.IosTooling(runner), env=env)
-        assert [c["check"] for c in report["checks"]] == ["ios.device.00008130-00060D893AE8001C"]
+        assert [c["check"] for c in report["checks"]] == ["ios.device.00008110-000123456789ABCD"]
+        assert "--json-output" in runner.commands[0]
+
+    @pytest.mark.parametrize(
+        "payload", ["not json", "{}", '{"result":{"devices":{}}}', '{"result":{"devices":[null]}}']
+    )
+    def test_ios_malformed_inventory_is_tooling_failure_not_no_devices(self, env: dict, payload: str) -> None:
+        runner = FakeRunner({"list devices": (0, payload)})
+        report = dr.device_doctor(REPO_ROOT, ios=dr.IosTooling(runner), env=env)
+        assert report["checks"][0]["check"] == "ios.tooling"
+        assert report["checks"][0]["status"] == "agent-remediable"
+
+    def test_ios_unpaired_or_shutdown_devices_are_not_candidates(self) -> None:
+        unpaired = ios_device()
+        unpaired["connectionProperties"]["pairingState"] = "unpaired"
+        shutdown = ios_device("SHUTDOWN-1234")
+        shutdown["deviceProperties"]["bootState"] = "shutdown"
+        runner = FakeRunner({"list devices": (0, ios_inventory(unpaired, shutdown))})
+        assert dr.IosTooling(runner).connected() == []
 
     def test_missing_adb_binary_is_agent_remediable_not_a_traceback(self, tmp_path: Path, env: dict) -> None:
         """A runner that raises FileNotFoundError (raw subprocess) must not
@@ -275,7 +317,7 @@ class TestRun:
         session = _running_session(env, platform="ios-simulator")
         artifact = tmp_path / "Runner.dev.ipa"
         artifact.write_bytes(b"fake ipa")
-        runner = FakeRunner({"list devices": (0, f"{udid} iPhone 16 Pro\n")})
+        runner = FakeRunner({"list devices": (0, ios_inventory(ios_device(udid)))})
         receipt = dr.run(
             REPO_ROOT,
             session["session_id"],

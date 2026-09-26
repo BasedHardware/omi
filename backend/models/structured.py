@@ -3,16 +3,28 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_serializer
 
 _SDK_SRC = Path(__file__).resolve().parents[2] / 'plugins' / 'omi-plugin-sdk' / 'src'
 if _SDK_SRC.exists() and str(_SDK_SRC) not in sys.path:
     sys.path.insert(0, str(_SDK_SRC))
 
 try:
-    from omi_plugin_sdk.models import ActionItem, Event, Section, Structured
+    from omi_plugin_sdk.models import ActionItem, Event, Insight, MeetingType, Participant, Section, Structured
 except ModuleNotFoundError:
     from models.conversation_enums import CategoryEnum
+
+    MeetingType = Literal[
+        'interview', 'intro', 'sales', 'customer', 'one_on_one', 'team_sync', 'planning', 'demo', 'social', 'other'
+    ]
+
+    _OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights')
+
+    def _drop_unset_fields(model: BaseModel, data: dict, fields: tuple) -> dict:
+        for field_name in fields:
+            if field_name not in model.model_fields_set:
+                data.pop(field_name, None)
+        return data
 
     class ActionItem(BaseModel):
         description: str = Field(description='The action item to be completed')
@@ -97,6 +109,29 @@ except ModuleNotFoundError:
         source_segment_ids: List[str] = Field(
             default_factory=list, description='Transcript segment IDs that directly support this section'
         )
+        kind: Literal['main', 'side_notes'] = Field(
+            default='main', description='Whether the section is primary recap or the closing side-notes section'
+        )
+
+        @model_serializer(mode='wrap')
+        def _omit_unset_kind(self, handler):
+            return _drop_unset_fields(self, handler(self), ('kind',))
+
+    class Participant(BaseModel):
+        name: Optional[str] = Field(default=None, description="Participant's display name")
+        email: Optional[str] = Field(default=None, description="Participant's email address")
+        organization: Optional[str] = Field(default=None, description="Participant's organization when known")
+        role: Optional[str] = Field(default=None, description="Participant's role or relationship when known")
+        is_ai_agent: bool = Field(default=False, description='True for AI notetakers and assistants, never people')
+        source: Literal['roster', 'transcript'] = Field(
+            description="Whether meeting metadata ('roster') or only the conversation evidences this participant"
+        )
+
+    class Insight(BaseModel):
+        text: str = Field(description='One insight connecting background context to this conversation')
+        kind: Literal['prior_meeting', 'goal', 'memory', 'person'] = Field(
+            description='Which background source the insight draws on'
+        )
 
     class Structured(BaseModel):
         title: str = Field(description='A title/name for this conversation', default='')
@@ -116,6 +151,21 @@ except ModuleNotFoundError:
             description='A list of events extracted from the conversation, that the user must have on his calendar.',
             default_factory=list,
         )
+        meeting_type: Optional[MeetingType] = Field(
+            default=None, description='The kind of meeting, when the capture is a meeting'
+        )
+        participants: List[Participant] = Field(
+            default_factory=list,
+            description='People and AI agents evidenced by the meeting roster or the transcript; never the account owner',
+        )
+        insights: List[Insight] = Field(
+            default_factory=list,
+            description='Insights connecting supplied background context to this conversation; empty without background',
+        )
+
+        @model_serializer(mode='wrap')
+        def _omit_unset_rich_fields(self, handler):
+            return _drop_unset_fields(self, handler(self), _OMIT_WHEN_UNSET)
 
         @field_validator('category', mode='before')
         @classmethod
@@ -141,4 +191,4 @@ except ModuleNotFoundError:
             return result.strip()
 
 
-__all__ = ['ActionItem', 'Event', 'Section', 'Structured']
+__all__ = ['ActionItem', 'Event', 'Insight', 'MeetingType', 'Participant', 'Section', 'Structured']

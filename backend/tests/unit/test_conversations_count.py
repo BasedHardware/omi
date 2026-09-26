@@ -36,7 +36,8 @@ def get_conversations_count(
     sources=None,
 ):
     """Mirrors database.conversations.get_conversations_count."""
-    conversations_ref = mock_db.collection('users').document(uid).collection('conversations')
+    collection = mock_db.collection('users').document(uid).collection('conversations')
+    conversations_ref = collection
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if sources:
@@ -60,7 +61,17 @@ def get_conversations_count(
     if end_date:
         conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
     result = conversations_ref.count().get()
-    return int(result[0][0].value)
+    matching = int(result[0][0].value)
+    for doc in collection.where(filter=FieldFilter('deleted', '==', True)).stream():
+        data = doc.to_dict() or {}
+        if not include_discarded and data.get('discarded'):
+            continue
+        if statuses and data.get('status') not in statuses:
+            continue
+        if sources and data.get('source') not in sources:
+            continue
+        matching -= 1
+    return matching
 
 
 class TestConversationsCount:
@@ -87,6 +98,7 @@ class TestConversationsCount:
         assert "FieldFilter('starred', '==', starred)" in source
         assert "FieldFilter('created_at', '>=', start_date)" in source
         assert "FieldFilter('created_at', '<=', end_date)" in source
+        assert "FieldFilter('deleted', '==', True)" in source
         assert '.count().get()' in source
         assert 'result[0][0].value' in source
 
@@ -94,6 +106,7 @@ class TestConversationsCount:
         ref = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = ref
         ref.where.return_value = ref
+        ref.stream.return_value = []
         ref.count.return_value.get.return_value = self._make_result(42)
 
         result = get_conversations_count('uid1')
@@ -104,11 +117,12 @@ class TestConversationsCount:
         ref = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = ref
         ref.where.return_value = ref
+        ref.stream.return_value = []
         ref.count.return_value.get.return_value = self._make_result(10)
 
         result = get_conversations_count('uid1', statuses=['processing', 'completed'])
         assert result == 10
-        assert ref.where.call_count == 2
+        assert ref.where.call_count == 3
         # Verify FieldFilter arguments (FieldFilter doesn't support equality, check attrs)
         f0 = ref.where.call_args_list[0].kwargs['filter']
         assert f0.field_path == 'discarded'
@@ -116,11 +130,15 @@ class TestConversationsCount:
         f1 = ref.where.call_args_list[1].kwargs['filter']
         assert f1.field_path == 'status'
         assert f1.value == ['processing', 'completed']
+        f2 = ref.where.call_args_list[2].kwargs['filter']
+        assert f2.field_path == 'deleted'
+        assert f2.value is True
 
     def test_count_composes_sources_and_statuses(self):
         ref = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = ref
         ref.where.return_value = ref
+        ref.stream.return_value = []
         ref.count.return_value.get.return_value = self._make_result(3)
 
         result = get_conversations_count('uid1', statuses=['processing', 'completed'], sources=['omi'])
@@ -131,21 +149,27 @@ class TestConversationsCount:
             ('discarded', '==', False),
             ('source', '==', 'omi'),
             ('status', 'in', ['processing', 'completed']),
+            ('deleted', '==', True),
         ]
 
     def test_count_include_discarded_skips_filter(self):
         ref = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = ref
+        ref.where.return_value = ref
+        ref.stream.return_value = []
         ref.count.return_value.get.return_value = self._make_result(55)
 
         result = get_conversations_count('uid1', include_discarded=True)
         assert result == 55
-        ref.where.assert_not_called()
+        f = ref.where.call_args.kwargs['filter']
+        assert f.field_path == 'deleted'
+        assert f.value is True
 
     def test_count_zero(self):
         ref = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = ref
         ref.where.return_value = ref
+        ref.stream.return_value = []
         ref.count.return_value.get.return_value = self._make_result(0)
 
         result = get_conversations_count('uid1')
@@ -156,33 +180,42 @@ class TestConversationsCount:
         ref = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = ref
         ref.where.return_value = ref
+        ref.stream.return_value = []
         ref.count.return_value.get.return_value = self._make_result(7)
 
         result = get_conversations_count('uid1')
         assert result == 7
-        assert ref.where.call_count == 1
-        f = ref.where.call_args.kwargs['filter']
-        assert f.field_path == 'discarded'
-        assert f.value is False
+        assert ref.where.call_count == 2
+        f0 = ref.where.call_args_list[0].kwargs['filter']
+        assert f0.field_path == 'discarded'
+        assert f0.value is False
+        f1 = ref.where.call_args_list[1].kwargs['filter']
+        assert f1.field_path == 'deleted'
+        assert f1.value is True
 
     def test_count_include_discarded_with_statuses(self):
         """include_discarded=True + statuses — only status filter, no discarded filter."""
         ref = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = ref
         ref.where.return_value = ref
+        ref.stream.return_value = []
         ref.count.return_value.get.return_value = self._make_result(20)
 
         result = get_conversations_count('uid1', include_discarded=True, statuses=['processing'])
         assert result == 20
-        assert ref.where.call_count == 1
-        f = ref.where.call_args.kwargs['filter']
-        assert f.field_path == 'status'
-        assert (f.op_string, f.value) == ('==', 'processing')
+        assert ref.where.call_count == 2
+        f0 = ref.where.call_args_list[0].kwargs['filter']
+        assert f0.field_path == 'status'
+        assert (f0.op_string, f0.value) == ('==', 'processing')
+        f1 = ref.where.call_args_list[1].kwargs['filter']
+        assert f1.field_path == 'deleted'
+        assert f1.value is True
 
     def test_count_applies_list_filter_parity(self):
         ref = MagicMock()
         mock_db.collection.return_value.document.return_value.collection.return_value = ref
         ref.where.return_value = ref
+        ref.stream.return_value = []
         ref.count.return_value.get.return_value = self._make_result(3)
 
         result = get_conversations_count(
@@ -203,6 +236,7 @@ class TestConversationsCount:
             ('starred', '==', False),
             ('created_at', '>=', '2026-06-01T00:00:00Z'),
             ('created_at', '<=', '2026-06-02T00:00:00Z'),
+            ('deleted', '==', True),
         ]
 
 

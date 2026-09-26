@@ -18,12 +18,12 @@ import 'package:omi/pages/conversation_detail/widgets/template_creation_outcome.
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/ui/ui.dart';
 
 class CreateTemplateBottomSheet extends StatefulWidget {
   final String? conversationId;
-  final ScrollController? scrollController;
 
-  const CreateTemplateBottomSheet({super.key, this.conversationId, this.scrollController});
+  const CreateTemplateBottomSheet({super.key, this.conversationId});
 
   @override
   State<CreateTemplateBottomSheet> createState() => _CreateTemplateBottomSheetState();
@@ -57,7 +57,8 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
 
     // Draw emoji text
     final textPainter = TextPainter(
-      text: TextSpan(text: emoji, style: const TextStyle(fontSize: 140)),
+      text: TextSpan(
+          text: emoji, style: const TextStyle(fontSize: 140)), // omi-ux-allow: font-size-literal -- icon bitmap
       textDirection: TextDirection.ltr,
     );
     textPainter.layout();
@@ -101,6 +102,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
       final result = await getGeneratedDescriptionAndEmoji(name, prompt);
       final description = result.description;
       final emoji = result.emoji;
+      if (!mounted) return;
 
       setState(() {
         _statusMessage = context.l10n.creatingAppIcon;
@@ -108,6 +110,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
 
       // Create simple emoji icon
       final iconFile = await _createEmojiIcon(emoji);
+      if (!mounted) return;
 
       setState(() {
         _statusMessage = context.l10n.creatingYourApp;
@@ -178,7 +181,9 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
           }
 
           if (mounted) {
-            // Close the create template bottom sheet
+            // Close the create template sheet; follow-up sheets open from the navigator, which
+            // outlives it.
+            final navigatorContext = Navigator.of(context).context;
             Navigator.pop(context);
             // Polarity comes from the tested classifier so a failed install
             // can never be reported as success (#10074).
@@ -191,12 +196,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
               AppSnackbar.showSnackbarSuccess(context.l10n.appCreatedAndInstalled);
 
               // Show the summarized apps sheet so user can use the new app
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (context) => const SummarizedAppsBottomSheet(),
-              );
+              if (navigatorContext.mounted) showSummarizedAppsSheet(navigatorContext);
             }
           }
         } else if (mounted) {
@@ -225,253 +225,111 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
     }
   }
 
+  InputDecoration _fieldDecoration(String hint) => InputDecoration(
+        hintText: hint,
+        hintStyle: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
+        filled: true,
+        fillColor: OmiColors.surface2,
+        border: const OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide.none),
+        contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
+      );
+
+  Widget _fieldLabel(String text) => Padding(
+        padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
+        child:
+            Text(text, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500)),
+      );
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF0F0F14),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle bar
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(top: 12),
-              decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(2)),
-            ),
-
-            // Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.auto_fix_high, color: Colors.white, size: 20),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Text(
-                      context.l10n.createCustomTemplate,
-                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: _isCreating ? null : () => Navigator.pop(context),
-                    icon: Icon(Icons.close, color: Colors.grey.shade500),
-                  ),
-                ],
-              ),
-            ),
-
-            // Form content
-            Flexible(
-              child: SingleChildScrollView(
-                controller: widget.scrollController,
-                padding: const EdgeInsets.only(left: 20, right: 20, top: 20, bottom: 20),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+    return PopScope(
+      // Leaving while the template is being created would orphan the request's result.
+      canPop: !_isCreating,
+      child: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: OmiSpacing.md),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _fieldLabel(context.l10n.templateName),
+                TextFormField(
+                  controller: _nameController,
+                  enabled: !_isCreating,
+                  style: OmiType.subhead,
+                  decoration: _fieldDecoration(context.l10n.templateNameHint),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return context.l10n.pleaseEnterAppName;
+                    }
+                    if (value.trim().length < 3) {
+                      return context.l10n.nameMustBeAtLeast3Characters;
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: OmiSpacing.lg),
+                _fieldLabel(context.l10n.conversationPrompt),
+                TextFormField(
+                  controller: _promptController,
+                  enabled: !_isCreating,
+                  style: OmiType.subhead,
+                  maxLines: 4,
+                  decoration: _fieldDecoration(context.l10n.conversationPromptHint),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return context.l10n.pleaseEnterAppPrompt;
+                    }
+                    if (value.trim().length < 10) {
+                      return context.l10n.promptMustBeAtLeast10Characters;
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: OmiSpacing.lg),
+                Container(
+                  padding: const EdgeInsets.all(OmiSpacing.md),
+                  decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                  child: Row(
                     children: [
-                      // Name field
-                      Text(
-                        context.l10n.templateName,
-                        style: TextStyle(color: Colors.grey.shade300, fontSize: 14, fontWeight: FontWeight.w500),
+                      FaIcon(
+                        _isPublic ? FontAwesomeIcons.globe : FontAwesomeIcons.lock,
+                        color: OmiColors.textSecondary,
+                        size: 16,
                       ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _nameController,
-                        enabled: !_isCreating,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: context.l10n.templateNameHint,
-                          hintStyle: TextStyle(color: Colors.grey.shade600),
-                          filled: true,
-                          fillColor: const Color(0xFF1F1F25),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return context.l10n.pleaseEnterAppName;
-                          }
-                          if (value.trim().length < 3) {
-                            return context.l10n.nameMustBeAtLeast3Characters;
-                          }
-                          return null;
-                        },
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // Prompt field
-                      Text(
-                        context.l10n.conversationPrompt,
-                        style: TextStyle(color: Colors.grey.shade300, fontSize: 14, fontWeight: FontWeight.w500),
-                      ),
-                      const SizedBox(height: 8),
-                      TextFormField(
-                        controller: _promptController,
-                        enabled: !_isCreating,
-                        style: const TextStyle(color: Colors.white),
-                        maxLines: 4,
-                        decoration: InputDecoration(
-                          hintText: context.l10n.conversationPromptHint,
-                          hintStyle: TextStyle(color: Colors.grey.shade600),
-                          filled: true,
-                          fillColor: const Color(0xFF1F1F25),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.all(16),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return context.l10n.pleaseEnterAppPrompt;
-                          }
-                          if (value.trim().length < 10) {
-                            return context.l10n.promptMustBeAtLeast10Characters;
-                          }
-                          return null;
-                        },
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // Public toggle
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1F1F25),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2A2A2E),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Center(
-                                child: FaIcon(
-                                  _isPublic ? FontAwesomeIcons.globe : FontAwesomeIcons.lock,
-                                  color: Colors.grey.shade400,
-                                  size: 16,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    context.l10n.makePublic,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    _isPublic
-                                        ? context.l10n.anyoneCanDiscoverTemplate
-                                        : context.l10n.onlyYouCanUseTemplate,
-                                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Switch(
-                              value: _isPublic,
-                              onChanged: _isCreating
-                                  ? null
-                                  : (value) {
-                                      setState(() {
-                                        _isPublic = value;
-                                      });
-                                    },
-                              activeThumbColor: const Color(0xFF6366F1),
+                            Text(context.l10n.makePublic, style: OmiType.callout.copyWith(fontWeight: FontWeight.w500)),
+                            const SizedBox(height: 2),
+                            Text(
+                              _isPublic ? context.l10n.anyoneCanDiscoverTemplate : context.l10n.onlyYouCanUseTemplate,
+                              style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
                             ),
                           ],
                         ),
                       ),
-
-                      const SizedBox(height: 24),
-
-                      // Create button
-                      SizedBox(
-                        width: double.infinity,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          child: ElevatedButton(
-                            onPressed: _isCreating ? null : _createTemplate,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _isCreating ? const Color(0xFF2A2A2E) : Colors.white,
-                              foregroundColor: Colors.black,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              elevation: 0,
-                            ),
-                            child: _isCreating
-                                ? Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      const SizedBox(
-                                        width: 18,
-                                        height: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Text(
-                                        _statusMessage,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  )
-                                : Text(
-                                    context.l10n.createApp,
-                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                                  ),
-                          ),
-                        ),
+                      OmiSwitch(
+                        value: _isPublic,
+                        onChanged: _isCreating ? null : (value) => setState(() => _isPublic = value),
                       ),
-
-                      SizedBox(height: MediaQuery.of(context).padding.bottom + 8),
                     ],
                   ),
                 ),
-              ),
+                const SizedBox(height: OmiSpacing.xl),
+                OmiButton(
+                  label: _isCreating ? _statusMessage : context.l10n.createApp,
+                  expand: true,
+                  isLoading: _isCreating,
+                  onPressed: _isCreating ? null : _createTemplate,
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -480,20 +338,9 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
 
 /// Shows the create template bottom sheet
 void showCreateTemplateBottomSheet(BuildContext context, {String? conversationId}) {
-  showModalBottomSheet(
+  showOmiSheet<void>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (context) => Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: DraggableScrollableSheet(
-        initialChildSize: 0.65,
-        minChildSize: 0.4,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (context, scrollController) =>
-            CreateTemplateBottomSheet(conversationId: conversationId, scrollController: scrollController),
-      ),
-    ),
+    title: context.l10n.createCustomTemplate,
+    builder: (_) => CreateTemplateBottomSheet(conversationId: conversationId),
   );
 }

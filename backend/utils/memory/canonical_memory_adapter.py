@@ -39,6 +39,7 @@ from utils.memory.belief_model import (
     temporal_view_allows_record,
     memory_use_suppressed,
 )
+from database.document_ids import document_id_from_seed
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import (
     CanonicalApplyWrite,
@@ -47,6 +48,7 @@ from database.memory_apply_store import (
     CanonicalReviewResolution,
     CanonicalReviewResolutionConflict,
     ConversationSourceReplacementConflict,
+    EvidenceIdentityConflict,
     apply_direct_user_long_term_patch_firestore,
     apply_long_term_patch_firestore,
     read_trigger_feedback_replay_firestore,
@@ -57,6 +59,7 @@ from database.memory_apply_store import (
 )
 from database.legal_holds import (
     LegalHoldAuthorityUnavailable,
+    assert_account_deletion_permitted,
     current_destructive_operation_token,
     destructive_operation_gate,
 )
@@ -73,6 +76,7 @@ from models.memory_domain import (
 from models.memory_evidence import (
     ArtifactRef,
     ArtifactPreservationState,
+    EVIDENCE_IDENTITY_FIELDS,
     MemoryEvidence,
     SourceState,
 )
@@ -1492,8 +1496,34 @@ def _product_metadata_from_payload(data: Dict[str, Any]) -> Dict[str, Any]:
     subject_kind = str(raw_subject_kind or "").strip().lower()
     if subject_kind in {"user", "speaker", "person", "entity", "unknown"}:
         source_attribution["subject_kind"] = subject_kind
+    override = _attribution_override_from_payload(data)
+    if override:
+        # Audit/revert record for a capture-time re-attribution; the planner
+        # reads only the three subject fields above (canonical_consolidation).
+        source_attribution["override"] = override
     metadata["source_attribution"] = source_attribution
     return metadata
+
+
+_ATTRIBUTION_OVERRIDE_KEYS = (
+    "source",
+    "question_version",
+    "model",
+    "p_user",
+    "threshold",
+    "pipeline_subject_attribution",
+    "pipeline_subject_entity_id",
+    "pipeline_subject_kind",
+)
+
+
+def _attribution_override_from_payload(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Bounded provenance for a Jev owner flip (``utils/conversations/owner_jev.py``)."""
+    raw = data.get("attribution_override")
+    if not isinstance(raw, dict) or raw.get("source") != "jev":
+        return {}
+    override = cast(Dict[str, Any], raw)
+    return {key: override[key] for key in _ATTRIBUTION_OVERRIDE_KEYS if key in override}
 
 
 def _relationship_to_user_from_payload(data: Dict[str, Any]) -> str:
@@ -1771,16 +1801,21 @@ def _existing_identical_add_row(
     if not getattr(snapshot, "exists", False):
         return None
     item = MemoryItem(**_snapshot_payload(snapshot))
-    if item.status != MemoryItemStatus.active:
+    if not _is_live_identical_row(item, data.get("content")):
         return None
+    return item
+
+
+def _is_live_identical_row(item: MemoryItem, content: Any) -> bool:
+    """Whether a resend of ``content`` is already satisfied by ``item``."""
+    if item.status != MemoryItemStatus.active:
+        return False
     if (item.promotion or {}).get("user_review") is False:
         # A rejected row remains active for audit/history, but it is not a
         # successful retry target.  Reusing it would silently resurrect a
         # user-rejected statement under the old content-derived identity.
-        return None
-    if (item.content or "").strip() != (data.get("content") or "").strip():
-        return None
-    return item
+        return False
+    return (item.content or "").strip() == str(content or "").strip()
 
 
 _DUPLICATE_ADD_SNAPSHOT_RETRY_DELAYS: tuple[float, ...] = (0.05, 0.15, 0.3)
@@ -1935,6 +1970,52 @@ def write_canonical_extraction_memory(
 
 
 _EXTERNAL_EVIDENCE_REISSUE_LIMIT = 25
+_EXTERNAL_MEMORY_ID_REISSUE_LIMIT = 25
+_EXTERNAL_WRITE_CONFLICT_ATTEMPTS = 3
+
+
+def _is_content_derived_memory_id(memory_id: Any, content: Any) -> bool:
+    # Only an id derived from this exact text may move. A caller-supplied id
+    # reused for different text is a genuine conflict and keeps failing.
+    text = str(content or "")
+    return bool(memory_id) and memory_id in {document_id_from_seed(text), document_id_from_seed(text.strip())}
+
+
+def _available_external_memory_id(uid: str, memory_id: str, content: Any, *, db_client: Any) -> str:
+    """Return the row id an external create should write, given rows that already hold its identity.
+
+    External memory ids are derived from the submitted text, but a row keeps its
+    id when it is edited, superseded, or rejected. A resend of the original text
+    would then collide with a row that no longer holds it and fail the add on
+    every retry (#17296). The user does not have that text any more, so the
+    resend is a new memory and gets a fresh identity, as a re-add after delete
+    does. The reissued id is deterministic, so retrying the same resend still
+    lands on one row, and a row that does hold the text is reused.
+    """
+    collections = MemoryCollections(uid=uid)
+    candidate = memory_id
+    for attempt in range(1, _EXTERNAL_MEMORY_ID_REISSUE_LIMIT + 1):
+        snapshot = db_client.document(f"{collections.memory_items}/{candidate}").get()
+        if not getattr(snapshot, "exists", False):
+            return candidate
+        if _is_live_identical_row(MemoryItem(**_snapshot_payload(snapshot)), content):
+            return candidate
+        candidate = (
+            "mem_"
+            + deterministic_contract_id(
+                "canonical-external-memory-occupied-reissue",
+                {"uid": uid, "memory_id": memory_id, "attempt": attempt},
+            )[:32]
+        )
+    raise RuntimeError("canonical external write exhausted memory identity reissues")
+
+
+_EXTERNAL_EVIDENCE_SOURCE_IDENTITY_FIELDS = set(EVIDENCE_IDENTITY_FIELDS) - {"evidence_id"}
+
+
+def _external_evidence_source_identity(evidence: MemoryEvidence) -> Dict[str, Any]:
+    """Immutable identity fields that name the source an evidence id stands for."""
+    return evidence.model_dump(mode="json", include=_EXTERNAL_EVIDENCE_SOURCE_IDENTITY_FIELDS)
 
 
 def _reissued_external_evidence(
@@ -1943,7 +2024,7 @@ def _reissued_external_evidence(
     *,
     db_client: Any,
 ) -> List[MemoryEvidence]:
-    """Mint a fresh evidence identity when an external submission reuses a retired one.
+    """Mint a fresh evidence identity when an external submission reuses a taken one.
 
     External evidence ids are derived from the submitted content, and evidence
     source_state is monotonic per identity. Deleting a memory tombstones its
@@ -1959,6 +2040,7 @@ def _reissued_external_evidence(
         if item.conversation_id or item.source_type == "conversation":
             reissued.append(item)
             continue
+        proposed_identity = _external_evidence_source_identity(item)
         evidence_id = item.evidence_id
         for attempt in range(1, _EXTERNAL_EVIDENCE_REISSUE_LIMIT + 1):
             snapshot = db_client.document(f"{collections.memory_evidence}/{evidence_id}").get()
@@ -1966,12 +2048,17 @@ def _reissued_external_evidence(
                 break
             stored = _snapshot_payload(snapshot)
             if SourceState(stored.get("source_state") or SourceState.active.value) == SourceState.active:
-                break
+                if _external_evidence_source_identity(MemoryEvidence(**stored)) == proposed_identity:
+                    break
             evidence_id = (
                 "ev_"
                 + deterministic_contract_id(
                     "canonical-external-evidence-reissue",
-                    {"evidence_id": item.evidence_id, "attempt": attempt},
+                    {
+                        "evidence_id": item.evidence_id,
+                        "identity": proposed_identity,
+                        "attempt": attempt,
+                    },
                 )[:32]
             )
         else:
@@ -1998,8 +2085,6 @@ def write_canonical_external_memory(
         raise ValueError("knowledge ledger writes require the dedicated ledger authority")
     client = db_client if db_client is not None else default_db_client
     original_evidence = _evidence_items_from_payload(data)
-    reissued_evidence = _reissued_external_evidence(uid, original_evidence, db_client=client)
-    payload = dict(data)
     original_memory_id = str(data.get("id") or "").strip()
     was_privacy_deleted = False
     if original_memory_id:
@@ -2008,47 +2093,58 @@ def write_canonical_external_memory(
             f"{privacy_deletion_receipt_id(uid, original_memory_id)}"
         ).get()
         was_privacy_deleted = bool(getattr(receipt, "exists", False))
-    if was_privacy_deleted and not any(
+    has_conversation_evidence = any(
         item.conversation_id or item.source_type == "conversation" for item in original_evidence
-    ):
-        reissued_evidence = [
-            item.model_copy(update={"evidence_id": f"ev_{secrets.token_hex(16)}"}) for item in original_evidence
-        ]
-        payload["id"] = f"mem_{secrets.token_hex(16)}"
-    if [item.evidence_id for item in reissued_evidence] != [item.evidence_id for item in original_evidence]:
-        # A manually re-added fact is a new source artifact. Give the new row a
-        # fresh deterministic identity derived from its newly minted evidence;
-        # the deleted row and evidence remain immutable history.
-        if not was_privacy_deleted:
-            payload["id"] = (
-                "mem_"
-                + deterministic_contract_id(
-                    "canonical-external-memory-reissue",
-                    {
-                        "uid": uid,
-                        "original_memory_id": data.get("id"),
-                        "evidence_ids": [item.evidence_id for item in reissued_evidence],
-                    },
-                )[:32]
-            )
-    memory_id = write_canonical_extraction_memory(
-        uid,
-        payload,
-        db_client=client,
-        evidence_items=reissued_evidence,
-        review_resolution=review_resolution,
-        _direct_user_authority=_DIRECT_USER_LEDGER_WRITE_AUTHORITY,
-        admit_neighbors=False,
     )
+    is_content_derived = _is_content_derived_memory_id(original_memory_id, data.get("content"))
+    last_conflict: Optional[EvidenceIdentityConflict] = None
+    memory_id: Optional[str] = None
+    for _conflict_attempt in range(_EXTERNAL_WRITE_CONFLICT_ATTEMPTS):
+        if not was_privacy_deleted and is_content_derived:
+            snapshot = client.document(f"{MemoryCollections(uid=uid).memory_items}/{original_memory_id}").get()
+            if getattr(snapshot, "exists", False) and _is_live_identical_row(
+                MemoryItem(**_snapshot_payload(snapshot)), data.get("content")
+            ):
+                return original_memory_id
+        payload = dict(data)
+        reissued_evidence = _reissued_external_evidence(uid, original_evidence, db_client=client)
+        if was_privacy_deleted and not has_conversation_evidence:
+            reissued_evidence = [
+                item.model_copy(update={"evidence_id": f"ev_{secrets.token_hex(16)}"}) for item in original_evidence
+            ]
+            payload["id"] = f"mem_{secrets.token_hex(16)}"
+        if _is_content_derived_memory_id(payload.get("id"), payload.get("content")):
+            payload["id"] = _available_external_memory_id(
+                uid, str(payload["id"]), payload.get("content"), db_client=client
+            )
+        try:
+            memory_id = write_canonical_extraction_memory(
+                uid,
+                payload,
+                db_client=client,
+                evidence_items=reissued_evidence,
+                review_resolution=review_resolution,
+                _direct_user_authority=_DIRECT_USER_LEDGER_WRITE_AUTHORITY,
+                admit_neighbors=False,
+            )
+        except EvidenceIdentityConflict as exc:
+            if was_privacy_deleted or has_conversation_evidence or not is_content_derived:
+                raise
+            last_conflict = exc
+            continue
+        break
+    if memory_id is None:
+        assert last_conflict is not None
+        raise last_conflict
     if belief_model_enabled():
         from utils.memory.belief_evidence import schedule_belief_admission
 
         schedule_belief_admission(
             uid,
             memory_id,
-            str(payload.get("content") or ""),
+            str(data.get("content") or ""),
             db_client=client,
-            new_user_asserted=bool(payload.get("manually_added") or payload.get("user_asserted")),
+            new_user_asserted=bool(data.get("manually_added") or data.get("user_asserted")),
         )
     return memory_id
 
@@ -2404,6 +2500,7 @@ def replace_conversation_sourced_memories(
     db_client: Any = None,
     conflict_backoff_seconds: Sequence[float] = _REPLACEMENT_CONFLICT_BACKOFF_SECONDS,
     empty_set_intent: str = "retraction",
+    claim_destructive_gate: bool = True,
 ) -> Dict[str, Any]:
     """Atomically replace one conversation's complete canonical memory set.
 
@@ -2421,6 +2518,10 @@ def replace_conversation_sourced_memories(
     conversation already has rows and no deletion gate is held, the existing
     rows are kept and the call resolves as a no-op instead of failing —
     extraction variance is not permission to destroy knowledge.
+
+    ``claim_destructive_gate`` is True for account-scale privacy deletion.
+    Sync-bridge donor retraction passes False: it still retracts rows, but
+    fences against a live wipe instead of taking the exclusive account lock.
     """
     if empty_set_intent not in {"retraction", "extraction"}:
         raise ValueError(f"unknown empty_set_intent: {empty_set_intent!r}")
@@ -2480,6 +2581,15 @@ def replace_conversation_sourced_memories(
             # ``expected_reactivation_items`` derives from
             # ``terminal_source_ids``, itself derived from
             # ``expected_source_items``, so it is necessarily empty here too.
+            if not claim_destructive_gate:
+                return {
+                    "retracted_memory_ids": [],
+                    "committed_memory_ids": [],
+                    "reactivated_memory_ids": [],
+                    "vector_delete_ids": [],
+                    "tombstoned_evidence_ids": [],
+                    "source_generation": observed_control.source_generation,
+                }
             try:
                 current_destructive_operation_token(uid, kind="explicit_memory_deletion")
             except LegalHoldAuthorityUnavailable:
@@ -2595,8 +2705,11 @@ def replace_conversation_sourced_memories(
                 expected_reactivation_items=expected_reactivation_items,
                 writes=writes,
                 deletion_gate_token=(
-                    current_destructive_operation_token(uid, kind="explicit_memory_deletion") if not items else None
+                    current_destructive_operation_token(uid, kind="explicit_memory_deletion")
+                    if not items and claim_destructive_gate
+                    else None
                 ),
+                require_deletion_gate=bool(not items and claim_destructive_gate),
                 db_client=client,
             )
             break
@@ -3795,6 +3908,7 @@ def _retract_conversation_sourced_memories_under_gate(
     conversation_id: str,
     *,
     db_client: Any = None,
+    claim_destructive_gate: bool = True,
 ) -> Dict[str, Any]:
     """Atomically replace one conversation's complete source set with nothing.
 
@@ -3820,6 +3934,7 @@ def _retract_conversation_sourced_memories_under_gate(
                 [],
                 db_client=client,
                 conflict_backoff_seconds=_IMMEDIATE_REPLACEMENT_RETRY_BACKOFF,
+                claim_destructive_gate=claim_destructive_gate,
             )
         except ConversationReplacementConflictError as exc:
             last_conflict = exc
@@ -3848,8 +3963,24 @@ def _retract_conversation_sourced_memories_under_gate(
     ) from last_conflict
 
 
-def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_client: Any = None) -> Dict[str, Any]:
+def retract_conversation_sourced_memories(
+    uid: str,
+    conversation_id: str,
+    *,
+    db_client: Any = None,
+    claim_destructive_gate: bool = True,
+) -> Dict[str, Any]:
     client = db_client if db_client is not None else default_db_client
+    if not claim_destructive_gate:
+        # Sync-bridge derived cleanup: refuse under an active legal hold or
+        # account wipe, but do not take the exclusive per-account lock.
+        assert_account_deletion_permitted(uid, firestore_client=client)
+        return _retract_conversation_sourced_memories_under_gate(
+            uid,
+            conversation_id,
+            db_client=client,
+            claim_destructive_gate=False,
+        )
     with destructive_operation_gate(
         uid,
         kind="explicit_memory_deletion",

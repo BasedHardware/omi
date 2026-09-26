@@ -13,6 +13,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/share_sheet.dart';
+import 'package:omi/ui/ui.dart';
 
 /// Full-screen photo viewer that replaces `FullScreenImageViewer` (a single network image, e.g.
 /// app store thumbnails) and `PhotoViewerPage` (a paged gallery of base64 conversation photos).
@@ -79,8 +80,8 @@ class MediaViewerPage extends StatefulWidget {
   /// gallery used 4.
   final double maxScaleMultiplier;
 
-  /// True for an explicit close `X` (single-image viewer); false lets the pushed route's default
-  /// back arrow show instead (the gallery never overrode `leading`).
+  /// Kept for existing callers and ignored: the viewer floats over the page, so it always leaves
+  /// by a trailing close X (and a swipe down), whatever opened it.
   final bool showCloseButton;
 
   /// The gallery viewer wrapped its body in a `SafeArea` (it has a caption strip that must clear
@@ -97,6 +98,30 @@ class MediaViewerPage extends StatefulWidget {
     this.wrapBodyInSafeArea = true,
   });
 
+  /// Presents the viewer the one way it is presented everywhere: a full-screen modal that slides up,
+  /// closes with the trailing X, a swipe down, or system back.
+  static Future<void> open(
+    BuildContext context, {
+    required List<MediaViewerItem> items,
+    int initialIndex = 0,
+    Color appBarBackgroundColor = Colors.black,
+    double maxScaleMultiplier = 4,
+    bool wrapBodyInSafeArea = true,
+  }) {
+    return Navigator.of(context).push<void>(
+      omiPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => MediaViewerPage(
+          items: items,
+          initialIndex: initialIndex,
+          appBarBackgroundColor: appBarBackgroundColor,
+          maxScaleMultiplier: maxScaleMultiplier,
+          wrapBodyInSafeArea: wrapBodyInSafeArea,
+        ),
+      ),
+    );
+  }
+
   @override
   State<MediaViewerPage> createState() => _MediaViewerPageState();
 }
@@ -106,6 +131,13 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
   late final PageController _pageController;
   final GlobalKey _shareButtonKey = GlobalKey();
   bool _isSharing = false;
+
+  /// Swipe-down-to-close: how far the image has been dragged, and whether the current page is
+  /// zoomed (a zoomed image pans instead).
+  double _dragOffset = 0;
+  bool _zoomed = false;
+  static const double _dismissDistance = 120;
+  static const double _dismissVelocity = 700;
 
   /// Providers are built the first time a page is actually built and kept after that, so paging
   /// back and forth does not decode the same photo again while opening the route still decodes
@@ -139,7 +171,22 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
     super.dispose();
   }
 
-  void _onPageChanged(int index) => setState(() => _currentIndex = index);
+  void _onPageChanged(int index) => setState(() {
+        _currentIndex = index;
+        _zoomed = false;
+      });
+
+  void _onDragUpdate(DragUpdateDetails details) {
+    setState(() => _dragOffset = (_dragOffset + details.delta.dy).clamp(0, double.infinity));
+  }
+
+  void _onDragEnd(DragEndDetails details) {
+    if (_dragOffset > _dismissDistance || (details.primaryVelocity ?? 0) > _dismissVelocity) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    setState(() => _dragOffset = 0);
+  }
 
   /// How long a thumbnail download may take before sharing gives up.
   ///
@@ -200,9 +247,7 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
     } catch (e) {
       Logger.debug('Failed to share media: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.somethingWentWrong)),
-        );
+        OmiFeedback.error(context, context.l10n.somethingWentWrong);
       }
     } finally {
       // The share sheet has copied what it needs by the time it returns, and every one of these is
@@ -243,18 +288,11 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.white70,
-              ),
-            ),
+            const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textSecondary),
             const SizedBox(width: 12),
             Text(
               context.l10n.analyzing,
-              style: const TextStyle(color: Colors.white70, fontSize: 16),
+              style: OmiType.callout.copyWith(color: OmiColors.textSecondary),
               textAlign: TextAlign.center,
             ),
           ],
@@ -272,7 +310,7 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 48),
       child: Text(
         text,
-        style: TextStyle(color: color, fontSize: 16),
+        style: OmiType.callout.copyWith(color: color),
         textAlign: TextAlign.center,
       ),
     );
@@ -288,6 +326,10 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
       pageController: _pageController,
       onPageChanged: _onPageChanged,
       scrollPhysics: const BouncingScrollPhysics(),
+      scaleStateChangedCallback: (state) {
+        final zoomed = state != PhotoViewScaleState.initial;
+        if (zoomed != _zoomed) setState(() => _zoomed = zoomed);
+      },
       backgroundDecoration: const BoxDecoration(color: Colors.black),
       builder: (context, index) {
         final item = widget.items[index];
@@ -298,7 +340,7 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
               builder: (context, snapshot) {
                 final bytes = snapshot.data;
                 if (snapshot.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(child: OmiSpinner());
                 }
                 if (bytes == null || bytes.isEmpty) {
                   return const Center(child: Icon(Icons.broken_image_outlined, color: Colors.white70));
@@ -320,11 +362,22 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
       },
     );
 
-    final body = Column(
-      children: [
-        Expanded(child: gallery),
-        if (captionStrip != null) captionStrip,
-      ],
+    final dismissProgress = (_dragOffset / (_dismissDistance * 3)).clamp(0.0, 1.0);
+    final body = GestureDetector(
+      onVerticalDragUpdate: _zoomed ? null : _onDragUpdate,
+      onVerticalDragEnd: _zoomed ? null : _onDragEnd,
+      child: Transform.translate(
+        offset: Offset(0, _dragOffset),
+        child: Opacity(
+          opacity: 1 - dismissProgress * 0.5,
+          child: Column(
+            children: [
+              Expanded(child: gallery),
+              if (captionStrip != null) captionStrip,
+            ],
+          ),
+        ),
+      ),
     );
 
     return Scaffold(
@@ -332,28 +385,18 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
       appBar: AppBar(
         backgroundColor: widget.appBarBackgroundColor,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-        leading: widget.showCloseButton
-            ? IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.pop(context),
-              )
-            : null,
+        automaticallyImplyLeading: false,
         actions: [
-          IconButton(
+          KeyedSubtree(
             key: _shareButtonKey,
-            icon: _isSharing
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
-                : const Icon(Icons.ios_share),
-            onPressed: _isSharing ? null : _share,
+            child: OmiIconButton(
+              icon: _isSharing ? const OmiSpinner(size: OmiSpinnerSize.small) : const Icon(Icons.ios_share),
+              label: context.l10n.share,
+              onPressed: _isSharing ? null : _share,
+            ),
           ),
+          const OmiCloseButton(),
+          const SizedBox(width: OmiSpacing.xxs),
         ],
       ),
       body: widget.wrapBodyInSafeArea ? SafeArea(child: body) : body,

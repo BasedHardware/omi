@@ -117,6 +117,20 @@ surfaces:
   gateway_lane_capability_needed: dedicated non-streaming no-tools omi:auto:public-shared-conversation-chat lane
   migration_status: gateway_only_trusted_frontend_bff
   test_guardrail_coverage: backend/tests/unit/test_public_shared_conversation_chat.py and web/frontend/src/__tests__/shared-conversation-chat-contract.test.mjs
+- surface: jev_decisions
+  code_path: backend/utils/llm/jev_client.py:ask_jev
+  entrypoint: conversation relevance model tier and capture-time memory owner check (flagged, default off)
+  feature: jev_decisions
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: gateway_fail_closed
+  call_sites: []
+  current_provider_model: gateway-only openrouter/typesafe/jev-1.13 (pinned) on omi:auto:jev-decisions
+  request_shape: decision-model state plus typed noul/choice questions; typed probabilities back, no generated text
+  gateway_lane_capability_needed: dedicated omi:auto:jev-decisions lane on the gateway /v1/systemone surface
+  migration_status: gateway_only; the relevance tier inherits the conv_discard plan gate, and every failure keeps the caller's
+    safe default
+  test_guardrail_coverage: backend/tests/unit/test_jev_client.py and backend/tests/unit/test_llm_gateway_systemone_route.py
 - surface: langchain_feature_routing
   code_path: backend/utils/llm/clients.py:get_llm
   entrypoint: get_llm central feature router
@@ -172,7 +186,7 @@ surfaces:
   fallback_on_deny: n/a_allowed
   call_sites:
   - utils/retrieval/agentic.py::feature:chat_agent
-  current_provider_model: gateway lane omi:auto:chat-agent (openai/gpt-5.6-luna); direct OpenAI only when OMI_LLM_CHAT_AGENT_ROUTE=direct
+  current_provider_model: gateway lane omi:auto:chat-agent (openai/gpt-x-luna); direct OpenAI only when OMI_LLM_CHAT_AGENT_ROUTE=direct
   request_shape: streaming OpenAI chat-completions with function tools; independent tool_use blocks run concurrently
   gateway_lane_capability_needed: openai.chat_completions surface with streaming and tools on omi:auto:chat-agent
   migration_status: gateway_luna_chat_agent; Omi-managed traffic is get_llm('chat_agent') through the generated OpenAI lane
@@ -215,7 +229,7 @@ surfaces:
   funding_owner: omi
   fallback_on_deny: none_unwired
   call_sites: []
-  current_provider_model: gateway lane omi:auto:file-chat-vision (openai/gpt-5.6-luna); direct OpenAI when OMI_LLM_GATEWAY_FEATURE_MODE
+  current_provider_model: gateway lane omi:auto:file-chat-vision (openai/gpt-x-luna); direct OpenAI when OMI_LLM_GATEWAY_FEATURE_MODE
     is off, and as a degrade when the gateway answers the lane with model-not-found (is_gateway_model_not_found)
   request_shape: streaming vision chat completion (image_url data URIs)
   gateway_lane_capability_needed: generated omi:auto:file-chat-vision lane with image_url content parts
@@ -232,7 +246,7 @@ surfaces:
   funding_owner: omi
   fallback_on_deny: none_unwired
   call_sites: []
-  current_provider_model: gateway lane omi:auto:file-chat-documents (openai/gpt-5.6-luna file parts for PDFs); direct OpenAI
+  current_provider_model: gateway lane omi:auto:file-chat-documents (openai/gpt-x-luna file parts for PDFs); direct OpenAI
     when OMI_LLM_GATEWAY_FEATURE_MODE is off, and as a degrade when the gateway answers the lane with model-not-found (is_gateway_model_not_found)
   request_shape: file upload purpose=user_data, streaming chat completion file input parts
   gateway_lane_capability_needed: generated omi:auto:file-chat-documents lane with OpenAI file content parts
@@ -348,7 +362,7 @@ surfaces:
   fallback_on_deny: none_unwired
   call_sites:
   - utils/llm/knowledge_graph.py::feature:knowledge_graph
-  current_provider_model: openai/gpt-5.6-luna knowledge_graph feature
+  current_provider_model: openai/gpt-x-luna knowledge_graph feature
   request_shape: return-only entity/edge extraction JSON
   gateway_lane_capability_needed: generated omi:auto:knowledge-graph lane
   migration_status: get_llm_routed; desktop onboarding should call this instead of inventing graphs via chat_agent
@@ -365,7 +379,7 @@ surfaces:
   - utils/llm/memories.py::feature:learnings
   - utils/llm/memories.py::feature:memory_category
   - utils/llm/memories.py::feature:memory_conflict
-  current_provider_model: openai/gpt-5.6-luna memories feature
+  current_provider_model: openai/gpt-x-luna memories feature
   request_shape: return-only memory-log JSON (memories + profile)
   gateway_lane_capability_needed: generated omi:auto:memories lane
   migration_status: get_llm_routed; desktop onboarding/import should call this instead of Haiku chat completions
@@ -379,7 +393,7 @@ surfaces:
   fallback_on_deny: none_unwired
   call_sites:
   - utils/llm/connector_synthesis.py::feature:memories
-  current_provider_model: openai/gpt-5.6-luna memories feature
+  current_provider_model: openai/gpt-x-luna memories feature
   request_shape: return-only calendar/gmail/notes memories + tasks + profile
   gateway_lane_capability_needed: generated omi:auto:memories lane
   migration_status: get_llm_routed; desktop connector importers should call this instead of Haiku chat completions
@@ -393,7 +407,7 @@ surfaces:
   fallback_on_deny: none_unwired
   call_sites:
   - utils/llm/conversation_topic.py::feature:conv_structure
-  current_provider_model: openai/gpt-5.6-luna conv_structure feature
+  current_provider_model: openai/gpt-x-luna conv_structure feature
   request_shape: return-only emoji + short title for a finished transcript
   gateway_lane_capability_needed: generated omi:auto:conv-structure lane
   migration_status: get_llm_routed; desktop clients should call this instead of Haiku chat completions
@@ -407,7 +421,7 @@ surfaces:
   fallback_on_deny: none_unwired
   call_sites:
   - utils/llm/ai_user_profile.py::feature:memories
-  current_provider_model: openai/gpt-5.6-luna memories feature
+  current_provider_model: openai/gpt-x-luna memories feature
   request_shape: return-only two-stage user profile document from desktop source lines
   gateway_lane_capability_needed: generated omi:auto:memories lane
   migration_status: get_llm_routed; desktop assistants should call this instead of Haiku chat completions
@@ -505,7 +519,7 @@ surfaces:
   fallback_on_deny: none_unwired
   call_sites:
   - routers/task_recommendations.py::feature:what_matters_now
-  current_provider_model: openai/gpt-5.6-luna via get_llm('what_matters_now')
+  current_provider_model: openai/gpt-x-luna via get_llm('what_matters_now')
   request_shape: structured live recommendation judgment
   gateway_lane_capability_needed: generated omi:auto:what-matters-now lane
   migration_status: get_llm_routed; not authorize_managed_compute-gated (follow-up)

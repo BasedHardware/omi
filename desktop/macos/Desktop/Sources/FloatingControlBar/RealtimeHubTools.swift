@@ -369,7 +369,7 @@ enum RealtimeHubTools {
     case normal
     case heavy
 
-    /// OpenAI Chat Completions `reasoning_effort` wire value for gpt-5.6-luna.
+    /// OpenAI Chat Completions `reasoning_effort` wire value for gpt-6-luna.
     /// OpenAI rejects function tools combined with a non-none effort on that
     /// surface, so escalations carry no client tools and the effort travels
     /// verbatim on the request.

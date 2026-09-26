@@ -82,6 +82,8 @@ async def load_listen_connect_base(
     user_exists = await run_blocking(db_executor, user_db.is_exists_user, uid)
 
     if use_custom_stt:
+        # Custom-STT skips managed-STT credits only. Conversation post-processing
+        # still hits has_conversation_processing_credits (#7690).
         user_has_credits = True
     else:
         user_has_credits = await run_blocking(db_executor, has_transcription_credits, uid, source=source)

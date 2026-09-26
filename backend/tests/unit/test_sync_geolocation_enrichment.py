@@ -72,6 +72,7 @@ def _build_pipeline_fakes() -> dict:
         'utils.conversations.factory',
         'utils.conversations.location',
         'utils.conversations.process_conversation',
+        'utils.sync.bridge',
         'utils.executors',
         'utils.fair_use',
         'utils.http_client',

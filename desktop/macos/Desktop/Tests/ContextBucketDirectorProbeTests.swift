@@ -70,7 +70,7 @@
           return ProactiveLaneResult(
             operation: operation,
             lane: "omi:auto:desktop-proactive-reasoning",
-            providerModel: "gpt-5.6-luna",
+            providerModel: "gpt-6-luna",
             usage: ProactiveLaneUsage(cachedTokens: 1, cacheWriteTokens: 0),
             cacheWrite: false,
             fallbackClass: "unknown",
@@ -119,7 +119,7 @@
       XCTAssertEqual(result["decision"], "suggest")
       XCTAssertEqual(result["bucket_entry_ref_count"], "1")
       XCTAssertEqual(result["fact_ref_count"], "1")
-      XCTAssertEqual(result["model"], "gpt-5.6-luna")
+      XCTAssertEqual(result["model"], "gpt-6-luna")
       XCTAssertNotNil(result["latency_ms"])
     }
 
@@ -320,7 +320,7 @@
           return ProactiveLaneResult(
             operation: operation,
             lane: "omi:auto:desktop-proactive-reasoning",
-            providerModel: "gpt-5.6-luna",
+            providerModel: "gpt-6-luna",
             usage: ProactiveLaneUsage(cachedTokens: 0, cacheWriteTokens: 0),
             cacheWrite: false,
             fallbackClass: "unknown",

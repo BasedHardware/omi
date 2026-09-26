@@ -1,7 +1,12 @@
 import 'dart:async';
 
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/geolocation.dart';
+import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/connectivity_service.dart';
+import 'package:omi/services/sockets/transcription_service.dart';
 
 /// Controllable external boundaries for the capture pipeline.
 ///
@@ -36,6 +41,49 @@ class WallClockCaptureScheduling implements CaptureScheduling {
   @override
   Timer periodic(Duration interval, void Function(Timer timer) callback) => Timer.periodic(interval, callback);
 }
+
+/// Only the BLE listener operations capture owns; production wraps [BleBridge].
+abstract interface class CaptureBleListeners {
+  void addBatchRecordingFinalizedListener(void Function(String) callback);
+  void removeBatchRecordingFinalizedListener(void Function(String) callback);
+}
+
+/// Production [CaptureBleListeners] over the shared [BleBridge] singleton.
+class BleBridgeCaptureListeners implements CaptureBleListeners {
+  const BleBridgeCaptureListeners();
+
+  @override
+  void addBatchRecordingFinalizedListener(void Function(String) callback) =>
+      BleBridge.instance.addBatchRecordingFinalizedListener(callback);
+
+  @override
+  void removeBatchRecordingFinalizedListener(void Function(String) callback) =>
+      BleBridge.instance.removeBatchRecordingFinalizedListener(callback);
+}
+
+typedef CaptureSocketOpen = Future<TranscriptSegmentSocketService?> Function({
+  required BleAudioCodec codec,
+  required int sampleRate,
+  required String language,
+  required bool force,
+  String? source,
+  String? clientConversationId,
+  CustomSttConfig? customSttConfig,
+});
+
+/// Conversation socket open that includes the production geolocation header.
+/// Spine oracles still type [CaptureSocketOpen] without it; composition wraps
+/// that older callback and the explicit path always supplies geolocation here.
+typedef CaptureConversationSocketOpen = Future<TranscriptSegmentSocketService?> Function({
+  required BleAudioCodec codec,
+  required int sampleRate,
+  required String language,
+  required bool force,
+  String? source,
+  String? clientConversationId,
+  CustomSttConfig? customSttConfig,
+  Geolocation? geolocation,
+});
 
 /// Auth identity boundary for the capture pipeline.
 ///

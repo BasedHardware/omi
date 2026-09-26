@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 import importlib.util
 import sys
@@ -185,6 +186,28 @@ class GitHubClientTests(unittest.TestCase):
             return_value=FakeResponse([{"description": "no name or color"}]),
         ), patch.object(github_client, "print"):
             self.assertEqual(client.get_repo_labels_with_details("token", "owner/repo"), [])
+
+    def test_create_issue_exception_returns_stable_error(self):
+        client = github_client.GitHubClient()
+
+        with patch.object(
+            github_client.requests,
+            "post",
+            side_effect=RuntimeError("connection dropped: secret-db"),
+        ), patch.object(github_client, "print"):
+            res = asyncio.run(client.create_issue("token", "owner/repo", "title", "body"))
+            self.assertEqual(res, {"success": False, "error": "Failed to create issue"})
+
+    def test_add_comment_exception_returns_stable_error(self):
+        client = github_client.GitHubClient()
+
+        with patch.object(
+            github_client.requests,
+            "post",
+            side_effect=RuntimeError("connection dropped: secret-db"),
+        ), patch.object(github_client, "print"):
+            res = client.add_issue_comment("token", "owner/repo", 42, "body")
+            self.assertEqual(res, {"success": False, "error": "Failed to add comment"})
 
 
 if __name__ == "__main__":

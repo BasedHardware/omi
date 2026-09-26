@@ -257,6 +257,17 @@ class BuildSearchQueryTest(unittest.TestCase):
         self.assertIn("search_query=au%3AYann+LeCun", encoded)
         self.assertNotIn("%2B", encoded)
 
+    def test_category_only_search_builds_cat_clause(self):
+        # issue #14380: a category-only search must produce a cat: filter,
+        # not a "Provide query, title, author, or category." error
+        query = main._build_search_query({"category": "physics.acc-ph"})
+        self.assertEqual(query, "cat:physics.acc-ph")
+
+    def test_category_with_query_is_ANDed_not_dropped(self):
+        # issue #14380: the category must survive when a keyword is present
+        query = main._build_search_query({"query": "electron", "category": "physics.acc-ph"})
+        self.assertEqual(query, "all:electron AND cat:physics.acc-ph")
+
 
 class SanitizerAndHelperTests(unittest.TestCase):
     def test_clean_text(self):
@@ -281,6 +292,13 @@ class SanitizerAndHelperTests(unittest.TestCase):
         self.assertEqual(main._safe_category("stat.ML"), "stat.ml")
         self.assertEqual(main._safe_category("quant-ph"), "quant-ph")
         self.assertEqual(main._safe_category("  math.PR  "), "math.pr")
+        # official arXiv taxonomy categories beyond two-letter subjects
+        # (issue #14380)
+        self.assertEqual(main._safe_category("physics.acc-ph"), "physics.acc-ph")
+        self.assertEqual(main._safe_category("physics.optics"), "physics.optics")
+        self.assertEqual(main._safe_category("cond-mat.mes-hall"), "cond-mat.mes-hall")
+        self.assertEqual(main._safe_category("cond-mat.soft"), "cond-mat.soft")
+        self.assertEqual(main._safe_category("astro-ph.GA"), "astro-ph.ga")
         self.assertEqual(main._safe_category("invalid_cat;DROP TABLE"), "")
         self.assertEqual(main._safe_category(None), "")
 
@@ -293,10 +311,10 @@ class SanitizerAndHelperTests(unittest.TestCase):
 
     def test_safe_paper_id(self):
         self.assertEqual(main._safe_paper_id("2401.01234"), "2401.01234")
-        self.assertEqual(main._safe_paper_id("1706.03762v7"), "1706.03762")
+        self.assertEqual(main._safe_paper_id("1706.03762v7"), "1706.03762v7")
         self.assertEqual(main._safe_paper_id("arXiv:2401.01234"), "2401.01234")
         self.assertEqual(main._safe_paper_id("https://arxiv.org/abs/2401.01234"), "2401.01234")
-        self.assertEqual(main._safe_paper_id("http://arxiv.org/abs/cs/9901001v2"), "cs/9901001")
+        self.assertEqual(main._safe_paper_id("http://arxiv.org/abs/cs/9901001v2"), "cs/9901001v2")
         self.assertEqual(main._safe_paper_id("cs/9901001"), "cs/9901001")
         self.assertIsNone(main._safe_paper_id("invalid-id"))
         self.assertIsNone(main._safe_paper_id(""))
@@ -513,10 +531,47 @@ class EndpointUnitTests(unittest.TestCase):
         req = models.GetPaperDetailsRequest(paper_id="1706.03762v7")
         with patch.object(main, "_request_arxiv", new=AsyncMock(return_value=SAMPLE_ATOM_FEED)) as mock_req:
             res = _run(main.get_paper_details(req))
-            mock_req.assert_called_once_with({"id_list": "1706.03762", "max_results": 1})
+            mock_req.assert_called_once_with({"id_list": "1706.03762v7", "max_results": 1})
 
         self.assertIsNone(res.error)
         self.assertIn("Attention Is All You Need", res.result)
+
+    def test_get_paper_details_preserves_requested_version(self):
+        # arXiv API manual 5.1.1: id_list without vN means latest, not v1.
+        # https://info.arxiv.org/help/api/user-manual.html#511-a-note-on-article-versions
+        cases = (
+            ("1706.03762v1", "1706.03762v1"),
+            ("arXiv:1706.03762v1", "1706.03762v1"),
+            ("https://arxiv.org/abs/1706.03762v1", "1706.03762v1"),
+            ("http://arxiv.org/abs/1706.03762v1", "1706.03762v1"),
+            ("cs/9901001v2", "cs/9901001v2"),
+            ("solv-int/9701001v1", "solv-int/9701001v1"),
+            ("1706.03762v12", "1706.03762v12"),
+        )
+        for supplied, expected in cases:
+            with self.subTest(paper_id=supplied):
+                feed = SAMPLE_ATOM_FEED.replace("1706.03762v7", expected)
+                with patch.object(main, "_request_arxiv", new=AsyncMock(return_value=feed)) as mock_req:
+                    res = _run(main.get_paper_details({"paper_id": supplied}))
+                mock_req.assert_called_once_with({"id_list": expected, "max_results": 1})
+                self.assertIsNone(res.error)
+                self.assertIn(f"URL: https://arxiv.org/abs/{expected}", res.result)
+
+    def test_get_paper_details_unversioned_id_still_requests_latest(self):
+        with patch.object(main, "_request_arxiv", new=AsyncMock(return_value=SAMPLE_ATOM_FEED)) as mock_req:
+            res = _run(main.get_paper_details({"paper_id": "1706.03762"}))
+        mock_req.assert_called_once_with({"id_list": "1706.03762", "max_results": 1})
+        self.assertIsNone(res.error)
+        self.assertIn("URL: https://arxiv.org/abs/1706.03762v7", res.result)
+
+    def test_get_paper_details_invalid_versions_do_not_request_upstream(self):
+        for paper_id in ("1706.03762v", "1706.03762v0", "1706.03762v-1", "1706.03762v2x", "cs/9901001v0"):
+            with self.subTest(paper_id=paper_id):
+                with patch.object(main, "_request_arxiv", new=AsyncMock(return_value=EMPTY_ATOM_FEED)) as mock_req:
+                    res = _run(main.get_paper_details({"paper_id": paper_id}))
+                mock_req.assert_not_called()
+                self.assertIsNone(res.result)
+                self.assertIn("Provide a valid arXiv paper ID", res.error)
 
     def test_get_paper_details_url_id(self):
         req = models.GetPaperDetailsRequest(paper_id="https://arxiv.org/abs/1706.03762")

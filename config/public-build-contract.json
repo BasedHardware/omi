@@ -25,9 +25,6 @@
           "--timeout=3600"
         ],
         "runtime_secrets": {
-          "FIREBASE_PROJECT_ID": "WEB_ADMIN_FIREBASE_PROJECT_ID:latest",
-          "FIREBASE_CLIENT_EMAIL": "WEB_ADMIN_FIREBASE_CLIENT_EMAIL:latest",
-          "FIREBASE_PRIVATE_KEY": "WEB_ADMIN_FIREBASE_PRIVATE_KEY:latest",
           "OMI_API_SECRET_KEY": "WEB_ADMIN_OMI_API_SECRET_KEY:latest",
           "TYPESENSE_HOST": "WEB_ADMIN_TYPESENSE_HOST:latest",
           "TYPESENSE_API_KEY": "WEB_ADMIN_TYPESENSE_API_KEY:latest",
@@ -52,6 +49,9 @@
           "ADMIN_OPENAI_COST_API_KEY": "WEB_ADMIN_OPENAI_COST_API_KEY:latest"
         },
         "remove_runtime_secrets": [
+          "FIREBASE_PROJECT_ID",
+          "FIREBASE_CLIENT_EMAIL",
+          "FIREBASE_PRIVATE_KEY",
           "ANTHROPIC_API_KEY",
           "CLAUDE_API_KEY",
           "OPENAI_API_KEY",

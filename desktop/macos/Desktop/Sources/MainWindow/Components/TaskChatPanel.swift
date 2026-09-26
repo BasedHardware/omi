@@ -29,7 +29,7 @@ struct TaskChatPanel: View {
           Spacer()
           ProgressView()
             .scaleEffect(0.8)
-          Text("Setting up chat...")
+          Text("Setting up chat…")
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
           Spacer()
@@ -91,14 +91,9 @@ struct TaskChatPanel: View {
                   .scaledFont(size: OmiType.body)
                   .foregroundColor(Ink.secondary)
                 Spacer()
-                Button {
-                  taskState.errorMessage = nil
-                } label: {
-                  Image(systemName: "xmark")
-                    .scaledFont(size: OmiType.caption)
-                    .foregroundColor(Ink.secondary)
-                }
-                .buttonStyle(.plain)
+                DismissButton(
+                  action: { taskState.errorMessage = nil }, showBackground: false,
+                  accessibilityLabel: "Dismiss Error", size: .compact)
               }
               .padding(.horizontal, OmiSpacing.lg)
               .padding(.vertical, OmiSpacing.sm)
@@ -125,7 +120,7 @@ struct TaskChatPanel: View {
               },
               isSending: taskState.isSending,
               isStopping: taskState.isStopping,
-              placeholder: "Continue this work...",
+              placeholder: "Continue this work…",
               mode: $taskState.chatMode,
               pendingText: $coordinator.pendingInputText,
               inputText: $taskState.draftText,
@@ -169,14 +164,7 @@ struct TaskChatPanel: View {
 
         Spacer()
 
-        Button(action: onClose) {
-          Image(systemName: "xmark")
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(Ink.secondary)
-            .frame(width: 20, height: 20)
-        }
-        .buttonStyle(.plain)
-        .help("Close chat panel")
+        DismissButton(action: onClose, accessibilityLabel: "Close Chat Panel")
       }
 
       // Workspace path indicator (only when a task is active)
@@ -409,14 +397,7 @@ struct TaskChatPanelPlaceholder: View {
           .scaledFont(size: OmiType.body, weight: .semibold)
           .foregroundColor(Ink.primary)
         Spacer()
-        Button(action: onClose) {
-          Image(systemName: "xmark")
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(Ink.secondary)
-            .frame(width: 20, height: 20)
-        }
-        .buttonStyle(.plain)
-        .help("Close chat panel")
+        DismissButton(action: onClose, accessibilityLabel: "Close Chat Panel")
       }
       .padding(.horizontal, OmiSpacing.md)
       .padding(.vertical, OmiSpacing.sm)

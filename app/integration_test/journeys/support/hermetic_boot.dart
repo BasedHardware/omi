@@ -9,12 +9,12 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/app_globals.dart';
+import 'package:omi/backend/http/conversation_api_contract.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
@@ -105,7 +105,7 @@ final class JourneyHermeticBoot {
           ChangeNotifierProvider(create: (_) => MessageProvider()),
           ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
           ChangeNotifierProvider(create: (_) => AppProvider()),
-          ChangeNotifierProvider(create: (_) => ConversationProvider()),
+          ChangeNotifierProvider(create: (_) => createProductionConversationProvider()),
           ChangeNotifierProvider(create: (_) => HomeProvider()),
           ChangeNotifierProvider(create: (_) => IntegrationProvider()),
           ChangeNotifierProvider(create: (_) => FolderProvider()),

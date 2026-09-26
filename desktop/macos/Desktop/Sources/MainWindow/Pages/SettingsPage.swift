@@ -263,6 +263,8 @@ struct SettingsContentView: View {
   @State var aiProfileDataSourcesUsed: Int = 0
   @State var isGeneratingAIProfile = false
   @State var isEditingAIProfile = false
+  @State var isConfirmingAIProfileDelete = false
+  @State var isConfirmingNudgeReset = false
   @State var aiProfileEditText: String = ""
 
   // Selected section (passed in from parent)
@@ -358,8 +360,6 @@ struct SettingsContentView: View {
   @State var transcriptionLanguage: String = "en"
   @State var vadGateEnabled: Bool = false
 
-  // Multi-chat mode setting
-  @AppStorage("multiChatEnabled") var multiChatEnabled = false
   @AppStorage("conversationsCompactView") var conversationsCompactView = true
   @AppStorage("speakNotificationsAloud") var speakNotificationsAloud = false
   @AppStorage(DefaultsKey.integrationNudgesEnabled.rawValue) var integrationNudgesEnabled = true

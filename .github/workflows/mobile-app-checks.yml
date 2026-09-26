@@ -3,8 +3,10 @@ name: Mobile App Checks
 on:
   push:
     branches: main
+  # Stacked PRs (V6 on V5, #14358) must run this workflow. `branches: main`
+  # made GitHub skip the entire workflow — the iOS job never existed, which
+  # reads as "green" and proves nothing.
   pull_request:
-    branches: main
 
 concurrency:
   group: mobile-app-checks-${{ github.event.pull_request.number || github.ref }}
@@ -18,6 +20,7 @@ jobs:
     outputs:
       has_app_codegen: ${{ steps.changes.outputs.has_app_codegen }}
       has_app_compile_smoke: ${{ steps.changes.outputs.has_app_compile_smoke }}
+      has_app_ios_compile: ${{ steps.changes.outputs.has_app_ios_compile }}
       has_app_journeys: ${{ steps.changes.outputs.has_app_journeys }}
       has_app_dart: ${{ steps.changes.outputs.has_app_dart }}
       has_app_l10n: ${{ steps.changes.outputs.has_app_l10n }}
@@ -359,12 +362,18 @@ jobs:
       - name: Setup Gradle for Flutter compile smoke
         uses: gradle/actions/setup-gradle@v6
         with:
-          # Default behaviour makes every non-default-branch run read-only AND
-          # never seeds the cache from main, so each PR paid a full cold
-          # assembleDevDebug ("Gradle User Home cache not found"). Stating the
-          # condition explicitly lets main runs write the cache that PRs read.
-          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
-          cache-cleanup: on-success
+          # This job is the Mobile App Checks wall. A main write here added
+          # ~1m of Gradle save+cleanup AFTER the APK was already uploaded
+          # (run 35256814704, Post Setup Gradle 1m08s). It also raced the
+          # parallel JVM job for the same content keys (ReserveCacheError on
+          # 35268313733 and 35250647514). Restore-only on every ref: PRs and
+          # main read the User Home that android-unit-tests writes on main.
+          # Cross-job restore is the default (strict-match false); run
+          # 35257388447 restored android-unit-tests[...] from this job.
+          # setup-gradle cannot overlap that POST save with earlier steps —
+          # moving the write to the non-wall job is the off-critical-path
+          # option that still seeds the cache.
+          cache-read-only: true
           # `caches` is the build cache; `wrapper` avoids re-downloading
           # Gradle 8.14 on every job. Restore-keys still fall back across
           # jobs on this OS (gradle-home-cache-strict-match defaults false).
@@ -386,6 +395,24 @@ jobs:
         # arm64-only since c8f35061fc: extra ABIs OOM'd ubuntu-latest during
         # stripDebugSymbols. Does not compile the JNI opus shim for armeabi-v7a or x86_64.
         run: flutter build apk --debug --flavor dev --target-platform android-arm64
+
+      # --analyze-size is release-mode + single-ABI only and would be a second
+      # ~10-15 min compile. Debug is not Play download size; this is a coarse
+      # zip breakdown of the APK this job already built. Never a gate.
+      - name: Report debug APK size
+        run: |
+          python3 .github/scripts/report_debug_apk_size.py \
+            --apk app/build/app/outputs/flutter-apk/app-dev-debug.apk \
+            --json "$GITHUB_WORKSPACE/apk-size-report.json" \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload debug APK size report
+        uses: actions/upload-artifact@v7
+        with:
+          name: apk-size-${{ github.event.pull_request.head.sha || github.sha }}
+          path: apk-size-report.json
+          if-no-files-found: error
+          retention-days: 5
 
       - name: Upload Flutter Android dev debug APK
         uses: actions/upload-artifact@v7
@@ -460,6 +487,9 @@ jobs:
       - name: Setup Gradle for Android JVM unit tests
         uses: gradle/actions/setup-gradle@v6
         with:
+          # Sole Gradle User Home writer. Compile-smoke is restore-only so
+          # this job's ~1m POST save is not on the workflow wall (JVM finishes
+          # minutes before Android Compile Smoke in the V5 sample).
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
           cache-cleanup: on-success
           gradle-home-cache-includes: |
@@ -477,3 +507,234 @@ jobs:
         # Same target-platform as the APK job so a shared Gradle cache hit
         # does not rebuild every ABI. This job does not wait for the APK.
         run: ./gradlew :app:testDevDebugUnitTest -Ptarget-platform=android-arm64
+
+  ios-compile-check:
+    name: iOS Compile Check
+    runs-on: macos-26
+    needs: changes
+    if: needs.changes.outputs.has_app_ios_compile == 'true'
+    # Local cold Xcode time was 334s on an M-series Mac. Hosted macos-26 still
+    # pays Flutter SDK, pub get, build_runner, and CocoaPods on top of that.
+    # Expect ~20-30 min warm / ~35 min cold; 40 is the wedge-guard.
+    timeout-minutes: 40
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Select and assert pinned Xcode
+        run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.5
+          cache: true
+
+      - name: Cache build_runner state
+        uses: actions/cache@v6
+        with:
+          path: app/.dart_tool/build
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}-
+            ${{ runner.os }}-flutter-buildrunner-
+
+      - name: Cache CocoaPods
+        uses: actions/cache@v6
+        with:
+          path: |
+            app/ios/Pods
+            ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-cocoapods-${{ hashFiles('app/ios/Podfile.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cocoapods-
+
+      - name: Resolve Flutter dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Prepare Flutter dev compile inputs
+        working-directory: app
+        run: |
+          mkdir -p android/app/src/dev/ android/app/src/prod/ ios/Config/Dev ios/Config/Prod
+          cp lib/firebase_options_local.dart lib/firebase_options_dev.dart
+          cp lib/firebase_options_local.dart lib/firebase_options_prod.dart
+          cp setup/prebuilt/google-services-local.json android/app/src/dev/google-services.json
+          cp setup/prebuilt/google-services-local.json android/app/src/prod/google-services.json
+          cp setup/prebuilt/key.properties android/key.properties
+          cp setup/prebuilt/GoogleService-Info-Local.plist ios/Config/Dev/GoogleService-Info.plist
+          cp setup/prebuilt/GoogleService-Info-Local.plist ios/Config/Prod/GoogleService-Info.plist
+          cp setup/prebuilt/GoogleService-Info-Local.plist ios/Runner/GoogleService-Info.plist
+          {
+            echo "API_BASE_URL="
+            echo "USE_WEB_AUTH=true"
+            echo "USE_AUTH_CUSTOM_TOKEN=true"
+            echo "STAGING_API_URL="
+          } > .dev.env
+          : > .env
+
+      - name: Generate Flutter code for iOS compile
+        working-directory: app
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      # omiWatchApp is a watchOS companion. `flutter build ios --simulator`
+      # without `-d` fails after pod install: "A device ID is required to
+      # build an app with a watchOS companion app." (run 35256673731).
+      - name: Pick an iPhone simulator
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+          import sys
+
+          raw = subprocess.check_output(
+              ["xcrun", "simctl", "list", "devices", "available", "-j"],
+              text=True,
+          )
+          data = json.loads(raw)
+          picked = None
+          for runtime, devices in data.get("devices", {}).items():
+              if "iOS" not in runtime:
+                  continue
+              for device in devices:
+                  if device.get("isAvailable") and "iPhone" in device.get("name", ""):
+                      picked = device
+          if picked is None:
+              print(raw, file=sys.stderr)
+              raise SystemExit("no available iPhone simulator")
+          udid = picked["udid"]
+          print(f"Using simulator {picked['name']} ({udid})")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as handle:
+              handle.write(f"IOS_SIMULATOR_UDID={udid}\n")
+          PY
+
+      - name: Build Flutter iOS simulator debug
+        working-directory: app
+        # Flavor scheme is `dev` (Debug-dev). omiWatchApp.xcscheme lacks
+        # customLLDBInitFile; Flutter warns, the compile still proceeds.
+        run: flutter build ios --simulator --debug --flavor dev --no-codesign -d "$IOS_SIMULATOR_UDID"
+
+  dart-tests-kiritimati:
+    # Parallel second pass of the hermetic Dart suite under the far timezones
+    # the harness Z1 contract names. Not on the critical path (needs: changes
+    # only). Expected red until harness Z1 (PR #14313) merges.
+    name: Dart Tests (Pacific/Kiritimati)
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.has_app_dart == 'true'
+    timeout-minutes: 60
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.5
+          cache: true
+
+      - name: Cache build_runner state
+        uses: actions/cache@v6
+        with:
+          path: app/.dart_tool/build
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}-
+            ${{ runner.os }}-flutter-buildrunner-
+
+      - name: Resolve Flutter dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Prepare Flutter dev compile inputs
+        working-directory: app
+        run: |
+          cp lib/firebase_options_local.dart lib/firebase_options_dev.dart
+          cp lib/firebase_options_local.dart lib/firebase_options_prod.dart
+          {
+            echo "API_BASE_URL="
+            echo "USE_WEB_AUTH=true"
+            echo "USE_AUTH_CUSTOM_TOKEN=true"
+            echo "STAGING_API_URL="
+          } > .dev.env
+          : > .env
+
+      - name: Generate Flutter code
+        working-directory: app
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Run Flutter tests under Pacific/Kiritimati
+        run: TZ=Pacific/Kiritimati bash app/test.sh
+
+      - name: Run Flutter tests under Pacific/Pago_Pago
+        if: always()
+        run: TZ=Pacific/Pago_Pago bash app/test.sh
+
+  # This is the only mobile status that a release-admission caller should
+  # consume.  Lane D must query this exact check name on the exact source SHA,
+  # then write the normalized evidence expected by
+  # verify_mobile_release_admission.py:
+  #
+  #   {"check_name":"Mobile Release Eligibility",
+  #    "workflow_name":"Mobile App Checks",
+  #    "workflow_path":".github/workflows/mobile-app-checks.yml",
+  #    "event":"push", "status":"completed", "conclusion":"success",
+  #    "head_branch":"main", "head_sha":"<source_sha>",
+  #    "repository":"BasedHardware/omi"}
+  #
+  # Conditional jobs are deliberately allowed to be skipped: a skipped job is
+  # an inapplicable area, not a failure. Changes itself must succeed, and any
+  # applicable job that fails or is cancelled makes this aggregate fail.
+  mobile-release-eligibility:
+    name: Mobile Release Eligibility
+    runs-on: ubuntu-latest
+    needs:
+      - changes
+      - generated-files
+      - analyze-and-test
+      - journeys-hermetic
+      - android-compile-smoke
+      - android-unit-tests
+      - ios-compile-check
+      - dart-tests-kiritimati
+    if: ${{ always() }}
+    timeout-minutes: 10
+    steps:
+      - name: Aggregate conditional mobile checks
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          GENERATED_FILES_RESULT: ${{ needs.generated-files.result }}
+          ANALYZE_AND_TEST_RESULT: ${{ needs.analyze-and-test.result }}
+          JOURNEYS_RESULT: ${{ needs.journeys-hermetic.result }}
+          ANDROID_COMPILE_RESULT: ${{ needs.android-compile-smoke.result }}
+          ANDROID_UNIT_RESULT: ${{ needs.android-unit-tests.result }}
+          IOS_COMPILE_RESULT: ${{ needs.ios-compile-check.result }}
+          DART_TIMEZONE_RESULT: ${{ needs.dart-tests-kiritimati.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$CHANGES_RESULT" != "success" ]]; then
+            echo "Detect Changes did not complete successfully: $CHANGES_RESULT" >&2
+            exit 1
+          fi
+          for result in \
+            "$GENERATED_FILES_RESULT" \
+            "$ANALYZE_AND_TEST_RESULT" \
+            "$JOURNEYS_RESULT" \
+            "$ANDROID_COMPILE_RESULT" \
+            "$ANDROID_UNIT_RESULT" \
+            "$IOS_COMPILE_RESULT" \
+            "$DART_TIMEZONE_RESULT"; do
+            case "$result" in
+              success|skipped) ;;
+              *)
+                echo "A mobile check failed, was cancelled, or is otherwise ineligible: $result" >&2
+                exit 1
+                ;;
+            esac
+          done
+          echo "Mobile Release Eligibility: success"
