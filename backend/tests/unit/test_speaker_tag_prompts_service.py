@@ -190,6 +190,128 @@ def test_owner_clip_window_keeps_text_of_a_long_segment_cropped_to_the_clip():
     assert service.owner_clip_window(conversation, ['a']) == (10.0, 20.0, 'one long owner turn')
 
 
+def test_clip_verification_cache_reuses_verdict_and_invalidates_on_audio_change(monkeypatch):
+    row = {'id': 'c1', 'audio_files': [{'chunk_timestamps': [10.0], 'duration': 20.0}]}
+    cache = {}
+    checks = []
+    downloads = []
+    monkeypatch.setattr(service.redis_db, 'get_generic_cache', lambda key: cache.get(key))
+    monkeypatch.setattr(service.redis_db, 'set_generic_cache', lambda key, value, ttl: cache.__setitem__(key, value))
+    monkeypatch.setattr(
+        service,
+        'conversation_clip_pcm',
+        lambda *args: downloads.append(1) or b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 5),
+    )
+
+    async def verify(audio, sample_rate, expected_text, language=None):
+        checks.append(expected_text)
+        return ('one two three four five', True, 'ok')
+
+    monkeypatch.setattr(service, 'verify_and_transcribe_sample', verify)
+    for _ in range(2):
+        assert service.verified_clip_pcm('u', row, 1.0, 6.0, 'one two three four five')
+    assert len(checks) == 1 and len(downloads) == 2
+    row['audio_files'][0]['duration'] = 21.0
+    assert service.verified_clip_pcm('u', row, 1.0, 6.0, 'one two three four five')
+    assert len(checks) == 2
+
+
+def test_positive_cache_never_authorizes_different_clip_bytes(monkeypatch):
+    row = {'id': 'c1', 'audio_files': [{'chunk_timestamps': [10.0], 'duration': 20.0}]}
+    cache = {}
+    pcm = [b'\x01\x00' * (service.CLIP_SAMPLE_RATE * 5)]
+    checks = []
+    monkeypatch.setattr(service.redis_db, 'get_generic_cache', lambda key: cache.get(key))
+    monkeypatch.setattr(service.redis_db, 'set_generic_cache', lambda key, value, ttl: cache.__setitem__(key, value))
+    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *args: pcm[0])
+
+    async def verify(audio, sample_rate, expected_text, language=None):
+        checks.append(1)
+        return ('matching words', len(checks) == 1, 'ok' if len(checks) == 1 else 'text_mismatch')
+
+    monkeypatch.setattr(service, 'verify_and_transcribe_sample', verify)
+    assert service.verified_clip_pcm('u', row, 1.0, 6.0, 'matching words') == pcm[0]
+    pcm[0] = b'\x02\x00' * (service.CLIP_SAMPLE_RATE * 5)
+    assert service.verified_clip_pcm('u', row, 1.0, 6.0, 'matching words') is None
+    assert len(checks) == 2
+
+
+def test_clip_verification_rejects_mismatch_and_caches_negative(monkeypatch):
+    row = {'id': 'c1', 'audio_files': [{'chunk_timestamps': [10.0], 'duration': 20.0}]}
+    cache = {}
+    checks = []
+    monkeypatch.setattr(service.redis_db, 'get_generic_cache', lambda key: cache.get(key))
+    monkeypatch.setattr(service.redis_db, 'set_generic_cache', lambda key, value, ttl: cache.__setitem__(key, value))
+    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *args: b'\x00\x00' * (service.CLIP_SAMPLE_RATE * 5))
+
+    async def verify(audio, sample_rate, expected_text, language=None):
+        checks.append(1)
+        return ('unrelated words', False, 'text_mismatch: containment=0.00')
+
+    monkeypatch.setattr(service, 'verify_and_transcribe_sample', verify)
+    assert service.verified_clip_pcm('u', row, 1.0, 6.0, 'one two three four five') is None
+    assert service.verified_clip_pcm('u', row, 1.0, 6.0, 'one two three four five') is None
+    assert len(checks) == 1 and list(cache.values()) == [False]
+
+
+def test_truncated_clip_is_rejected_before_transcription(monkeypatch):
+    row = {'id': 'c1', 'audio_files': [{'chunk_timestamps': [10.0], 'duration': 20.0}]}
+    monkeypatch.setattr(service.redis_db, 'get_generic_cache', lambda key: None)
+    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *args: b'\x00\x00' * service.CLIP_SAMPLE_RATE)
+    called = []
+
+    async def verify(*args, **kwargs):
+        called.append(1)
+        return ('one two three four five', True, 'ok')
+
+    monkeypatch.setattr(service, 'verify_and_transcribe_sample', verify)
+    assert service.verified_clip_pcm('u', row, 1.0, 6.0, 'one two three four five') is None
+    assert called == []
+
+
+def test_clip_download_error_skips_prompt_without_leaking_content(monkeypatch, caplog):
+    row = {'id': 'c1', 'audio_files': [{'chunk_timestamps': [10.0], 'duration': 20.0}]}
+    monkeypatch.setattr(service.redis_db, 'get_generic_cache', lambda key: None)
+
+    def fail(*args):
+        raise RuntimeError('private sample data')
+
+    monkeypatch.setattr(service, 'conversation_clip_pcm', fail)
+    assert service.verified_clip_pcm('u', row, 1.0, 6.0, 'one two three four five') is None
+    assert 'private sample data' not in caplog.text
+
+
+def test_get_prompts_excludes_misaligned_merged_sync_audio(monkeypatch):
+    World(monkeypatch)
+    started = NOW - timedelta(hours=1)
+    row = {
+        'id': 'merged',
+        'started_at': started,
+        'status': 'completed',
+        'sync_live_target': True,
+        'sync_merged_from': ['donor'],
+        'audio_files': [{'chunk_timestamps': [started.timestamp(), started.timestamp() + 88.2], 'duration': 92.3}],
+        'conversation_audio': {'spans': [{'wall_offset': 0, 'len': 149.4}]},
+        'transcript_segments': [
+            {'id': 's1', 'speaker_id': 0, 'start': 10.28, 'end': 20.28, 'text': 'Please confirm these spoken words'}
+        ],
+    }
+    monkeypatch.setattr(service.conversations_db, 'get_conversations', lambda *args, **kwargs: [row])
+    monkeypatch.setattr(service.redis_db, 'get_generic_cache', lambda key: None)
+    monkeypatch.setattr(service.redis_db, 'set_generic_cache', lambda key, value, ttl: None)
+    monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *args: b'\x01\x00' * (10 * 16000))
+    checked = []
+
+    async def verify(audio, sample_rate, expected_text, language=None):
+        checked.append(expected_text)
+        return ('Static and coughing', False, 'text_mismatch: containment=0.00')
+
+    monkeypatch.setattr(service, 'verify_and_transcribe_sample', verify)
+    response = service.get_prompts('u', NOW)
+    assert response.status == 'no_candidates'
+    assert checked == ['Please confirm these spoken words']
+
+
 def test_owner_clip_window_requires_clean_owner_stretch():
     conversation = {
         'transcript_segments': [

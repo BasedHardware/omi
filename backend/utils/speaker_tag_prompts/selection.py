@@ -13,11 +13,11 @@ import hashlib
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from models.speaker_tag_prompts import SpeakerTagPrompt, SpeakerTagPromptKind, SpeakerTagPromptOrigin
 from models.transcript_segment import legacy_conversation_segment_id
-from utils.audio_timeline import coverage_outcome, is_audio_timeline_v2
+from utils.speaker_tag_prompts.coverage import prompt_window_covered
 
 PROMPT_WINDOW = timedelta(hours=48)
 MIN_CLIP_SECONDS = 5.0
@@ -48,6 +48,8 @@ class _Run:
 class _Candidate:
     score: float
     prompt: SpeakerTagPrompt
+    conversation: Mapping[str, Any]
+    expected_text: str
 
 
 def prompt_id(conversation_id: str, speaker_id: int, kind: SpeakerTagPromptKind) -> str:
@@ -197,6 +199,9 @@ def select_prompts(
     answered: set,
     people: Mapping[str, str],
     limit: int = DEFAULT_LIMIT,
+    verify: Optional[Callable[[Mapping[str, Any], SpeakerTagPrompt, str], bool]] = None,
+    max_verifications: int = 4,
+    on_skip: Optional[Callable[[str], None]] = None,
 ) -> List[SpeakerTagPrompt]:
     """Return at most ``limit`` prompts, best first. ``people`` maps person id to name."""
     recent_people = [pid for pid in recent_person_ids(conversations) if pid in people]
@@ -245,11 +250,10 @@ def select_prompts(
             if pid in answered:
                 return
             clip_start, clip_end = _clip_window(run)
-            if is_audio_timeline_v2(conversation):
-                # v2: offer a prompt only when the *actual selected clip
-                # window* has validated coverage; the clip endpoint rechecks.
-                if coverage_outcome(conversation, clip_start, clip_end) != 'covered':
-                    return
+            if not prompt_window_covered(conversation, clip_start, clip_end):
+                if on_skip:
+                    on_skip('uncovered')
+                return
             excerpt = ' '.join(
                 (segment.get('text') or '').strip()
                 for segment in segments
@@ -271,7 +275,15 @@ def select_prompts(
                 excerpt=_excerpt(excerpt),
                 **extra,
             )
-            candidates.append(_Candidate(score + freshness, prompt))
+            expected_text = ' '.join(
+                (segment.get('text') or '').strip()
+                for segment in segments
+                if segment['id'] in run.segment_ids
+                and float(segment.get('start') or 0) < clip_end
+                and float(segment.get('end') or 0) > clip_start
+            ).strip()
+            if expected_text:
+                candidates.append(_Candidate(score + freshness, prompt, conversation, expected_text))
 
         for (_, identity), run in best_run.items():
             if identity == 'user':
@@ -306,14 +318,21 @@ def select_prompts(
     per_conversation: Counter = Counter()
     per_speaker: set = set()
     owner_checks = 0
+    attempted = 0
     for candidate in candidates:
         prompt = candidate.prompt
         speaker_key = (prompt.conversation_id, prompt.speaker_id)
         if per_conversation[prompt.conversation_id] >= MAX_PER_CONVERSATION or speaker_key in per_speaker:
             continue
-        if prompt.kind == SpeakerTagPromptKind.owner_check:
-            if owner_checks >= MAX_OWNER_CHECKS:
+        if prompt.kind == SpeakerTagPromptKind.owner_check and owner_checks >= MAX_OWNER_CHECKS:
+            continue
+        if verify is not None:
+            if attempted >= max_verifications:
+                break
+            attempted += 1
+            if not verify(candidate.conversation, prompt, candidate.expected_text):
                 continue
+        if prompt.kind == SpeakerTagPromptKind.owner_check:
             owner_checks += 1
         chosen.append(prompt)
         per_conversation[prompt.conversation_id] += 1
