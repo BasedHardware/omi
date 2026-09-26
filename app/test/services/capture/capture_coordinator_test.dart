@@ -57,7 +57,7 @@ class HarnessPorts {
   bool failNextOpen = false;
   bool failNextSnapshot = false;
   bool supersedeNextPolicy = false;
-  bool supersedingPolicyMuted = true;
+  bool simulateOpenAdmissionOnSupersede = false;
   bool nativeBatchBin = false;
   final log = <String>[];
 
@@ -84,7 +84,7 @@ class HarnessPorts {
           await _record('policy:$value');
           if (supersedeNextPolicy) {
             supersedeNextPolicy = false;
-            muted = supersedingPolicyMuted;
+            muted = !simulateOpenAdmissionOnSupersede;
             return const PolicyWriteOutcome(revision: 1, superseded: true);
           }
           muted = value;
@@ -532,9 +532,15 @@ Future<String?> effectFailureFor(List<ScriptStep> steps, {required int seed, Fau
         fake.failNextSnapshot = true;
         if (coverage != null) coverage.snapshot++;
       }
-      if (fault == 1 && step.code == 3 && coordinator.state.phoneOwns) {
+      final phase = coordinator.state.phase;
+      if (fault == 1 &&
+          transition.effects.isNotEmpty &&
+          transition.effects.first is PolicyWrite &&
+          (transition.effects.first as PolicyWrite).muted &&
+          ((step.code == 3 && phase == CapturePhase.phoneBatchPaused) ||
+              (step.code == 6 && phase == CapturePhase.pendantBatchPaused) ||
+              (step.code == 1 && phase == CapturePhase.pendantBatchPaused))) {
         fake.supersedeNextPolicy = true;
-        fake.supersedingPolicyMuted = faults.nextInt(2) == 1;
         if (coverage != null) coverage.policySuperseded++;
       }
       if (fault == 2 && step.code == 5 && coordinator.state.phase == CapturePhase.phonePaused) {
@@ -589,7 +595,7 @@ Future<String?> effectFailureFor(List<ScriptStep> steps, {required int seed, Fau
       fake.failNextOpen = false;
       fake.failNextSnapshot = false;
       fake.supersedeNextPolicy = false;
-      fake.supersedingPolicyMuted = true;
+      fake.simulateOpenAdmissionOnSupersede = false;
       verify(step);
     }
   } catch (error) {
@@ -1125,7 +1131,8 @@ void main() {
     coordinator.dispose();
   });
 
-  test('a paused phone batch whose stop mute loses to an unmute closes the writer and keeps pendant debt', () async {
+  test('a paused phone batch whose stop mute loses to a simulated unmute denies the writer and keeps pendant debt',
+      () async {
     final fake = HarnessPorts();
     late CaptureCoordinator coordinator;
     coordinator = CaptureCoordinator(
@@ -1143,7 +1150,7 @@ void main() {
     expect(fake.nativeBatchBin, isTrue);
     final logBefore = fake.log.length;
     fake.supersedeNextPolicy = true;
-    fake.supersedingPolicyMuted = false;
+    fake.simulateOpenAdmissionOnSupersede = true;
     final result = await coordinator.dispatch(const PhoneStopRequested(reason: 'user_stopped', userStop: true));
     expect(result.failed, isTrue);
     expect(coordinator.state.phase, CapturePhase.idle);
@@ -1166,7 +1173,7 @@ void main() {
     coordinator.dispose();
   });
 
-  test('a paused phone batch whose stop mute loses to another mute keeps the writer paused in place', () async {
+  test('a superseded stop mute still stops a paused phone batch and keeps pendant debt resumable', () async {
     final fake = HarnessPorts();
     late CaptureCoordinator coordinator;
     coordinator = CaptureCoordinator(
@@ -1178,28 +1185,34 @@ void main() {
     await coordinator.dispatch(const BatchModeSetRequested(enabled: true));
     await coordinator.dispatch(const PauseCaptureRequested());
     expect(coordinator.state.phase, CapturePhase.phoneBatchPaused);
-    final before = coordinator.state.encode();
-    final id = fake.recordingId;
     final logBefore = fake.log.length;
     fake.supersedeNextPolicy = true;
-    final result = await coordinator.dispatch(const PhoneStopRequested(reason: 'user_stopped', userStop: true));
+    final result = await coordinator
+        .dispatch(const PhoneStopRequested(reason: 'user_stopped', userStop: true, resumeSuspendedPendant: false));
     expect(result.failed, isFalse);
-    expect(result.result, isFalse);
-    expect(coordinator.state.encode(), before);
-    expect(fake.mic, isTrue);
+    expect(coordinator.state.phase, CapturePhase.idle);
+    expect(coordinator.state.pendantSuspension?.reason, SuspendReason.phone);
+    expect(coordinator.state.awaitingPhoneResume, isTrue);
+    expect(fake.mic, isFalse);
     expect(fake.muted, isTrue);
-    expect(fake.nativeBatchBin, isTrue);
-    expect(fake.recordingId, id);
-    expect(fake.snapshot, before);
+    expect(fake.nativeBatchBin, isFalse);
+    expect(fake.log.skip(logBefore), contains('stage:StopPhoneBatchStage'));
     expect(fake.log.skip(logBefore).where((line) => line.startsWith('policy:')), ['policy:true']);
     expect(
         fake.log.skip(logBefore).where((line) =>
+            line == 'gate:pendant:false' ||
+            line == 'gate:phone:false' ||
             line == 'mic:stop' ||
             line == 'ble:stop' ||
-            line == 'socket:close' ||
-            line == 'stage:StopPhoneBatchStage' ||
-            line == 'snapshot'),
+            line == 'socket:close'),
         isEmpty);
+    expect(CaptureCoordinatorState.tryParse(fake.snapshot)?.encode(), coordinator.state.encode());
+    final resumed = await coordinator.dispatch(const PhoneStopRequested(reason: 'user_stopped', userStop: true));
+    expect(resumed.failed, isFalse);
+    expect(coordinator.state.phase, CapturePhase.pendantLive);
+    expect(coordinator.state.suspended, isEmpty);
+    expect(fake.ble, isTrue);
+    expect(fake.recordingId, coordinator.state.active?.recordingId);
     coordinator.dispose();
   });
 
@@ -1238,7 +1251,7 @@ void main() {
     coordinator.dispose();
   });
 
-  test('a paused phone batch stop under a call whose mute loses keeps the call and converts the debt', () async {
+  test('a paused phone batch stop under a call whose mute is superseded still ends the session', () async {
     final fake = HarnessPorts();
     var call = false;
     late CaptureCoordinator coordinator;
@@ -1256,9 +1269,8 @@ void main() {
     expect(coordinator.state.callActive, isTrue);
     final logBefore = fake.log.length;
     fake.supersedeNextPolicy = true;
-    fake.supersedingPolicyMuted = false;
     final result = await coordinator.dispatch(const PhoneStopRequested(reason: 'user_stopped', userStop: true));
-    expect(result.failed, isTrue);
+    expect(result.failed, isFalse);
     expect(coordinator.state.phase, CapturePhase.callActive);
     expect(coordinator.state.callActive, isTrue);
     expect(coordinator.state.pendantSuspension?.reason, SuspendReason.call);
@@ -1266,7 +1278,17 @@ void main() {
     expect(fake.mic, isFalse);
     expect(fake.muted, isTrue);
     expect(fake.nativeBatchBin, isFalse);
-    expect(fake.log.skip(logBefore), contains('stage:StopPhoneBatchStage'));
+    expect(
+        fake.log.skip(logBefore).where((line) => line == 'stage:StopPhoneBatchStage'), ['stage:StopPhoneBatchStage']);
+    expect(fake.log.skip(logBefore).where((line) => line.startsWith('policy:')), ['policy:true']);
+    expect(
+        fake.log.skip(logBefore).where((line) =>
+            line == 'gate:pendant:false' ||
+            line == 'gate:phone:false' ||
+            line == 'mic:stop' ||
+            line == 'ble:stop' ||
+            line == 'socket:close'),
+        isEmpty);
     expect(CaptureCoordinatorState.tryParse(fake.snapshot)?.encode(), coordinator.state.encode());
     call = false;
     final ended = await coordinator.dispatch(const CallStateChanged());
@@ -1277,7 +1299,7 @@ void main() {
     coordinator.dispose();
   });
 
-  test('a call start on a paused pendant batch whose mute loses still suspends the writer', () async {
+  test('a superseded mute still suspends a paused pendant batch for the call', () async {
     final fake = HarnessPorts()..batch = true;
     var call = false;
     late CaptureCoordinator coordinator;
@@ -1295,9 +1317,8 @@ void main() {
     final logBefore = fake.log.length;
     call = true;
     fake.supersedeNextPolicy = true;
-    fake.supersedingPolicyMuted = false;
     final result = await coordinator.dispatch(const CallStateChanged());
-    expect(result.failed, isTrue);
+    expect(result.failed, isFalse);
     expect(coordinator.state.phase, CapturePhase.callActive);
     expect(coordinator.state.callActive, isTrue);
     expect(coordinator.state.pendantSuspension?.reason, SuspendReason.call);
@@ -1308,6 +1329,8 @@ void main() {
     expect(fake.ble, isFalse);
     expect(fake.nativeBatchBin, isTrue);
     expect(fake.log.skip(logBefore), contains('stage:SuspendPendantStage'));
+    expect(fake.log.skip(logBefore).where((line) => line.startsWith('policy:')), ['policy:true']);
+    expect(fake.log.skip(logBefore).where((line) => line == 'mic:stop' || line == 'socket:close'), isEmpty);
     expect(CaptureCoordinatorState.tryParse(fake.snapshot)?.encode(), coordinator.state.encode());
     call = false;
     final ended = await coordinator.dispatch(const CallStateChanged());
@@ -1322,7 +1345,7 @@ void main() {
     coordinator.dispose();
   });
 
-  test('a pendant batch disconnect whose mute loses denies the writer and clears the device', () async {
+  test('a superseded mute still completes a paused pendant batch disconnect', () async {
     final fake = HarnessPorts()..batch = true;
     late CaptureCoordinator coordinator;
     coordinator = CaptureCoordinator(
@@ -1334,9 +1357,8 @@ void main() {
     expect(coordinator.state.phase, CapturePhase.pendantBatchPaused);
     final logBefore = fake.log.length;
     fake.supersedeNextPolicy = true;
-    fake.supersedingPolicyMuted = false;
     final result = await coordinator.dispatch(const DeviceUpdated(null));
-    expect(result.failed, isTrue);
+    expect(result.failed, isFalse);
     expect(coordinator.state.phase, CapturePhase.idle);
     expect(coordinator.state.connectedDevice, isNull);
     expect(coordinator.state.suspended, isEmpty);
@@ -1345,8 +1367,11 @@ void main() {
     expect(fake.nativeBatchBin, isFalse);
     expect(fake.log.skip(logBefore), contains('stage:StopDeviceSessionStage'));
     expect(fake.log.skip(logBefore), contains('stage:DeviceStopTelemetryStage'));
+    expect(fake.log.skip(logBefore).where((line) => line.startsWith('policy:')), ['policy:true']);
     expect(
-        fake.log.skip(logBefore).where((line) => line.startsWith('mint:') || line == 'stage:StartDeviceSessionStage'),
+        fake.log
+            .skip(logBefore)
+            .where((line) => line.startsWith('mint:') || line == 'stage:StartDeviceSessionStage' || line == 'mic:stop'),
         isEmpty);
     expect(CaptureCoordinatorState.tryParse(fake.snapshot)?.encode(), coordinator.state.encode());
     coordinator.dispose();
@@ -1386,6 +1411,86 @@ void main() {
             line == 'stage:StopDeviceSessionStage' ||
             line == 'snapshot'),
         isEmpty);
+    coordinator.dispose();
+  });
+
+  test('a paused phone batch resume keeps pre-state and reports the error when the policy read fails', () async {
+    final fake = HarnessPorts();
+    var envReadsBeforeThrow = -1;
+    late CaptureCoordinator coordinator;
+    coordinator = CaptureCoordinator(
+      ports: fake.ports,
+      readEnvironment: () {
+        if (envReadsBeforeThrow >= 0) {
+          if (envReadsBeforeThrow == 0) {
+            envReadsBeforeThrow = -1;
+            throw StateError('synthetic policy read failure');
+          }
+          envReadsBeforeThrow--;
+        }
+        return environment(coordinator.state, muted: fake.muted, batch: fake.batch);
+      },
+    );
+    await coordinator.dispatch(DeviceStartRequested(device: pendant));
+    await coordinator.dispatch(const PhoneStartRequested());
+    await coordinator.dispatch(const BatchModeSetRequested(enabled: true));
+    await coordinator.dispatch(const PauseCaptureRequested());
+    expect(coordinator.state.phase, CapturePhase.phoneBatchPaused);
+    final before = coordinator.state.encode();
+    final id = fake.recordingId;
+    final logBefore = fake.log.length;
+    fake.supersedeNextPolicy = true;
+    envReadsBeforeThrow = 1;
+    final result = await coordinator.dispatch(const ResumeCaptureRequested());
+    expect(result.failed, isTrue);
+    expect(coordinator.state.encode(), before);
+    expect(fake.mic, isTrue);
+    expect(fake.muted, isTrue);
+    expect(fake.nativeBatchBin, isTrue);
+    expect(fake.recordingId, id);
+    expect(fake.log.skip(logBefore).where((line) => line.startsWith('policy:')), ['policy:false']);
+    expect(
+        fake.log.skip(logBefore).where((line) =>
+            line == 'mic:stop' ||
+            line == 'ble:stop' ||
+            line == 'socket:close' ||
+            line == 'gate:phone:false' ||
+            line == 'snapshot'),
+        isEmpty);
+    coordinator.dispose();
+  });
+
+  test('a simulated-open superseded unmute resumes the paused phone batch in its file', () async {
+    final fake = HarnessPorts();
+    late CaptureCoordinator coordinator;
+    coordinator = CaptureCoordinator(
+      ports: fake.ports,
+      readEnvironment: () => environment(coordinator.state, muted: fake.muted, batch: fake.batch),
+    );
+    await coordinator.dispatch(DeviceStartRequested(device: pendant));
+    await coordinator.dispatch(const PhoneStartRequested());
+    await coordinator.dispatch(const BatchModeSetRequested(enabled: true));
+    await coordinator.dispatch(const PauseCaptureRequested());
+    expect(coordinator.state.phase, CapturePhase.phoneBatchPaused);
+    final id = fake.recordingId;
+    final logBefore = fake.log.length;
+    fake.supersedeNextPolicy = true;
+    fake.simulateOpenAdmissionOnSupersede = true;
+    final result = await coordinator.dispatch(const ResumeCaptureRequested());
+    expect(result.failed, isFalse);
+    expect(coordinator.state.phase, CapturePhase.phoneBatchLive);
+    expect(coordinator.state.pendantSuspension?.reason, SuspendReason.phone);
+    expect(fake.mic, isTrue);
+    expect(fake.muted, isFalse);
+    expect(fake.nativeBatchBin, isTrue);
+    expect(fake.recordingId, id);
+    expect(fake.log.skip(logBefore).where((line) => line.startsWith('policy:')), ['policy:false']);
+    expect(
+        fake.log
+            .skip(logBefore)
+            .where((line) => line == 'mic:stop' || line == 'ble:stop' || line == 'stage:StopPhoneBatchStage'),
+        isEmpty);
+    expect(CaptureCoordinatorState.tryParse(fake.snapshot)?.encode(), coordinator.state.encode());
     coordinator.dispose();
   });
 
@@ -1470,7 +1575,7 @@ void main() {
         isNull);
   });
 
-  test('a superseded finish never tears down the phone or resumes its pendant', () async {
+  test('a superseded finish mute still tears down the phone and resumes its pendant', () async {
     final fake = HarnessPorts();
     late CaptureCoordinator coordinator;
     coordinator = CaptureCoordinator(
@@ -1481,14 +1586,18 @@ void main() {
     await coordinator.dispatch(const PhoneStartRequested());
     expect(fake.mic, isTrue);
     final previous = coordinator.state.active?.recordingId;
+    final logBefore = fake.log.length;
     fake.supersedeNextPolicy = true;
     final outcome = await coordinator.dispatch(const FinishRequested());
-    expect(outcome.result, isFalse);
-    expect(coordinator.state.phase, CapturePhase.phoneLive);
-    expect(coordinator.state.active?.recordingId, previous);
-    expect(coordinator.state.pendantSuspension?.reason, SuspendReason.phone);
-    expect(fake.ble, isFalse);
-    expect(fake.mic, isTrue);
+    expect(outcome.failed, isFalse);
+    expect(coordinator.state.phase, CapturePhase.pendantLive);
+    expect(coordinator.state.suspended, isEmpty);
+    expect(coordinator.state.active?.recordingId, isNot(previous));
+    expect(fake.mic, isFalse);
+    expect(fake.ble, isTrue);
+    expect(fake.log.skip(logBefore), contains('stage:StopPhoneLiveStage'));
+    expect(fake.recordingId, coordinator.state.active?.recordingId);
+    expect(CaptureCoordinatorState.tryParse(fake.snapshot)?.encode(), coordinator.state.encode());
     coordinator.dispose();
   });
 

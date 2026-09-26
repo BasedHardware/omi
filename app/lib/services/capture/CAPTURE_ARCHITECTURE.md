@@ -257,28 +257,39 @@ recovery, batch-mode/settings/onboarding tails.
   `CaptureStageFailure` — state still fails closed, the caller sees the
   historical non-throwing completion (`absorbed`).
 - A `PolicyWrite` that comes back `superseded` (a newer out-of-band intent won
-  the policy revision) abandons the rest of the transition. If no effect had
-  run yet the dispatch normally keeps the pre-transition state and reports
-  `false` (the legacy `stopStreamRecording` supersede contract). Over a
-  committed `phoneBatchPaused` or `pendantBatchPaused` session the outcome
-  depends on the newer intent's effective policy, re-read after the lost
-  write: a still-muted policy is already safe — the paused writer stays
-  closed in its file and the dispatch keeps the committed state, `.bin`,
-  identity and debt untouched. An unmuted effective policy means shared
-  admission opened under a live native batch writer, so the transition fails
-  closed — writer gates denied, mic/BLE stopped, socket closed, mute `true`
-  restored after the deny (a superseded or failed safety mute changes nothing
-  physically; it never reopens hardware) — and the session-cleanup stage the
-  early return skipped still runs best-effort before the safe commit:
-  `StopPhoneBatchStage` for a phone-batch stop/finish, `StopDeviceSessionStage`
-  and `DeviceStopTelemetryStage` for a pendant disconnect, `SuspendPendantStage`
+  the policy revision) is adjudicated by the effective policy, re-read
+  synchronously after the lost write (production: `setCaptureMuted(true)`
+  publishes immediately, so a superseded mute is already enforced and a
+  superseded unmute stays muted). At effect index 0 the effective policy is
+  compared to the requested `muted`: a match — including a superseded mute
+  whose newer intent also muted — means admission is already what the
+  transition needs, so the effect counts as applied and the transition runs
+  its mandatory stages, snapshot and target commit like any other write. A
+  mismatched superseded unmute (requested `false`, effective still muted)
+  cannot open anything, so the dispatch abandons the rest of the transition,
+  keeps the committed pre-state and reports `false` — for a paused batch that
+  preserves the writer's `.bin`, identity, debt and `callActive`. The
+  opposite mismatch (requested `true`, effective unmuted) is only reachable
+  if a newer intent reopened admission; over a committed `phoneBatchPaused`
+  or `pendantBatchPaused` writer that would leave a live native batch writer
+  unmuted, so the transition fails physically closed — writer gates denied,
+  mic/BLE stopped, socket closed, mute `true` restored after the deny (a
+  superseded or failed safety mute changes nothing physically; it never
+  reopens hardware) — and the session-cleanup stage the early return skipped
+  still runs best-effort before the safe commit: `StopPhoneBatchStage` for a
+  phone-batch stop/finish, `StopDeviceSessionStage` and
+  `DeviceStopTelemetryStage` for a pendant disconnect, `SuspendPendantStage`
   for a call start. A transition that had already latched `callActive` — a
   phone stop under a call, or a call starting over the paused pendant —
   keeps the call phase and its converted call-reason suspension instead of
   idle; without a call, a `phoneBatchPaused` failure keeps its phone-reason
-  pendant debt with `awaitingPhoneResume` for a later explicit stop. If
-  physical effects already ran the transition fails closed, since neither old
-  nor target state matches the physical world anymore.
+  pendant debt with `awaitingPhoneResume` for a later explicit stop. If the
+  post-write read itself throws, a superseded unmute over a paused batch is
+  guaranteed still-muted, so the pre-state is kept and the error reported
+  rather than tearing hardware down, while a superseded mute is guaranteed
+  denied and the transition continues. Superseded effects after index 0 fail
+  closed, since neither old nor target state matches the physical world
+  anymore.
 - Snapshot persistence is required durability: the snapshot of the target
   state is written before the in-memory publish, and a failed write fails the
   transition closed (physical deny + safe idle) exactly like an effect failure.

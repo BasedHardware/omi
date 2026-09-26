@@ -230,7 +230,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       OmiHaptics.medium();
       if (provider.isPaused) {
         await provider.resumeCapture();
-        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStarted();
+        if (phone && !provider.isPaused) PlatformManager.instance.analytics.phoneMicRecordingStarted();
       } else {
         await provider.pauseCapture();
         if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();

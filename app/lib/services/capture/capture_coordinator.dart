@@ -1432,14 +1432,28 @@ class CaptureCoordinator {
           } else if (value is PolicyWriteOutcome) {
             if (value.superseded) {
               if (i == 0) {
-                if (_state.phase == CapturePhase.phoneBatchPaused || _state.phase == CapturePhase.pendantBatchPaused) {
-                  var effectiveMuted = false;
-                  try {
-                    effectiveMuted = _readEnvironment().policyMuted;
-                  } catch (_) {}
-                  if (effectiveMuted) {
-                    return CaptureDispatchOutcome.completed(state: _state, result: false);
+                final requested = (transition.effects[i] as PolicyWrite).muted;
+                final pausedBatch =
+                    _state.phase == CapturePhase.phoneBatchPaused || _state.phase == CapturePhase.pendantBatchPaused;
+                bool? effectiveMuted;
+                Object? readError;
+                StackTrace? readStack;
+                try {
+                  effectiveMuted = _readEnvironment().policyMuted;
+                } catch (error, stack) {
+                  readError = error;
+                  readStack = stack;
+                }
+                if (effectiveMuted == requested || (requested && effectiveMuted == null)) {
+                  continue;
+                }
+                if (effectiveMuted == null) {
+                  if (pausedBatch) {
+                    return CaptureDispatchOutcome.completed(state: _state, error: readError, stackTrace: readStack);
                   }
+                  return CaptureDispatchOutcome.completed(state: _state, result: false);
+                }
+                if (pausedBatch && requested) {
                   final error = StateError('capture transition superseded by a newer capture intent');
                   final cleanupStages = transition.effects
                       .whereType<RunStage>()
