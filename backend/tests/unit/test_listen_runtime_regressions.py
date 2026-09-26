@@ -1163,3 +1163,25 @@ async def test_heartbeat_stops_after_close_message_instead_of_crashing():
     await runtime._heartbeat()
 
     assert runtime.state.active is False
+
+
+def test_persisted_started_seconds_guards_bool_and_iso():
+    from datetime import datetime, timezone
+    from routers.listen.contracts import persisted_started_seconds
+
+    dt = datetime(2026, 9, 26, 1, 30, 0, tzinfo=timezone.utc)
+    assert persisted_started_seconds(dt) == dt.timestamp()
+    assert persisted_started_seconds('2026-09-26T01:30:00Z') == dt.timestamp()
+    assert persisted_started_seconds('2026-09-26T01:30:00+00:00') == dt.timestamp()
+    assert persisted_started_seconds(1790386200.0) == 1790386200.0
+    assert persisted_started_seconds(1790386200) == 1790386200.0
+
+    # Booleans must NOT coerce to 1.0 / 0.0
+    assert persisted_started_seconds(True) is None
+    assert persisted_started_seconds(False) is None
+
+    # Invalid / None
+    assert persisted_started_seconds(None) is None
+    assert persisted_started_seconds('not-an-iso-string') is None
+    assert persisted_started_seconds([]) is None
+

@@ -46,10 +46,10 @@ def persisted_started_seconds(started_at: Any) -> Optional[float]:
             return None
     if isinstance(started_at, str):
         try:
-            return datetime.fromisoformat(started_at).timestamp()
+            return datetime.fromisoformat(started_at.strip().replace('Z', '+00:00')).timestamp()
         except ValueError:
             return None
-    if isinstance(started_at, (int, float)):
+    if isinstance(started_at, (int, float)) and not isinstance(started_at, bool):
         return float(started_at)
     return None
 
