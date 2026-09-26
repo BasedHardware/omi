@@ -566,6 +566,8 @@ def test_profile_field_invalid_string_type_records_load_error(
         ("inf", "non-finite (inf)"),
         ("-inf", "non-finite (-inf)"),
         ("nan", "non-finite (nan)"),
+        ("9" * 400, "overflow"),
+        ("-" + "9" * 400, "overflow"),
     ],
 )
 def test_profile_field_invalid_expiry_type_records_load_error(
@@ -582,6 +584,20 @@ def test_profile_field_invalid_expiry_type_records_load_error(
         f"profile 'default' field 'id_token_expires_at' must be finite numeric, got {expected_type}"
         in config.load_error
     )
+
+
+def test_profile_field_oversized_expiry_records_load_error(config_path: Path) -> None:
+    """An integer expiry that tomllib parses but math.isfinite cannot convert sets load_error."""
+    config_path.write_text(
+        "[profiles.default]\nid_token_expires_at = " + "9" * 400 + "\n",
+        encoding="utf-8",
+    )
+    config = cfg.load()
+    assert config.was_load_error
+    assert config.active_profile == cfg.DEFAULT_PROFILE_NAME
+    assert config.profiles == {}
+    assert config.load_error is not None
+    assert "profile 'default' field 'id_token_expires_at' must be finite numeric, got overflow" in config.load_error
 
 
 def test_profile_field_valid_numeric_expiry_loads_normally(config_path: Path) -> None:
