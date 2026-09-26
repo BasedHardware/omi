@@ -31,8 +31,8 @@ const secondsPerFlashPage = 1.4;
 ///                  [outsideRecoveryWindow] this is terminal rather than pending.
 ///                  The local file is kept; only deletion is offered.
 /// - [uploadRejected] — the upload endpoint definitively refused these bytes
-///                  (HTTP 400/401/403/413). Connectivity restoration cannot
-///                  change that response, so automatic drains must stop.
+///                  (HTTP 400/403/413). Connectivity restoration cannot change
+///                  that response, so automatic drains must stop.
 enum WalStatus {
   inProgress,
   miss,
@@ -290,8 +290,8 @@ class Wal {
   }
 
   /// Marks a definitive upload-endpoint refusal. The bytes stay available for
-  /// review/deletion, but connectivity wakes and manual retry do not re-offer
-  /// a request the server has already declared invalid or unauthorized.
+  /// review/deletion and automatic connectivity wakes do not re-offer them;
+  /// an explicit manual retry may still re-submit after user intervention.
   void markUploadRejected() {
     status = WalStatus.uploadRejected;
     jobId = null;

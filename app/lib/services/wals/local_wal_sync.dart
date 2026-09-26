@@ -115,7 +115,7 @@ String? _walLocationBatchKey(Wal wal) {
 bool isAutoUploadEligible(Wal wal) =>
     wal.status == WalStatus.miss && wal.storage == WalStorage.disk && wal.retryCount < walMaxAutoRetries;
 
-const _kDefinitiveUploadRefusalStatusCodes = {400, 401, 403, 413};
+const _kDefinitiveUploadRefusalStatusCodes = {400, 403, 413};
 
 @visibleForTesting
 bool isDefinitiveUploadRefusal(Object error) =>
@@ -1211,10 +1211,6 @@ class LocalWalSyncImpl implements LocalWalSync {
       return null;
     }
     final walToSync = matches.first;
-    if (walToSync.status == WalStatus.uploadRejected) {
-      DebugLogManager.logInfo('Single WAL upload skipped — server refusal is terminal', {'walId': wal.id});
-      return null;
-    }
     // A deliberate single-recording retry is a fresh start, so it restores the
     // auto-upload budget a previous failure spent. It costs at most one extra
     // upload for a permanently refused recording: the reconciler spends the

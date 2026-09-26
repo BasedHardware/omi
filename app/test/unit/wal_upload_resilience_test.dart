@@ -511,11 +511,61 @@ void main() {
       });
     }
 
-    test('all required definitive codes share the terminal classifier', () {
-      for (final statusCode in [400, 401, 403, 413]) {
+    test('only permanent request refusals share the terminal classifier', () {
+      for (final statusCode in [400, 403, 413]) {
         expect(isDefinitiveUploadRefusal(SyncUploadHttpException(statusCode, 'refused')), isTrue);
       }
+      expect(isDefinitiveUploadRefusal(const SyncUploadHttpException(401, 're-login required')), isFalse);
       expect(isDefinitiveUploadRefusal(const SyncUploadHttpException(500, 'retryable')), isFalse);
+    });
+
+    test('HTTP 401 is re-armed after a re-login connectivity reset', () async {
+      final wal = await refusedWal(401);
+
+      final first = await sync.syncAll();
+      wal.retryCount = walMaxAutoRetries;
+      final reset = await sync.resetExhaustedAutoRetries();
+
+      expect(first?.localUploadFailures, 1);
+      expect(wal.status, WalStatus.miss, reason: 'authentication failure must remain retryable');
+      expect(reset, 1);
+      expect(wal.retryCount, 0);
+      expect(isAutoUploadEligible(wal), isTrue, reason: 'a later login can provide valid credentials');
+    });
+
+    test('manual sync retries every terminal WAL state', () async {
+      var uploads = 0;
+      final manualSync = LocalWalSyncImpl(
+        listener,
+        uploadGate: SyncUploadGate(
+          limiter: SyncRateLimiter.instance,
+          uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
+            uploads++;
+            return UploadFilesResult.done(
+              SyncLocalFilesResponse(newConversationIds: const [], updatedConversationIds: const ['recovered']),
+            );
+          },
+          fairUseStatusLoader: () async => {'stage': 'none'},
+        ),
+      );
+      final terminalStatuses = [
+        WalStatus.corrupted,
+        WalStatus.outsideRecoveryWindow,
+        WalStatus.unsupportedAudio,
+        WalStatus.uploadRejected,
+      ];
+
+      for (var index = 0; index < terminalStatuses.length; index++) {
+        final filename = 'manual_terminal_$index.bin';
+        await File('${tempDir.path}/$filename').writeAsBytes([0xAA, 0xBB]);
+        final wal = _makeWal(timerStart: 11000 + index, status: terminalStatuses[index], filePath: filename);
+        manualSync.testWals = [wal];
+
+        await manualSync.syncWal(wal: wal);
+
+        expect(wal.status, WalStatus.synced, reason: '${terminalStatuses[index]} should honor an explicit retry');
+      }
+      expect(uploads, terminalStatuses.length);
     });
   });
 
