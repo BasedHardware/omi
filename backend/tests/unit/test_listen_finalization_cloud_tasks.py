@@ -1966,8 +1966,12 @@ async def test_finalizer_completes_when_an_app_permanently_rejects_the_delivery(
     safe_target.assert_called_once_with('https://app.test/hook?uid=uid-1')
     webhook_client.post.assert_awaited_once_with(
         pinned_url,
-        json={'id': 'conversation-1'},
-        headers={'Host': 'app.test', 'X-Omi-Idempotency-Key': 'conversation:conversation-1:finalization'},
+        content=b'{"id":"conversation-1"}',
+        headers={
+            'Host': 'app.test',
+            'Content-Type': 'application/json',
+            'X-Omi-Idempotency-Key': 'conversation:conversation-1:finalization',
+        },
         extensions={'sni_hostname': 'app.test'},
         follow_redirects=False,
     )

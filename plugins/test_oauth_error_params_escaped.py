@@ -29,6 +29,18 @@ from unittest import mock
 # is a self-contained script)
 PLUGINS_DIR = Path(__file__).resolve().parent
 
+# Apps import omi_plugin_sdk.auth; the package __init__ pulls pydantic-dependent
+# models, but auth.py itself is stdlib-only. Load the real auth module so
+# hermetic runs exercise the real HMAC scheme instead of a permissive stub.
+_SDK_AUTH_SPEC = importlib.util.spec_from_file_location(
+    'omi_plugin_sdk.auth',
+    PLUGINS_DIR / 'omi-plugin-sdk' / 'src' / 'omi_plugin_sdk' / 'auth.py',
+)
+SDK_AUTH = importlib.util.module_from_spec(_SDK_AUTH_SPEC)
+_SDK_AUTH_SPEC.loader.exec_module(SDK_AUTH)
+_SDK_PKG = types.ModuleType('omi_plugin_sdk')
+_SDK_PKG.auth = SDK_AUTH
+
 STDLIB = {
     'os', 'sys', 'json', 're', 'base64', 'secrets', 'struct', 'wave', 'io',
     'datetime', 'typing', 'pathlib', 'collections', 'urllib', 'tempfile',
@@ -126,6 +138,10 @@ def _stub_modules_for(app_main: Path):
     exceptions.RequestValidationError = type('RequestValidationError', (Exception,), {})
     stubs['fastapi.exceptions'] = exceptions
     stubs['dotenv'].load_dotenv = lambda *a, **k: None
+    if 'omi_plugin_sdk' in stubs:
+        # the app verifies plugin HMAC auth; use the real stdlib-only module
+        stubs['omi_plugin_sdk'] = _SDK_PKG
+        stubs['omi_plugin_sdk.auth'] = SDK_AUTH
     return stubs
 
 

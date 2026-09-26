@@ -9,6 +9,7 @@ every ordinary call fails validation. The wire body must carry only the argument
 actually supplied.
 """
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -61,7 +62,9 @@ class TestHttpToolArguments:
             finally:
                 self.mod.agent_config_context.reset(token)
         assert result == "ok"
-        return client.request.call_args.kwargs["json"]
+        # The tool signs the exact delivered bytes, so the body arrives as
+        # pre-serialized `content`, not the `json=` kwarg.
+        return json.loads(client.request.call_args.kwargs["content"])
 
     @pytest.mark.asyncio
     async def test_omitted_optionals_are_absent_from_the_body(self):

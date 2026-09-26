@@ -1,3 +1,4 @@
+../omi-plugin-sdk
 fastapi==0.104.1
 uvicorn==0.24.0
 python-dotenv==1.2.2
