@@ -479,6 +479,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           live: isLimitless || (!muted && !storageFull),
           elapsed: isLimitless || elapsedSeconds == null ? null : Duration(seconds: elapsedSeconds),
           note: note,
+          showsTranscript: false,
         ),
         if (actions.isNotEmpty) ...[
           const SizedBox(height: OmiSpacing.sm),
