@@ -59,18 +59,24 @@ def test_pass_uses_each_blob_clock_and_restores_first_word_offset(monkeypatch):
         id='synthetic',
         language='en',
         audio_files=[SimpleNamespace(chunk_timestamps=[100.0, 107.0])],
+        started_at=datetime.fromtimestamp(85, timezone.utc),
         finished_at=datetime.fromtimestamp(120, timezone.utc),
         transcript_segments=[],
     )
     passed, audio = shadow._make_pass('synthetic', conversation, deadline=float('inf'), reserved_seconds=20)
     assert [round(s.start, 3) for s in passed] == [2.0, 12.0]
     assert [round(s.end, 3) for s in passed] == [3.0, 13.0]
-    assert audio == {'coverage': 0.85, 'tail_gap_seconds': 3.0, 'audio_seconds': 17.0}
+    assert audio == {
+        'coverage': 0.85,
+        'tail_gap_seconds': 3.0,
+        'audio_seconds': 17.0,
+        'audio_origin_offset_seconds': 15.0,
+    }
     assert all(s.speaker_id_scope.startswith('sync:shadow:') for s in passed)
 
 
 def test_probe_audio_is_posted_as_two_speech_windows_not_long_silence(monkeypatch):
-    """The public 4.9 s probe is sent twice; 62.4 s of stored PCM has 34 spoken words."""
+    """A synthetic two-send audio sample exercises silence splitting, not the eight-send qualification probe."""
     fixture = Path(__file__).resolve().parents[2] / 'testing/release_fixtures/transcription-release-probe.wav'
     with wave.open(str(fixture), 'rb') as handle:
         phrase = handle.readframes(handle.getnframes())
@@ -120,6 +126,7 @@ def test_probe_audio_is_posted_as_two_speech_windows_not_long_silence(monkeypatc
         id='probe',
         language='en',
         audio_files=[SimpleNamespace(chunk_timestamps=[100.0, 157.0])],
+        started_at=datetime.fromtimestamp(100, timezone.utc),
         finished_at=datetime.fromtimestamp(162.4, timezone.utc),
         transcript_segments=[],
     )
@@ -128,7 +135,12 @@ def test_probe_audio_is_posted_as_two_speech_windows_not_long_silence(monkeypatc
     assert max(posted) < 6
     assert [round(segment.start, 1) for segment in passed] == [1.0, 14.0]
     assert sum(len(shadow._words(segment.text)) for segment in passed) == 34
-    assert audio == {'coverage': 1.0, 'tail_gap_seconds': 0.0, 'audio_seconds': 62.4}
+    assert audio == {
+        'coverage': 1.0,
+        'tail_gap_seconds': 0.0,
+        'audio_seconds': 62.4,
+        'audio_origin_offset_seconds': 0.0,
+    }
 
 
 def test_forced_window_keeps_utterance_that_crosses_cut(monkeypatch):
@@ -185,7 +197,9 @@ def test_comparison_persists_only_bounded_scalars_and_detects_owner_parity():
     live = TranscriptSegment(id='old', text='Synthetic private words', start=0, end=2, is_user=True)
     passed = TranscriptSegment(id='new', text='Synthetic private words', start=0, end=2, is_user=True)
     conversation = SimpleNamespace(
-        transcript_segments=[live], structured=SimpleNamespace(model_dump=lambda: {'source_segment_ids': ['old']})
+        transcript_segments=[live],
+        audio_timeline=SimpleNamespace(version=2),
+        structured=SimpleNamespace(model_dump=lambda: {'source_segment_ids': ['old']}),
     )
     result = shadow._compare(
         conversation, [passed], {'coverage': 1.0, 'tail_gap_seconds': 0.0, 'audio_seconds': 2.0}, {}
@@ -193,7 +207,27 @@ def test_comparison_persists_only_bounded_scalars_and_detects_owner_parity():
     assert result['word_distance'] == 0
     assert result['live_owner_seconds'] == result['pass_owner_seconds'] == 2
     assert result['remap_safe']
+    assert result['audio_timeline_v2'] is True
     assert 'Synthetic private words' not in repr(result)
+
+
+def test_comparison_counts_competing_repeated_phrase_and_blocks_source_ref():
+    phrase = 'the repeated synthetic phrase in this test'
+    live = TranscriptSegment(id='live', text=phrase, start=2, end=6, is_user=False)
+    passed = [
+        TranscriptSegment(id=f'pass-{i}', text=phrase, start=17 + 5 * i, end=21 + 5 * i, is_user=False)
+        for i in range(8)
+    ]
+    conversation = SimpleNamespace(
+        transcript_segments=[live],
+        audio_timeline=SimpleNamespace(version=2),
+        structured=SimpleNamespace(model_dump=lambda: {'source_segment_ids': ['live']}),
+    )
+    result = shadow._compare(conversation, passed, {'coverage': 1.0, 'tail_gap_seconds': 0.0}, {})
+    assert result['remap_ambiguous_count'] == 1
+    assert result['remap_success_rate'] == 0
+    assert result['remap_safe'] is False
+    assert phrase not in repr(result)
 
 
 def test_comparison_prometheus_metrics_use_only_closed_outcome_and_safety_labels(monkeypatch):
