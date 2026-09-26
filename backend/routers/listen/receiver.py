@@ -219,7 +219,7 @@ class ListenReceiver:
         # Capture start sample of the STT buffer's first byte; the buffer is
         # one contiguous run of accepted decoded audio.
         self._stt_buffer_start_sample: Optional[int] = None
-        self._initial_conversation_id = host.state.current_conversation_id
+        self._initial_conversation_id = getattr(host.state, 'current_conversation_id', None)
 
     def _owner_for_sample(self, sample: int) -> Optional[str]:
         """The conversation that owned a capture sample at acceptance time."""
