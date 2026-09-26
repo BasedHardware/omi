@@ -97,24 +97,6 @@ enum ConferencingApps {
     return String(title[range].suffix(12)).lowercased()
   }
 
-  /// Which calls are on right now, so `MeetingDetector` can tell one call from the next while
-  /// the microphone never goes quiet long enough for an off edge. `meet:<code>` for each
-  /// on-screen Google Meet window (needs Screen Recording permission, as titles do) and
-  /// `app:<bundle id>` for each native call app holding the microphone (macOS 14.4+). Browsers
-  /// get no app identity: one browser hosts every web call, so only the Meet code separates them.
-  static func currentCallIdentities() -> Set<String> {
-    var identities = Set<String>()
-    if #available(macOS 14.4, *) {
-      for bundleID in bundleIDsRunningInput() where isNativeCallApp(bundleID: bundleID) {
-        identities.insert("app:\(bundleID)")
-      }
-    }
-    for title in onScreenBrowserWindowTitles() {
-      if let code = meetingCode(fromTitle: title) { identities.insert("meet:\(code)") }
-    }
-    return identities
-  }
-
   /// Bundle IDs (lowercased) of native conferencing apps, used for mic-in-use ("in a call")
   /// detection. A native call app that is *running but idle* (open, not in a call) is NOT using
   /// the microphone, so it won't be treated as a meeting.
@@ -302,6 +284,30 @@ enum ConferencingApps {
     return false
   }
 
+  /// One CoreAudio pass plus, only when `browserTitles` asks for them, one
+  /// window-title pass. The meeting detector uses this as its only probe per tick.
+  static func captureCallAudioSnapshot(browserTitles: CallAudioBrowserTitles) -> CallAudioSnapshot {
+    let processes: [CallAudioProcessSnapshot]
+    if #available(macOS 14.4, *) {
+      processes = callAudioProcesses()
+    } else {
+      processes = []
+    }
+    let includeTitles: Bool
+    switch browserTitles {
+    case .always:
+      includeTitles = true
+    case .whenCallSurfaceHoldsInput:
+      includeTitles = processes.contains {
+        $0.isRunningInput && isCallSurface(bundleID: $0.bundleID)
+      }
+    }
+    return CallAudioSnapshot(
+      processes: processes,
+      defaultInputDeviceID: defaultInputDeviceID(),
+      browserWindowTitles: includeTitles ? onScreenBrowserWindowTitles() : [])
+  }
+
   // MARK: - CoreAudio process API (macOS 14.4+) — microphone-in-use detection
 
   @available(macOS 14.4, *)
@@ -321,6 +327,48 @@ enum ConferencingApps {
     guard AudioObjectGetPropertyData(system, &address, 0, nil, &dataSize, &objects) == noErr
     else { return [] }
     return objects
+  }
+
+  @available(macOS 14.4, *)
+  private static func callAudioProcesses() -> [CallAudioProcessSnapshot] {
+    var processes: [CallAudioProcessSnapshot] = []
+    for process in audioProcessObjects() {
+      guard let bundleID = processBundleID(process) else { continue }
+      processes.append(
+        CallAudioProcessSnapshot(
+          bundleID: bundleID.lowercased(),
+          pid: processPID(process),
+          isRunningInput: processBoolProperty(process, kAudioProcessPropertyIsRunningInput),
+          isRunningOutput: processBoolProperty(process, kAudioProcessPropertyIsRunningOutput)))
+    }
+    return processes
+  }
+
+  @available(macOS 14.4, *)
+  private static func processPID(_ process: AudioObjectID) -> Int32 {
+    var address = AudioObjectPropertyAddress(
+      mSelector: kAudioProcessPropertyPID,
+      mScope: kAudioObjectPropertyScopeGlobal,
+      mElement: kAudioObjectPropertyElementMain)
+    var value: pid_t = -1
+    var size = UInt32(MemoryLayout<pid_t>.size)
+    guard AudioObjectGetPropertyData(process, &address, 0, nil, &size, &value) == noErr else {
+      return -1
+    }
+    return value
+  }
+
+  private static func defaultInputDeviceID() -> UInt32 {
+    var deviceID: AudioDeviceID = 0
+    var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+    var address = AudioObjectPropertyAddress(
+      mSelector: kAudioHardwarePropertyDefaultInputDevice,
+      mScope: kAudioObjectPropertyScopeGlobal,
+      mElement: kAudioObjectPropertyElementMain)
+    let status = AudioObjectGetPropertyData(
+      AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID)
+    guard status == noErr else { return 0 }
+    return deviceID
   }
 
   @available(macOS 14.4, *)

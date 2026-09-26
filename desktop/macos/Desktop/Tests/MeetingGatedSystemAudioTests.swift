@@ -6,6 +6,13 @@ import XCTest
   // omi-release-compile: this suite drives DEBUG-only test seams; the release-mode
   // notification regression step must compile the bundle without them.
 
+  private func meetingProbeSnapshot(detected: Bool) -> CallAudioSnapshot {
+    CallAudioSnapshot(
+      processes: [],
+      defaultInputDeviceID: 0,
+      browserWindowTitles: detected ? ["Meet - abc-defg-hij"] : [])
+  }
+
   private final class Box<T>: @unchecked Sendable {
     var value: T
     init(_ v: T) { self.value = v }
@@ -287,10 +294,10 @@ import XCTest
       let detector = MeetingDetector(
         pollInterval: 60.0,
         offGracePeriod: 8.0,
-        isMeetingNow: {
+        snapshot: {
           probeStarted.signal()
           _ = releaseProbe.wait(timeout: .now() + 2)
-          return true
+          return meetingProbeSnapshot(detected: true)
         },
         now: { [weak self] in self?.now ?? Date(timeIntervalSince1970: 0) },
         onInitialStateObserved: {
@@ -330,7 +337,7 @@ import XCTest
       let detector = MeetingDetector(
         pollInterval: 60.0,
         offGracePeriod: 8.0,
-        isMeetingNow: {
+        snapshot: {
           probeLock.lock()
           probeCount.value += 1
           let probeIndex = probeCount.value
@@ -339,12 +346,12 @@ import XCTest
           if probeIndex == 1 {
             firstProbeStarted.signal()
             _ = releaseFirstProbe.wait(timeout: .now() + 2)
-            return true
+            return meetingProbeSnapshot(detected: true)
           }
 
           secondProbeStarted.signal()
           _ = releaseSecondProbe.wait(timeout: .now() + 2)
-          return false
+          return meetingProbeSnapshot(detected: false)
         },
         now: { [weak self] in self?.now ?? Date(timeIntervalSince1970: 0) },
         onInitialStateObserved: { initialObservedCount += 1 },
