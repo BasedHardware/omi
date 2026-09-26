@@ -41,7 +41,9 @@ _cache_lock = asyncio.Lock()
 
 def _reset_cache() -> None:
     """Testing helper to clear cached model pick."""
+    global _cache_lock
     _cache.update(provider=None, ts=0.0, detail={})
+    _cache_lock = asyncio.Lock()
 
 
 def _score(quality: Any, speed: Any) -> Optional[float]:
