@@ -150,7 +150,8 @@ def create_folder(
 
     # Get the highest order number
     existing_folders = list(folders_ref.order_by('order', direction=firestore.Query.DESCENDING).limit(1).stream())
-    max_order = _typed_doc(existing_folders[0]).get('order', 0) if existing_folders else 0
+    raw_order = _typed_doc(existing_folders[0]).get('order') if existing_folders else 0
+    max_order = raw_order if isinstance(raw_order, int) and not isinstance(raw_order, bool) else 0
 
     folder_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
@@ -179,10 +180,16 @@ def update_folder(uid: str, folder_id: str, update_data: Dict[str, Any]) -> bool
     user_ref = db.collection('users').document(uid)
     folder_ref = user_ref.collection('folders').document(folder_id)
 
-    # Add updated_at timestamp
-    update_data['updated_at'] = datetime.now(timezone.utc)
+    sanitized_data = {
+        k: v for k, v in update_data.items() if v is not None or k not in ('name', 'color', 'icon', 'order')
+    }
+    if not sanitized_data:
+        return True
 
-    folder_ref.update(update_data)
+    # Add updated_at timestamp
+    sanitized_data['updated_at'] = datetime.now(timezone.utc)
+
+    folder_ref.update(sanitized_data)
     return True
 
 
@@ -197,9 +204,9 @@ def delete_folder(uid: str, folder_id: str, move_to_folder_id: Optional[str] = N
     # Find target folder
     target_folder_id: Optional[str] = move_to_folder_id
     if not target_folder_id:
-        # Find the default folder (usually 'Other')
+        # Find the default folder (usually 'Other'), excluding the folder being deleted
         folders = get_folders(uid)
-        default_folder = next((f for f in folders if f.get('is_default')), None)
+        default_folder = next((f for f in folders if f.get('is_default') and f.get('id') != folder_id), None)
         if default_folder:
             target_folder_id = str(default_folder['id'])
 
