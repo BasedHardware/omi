@@ -59,6 +59,11 @@ checks:
     triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "optional tool parameters sent as JSON null must take defaults and validation errors must return ChatToolResponse HTTP 200"
+  - id: clinicaltrials-app-tests
+    command: ["python3", "plugins/omi-clinicaltrials-app/test_main.py"]
+    triggers: ["plugins/omi-clinicaltrials-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "ClinicalTrials.gov app must validate chat-tool input, ignore Omi uid, cap provider payloads, and format public study data without leaking provider bodies or presenting medical advice"
   - id: linear-exact-issue-lookup-tests
     command: ["python3", "plugins/omi-linear-app/test_issue_lookup.py"]
     triggers: ["plugins/omi-linear-app/**", ".github/checks-manifest.yaml"]
