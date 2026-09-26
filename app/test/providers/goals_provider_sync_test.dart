@@ -17,17 +17,17 @@ class _UnreachableApiEnv implements EnvFields {
 }
 
 Goal _goal(String id) => Goal(
-  id: id,
-  title: 'Goal $id',
-  goalType: 'numeric',
-  targetValue: 10,
-  currentValue: 2,
-  minValue: 0,
-  maxValue: 10,
-  isActive: true,
-  createdAt: DateTime(2026, 1, 1),
-  updatedAt: DateTime(2026, 1, 1),
-);
+      id: id,
+      title: 'Goal $id',
+      goalType: 'numeric',
+      targetValue: 10,
+      currentValue: 2,
+      minValue: 0,
+      maxValue: 10,
+      isActive: true,
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

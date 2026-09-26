@@ -35,8 +35,7 @@ Future<bool> confirmOnDeviceTranscription(
     return showOmiConfirm(
       context,
       title: l10n.olderDeviceDetected,
-      message:
-          '$specDetails\n\n${l10n.transcriptionSlowerOnDevice}\n'
+      message: '$specDetails\n\n${l10n.transcriptionSlowerOnDevice}\n'
           '• ${l10n.batteryUsageHigher}\n• ${l10n.considerOmiCloud}',
       confirmLabel: l10n.continueButton,
     );
@@ -44,8 +43,7 @@ Future<bool> confirmOnDeviceTranscription(
   return showOmiConfirm(
     context,
     title: l10n.highResourceUsage,
-    message:
-        '${l10n.computationallyIntensive}\n\n'
+    message: '${l10n.computationallyIntensive}\n\n'
         '• ${l10n.batteryDrainSignificantly}\n• ${l10n.deviceMayWarmUp}\n• ${l10n.speedAccuracyLower}',
     confirmLabel: l10n.iUnderstand,
   );
@@ -68,7 +66,9 @@ Future<bool> confirmModelDownload(
         message: [
           l10n.modelNameWithFile('ggml-$modelName.bin'),
           l10n.estimatedSizeWithValue(estimatedSizeMB.toStringAsFixed(0)),
-          l10n.availableSpaceWithValue(freeSpaceMB != null ? '${freeSpaceMB.toStringAsFixed(0)} MB' : l10n.unknown),
+          l10n.availableSpaceWithValue(
+            freeSpaceMB != null ? '${freeSpaceMB.toStringAsFixed(0)} MB' : l10n.unknown,
+          ),
         ].join('\n'),
         content: notEnoughSpace
             ? Text(

@@ -144,9 +144,7 @@ void main() {
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
           body: ChangeNotifierProvider<SyncProvider>.value(
-            value: syncProvider,
-            child: const PendingTranscriptionsBanner(),
-          ),
+              value: syncProvider, child: const PendingTranscriptionsBanner()),
         ),
       ),
     );
@@ -162,11 +160,8 @@ void main() {
     ];
     final syncProvider = await makeProvider();
 
-    expect(
-      syncProvider.pendingLocalTranscriptionWals.length,
-      3,
-      reason: 'uploaded counts as pending until the server job finishes',
-    );
+    expect(syncProvider.pendingLocalTranscriptionWals.length, 3,
+        reason: 'uploaded counts as pending until the server job finishes');
 
     await pumpBanner(tester, syncProvider);
 
@@ -183,11 +178,8 @@ void main() {
     ];
     final syncProvider = await makeProvider();
 
-    expect(
-      syncProvider.pendingLocalTranscriptionWals,
-      isEmpty,
-      reason: 'device-side files drain through the sync pages, not this backlog',
-    );
+    expect(syncProvider.pendingLocalTranscriptionWals, isEmpty,
+        reason: 'device-side files drain through the sync pages, not this backlog');
 
     await pumpBanner(tester, syncProvider);
 

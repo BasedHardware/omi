@@ -20,12 +20,12 @@ class _MockListener implements IWalSyncListener {
 }
 
 Wal _wal({required int timerStart}) => Wal(
-  timerStart: timerStart,
-  codec: BleAudioCodec.pcm16,
-  seconds: 30,
-  status: WalStatus.miss,
-  storage: WalStorage.disk,
-);
+      timerStart: timerStart,
+      codec: BleAudioCodec.pcm16,
+      seconds: 30,
+      status: WalStatus.miss,
+      storage: WalStorage.disk,
+    );
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

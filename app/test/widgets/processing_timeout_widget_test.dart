@@ -9,7 +9,10 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/providers/conversation_provider.dart';
 
-ServerConversation _processingConversation({required DateTime createdAt, DateTime? finishedAt}) {
+ServerConversation _processingConversation({
+  required DateTime createdAt,
+  DateTime? finishedAt,
+}) {
   return ServerConversation(
     id: 'processing-1',
     createdAt: createdAt,
@@ -146,7 +149,10 @@ void main() {
           value: provider,
           child: Scaffold(
             body: ProcessingConversationWidget(
-              conversation: _processingConversation(createdAt: processingStartedAt, finishedAt: processingStartedAt),
+              conversation: _processingConversation(
+                createdAt: processingStartedAt,
+                finishedAt: processingStartedAt,
+              ),
               now: () => now,
               reprocess: (id) async {
                 throw const FormatException('malformed reprocess body');
@@ -163,6 +169,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(tester.takeException(), isNull);
-    expect(find.text(AppLocalizations.of(tester.element(find.byType(Scaffold))).somethingWentWrong), findsOneWidget);
+    expect(
+      find.text(AppLocalizations.of(tester.element(find.byType(Scaffold))).somethingWentWrong),
+      findsOneWidget,
+    );
   });
 }

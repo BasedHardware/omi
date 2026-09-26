@@ -26,7 +26,10 @@ void main() {
   testWidgets('intro screen shows Skip below Get Started and fires onSkip', (tester) async {
     var started = false;
     var skipped = false;
-    await tester.pumpWidget(_app(OnboardingIntroScreen(onStart: () => started = true, onSkip: () => skipped = true)));
+    await tester.pumpWidget(_app(OnboardingIntroScreen(
+      onStart: () => started = true,
+      onSkip: () => skipped = true,
+    )));
     await tester.pump();
 
     final skipFinder = find.byKey(const Key('device_onboarding_skip_button'));
@@ -44,7 +47,10 @@ void main() {
 
   testWidgets('close X fires onSkip and is labelled', (tester) async {
     var skipped = false;
-    await tester.pumpWidget(_app(OnboardingIntroScreen(onStart: () {}, onSkip: () => skipped = true)));
+    await tester.pumpWidget(_app(OnboardingIntroScreen(
+      onStart: () {},
+      onSkip: () => skipped = true,
+    )));
     await tester.pump();
 
     expect(find.bySemanticsLabel('Close'), findsOneWidget);

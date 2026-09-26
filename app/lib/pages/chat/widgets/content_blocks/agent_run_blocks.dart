@@ -51,15 +51,15 @@ class AgentCompletionBlock extends StatelessWidget {
       icon: completed
           ? Icons.check_circle_outline
           : cancelled
-          ? Icons.cancel_outlined
-          : Icons.error_outline,
+              ? Icons.cancel_outlined
+              : Icons.error_outline,
       label: completed
           ? l10n.statusCompleted
           : cancelled
-          ? l10n.cancelled
-          : timedOut
-          ? l10n.statusTimedOut
-          : l10n.statusFailed,
+              ? l10n.cancelled
+              : timedOut
+                  ? l10n.statusTimedOut
+                  : l10n.statusFailed,
       title: block.title,
       body: block.output,
     );
@@ -67,7 +67,12 @@ class AgentCompletionBlock extends StatelessWidget {
 }
 
 class _AgentRunCard extends StatelessWidget {
-  const _AgentRunCard({required this.icon, required this.label, required this.title, required this.body});
+  const _AgentRunCard({
+    required this.icon,
+    required this.label,
+    required this.title,
+    required this.body,
+  });
 
   final IconData icon;
   final String label;

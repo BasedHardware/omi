@@ -82,8 +82,7 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
   Widget build(BuildContext context) {
     return Consumer<PhoneCallProvider>(
       builder: (context, provider, _) {
-        bool isCallInProgress =
-            provider.callState == PhoneCallState.active ||
+        bool isCallInProgress = provider.callState == PhoneCallState.active ||
             provider.callState == PhoneCallState.connecting ||
             provider.callState == PhoneCallState.ringing;
 
@@ -234,7 +233,10 @@ class _LiveTranscriptView extends StatelessWidget {
         );
       }
       return Center(
-        child: Text(context.l10n.transcriptPlaceholder, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
+        child: Text(
+          context.l10n.transcriptPlaceholder,
+          style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
+        ),
       );
     }
 
@@ -428,10 +430,8 @@ class _ControlButton extends StatelessWidget {
             Container(
               width: 56,
               height: 56,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: isActive ? OmiColors.accent : OmiColors.surface2,
-              ),
+              decoration:
+                  BoxDecoration(shape: BoxShape.circle, color: isActive ? OmiColors.accent : OmiColors.surface2),
               child: Icon(
                 icon,
                 color: isActive ? OmiColors.onAccent : (enabled ? OmiColors.textPrimary : OmiColors.textDisabled),

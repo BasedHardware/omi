@@ -35,8 +35,8 @@ class TrainingDataOptionCard extends StatelessWidget {
     final subtitle = approved
         ? l10n.trainingDataProgram
         : pending
-        ? l10n.yourRequestUnderReview
-        : l10n.shareDataForTraining;
+            ? l10n.yourRequestUnderReview
+            : l10n.shareDataForTraining;
     final VoidCallback? onTap = approved || pending
         ? () => routeToPage(context, TrainingProgramPage(title: l10n.omiTraining))
         : (isLoading ? null : onOptIn);

@@ -88,7 +88,11 @@ void main() {
       _ledgerMemory(id: 'fact-high', kind: KnowledgeLedgerKind.fact, weight: 9),
       _ledgerMemory(id: 'playbook', kind: KnowledgeLedgerKind.document),
       _ledgerMemory(id: 'trigger', kind: KnowledgeLedgerKind.trigger),
-      _ledgerMemory(id: 'closed', kind: KnowledgeLedgerKind.fact, invalidAt: DateTime.utc(2026, 8, 24)),
+      _ledgerMemory(
+        id: 'closed',
+        kind: KnowledgeLedgerKind.fact,
+        invalidAt: DateTime.utc(2026, 8, 24),
+      ),
     ];
     final provider = MemoriesProvider(
       fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async =>
@@ -280,7 +284,9 @@ void main() {
     expect(operationIds, hasLength(1));
     expect(operationIds.single, matches(RegExp(r'^[0-9a-f-]{36}$')));
 
-    response.complete(RevertMemoryResult(persisted: true, authoritativeMemory: _revertReplacement(source)));
+    response.complete(
+      RevertMemoryResult(persisted: true, authoritativeMemory: _revertReplacement(source)),
+    );
     expect(await firstTap, isTrue);
     expect(provider.isRevertingMemory(source.id), isFalse);
     expect(provider.historicalLedgerRows.map((memory) => memory.id), ['superseded']);
@@ -375,10 +381,17 @@ void main() {
       invalidAt: DateTime.utc(2026, 8, 24),
     )..visibility = MemoryVisibility.public;
     final responses = [
-      RevertMemoryResult(persisted: true, authoritativeMemory: _revertReplacement(source, id: 'wrong-visibility')),
       RevertMemoryResult(
         persisted: true,
-        authoritativeMemory: _revertReplacement(source, id: 'matching-visibility', visibility: MemoryVisibility.public),
+        authoritativeMemory: _revertReplacement(source, id: 'wrong-visibility'),
+      ),
+      RevertMemoryResult(
+        persisted: true,
+        authoritativeMemory: _revertReplacement(
+          source,
+          id: 'matching-visibility',
+          visibility: MemoryVisibility.public,
+        ),
       ),
     ];
     var historyRequests = 0;
@@ -387,7 +400,10 @@ void main() {
           GetMemoriesResult([tail], true),
       fetchLedgerHistoryRequest: ({int limit = 500, int offset = 0}) async {
         historyRequests++;
-        return GetLedgerHistoryResult(historyRequests < 2 ? [source] : [source, closedTail], supported: true);
+        return GetLedgerHistoryResult(
+          historyRequests < 2 ? [source] : [source, closedTail],
+          supported: true,
+        );
       },
       revertMemoryRequest: (id, operationId) async => responses.removeAt(0),
     );
@@ -519,7 +535,10 @@ void main() {
 
     expect(provider.canRevertSupersededFact(source), isTrue);
     expect(await provider.revertSupersededFact(source), isTrue);
-    expect(provider.currentLedgerFacts.map((memory) => memory.id), containsAll(['unrelated-current', 'restored-fact']));
+    expect(
+      provider.currentLedgerFacts.map((memory) => memory.id),
+      containsAll(['unrelated-current', 'restored-fact']),
+    );
     expect(provider.memories.any((memory) => memory.id == 'unrelated-current'), isTrue);
   });
 
@@ -543,7 +562,9 @@ void main() {
 
     final pending = provider.revertSupersededFact(source);
     provider.clearUserData();
-    response.complete(RevertMemoryResult(persisted: true, authoritativeMemory: _revertReplacement(source)));
+    response.complete(
+      RevertMemoryResult(persisted: true, authoritativeMemory: _revertReplacement(source)),
+    );
 
     expect(await pending, isFalse);
     expect(provider.memories, isEmpty);
@@ -551,7 +572,11 @@ void main() {
 
   test('revert excludes standalone closed, rejected-current, non-fact, future, and legacy rows', () async {
     final rows = [
-      _ledgerMemory(id: 'closed', kind: KnowledgeLedgerKind.fact, invalidAt: DateTime.utc(2026, 8, 24)),
+      _ledgerMemory(
+        id: 'closed',
+        kind: KnowledgeLedgerKind.fact,
+        invalidAt: DateTime.utc(2026, 8, 24),
+      ),
       _ledgerMemory(id: 'rejected', kind: KnowledgeLedgerKind.fact, review: false),
       _ledgerMemory(id: 'playbook', kind: KnowledgeLedgerKind.document, supersededBy: 'replacement'),
       _ledgerMemory(
@@ -560,7 +585,12 @@ void main() {
         supersededBy: 'replacement',
         schemaVersion: 'knowledge_ledger.v2',
       ),
-      _ledgerMemory(id: 'legacy', kind: KnowledgeLedgerKind.fact, supersededBy: 'replacement', schemaVersion: ''),
+      _ledgerMemory(
+        id: 'legacy',
+        kind: KnowledgeLedgerKind.fact,
+        supersededBy: 'replacement',
+        schemaVersion: '',
+      ),
     ];
     var requests = 0;
     final provider = MemoriesProvider(

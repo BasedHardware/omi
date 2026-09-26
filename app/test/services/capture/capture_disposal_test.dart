@@ -73,7 +73,11 @@ void main() {
     final clock = VirtualClock(DateTime.utc(2026));
     final scheduler = ManualScheduler(clock: clock);
     final changes = StreamController<bool>.broadcast(sync: true);
-    final provider = _provider(scheduler: scheduler, now: clock.now, connectivityChanges: changes.stream);
+    final provider = _provider(
+      scheduler: scheduler,
+      now: clock.now,
+      connectivityChanges: changes.stream,
+    );
     expect(provider.isConnected, isTrue);
     provider.dispose();
     changes.add(false);

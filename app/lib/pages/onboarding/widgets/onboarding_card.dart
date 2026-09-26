@@ -42,11 +42,8 @@ class OnboardingCard extends StatelessWidget {
           children: [
             Flexible(
               child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: crossAxisAlignment,
-                  children: content,
-                ),
+                child:
+                    Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: crossAxisAlignment, children: content),
               ),
             ),
             ...footer,
@@ -69,10 +66,7 @@ class OnboardingStep extends StatelessWidget {
     // Keep clear of the progress dots and back button drawn over the top of the step.
     return Padding(
       padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top + 64),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [Flexible(child: card)],
-      ),
+      child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [Flexible(child: card)]),
     );
   }
 }

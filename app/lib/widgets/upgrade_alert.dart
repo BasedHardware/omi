@@ -43,7 +43,12 @@ class MyUpgradeAlertState extends UpgradeAlertState {
     );
   }
 
-  Future<void> _show(BuildContext context, {Key? key, required String message, required bool barrierDismissible}) {
+  Future<void> _show(
+    BuildContext context, {
+    Key? key,
+    required String message,
+    required bool barrierDismissible,
+  }) {
     return showDialog<void>(
       context: context,
       barrierDismissible: barrierDismissible,

@@ -37,7 +37,12 @@ class AppDetailSummary extends StatelessWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(name, style: OmiType.title3, maxLines: 2, overflow: TextOverflow.ellipsis),
+              Text(
+                name,
+                style: OmiType.title3,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
               const SizedBox(height: OmiSpacing.xxs),
               Row(
                 children: [
@@ -62,7 +67,10 @@ class AppDetailSummary extends StatelessWidget {
                     if (ratingCount > 0) ...[
                       const FaIcon(FontAwesomeIcons.solidStar, size: 11, color: OmiColors.textPrimary),
                       const SizedBox(width: OmiSpacing.xxs),
-                      Text('$rating ($ratingCount)', style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                      Text(
+                        '$rating ($ratingCount)',
+                        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                      ),
                       if (installs > 0) Text('  ·  ', style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
                     ],
                     if (installs > 0)

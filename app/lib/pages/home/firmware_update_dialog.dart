@@ -94,7 +94,10 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
             if (stepMap[key] != null) _buildStepItem(stepMap[key]!),
           Container(
             padding: const EdgeInsets.all(OmiSpacing.md),
-            decoration: BoxDecoration(color: OmiColors.warning.withValues(alpha: 0.12), borderRadius: OmiRadius.mdAll),
+            decoration: BoxDecoration(
+              color: OmiColors.warning.withValues(alpha: 0.12),
+              borderRadius: OmiRadius.mdAll,
+            ),
             child: Row(
               children: [
                 const ExcludeSemantics(

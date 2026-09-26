@@ -43,7 +43,7 @@ class OmiLoadingState extends StatelessWidget {
 /// the two is given; either way it is drawn 40pt in [OmiColors.textTertiary].
 class OmiEmptyState extends StatelessWidget {
   const OmiEmptyState({super.key, this.icon, this.glyph, required this.title, this.message, this.action})
-    : assert((icon == null) != (glyph == null), 'Give OmiEmptyState exactly one of icon or glyph');
+      : assert((icon == null) != (glyph == null), 'Give OmiEmptyState exactly one of icon or glyph');
 
   final IconData? icon;
 
@@ -129,7 +129,10 @@ class _StateLayout extends StatelessWidget {
                 style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
               ),
             ],
-            if (action != null) ...[const SizedBox(height: OmiSpacing.lg), action!],
+            if (action != null) ...[
+              const SizedBox(height: OmiSpacing.lg),
+              action!,
+            ],
           ],
         ),
       ),

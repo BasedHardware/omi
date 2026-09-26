@@ -50,11 +50,11 @@ class HomeDeepLink {
   /// The home tab the link belongs to, so the parent (the tab) shows before the child (the page
   /// pushed over it). Null keeps the current tab.
   int? get tabIndex => switch (alias) {
-    'action-items' => 2,
-    'apps' => 3,
-    'memories' || 'facts' => 0,
-    _ => null,
-  };
+        'action-items' => 2,
+        'apps' => 3,
+        'memories' || 'facts' => 0,
+        _ => null,
+      };
 }
 
 /// Opens [link] on top of the home shell whose [context] is given: parent first (the tab, or the
@@ -99,12 +99,10 @@ Future<void> openHomeDeepLink(
         OmiFeedback.info(context, context.l10n.conversationNotFoundOrDeleted);
         return;
       }
-      unawaited(
-        routeToPage(
-          context,
-          ConversationDetailPage(conversation: conversation, openShareToContactsOnLoad: link.query['share'] == '1'),
-        ),
-      );
+      unawaited(routeToPage(
+        context,
+        ConversationDetailPage(conversation: conversation, openShareToContactsOnLoad: link.query['share'] == '1'),
+      ));
     case 'daily-summary':
       if (id == null) return;
       PlatformManager.instance.analytics.dailySummaryNotificationOpened(

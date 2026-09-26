@@ -10,7 +10,7 @@ enum CaptureGroupSeparationPhase { idle, separating, failed }
 /// the page confirms first and reloads only after the server accepted it.
 class CaptureGroupSeparationController extends ChangeNotifier {
   CaptureGroupSeparationController({Future<CaptureGroupSeparationResult> Function(String conversationId)? separate})
-    : _separateOnServer = separate ?? separateConversationFromCaptureGroup;
+      : _separateOnServer = separate ?? separateConversationFromCaptureGroup;
 
   final Future<CaptureGroupSeparationResult> Function(String conversationId) _separateOnServer;
 

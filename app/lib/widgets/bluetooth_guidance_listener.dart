@@ -32,9 +32,9 @@ class BluetoothGuidanceListener extends StatefulWidget {
     bool? isAndroid,
     this.retryBlockedOperation,
     this.promptQueue,
-  }) : readiness = readiness ?? BluetoothReadiness.instance,
-       navigatorKey = navigatorKey ?? globalNavigatorKey,
-       isAndroid = isAndroid ?? Platform.isAndroid;
+  })  : readiness = readiness ?? BluetoothReadiness.instance,
+        navigatorKey = navigatorKey ?? globalNavigatorKey,
+        isAndroid = isAndroid ?? Platform.isAndroid;
 
   @override
   State<BluetoothGuidanceListener> createState() => _BluetoothGuidanceListenerState();
@@ -75,9 +75,8 @@ class _BluetoothGuidanceListenerState extends State<BluetoothGuidanceListener> {
     if (identical(widget.navigatorKey, globalNavigatorKey) && globalNavigatorKey.currentState != null) {
       return PromptQueue.instance;
     }
-    return _localQueue ??= PromptQueue(
-      contextProvider: () => widget.navigatorKey.currentContext ?? (mounted ? context : null),
-    );
+    return _localQueue ??=
+        PromptQueue(contextProvider: () => widget.navigatorKey.currentContext ?? (mounted ? context : null));
   }
 
   PromptQueue? _localQueue;

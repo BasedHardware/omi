@@ -53,9 +53,9 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
         final l10n = context.l10n;
 
         Widget field(Widget child) => Padding(
-          padding: const EdgeInsets.only(left: 10.0, right: 10.0, top: OmiSpacing.md),
-          child: child,
-        );
+              padding: const EdgeInsets.only(left: 10.0, right: 10.0, top: OmiSpacing.md),
+              child: child,
+            );
 
         return GestureDetector(
           onTap: () {
@@ -65,9 +65,7 @@ class ExternalTriggerFieldsWidget extends StatelessWidget {
             children: [
               // Scopes Card
               const SizedBox(height: 18),
-              const AppFormCard(
-                child: Padding(padding: EdgeInsets.only(left: 2.0), child: ActionFieldsWidget()),
-              ),
+              const AppFormCard(child: Padding(padding: EdgeInsets.only(left: 2.0), child: ActionFieldsWidget())),
 
               // External Integration Card
               const SizedBox(height: 18),

@@ -16,51 +16,47 @@ import 'package:omi/utils/conversations/capture_groups.dart';
 final _t0 = DateTime(2026, 9, 23, 13, 57);
 
 CaptureGroup _meeting({String primary = 'desktop'}) => CaptureGroup(
-  id: 'event-1',
-  primaryId: primary,
-  revision: 2,
-  members: [
-    CaptureGroupMember(
-      id: 'desktop',
-      source: 'desktop',
-      startedAt: _t0,
-      finishedAt: _t0.add(const Duration(minutes: 62)),
-    ),
-    CaptureGroupMember(
-      id: 'pendant-2',
-      source: 'omi',
-      startedAt: _t0.add(const Duration(minutes: 31)),
-      finishedAt: _t0.add(const Duration(minutes: 34)),
-    ),
-    CaptureGroupMember(
-      id: 'pendant-1',
-      source: 'omi',
-      startedAt: _t0.add(const Duration(minutes: 2)),
-      finishedAt: _t0.add(const Duration(minutes: 30)),
-    ),
-  ],
-);
+      id: 'event-1',
+      primaryId: primary,
+      revision: 2,
+      members: [
+        CaptureGroupMember(
+            id: 'desktop', source: 'desktop', startedAt: _t0, finishedAt: _t0.add(const Duration(minutes: 62))),
+        CaptureGroupMember(
+          id: 'pendant-2',
+          source: 'omi',
+          startedAt: _t0.add(const Duration(minutes: 31)),
+          finishedAt: _t0.add(const Duration(minutes: 34)),
+        ),
+        CaptureGroupMember(
+          id: 'pendant-1',
+          source: 'omi',
+          startedAt: _t0.add(const Duration(minutes: 2)),
+          finishedAt: _t0.add(const Duration(minutes: 30)),
+        ),
+      ],
+    );
 
 ServerConversation _row(String id, {CaptureGroup? group, int minute = 0}) => ServerConversation(
-  id: id,
-  createdAt: _t0.add(Duration(minutes: minute + 10)),
-  startedAt: _t0.add(Duration(minutes: minute)),
-  finishedAt: _t0.add(Duration(minutes: minute + 10)),
-  structured: Structured(id, ''),
-  source: ConversationSource.omi,
-  captureGroup: group,
-);
+      id: id,
+      createdAt: _t0.add(Duration(minutes: minute + 10)),
+      startedAt: _t0.add(Duration(minutes: minute)),
+      finishedAt: _t0.add(Duration(minutes: minute + 10)),
+      structured: Structured(id, ''),
+      source: ConversationSource.omi,
+      captureGroup: group,
+    );
 
 TranscriptSegment _segment(String text, {bool user = false, int speaker = 0, String? personId}) => TranscriptSegment(
-  id: text,
-  text: text,
-  speaker: 'SPEAKER_0$speaker',
-  isUser: user,
-  personId: personId,
-  start: 0,
-  end: 1,
-  translations: const [],
-);
+      id: text,
+      text: text,
+      speaker: 'SPEAKER_0$speaker',
+      isUser: user,
+      personId: personId,
+      start: 0,
+      end: 1,
+      translations: const [],
+    );
 
 void main() {
   group('capture group wire', () {
@@ -80,9 +76,7 @@ void main() {
       expect(decoded.captureGroup!.revision, 3);
       expect(decoded.captureGroup!.members.map((m) => m.source), ['desktop', 'omi']);
       expect(
-        decoded.captureGroup!.members.first.startedAt!.isAtSameMomentAs(DateTime.utc(2026, 9, 23, 20, 57)),
-        isTrue,
-      );
+          decoded.captureGroup!.members.first.startedAt!.isAtSameMomentAs(DateTime.utc(2026, 9, 23, 20, 57)), isTrue);
 
       final cached = ServerConversation.fromJson(decoded.toJson());
       expect(cached.captureGroup!.members.map((m) => m.id), ['desktop', 'pendant-1']);
@@ -127,22 +121,14 @@ void main() {
     });
 
     test('a membership that has not caught up still lists the open conversation', () {
-      const group = CaptureGroup(
-        id: 'e',
-        primaryId: 'desktop',
-        members: [CaptureGroupMember(id: 'desktop')],
-      );
+      const group = CaptureGroup(id: 'e', primaryId: 'desktop', members: [CaptureGroupMember(id: 'desktop')]);
       final recordings = CaptureGroupPresentation.recordings(_row('late', group: group));
       expect(recordings.map((r) => r.id), containsAll(['desktop', 'late']));
       expect(recordings.singleWhere((r) => r.isCurrent).id, 'late');
     });
 
     test('a group of one is just a conversation', () {
-      const group = CaptureGroup(
-        id: 'e',
-        primaryId: 'solo',
-        members: [CaptureGroupMember(id: 'solo')],
-      );
+      const group = CaptureGroup(id: 'e', primaryId: 'solo', members: [CaptureGroupMember(id: 'solo')]);
       expect(CaptureGroupPresentation.recordings(_row('solo', group: group)), isEmpty);
       expect(CaptureGroupPresentation.recordings(_row('solo')), isEmpty);
     });
@@ -157,9 +143,7 @@ void main() {
       final loaded = [_row('pendant-1', group: _meeting())];
       expect(await CaptureGroupPresentation.resolveMember('pendant-1', loaded: loaded, fetch: fetch), same(loaded[0]));
       expect(
-        (await CaptureGroupPresentation.resolveMember('pendant-2', loaded: loaded, fetch: fetch))!.id,
-        'pendant-2',
-      );
+          (await CaptureGroupPresentation.resolveMember('pendant-2', loaded: loaded, fetch: fetch))!.id, 'pendant-2');
       expect(fetched, ['pendant-2']);
     });
   });
@@ -254,12 +238,10 @@ void main() {
   group('separation flow', () {
     test('success reloads, then returns to idle', () async {
       final calls = <String>[];
-      final controller = CaptureGroupSeparationController(
-        separate: (id) async {
-          calls.add('separate $id');
-          return CaptureGroupSeparationResult.separated;
-        },
-      );
+      final controller = CaptureGroupSeparationController(separate: (id) async {
+        calls.add('separate $id');
+        return CaptureGroupSeparationResult.separated;
+      });
       addTearDown(controller.dispose);
       final phases = <CaptureGroupSeparationPhase>[];
       controller.addListener(() => phases.add(controller.phase));
@@ -273,9 +255,8 @@ void main() {
 
     test('an already-separated recording still reloads the stale membership', () async {
       var reloaded = false;
-      final controller = CaptureGroupSeparationController(
-        separate: (_) async => CaptureGroupSeparationResult.unchanged,
-      );
+      final controller =
+          CaptureGroupSeparationController(separate: (_) async => CaptureGroupSeparationResult.unchanged);
       addTearDown(controller.dispose);
       expect(await controller.separate('x', reload: () async => reloaded = true), isTrue);
       expect(reloaded, isTrue);
@@ -297,12 +278,10 @@ void main() {
 
     test('one separation at a time', () async {
       final gate = <Future<void>>[];
-      final controller = CaptureGroupSeparationController(
-        separate: (_) async {
-          await Future<void>.delayed(const Duration(milliseconds: 5));
-          return CaptureGroupSeparationResult.separated;
-        },
-      );
+      final controller = CaptureGroupSeparationController(separate: (_) async {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        return CaptureGroupSeparationResult.separated;
+      });
       addTearDown(controller.dispose);
       gate.add(controller.separate('a', reload: () async {}));
       expect(controller.isBusy, isTrue);

@@ -187,18 +187,16 @@ void main() {
     });
 
     test('falls back to the option label when no prepared answer is sent', () {
-      final question =
-          decode({
-                'type': 'questionCard',
-                'id': 'b1',
-                'questionId': 'q1',
-                'text': 'What next?',
-                'subject': {'kind': 'cold_start', 'id': 'seq-1'},
-                'options': [
-                  {'optionId': 'a', 'label': 'Ship it'},
-                ],
-              })!
-              as QuestionCardContentBlock;
+      final question = decode({
+        'type': 'questionCard',
+        'id': 'b1',
+        'questionId': 'q1',
+        'text': 'What next?',
+        'subject': {'kind': 'cold_start', 'id': 'seq-1'},
+        'options': [
+          {'optionId': 'a', 'label': 'Ship it'},
+        ],
+      })! as QuestionCardContentBlock;
       expect(question.options.single.preparedAnswer, 'Ship it');
     });
   });

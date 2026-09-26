@@ -13,7 +13,11 @@ class TranscriptionAllowanceSnapshot {
   final String reason;
   final int? remainingSeconds;
 
-  const TranscriptionAllowanceSnapshot({required this.mode, required this.reason, this.remainingSeconds});
+  const TranscriptionAllowanceSnapshot({
+    required this.mode,
+    required this.reason,
+    this.remainingSeconds,
+  });
 
   bool get isManaged => mode == modeManaged;
   bool get isOnDevice => mode == modeOnDevice;
@@ -28,7 +32,11 @@ class TranscriptionAllowanceSnapshot {
   }
 
   wire.GeneratedTranscriptionAllowanceSnapshot toGenerated() {
-    return wire.GeneratedTranscriptionAllowanceSnapshot(mode: mode, reason: reason, remainingSeconds: remainingSeconds);
+    return wire.GeneratedTranscriptionAllowanceSnapshot(
+      mode: mode,
+      reason: reason,
+      remainingSeconds: remainingSeconds,
+    );
   }
 
   factory TranscriptionAllowanceSnapshot.fromJson(Map<String, dynamic> json) {

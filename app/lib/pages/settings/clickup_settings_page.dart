@@ -197,7 +197,10 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
       children: [
         if (_clickupService.currentUserId != null)
           IntegrationConnectedBanner(context.l10n.connectedAsUser(_clickupService.currentUserId!)),
-        Text(context.l10n.defaultWorkspace, style: OmiType.title3),
+        Text(
+          context.l10n.defaultWorkspace,
+          style: OmiType.title3,
+        ),
         const SizedBox(height: OmiSpacing.xs),
         Text(context.l10n.tasksCreatedInWorkspace, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
         const SizedBox(height: OmiSpacing.md),
@@ -205,11 +208,18 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
           final teamId = team['id'].toString();
           final teamName = team['name'] as String;
           final isSelected = _selectedTeamId == teamId;
-          return IntegrationSelectionCard(label: teamName, isSelected: isSelected, onTap: () => _selectTeam(team));
+          return IntegrationSelectionCard(
+            label: teamName,
+            isSelected: isSelected,
+            onTap: () => _selectTeam(team),
+          );
         }),
         const SizedBox(height: OmiSpacing.xxl),
         if (_selectedTeamId != null) ...[
-          Text(context.l10n.defaultSpace, style: OmiType.title3),
+          Text(
+            context.l10n.defaultSpace,
+            style: OmiType.title3,
+          ),
           const SizedBox(height: OmiSpacing.xs),
           Text(context.l10n.selectSpaceInWorkspace, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
           const SizedBox(height: OmiSpacing.md),
@@ -233,7 +243,10 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
           const SizedBox(height: OmiSpacing.xxl),
         ],
         if (_selectedSpaceId != null) ...[
-          Text(context.l10n.defaultList, style: OmiType.title3),
+          Text(
+            context.l10n.defaultList,
+            style: OmiType.title3,
+          ),
           const SizedBox(height: OmiSpacing.xs),
           Text(context.l10n.tasksAddedToList, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
           const SizedBox(height: OmiSpacing.md),
@@ -248,7 +261,11 @@ class _ClickUpSettingsPageState extends State<ClickUpSettingsPage> {
               final listId = list['id'].toString();
               final listName = list['name'] as String;
               final isSelected = _selectedListId == listId;
-              return IntegrationSelectionCard(label: listName, isSelected: isSelected, onTap: () => _selectList(list));
+              return IntegrationSelectionCard(
+                label: listName,
+                isSelected: isSelected,
+                onTap: () => _selectList(list),
+              );
             }),
           const SizedBox(height: OmiSpacing.xxl),
         ],

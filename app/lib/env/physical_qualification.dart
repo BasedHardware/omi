@@ -35,16 +35,13 @@ class PhysicalQualification {
       'error_type': error?.runtimeType.toString(),
       'frames': frames,
     };
-    _runtimeWrites = _runtimeWrites
-        .then((_) async {
-          final documents = await getApplicationDocumentsDirectory();
-          await File(
-            '${documents.path}/physical_capture_runtime.jsonl',
-          ).writeAsString('${jsonEncode(metadata)}\n', mode: FileMode.append, flush: true);
-        })
-        .catchError((Object _) {
-          // A diagnostic I/O failure must not recursively enter the zone handler.
-        });
+    _runtimeWrites = _runtimeWrites.then((_) async {
+      final documents = await getApplicationDocumentsDirectory();
+      await File('${documents.path}/physical_capture_runtime.jsonl')
+          .writeAsString('${jsonEncode(metadata)}\n', mode: FileMode.append, flush: true);
+    }).catchError((Object _) {
+      // A diagnostic I/O failure must not recursively enter the zone handler.
+    });
     return _runtimeWrites;
   }
 
@@ -74,14 +71,13 @@ class PhysicalQualification {
       final target = '${documents.path}/physical_capture_startup.json';
       final temporary = File('$target.tmp');
       await temporary.writeAsString(
-        jsonEncode({
-          'stage': stage,
-          'state': state,
-          'error_type': errorType,
-          'at_ms': DateTime.now().millisecondsSinceEpoch,
-        }),
-        flush: true,
-      );
+          jsonEncode({
+            'stage': stage,
+            'state': state,
+            'error_type': errorType,
+            'at_ms': DateTime.now().millisecondsSinceEpoch,
+          }),
+          flush: true);
       await temporary.rename(target);
     });
     // Serialize atomic replacements; one failed write must not poison later
@@ -148,9 +144,8 @@ class PhysicalQualification {
       '${api.host}:${api.port}',
       '${Env.firebaseAuthEmulatorHost}:${Env.firebaseAuthEmulatorPort}',
     });
-    final native = await const MethodChannel(
-      'omi/physical_qualification',
-    ).invokeMapMethod<String, dynamic>('isolation');
+    final native =
+        await const MethodChannel('omi/physical_qualification').invokeMapMethod<String, dynamic>('isolation');
     if (native == null ||
         !(native['bundle_id'] as String? ?? '').contains('.capture-qualification.') ||
         native['firebase_messaging_auto_init'] != false ||
@@ -158,12 +153,8 @@ class PhysicalQualification {
         native['firebase_data_collection'] != false) {
       throw StateError('Physical qualification requires a separate bundle and disabled native Firebase collection.');
     }
-    if ([
-      Env.posthogApiKey,
-      Env.intercomAppId,
-      Env.intercomIOSApiKey,
-      Env.intercomAndroidApiKey,
-    ].any((value) => value != null && value.isNotEmpty)) {
+    if ([Env.posthogApiKey, Env.intercomAppId, Env.intercomIOSApiKey, Env.intercomAndroidApiKey]
+        .any((value) => value != null && value.isNotEmpty)) {
       throw StateError('Physical qualification refuses external analytics credentials.');
     }
   }
@@ -182,8 +173,7 @@ class PhysicalQualificationHttpOverrides extends HttpOverrides {
       ..connectionFactory = (uri, proxyHost, proxyPort) {
         if (!allowsConnection(uri, proxyHost)) {
           return Future.error(
-            const SocketException('Physical qualification blocked an unapproved network destination'),
-          );
+              const SocketException('Physical qualification blocked an unapproved network destination'));
         }
         return Socket.startConnect(uri.host, uri.port);
       };

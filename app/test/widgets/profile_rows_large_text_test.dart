@@ -26,10 +26,7 @@ Widget _app(Widget child, {double textScale = 1.0, double width = _narrowWidth})
       child: Scaffold(
         body: Align(
           alignment: Alignment.topLeft,
-          child: SizedBox(
-            width: width,
-            child: OmiSettingsGroup(children: [child]),
-          ),
+          child: SizedBox(width: width, child: OmiSettingsGroup(children: [child])),
         ),
       ),
     ),

@@ -66,7 +66,10 @@ class CategorySection extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
             child: Row(
               children: [
-                Text(categoryName, style: OmiType.title3),
+                Text(
+                  categoryName,
+                  style: OmiType.title3,
+                ),
                 const Spacer(),
                 if (showViewAll)
                   GestureDetector(
@@ -79,10 +82,8 @@ class CategorySection extends StatelessWidget {
                           decoration: const BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
                           child: Text(
                             context.l10n.all,
-                            style: OmiType.caption.copyWith(
-                              color: OmiColors.textSecondary,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style:
+                                OmiType.caption.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
                           ),
                         ),
                         // const SizedBox(width: 8),

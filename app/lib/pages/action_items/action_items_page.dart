@@ -85,8 +85,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       final phase = provider.apiViewState.phase;
-      final typedResultAlreadyProjected =
-          phase == ApiViewPhase.error ||
+      final typedResultAlreadyProjected = phase == ApiViewPhase.error ||
           phase == ApiViewPhase.locked ||
           phase == ApiViewPhase.terminal ||
           phase == ApiViewPhase.authenticationRequired ||
@@ -466,8 +465,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         final showCompleted = provider.showCompletedView;
         final categorizedItems = _categorizeItems(provider.actionItems, showCompleted);
         final apiPhase = provider.apiViewState.phase;
-        final showTypedStatus =
-            apiPhase == ApiViewPhase.error ||
+        final showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
             apiPhase == ApiViewPhase.terminal ||
             apiPhase == ApiViewPhase.authenticationRequired ||
@@ -487,19 +485,19 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: provider.isLoading && provider.actionItems.isEmpty
                       ? _buildLoadingState()
                       : showTypedStatus
-                      ? CustomScrollView(
-                          controller: _scrollController,
-                          physics: const AlwaysScrollableScrollPhysics(),
-                          slivers: [
-                            SliverFillRemaining(
-                              hasScrollBody: false,
-                              child: Center(child: ActionItemsApiStatus(provider: provider)),
-                            ),
-                          ],
-                        )
-                      : categorizedItems.values.every((l) => l.isEmpty)
-                      ? _buildEmptyTasksList()
-                      : _buildTasksList(categorizedItems, provider),
+                          ? CustomScrollView(
+                              controller: _scrollController,
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              slivers: [
+                                SliverFillRemaining(
+                                  hasScrollBody: false,
+                                  child: Center(child: ActionItemsApiStatus(provider: provider)),
+                                ),
+                              ],
+                            )
+                          : categorizedItems.values.every((l) => l.isEmpty)
+                              ? _buildEmptyTasksList()
+                              : _buildTasksList(categorizedItems, provider),
                 ),
               ),
               // Hide the corner FAB when the empty state already
@@ -727,7 +725,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 size: 16,
                               ),
                               const SizedBox(width: 4),
-                              Text(title.toUpperCase(), style: _sectionLabelStyle),
+                              Text(
+                                title.toUpperCase(),
+                                style: _sectionLabelStyle,
+                              ),
                               if (orderedItems.isNotEmpty) ...[
                                 const SizedBox(width: 8),
                                 _SectionCount(orderedItems.length),
@@ -738,7 +739,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       else
                         Padding(
                           padding: _sectionHeaderLinePadding,
-                          child: Text(title.toUpperCase(), style: _sectionLabelStyle),
+                          child: Text(
+                            title.toUpperCase(),
+                            style: _sectionLabelStyle,
+                          ),
                         ),
                       const Spacer(),
                       if (category != TaskCategory.noDeadline) ...[
@@ -758,7 +762,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                             ),
                           )
                         else if (orderedItems.isNotEmpty)
-                          Padding(padding: _sectionHeaderLinePadding, child: _SectionCount(orderedItems.length)),
+                          Padding(
+                            padding: _sectionHeaderLinePadding,
+                            child: _SectionCount(orderedItems.length),
+                          ),
                       ] else if (provider.showCompletedView && orderedItems.isNotEmpty && _noDeadlineExpanded)
                         _SectionHeaderTapTarget(
                           semanticLabel: context.l10n.tasksClearCompleted,
@@ -812,13 +819,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        _overdueExpanded ? Icons.expand_less : Icons.expand_more,
-                        color: OmiColors.textTertiary,
-                        size: 16,
-                      ),
+                      Icon(_overdueExpanded ? Icons.expand_less : Icons.expand_more,
+                          color: OmiColors.textTertiary, size: 16),
                       const SizedBox(width: 4),
-                      Text(context.l10n.tasksOverdue.toUpperCase(), style: _sectionLabelStyle),
+                      Text(
+                        context.l10n.tasksOverdue.toUpperCase(),
+                        style: _sectionLabelStyle,
+                      ),
                       const SizedBox(width: 8),
                       _SectionCount(orderedItems.length),
                     ],
@@ -1265,10 +1272,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   behavior: HitTestBehavior.opaque,
                   onTap: provider.isSelectionMode ? null : () => _toggleCompleted(provider, item),
                   child: SizedBox(
-                    width: 44,
-                    height: 48,
-                    child: Center(child: TaskCompletionMark(completed: item.completed)),
-                  ),
+                      width: 44, height: 48, child: Center(child: TaskCompletionMark(completed: item.completed))),
                 ),
               ),
               // Task text
@@ -1448,11 +1452,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 const EdgeInsets _sectionHeaderLinePadding = EdgeInsets.only(top: 16, bottom: 4);
 
 /// A section header's label ("TODAY", "OVERDUE").
-final TextStyle _sectionLabelStyle = OmiType.footnote.copyWith(
-  color: OmiColors.textTertiary,
-  fontWeight: FontWeight.w600,
-  letterSpacing: 0.8,
-);
+final TextStyle _sectionLabelStyle =
+    OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600, letterSpacing: 0.8);
 
 /// The count beside a section header, read out as "3 tasks" rather than a bare number.
 class _SectionCount extends StatelessWidget {
@@ -1480,7 +1481,12 @@ class _SectionCount extends StatelessWidget {
 /// the header's Spacer. The child stays where it was on the text line and
 /// nothing in the list moves; the target becomes the header's full 36pt height.
 class _SectionHeaderTapTarget extends StatelessWidget {
-  const _SectionHeaderTapTarget({required this.onTap, required this.child, required this.reach, this.semanticLabel});
+  const _SectionHeaderTapTarget({
+    required this.onTap,
+    required this.child,
+    required this.reach,
+    this.semanticLabel,
+  });
 
   final VoidCallback onTap;
   final Widget child;

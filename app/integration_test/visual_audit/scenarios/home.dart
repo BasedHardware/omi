@@ -51,10 +51,8 @@ final homeScenarios = <AuditScenario>[
     state: 'Start-up threw "Could not reach the Omi backend"; a retry callback is available',
     run: (a) async {
       // StartupFailureApp is its own MaterialApp; it nests under the harness app unchanged.
-      await a.pump(
-        StartupFailureApp(error: Exception('Could not reach the Omi backend'), onRetry: () async {}),
-        scaffold: false,
-      );
+      await a.pump(StartupFailureApp(error: Exception('Could not reach the Omi backend'), onRetry: () async {}),
+          scaffold: false);
       await a.shot('The start-up failure screen with Try Again and Contact Support');
     },
   ),

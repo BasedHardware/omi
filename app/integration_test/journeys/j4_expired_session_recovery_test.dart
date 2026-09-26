@@ -32,82 +32,69 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'positive: terminal token failure expires the session and local-dev recovery reaches the re-mint endpoint',
-    (tester) async {
-      final evidence = JourneyEvidence.begin(journeyId: 'j4_expired_session_recovery', lane: journeyLane);
-      final server = await JourneyHermeticBoot.start();
-      addTearDown(JourneyHermeticBoot.stop);
-      evidence.stateBefore = SemanticControls.instance.state().toJson();
+      'positive: terminal token failure expires the session and local-dev recovery reaches the re-mint endpoint',
+      (tester) async {
+    final evidence = JourneyEvidence.begin(journeyId: 'j4_expired_session_recovery', lane: journeyLane);
+    final server = await JourneyHermeticBoot.start();
+    addTearDown(JourneyHermeticBoot.stop);
+    evidence.stateBefore = SemanticControls.instance.state().toJson();
 
-      // Leg 1 — TRANSIENT failure on a healthy session: the production
-      // local-dev recovery schedules an out-of-band re-mint through the real
-      // custom-token endpoint (external I/O observable even though the final
-      // Firebase sign-in needs the emulator lane).
-      final gateway = ScriptableGateway(
-        user: gatewayUser,
-        refreshOutcome: const AuthTokenTransientFailure(failureClass: 'network', code: 'io'),
-      );
-      AuthService.installLocalHarnessTokenGateway(gateway);
+    // Leg 1 — TRANSIENT failure on a healthy session: the production
+    // local-dev recovery schedules an out-of-band re-mint through the real
+    // custom-token endpoint (external I/O observable even though the final
+    // Firebase sign-in needs the emulator lane).
+    final gateway = ScriptableGateway(
+      user: gatewayUser,
+      refreshOutcome: const AuthTokenTransientFailure(failureClass: 'network', code: 'io'),
+    );
+    AuthService.installLocalHarnessTokenGateway(gateway);
 
-      final reMintsBefore = server.countOf('POST', '/v1/auth/local-dev/custom-token');
-      await tester.runAsync(() => AuthService.instance.getIdToken());
-      // The scheduled recovery runs off the call stack (documented in
-      // AuthService): let real async I/O complete outside the fake clock.
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 800)));
-      final reMints = server.countOf('POST', '/v1/auth/local-dev/custom-token') - reMintsBefore;
-      evidence.record(
-        'local-dev-recovery-reaches-re-mint-endpoint',
+    final reMintsBefore = server.countOf('POST', '/v1/auth/local-dev/custom-token');
+    await tester.runAsync(() => AuthService.instance.getIdToken());
+    // The scheduled recovery runs off the call stack (documented in
+    // AuthService): let real async I/O complete outside the fake clock.
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 800)));
+    final reMints = server.countOf('POST', '/v1/auth/local-dev/custom-token') - reMintsBefore;
+    evidence.record('local-dev-recovery-reaches-re-mint-endpoint',
         ok: reMints >= 1,
         invariant: 'local_dev transient failures recover by re-minting through the real custom-token endpoint',
-        detail: '$reMints re-mint requests',
-      );
-      expect(
-        reMints,
-        greaterThanOrEqualTo(1),
-        reason: 'the scheduled local-dev recovery must call POST /v1/auth/local-dev/custom-token',
-      );
+        detail: '$reMints re-mint requests');
+    expect(reMints, greaterThanOrEqualTo(1),
+        reason: 'the scheduled local-dev recovery must call POST /v1/auth/local-dev/custom-token');
 
-      // Leg 2 — TERMINAL failure: the session expires explicitly, and further
-      // authenticated requests are blocked before send.
-      final expiryEvents = <AuthSessionExpiredEvent>[];
-      final sub = AuthService.instance.sessionExpiredEvents.listen(expiryEvents.add);
-      addTearDown(sub.cancel);
+    // Leg 2 — TERMINAL failure: the session expires explicitly, and further
+    // authenticated requests are blocked before send.
+    final expiryEvents = <AuthSessionExpiredEvent>[];
+    final sub = AuthService.instance.sessionExpiredEvents.listen(expiryEvents.add);
+    addTearDown(sub.cancel);
 
-      gateway.refreshOutcome = const AuthTokenTerminalFailure(code: 'user-token-expired');
-      final token = await tester.runAsync(() => AuthService.instance.getIdToken());
-      evidence.record(
-        'no-token-after-terminal-failure',
-        ok: token == null,
-        invariant: 'a terminal refresh failure yields no usable token',
-      );
-      expect(token, isNull);
+    gateway.refreshOutcome = const AuthTokenTerminalFailure(code: 'user-token-expired');
+    final token = await tester.runAsync(() => AuthService.instance.getIdToken());
+    evidence.record('no-token-after-terminal-failure',
+        ok: token == null, invariant: 'a terminal refresh failure yields no usable token');
+    expect(token, isNull);
 
-      evidence.record(
-        'session-expired-event-emitted',
+    evidence.record('session-expired-event-emitted',
         ok: expiryEvents.any((e) => e.reason == AuthSessionExpirationReason.terminalTokenFailure),
         invariant: 'the expired session surfaces as an explicit reauthentication signal',
-        detail: expiryEvents.map((e) => e.reason.name).toList(),
-      );
-      expect(
-        expiryEvents.any((e) => e.reason == AuthSessionExpirationReason.terminalTokenFailure),
-        isTrue,
-        reason: 'terminal token failure must emit the session-expired event',
-      );
+        detail: expiryEvents.map((e) => e.reason.name).toList());
+    expect(
+      expiryEvents.any((e) => e.reason == AuthSessionExpirationReason.terminalTokenFailure),
+      isTrue,
+      reason: 'terminal token failure must emit the session-expired event',
+    );
 
-      // Authenticated requests are blocked before any traffic leaves the app.
-      final blocked = await tester.runAsync(() => AuthService.instance.getIdToken());
-      evidence.record(
-        'subsequent-requests-blocked',
+    // Authenticated requests are blocked before any traffic leaves the app.
+    final blocked = await tester.runAsync(() => AuthService.instance.getIdToken());
+    evidence.record('subsequent-requests-blocked',
         ok: blocked == null && gateway.refreshCalls >= 1,
-        invariant: 'an expired session cannot silently authorize further requests',
-      );
-      expect(blocked, isNull);
+        invariant: 'an expired session cannot silently authorize further requests');
+    expect(blocked, isNull);
 
-      evidence.stateAfter = SemanticControls.instance.state().toJson();
-      expect(evidence.failed, 0);
-      await evidence.write();
-    },
-  );
+    evidence.stateAfter = SemanticControls.instance.state().toJson();
+    expect(evidence.failed, 0);
+    await evidence.write();
+  });
 
   test('negative: production-family profiles never run local-dev silent re-minting', () async {
     final evidence = JourneyEvidence.begin(journeyId: 'j4_expired_session_recovery.production-gate', lane: journeyLane);
@@ -122,11 +109,8 @@ void main() {
     // refresh. This journey-level negative pins that the expiry journey's
     // recovery leg is unattainable there.
     final recoveryUnattainable = prodProfile != AppEnvironmentProfile.localDev;
-    evidence.record(
-      'recovery-gate-closed-in-production',
-      ok: recoveryUnattainable,
-      invariant: 'production keeps a failed refresh a failed refresh (no silent re-auth)',
-    );
+    evidence.record('recovery-gate-closed-in-production',
+        ok: recoveryUnattainable, invariant: 'production keeps a failed refresh a failed refresh (no silent re-auth)');
     expect(recoveryUnattainable, isTrue);
     expect(evidence.failed, 0);
     evidence.stateAfter = {'profile': prodProfile.name};
@@ -135,7 +119,7 @@ void main() {
 }
 
 AuthUserSnapshot get gatewayUser => const AuthUserSnapshot(
-  uid: 'omi-fixture-v1-user-1',
-  email: 'omi-fixture-v1-user-1@local.test',
-  displayName: 'Journey Fixture',
-);
+      uid: 'omi-fixture-v1-user-1',
+      email: 'omi-fixture-v1-user-1@local.test',
+      displayName: 'Journey Fixture',
+    );

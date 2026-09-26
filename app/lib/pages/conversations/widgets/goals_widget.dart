@@ -384,9 +384,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                 height: 40,
                 margin: const EdgeInsets.only(right: 12),
                 decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-                child: Center(
-                  child: ExcludeSemantics(child: Text(emoji, style: OmiType.headline)),
-                ),
+                child: Center(child: ExcludeSemantics(child: Text(emoji, style: OmiType.headline))),
               ),
               // Content
               Expanded(

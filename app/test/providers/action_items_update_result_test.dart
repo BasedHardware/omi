@@ -13,9 +13,11 @@ Future<ActionItemsResponse?> _noItems({
   DateTime? endDate,
   DateTime? dueStartDate,
   DateTime? dueEndDate,
-}) async => const ActionItemsResponse(actionItems: [], hasMore: false);
+}) async =>
+    const ActionItemsResponse(actionItems: [], hasMore: false);
 
-ActionItemWithMetadata _item() => const ActionItemWithMetadata(id: 'task-1', description: 'Buy milk', completed: false);
+ActionItemWithMetadata _item() =>
+    const ActionItemWithMetadata(id: 'task-1', description: 'Buy milk', completed: false);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -42,28 +42,28 @@ enum MobileFeedbackReason {
 }
 
 String _mobileFeedbackKindValue(MobileFeedbackKind kind) => switch (kind) {
-  MobileFeedbackKind.summaryHelpfulness => 'summary_helpfulness',
-  MobileFeedbackKind.recordingQuality => 'recording_quality',
-};
+      MobileFeedbackKind.summaryHelpfulness => 'summary_helpfulness',
+      MobileFeedbackKind.recordingQuality => 'recording_quality',
+    };
 
 String _mobileFeedbackTargetKindValue(MobileFeedbackTargetKind kind) => switch (kind) {
-  MobileFeedbackTargetKind.conversation => 'conversation',
-  MobileFeedbackTargetKind.recording => 'recording',
-};
+      MobileFeedbackTargetKind.conversation => 'conversation',
+      MobileFeedbackTargetKind.recording => 'recording',
+    };
 
 String _mobileFeedbackReasonValue(MobileFeedbackReason reason) => switch (reason) {
-  MobileFeedbackReason.summaryInaccurate => 'summary_inaccurate',
-  MobileFeedbackReason.summaryIncomplete => 'summary_incomplete',
-  MobileFeedbackReason.summaryIrrelevant => 'summary_irrelevant',
-  MobileFeedbackReason.summaryWrongContext => 'summary_wrong_context',
-  MobileFeedbackReason.summaryOther => 'summary_other',
-  MobileFeedbackReason.recordingMissingAudio => 'recording_missing_audio',
-  MobileFeedbackReason.recordingPoorTranscription => 'recording_poor_transcription',
-  MobileFeedbackReason.recordingWrongSpeaker => 'recording_wrong_speaker',
-  MobileFeedbackReason.recordingDelayedOrStuck => 'recording_delayed_or_stuck',
-  MobileFeedbackReason.recordingFragmentedOrDuplicated => 'recording_fragmented_or_duplicated',
-  MobileFeedbackReason.recordingOther => 'recording_other',
-};
+      MobileFeedbackReason.summaryInaccurate => 'summary_inaccurate',
+      MobileFeedbackReason.summaryIncomplete => 'summary_incomplete',
+      MobileFeedbackReason.summaryIrrelevant => 'summary_irrelevant',
+      MobileFeedbackReason.summaryWrongContext => 'summary_wrong_context',
+      MobileFeedbackReason.summaryOther => 'summary_other',
+      MobileFeedbackReason.recordingMissingAudio => 'recording_missing_audio',
+      MobileFeedbackReason.recordingPoorTranscription => 'recording_poor_transcription',
+      MobileFeedbackReason.recordingWrongSpeaker => 'recording_wrong_speaker',
+      MobileFeedbackReason.recordingDelayedOrStuck => 'recording_delayed_or_stuck',
+      MobileFeedbackReason.recordingFragmentedOrDuplicated => 'recording_fragmented_or_duplicated',
+      MobileFeedbackReason.recordingOther => 'recording_other',
+    };
 
 /// Persist explicit, content-free mobile feedback through the idempotent
 /// feedback ledger. The caller can reuse [feedbackId] when retrying a 503.
@@ -77,7 +77,10 @@ class MobileFeedbackReceipt {
   /// Parses the server's durable-write receipt. A 201 alone is insufficient:
   /// callers may only complete the product journey after the ledger confirms
   /// persistence and returns its bounded event coordinate.
-  static MobileFeedbackReceipt? fromJson(Map<String, dynamic> payload, {required String expectedFeedbackId}) {
+  static MobileFeedbackReceipt? fromJson(
+    Map<String, dynamic> payload, {
+    required String expectedFeedbackId,
+  }) {
     try {
       // The generated model applies OpenAPI defaults for these fields. Keep
       // the receipt gate strict: both markers must be present on the wire so

@@ -18,15 +18,21 @@ class ChatPageContext {
   final String? startDate;
   final String? endDate;
 
-  const ChatPageContext({required this.type, this.id, this.title, this.startDate, this.endDate});
+  const ChatPageContext({
+    required this.type,
+    this.id,
+    this.title,
+    this.startDate,
+    this.endDate,
+  });
 
   Map<String, dynamic> toJson() => {
-    'type': type,
-    if (id != null) 'id': id,
-    if (title != null) 'title': title,
-    if (startDate != null) 'start_date': startDate,
-    if (endDate != null) 'end_date': endDate,
-  };
+        'type': type,
+        if (id != null) 'id': id,
+        if (title != null) 'title': title,
+        if (startDate != null) 'start_date': startDate,
+        if (endDate != null) 'end_date': endDate,
+      };
 
   ChatPageContext copyWith({
     String? type,

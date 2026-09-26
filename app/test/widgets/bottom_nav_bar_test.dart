@@ -103,7 +103,11 @@ void main() {
     const systemNavBarHeight = 48.0;
 
     final withoutInset = await _layoutForBottomInset(tester, viewPadding: 0, padding: 0);
-    final withInset = await _layoutForBottomInset(tester, viewPadding: systemNavBarHeight, padding: systemNavBarHeight);
+    final withInset = await _layoutForBottomInset(
+      tester,
+      viewPadding: systemNavBarHeight,
+      padding: systemNavBarHeight,
+    );
 
     final safeBottom = withInset.screenBottom - systemNavBarHeight;
     for (final entry in withInset.iconBottoms.entries) {
@@ -199,7 +203,11 @@ void main() {
     // viewPadding is set.
     const systemNavBarHeight = 48.0;
 
-    final keyboardOpen = await _layoutForBottomInset(tester, viewPadding: systemNavBarHeight, padding: 0);
+    final keyboardOpen = await _layoutForBottomInset(
+      tester,
+      viewPadding: systemNavBarHeight,
+      padding: 0,
+    );
 
     final safeBottom = keyboardOpen.screenBottom - systemNavBarHeight;
     for (final entry in keyboardOpen.iconBottoms.entries) {
@@ -223,7 +231,11 @@ final _tabIcons = <(String, FaIconData)>[
 /// where the tab icons landed relative to the bottom of the screen. The two are
 /// separate so a test can pin which inset the bar actually reads.
 Future<({double screenBottom, double barHeight, Map<String, double> iconBottoms, Map<String, Rect> tapTargets})>
-_layoutForBottomInset(WidgetTester tester, {required double viewPadding, required double padding}) async {
+    _layoutForBottomInset(
+  WidgetTester tester, {
+  required double viewPadding,
+  required double padding,
+}) async {
   final provider = HomeProvider();
   addTearDown(provider.dispose);
 
@@ -253,10 +265,11 @@ _layoutForBottomInset(WidgetTester tester, {required double viewPadding, require
 
   return (
     screenBottom: tester.getRect(find.byType(Scaffold)).bottom,
-    barHeight: tester
-        .getRect(find.descendant(of: find.byType(BottomNavBar), matching: find.byType(Container)).first)
-        .height,
-    iconBottoms: {for (final (label, icon) in _tabIcons) label: tester.getRect(_findIcon(icon)).bottom},
+    barHeight:
+        tester.getRect(find.descendant(of: find.byType(BottomNavBar), matching: find.byType(Container)).first).height,
+    iconBottoms: {
+      for (final (label, icon) in _tabIcons) label: tester.getRect(_findIcon(icon)).bottom,
+    },
     tapTargets: {
       for (final (label, icon) in _tabIcons)
         label: tester.getRect(find.ancestor(of: _findIcon(icon), matching: find.byType(InkWell)).first),

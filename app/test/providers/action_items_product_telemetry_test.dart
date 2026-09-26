@@ -21,17 +21,17 @@ void main() {
     ProductTelemetry.instance = ProductTelemetry(emit: events.add);
     final item = _item();
     final provider = ActionItemsProvider(
-      getActionItems:
-          ({
-            int limit = 50,
-            int offset = 0,
-            bool? completed,
-            String? conversationId,
-            DateTime? startDate,
-            DateTime? endDate,
-            DateTime? dueStartDate,
-            DateTime? dueEndDate,
-          }) async => const ActionItemsResponse(actionItems: []),
+      getActionItems: ({
+        int limit = 50,
+        int offset = 0,
+        bool? completed,
+        String? conversationId,
+        DateTime? startDate,
+        DateTime? endDate,
+        DateTime? dueStartDate,
+        DateTime? dueEndDate,
+      }) async =>
+          const ActionItemsResponse(actionItems: []),
       updateActionItemRequest: (id, {description, completed, dueAt}) async => item.copyWith(completed: completed),
     );
     addTearDown(provider.dispose);
@@ -51,17 +51,17 @@ void main() {
     final events = <RegisteredEvent>[];
     ProductTelemetry.instance = ProductTelemetry(emit: events.add);
     final provider = ActionItemsProvider(
-      getActionItems:
-          ({
-            int limit = 50,
-            int offset = 0,
-            bool? completed,
-            String? conversationId,
-            DateTime? startDate,
-            DateTime? endDate,
-            DateTime? dueStartDate,
-            DateTime? dueEndDate,
-          }) async => const ActionItemsResponse(actionItems: []),
+      getActionItems: ({
+        int limit = 50,
+        int offset = 0,
+        bool? completed,
+        String? conversationId,
+        DateTime? startDate,
+        DateTime? endDate,
+        DateTime? dueStartDate,
+        DateTime? dueEndDate,
+      }) async =>
+          const ActionItemsResponse(actionItems: []),
       updateActionItemRequest: (id, {description, completed, dueAt}) async => null,
     );
     addTearDown(provider.dispose);
@@ -73,4 +73,8 @@ void main() {
   });
 }
 
-ActionItemWithMetadata _item() => const ActionItemWithMetadata(id: 'task-1', description: 'Buy milk', completed: false);
+ActionItemWithMetadata _item() => const ActionItemWithMetadata(
+      id: 'task-1',
+      description: 'Buy milk',
+      completed: false,
+    );

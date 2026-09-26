@@ -22,8 +22,7 @@ class ActiveCallBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<PhoneCallProvider>(
       builder: (context, provider, _) {
-        bool isCallInProgress =
-            provider.callState == PhoneCallState.active ||
+        bool isCallInProgress = provider.callState == PhoneCallState.active ||
             provider.callState == PhoneCallState.connecting ||
             provider.callState == PhoneCallState.ringing;
 
@@ -306,10 +305,7 @@ class _CompactControlButton extends StatelessWidget {
               children: [
                 Icon(icon, color: foreground, size: 18),
                 const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: OmiType.caption.copyWith(color: foreground, fontWeight: FontWeight.w500),
-                ),
+                Text(label, style: OmiType.caption.copyWith(color: foreground, fontWeight: FontWeight.w500)),
               ],
             ),
           ),
@@ -328,8 +324,7 @@ class ActiveCallTopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Consumer<PhoneCallProvider>(
       builder: (context, provider, _) {
-        bool isCallInProgress =
-            provider.callState == PhoneCallState.active ||
+        bool isCallInProgress = provider.callState == PhoneCallState.active ||
             provider.callState == PhoneCallState.connecting ||
             provider.callState == PhoneCallState.ringing;
 

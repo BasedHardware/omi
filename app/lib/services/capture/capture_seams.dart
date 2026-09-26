@@ -61,31 +61,29 @@ class BleBridgeCaptureListeners implements CaptureBleListeners {
       BleBridge.instance.removeBatchRecordingFinalizedListener(callback);
 }
 
-typedef CaptureSocketOpen =
-    Future<TranscriptSegmentSocketService?> Function({
-      required BleAudioCodec codec,
-      required int sampleRate,
-      required String language,
-      required bool force,
-      String? source,
-      String? clientConversationId,
-      CustomSttConfig? customSttConfig,
-    });
+typedef CaptureSocketOpen = Future<TranscriptSegmentSocketService?> Function({
+  required BleAudioCodec codec,
+  required int sampleRate,
+  required String language,
+  required bool force,
+  String? source,
+  String? clientConversationId,
+  CustomSttConfig? customSttConfig,
+});
 
 /// Conversation socket open that includes the production geolocation header.
 /// Spine oracles still type [CaptureSocketOpen] without it; composition wraps
 /// that older callback and the explicit path always supplies geolocation here.
-typedef CaptureConversationSocketOpen =
-    Future<TranscriptSegmentSocketService?> Function({
-      required BleAudioCodec codec,
-      required int sampleRate,
-      required String language,
-      required bool force,
-      String? source,
-      String? clientConversationId,
-      CustomSttConfig? customSttConfig,
-      Geolocation? geolocation,
-    });
+typedef CaptureConversationSocketOpen = Future<TranscriptSegmentSocketService?> Function({
+  required BleAudioCodec codec,
+  required int sampleRate,
+  required String language,
+  required bool force,
+  String? source,
+  String? clientConversationId,
+  CustomSttConfig? customSttConfig,
+  Geolocation? geolocation,
+});
 
 /// Auth identity boundary for the capture pipeline.
 ///
@@ -119,9 +117,9 @@ class CaptureConnectivityBoundary {
     required bool initiallyConnected,
     required Stream<bool> changes,
     required bool Function() isConnected,
-  }) : _initiallyConnected = initiallyConnected,
-       _changes = changes,
-       _isConnected = isConnected;
+  })  : _initiallyConnected = initiallyConnected,
+        _changes = changes,
+        _isConnected = isConnected;
 
   final bool _initiallyConnected;
   final Stream<bool> _changes;
@@ -131,9 +129,9 @@ class CaptureConnectivityBoundary {
 
   /// The production boundary over the shared [ConnectivityService].
   CaptureConnectivityBoundary.production()
-    : _initiallyConnected = ConnectivityService().isConnected,
-      _changes = ConnectivityService().onConnectionChange,
-      _isConnected = _productionProbe;
+      : _initiallyConnected = ConnectivityService().isConnected,
+        _changes = ConnectivityService().onConnectionChange,
+        _isConnected = _productionProbe;
 
   static bool _productionProbe() => ConnectivityService().isConnected;
 

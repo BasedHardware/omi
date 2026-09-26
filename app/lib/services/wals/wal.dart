@@ -89,16 +89,16 @@ WalSyncDisplayState? worstSessionSyncState(Iterable<Wal> wals) {
 bool isRetryableSyncState(WalSyncDisplayState state) => state == WalSyncDisplayState.failed;
 
 int _syncOutcomeRank(WalSyncDisplayState state) => switch (state) {
-  WalSyncDisplayState.failed => 4,
-  WalSyncDisplayState.corrupted => 4,
-  WalSyncDisplayState.outsideRecoveryWindow => 4,
-  WalSyncDisplayState.unsupportedAudio => 4,
-  WalSyncDisplayState.retrying => 3,
-  WalSyncDisplayState.syncing => 2,
-  WalSyncDisplayState.uploaded => 1,
-  WalSyncDisplayState.synced => 1,
-  WalSyncDisplayState.waiting => 1,
-};
+      WalSyncDisplayState.failed => 4,
+      WalSyncDisplayState.corrupted => 4,
+      WalSyncDisplayState.outsideRecoveryWindow => 4,
+      WalSyncDisplayState.unsupportedAudio => 4,
+      WalSyncDisplayState.retrying => 3,
+      WalSyncDisplayState.syncing => 2,
+      WalSyncDisplayState.uploaded => 1,
+      WalSyncDisplayState.synced => 1,
+      WalSyncDisplayState.waiting => 1,
+    };
 
 /// Max automatic sync attempts before a recording is considered
 /// [WalSyncDisplayState.failed]. This is the budget itself, not a display
@@ -318,9 +318,8 @@ class Wal {
       fileNum: json['file_num'] ?? 1,
       totalFrames: json['total_frames'] ?? 0,
       syncedFrameOffset: json['synced_frame_offset'] ?? 0,
-      originalStorage: json['original_storage'] != null
-          ? WalStorage.values.asNameMap()[json['original_storage']]
-          : null,
+      originalStorage:
+          json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
       conversationId: json['conversation_id'],
       ownerUid: json['owner_uid'],
       geolocation: json['geolocation'] is Map<String, dynamic>

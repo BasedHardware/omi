@@ -440,7 +440,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                 SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.only(top: OmiSpacing.md),
-                    child: OnboardingProgressDots(current: kProgressSteps.indexOf(index), total: kProgressSteps.length),
+                    child: OnboardingProgressDots(
+                      current: kProgressSteps.indexOf(index),
+                      total: kProgressSteps.length,
+                    ),
                   ),
                 ),
               if (previous != null)

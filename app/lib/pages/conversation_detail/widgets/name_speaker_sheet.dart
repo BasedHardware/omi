@@ -22,13 +22,8 @@ Future<void> showNameSpeakerSheet(
   required String segmentId,
   required List<TranscriptSegment> segments,
   required Future<bool> Function(
-    int speakerId,
-    String personId,
-    String personName,
-    List<String> segmentIds,
-    bool applyToSpeaker,
-  )
-  onSpeakerAssigned,
+          int speakerId, String personId, String personName, List<String> segmentIds, bool applyToSpeaker)
+      onSpeakerAssigned,
   SpeakerLabelSuggestionEvent? suggestion,
   bool defaultApplyToSpeaker = false,
 }) {
@@ -50,13 +45,8 @@ class NameSpeakerBottomSheet extends StatefulWidget {
   final int speakerId;
   final String segmentId;
   final Future<bool> Function(
-    int speakerId,
-    String personId,
-    String personName,
-    List<String> segmentIds,
-    bool applyToSpeaker,
-  )
-  onSpeakerAssigned;
+          int speakerId, String personId, String personName, List<String> segmentIds, bool applyToSpeaker)
+      onSpeakerAssigned;
   final List<TranscriptSegment> segments;
   final SpeakerLabelSuggestionEvent? suggestion;
   final bool defaultApplyToSpeaker;
@@ -376,9 +366,8 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   }
 
   Widget _buildUntaggedSegments() {
-    final untaggedSegments = widget.segments
-        .where((s) => s.speakerId == widget.speakerId && s.id != widget.segmentId)
-        .toList();
+    final untaggedSegments =
+        widget.segments.where((s) => s.speakerId == widget.speakerId && s.id != widget.segmentId).toList();
     final selectedUntaggedSegmentsCount = untaggedSegments.where((s) => _selectedSegmentIds.contains(s.id)).length;
 
     return Column(
@@ -437,12 +426,15 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                   title: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(segment.text, maxLines: 2, overflow: TextOverflow.ellipsis, style: OmiType.caption),
-                      const SizedBox(height: 4),
                       Text(
-                        OmiDuration.offset(segment.start),
-                        style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                        segment.text,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: OmiType.caption,
                       ),
+                      const SizedBox(height: 4),
+                      Text(OmiDuration.offset(segment.start),
+                          style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
                     ],
                   ),
                   value: _selectedSegmentIds.contains(segment.id),

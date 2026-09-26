@@ -38,8 +38,10 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
     super.dispose();
   }
 
-  PhoneNumberInput get _parsed =>
-      parsePhoneNumberInput(raw: _phoneController.text, isoCode: _selectedCountry.codeAlpha2);
+  PhoneNumberInput get _parsed => parsePhoneNumberInput(
+        raw: _phoneController.text,
+        isoCode: _selectedCountry.codeAlpha2,
+      );
 
   bool get _isValid => _parsed.isValid;
 
@@ -78,14 +80,18 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
       if (provider.verificationStatus == 'verified') {
         await provider.loadVerifiedNumbers();
         if (!mounted) return;
-        Navigator.of(
-          context,
-        ).pushAndRemoveUntil(omiPageRoute(builder: (_) => const _AlreadyVerifiedRedirect()), (route) => route.isFirst);
+        Navigator.of(context).pushAndRemoveUntil(
+          omiPageRoute(builder: (_) => const _AlreadyVerifiedRedirect()),
+          (route) => route.isFirst,
+        );
         return;
       }
 
       setState(() => _isLoading = false);
-      routeToPage(context, PhoneSetupVerifyPage(phoneNumber: _fullNumber, validationCode: provider.validationCode));
+      routeToPage(
+        context,
+        PhoneSetupVerifyPage(phoneNumber: _fullNumber, validationCode: provider.validationCode),
+      );
     } else {
       setState(() {
         _isLoading = false;
@@ -270,7 +276,10 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          Text('+${c.telephoneCode}', style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
+                          Text(
+                            '+${c.telephoneCode}',
+                            style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
+                          ),
                           if (isSelected) ...[
                             const SizedBox(width: OmiSpacing.xs),
                             const Icon(Icons.check, color: OmiColors.textPrimary, size: 20),

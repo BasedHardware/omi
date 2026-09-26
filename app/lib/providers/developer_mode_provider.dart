@@ -43,20 +43,20 @@ class DeveloperModeProvider extends BaseProvider {
   }
 
   List<TextEditingController> get _webhookControllers => [
-    webhookOnConversationCreated,
-    webhookOnTranscriptReceived,
-    webhookAudioBytes,
-    webhookAudioBytesDelay,
-    webhookDaySummary,
-  ];
+        webhookOnConversationCreated,
+        webhookOnTranscriptReceived,
+        webhookAudioBytes,
+        webhookAudioBytesDelay,
+        webhookDaySummary,
+      ];
 
   Map<String, String> _webhookText() => {
-    'conversation': webhookOnConversationCreated.text,
-    'transcript': webhookOnTranscriptReceived.text,
-    'audio': webhookAudioBytes.text,
-    'audioDelay': webhookAudioBytesDelay.text,
-    'daySummary': webhookDaySummary.text,
-  };
+        'conversation': webhookOnConversationCreated.text,
+        'transcript': webhookOnTranscriptReceived.text,
+        'audio': webhookAudioBytes.text,
+        'audioDelay': webhookAudioBytesDelay.text,
+        'daySummary': webhookDaySummary.text,
+      };
 
   void _markWebhooksSaved() => _savedWebhookText = _webhookText();
 

@@ -17,8 +17,7 @@ import { cn } from '@/lib/utils';
 import { MemoriesPrefetcher } from '@/components/memories/MemoriesPrefetcher';
 
 const ChatBubble = dynamic(
-  () =>
-    import('@/components/chat/ChatBubble').then((mod) => ({ default: mod.ChatBubble })),
+  () => import('@/components/chat/ChatBubble').then((mod) => ({ default: mod.ChatBubble })),
   { ssr: false },
 );
 
@@ -105,14 +104,14 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
         <ChatAppRouter />
         {/* Prefetch memories in background for instant page load */}
         <MemoriesPrefetcher />
-        <div className="flex h-screen w-screen overflow-hidden bg-bg-primary">
+        <div className="h-screen w-screen bg-bg-primary flex overflow-hidden">
           {/* Sidebar */}
           <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
           {/* Main content area - flex row to support push/slide panels */}
-          <div className="flex h-full min-w-0 flex-1 overflow-hidden">
+          <div className="flex-1 flex min-w-0 h-full overflow-hidden">
             {/* Main content */}
-            <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden pb-16 lg:pb-0">
+            <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden pb-16 lg:pb-0">
               {/* Header - conditionally shown */}
               {!hideHeader && (
                 <header
@@ -126,7 +125,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
                   <MobileMenuButton onClick={() => setSidebarOpen(true)} />
 
                   {title && (
-                    <h1 className="font-display text-xl font-semibold text-text-primary">
+                    <h1 className="text-xl font-display font-semibold text-text-primary">
                       {title}
                     </h1>
                   )}
@@ -135,7 +134,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
 
               {/* Mobile menu button when header is hidden */}
               {hideHeader && (
-                <div className="absolute left-4 top-4 z-30 lg:hidden">
+                <div className="lg:hidden absolute top-4 left-4 z-30">
                   <MobileMenuButton onClick={() => setSidebarOpen(true)} />
                 </div>
               )}
@@ -144,7 +143,7 @@ export function MainLayout({ children, title, hideHeader = false }: MainLayoutPr
                   OmiSpacing.md (12) and rounds it to OmiChrome.windowRadius
                   (26), so the shell reads as a card floating over the window
                   rather than a full-bleed page. */}
-              <div className="min-h-0 flex-1 p-0 sm:p-3">
+              <div className="flex-1 min-h-0 p-0 sm:p-3">
                 <div
                   className={cn(
                     'h-full w-full overflow-hidden',

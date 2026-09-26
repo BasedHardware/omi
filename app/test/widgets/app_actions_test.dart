@@ -13,7 +13,12 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/widgets/app_actions.dart';
 import 'package:omi/providers/app_provider.dart';
 
-App _app({bool enabled = false, bool external = false, bool paid = false, List<AuthStep> authSteps = const []}) {
+App _app({
+  bool enabled = false,
+  bool external = false,
+  bool paid = false,
+  List<AuthStep> authSteps = const [],
+}) {
   return App(
     id: 'app-1',
     name: 'Notes Sync',
@@ -62,11 +67,7 @@ void main() {
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: const [Locale('en')],
-          home: Scaffold(
-            body: Center(
-              child: AppListActionButton(app: app, onOpen: () {}),
-            ),
-          ),
+          home: Scaffold(body: Center(child: AppListActionButton(app: app, onOpen: () {}))),
         ),
       ),
     );
@@ -88,13 +89,7 @@ void main() {
     expect(find.text('View'), findsOneWidget);
     expect(find.text('Install'), findsNothing);
 
-    await pump(
-      tester,
-      _app(
-        external: true,
-        authSteps: [AuthStep(name: 'Sign in', url: 'https://example.com')],
-      ),
-    );
+    await pump(tester, _app(external: true, authSteps: [AuthStep(name: 'Sign in', url: 'https://example.com')]));
     expect(find.text('View'), findsOneWidget);
     await tearDownProvider(tester);
   });

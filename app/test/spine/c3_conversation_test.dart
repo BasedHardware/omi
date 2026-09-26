@@ -16,10 +16,9 @@ import '../support/spine/widgets.dart';
 import 'c3_fixture.dart';
 
 ServerConversation seed(String id) => ServerConversation(
-  id: id,
-  createdAt: DateTime.utc(2026, 9, 17),
-  structured: Structured('Synthetic $id', 'Fixture overview', emoji: '', category: 'other'),
-);
+    id: id,
+    createdAt: DateTime.utc(2026, 9, 17),
+    structured: Structured('Synthetic $id', 'Fixture overview', emoji: '', category: 'other'));
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -34,13 +33,10 @@ void main() {
     expect(fixture.backend.countOf('GET', '/v1/conversations'), 1);
     expect(p.apiViewState.phase, ApiViewPhase.error);
     expect(p.isLoadingConversations, isFalse);
-    await tester.pumpWidget(
-      MaterialApp(
+    await tester.pumpWidget(MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: const [Locale('en')],
-        home: Scaffold(body: ConversationApiStatus(provider: p)),
-      ),
-    );
+        home: Scaffold(body: ConversationApiStatus(provider: p))));
     await tester.pump();
     expect(find.byKey(const ValueKey('omi.conversations.error')), findsOneWidget);
     expect(find.byKey(const ValueKey('omi.conversations.empty')), findsNothing);
@@ -84,7 +80,7 @@ void main() {
     fixture.backend.conversations.addAll([
       seed('first').toJson(),
       {'id': 42},
-      seed('last').toJson(),
+      seed('last').toJson()
     ]);
     final result = await ConversationApi(baseUrl: fixture.backend.baseUrl, send: fixture.send).list();
     final success = result as ApiSuccess<List<ServerConversation>>;
@@ -100,14 +96,13 @@ void main() {
     addTearDown(fixture!.close);
     var outage = true;
     final api = ConversationApi(
-      baseUrl: fixture.backend.baseUrl,
-      send: (request) async {
-        if (outage && request.method == 'GET' && Uri.parse(request.url).path == '/v1/conversations') {
-          fixture.backend.failNext('GET', '/v1/conversations', status: 503);
-        }
-        return fixture.send(request);
-      },
-    );
+        baseUrl: fixture.backend.baseUrl,
+        send: (request) async {
+          if (outage && request.method == 'GET' && Uri.parse(request.url).path == '/v1/conversations') {
+            fixture.backend.failNext('GET', '/v1/conversations', status: 503);
+          }
+          return fixture.send(request);
+        });
     final provider = composeTypedConversationProvider(api);
     expect(provider.runtimeType, ConversationProvider);
     addTearDown(provider.dispose);

@@ -315,26 +315,21 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                 ),
               ),
             ),
-            Wrap(
-              spacing: OmiSpacing.xs,
-              children: [
-                for (final days in [0, 1, 7])
-                  ActionChip(
-                    key: ValueKey('task_quick_date_$days'),
-                    label: Text(
-                      days == 0
-                          ? l10n.today
-                          : days == 1
+            Wrap(spacing: OmiSpacing.xs, children: [
+              for (final days in [0, 1, 7])
+                ActionChip(
+                  key: ValueKey('task_quick_date_$days'),
+                  label: Text(days == 0
+                      ? l10n.today
+                      : days == 1
                           ? l10n.tomorrow
-                          : l10n.nextWeek,
-                    ),
-                    onPressed: _isSaving ? null : () => _selectQuickDate(days),
-                    backgroundColor: OmiColors.surface2,
-                    labelStyle: OmiType.footnote,
-                    side: const BorderSide(color: OmiColors.border),
-                  ),
-              ],
-            ),
+                          : l10n.nextWeek),
+                  onPressed: _isSaving ? null : () => _selectQuickDate(days),
+                  backgroundColor: OmiColors.surface2,
+                  labelStyle: OmiType.footnote,
+                  side: const BorderSide(color: OmiColors.border),
+                ),
+            ]),
             Align(
               alignment: AlignmentDirectional.centerEnd,
               child: Text(
@@ -373,8 +368,8 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                     label: _saveFailed
                         ? l10n.tryAgain
                         : widget.isEditing
-                        ? l10n.save
-                        : l10n.addTask,
+                            ? l10n.save
+                            : l10n.addTask,
                   ),
                 ),
               ],
@@ -414,8 +409,8 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
         color: isSelected == true
             ? OmiColors.accent
             : isCurrentYear == true
-            ? OmiColors.surface3
-            : Colors.transparent,
+                ? OmiColors.surface3
+                : Colors.transparent,
         borderRadius: OmiRadius.smAll,
       ),
       child: Center(
@@ -426,8 +421,8 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
             color: isSelected == true
                 ? OmiColors.onAccent
                 : isDisabled == true
-                ? OmiColors.textDisabled
-                : OmiColors.textPrimary,
+                    ? OmiColors.textDisabled
+                    : OmiColors.textPrimary,
           ),
         ),
       ),
@@ -549,21 +544,20 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                   mainAxisAlignment: MainAxisAlignment.start,
                   children: [
                     CalendarDatePicker2(
-                      config:
-                          getDefaultCalendarConfig(
-                            firstDate: now,
-                            currentDate: now,
-                            lastDate: (widget.initialDateTime ?? now).add(const Duration(days: 365 * 5)),
-                            yearBuilder: yearBuilder,
-                          ).copyWith(
-                            // Neutral selection (INV-UI-1): white day, black numeral.
-                            selectedDayHighlightColor: OmiColors.accent,
-                            selectedDayTextStyle: OmiType.subhead.copyWith(
-                              color: OmiColors.onAccent,
-                              fontWeight: FontWeight.w600,
-                            ),
-                            todayTextStyle: OmiType.subhead.copyWith(fontWeight: FontWeight.w700),
-                          ),
+                      config: getDefaultCalendarConfig(
+                        firstDate: now,
+                        currentDate: now,
+                        lastDate: (widget.initialDateTime ?? now).add(const Duration(days: 365 * 5)),
+                        yearBuilder: yearBuilder,
+                      ).copyWith(
+                        // Neutral selection (INV-UI-1): white day, black numeral.
+                        selectedDayHighlightColor: OmiColors.accent,
+                        selectedDayTextStyle: OmiType.subhead.copyWith(
+                          color: OmiColors.onAccent,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        todayTextStyle: OmiType.subhead.copyWith(fontWeight: FontWeight.w700),
+                      ),
                       value: [_selectedDateTime],
                       onValueChanged: (dates) => setState(() {
                         _selectedDateTime = DateTime(

@@ -50,10 +50,10 @@ void main() {
 
     test('without a flag, only a hand-picked language counts as an override', () {
       bool overridden(String? language) => SttLanguage.isOverridden(
-        SttProvider.openai,
-        saved: CustomSttConfig(provider: SttProvider.openai, language: language),
-        primary: 'es',
-      );
+            SttProvider.openai,
+            saved: CustomSttConfig(provider: SttProvider.openai, language: language),
+            primary: 'es',
+          );
       expect(overridden(null), isFalse);
       expect(overridden('en'), isFalse, reason: 'the provider default');
       expect(overridden('es'), isFalse, reason: 'the primary language');

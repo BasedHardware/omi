@@ -42,11 +42,8 @@ void main() {
 
     expect(sent, ['hello', 'hello'], reason: 'Try Again resends the same user message');
     expect(provider.messages.where((m) => identical(m, failed)), isEmpty);
-    expect(
-      provider.messages.where((m) => m.sender == MessageSender.human),
-      hasLength(1),
-      reason: 'retrying does not duplicate the user bubble',
-    );
+    expect(provider.messages.where((m) => m.sender == MessageSender.human), hasLength(1),
+        reason: 'retrying does not duplicate the user bubble');
     final retried = provider.messages.last;
     expect(provider.isReplyFailed(retried), isFalse);
     expect(retried.text, 'All good.');

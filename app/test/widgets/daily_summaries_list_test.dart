@@ -20,20 +20,21 @@ Widget _wrap(Widget sliver) {
 }
 
 DailySummary _summary() => DailySummary(
-  id: 'summary-1',
-  date: '2026-09-20',
-  createdAt: DateTime.utc(2026, 9, 20, 12),
-  headline: 'A quiet day',
-  overview: 'Nothing much happened',
-  stats: DayStats(),
-);
+      id: 'summary-1',
+      date: '2026-09-20',
+      createdAt: DateTime.utc(2026, 9, 20, 12),
+      headline: 'A quiet day',
+      overview: 'Nothing much happened',
+      stats: DayStats(),
+    );
 
 void main() {
   testWidgets('a failed read does not claim the user has no recaps', (tester) async {
     await tester.pumpWidget(
       _wrap(
         DailySummariesList(
-          fetchSummaries: ({int limit = 30, int offset = 0}) async => (items: const <DailySummary>[], ok: false),
+          fetchSummaries: ({int limit = 30, int offset = 0}) async =>
+              (items: const <DailySummary>[], ok: false),
         ),
       ),
     );
@@ -47,7 +48,8 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         DailySummariesList(
-          fetchSummaries: ({int limit = 30, int offset = 0}) async => (items: const <DailySummary>[], ok: true),
+          fetchSummaries: ({int limit = 30, int offset = 0}) async =>
+              (items: const <DailySummary>[], ok: true),
         ),
       ),
     );
@@ -59,7 +61,9 @@ void main() {
   testWidgets('recaps that loaded are listed', (tester) async {
     await tester.pumpWidget(
       _wrap(
-        DailySummariesList(fetchSummaries: ({int limit = 30, int offset = 0}) async => (items: [_summary()], ok: true)),
+        DailySummariesList(
+          fetchSummaries: ({int limit = 30, int offset = 0}) async => (items: [_summary()], ok: true),
+        ),
       ),
     );
     await tester.pumpAndSettle();

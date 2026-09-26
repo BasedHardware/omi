@@ -329,8 +329,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       ),
       body: Consumer<UsageProvider>(
         builder: (context, provider, child) {
-          final hasAnyData =
-              provider.todayUsage != null ||
+          final hasAnyData = provider.todayUsage != null ||
               provider.monthlyUsage != null ||
               provider.yearlyUsage != null ||
               provider.allTimeUsage != null;
@@ -456,10 +455,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            context.l10n.managePlan,
-                            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                          ),
+                          Text(context.l10n.managePlan,
+                              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
                           const SizedBox(width: OmiSpacing.xxs),
                           const Icon(Icons.chevron_right, color: OmiColors.textSecondary, size: 20),
                         ],
@@ -473,7 +470,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
             const SizedBox(height: OmiSpacing.xxs),
             Text(context.l10n.basicPlanDescription, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
             const SizedBox(height: OmiSpacing.md),
-            OmiButton(label: context.l10n.upgrade, expand: true, onPressed: _showPlansSheet),
+            OmiButton(
+              label: context.l10n.upgrade,
+              expand: true,
+              onPressed: _showPlansSheet,
+            ),
           ],
         ],
       ),
@@ -1052,10 +1053,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     if (onFreePlan && icon == FontAwesomeIcons.microphone && subscription.transcriptionSecondsLimit > 0) {
       final minutesUsed = (subscription.transcriptionSecondsUsed / 60).round();
       final minutesLimit = (subscription.transcriptionSecondsLimit / 60).round();
-      final percentage = (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(
-        0.0,
-        1.0,
-      );
+      final percentage =
+          (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
       footer = _UsageMeter(
         text: l10n.minsUsedThisMonth(numberFormatter.format(minutesUsed), minutesLimit),
         percentage: percentage,
@@ -1067,12 +1066,12 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 after: ' ${l10n.forUnlimitedFreeTranscription}',
               )
             : percentage >= 0.8
-            ? _OnDeviceHint(
-                before: '${l10n.premiumMinsLeft(minutesLimit - minutesUsed)} ',
-                link: l10n.onDevice,
-                after: ' ${l10n.alwaysAvailable}',
-              )
-            : null,
+                ? _OnDeviceHint(
+                    before: '${l10n.premiumMinsLeft(minutesLimit - minutesUsed)} ',
+                    link: l10n.onDevice,
+                    after: ' ${l10n.alwaysAvailable}',
+                  )
+                : null,
       );
     } else if (onFreePlan && icon == FontAwesomeIcons.comments && subscription.wordsTranscribedLimit > 0) {
       final used = subscription.wordsTranscribedUsed;
@@ -1135,9 +1134,7 @@ class _UsageStatCard extends StatelessWidget {
             children: [
               ExcludeSemantics(child: FaIcon(icon, color: color, size: 16)),
               const SizedBox(width: OmiSpacing.xs),
-              Expanded(
-                child: Text(title, style: OmiType.callout.copyWith(fontWeight: FontWeight.w500)),
-              ),
+              Expanded(child: Text(title, style: OmiType.callout.copyWith(fontWeight: FontWeight.w500))),
             ],
           ),
           const SizedBox(height: OmiSpacing.xs),

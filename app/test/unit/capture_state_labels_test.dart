@@ -89,9 +89,7 @@ void main() {
   test('interrupted: the OS holding the mic, capture recovering, or a reader pause that wins', () {
     expect(captureInterruption(interrupted: true, readerPaused: false, osHoldsMic: true), CaptureInterruption.micTaken);
     expect(
-      captureInterruption(interrupted: true, readerPaused: false, osHoldsMic: false),
-      CaptureInterruption.recovering,
-    );
+        captureInterruption(interrupted: true, readerPaused: false, osHoldsMic: false), CaptureInterruption.recovering);
     expect(captureInterruption(interrupted: true, readerPaused: true, osHoldsMic: true), CaptureInterruption.none);
     expect(captureInterruption(interrupted: false, readerPaused: false, osHoldsMic: true), CaptureInterruption.none);
   });

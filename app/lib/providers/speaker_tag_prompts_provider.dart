@@ -38,28 +38,27 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     Future<ApiResult<bool>> Function(List<String>)? markShown,
     Future<ApiResult<void>> Function()? dismiss,
     Future<ApiResult<GeneratedSpeakerTagPromptAnswerResponse>> Function(GeneratedSpeakerTagPromptAnswerRequest)?
-    submitAnswer,
+        submitAnswer,
     Future<ApiResult<GeneratedVoiceProfileSettings>> Function()? fetchSettings,
     Future<ApiResult<GeneratedVoiceProfileSettings>> Function({
       bool? speakerTagPromptsEnabled,
       bool? saveOtherVoiceProfiles,
       required String source,
-    })?
-    updateSettings,
+    })? updateSettings,
     ClipLoader? loadClip,
     ClipPlayer? playClip,
     void Function(RegisteredEvent)? emit,
     DateTime Function()? now,
-  }) : _fetchPrompts = fetchPrompts ?? api.getSpeakerTagPrompts,
-       _markShown = markShown ?? api.markSpeakerTagPromptsShown,
-       _dismiss = dismiss ?? api.dismissSpeakerTagPrompts,
-       _submitAnswer = submitAnswer ?? api.answerSpeakerTagPrompt,
-       _fetchSettings = fetchSettings ?? api.getVoiceProfileSettings,
-       _updateSettings = updateSettings ?? api.updateVoiceProfileSettings,
-       _loadClip = loadClip ?? _defaultLoadClip,
-       _playClipOverride = playClip,
-       _emit = emit ?? const TypedEvents().emit,
-       _now = now ?? DateTime.now;
+  })  : _fetchPrompts = fetchPrompts ?? api.getSpeakerTagPrompts,
+        _markShown = markShown ?? api.markSpeakerTagPromptsShown,
+        _dismiss = dismiss ?? api.dismissSpeakerTagPrompts,
+        _submitAnswer = submitAnswer ?? api.answerSpeakerTagPrompt,
+        _fetchSettings = fetchSettings ?? api.getVoiceProfileSettings,
+        _updateSettings = updateSettings ?? api.updateVoiceProfileSettings,
+        _loadClip = loadClip ?? _defaultLoadClip,
+        _playClipOverride = playClip,
+        _emit = emit ?? const TypedEvents().emit,
+        _now = now ?? DateTime.now;
 
   static const Duration refetchInterval = Duration(minutes: 30);
 
@@ -67,14 +66,13 @@ class SpeakerTagPromptsProvider extends BaseProvider {
   final Future<ApiResult<bool>> Function(List<String>) _markShown;
   final Future<ApiResult<void>> Function() _dismiss;
   final Future<ApiResult<GeneratedSpeakerTagPromptAnswerResponse>> Function(GeneratedSpeakerTagPromptAnswerRequest)
-  _submitAnswer;
+      _submitAnswer;
   final Future<ApiResult<GeneratedVoiceProfileSettings>> Function() _fetchSettings;
   final Future<ApiResult<GeneratedVoiceProfileSettings>> Function({
     bool? speakerTagPromptsEnabled,
     bool? saveOtherVoiceProfiles,
     required String source,
-  })
-  _updateSettings;
+  }) _updateSettings;
   final ClipLoader _loadClip;
   final ClipPlayer? _playClipOverride;
   final void Function(RegisteredEvent) _emit;
@@ -310,9 +308,8 @@ class SpeakerTagPromptsProvider extends BaseProvider {
       VoiceProfileSettingToggled(
         setting: VoiceProfileSettingToggledSetting.saveOtherVoices,
         enabled: enabled,
-        source: fromFirstPrompt
-            ? VoiceProfileSettingToggledSource.firstPrompt
-            : VoiceProfileSettingToggledSource.settings,
+        source:
+            fromFirstPrompt ? VoiceProfileSettingToggledSource.firstPrompt : VoiceProfileSettingToggledSource.settings,
         succeeded: settings != null,
       ),
     );
@@ -428,29 +425,32 @@ class SpeakerTagPromptsProvider extends BaseProvider {
     }
   }
 
-  static Future<ApiResult<Uint8List>> _defaultLoadClip(GeneratedSpeakerTagPrompt prompt) =>
-      api.getSpeakerTagPromptClip(conversationId: prompt.conversationId, start: prompt.clipStart, end: prompt.clipEnd);
+  static Future<ApiResult<Uint8List>> _defaultLoadClip(GeneratedSpeakerTagPrompt prompt) => api.getSpeakerTagPromptClip(
+        conversationId: prompt.conversationId,
+        start: prompt.clipStart,
+        end: prompt.clipEnd,
+      );
 
   static SpeakerTagPromptClipPlayedKind _kind(String kind) => switch (kind) {
-    'owner_check' => SpeakerTagPromptClipPlayedKind.ownerCheck,
-    'confirm_person' => SpeakerTagPromptClipPlayedKind.confirmPerson,
-    'identify' => SpeakerTagPromptClipPlayedKind.identify,
-    _ => SpeakerTagPromptClipPlayedKind.unknown,
-  };
+        'owner_check' => SpeakerTagPromptClipPlayedKind.ownerCheck,
+        'confirm_person' => SpeakerTagPromptClipPlayedKind.confirmPerson,
+        'identify' => SpeakerTagPromptClipPlayedKind.identify,
+        _ => SpeakerTagPromptClipPlayedKind.unknown,
+      };
 
   static SpeakerTagPromptAnswerSubmittedKind _answerKind(String kind) => switch (kind) {
-    'owner_check' => SpeakerTagPromptAnswerSubmittedKind.ownerCheck,
-    'confirm_person' => SpeakerTagPromptAnswerSubmittedKind.confirmPerson,
-    'identify' => SpeakerTagPromptAnswerSubmittedKind.identify,
-    _ => SpeakerTagPromptAnswerSubmittedKind.unknown,
-  };
+        'owner_check' => SpeakerTagPromptAnswerSubmittedKind.ownerCheck,
+        'confirm_person' => SpeakerTagPromptAnswerSubmittedKind.confirmPerson,
+        'identify' => SpeakerTagPromptAnswerSubmittedKind.identify,
+        _ => SpeakerTagPromptAnswerSubmittedKind.unknown,
+      };
 
   static SpeakerTagPromptAnswerSubmittedAnswer _answer(SpeakerTagAnswer answer) => switch (answer) {
-    SpeakerTagAnswer.me => SpeakerTagPromptAnswerSubmittedAnswer.me,
-    SpeakerTagAnswer.notMe => SpeakerTagPromptAnswerSubmittedAnswer.notMe,
-    SpeakerTagAnswer.person => SpeakerTagPromptAnswerSubmittedAnswer.person,
-    SpeakerTagAnswer.newPerson => SpeakerTagPromptAnswerSubmittedAnswer.newPerson,
-    SpeakerTagAnswer.someoneElse => SpeakerTagPromptAnswerSubmittedAnswer.someoneElse,
-    SpeakerTagAnswer.skip => SpeakerTagPromptAnswerSubmittedAnswer.skip,
-  };
+        SpeakerTagAnswer.me => SpeakerTagPromptAnswerSubmittedAnswer.me,
+        SpeakerTagAnswer.notMe => SpeakerTagPromptAnswerSubmittedAnswer.notMe,
+        SpeakerTagAnswer.person => SpeakerTagPromptAnswerSubmittedAnswer.person,
+        SpeakerTagAnswer.newPerson => SpeakerTagPromptAnswerSubmittedAnswer.newPerson,
+        SpeakerTagAnswer.someoneElse => SpeakerTagPromptAnswerSubmittedAnswer.someoneElse,
+        SpeakerTagAnswer.skip => SpeakerTagPromptAnswerSubmittedAnswer.skip,
+      };
 }

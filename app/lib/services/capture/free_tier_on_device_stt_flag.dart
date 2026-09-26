@@ -10,7 +10,10 @@ class FreeTierOnDeviceSttFlag {
   static const environmentKey = 'OMI_FREE_TIER_ON_DEVICE_STT';
   static const prefsKey = 'freeTierOnDeviceStt';
 
-  static bool isEnabled({Map<String, String>? environment, bool? prefsOverride}) {
+  static bool isEnabled({
+    Map<String, String>? environment,
+    bool? prefsOverride,
+  }) {
     final env = environment ?? Platform.environment;
     if (isTruthy(env[environmentKey])) return true;
     if (prefsOverride != null) return prefsOverride;

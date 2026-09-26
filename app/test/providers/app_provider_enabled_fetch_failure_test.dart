@@ -16,19 +16,19 @@ class _UnreachableApiEnv implements EnvFields {
 }
 
 App _app({required bool enabled}) => App.fromJson({
-  'id': 'app_journal',
-  'name': 'Journal',
-  'author': 'Test Author',
-  'description': 'test',
-  'image': '',
-  'capabilities': ['memories'],
-  'status': 'approved',
-  'category': 'productivity',
-  'approved': true,
-  'private': false,
-  'enabled': enabled,
-  'deleted': false,
-});
+      'id': 'app_journal',
+      'name': 'Journal',
+      'author': 'Test Author',
+      'description': 'test',
+      'image': '',
+      'capabilities': ['memories'],
+      'status': 'approved',
+      'category': 'productivity',
+      'approved': true,
+      'private': false,
+      'enabled': enabled,
+      'deleted': false,
+    });
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -47,10 +47,10 @@ void main() {
     final provider = AppProvider();
     addTearDown(provider.dispose);
     provider.retrieveAppsGroupedOverride = () async => [
-      {
-        'data': [_app(enabled: false)],
-      },
-    ];
+          {
+            'data': [_app(enabled: false)],
+          },
+        ];
     provider.getEnabledAppsOverride = getEnabledAppsServer;
 
     await provider.getApps();

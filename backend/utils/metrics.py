@@ -110,6 +110,24 @@ OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL = Counter(
     'Live transcript segments by audio-timeline mapping outcome',
     ['mode', 'outcome'],
 )
+# Keep the established outcome metric stable for existing dashboards. This
+# companion metric exposes a fixed reason vocabulary for every rejected
+# provider interval, including clock-only sessions while the v2 flag is off.
+AUDIO_TIMELINE_REJECT_REASONS = (
+    'non_numeric',
+    'non_finite',
+    'zero_length',
+    'outside_accepted_sends',
+    'collapsed_interval',
+    'evicted_interval',
+    'callback_error',
+    'other',
+)
+OMI_AUDIO_TIMELINE_REJECTS_TOTAL = Counter(
+    'omi_audio_timeline_rejects_total',
+    'Provider epoch translation rejects by bounded reason',
+    ['mode', 'reason'],
+)
 OMI_AUDIO_TIMELINE_COVERAGE_TOTAL = Counter(
     'omi_audio_timeline_coverage_total',
     'Audio-linked coverage checks observed at bounded reconciliation points',
@@ -123,6 +141,8 @@ OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL = Counter(
     'v2 audio frames dropped because an already-accepted range holds different bytes',
 )
 for _mode in ('legacy', 'v2'):
+    for _reason in AUDIO_TIMELINE_REJECT_REASONS:
+        OMI_AUDIO_TIMELINE_REJECTS_TOTAL.labels(mode=_mode, reason=_reason)
     for _outcome in ('mapped', 'rejected', 'straddled', 'late_owner_dropped'):
         OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode=_mode, outcome=_outcome)
     for _outcome in ('covered', 'missing', 'pending_upload', 'no_audio', 'unsupported'):

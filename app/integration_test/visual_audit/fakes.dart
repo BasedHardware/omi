@@ -47,56 +47,56 @@ import 'package:omi/services/wals/wal.dart';
 /// A provider for every type a registered page reads, so any page pumps without a
 /// ProviderNotFoundException. A scenario seeds state by passing its own provider of the same type.
 List<SingleChildWidget> defaultAuditProviders() => [
-  ChangeNotifierProvider(create: (_) => MessageProvider()),
-  ChangeNotifierProvider(
-    create: (_) => ActionItemsProvider(
-      getActionItems:
-          ({limit = 100, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) async =>
-              const ActionItemsResponse(actionItems: []),
-      deleteActionItemRequest: (_) async => true,
-      updateActionItemRequest: (id, {description, completed, dueAt}) async => null,
-    ),
-  ),
-  ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
-  ChangeNotifierProvider(create: (_) => AppProvider()),
-  ChangeNotifierProvider(create: (_) => ConversationProvider(isSignedIn: () => true)),
-  ChangeNotifierProvider(create: (_) => HomeProvider()),
-  ChangeNotifierProvider(create: (_) => IntegrationProvider()),
-  ChangeNotifierProvider(create: (_) => FolderProvider()),
-  ChangeNotifierProvider(create: (_) => UsageProvider()),
-  ChangeNotifierProvider(create: (_) => VoiceRecorderProvider()),
-  ChangeNotifierProvider(
-    create: (_) => MemoriesProvider(
-      fetchMemoriesRequest: ({limit = 100, offset = 0, thisDeviceOnly = false}) async =>
-          const GetMemoriesResult([], true),
-    ),
-  ),
-  ChangeNotifierProvider(create: (_) => GoalsProvider()),
-  ChangeNotifierProvider<TaskIntegrationProvider>(create: (_) => LoadedTaskIntegrationProvider()),
-  ChangeNotifierProvider<DeviceProvider>(create: (_) => AuditDeviceProvider()),
-  ChangeNotifierProvider(create: (_) => CaptureProvider()),
-  ChangeNotifierProvider(create: (_) => UserProvider()),
-  ChangeNotifierProvider(create: (_) => LocaleProvider()),
-  ChangeNotifierProvider<PhoneCallProvider>(create: (_) => InertPhoneCallProvider()),
-  ChangeNotifierProvider<LocalRecordingsProvider>(create: (_) => InertLocalRecordingsProvider()),
-  ChangeNotifierProvider<SyncProvider>(create: (_) => InertSyncProvider()),
-  ChangeNotifierProvider(create: (_) => PeopleProvider(loadPeople: () async => const [])),
-  ChangeNotifierProvider(create: (_) => OnboardingProvider()),
-  ChangeNotifierProvider(create: (_) => McpProvider()),
-  ChangeNotifierProvider<PaymentMethodProvider>(create: (_) => InertPaymentMethodProvider()),
-  ChangeNotifierProvider(create: (_) => AuthenticationProvider(initializeListeners: false)),
-  ChangeNotifierProvider(create: (_) => SpeakerTagPromptsProvider()),
-];
+      ChangeNotifierProvider(create: (_) => MessageProvider()),
+      ChangeNotifierProvider(
+          create: (_) => ActionItemsProvider(
+                getActionItems: (
+                        {limit = 100,
+                        offset = 0,
+                        completed,
+                        conversationId,
+                        startDate,
+                        endDate,
+                        dueStartDate,
+                        dueEndDate}) async =>
+                    const ActionItemsResponse(actionItems: []),
+                deleteActionItemRequest: (_) async => true,
+                updateActionItemRequest: (id, {description, completed, dueAt}) async => null,
+              )),
+      ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
+      ChangeNotifierProvider(create: (_) => AppProvider()),
+      ChangeNotifierProvider(create: (_) => ConversationProvider(isSignedIn: () => true)),
+      ChangeNotifierProvider(create: (_) => HomeProvider()),
+      ChangeNotifierProvider(create: (_) => IntegrationProvider()),
+      ChangeNotifierProvider(create: (_) => FolderProvider()),
+      ChangeNotifierProvider(create: (_) => UsageProvider()),
+      ChangeNotifierProvider(create: (_) => VoiceRecorderProvider()),
+      ChangeNotifierProvider(
+          create: (_) => MemoriesProvider(
+                fetchMemoriesRequest: ({limit = 100, offset = 0, thisDeviceOnly = false}) async =>
+                    const GetMemoriesResult([], true),
+              )),
+      ChangeNotifierProvider(create: (_) => GoalsProvider()),
+      ChangeNotifierProvider<TaskIntegrationProvider>(create: (_) => LoadedTaskIntegrationProvider()),
+      ChangeNotifierProvider<DeviceProvider>(create: (_) => AuditDeviceProvider()),
+      ChangeNotifierProvider(create: (_) => CaptureProvider()),
+      ChangeNotifierProvider(create: (_) => UserProvider()),
+      ChangeNotifierProvider(create: (_) => LocaleProvider()),
+      ChangeNotifierProvider<PhoneCallProvider>(create: (_) => InertPhoneCallProvider()),
+      ChangeNotifierProvider<LocalRecordingsProvider>(create: (_) => InertLocalRecordingsProvider()),
+      ChangeNotifierProvider<SyncProvider>(create: (_) => InertSyncProvider()),
+      ChangeNotifierProvider(create: (_) => PeopleProvider(loadPeople: () async => const [])),
+      ChangeNotifierProvider(create: (_) => OnboardingProvider()),
+      ChangeNotifierProvider(create: (_) => McpProvider()),
+      ChangeNotifierProvider<PaymentMethodProvider>(create: (_) => InertPaymentMethodProvider()),
+      ChangeNotifierProvider(create: (_) => AuthenticationProvider(initializeListeners: false)),
+      ChangeNotifierProvider(create: (_) => SpeakerTagPromptsProvider()),
+    ];
 
 /// A device provider with no BLE behind it.
 class AuditDeviceProvider extends ChangeNotifier implements DeviceProvider {
-  AuditDeviceProvider({
-    this.connected = false,
-    this.battery = 0,
-    this.charging = false,
-    this.newFirmware = false,
-    this.device,
-  });
+  AuditDeviceProvider(
+      {this.connected = false, this.battery = 0, this.charging = false, this.newFirmware = false, this.device});
   final bool connected;
   final int battery;
   final bool charging;
@@ -196,7 +196,7 @@ class LoadedTaskIntegrationProvider extends TaskIntegrationProvider {
 /// AddAppProvider's catalog calls have no injectable fetcher; keep its default empty catalog.
 class InertAddAppProvider extends AddAppProvider {
   InertAddAppProvider()
-    : super(listApiKeysServerFn: (_) async => const [], deleteApiKeyServerFn: (_, __) async => true);
+      : super(listApiKeysServerFn: (_) async => const [], deleteApiKeyServerFn: (_, __) async => true);
   @override
   Future<void> getCategories() async {
     // mapCategoryIdToName() has no orElse; an empty list throws as soon as a category is shown.
@@ -230,12 +230,8 @@ ServerConversation auditConversation(
   return ServerConversation(
     id: id,
     createdAt: DateTime(2026, 9, 20, 10),
-    structured: Structured(
-      title,
-      'We agreed to simplify the recording flow and ship the revised notes Friday.',
-      emoji: '\u{1F4AC}',
-      category: 'work',
-    ),
+    structured: Structured(title, 'We agreed to simplify the recording flow and ship the revised notes Friday.',
+        emoji: '\u{1F4AC}', category: 'work'),
     status: ConversationStatus.completed,
     discarded: discarded,
     transcriptSegments: segments,
@@ -253,9 +249,7 @@ Future<void> primeNetworkImages(WidgetTester tester, Iterable<String> urls) asyn
     return recorder.endRecording().toImage(8, 8);
   });
   for (final url in urls) {
-    PaintingBinding.instance.imageCache.putIfAbsent(
-      CachedNetworkImageProvider(url),
-      () => OneFrameImageStreamCompleter(SynchronousFuture(ImageInfo(image: tile!.clone()))),
-    );
+    PaintingBinding.instance.imageCache.putIfAbsent(CachedNetworkImageProvider(url),
+        () => OneFrameImageStreamCompleter(SynchronousFuture(ImageInfo(image: tile!.clone()))));
   }
 }

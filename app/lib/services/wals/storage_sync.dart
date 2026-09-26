@@ -589,9 +589,8 @@ class StorageSyncImpl implements StorageSync {
     var chunkSize = sdcardChunkSizeSecs * wal.codec.getFramesPerSecond();
     int totalFrames = bytesData.length;
     int accurateDuration = totalFrames ~/ wal.codec.getFramesPerSecond();
-    int timerStart = wal.timerStart > 0
-        ? wal.timerStart
-        : DateTime.now().millisecondsSinceEpoch ~/ 1000 - accurateDuration;
+    int timerStart =
+        wal.timerStart > 0 ? wal.timerStart : DateTime.now().millisecondsSinceEpoch ~/ 1000 - accurateDuration;
     int bytesLeft = 0;
 
     while (bytesData.length - bytesLeft >= chunkSize) {
@@ -642,12 +641,7 @@ class StorageSyncImpl implements StorageSync {
 
   /// Register a downloaded chunk with LocalWalSync so it gets uploaded to backend.
   Future<void> _registerWithLocalSync(
-    Wal wal,
-    File file,
-    int timerStart,
-    int frameCount,
-    int admittedGeneration,
-  ) async {
+      Wal wal, File file, int timerStart, int frameCount, int admittedGeneration) async {
     if (_localSync == null) {
       Logger.debug("StorageSync: WARNING - Cannot register file, LocalWalSync not available");
       return;

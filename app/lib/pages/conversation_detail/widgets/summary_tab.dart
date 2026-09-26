@@ -26,13 +26,12 @@ class SummaryTab extends StatefulWidget {
   final int currentResultIndex;
   final VoidCallback? onTapWhenSearchEmpty;
 
-  const SummaryTab({
-    super.key,
-    this.reviewEnabled = false,
-    this.searchQuery = '',
-    this.currentResultIndex = -1,
-    this.onTapWhenSearchEmpty,
-  });
+  const SummaryTab(
+      {super.key,
+      this.reviewEnabled = false,
+      this.searchQuery = '',
+      this.currentResultIndex = -1,
+      this.onTapWhenSearchEmpty});
 
   @override
   State<SummaryTab> createState() => _SummaryTabState();
@@ -66,8 +65,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
           // sections population until that wire is available.
           final hasSummaryFeedback =
               !discarded && !summarySelection.isApp && summarySelection.content.trim().isNotEmpty;
-          final hasRecordingFeedback =
-              !discarded &&
+          final hasRecordingFeedback = !discarded &&
               conversation != null &&
               conversation.status == ConversationStatus.completed &&
               conversation.audioFiles.isNotEmpty;
@@ -81,8 +79,7 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
           return AppReviewPrompt(
             contentId: conversation?.id ?? '',
             moment: AppReviewMoment.conversationRead,
-            enabled:
-                widget.reviewEnabled &&
+            enabled: widget.reviewEnabled &&
                 !_isEditing &&
                 !provider.isLoading &&
                 !provider.loadingReprocessConversation &&
@@ -120,9 +117,9 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                             onSaveSummarySelection: (selection, newContent) {
                               PlatformManager.instance.analytics.editSummarySaved();
                               context.read<ConversationDetailProvider>().saveEditingSummarySelection(
-                                selection,
-                                newContent,
-                              );
+                                    selection,
+                                    newContent,
+                                  );
                             },
                           ),
                     if (feedbackKind == FeedbackPromptKind.summary)

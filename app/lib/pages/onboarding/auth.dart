@@ -72,7 +72,11 @@ class _AuthComponentState extends State<AuthComponent> {
                         const SizedBox(width: 8),
                         Text(
                           context.l10n.signInWithApple,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Manrope',
+                          ),
                         ),
                       ],
                     ),
@@ -143,7 +147,11 @@ class _AuthComponentState extends State<AuthComponent> {
               RichText(
                 textAlign: TextAlign.center,
                 text: TextSpan(
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 11, fontFamily: 'Manrope'),
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.6),
+                    fontSize: 11,
+                    fontFamily: 'Manrope',
+                  ),
                   children: [
                     TextSpan(text: context.l10n.byContinuingAgree),
                     TextSpan(

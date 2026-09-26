@@ -55,25 +55,25 @@ class _FakeConnection implements DeviceConnection {
 final _device = BtDevice(id: 'omi-1', name: 'Omi', type: DeviceType.omi, rssi: -40);
 
 Wal _ringWal() => Wal(
-  timerStart: 2000,
-  codec: BleAudioCodec.opus,
-  seconds: 60,
-  status: WalStatus.miss,
-  storage: WalStorage.sdcard,
-  device: 'omi-1',
-  fileNum: -1,
-);
+      timerStart: 2000,
+      codec: BleAudioCodec.opus,
+      seconds: 60,
+      status: WalStatus.miss,
+      storage: WalStorage.sdcard,
+      device: 'omi-1',
+      fileNum: -1,
+    );
 
 Wal _sdWal({int timerStart = 3000, int fileNum = 1, String device = 'omi-1'}) => Wal(
-  timerStart: timerStart,
-  codec: BleAudioCodec.opus,
-  seconds: 60,
-  status: WalStatus.miss,
-  storage: WalStorage.sdcard,
-  device: device,
-  fileNum: fileNum,
-  storageTotalBytes: 800000,
-);
+      timerStart: timerStart,
+      codec: BleAudioCodec.opus,
+      seconds: 60,
+      status: WalStatus.miss,
+      storage: WalStorage.sdcard,
+      device: device,
+      fileNum: fileNum,
+      storageTotalBytes: 800000,
+    );
 
 void main() {
   group('RingStorageSyncImpl durable delete', () {

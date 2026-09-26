@@ -69,9 +69,8 @@ class OfflineProcessingDisplay {
     }
 
     final total = trackedUploadedWalIds.length;
-    final stillWaiting = wals
-        .where((w) => trackedUploadedWalIds.contains(w.id) && w.status == WalStatus.uploaded)
-        .length;
+    final stillWaiting =
+        wals.where((w) => trackedUploadedWalIds.contains(w.id) && w.status == WalStatus.uploaded).length;
     final processed = (total - stillWaiting).clamp(0, total);
     return (processed: processed, total: total);
   }

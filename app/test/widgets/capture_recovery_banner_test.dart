@@ -49,12 +49,7 @@ void main() {
           GlobalCupertinoLocalizations.delegate,
         ],
         supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(
-          body: TickerMode(
-            enabled: tickerEnabled,
-            child: CaptureRecoveryBanner(monitor: monitor),
-          ),
-        ),
+        home: Scaffold(body: TickerMode(enabled: tickerEnabled, child: CaptureRecoveryBanner(monitor: monitor))),
       ),
     );
     await tester.pump();

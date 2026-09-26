@@ -13,11 +13,8 @@ void main() {
     attempt.firstResult();
     attempt.complete(ProductOutcome.empty, resultCount: 0);
     attempt.complete(ProductOutcome.failure, failure: ProductFailure.server);
-    expect(events.map((e) => e.wireName), [
-      'Product Journey Started',
-      'Product Journey First Result',
-      'Product Journey Outcome',
-    ]);
+    expect(events.map((e) => e.wireName),
+        ['Product Journey Started', 'Product Journey First Result', 'Product Journey Outcome']);
     expect(events.map((e) => e.properties['correlation_id']).toSet(), {attempt.correlationId});
     expect(events.last.properties['outcome'], 'empty');
     expect(events.last.properties['duration_ms'], 250);
@@ -49,16 +46,10 @@ void main() {
     expect(RecordReference.fromId('https://example.com'), isNull);
     expect(RecordReference.fromId(''), isNull);
     final events = <RegisteredEvent>[];
-    ProductTelemetry(emit: events.add).value(
-      ProductValue.resultViewed,
-      objectId: RecordReference.fromId('conversation_123'),
-      surface: ProductSurface.conversationDetail,
-    );
-    expect(events.single.properties, {
-      'kind': 'result_viewed',
-      'surface': 'conversation_detail',
-      'object_id': 'conversation_123',
-    });
+    ProductTelemetry(emit: events.add).value(ProductValue.resultViewed,
+        objectId: RecordReference.fromId('conversation_123'), surface: ProductSurface.conversationDetail);
+    expect(events.single.properties,
+        {'kind': 'result_viewed', 'surface': 'conversation_detail', 'object_id': 'conversation_123'});
   });
 
   test('telemetry failure cannot break an operation', () {

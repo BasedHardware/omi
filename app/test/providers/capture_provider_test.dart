@@ -151,7 +151,8 @@ class _NullSocketCaptureProvider extends CaptureProvider {
     String? clientConversationId,
     CustomSttConfig? customSttConfig,
     Geolocation? geolocation,
-  }) async => null;
+  }) async =>
+      null;
 }
 
 class _CountingSocketCaptureProvider extends CaptureProvider {
@@ -248,7 +249,7 @@ class _FakeBatchMicRecorder implements IMicRecorderService {
 
 class _IdentifiedSocketService extends TranscriptSegmentSocketService {
   _IdentifiedSocketService(this.id, this.onSubscribed)
-    : super.withSocket(16000, BleAudioCodec.pcm16, 'en', _TrackingSocket());
+      : super.withSocket(16000, BleAudioCodec.pcm16, 'en', _TrackingSocket());
 
   final int id;
   final void Function(int id) onSubscribed;
@@ -356,10 +357,9 @@ void main() {
       'transcript_segments': [_segment('a', 'one').toJson(), _segment('b', 'two').toJson()],
     });
     final provider = CaptureProvider(
-      externalActions: actions,
-      inProgressConversationLoader: () async {},
-      conversationLocationCapture: _CountingConversationLocationCapture(),
-    );
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
     provider.applyInProgressConversation(conversation);
     provider.onSegmentReceived([_segment('a', 'one')]);
     await Future<void>.delayed(Duration.zero);
@@ -393,10 +393,9 @@ void main() {
       'transcript_segments': [_segment('a', 'one').toJson()],
     });
     final provider = CaptureProvider(
-      externalActions: actions,
-      inProgressConversationLoader: () async {},
-      conversationLocationCapture: _CountingConversationLocationCapture(),
-    );
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
     provider.applyInProgressConversation(conversation);
     provider.onSegmentReceived([_segment('a', 'one')]);
     await Future<void>.delayed(Duration.zero);
@@ -418,7 +417,7 @@ void main() {
       'speaker_id': 0,
       'person_id': '',
       'person_name': 'Alex',
-      'segment_id': 'candidate',
+      'segment_id': 'candidate'
     };
     provider.onMessageEventReceived(MessageEvent.fromJson(payload));
     expect(provider.suggestionsBySegmentId['candidate']?.personName, 'Alex');
@@ -431,7 +430,7 @@ void main() {
       {...payload, 'person_name': false},
       {...payload, 'segment_id': []},
       {...payload, 'segment_id': 'old-conversation'},
-      {...payload, 'speaker_id': 9},
+      {...payload, 'speaker_id': 9}
     ]) {
       provider.onMessageEventReceived(MessageEvent.fromJson(invalid));
     }
@@ -488,9 +487,9 @@ void main() {
     final provider = CaptureProvider(conversationLocationCapture: locationCapture);
 
     await provider.streamDeviceRecording().timeout(
-      const Duration(seconds: 2),
-      onTimeout: () => fail('streamDeviceRecording blocked on location capture'),
-    );
+          const Duration(seconds: 2),
+          onTimeout: () => fail('streamDeviceRecording blocked on location capture'),
+        );
     expect(locationCapture.calls, 1);
     locationCapture.complete();
     provider.dispose();
@@ -507,9 +506,9 @@ void main() {
     );
 
     await provider.startPhoneMicBatchForTesting().timeout(
-      const Duration(seconds: 2),
-      onTimeout: () => fail('phone batch start blocked on location capture'),
-    );
+          const Duration(seconds: 2),
+          onTimeout: () => fail('phone batch start blocked on location capture'),
+        );
 
     expect(micRecorder.startBatchCalls, 1);
     expect(provider.recordingState, RecordingState.record);
@@ -1139,17 +1138,17 @@ void main() {
       final provider = CaptureProvider(
         phoneMicRecorder: mic,
         microphonePermissionRequester: () async => true,
-        openSocket:
-            ({
-              required codec,
-              required sampleRate,
-              required language,
-              required force,
-              source,
-              clientConversationId,
-              customSttConfig,
-              geolocation,
-            }) async => null,
+        openSocket: ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+          geolocation,
+        }) async =>
+            null,
       );
       addTearDown(provider.dispose);
       provider.onConnectionStateChanged(true);
@@ -1713,11 +1712,12 @@ void main() {
       _GatedSocketCaptureProvider provider, {
       BleAudioCodec codec = BleAudioCodec.pcm16,
       int sampleRate = 16000,
-    }) => provider.changeAudioRecordProfile(
-      audioCodec: codec,
-      sampleRate: sampleRate,
-      source: ConversationSource.phone.name,
-    );
+    }) =>
+        provider.changeAudioRecordProfile(
+          audioCodec: codec,
+          sampleRate: sampleRate,
+          source: ConversationSource.phone.name,
+        );
 
     test('drops a reconnect attempt while one is still in flight', () async {
       final provider = _GatedSocketCaptureProvider();
@@ -1870,11 +1870,9 @@ void main() {
     test('the cycle self-terminates at its cap when nothing interrupts it', () {
       fakeAsync((async) {
         var loadCalls = 0;
-        final provider = CaptureProvider(
-          inProgressConversationLoader: () async {
-            loadCalls++;
-          },
-        );
+        final provider = CaptureProvider(inProgressConversationLoader: () async {
+          loadCalls++;
+        });
         provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
         provider.updateRecordingState(RecordingState.deviceRecord);
 

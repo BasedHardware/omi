@@ -178,18 +178,10 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
             OmiSettingsGroup(
               children: [
                 _buildPermissionRow(
-                  l10n.conversations,
-                  'conversations:read',
-                  'conversations:write',
-                  Icons.chat_bubble_outline,
-                ),
+                    l10n.conversations, 'conversations:read', 'conversations:write', Icons.chat_bubble_outline),
                 _buildPermissionRow(l10n.memories, 'memories:read', 'memories:write', Icons.psychology_outlined),
                 _buildPermissionRow(
-                  l10n.actionItems,
-                  'action_items:read',
-                  'action_items:write',
-                  Icons.task_alt_outlined,
-                ),
+                    l10n.actionItems, 'action_items:read', 'action_items:write', Icons.task_alt_outlined),
                 _buildPermissionRow(l10n.goals, 'goals:read', 'goals:write', Icons.flag_outlined),
               ],
             ),
@@ -201,10 +193,8 @@ class _CreateDevApiKeySheetState extends State<CreateDevApiKeySheet> {
                 const Icon(Icons.info_outline, color: OmiColors.textTertiary, size: 16),
                 const SizedBox(width: OmiSpacing.xs),
                 Expanded(
-                  child: Text(
-                    l10n.permissionsInfoNote,
-                    style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                  ),
+                  child:
+                      Text(l10n.permissionsInfoNote, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
                 ),
               ],
             ),

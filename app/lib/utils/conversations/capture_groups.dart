@@ -99,15 +99,13 @@ abstract final class CaptureGroupPresentation {
     ];
     // A membership that has not caught up with this conversation still lists it.
     if (!seen.contains(conversation.id)) {
-      recordings.add(
-        CaptureRecording(
-          id: conversation.id,
-          source: conversation.source?.name,
-          startedAt: conversation.startedAt,
-          finishedAt: conversation.finishedAt,
-          isCurrent: true,
-        ),
-      );
+      recordings.add(CaptureRecording(
+        id: conversation.id,
+        source: conversation.source?.name,
+        startedAt: conversation.startedAt,
+        finishedAt: conversation.finishedAt,
+        isCurrent: true,
+      ));
     }
     if (recordings.length < 2) return const [];
     recordings.sort((a, b) {

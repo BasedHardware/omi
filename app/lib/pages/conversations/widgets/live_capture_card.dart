@@ -94,8 +94,8 @@ class LiveCaptureCard extends StatelessWidget {
     final sourceName = isCall
         ? l10n.captureSourceCall
         : source == 'phone'
-        ? l10n.phone
-        : CaptureSources.label(context, source);
+            ? l10n.phone
+            : CaptureSources.label(context, source);
     final secondary = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
     final problem = explanation != null;
 
@@ -111,38 +111,31 @@ class LiveCaptureCard extends StatelessWidget {
       ),
     );
 
-    final line2 = [if (elapsed != null) formatElapsed(elapsed!), if (detail != null) detail!].join('  ·  ');
-    Widget text = Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            if (problem) ...[
-              const ExcludeSemantics(child: Icon(Icons.warning_amber_rounded, size: 18, color: OmiColors.warning)),
-              const SizedBox(width: OmiSpacing.xxs),
-            ],
-            // The short status always fits in English; a longer translation gives up its tail only.
-            Flexible(
-              child: Text(
-                status,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
+    final line2 = [
+      if (elapsed != null) formatElapsed(elapsed!),
+      if (detail != null) detail!,
+    ].join('  ·  ');
+    Widget text = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        if (problem) ...[
+          const ExcludeSemantics(child: Icon(Icons.warning_amber_rounded, size: 18, color: OmiColors.warning)),
+          const SizedBox(width: OmiSpacing.xxs),
+        ],
+        // The short status always fits in English; a longer translation gives up its tail only.
+        Flexible(
+          child: Text(status,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
         ),
-        if (line2.isNotEmpty)
-          // The consequence wraps rather than losing its meaning at large text sizes.
-          Text(
-            line2,
+      ]),
+      if (line2.isNotEmpty)
+        // The consequence wraps rather than losing its meaning at large text sizes.
+        Text(line2,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: secondary.copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
-          ),
-      ],
-    );
+            style: secondary.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+    ]);
     if (problem) {
       text = Semantics(
         button: true,
@@ -150,56 +143,43 @@ class LiveCaptureCard extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: () => showDetails(context, title: status, explanation: explanation!),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
-            child: text,
-          ),
+          child: ConstrainedBox(constraints: const BoxConstraints(minHeight: kOmiMinTapTarget), child: text),
         ),
       );
     }
 
-    final statusRow = Row(
-      children: [
-        leading,
-        const SizedBox(width: OmiSpacing.xs),
-        Expanded(child: text),
-        if (isCall)
-          const SizedBox(
-            width: kOmiMinTapTarget,
-            child: Icon(Icons.chevron_right_rounded, size: 22, color: OmiColors.textTertiary),
-          )
-        else if (onPauseToggle != null)
-          OmiIconButton.filled(
-            icon: Icon(paused ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 22),
-            label: paused ? l10n.resume : l10n.pause,
-            diameter: 36,
-            fillColor: OmiColors.surface3,
-            onPressed: onPauseToggle,
-          ),
+    final statusRow = Row(children: [
+      leading,
+      const SizedBox(width: OmiSpacing.xs),
+      Expanded(child: text),
+      if (isCall)
+        const SizedBox(
+          width: kOmiMinTapTarget,
+          child: Icon(Icons.chevron_right_rounded, size: 22, color: OmiColors.textTertiary),
+        )
+      else if (onPauseToggle != null)
+        OmiIconButton.filled(
+          icon: Icon(paused ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 22),
+          label: paused ? l10n.resume : l10n.pause,
+          diameter: 36,
+          fillColor: OmiColors.surface3,
+          onPressed: onPauseToggle,
+        ),
+    ]);
+    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+      statusRow,
+      if (lastLine != null && lastLine!.trim().isNotEmpty) ...[
+        const SizedBox(height: OmiSpacing.sm),
+        Text('… ${lastLine!.trim()}', maxLines: 1, overflow: TextOverflow.ellipsis, style: secondary),
       ],
-    );
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        statusRow,
-        if (lastLine != null && lastLine!.trim().isNotEmpty) ...[
-          const SizedBox(height: OmiSpacing.sm),
-          Text('… ${lastLine!.trim()}', maxLines: 1, overflow: TextOverflow.ellipsis, style: secondary),
-        ],
-        if (note != null) ...[
-          const SizedBox(height: OmiSpacing.sm),
-          Row(
-            children: [
-              Icon(CaptureSources.icon('omi'), size: 14, color: OmiColors.textTertiary),
-              const SizedBox(width: OmiSpacing.xs),
-              Flexible(
-                child: Text(note!, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
-              ),
-            ],
-          ),
-        ],
+      if (note != null) ...[
+        const SizedBox(height: OmiSpacing.sm),
+        Row(children: [
+          Icon(CaptureSources.icon('omi'), size: 14, color: OmiColors.textTertiary),
+          const SizedBox(width: OmiSpacing.xs),
+          Flexible(child: Text(note!, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary))),
+        ]),
       ],
-    );
+    ]);
   }
 }

@@ -11,13 +11,13 @@ class ApiFallbackEvent {
   final ApiFallbackReason reason;
   final ApiFallbackOutcome outcome;
   Map<String, String> toFields() => {
-    'component': 'other',
-    'area': 'other',
-    'from': 'none',
-    'to': 'none',
-    'reason': 'other',
-    'outcome': outcome.name,
-  };
+        'component': 'other',
+        'area': 'other',
+        'from': 'none',
+        'to': 'none',
+        'reason': 'other',
+        'outcome': outcome.name,
+      };
 }
 
 /// Default sink is AnalyticsManager's existing track method; injected sink is

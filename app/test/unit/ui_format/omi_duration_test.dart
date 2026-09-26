@@ -67,12 +67,10 @@ void main() {
       Localizations(
         locale: const Locale('fr'),
         delegates: const [AppLocalizations.delegate, DefaultWidgetsLocalizations.delegate],
-        child: Builder(
-          builder: (c) {
-            context = c;
-            return const SizedBox();
-          },
-        ),
+        child: Builder(builder: (c) {
+          context = c;
+          return const SizedBox();
+        }),
       ),
     );
     await tester.pump();

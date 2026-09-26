@@ -85,7 +85,11 @@ class SpeakerNames {
   static AppLocalizations contextFreeL10n() {
     final name = Intl.defaultLocale ?? Intl.systemLocale;
     final parts = name.split(RegExp('[_-]'));
-    for (final locale in [if (parts.length > 1) Locale(parts[0], parts[1]), Locale(parts[0]), const Locale('en')]) {
+    for (final locale in [
+      if (parts.length > 1) Locale(parts[0], parts[1]),
+      Locale(parts[0]),
+      const Locale('en'),
+    ]) {
       try {
         return lookupAppLocalizations(locale);
       } catch (_) {

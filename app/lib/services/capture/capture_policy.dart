@@ -16,7 +16,11 @@ class CapturePolicy {
 
   int get version => currentVersion;
 
-  Map<String, Object> toJson() => <String, Object>{'version': currentVersion, 'revision': revision, 'muted': muted};
+  Map<String, Object> toJson() => <String, Object>{
+        'version': currentVersion,
+        'revision': revision,
+        'muted': muted,
+      };
 
   String encode() => jsonEncode(toJson());
 

@@ -50,8 +50,11 @@ class FreemiumSwitchHandler {
       PromptPriority.low,
       // Still relevant when it is finally shown (the plan may have changed meanwhile).
       canShowNow: () => _eligible(context, captureProvider),
-      show: (promptContext) =>
-          showOmiSheet<void>(context: promptContext, padding: EdgeInsets.zero, builder: (_) => _PlansSheetWrapper()),
+      show: (promptContext) => showOmiSheet<void>(
+        context: promptContext,
+        padding: EdgeInsets.zero,
+        builder: (_) => _PlansSheetWrapper(),
+      ),
     );
   }
 

@@ -153,9 +153,7 @@ function calculateStreak(memories: Memory[]): number {
   if (memories.length === 0) return 0;
 
   // Sort by date descending
-  const sorted = [...memories].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-  );
+  const sorted = [...memories].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -269,9 +267,7 @@ function computeInsights(memories: Memory[]) {
     const dayOfWeekCounts = new Array(7).fill(0);
     const hourCounts = new Array(24).fill(0);
     const thisMonthCount = memories.filter(
-      (m) =>
-        new Date(m.created_at).getMonth() === now.getMonth() &&
-        new Date(m.created_at).getFullYear() === now.getFullYear(),
+      (m) => new Date(m.created_at).getMonth() === now.getMonth() && new Date(m.created_at).getFullYear() === now.getFullYear()
     ).length;
 
     for (const memory of memories) {
@@ -298,11 +294,7 @@ function computeInsights(memories: Memory[]) {
 
     const totalDays = Math.max(
       1,
-      Math.ceil(
-        (now.getTime() -
-          new Date(memories[memories.length - 1]?.created_at || now).getTime()) /
-          (1000 * 60 * 60 * 24),
-      ),
+      Math.ceil((now.getTime() - new Date(memories[memories.length - 1]?.created_at || now).getTime()) / (1000 * 60 * 60 * 24))
     );
     const avgMemoriesPerDay = memories.length / totalDays;
 
@@ -358,15 +350,11 @@ function computeInsights(memories: Memory[]) {
     }
   }
 
-  const totalCategorized = Array.from(categoryCounts.values()).reduce(
-    (sum, count) => sum + count,
-    0,
-  );
+  const totalCategorized = Array.from(categoryCounts.values()).reduce((sum, count) => sum + count, 0);
   const lifeBalance = (Object.keys(CATEGORY_COLORS) as LifeCategory[])
     .map((category) => {
       const rawCount = categoryCounts.get(category) || 0;
-      const value =
-        totalCategorized > 0 ? Math.round((rawCount / totalCategorized) * 100) : 0;
+      const value = totalCategorized > 0 ? Math.round((rawCount / totalCategorized) * 100) : 0;
       return {
         category,
         label: category.charAt(0).toUpperCase() + category.slice(1),
@@ -392,17 +380,10 @@ function computeInsights(memories: Memory[]) {
 
     // Only consider tags with meaningful data
     if (totalCount >= 3 && (recentCount > 0 || priorCount > 0)) {
-      const change =
-        priorCount > 0
-          ? ((recentCount - priorCount) / priorCount) * 100
-          : recentCount > 0
-          ? 100
-          : 0;
+      const change = priorCount > 0 ? ((recentCount - priorCount) / priorCount) * 100 : recentCount > 0 ? 100 : 0;
 
       const lastSeen = tagLastSeen.get(tag);
-      const daysSinceLastMention = lastSeen
-        ? Math.floor((now.getTime() - lastSeen.getTime()) / (1000 * 60 * 60 * 24))
-        : undefined;
+      const daysSinceLastMention = lastSeen ? Math.floor((now.getTime() - lastSeen.getTime()) / (1000 * 60 * 60 * 24)) : undefined;
 
       trendingData.push({
         tag,
@@ -453,15 +434,13 @@ function computeInsights(memories: Memory[]) {
   // ==================== 8. TIME PATTERNS ====================
   const dayOfWeekPattern = DAY_NAMES.map((label, i) => {
     const count = dateMetrics.dayOfWeekCounts[i];
-    const percentage =
-      memories.length > 0 ? Math.round((count / memories.length) * 100) : 0;
+    const percentage = memories.length > 0 ? Math.round((count / memories.length) * 100) : 0;
     return { label, count, percentage };
   });
 
   const hourPattern = Array.from({ length: 24 }, (_, hour) => {
     const count = dateMetrics.hourCounts[hour];
-    const percentage =
-      memories.length > 0 ? Math.round((count / memories.length) * 100) : 0;
+    const percentage = memories.length > 0 ? Math.round((count / memories.length) * 100) : 0;
     const label = `${hour.toString().padStart(2, '0')}:00`;
     return { label, count, percentage };
   });
@@ -487,10 +466,7 @@ self.onmessage = (e: MessageEvent) => {
       const insights = computeInsights(memories);
       self.postMessage({ type: 'result', insights });
     } catch (error) {
-      self.postMessage({
-        type: 'error',
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
+      self.postMessage({ type: 'error', error: error instanceof Error ? error.message : 'Unknown error' });
     }
   }
 };

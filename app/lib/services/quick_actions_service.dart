@@ -69,7 +69,10 @@ class QuickActionsService {
         localizedTitle: isDeviceConnected ? l10n.deviceSettings : l10n.connectDevice,
       ),
       if (isDeviceConnected)
-        ShortcutItem(type: isMuted ? _kUnmute : _kMute, localizedTitle: isMuted ? l10n.phoneUnmute : l10n.mute),
+        ShortcutItem(
+          type: isMuted ? _kUnmute : _kMute,
+          localizedTitle: isMuted ? l10n.phoneUnmute : l10n.mute,
+        ),
       ShortcutItem(type: _kVoiceMode, localizedTitle: l10n.voiceMode),
       ShortcutItem(type: _kAskOmi, localizedTitle: l10n.quickActionAskOmi),
       ShortcutItem(type: _kAddTask, localizedTitle: l10n.addTask),

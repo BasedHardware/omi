@@ -113,9 +113,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                         child: isReprocessing
                             ? const Center(
                                 child: Padding(
-                                  padding: EdgeInsets.all(8.0),
-                                  child: OmiSpinner(size: OmiSpinnerSize.small),
-                                ),
+                                    padding: EdgeInsets.all(8.0), child: OmiSpinner(size: OmiSpinnerSize.small)),
                               )
                             : Padding(
                                 padding: const EdgeInsets.all(8.0),

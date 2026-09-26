@@ -273,8 +273,12 @@ describe("PiMonoAdapter prompt correlation", () => {
     const previous = process.env.OMI_EXPERIMENT_VARIANT;
     process.env.OMI_EXPERIMENT_VARIANT = "control";
     try {
-      expect(routePromptForPublicWeb("Search the web for the latest SwiftUI changes.")).toContain(
-        "<omi_retrieval_policy>"
+      // Main removed the phrase-gate prefix injection: public-web lookup is a
+      // real `web_search` tool, and the manufactured prefix made a capability
+      // claim without a tool call. Control and un-armed turns now pass the
+      // prompt through untouched — the arm must not resurrect it.
+      expect(routePromptForPublicWeb("Search the web for the latest SwiftUI changes.")).toBe(
+        "Search the web for the latest SwiftUI changes."
       );
     } finally {
       if (previous === undefined) {

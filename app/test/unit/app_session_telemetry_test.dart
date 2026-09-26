@@ -20,7 +20,9 @@ void main() {
     adapter = _FakeAnalyticsAdapter();
     AnalyticsManager.configure(adapter);
     await AnalyticsManager.init();
-    telemetry = AppSessionTelemetry(createSessionId: () => 'session-${++nextId}');
+    telemetry = AppSessionTelemetry(
+      createSessionId: () => 'session-${++nextId}',
+    );
   });
 
   tearDown(AnalyticsManager.resetForTesting);
@@ -62,7 +64,10 @@ class _FakeAnalyticsAdapter implements AnalyticsAdapter {
   Future<void> init() async {}
 
   @override
-  void identify({required String userId, Map<String, Object>? userProperties}) {}
+  void identify({
+    required String userId,
+    Map<String, Object>? userProperties,
+  }) {}
 
   @override
   void alias({required String newUserId}) {}

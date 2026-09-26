@@ -21,17 +21,15 @@ void main() {
   group('showOmiConfirm', () {
     testWidgets('Material: Cancel + verb, destructive in red, resolves true only on the verb', (tester) async {
       bool? result;
-      await tester.pumpWidget(
-        feedbackHarness((context) async {
-          result = await showOmiConfirm(
-            context,
-            title: 'Delete conversation?',
-            message: 'This cannot be undone.',
-            confirmLabel: 'Delete',
-            destructive: true,
-          );
-        }),
-      );
+      await tester.pumpWidget(feedbackHarness((context) async {
+        result = await showOmiConfirm(
+          context,
+          title: 'Delete conversation?',
+          message: 'This cannot be undone.',
+          confirmLabel: 'Delete',
+          destructive: true,
+        );
+      }));
       await tapTrigger(tester);
 
       expect(find.byType(AlertDialog), findsOneWidget);
@@ -51,11 +49,9 @@ void main() {
 
     testWidgets('barrier dismissal resolves false', (tester) async {
       bool? result;
-      await tester.pumpWidget(
-        feedbackHarness((context) async {
-          result = await showOmiConfirm(context, title: 'Sign out?', confirmLabel: 'Sign Out');
-        }),
-      );
+      await tester.pumpWidget(feedbackHarness((context) async {
+        result = await showOmiConfirm(context, title: 'Sign out?', confirmLabel: 'Sign Out');
+      }));
       await tapTrigger(tester);
       await tester.tapAt(const Offset(4, 4));
       await tester.pumpAndSettle();
@@ -63,12 +59,10 @@ void main() {
     });
 
     testWidgets('iOS: CupertinoAlertDialog with real destructive / default actions', (tester) async {
-      await tester.pumpWidget(
-        feedbackHarness(
-          (context) => showOmiConfirm(context, title: 'Clear chat?', confirmLabel: 'Clear Chat', destructive: true),
-          platform: TargetPlatform.iOS,
-        ),
-      );
+      await tester.pumpWidget(feedbackHarness(
+        (context) => showOmiConfirm(context, title: 'Clear chat?', confirmLabel: 'Clear Chat', destructive: true),
+        platform: TargetPlatform.iOS,
+      ));
       await tapTrigger(tester);
 
       expect(find.byType(CupertinoAlertDialog), findsOneWidget);
@@ -85,11 +79,9 @@ void main() {
 
     testWidgets('opt-out row is one tappable target and is returned', (tester) async {
       OmiConfirmResult? result;
-      await tester.pumpWidget(
-        feedbackHarness((context) async {
-          result = await showOmiConfirmWithOptOut(context, title: 'Delete?', confirmLabel: 'Delete', destructive: true);
-        }),
-      );
+      await tester.pumpWidget(feedbackHarness((context) async {
+        result = await showOmiConfirmWithOptOut(context, title: 'Delete?', confirmLabel: 'Delete', destructive: true);
+      }));
       await tapTrigger(tester);
 
       final row = find.byType(OmiCheckboxRow);
@@ -114,23 +106,20 @@ void main() {
   });
 
   group('legacy adapters', () {
-    testWidgets('ConfirmationDialog shows Cancel without cancelText, and Cancel closes even with a no-op onCancel', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        feedbackHarness((context) {
-          showDialog(
-            context: context,
-            builder: (c) => ConfirmationDialog(
-              title: 'Finished conversation?',
-              description: 'Stop recording and summarize?',
-              confirmText: 'Stop',
-              onConfirm: () => Navigator.pop(c),
-              onCancel: () {},
-            ),
-          );
-        }),
-      );
+    testWidgets('ConfirmationDialog shows Cancel without cancelText, and Cancel closes even with a no-op onCancel',
+        (tester) async {
+      await tester.pumpWidget(feedbackHarness((context) {
+        showDialog(
+          context: context,
+          builder: (c) => ConfirmationDialog(
+            title: 'Finished conversation?',
+            description: 'Stop recording and summarize?',
+            confirmText: 'Stop',
+            onConfirm: () => Navigator.pop(c),
+            onCancel: () {},
+          ),
+        );
+      }));
       await tapTrigger(tester);
       expect(find.text('Cancel'), findsOneWidget);
       await tester.tap(find.text('Cancel'));
@@ -140,21 +129,19 @@ void main() {
 
     testWidgets('ConfirmationDialog checkbox label is tappable', (tester) async {
       bool? checked;
-      await tester.pumpWidget(
-        feedbackHarness((context) {
-          showDialog(
-            context: context,
-            builder: (c) => ConfirmationDialog(
-              title: 'Submit app?',
-              description: 'It goes to review.',
-              checkboxText: "Don't show again",
-              onCheckboxChanged: (v) => checked = v,
-              onConfirm: () => Navigator.pop(c),
-              onCancel: () => Navigator.pop(c),
-            ),
-          );
-        }),
-      );
+      await tester.pumpWidget(feedbackHarness((context) {
+        showDialog(
+          context: context,
+          builder: (c) => ConfirmationDialog(
+            title: 'Submit app?',
+            description: 'It goes to review.',
+            checkboxText: "Don't show again",
+            onCheckboxChanged: (v) => checked = v,
+            onConfirm: () => Navigator.pop(c),
+            onCancel: () => Navigator.pop(c),
+          ),
+        );
+      }));
       await tapTrigger(tester);
       await tester.tap(find.text("Don't show again"));
       await tester.pump();
@@ -163,11 +150,9 @@ void main() {
 
     testWidgets('OmiConfirmDialog uses localized defaults and infers destructive from colour', (tester) async {
       bool? result;
-      await tester.pumpWidget(
-        feedbackHarness((context) async {
-          result = await OmiConfirmDialog.show(context, title: 'Delete recording?', message: 'Gone for good.');
-        }),
-      );
+      await tester.pumpWidget(feedbackHarness((context) async {
+        result = await OmiConfirmDialog.show(context, title: 'Delete recording?', message: 'Gone for good.');
+      }));
       await tapTrigger(tester);
       expect(find.text('Cancel'), findsOneWidget);
       expect(find.text('Confirm'), findsOneWidget);
@@ -176,34 +161,21 @@ void main() {
       await tester.pumpAndSettle();
       expect(result, isTrue);
 
-      await tester.pumpWidget(
-        feedbackHarness((context) {
-          OmiConfirmDialog.show(
-            context,
-            title: 'Sync?',
-            message: 'Upload now.',
-            confirmLabel: 'Sync',
-            confirmColor: Colors.white,
-          );
-        }),
-      );
+      await tester.pumpWidget(feedbackHarness((context) {
+        OmiConfirmDialog.show(context,
+            title: 'Sync?', message: 'Upload now.', confirmLabel: 'Sync', confirmColor: Colors.white);
+      }));
       await tapTrigger(tester);
       expect(textColor(tester, 'Sync'), isNot(omiDialogDangerColor));
     });
 
     testWidgets('AppDialog.show honours singleButton and closes after the callback', (tester) async {
       var cancelled = 0;
-      await tester.pumpWidget(
-        feedbackHarness(
-          (_) => AppDialog.show(
-            title: 'Error',
-            content: 'Could not update.',
-            singleButton: true,
-            onCancel: () => cancelled++,
-          ),
-          navigatorKey: globalNavigatorKey,
-        ),
-      );
+      await tester.pumpWidget(feedbackHarness(
+        (_) => AppDialog.show(
+            title: 'Error', content: 'Could not update.', singleButton: true, onCancel: () => cancelled++),
+        navigatorKey: globalNavigatorKey,
+      ));
       await tapTrigger(tester);
       expect(find.byType(TextButton), findsOneWidget);
       expect(find.text('Cancel'), findsNothing);

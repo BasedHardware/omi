@@ -5,8 +5,17 @@ import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as wire
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-ActionItemWithMetadata _item({required String id, required bool completed, DateTime? dueAt}) {
-  return wire.GeneratedActionItemResponse(id: id, description: id, completed: completed, dueAt: dueAt);
+ActionItemWithMetadata _item({
+  required String id,
+  required bool completed,
+  DateTime? dueAt,
+}) {
+  return wire.GeneratedActionItemResponse(
+    id: id,
+    description: id,
+    completed: completed,
+    dueAt: dueAt,
+  );
 }
 
 void main() {
@@ -44,19 +53,27 @@ void main() {
 
     final dueCalls = <Map<String, Object?>>[];
     final provider = ActionItemsProvider(
-      getActionItems:
-          ({limit = 50, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) async {
-            if (dueStartDate != null || dueEndDate != null) {
-              dueCalls.add({
-                'limit': limit,
-                'completed': completed,
-                'dueStartDate': dueStartDate,
-                'dueEndDate': dueEndDate,
-              });
-              return ActionItemsResponse(actionItems: [hiddenDue], hasMore: false);
-            }
-            return ActionItemsResponse(actionItems: filler, hasMore: true);
-          },
+      getActionItems: ({
+        limit = 50,
+        offset = 0,
+        completed,
+        conversationId,
+        startDate,
+        endDate,
+        dueStartDate,
+        dueEndDate,
+      }) async {
+        if (dueStartDate != null || dueEndDate != null) {
+          dueCalls.add({
+            'limit': limit,
+            'completed': completed,
+            'dueStartDate': dueStartDate,
+            'dueEndDate': dueEndDate,
+          });
+          return ActionItemsResponse(actionItems: [hiddenDue], hasMore: false);
+        }
+        return ActionItemsResponse(actionItems: filler, hasMore: true);
+      },
     );
 
     await provider.ensureLoaded();
@@ -79,13 +96,21 @@ void main() {
   test('empty due-window result does not hide a first-page today task', () async {
     final firstPageDue = _item(id: 'first-page-due', completed: false, dueAt: now);
     final provider = ActionItemsProvider(
-      getActionItems:
-          ({limit = 50, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) async {
-            if (dueStartDate != null || dueEndDate != null) {
-              return const ActionItemsResponse(actionItems: [], hasMore: false);
-            }
-            return ActionItemsResponse(actionItems: [firstPageDue], hasMore: false);
-          },
+      getActionItems: ({
+        limit = 50,
+        offset = 0,
+        completed,
+        conversationId,
+        startDate,
+        endDate,
+        dueStartDate,
+        dueEndDate,
+      }) async {
+        if (dueStartDate != null || dueEndDate != null) {
+          return const ActionItemsResponse(actionItems: [], hasMore: false);
+        }
+        return ActionItemsResponse(actionItems: [firstPageDue], hasMore: false);
+      },
     );
 
     await provider.ensureLoaded();
@@ -98,17 +123,25 @@ void main() {
     final hiddenDue = _item(id: 'hidden-due', completed: false, dueAt: now);
     var dueAttempts = 0;
     final provider = ActionItemsProvider(
-      getActionItems:
-          ({limit = 50, offset = 0, completed, conversationId, startDate, endDate, dueStartDate, dueEndDate}) async {
-            if (dueStartDate != null || dueEndDate != null) {
-              dueAttempts += 1;
-              if (dueAttempts == 1) {
-                throw StateError('due-window unavailable');
-              }
-              return ActionItemsResponse(actionItems: [hiddenDue], hasMore: false);
-            }
-            return const ActionItemsResponse(actionItems: [], hasMore: false);
-          },
+      getActionItems: ({
+        limit = 50,
+        offset = 0,
+        completed,
+        conversationId,
+        startDate,
+        endDate,
+        dueStartDate,
+        dueEndDate,
+      }) async {
+        if (dueStartDate != null || dueEndDate != null) {
+          dueAttempts += 1;
+          if (dueAttempts == 1) {
+            throw StateError('due-window unavailable');
+          }
+          return ActionItemsResponse(actionItems: [hiddenDue], hasMore: false);
+        }
+        return const ActionItemsResponse(actionItems: [], hasMore: false);
+      },
     );
 
     await provider.ensureHomeTodayTasksLoaded(now: now);

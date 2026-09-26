@@ -41,7 +41,13 @@ SttModeDecision _resolve({
 }) {
   return SttModeResolver(
     onDeviceConfigBuilder: _onDevice,
-  ).resolve(flagEnabled: flag, persistedCustomStt: persisted, allowance: allowance, readiness: readiness, codec: codec);
+  ).resolve(
+    flagEnabled: flag,
+    persistedCustomStt: persisted,
+    allowance: allowance,
+    readiness: readiness,
+    codec: codec,
+  );
 }
 
 void main() {
@@ -52,7 +58,10 @@ void main() {
 
   group('SttModeResolver matrix', () {
     test('flag off keeps today\'s managed path even for basic on_device', () {
-      final decision = _resolve(flag: false, allowance: _allowance('on_device', reason: 'plan_allowance_exhausted'));
+      final decision = _resolve(
+        flag: false,
+        allowance: _allowance('on_device', reason: 'plan_allowance_exhausted'),
+      );
       expect(decision.path, SttResolvedPath.managed);
       expect(decision.opensManagedOmiSocket, isTrue);
       expect(decision.reason, 'flag_off');
@@ -74,7 +83,7 @@ void main() {
       (
         'basic under cap still on_device from S16 inactive/exhausted shapes',
         _allowance('on_device', reason: 'subscription_inactive'),
-        'subscription_inactive',
+        'subscription_inactive'
       ),
       ('basic over cap', _allowance('on_device', reason: 'plan_allowance_exhausted'), 'plan_allowance_exhausted'),
     ]) {

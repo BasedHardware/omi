@@ -34,7 +34,13 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
         actions: [
           IconButton(
             onPressed: onTap,
-            icon: loading ? const SizedBox(width: 16, height: 16, child: OmiSpinner()) : const Icon(Icons.send),
+            icon: loading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: OmiSpinner(),
+                  )
+                : const Icon(Icons.send),
           ),
         ],
       ),

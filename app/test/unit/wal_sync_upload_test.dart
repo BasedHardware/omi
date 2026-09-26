@@ -23,7 +23,13 @@ void main() {
   });
 
   test('Wal.getFileName is a framed bin, never wav', () {
-    final wal = Wal(timerStart: 1735689600, codec: BleAudioCodec.opus, seconds: 60, sampleRate: 16000, device: 'omi');
+    final wal = Wal(
+      timerStart: 1735689600,
+      codec: BleAudioCodec.opus,
+      seconds: 60,
+      sampleRate: 16000,
+      device: 'omi',
+    );
     final name = wal.getFileName();
     expect(name.endsWith('.bin'), isTrue);
     expect(name.contains('.wav'), isFalse);
@@ -33,7 +39,13 @@ void main() {
   });
 
   test('assertWalSyncFilesAreFramedBins throws on wav', () {
-    expect(() => assertWalSyncFilesAreFramedBins(['audio_omi_opus_16000_1_fs160_1735689600.wav']), throwsArgumentError);
-    expect(() => assertWalSyncFilesAreFramedBins(['audio_omi_opus_16000_1_fs160_1735689600.bin']), returnsNormally);
+    expect(
+      () => assertWalSyncFilesAreFramedBins(['audio_omi_opus_16000_1_fs160_1735689600.wav']),
+      throwsArgumentError,
+    );
+    expect(
+      () => assertWalSyncFilesAreFramedBins(['audio_omi_opus_16000_1_fs160_1735689600.bin']),
+      returnsNormally,
+    );
   });
 }

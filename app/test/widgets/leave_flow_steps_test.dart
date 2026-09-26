@@ -55,16 +55,15 @@ void main() {
           GlobalCupertinoLocalizations.delegate,
         ],
         supportedLocales: const [Locale('en')],
-        home: Builder(
-          builder: (context) {
-            homeContext = context;
-            return const Scaffold(body: Text('home'));
-          },
-        ),
+        home: Builder(builder: (context) {
+          homeContext = context;
+          return const Scaffold(body: Text('home'));
+        }),
       ),
     );
-    Future<Object?> open() =>
-        Navigator.of(homeContext).push<Object?>(MaterialPageRoute(builder: (_) => _Step(index: 0, exit: exit)));
+    Future<Object?> open() => Navigator.of(homeContext).push<Object?>(
+          MaterialPageRoute(builder: (_) => _Step(index: 0, exit: exit)),
+        );
     return (exit, open);
   }
 
@@ -119,18 +118,16 @@ void main() {
       ),
     );
     final navigator = tester.state<NavigatorState>(find.byType(Navigator));
-    navigator.push(
-      MaterialPageRoute(
-        builder: (_) => const LeaveFlowStepScaffold(
-          step: 2,
-          stepCount: 3,
-          title: 'busy',
-          canPop: false,
-          body: SizedBox.shrink(),
-          actions: SizedBox.shrink(),
-        ),
+    navigator.push(MaterialPageRoute(
+      builder: (_) => const LeaveFlowStepScaffold(
+        step: 2,
+        stepCount: 3,
+        title: 'busy',
+        canPop: false,
+        body: SizedBox.shrink(),
+        actions: SizedBox.shrink(),
       ),
-    );
+    ));
     await tester.pumpAndSettle();
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();

@@ -70,7 +70,10 @@ void main() {
       telemetry: (event, properties) => events.add(<String, Object>{'event': event, ...properties}),
     );
     await reviewService.recordEngagement();
-    await reviewService.requestReview(moment: AppReviewMoment.dailySummaryRead, isStillAppropriate: () => true);
+    await reviewService.requestReview(
+      moment: AppReviewMoment.dailySummaryRead,
+      isStillAppropriate: () => true,
+    );
 
     expect(availabilityCalls, 0);
     expect(events.single['event'], 'App Review Opportunity');
@@ -101,11 +104,10 @@ void main() {
 
     expect(lifecycleChecks, 3);
     expect(requestCalls, 1);
-    expect(events.map((event) => event['event']), [
-      'App Review Opportunity',
-      'App Review Request Attempted',
-      'App Review Request Finished',
-    ]);
+    expect(
+      events.map((event) => event['event']),
+      ['App Review Opportunity', 'App Review Request Attempted', 'App Review Request Finished'],
+    );
     expect(events.first['decision'], 'eligible');
     expect(events.last['result'], 'returned');
   });
@@ -176,7 +178,10 @@ void main() {
   });
 
   test('a new build of the same marketing version cannot request again', () async {
-    final first = service(isAvailable: () async => true, requestNativeReview: () async {});
+    final first = service(
+      isAvailable: () async => true,
+      requestNativeReview: () async {},
+    );
     await recordThreeReadingDays(first);
     await first.requestReview(moment: AppReviewMoment.dailySummaryRead, isStillAppropriate: () => true);
 
@@ -193,7 +198,10 @@ void main() {
 
   test('concurrent triggers serialize to one native call', () async {
     var requestCalls = 0;
-    final reviewService = service(isAvailable: () async => true, requestNativeReview: () async => requestCalls++);
+    final reviewService = service(
+      isAvailable: () async => true,
+      requestNativeReview: () async => requestCalls++,
+    );
     await recordThreeReadingDays(reviewService);
     await Future.wait([
       reviewService.requestReview(moment: AppReviewMoment.dailySummaryRead, isStillAppropriate: () => true),

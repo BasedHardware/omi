@@ -34,7 +34,11 @@ void main() {
 
   test('plus meter paywall is Plus-only', () {
     expect(
-      FreemiumThresholdTracker.shouldShowPlusMeterPaywall(reached: true, requiresUserAction: true, plan: PlanType.plus),
+      FreemiumThresholdTracker.shouldShowPlusMeterPaywall(
+        reached: true,
+        requiresUserAction: true,
+        plan: PlanType.plus,
+      ),
       isTrue,
     );
     expect(
@@ -46,7 +50,11 @@ void main() {
       isFalse,
     );
     expect(
-      FreemiumThresholdTracker.shouldShowPlusMeterPaywall(reached: true, requiresUserAction: true, plan: null),
+      FreemiumThresholdTracker.shouldShowPlusMeterPaywall(
+        reached: true,
+        requiresUserAction: true,
+        plan: null,
+      ),
       isFalse,
     );
     expect(

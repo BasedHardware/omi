@@ -108,21 +108,15 @@ class OmiSheetScaffold extends StatelessWidget {
                           ? const SizedBox.shrink()
                           : Semantics(
                               header: true,
-                              child: Text(
-                                title!,
-                                style: OmiType.headline,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                              child:
+                                  Text(title!, style: OmiType.headline, maxLines: 2, overflow: TextOverflow.ellipsis),
                             ),
                     ),
                     if (showCloseButton) OmiCloseButton(onPressed: onClose, color: OmiColors.textSecondary),
                   ],
                 ),
               ),
-            Flexible(
-              child: Padding(padding: padding, child: child),
-            ),
+            Flexible(child: Padding(padding: padding, child: child)),
           ],
         ),
       ),

@@ -102,11 +102,8 @@ abstract final class OmiType {
   static const TextStyle title1 = TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: OmiColors.textPrimary);
 
   /// 34 bold — the largest display text; one per screen at most.
-  static const TextStyle largeTitle = TextStyle(
-    fontSize: 34,
-    fontWeight: FontWeight.w700,
-    color: OmiColors.textPrimary,
-  );
+  static const TextStyle largeTitle =
+      TextStyle(fontSize: 34, fontWeight: FontWeight.w700, color: OmiColors.textPrimary);
 }
 
 /// Corner radii. Pick by the size of the thing being rounded, not by taste.
@@ -174,16 +171,10 @@ class OmiMotion {
   static const Curve standardCurve = Curves.easeInOut;
   static const Curve emphasizedCurve = Curves.easeOutCubic;
 
-  static const OmiMotion _full = OmiMotion._(
-    quick: quickDuration,
-    standard: standardDuration,
-    emphasized: emphasizedDuration,
-  );
-  static const OmiMotion _reduced = OmiMotion._(
-    quick: Duration.zero,
-    standard: Duration.zero,
-    emphasized: Duration.zero,
-  );
+  static const OmiMotion _full =
+      OmiMotion._(quick: quickDuration, standard: standardDuration, emphasized: emphasizedDuration);
+  static const OmiMotion _reduced =
+      OmiMotion._(quick: Duration.zero, standard: Duration.zero, emphasized: Duration.zero);
 
   /// The durations for this context: all [Duration.zero] when the user asked the system to remove
   /// animations.

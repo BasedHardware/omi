@@ -58,34 +58,30 @@ class NativeCaptureEvent {
       NativeCaptureEvent(kind: NativeCaptureEventKind.audioFrame, sessionId: sessionId, pcmFrame: pcm);
 
   factory NativeCaptureEvent.error(String code, String message, int sessionId) => NativeCaptureEvent(
-    kind: NativeCaptureEventKind.captureError,
-    sessionId: sessionId,
-    errorCode: code,
-    errorMessage: message,
-  );
+      kind: NativeCaptureEventKind.captureError, sessionId: sessionId, errorCode: code, errorMessage: message);
 
   factory NativeCaptureEvent.batchProgress(double seconds, int sessionId) =>
       NativeCaptureEvent(kind: NativeCaptureEventKind.batchProgress, sessionId: sessionId, capturedSeconds: seconds);
 
   Map<String, Object?> toJson() => {
-    'kind': kind.name,
-    'session_id': sessionId,
-    if (state != null) 'state': state,
-    if (pcmFrame != null) 'pcm_frame_base64': base64Encode(pcmFrame!),
-    if (capturedSeconds != null) 'captured_seconds': capturedSeconds,
-    if (errorCode != null) 'error_code': errorCode,
-    if (errorMessage != null) 'error_message': errorMessage,
-  };
+        'kind': kind.name,
+        'session_id': sessionId,
+        if (state != null) 'state': state,
+        if (pcmFrame != null) 'pcm_frame_base64': base64Encode(pcmFrame!),
+        if (capturedSeconds != null) 'captured_seconds': capturedSeconds,
+        if (errorCode != null) 'error_code': errorCode,
+        if (errorMessage != null) 'error_message': errorMessage,
+      };
 
   factory NativeCaptureEvent.fromJson(Map<String, dynamic> json) => NativeCaptureEvent(
-    kind: NativeCaptureEventKind.values.byName(json['kind'] as String),
-    sessionId: json['session_id'] as int,
-    state: json['state'] as String?,
-    pcmFrame: json['pcm_frame_base64'] == null ? null : base64Decode(json['pcm_frame_base64'] as String),
-    capturedSeconds: (json['captured_seconds'] as num?)?.toDouble(),
-    errorCode: json['error_code'] as String?,
-    errorMessage: json['error_message'] as String?,
-  );
+        kind: NativeCaptureEventKind.values.byName(json['kind'] as String),
+        sessionId: json['session_id'] as int,
+        state: json['state'] as String?,
+        pcmFrame: json['pcm_frame_base64'] == null ? null : base64Decode(json['pcm_frame_base64'] as String),
+        capturedSeconds: (json['captured_seconds'] as num?)?.toDouble(),
+        errorCode: json['error_code'] as String?,
+        errorMessage: json['error_message'] as String?,
+      );
 }
 
 /// A replayable vector: an ordered sequence of native events with deterministic
@@ -106,23 +102,23 @@ class NativeEventVector {
   });
 
   Map<String, Object?> toJson() => {
-    'id': id,
-    'revision': revision,
-    'schema_version': schemaVersion,
-    'start_session_id': startSessionId,
-    'events': events.map((e) => e.toJson()).toList(),
-  };
+        'id': id,
+        'revision': revision,
+        'schema_version': schemaVersion,
+        'start_session_id': startSessionId,
+        'events': events.map((e) => e.toJson()).toList(),
+      };
 
   String toJsonString() => const JsonEncoder.withIndent('  ').convert(toJson());
 
   factory NativeEventVector.fromJson(Map<String, dynamic> json) => NativeEventVector(
-    id: json['id'] as String,
-    revision: json['revision'] as int,
-    startSessionId: json['start_session_id'] as int,
-    events: (json['events'] as List)
-        .map((e) => NativeCaptureEvent.fromJson(Map<String, dynamic>.from(e as Map)))
-        .toList(),
-  );
+        id: json['id'] as String,
+        revision: json['revision'] as int,
+        startSessionId: json['start_session_id'] as int,
+        events: (json['events'] as List)
+            .map((e) => NativeCaptureEvent.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList(),
+      );
 
   /// Deterministic synthetic PCM16 mono-16k frame (320 bytes = 10ms).
   ///

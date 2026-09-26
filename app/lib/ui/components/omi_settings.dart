@@ -58,9 +58,7 @@ class OmiSectionHeader extends StatelessWidget {
         children: [
           Row(
             children: [
-              Expanded(
-                child: Semantics(header: true, child: Text(title, style: OmiType.title3)),
-              ),
+              Expanded(child: Semantics(header: true, child: Text(title, style: OmiType.title3))),
               if (trailing != null) trailing!,
             ],
           ),
@@ -111,10 +109,7 @@ class OmiSettingsGroup extends StatelessWidget {
         if (header != null) OmiSectionHeader(header!, subtitle: headerSubtitle),
         ClipRRect(
           borderRadius: OmiRadius.lgAll,
-          child: Material(
-            color: OmiColors.surface1,
-            child: Column(mainAxisSize: MainAxisSize.min, children: rows),
-          ),
+          child: Material(color: OmiColors.surface1, child: Column(mainAxisSize: MainAxisSize.min, children: rows)),
         ),
         if (footer != null)
           Padding(
@@ -144,8 +139,8 @@ class OmiSettingsRow extends StatelessWidget {
     this.onTap,
     this.showChevron,
     this.isDestructive = false,
-  }) : toggleValue = null,
-       onToggle = null;
+  })  : toggleValue = null,
+        onToggle = null;
 
   /// A row whose trailing element is an [OmiSwitch]; tapping anywhere on the row flips it.
   const OmiSettingsRow.toggle({
@@ -155,13 +150,13 @@ class OmiSettingsRow extends StatelessWidget {
     required ValueChanged<bool>? onChanged,
     this.leading,
     this.subtitle,
-  }) : toggleValue = value,
-       onToggle = onChanged,
-       value = null,
-       trailing = null,
-       onTap = null,
-       showChevron = false,
-       isDestructive = false;
+  })  : toggleValue = value,
+        onToggle = onChanged,
+        value = null,
+        trailing = null,
+        onTap = null,
+        showChevron = false,
+        isDestructive = false;
 
   final String title;
 
@@ -198,9 +193,7 @@ class OmiSettingsRow extends StatelessWidget {
 
     Widget? trailingWidget;
     if (_isToggle) {
-      trailingWidget = ExcludeSemantics(
-        child: OmiSwitch(value: toggleValue!, onChanged: onToggle),
-      );
+      trailingWidget = ExcludeSemantics(child: OmiSwitch(value: toggleValue!, onChanged: onToggle));
     } else if (trailing != null) {
       trailingWidget = trailing;
     }
@@ -215,7 +208,10 @@ class OmiSettingsRow extends StatelessWidget {
               children: [
                 if (leading != null) ...[
                   IconTheme.merge(
-                    data: IconThemeData(size: 20, color: isDestructive ? OmiColors.danger : OmiColors.textTertiary),
+                    data: IconThemeData(
+                      size: 20,
+                      color: isDestructive ? OmiColors.danger : OmiColors.textTertiary,
+                    ),
                     // At least 24pt wide so icons line up; an avatar may be wider.
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(minWidth: 24),
@@ -250,7 +246,10 @@ class OmiSettingsRow extends StatelessWidget {
                     ),
                   ),
                 ],
-                if (trailingWidget != null) ...[const SizedBox(width: OmiSpacing.xs), trailingWidget],
+                if (trailingWidget != null) ...[
+                  const SizedBox(width: OmiSpacing.xs),
+                  trailingWidget,
+                ],
                 if (chevron) ...[
                   const SizedBox(width: OmiSpacing.xxs),
                   const ExcludeSemantics(child: Icon(Icons.chevron_right, size: 20, color: OmiColors.textTertiary)),
@@ -274,10 +273,7 @@ class OmiSettingsRow extends StatelessWidget {
     }
     if (onTap == null) return MergeSemantics(child: row);
     return MergeSemantics(
-      child: Semantics(
-        button: true,
-        child: InkWell(onTap: onTap, child: row),
-      ),
+      child: Semantics(button: true, child: InkWell(onTap: onTap, child: row)),
     );
   }
 }

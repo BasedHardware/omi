@@ -40,9 +40,7 @@ void main() {
       expect(fmt(const Locale('en')).dayHeader(DateTime(2026, 9, 23, 9)), 'Today');
       expect(fmt(const Locale('en')).dayHeader(DateTime(2026, 9, 22, 23, 59)), 'Yesterday');
       expect(
-        fmt(const Locale('de')).dayHeader(DateTime(2026, 9, 23)),
-        lookupAppLocalizations(const Locale('de')).today,
-      );
+          fmt(const Locale('de')).dayHeader(DateTime(2026, 9, 23)), lookupAppLocalizations(const Locale('de')).today);
       expect(
         fmt(const Locale('fr')).dayHeader(DateTime(2026, 9, 22)),
         lookupAppLocalizations(const Locale('fr')).yesterday,
@@ -72,25 +70,21 @@ void main() {
 
   group('timeRange', () {
     test('same day, same period: the period is written once', () {
-      final range = fmt(
-        const Locale('en', 'US'),
-      ).timeRange(DateTime(2026, 9, 23, 10, 17), DateTime(2026, 9, 23, 11, 19));
+      final range =
+          fmt(const Locale('en', 'US')).timeRange(DateTime(2026, 9, 23, 10, 17), DateTime(2026, 9, 23, 11, 19));
       expect(plain(range), '10:17 – 11:19 AM');
     });
 
     test('same day across noon keeps both periods', () {
-      final range = fmt(
-        const Locale('en', 'US'),
-      ).timeRange(DateTime(2026, 9, 23, 11, 50), DateTime(2026, 9, 23, 12, 10));
+      final range =
+          fmt(const Locale('en', 'US')).timeRange(DateTime(2026, 9, 23, 11, 50), DateTime(2026, 9, 23, 12, 10));
       expect(plain(range), '11:50 AM – 12:10 PM');
     });
 
     test('24h', () {
       expect(
-        fmt(
-          const Locale('en', 'US'),
-          h24: true,
-        ).timeRange(DateTime(2026, 9, 23, 10, 17), DateTime(2026, 9, 23, 11, 19)),
+        fmt(const Locale('en', 'US'), h24: true)
+            .timeRange(DateTime(2026, 9, 23, 10, 17), DateTime(2026, 9, 23, 11, 19)),
         '10:17 – 11:19',
       );
       expect(
@@ -100,9 +94,8 @@ void main() {
     });
 
     test('cross-day shows both dates', () {
-      final range = fmt(
-        const Locale('en', 'US'),
-      ).timeRange(DateTime(2026, 9, 22, 23, 30), DateTime(2026, 9, 23, 0, 45));
+      final range =
+          fmt(const Locale('en', 'US')).timeRange(DateTime(2026, 9, 22, 23, 30), DateTime(2026, 9, 23, 0, 45));
       expect(plain(range), 'Sep 22, 2026 11:30 PM – Sep 23, 2026 12:45 AM');
     });
   });
@@ -129,12 +122,10 @@ void main() {
         delegates: const [AppLocalizations.delegate, DefaultWidgetsLocalizations.delegate],
         child: MediaQuery(
           data: const MediaQueryData(alwaysUse24HourFormat: true),
-          child: Builder(
-            builder: (context) {
-              captured = OmiDateFormat.of(context);
-              return const SizedBox();
-            },
-          ),
+          child: Builder(builder: (context) {
+            captured = OmiDateFormat.of(context);
+            return const SizedBox();
+          }),
         ),
       ),
     );

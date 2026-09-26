@@ -272,8 +272,7 @@ void main() {
       expect(
         sync.testWals.first.status,
         WalStatus.miss,
-        reason:
-            'a WAL whose file exists must not be corrupted by pre-upload checks; '
+        reason: 'a WAL whose file exists must not be corrupted by pre-upload checks; '
             'a failed upload leaves it retryable as miss',
       );
     });
@@ -322,8 +321,7 @@ void main() {
       expect(
         stuck.retryCount,
         0,
-        reason:
-            'syncAll() never increments retryCount, so the WAL looks brand-new '
+        reason: 'syncAll() never increments retryCount, so the WAL looks brand-new '
             'on every app open and is unconditionally re-queued',
       );
       expect(stuck.isSyncing, false, reason: 'isSyncing must be cleared so the WAL is eligible for the next attempt');
@@ -349,11 +347,8 @@ void main() {
       expect(skipped.status, WalStatus.miss, reason: 'the recording is retained, not discarded');
       expect(skipped.isSyncing, false);
       expect(skipped.retryCount, 50, reason: 'a skipped recording spends nothing further');
-      expect(
-        skipped.syncDisplayState,
-        WalSyncDisplayState.failed,
-        reason: 'the sync row presents it as failed with a manual retry',
-      );
+      expect(skipped.syncDisplayState, WalSyncDisplayState.failed,
+          reason: 'the sync row presents it as failed with a manual retry');
     });
 
     test('syncAll still uploads a WAL with budget left', () async {

@@ -10,7 +10,12 @@ class DailySummaryCard extends StatelessWidget {
   static const double mapHeight = 96;
   static const double radius = 20;
 
-  const DailySummaryCard({super.key, required this.summary, required this.dateLabel, required this.onTap});
+  const DailySummaryCard({
+    super.key,
+    required this.summary,
+    required this.dateLabel,
+    required this.onTap,
+  });
 
   final DailySummary summary;
   final String dateLabel;
@@ -71,10 +76,8 @@ class DailySummaryCard extends StatelessWidget {
                   right: 10,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.55),
-                      borderRadius: OmiRadius.pillAll,
-                    ),
+                    decoration:
+                        BoxDecoration(color: Colors.black.withValues(alpha: 0.55), borderRadius: OmiRadius.pillAll),
                     child: Text(dateLabel, style: OmiType.caption.copyWith(color: OmiColors.textSecondary)),
                   ),
                 ),

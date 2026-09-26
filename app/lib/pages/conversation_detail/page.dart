@@ -207,16 +207,16 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   }
 
   static ConversationTab _tabForIndex(int index) => switch (index) {
-    _transcriptTabIndex => ConversationTab.transcript,
-    _tasksTabIndex => ConversationTab.actionItems,
-    _ => ConversationTab.summary,
-  };
+        _transcriptTabIndex => ConversationTab.transcript,
+        _tasksTabIndex => ConversationTab.actionItems,
+        _ => ConversationTab.summary,
+      };
 
   static int _indexForTab(ConversationTab tab) => switch (tab) {
-    ConversationTab.transcript => _transcriptTabIndex,
-    ConversationTab.summary => _summaryTabIndex,
-    ConversationTab.actionItems => _tasksTabIndex,
-  };
+        ConversationTab.transcript => _transcriptTabIndex,
+        ConversationTab.summary => _summaryTabIndex,
+        ConversationTab.actionItems => _tasksTabIndex,
+      };
 
   void _createTabController({required int length, required int initialIndex}) {
     _controller = TabController(length: length, vsync: this, initialIndex: initialIndex.clamp(0, length - 1));
@@ -339,9 +339,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     return switch (selectedTab) {
       ConversationTab.transcript => conversation.transcriptSegments.any((segment) => segment.text.trim().isNotEmpty),
       ConversationTab.summary => provider.getSummarySelection().content.trim().isNotEmpty,
-      ConversationTab.actionItems => conversation.structured.actionItems.any(
-        (item) => !item.deleted && item.description.trim().isNotEmpty,
-      ),
+      ConversationTab.actionItems =>
+        conversation.structured.actionItems.any((item) => !item.deleted && item.description.trim().isNotEmpty),
     };
   }
 
@@ -500,13 +499,10 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     trackConversationAction(ConversationActionAction.separate, ConversationActionSurface.detailBody);
     final detail = context.read<ConversationDetailProvider>();
     final list = context.read<ConversationProvider>();
-    return _separation.separate(
-      recording.id,
-      reload: () async {
-        await detail.refreshConversation();
-        await (list.hasActiveSearch ? list.searchConversations(list.previousQuery) : list.forceRefreshConversations());
-      },
-    );
+    return _separation.separate(recording.id, reload: () async {
+      await detail.refreshConversation();
+      await (list.hasActiveSearch ? list.searchConversations(list.previousQuery) : list.forceRefreshConversations());
+    });
   }
 
   static const _overflowActions = {
@@ -906,11 +902,8 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
               routeToPage(
                 context,
                 ChatPage(
-                  initialChatContext: ChatPageContext(
-                    type: 'conversation',
-                    id: convo.id,
-                    title: convo.structured.title,
-                  ),
+                  initialChatContext:
+                      ChatPageContext(type: 'conversation', id: convo.id, title: convo.structured.title),
                 ),
               );
             },
@@ -1038,49 +1031,47 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                   // Title and facts, shared by every tab (#17297).
                   ConversationDetailHeader(onOpenRecordings: _openRecordings),
                   Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-                      child: TabBarView(
-                        controller: _controller,
-                        children: [
-                          TranscriptWidgets(
-                            searchQuery: _searchQuery,
-                            currentResultIndex: getCurrentResultIndexForHighlighting(),
-                            onTapWhenSearchEmpty: _closeSearchIfEmpty,
-                            onSegmentTap: (segment) async {
-                              if (selectedTab != ConversationTab.transcript) {
-                                setState(() {
-                                  selectedTab = ConversationTab.transcript;
-                                });
-                                _controller!.animateTo(_transcriptTabIndex);
-                              }
+                      child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                    child: TabBarView(
+                      controller: _controller,
+                      children: [
+                        TranscriptWidgets(
+                          searchQuery: _searchQuery,
+                          currentResultIndex: getCurrentResultIndexForHighlighting(),
+                          onTapWhenSearchEmpty: _closeSearchIfEmpty,
+                          onSegmentTap: (segment) async {
+                            if (selectedTab != ConversationTab.transcript) {
+                              setState(() {
+                                selectedTab = ConversationTab.transcript;
+                              });
+                              _controller!.animateTo(_transcriptTabIndex);
+                            }
 
-                              // Seek to segment using callback (start + end for bounded play)
-                              if (_seekToSegmentCallback != null) {
-                                await _seekToSegmentCallback!(segment.start, segment.end);
-                                HapticFeedback.lightImpact();
-                              }
-                            },
-                          ),
-                          SummaryTab(
-                            reviewEnabled:
-                                !widget.isFromOnboarding &&
-                                widget.initialSeekStart == null &&
-                                selectedTab == ConversationTab.summary &&
-                                !_controller!.indexIsChanging &&
-                                !_isSearching &&
-                                !_isSharing &&
-                                !_isDownloadingAudio &&
-                                !_reviewInterrupted,
-                            searchQuery: _searchQuery,
-                            currentResultIndex: getCurrentResultIndexForHighlighting(),
-                            onTapWhenSearchEmpty: _closeSearchIfEmpty,
-                          ),
-                          if (_controller!.length > _tasksTabIndex) const ActionItemsTab(),
-                        ],
-                      ),
+                            // Seek to segment using callback (start + end for bounded play)
+                            if (_seekToSegmentCallback != null) {
+                              await _seekToSegmentCallback!(segment.start, segment.end);
+                              HapticFeedback.lightImpact();
+                            }
+                          },
+                        ),
+                        SummaryTab(
+                          reviewEnabled: !widget.isFromOnboarding &&
+                              widget.initialSeekStart == null &&
+                              selectedTab == ConversationTab.summary &&
+                              !_controller!.indexIsChanging &&
+                              !_isSearching &&
+                              !_isSharing &&
+                              !_isDownloadingAudio &&
+                              !_reviewInterrupted,
+                          searchQuery: _searchQuery,
+                          currentResultIndex: getCurrentResultIndexForHighlighting(),
+                          onTapWhenSearchEmpty: _closeSearchIfEmpty,
+                        ),
+                        if (_controller!.length > _tasksTabIndex) const ActionItemsTab(),
+                      ],
                     ),
-                  ),
+                  )),
                 ],
               ),
             ),
@@ -1104,8 +1095,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                   mode: ConversationBottomBarMode.detail,
                   selectedTab: selectedTab,
                   conversation: conversation,
-                  hasSegments:
-                      conversation.transcriptSegments.isNotEmpty ||
+                  hasSegments: conversation.transcriptSegments.isNotEmpty ||
                       conversation.photos.isNotEmpty ||
                       conversation.externalIntegration != null,
                   hasActionItems: hasTasks,

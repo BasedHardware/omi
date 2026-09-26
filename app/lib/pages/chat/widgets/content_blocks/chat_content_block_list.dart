@@ -105,12 +105,10 @@ class ChatContentBlockList extends StatelessWidget {
       // prevents a mixed turn from losing that line beside a valid card.
       final block = ChatContentBlock.tryDecode(rawBlock);
       final fallback = renderStructuredFallbackText ? message.structuredFallbackTextForRawBlock(rawBlock) : null;
-      final fallbackKey = rawBlock['id'] is String && (rawBlock['id'] as String).isNotEmpty
-          ? rawBlock['id'] as String
-          : '$index';
+      final fallbackKey =
+          rawBlock['id'] is String && (rawBlock['id'] as String).isNotEmpty ? rawBlock['id'] as String : '$index';
       final widget = block == null ? null : _build(block);
-      final child =
-          widget ??
+      final child = widget ??
           (fallback == null
               ? null
               : _StructuredFallbackText(
@@ -124,7 +122,11 @@ class ChatContentBlockList extends StatelessWidget {
     }
     if (children.isEmpty) return const SizedBox.shrink();
 
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: children);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: children,
+    );
   }
 }
 

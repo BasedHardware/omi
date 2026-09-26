@@ -165,18 +165,14 @@ class _AppsListState extends State<_AppsList> {
                     width: double.infinity,
                     height: 16,
                     decoration: const BoxDecoration(
-                      color: OmiColors.surface1,
-                      borderRadius: BorderRadius.all(Radius.circular(4)),
-                    ),
+                        color: OmiColors.surface1, borderRadius: BorderRadius.all(Radius.circular(4))),
                   ),
                   const SizedBox(height: 8),
                   Container(
                     width: 200,
                     height: 12,
                     decoration: const BoxDecoration(
-                      color: OmiColors.surface1,
-                      borderRadius: BorderRadius.all(Radius.circular(4)),
-                    ),
+                        color: OmiColors.surface1, borderRadius: BorderRadius.all(Radius.circular(4))),
                   ),
                 ],
               ),
@@ -364,9 +360,8 @@ class _AppsListState extends State<_AppsList> {
       PlatformManager.instance.analytics.summarizedAppSelected(
         conversationId: conversationId,
         selectedAppId: app.id,
-        previousAppId: conversationProvider.getSummarySelection().isApp
-            ? conversationProvider.getSummarySelection().appId
-            : null,
+        previousAppId:
+            conversationProvider.getSummarySelection().isApp ? conversationProvider.getSummarySelection().appId : null,
       );
 
       // Track the last used app
@@ -544,7 +539,10 @@ class _AppListItemState extends State<_AppListItem> {
       tags.add(
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-          decoration: BoxDecoration(color: Colors.grey.shade600.withValues(alpha: 0.3), borderRadius: OmiRadius.smAll),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade600.withValues(alpha: 0.3),
+            borderRadius: OmiRadius.smAll,
+          ),
           child: Center(
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -578,8 +576,7 @@ class _AppListItemState extends State<_AppListItem> {
 
   Widget _buildTrailingWidget() {
     // Check if this app is currently being processed
-    final isProcessing =
-        widget.provider != null &&
+    final isProcessing = widget.provider != null &&
         widget.provider!.loadingReprocessConversation &&
         widget.provider!.selectedAppForReprocessing?.id == widget.app.id;
 
@@ -629,7 +626,10 @@ class _CreateTemplateListItem extends StatelessWidget {
             radius: 16,
             child: FaIcon(FontAwesomeIcons.plus, color: Colors.black, size: 18),
           ),
-          title: Text(context.l10n.createCustomTemplate, style: OmiType.callout.copyWith(fontWeight: FontWeight.w500)),
+          title: Text(
+            context.l10n.createCustomTemplate,
+            style: OmiType.callout.copyWith(fontWeight: FontWeight.w500),
+          ),
           trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
           onTap: () {
             final conversationId = context.read<ConversationDetailProvider>().conversation.id;
@@ -663,7 +663,10 @@ class _EnableAppsListItem extends StatelessWidget {
             radius: 16,
             child: FaIcon(FontAwesomeIcons.solidFolderOpen, color: Colors.black, size: 14),
           ),
-          title: Text(context.l10n.allTemplates, style: OmiType.callout.copyWith(fontWeight: FontWeight.w500)),
+          title: Text(
+            context.l10n.allTemplates,
+            style: OmiType.callout.copyWith(fontWeight: FontWeight.w500),
+          ),
           trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
           onTap: () {
             Navigator.pop(context);

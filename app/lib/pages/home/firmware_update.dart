@@ -60,9 +60,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
         if (mounted) {
           setState(() {
             shouldUpdate = result.$2;
-            updateMessage = widget.device!.firmwareRevision.isEmpty
-                ? context.l10n.unableToDetermineFirmwareVersion
-                : result.$1;
+            updateMessage =
+                widget.device!.firmwareRevision.isEmpty ? context.l10n.unableToDetermineFirmwareVersion : result.$1;
             isLoading = false;
           });
         }
@@ -92,12 +91,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
 
   Widget _buildSectionHeader(String title, {String? subtitle}) => OmiSectionHeader(title, subtitle: subtitle);
 
-  Widget _buildVersionItem({
-    required FaIconData icon,
-    required String label,
-    required String version,
-    Color? chipColor,
-  }) {
+  Widget _buildVersionItem(
+      {required FaIconData icon, required String label, required String version, Color? chipColor}) {
     return Padding(
       padding: const EdgeInsets.all(OmiSpacing.md),
       child: Row(
@@ -394,10 +389,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                         ),
                         const SizedBox(width: OmiSpacing.sm),
                         Expanded(
-                          child: Text(
-                            change,
-                            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4),
-                          ),
+                          child: Text(change,
+                              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4)),
                         ),
                       ],
                     ),
@@ -421,8 +414,8 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             label: widget.isRollback
                 ? context.l10n.installStableFirmware
                 : otaUpdateSteps.isEmpty
-                ? context.l10n.installUpdate
-                : context.l10n.updateNow,
+                    ? context.l10n.installUpdate
+                    : context.l10n.updateNow,
             leading: const FaIcon(FontAwesomeIcons.download),
             expand: true,
             onPressed: batteryTooLow ? null : _startUpdate,
@@ -481,12 +474,12 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             child: isLoading
                 ? _buildLoadingSection()
                 : busy
-                ? _buildProgressSection()
-                : isInstalled
-                ? _buildSuccessSection()
-                : failure != null
-                ? _buildFailedSection(failure)
-                : _buildUpdateSection(),
+                    ? _buildProgressSection()
+                    : isInstalled
+                        ? _buildSuccessSection()
+                        : failure != null
+                            ? _buildFailedSection(failure)
+                            : _buildUpdateSection(),
           ),
         ),
       ),

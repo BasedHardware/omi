@@ -202,7 +202,11 @@ class WalSyncs implements IWalSync {
   }
 
   int _estimateWalSize(Wal wal) {
-    return wal.codec.estimatedRecordingBytes(seconds: wal.seconds, sampleRate: wal.sampleRate, channels: wal.channel);
+    return wal.codec.estimatedRecordingBytes(
+      seconds: wal.seconds,
+      sampleRate: wal.sampleRate,
+      channels: wal.channel,
+    );
   }
 
   Future<void> deleteAllSyncedWals() async {

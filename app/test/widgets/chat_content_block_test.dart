@@ -168,7 +168,12 @@ void main() {
         type: 'text',
         contentBlocks: const [
           {'type': 'thinking', 'id': 'block-thinking', 'text': 'Checking the latest notes.'},
-          {'type': 'toolCall', 'id': 'block-tool', 'name': 'search_knowledge', 'output': 'Found 3 matching notes.'},
+          {
+            'type': 'toolCall',
+            'id': 'block-tool',
+            'name': 'search_knowledge',
+            'output': 'Found 3 matching notes.',
+          },
           {
             'type': 'citation',
             'id': 'block-citation',
@@ -207,7 +212,7 @@ void main() {
           {
             'type': 'toolCall',
             'name': 42,
-            'output': {'unexpected': true},
+            'output': {'unexpected': true}
           },
           {
             'type': 'conversationLink',
@@ -260,7 +265,10 @@ void main() {
       ],
     );
     expect(message.text, contains('The deadline is Friday.'));
-    await pumpMessage(tester, message: message);
+    await pumpMessage(
+      tester,
+      message: message,
+    );
 
     expect(find.byKey(const ValueKey('chat-block-text-block-text')), findsNothing);
   });
@@ -280,7 +288,11 @@ void main() {
       ],
     );
     expect(message.text, contains('The deadline is Friday.'));
-    await pumpMessage(tester, displayOptions: true, message: message);
+    await pumpMessage(
+      tester,
+      displayOptions: true,
+      message: message,
+    );
 
     expect(find.byKey(const ValueKey('chat-block-text-block-text')), findsNothing);
   });

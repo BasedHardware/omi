@@ -43,11 +43,8 @@ class AppReviewPrompt extends StatelessWidget {
           RecordingState.interrupted,
           RecordingState.pause,
         }.contains(capture?.recordingState) &&
-        !const {
-          PhoneCallState.connecting,
-          PhoneCallState.ringing,
-          PhoneCallState.active,
-        }.contains(PhoneCallProvider.callStateListenable.value);
+        !const {PhoneCallState.connecting, PhoneCallState.ringing, PhoneCallState.active}
+            .contains(PhoneCallProvider.callStateListenable.value);
   }
 
   @override

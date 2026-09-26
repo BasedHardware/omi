@@ -1,12 +1,6 @@
 'use client';
 
-import {
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  type CSSProperties,
-  type ReactNode,
-} from 'react';
+import { useEffect, useLayoutEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 export function PanelReveal({

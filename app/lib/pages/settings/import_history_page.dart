@@ -424,10 +424,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      statusText,
-                      style: OmiType.subhead.copyWith(color: statusColor, fontWeight: FontWeight.w600),
-                    ),
+                    Text(statusText, style: OmiType.subhead.copyWith(color: statusColor, fontWeight: FontWeight.w600)),
                     if (dateTimeStr.isNotEmpty && job.status == ImportJobStatus.completed)
                       Text(dateTimeStr, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
                   ],

@@ -59,8 +59,7 @@ final settingsPagesScenarios = <AuditScenario>[
     state: 'Signed-in fixture account; the fixture backend serves no plans; opened on a neutral host',
     run: (a) async {
       await a.pumpHost(
-        (context) => showOmiSheet(context: context, padding: EdgeInsets.zero, builder: (_) => _PlansHost()),
-      );
+          (context) => showOmiSheet(context: context, padding: EdgeInsets.zero, builder: (_) => _PlansHost()));
       await a.shot('Open the Plans sheet');
     },
   ),
@@ -128,10 +127,9 @@ final settingsPagesScenarios = <AuditScenario>[
       final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
       messenger.setMockMessageHandler(channel, (_) async => const StandardMethodCodec().encodeSuccessEnvelope(null));
       addTearDown(() => messenger.setMockMessageHandler(channel, null));
-      await a.pump(
-        const PhoneCallSettingsPage(),
-        providers: [ChangeNotifierProvider<PhoneCallProvider>.value(value: _NoNumbersPhoneCallProvider())],
-      );
+      await a.pump(const PhoneCallSettingsPage(), providers: [
+        ChangeNotifierProvider<PhoneCallProvider>.value(value: _NoNumbersPhoneCallProvider()),
+      ]);
       await a.shot('Open Phone Call settings with no verified numbers');
     },
   ),
@@ -142,17 +140,16 @@ final settingsPagesScenarios = <AuditScenario>[
     state: 'PeopleProvider holding one person (Alex) with one speech sample',
     run: (a) async {
       final people = PeopleProvider(
-        loadPeople: () async => [
-          Person(
-            id: 'p1',
-            name: 'Alex',
-            createdAt: DateTime.utc(2026, 9, 1),
-            updatedAt: DateTime.utc(2026, 9, 1),
-            speechSamples: const ['https://example.invalid/sample-0.wav'],
-            speechSampleTranscripts: const ['Hello there'],
-          ),
-        ],
-      );
+          loadPeople: () async => [
+                Person(
+                  id: 'p1',
+                  name: 'Alex',
+                  createdAt: DateTime.utc(2026, 9, 1),
+                  updatedAt: DateTime.utc(2026, 9, 1),
+                  speechSamples: const ['https://example.invalid/sample-0.wav'],
+                  speechSampleTranscripts: const ['Hello there'],
+                ),
+              ]);
       await a.pump(const UserPeoplePage(), providers: [ChangeNotifierProvider<PeopleProvider>.value(value: people)]);
       await a.shot('Open People with one enrolled person');
     },
@@ -185,10 +182,8 @@ final settingsPagesScenarios = <AuditScenario>[
     page: 'lib/pages/onboarding/speech_profile_widget.dart (SpeechProfileWidget)',
     state: 'Guided voice controller opened from Settings with a no-op microphone and network',
     run: (a) async {
-      await a.pump(
-        _voiceProfile(GuidedVoiceController(_SilentGuidedVoiceIO(), flowSource: 'settings')),
-        scaffold: false,
-      );
+      await a.pump(_voiceProfile(GuidedVoiceController(_SilentGuidedVoiceIO(), flowSource: 'settings')),
+          scaffold: false);
       await a.shot('Open Voice Profile from Settings: first prompt, progress and Start');
     },
   ),
@@ -211,9 +206,9 @@ final settingsPagesScenarios = <AuditScenario>[
 ];
 
 Widget _voiceProfile(GuidedVoiceController flow) => Scaffold(
-  appBar: AppBar(leading: const OmiBackButton()),
-  body: SpeechProfileWidget(flowSource: 'settings', controller: flow, goNext: () {}, onSkip: () {}),
-);
+      appBar: AppBar(leading: const OmiBackButton()),
+      body: SpeechProfileWidget(flowSource: 'settings', controller: flow, goNext: () {}, onSkip: () {}),
+    );
 
 class _NoNumbersPhoneCallProvider extends PhoneCallProvider {
   _NoNumbersPhoneCallProvider() : super.forTesting();
@@ -257,10 +252,8 @@ class _PlansHostState extends State<_PlansHost> with TickerProviderStateMixin {
   late final _wave = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
   late final _arrow = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat();
   late final _notes = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
-  late final _arrowAnimation = Tween<double>(
-    begin: 0,
-    end: 10,
-  ).animate(CurvedAnimation(parent: _arrow, curve: Curves.easeInOut));
+  late final _arrowAnimation =
+      Tween<double>(begin: 0, end: 10).animate(CurvedAnimation(parent: _arrow, curve: Curves.easeInOut));
 
   @override
   void dispose() {
@@ -272,9 +265,5 @@ class _PlansHostState extends State<_PlansHost> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) => PlansSheet(
-    waveController: _wave,
-    notesController: _notes,
-    arrowController: _arrow,
-    arrowAnimation: _arrowAnimation,
-  );
+      waveController: _wave, notesController: _notes, arrowController: _arrow, arrowAnimation: _arrowAnimation);
 }

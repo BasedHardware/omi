@@ -37,7 +37,9 @@ class ChatAppsDrawer extends StatelessWidget {
     final l10n = context.l10n;
     return Drawer(
       backgroundColor: OmiColors.surface1,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.horizontal(left: Radius.circular(OmiRadius.lg))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.horizontal(left: Radius.circular(OmiRadius.lg)),
+      ),
       child: SafeArea(
         child: Consumer2<MessageProvider, AppProvider>(
           builder: (context, messageProvider, appProvider, child) {
@@ -159,16 +161,15 @@ class _AppRow extends StatelessWidget {
       title: Text(name, style: OmiType.callout, overflow: TextOverflow.ellipsis),
       trailing: isSelected
           ? const ExcludeSemantics(
-              child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: OmiColors.textPrimary, size: 18),
-            )
+              child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: OmiColors.textPrimary, size: 18))
           : onDisable == null
-          ? null
-          : OmiIconButton(
-              icon: const FaIcon(FontAwesomeIcons.circleMinus, size: 18),
-              label: context.l10n.disableAppNamed(name),
-              color: OmiColors.textTertiary,
-              onPressed: onDisable,
-            ),
+              ? null
+              : OmiIconButton(
+                  icon: const FaIcon(FontAwesomeIcons.circleMinus, size: 18),
+                  label: context.l10n.disableAppNamed(name),
+                  color: OmiColors.textTertiary,
+                  onPressed: onDisable,
+                ),
       selected: isSelected,
       selectedTileColor: OmiColors.surface2,
       onTap: onTap,

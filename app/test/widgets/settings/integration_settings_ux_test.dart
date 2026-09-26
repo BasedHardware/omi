@@ -73,8 +73,7 @@ void main() {
 
       expect(find.text('Disconnect from Todoist?'), findsOneWidget);
       final confirm = tester.widget<TextButton>(
-        find.widgetWithText(TextButton, 'Disconnect').last,
-      ); // the dialog's, above the page button
+          find.widgetWithText(TextButton, 'Disconnect').last); // the dialog's, above the page button
       expect(confirm.style!.foregroundColor!.resolve({}), omiDialogDangerColor);
       // The page's button must not be busy just because the confirm is showing.
       expect(find.byType(OmiSpinner), findsNothing);

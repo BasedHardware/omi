@@ -33,27 +33,25 @@ void main() {
   if (_seconds < 5 || _seconds > 300) throw StateError('Capture duration must be 5–300 seconds.');
   if (!['phone_mic', 'wearable'].contains(_requestedSource)) throw StateError('Unknown physical capture source.');
   app.main();
-  unawaited(
-    _run().catchError((Object error, StackTrace stack) async {
-      // Keep failures visible and durable without logging auth values or audio.
-      await PhysicalQualification.runtimeEvent('capture_entry', error: error, stack: stack);
-      final documents = await getApplicationDocumentsDirectory();
-      await File('${documents.path}/physical_capture_failure.json').writeAsString(
-        jsonEncode({
-          'status': 'blocked',
-          'stage': _entryStage,
-          'error_type': error.runtimeType.toString(),
-          if (error is PhysicalCaptureCleanupFailure) ...{
-            'capture_error_type': error.captureError?.runtimeType.toString(),
-            'cleanup_error_type': error.cleanupError.runtimeType.toString(),
-          },
-          'at_ms': DateTime.now().millisecondsSinceEpoch,
-        }),
-        flush: true,
-      );
-      debugPrint('PHYSICAL_CAPTURE blocked: ${error.runtimeType}');
-    }),
-  );
+  unawaited(_run().catchError((Object error, StackTrace stack) async {
+    // Keep failures visible and durable without logging auth values or audio.
+    await PhysicalQualification.runtimeEvent('capture_entry', error: error, stack: stack);
+    final documents = await getApplicationDocumentsDirectory();
+    await File('${documents.path}/physical_capture_failure.json').writeAsString(
+      jsonEncode({
+        'status': 'blocked',
+        'stage': _entryStage,
+        'error_type': error.runtimeType.toString(),
+        if (error is PhysicalCaptureCleanupFailure) ...{
+          'capture_error_type': error.captureError?.runtimeType.toString(),
+          'cleanup_error_type': error.cleanupError.runtimeType.toString(),
+        },
+        'at_ms': DateTime.now().millisecondsSinceEpoch,
+      }),
+      flush: true,
+    );
+    debugPrint('PHYSICAL_CAPTURE blocked: ${error.runtimeType}');
+  }));
 }
 
 Future<void> _event(String phase, Map<String, dynamic> fields) async {
@@ -132,7 +130,7 @@ Future<BtDevice> _connectWearable(String boot) async {
     'scan_id': scanId,
     'candidates': [
       for (final candidate in candidates)
-        {'peripheral_id': candidate.id, 'name': candidate.name, 'rssi': candidate.rssi},
+        {'peripheral_id': candidate.id, 'name': candidate.name, 'rssi': candidate.rssi}
     ],
   });
   if (candidates.length != 1) throw StateError('Wearable scan must contain exactly one Omi.');
@@ -173,7 +171,7 @@ Future<Map<String, dynamic>> _snapshot(Directory documents, String phase, List<S
       'bytes': bytes.length,
       'sha256': sha256.convert(bytes).toString(),
       'status': wal.status.name,
-      'job_id': wal.jobId,
+      'job_id': wal.jobId
     });
   }
   return {'files': files, 'at_ms': DateTime.now().millisecondsSinceEpoch};
@@ -191,9 +189,7 @@ Future<void> _run() async {
     if (context != null && context.mounted) {
       try {
         capture = context.read<CaptureProvider>();
-      } on ProviderNotFoundException {
-        /* wait for routing */
-      }
+      } on ProviderNotFoundException {/* wait for routing */}
     }
   }
   if (capture == null) throw StateError('Real app capture provider did not become ready.');

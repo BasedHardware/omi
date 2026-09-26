@@ -40,7 +40,10 @@ class PopularAppsSection extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
           child: Row(
             children: [
-              Text(context.l10n.popularApps, style: OmiType.title3),
+              Text(
+                context.l10n.popularApps,
+                style: OmiType.title3,
+              ),
               const Spacer(),
               Row(
                 mainAxisSize: MainAxisSize.min,

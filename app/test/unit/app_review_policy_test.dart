@@ -32,18 +32,17 @@ void main() {
   });
 
   test('enforces migration cooldown, session, version, spacing, and budget', () {
-    expect(evaluate(migratedAt: now.subtract(const Duration(days: 119))), AppReviewDecision.migrationCooldown);
+    expect(
+      evaluate(migratedAt: now.subtract(const Duration(days: 119))),
+      AppReviewDecision.migrationCooldown,
+    );
     expect(evaluate(session: true), AppReviewDecision.sessionAlreadyAttempted);
     expect(
-      evaluate(
-        attempts: [AppReviewAttempt(at: now.subtract(const Duration(days: 365)), version: '1.2')],
-      ),
+      evaluate(attempts: [AppReviewAttempt(at: now.subtract(const Duration(days: 365)), version: '1.2')]),
       AppReviewDecision.versionAlreadyAttempted,
     );
     expect(
-      evaluate(
-        attempts: [AppReviewAttempt(at: now.subtract(const Duration(days: 1)), version: '1.1')],
-      ),
+      evaluate(attempts: [AppReviewAttempt(at: now.subtract(const Duration(days: 1)), version: '1.1')]),
       AppReviewDecision.cooldown,
     );
     expect(
@@ -60,9 +59,7 @@ void main() {
 
   test('allows the exact cooldown and rolling-window boundaries', () {
     expect(
-      evaluate(
-        attempts: [AppReviewAttempt(at: now.subtract(const Duration(days: 120)), version: '1.1')],
-      ),
+      evaluate(attempts: [AppReviewAttempt(at: now.subtract(const Duration(days: 120)), version: '1.1')]),
       AppReviewDecision.eligible,
     );
     expect(

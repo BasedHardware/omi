@@ -20,9 +20,7 @@ class TranscriptionFieldLabel extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
       child: Row(
         children: [
-          Expanded(
-            child: Text(text, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
-          ),
+          Expanded(child: Text(text, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary))),
           if (trailing != null) trailing!,
         ],
       ),
@@ -48,10 +46,8 @@ class TranscriptionHelpText extends StatelessWidget {
 
 /// The filled, bordered field decoration used on the page.
 InputDecoration transcriptionInputDecoration({String? hint, Widget? suffixIcon}) {
-  OutlineInputBorder border(Color color) => OutlineInputBorder(
-    borderRadius: OmiRadius.mdAll,
-    borderSide: BorderSide(color: color),
-  );
+  OutlineInputBorder border(Color color) =>
+      OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide(color: color));
   return InputDecoration(
     hintText: hint,
     hintStyle: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
@@ -175,13 +171,8 @@ class TranscriptionAutocompleteField extends StatelessWidget {
 
 /// A full-width dropdown in the page's field style.
 class TranscriptionDropdown<T> extends StatelessWidget {
-  const TranscriptionDropdown({
-    super.key,
-    required this.value,
-    required this.items,
-    required this.onChanged,
-    this.hint,
-  });
+  const TranscriptionDropdown(
+      {super.key, required this.value, required this.items, required this.onChanged, this.hint});
 
   final T? value;
   final List<DropdownMenuItem<T>> items;
@@ -335,9 +326,7 @@ class TranscriptionJsonCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Flexible(
-                          child: Text(title, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500)),
-                        ),
+                        Flexible(child: Text(title, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500))),
                         if (isCustomized) ...[
                           const SizedBox(width: OmiSpacing.xs),
                           Container(

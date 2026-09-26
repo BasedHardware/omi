@@ -13,26 +13,17 @@ void main() {
       expect(1, 2);
     });
     expect(called, isTrue);
-    await expectLater(
-      runContract(() {
-        pendingContract(package);
-      }),
-      throwsA(isA<TestFailure>()),
-    );
-    await expectLater(
-      runContract(() {
-        pendingContract(package);
-        throw StateError('broken fixture');
-      }),
-      throwsA(isA<StateError>()),
-    );
-    await expectLater(
-      runContract(() async {
-        await Future<void>.value();
-        expect(false, isTrue);
-      }),
-      throwsA(isA<TestFailure>()),
-    );
+    await expectLater(runContract(() {
+      pendingContract(package);
+    }), throwsA(isA<TestFailure>()));
+    await expectLater(runContract(() {
+      pendingContract(package);
+      throw StateError('broken fixture');
+    }), throwsA(isA<StateError>()));
+    await expectLater(runContract(() async {
+      await Future<void>.value();
+      expect(false, isTrue);
+    }), throwsA(isA<TestFailure>()));
     await runContract(() {
       pendingContract(package);
       throw UnimplementedError('skeleton');

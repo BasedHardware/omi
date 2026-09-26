@@ -124,11 +124,17 @@ class DeveloperMcpSection extends StatelessWidget {
                   const SizedBox(height: OmiSpacing.lg),
                   _Label(l10n.apiKeyAuth),
                   const SizedBox(height: OmiSpacing.xs),
-                  _KeyValue(label: l10n.header, value: 'Authorization: Bearer <key>'),
+                  _KeyValue(
+                    label: l10n.header,
+                    value: 'Authorization: Bearer <key>',
+                  ),
                   const SizedBox(height: OmiSpacing.lg),
                   _Label(l10n.oAuth),
                   const SizedBox(height: OmiSpacing.xs),
-                  Text(l10n.mcpOAuthSetup, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                  Text(
+                    l10n.mcpOAuthSetup,
+                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                  ),
                   const SizedBox(height: OmiSpacing.sm),
                   _KeyValue(label: l10n.clientId, value: kMcpOAuthClientId, copyable: true),
                   const SizedBox(height: OmiSpacing.xs),
@@ -171,14 +177,14 @@ class _McpKeysList extends StatelessWidget {
           return const Padding(padding: EdgeInsets.all(OmiSpacing.xl), child: OmiSpinner());
         }
         if (provider.error != null) {
-          return OmiErrorState(message: l10n.errorWithMessage(provider.error!), onRetry: () => provider.fetchKeys());
+          return OmiErrorState(
+            message: l10n.errorWithMessage(provider.error!),
+            onRetry: () => provider.fetchKeys(),
+          );
         }
         if (provider.keys.isEmpty) {
           return OmiEmptyState(
-            glyph: const FaIcon(FontAwesomeIcons.key),
-            title: l10n.noApiKeysYet,
-            message: l10n.createKeyToGetStarted,
-          );
+              glyph: const FaIcon(FontAwesomeIcons.key), title: l10n.noApiKeysYet, message: l10n.createKeyToGetStarted);
         }
         return OmiSettingsGroup(children: [for (final key in provider.keys) McpApiKeyListItem(apiKey: key)]);
       },
@@ -193,10 +199,7 @@ class _Label extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
-    );
+    return Text(text, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600));
   }
 }
 
@@ -217,10 +220,7 @@ class _CodeBlock extends StatelessWidget {
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Text.rich(
-          TextSpan(
-            style: OmiType.caption.copyWith(fontFamily: _mono, height: 1.6),
-            children: [child],
-          ),
+          TextSpan(style: OmiType.caption.copyWith(fontFamily: _mono, height: 1.6), children: [child]),
         ),
       ),
     );
@@ -253,9 +253,7 @@ class _CopyableValue extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Expanded(
-                child: Text(value, style: OmiType.footnote.copyWith(fontFamily: _mono)),
-              ),
+              Expanded(child: Text(value, style: OmiType.footnote.copyWith(fontFamily: _mono))),
               const SizedBox(width: OmiSpacing.xs),
               const FaIcon(FontAwesomeIcons.copy, size: 14, color: OmiColors.textTertiary),
             ],

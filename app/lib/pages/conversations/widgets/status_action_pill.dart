@@ -17,10 +17,7 @@ Widget statusActionPill(String label, Color color, VoidCallback onTap) {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
             decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: OmiRadius.pillAll),
-            child: Text(
-              label,
-              style: OmiType.footnote.copyWith(color: color, fontWeight: FontWeight.w500),
-            ),
+            child: Text(label, style: OmiType.footnote.copyWith(color: color, fontWeight: FontWeight.w500)),
           ),
         ),
       ),

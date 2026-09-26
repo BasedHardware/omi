@@ -30,18 +30,17 @@ final conversationsScenarios = <AuditScenario>[
         ServerConversation(id: 'b', createdAt: DateTime(2026, 9, 20, 10), structured: Structured('   ', 'Overview')),
         auditConversation('c', title: 'Old planning notes', discarded: true),
       ];
-      final provider =
-          ConversationProvider(conversationListFetcher: () async => (items: items, ok: true), isSignedIn: () => true)
-            ..conversationDeleteFetcherOverride = ((_) async => true)
-            ..conversations = items
-            ..groupConversationsByDate();
-      await a.pump(
-        const ConversationsPage(requestInitialLoad: false),
-        providers: <SingleChildWidget>[
-          ChangeNotifierProvider<ConversationProvider>.value(value: provider),
-          ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[])),
-        ],
-      );
+      final provider = ConversationProvider(
+        conversationListFetcher: () async => (items: items, ok: true),
+        isSignedIn: () => true,
+      )
+        ..conversationDeleteFetcherOverride = ((_) async => true)
+        ..conversations = items
+        ..groupConversationsByDate();
+      await a.pump(const ConversationsPage(requestInitialLoad: false), providers: <SingleChildWidget>[
+        ChangeNotifierProvider<ConversationProvider>.value(value: provider),
+        ChangeNotifierProvider(create: (_) => FolderProvider(foldersFetcher: () async => <Folder>[])),
+      ]);
       expect(find.byType(ConversationListItem), findsNWidgets(3));
       await a.shot('Conversations tab with a titled, an untitled and a discarded row', step: 'list');
       // No row menu at this revision: a long press selects the row for merging.

@@ -29,7 +29,9 @@ void main() {
 
   test('a failed folder refresh keeps the folders already loaded', () async {
     var calls = 0;
-    final provider = FolderProvider(foldersFetcher: () async => calls++ == 0 ? [_folder('work')] : await getFolders());
+    final provider = FolderProvider(
+      foldersFetcher: () async => calls++ == 0 ? [_folder('work')] : await getFolders(),
+    );
     addTearDown(provider.dispose);
 
     await provider.loadFolders();
@@ -43,14 +45,14 @@ void main() {
 }
 
 Folder _folder(String id) => Folder(
-  id: id,
-  name: 'Work',
-  color: '#FFFFFF',
-  icon: 'folder',
-  createdAt: DateTime.utc(2026),
-  updatedAt: DateTime.utc(2026),
-  order: 0,
-  isDefault: false,
-  isSystem: false,
-  conversationCount: 3,
-);
+      id: id,
+      name: 'Work',
+      color: '#FFFFFF',
+      icon: 'folder',
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+      order: 0,
+      isDefault: false,
+      isSystem: false,
+      conversationCount: 3,
+    );

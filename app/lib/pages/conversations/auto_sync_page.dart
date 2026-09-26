@@ -35,7 +35,7 @@ import 'package:omi/pages/conversations/widgets/status_action_pill.dart';
 /// clear that failed part-way still deleted files and leaves the card just as
 /// wrong; the failure itself still propagates to the caller.
 ({Future<void> Function() synced, Future<void> Function() pending, Future<void> Function() all})
-buildStorageClearActions({
+    buildStorageClearActions({
   required Future<void> Function() clearSynced,
   required Future<void> Function() clearPending,
   required Future<void> Function() clearAll,
@@ -222,8 +222,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       // Uploads finished, reconciler is resolving jobs in the background.
       title = l.syncCardProcessing;
       final counts = p.offlineServerProcessingCounts;
-      progressText =
-          SyncCardProgressLine.serverProcessingSubtitle(
+      progressText = SyncCardProgressLine.serverProcessingSubtitle(
             processed: counts.processed,
             total: counts.total,
             counterLabel: (processed, total) => l.processingProgress(processed, total),
@@ -255,7 +254,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          if (showSpinner) ...[const OmiSpinner(size: OmiSpinnerSize.small), const SizedBox(width: 12)],
+          if (showSpinner) ...[
+            const OmiSpinner(size: OmiSpinnerSize.small),
+            const SizedBox(width: 12),
+          ],
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

@@ -34,11 +34,8 @@ class ActionFieldsWidget extends StatelessWidget {
                     children: [
                       Text(context.l10n.scopes, style: OmiType.callout.copyWith(color: OmiColors.textSecondary)),
                       OmiIconButton(
-                        icon: const FaIcon(
-                          FontAwesomeIcons.solidCircleQuestion,
-                          color: OmiColors.textTertiary,
-                          size: 18,
-                        ),
+                        icon:
+                            const FaIcon(FontAwesomeIcons.solidCircleQuestion, color: OmiColors.textTertiary, size: 18),
                         label: context.l10n.docs,
                         onPressed: () {
                           launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Integrations'));
@@ -78,7 +75,12 @@ class ActionFieldsWidget extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(width: 14),
-                                Expanded(child: Text(actionType.getLocalizedTitle(context), style: OmiType.callout)),
+                                Expanded(
+                                  child: Text(
+                                    actionType.getLocalizedTitle(context),
+                                    style: OmiType.callout,
+                                  ),
+                                ),
                                 OmiSwitch(
                                   value: isSelected,
                                   onChanged: (value) {

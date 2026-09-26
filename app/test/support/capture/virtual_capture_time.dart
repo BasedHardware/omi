@@ -31,7 +31,7 @@ class FakeTimer implements Timer {
   int fires = 0;
 
   FakeTimer._(Duration delay, this._interval, this._fire, this.label, DateTime start)
-    : _nextDeadline = start.add(delay);
+      : _nextDeadline = start.add(delay);
 
   @override
   void cancel() => _active = false;
@@ -111,11 +111,9 @@ class ManualScheduler implements CaptureScheduling {
 
   void _trackCallbackResult(Object? result) {
     if (result is Future) {
-      _inFlightIo.add(
-        Future<void>.sync(() async {
-          await result;
-        }),
-      );
+      _inFlightIo.add(Future<void>.sync(() async {
+        await result;
+      }));
     }
   }
 

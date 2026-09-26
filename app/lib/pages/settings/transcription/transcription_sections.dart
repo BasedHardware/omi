@@ -131,9 +131,7 @@ class WhisperModelStatus extends StatelessWidget {
         children: [
           LinearProgressIndicator(value: progress, backgroundColor: OmiColors.surface3, color: OmiColors.accent),
           const SizedBox(height: OmiSpacing.xs),
-          Center(
-            child: Text(l10n.doNotCloseApp, style: OmiType.footnote.copyWith(color: OmiColors.warning)),
-          ),
+          Center(child: Text(l10n.doNotCloseApp, style: OmiType.footnote.copyWith(color: OmiColors.warning))),
           const SizedBox(height: OmiSpacing.xxs),
           Row(
             children: [
@@ -157,10 +155,8 @@ class WhisperModelStatus extends StatelessWidget {
             const Icon(Icons.check_circle, color: OmiColors.success, size: 20),
             const SizedBox(width: OmiSpacing.sm),
             Expanded(
-              child: Text(
-                l10n.modelReadyWithName(modelFile),
-                style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
-              ),
+              child: Text(l10n.modelReadyWithName(modelFile),
+                  style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500)),
             ),
             OmiButton.tertiary(label: l10n.reDownload, size: OmiButtonSize.compact, onPressed: onDownload),
           ],
@@ -256,9 +252,7 @@ class _LogLine extends StatelessWidget {
           const SizedBox(width: 6),
           Icon(icon, size: 12, color: color),
           const SizedBox(width: 6),
-          Expanded(
-            child: Text('[${log.source}] ${log.message}', style: mono.copyWith(color: color)),
-          ),
+          Expanded(child: Text('[${log.source}] ${log.message}', style: mono.copyWith(color: color))),
         ],
       ),
     );

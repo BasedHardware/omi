@@ -7,12 +7,8 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 /// Flashes a firmware ZIP the developer picked (Developer Settings → Firmware).
 class DeveloperFirmwareFlashPage extends StatefulWidget {
-  const DeveloperFirmwareFlashPage({
-    super.key,
-    required this.zipFilePath,
-    required this.fileName,
-    required this.device,
-  });
+  const DeveloperFirmwareFlashPage(
+      {super.key, required this.zipFilePath, required this.fileName, required this.device});
 
   final String zipFilePath;
   final String fileName;

@@ -240,12 +240,12 @@ class LocalWalSyncImpl implements LocalWalSync {
     Future<SyncJobFetch> Function(String jobId)? jobStatusFetcher,
     Future<void> Function(List<Wal> wals)? persistWals,
     Future<List<Wal>> Function()? loadWals,
-  }) : _uploadGateOverride = uploadGate,
-       _nowOverride = now,
-       _periodicOverride = periodic,
-       _jobStatusFetcherOverride = jobStatusFetcher,
-       _persistWalsOverride = persistWals,
-       _loadWalsOverride = loadWals;
+  })  : _uploadGateOverride = uploadGate,
+        _nowOverride = now,
+        _periodicOverride = periodic,
+        _jobStatusFetcherOverride = jobStatusFetcher,
+        _persistWalsOverride = persistWals,
+        _loadWalsOverride = loadWals;
 
   @override
   int get sessionGeneration => _sessionGeneration;
@@ -302,7 +302,9 @@ class LocalWalSyncImpl implements LocalWalSync {
       final generation = _sessionGeneration;
       await _chunk(generation);
     });
-    _flushingTimer = _periodic(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds), (t) async {
+    _flushingTimer = _periodic(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds), (
+      t,
+    ) async {
       final generation = _sessionGeneration;
       await _flush(generation);
     });
@@ -857,8 +859,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       if (batch.isEmpty) break;
       attemptedWalIds.addAll(batch.map((wal) => wal.id));
       final batchConversationId = batch.first.conversationId;
-      final claimLiveCapture =
-          !unclaimableConversationIds.contains(batchConversationId) &&
+      final claimLiveCapture = !unclaimableConversationIds.contains(batchConversationId) &&
           canClaimLiveCapture(
             batch,
             candidates.where((wal) => wal.conversationId == batchConversationId).toList(),

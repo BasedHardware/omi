@@ -34,79 +34,79 @@ void fireC8LeftoverBools(AnalyticsManager analytics) {
 }
 
 List<List<Object>> c8LeftoverBoolGoldens(Map<String, Object> globals) => [
-  [
-    'Show Discarded Memories Toggled',
-    {...globals, 'show_discarded': false},
-  ],
-  [
-    'Show Discarded Memories Toggled',
-    {...globals, 'show_discarded': true},
-  ],
-  [
-    'Show Discarded Conversations Toggled',
-    {...globals, 'show_discarded': false},
-  ],
-  [
-    'Show Discarded Conversations Toggled',
-    {...globals, 'show_discarded': true},
-  ],
-  [
-    'Deleted Conversations Filter Toggled',
-    {...globals, 'show_deleted': false},
-  ],
-  [
-    'Deleted Conversations Filter Toggled',
-    {...globals, 'show_deleted': true},
-  ],
-  [
-    'Apps Filter My Apps',
-    {...globals, 'enabled': false},
-  ],
-  [
-    'Apps Filter My Apps',
-    {...globals, 'enabled': true},
-  ],
-  [
-    'Apps Filter Installed',
-    {...globals, 'enabled': false},
-  ],
-  [
-    'Apps Filter Installed',
-    {...globals, 'enabled': true},
-  ],
-  [
-    'Daily Summary Toggled',
-    {...globals, 'enabled': false},
-  ],
-  [
-    'Daily Summary Toggled',
-    {...globals, 'enabled': true},
-  ],
-  [
-    'AI App Generator App Generated',
-    {...globals, 'success': false},
-  ],
-  [
-    'AI App Generator App Generated',
-    {...globals, 'success': true},
-  ],
-  [
-    'Action Items View Toggled',
-    {...globals, 'grouped_view': false},
-  ],
-  [
-    'Action Items View Toggled',
-    {...globals, 'grouped_view': true},
-  ],
-  [
-    'Phone Call Started',
-    {...globals, 'has_contact_name': false},
-  ],
-  [
-    'Phone Call Started',
-    {...globals, 'has_contact_name': true},
-  ],
-];
+      [
+        'Show Discarded Memories Toggled',
+        {...globals, 'show_discarded': false}
+      ],
+      [
+        'Show Discarded Memories Toggled',
+        {...globals, 'show_discarded': true}
+      ],
+      [
+        'Show Discarded Conversations Toggled',
+        {...globals, 'show_discarded': false}
+      ],
+      [
+        'Show Discarded Conversations Toggled',
+        {...globals, 'show_discarded': true}
+      ],
+      [
+        'Deleted Conversations Filter Toggled',
+        {...globals, 'show_deleted': false}
+      ],
+      [
+        'Deleted Conversations Filter Toggled',
+        {...globals, 'show_deleted': true}
+      ],
+      [
+        'Apps Filter My Apps',
+        {...globals, 'enabled': false}
+      ],
+      [
+        'Apps Filter My Apps',
+        {...globals, 'enabled': true}
+      ],
+      [
+        'Apps Filter Installed',
+        {...globals, 'enabled': false}
+      ],
+      [
+        'Apps Filter Installed',
+        {...globals, 'enabled': true}
+      ],
+      [
+        'Daily Summary Toggled',
+        {...globals, 'enabled': false}
+      ],
+      [
+        'Daily Summary Toggled',
+        {...globals, 'enabled': true}
+      ],
+      [
+        'AI App Generator App Generated',
+        {...globals, 'success': false}
+      ],
+      [
+        'AI App Generator App Generated',
+        {...globals, 'success': true}
+      ],
+      [
+        'Action Items View Toggled',
+        {...globals, 'grouped_view': false}
+      ],
+      [
+        'Action Items View Toggled',
+        {...globals, 'grouped_view': true}
+      ],
+      [
+        'Phone Call Started',
+        {...globals, 'has_contact_name': false}
+      ],
+      [
+        'Phone Call Started',
+        {...globals, 'has_contact_name': true}
+      ],
+    ];
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -114,12 +114,7 @@ void main() {
     AnalyticsManager.resetForTesting();
     SharedPreferences.setMockInitialValues({});
     PackageInfo.setMockInitialValues(
-      appName: 'Omi Test',
-      packageName: 'com.omi.test',
-      version: '1.0.543',
-      buildNumber: '992',
-      buildSignature: '',
-    );
+        appName: 'Omi Test', packageName: 'com.omi.test', version: '1.0.543', buildNumber: '992', buildSignature: '');
     await SharedPreferencesUtil.init();
   });
   tearDown(AnalyticsManager.resetForTesting);

@@ -46,13 +46,14 @@ void main() {
       bool micInterrupted = false,
       PhoneCallState call = PhoneCallState.idle,
       bool firmware = false,
-    }) => promptsBlocked(
-      recordingState: recording,
-      phoneMicBatchRecording: batch,
-      micInterruptedByCall: micInterrupted,
-      callState: call,
-      firmwareUpdateInProgress: firmware,
-    );
+    }) =>
+        promptsBlocked(
+          recordingState: recording,
+          phoneMicBatchRecording: batch,
+          micInterruptedByCall: micInterrupted,
+          callState: call,
+          firmwareUpdateInProgress: firmware,
+        );
 
     test('idle, passive wearable capture and a muted pendant do not hold prompts', () {
       expect(blocked(), isFalse);

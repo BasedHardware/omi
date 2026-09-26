@@ -163,9 +163,10 @@ class _ConversationLinkBlockState extends State<ConversationLinkBlock> {
               children: [
                 Text(
                   l10n.chatBlockRecommendedNextSteps,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.labelSmall?.copyWith(color: colorScheme.onSurfaceVariant, fontWeight: FontWeight.w600),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
                 ),
                 const SizedBox(height: 4),
                 for (final item in items)
@@ -179,7 +180,9 @@ class _ConversationLinkBlockState extends State<ConversationLinkBlock> {
                         Expanded(
                           child: Text(
                             item.description,
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
                           ),
                         ),
                       ],

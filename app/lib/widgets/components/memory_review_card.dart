@@ -35,7 +35,13 @@ enum MemoryReviewSource {
 /// requests are id-addressed. Such a row stays pending until a verdict is
 /// written, and the card never renders untappable control chrome.
 class MemoryReviewCard extends StatefulWidget {
-  const MemoryReviewCard({super.key, required this.items, required this.source, this.impressionKey, this.title});
+  const MemoryReviewCard({
+    super.key,
+    required this.items,
+    required this.source,
+    this.impressionKey,
+    this.title,
+  });
 
   final List<MemoryReviewItem> items;
   final MemoryReviewSource source;
@@ -430,9 +436,9 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
           label: context.l10n.memoryReviewFix,
           onTap: enabled
               ? () => setState(() {
-                  _failed.remove(item.memoryId);
-                  _editors[item.memoryId] = TextEditingController(text: _contentOf(item, memory));
-                })
+                    _failed.remove(item.memoryId);
+                    _editors[item.memoryId] = TextEditingController(text: _contentOf(item, memory));
+                  })
               : null,
         ),
       ],
@@ -444,8 +450,8 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
     final color = onTap == null
         ? OmiColors.textDisabled
         : emphasized
-        ? OmiColors.textPrimary
-        : OmiColors.textSecondary;
+            ? OmiColors.textPrimary
+            : OmiColors.textSecondary;
     return Semantics(
       button: true,
       enabled: onTap != null,

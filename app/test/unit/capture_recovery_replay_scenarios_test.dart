@@ -129,18 +129,12 @@ void main() {
       world.injectAudioFrames(100, sessionId: world.hostApi.lastStartSessionId!, firstFrameIndex: 2500 + s * 100);
       await world.elapse(const Duration(seconds: 1));
     }
-    expect(
-      world.socketCreates - createsAfterRestore,
-      lessThanOrEqualTo(2),
-      reason: 'reconnect attempts are rate-limited to the 15s keepalive cadence',
-    );
+    expect(world.socketCreates - createsAfterRestore, lessThanOrEqualTo(2),
+        reason: 'reconnect attempts are rate-limited to the 15s keepalive cadence');
     world.emitNativeState(PhoneMicCaptureState.running); // native engine is up on the fresh session
     await world.settle();
-    expect(
-      world.controller.recordingState,
-      RecordingState.record,
-      reason: 'the reconnected session returns to recording',
-    );
+    expect(world.controller.recordingState, RecordingState.record,
+        reason: 'the reconnected session returns to recording');
     final session2 = world.hostApi.lastStartSessionId!;
     expect(session2, session1 + 1);
     expect(world.hostApi.startSessionIds, [session1, session2], reason: 'one authoritative active session');
@@ -149,11 +143,9 @@ void main() {
     await captureSeconds(5, sessionId: session2, frameCursor: 4100);
     final reconnectedSocket = world.socket!;
     expect(reconnectedSocket, isNot(same(onlineSocket)));
-    expect(
-      reconnectedSocket.sentBinary.length,
-      600,
-      reason: 'post-reconnect frames stream on the new socket (the final restore-window second plus the recovered 5s)',
-    );
+    expect(reconnectedSocket.sentBinary.length, 600,
+        reason:
+            'post-reconnect frames stream on the new socket (the final restore-window second plus the recovered 5s)');
 
     // Session ends: the whole capture (online + offline + recovered windows) lands on disk.
     await world.stopLiveCapture();
@@ -166,11 +158,8 @@ void main() {
     final wal = missing.single;
     expect(wal.status, WalStatus.miss);
     final storedFrames = await readStoredWalFrames(wal);
-    expect(
-      storedFrames,
-      expectedFrames(0, 4600),
-      reason: 'recoverable audio identity: stored bytes must equal the exact injected frame sequence',
-    );
+    expect(storedFrames, expectedFrames(0, 4600),
+        reason: 'recoverable audio identity: stored bytes must equal the exact injected frame sequence');
 
     // Recovery drain uploads the WAL exactly once; a second wake is a no-op.
     await world.coordinator.wake(WakeTrigger.userRetry);
@@ -203,11 +192,8 @@ void main() {
     // Stale terminal idle from session 1 must not stop the fresh session.
     world.emitNativeState(PhoneMicCaptureState.idle, sessionId: session1);
     await world.settle();
-    expect(
-      world.controller.recordingState,
-      RecordingState.record,
-      reason: 'a stale terminal idle must never clobber the current session',
-    );
+    expect(world.controller.recordingState, RecordingState.record,
+        reason: 'a stale terminal idle must never clobber the current session');
     expect(world.hostApi.stopCalls, 1, reason: 'stale idle must not trigger a second native stop');
 
     // Stale audio frames are dropped: WAL sees only fresh-session frames.
@@ -340,12 +326,9 @@ void main() {
     final restored = wals.single;
     expect(restored.status, WalStatus.miss, reason: 'flushed-but-unuploaded WAL reloads as retryable');
     expect(restored.storage, WalStorage.disk);
-    expect(
-      (await readStoredWalFrames(restored)).length,
-      6000,
-      reason:
-          'the 75s chunk stored a 60s WAL (6000 frames) and the 105s flush wrote it to disk; the in-memory tail dies with the process',
-    );
+    expect((await readStoredWalFrames(restored)).length, 6000,
+        reason:
+            'the 75s chunk stored a 60s WAL (6000 frames) and the 105s flush wrote it to disk; the in-memory tail dies with the process');
     // Recovery after restart uploads the reconstructed artifact once.
     await world.coordinator.wake(WakeTrigger.userRetry);
     await world.settle();
@@ -400,11 +383,8 @@ void main() {
     await world.settle();
 
     final after = (await world.wal.syncs.phone.getAllWals()).single;
-    expect(
-      after.status,
-      WalStatus.corrupted,
-      reason: 'missing audio must become terminal corruption, not an infinite retry',
-    );
+    expect(after.status, WalStatus.corrupted,
+        reason: 'missing audio must become terminal corruption, not an infinite retry');
     expect(world.uploads.attempts, isEmpty, reason: 'no upload can be attempted without bytes');
     expect(await world.wal.syncs.phone.getMissingWals(), isEmpty, reason: 'corrupted WAL leaves the retry queue');
   });
@@ -429,11 +409,8 @@ void main() {
     await world.settle();
     expect(world.uploads.attempts, hasLength(1));
     expect((await world.walCounts())[WalStatus.miss], 1, reason: 'failed upload must remain retryable');
-    expect(
-      world.coordinator.nextCooldownAt,
-      world.clock.now().add(const Duration(seconds: 5)),
-      reason: 'first failure schedules the first backoff step (5s)',
-    );
+    expect(world.coordinator.nextCooldownAt, world.clock.now().add(const Duration(seconds: 5)),
+        reason: 'first failure schedules the first backoff step (5s)');
 
     // Retry at +5s fails again -> next backoff step is 10s. Event-queue
     // pressure must not hide the cooldown drain (CI load reproduced this).
@@ -444,11 +421,8 @@ void main() {
     await world.settle();
     expect(world.uploads.attempts, hasLength(2));
     expect((await world.walCounts())[WalStatus.miss], 1);
-    expect(
-      world.coordinator.nextCooldownAt,
-      world.clock.now().add(const Duration(seconds: 10)),
-      reason: 'backoff escalates 5s -> 10s',
-    );
+    expect(world.coordinator.nextCooldownAt, world.clock.now().add(const Duration(seconds: 10)),
+        reason: 'backoff escalates 5s -> 10s');
 
     // Second retry succeeds -> terminal synced, retries stop.
     eventQueuePressure();
@@ -496,11 +470,8 @@ void main() {
     expect(wal.status, WalStatus.uploaded, reason: 'queued job is enqueued, not yet acknowledged');
     expect(wal.jobId, 'job-42');
     final walPath = (await Wal.getFilePath(wal.filePath))!;
-    expect(
-      File(walPath).existsSync(),
-      isTrue,
-      reason: 'uploaded-but-unconfirmed audio is retained until server acknowledgement',
-    );
+    expect(File(walPath).existsSync(), isTrue,
+        reason: 'uploaded-but-unconfirmed audio is retained until server acknowledgement');
 
     // Non-terminal status again on a later pass: still not acknowledged.
     await world.coordinator.wake(WakeTrigger.userRetry);
@@ -518,11 +489,8 @@ void main() {
     await world.settle();
     wal = (await world.wal.syncs.phone.getAllWals()).single;
     expect(wal.status, WalStatus.synced);
-    expect(
-      world.uploads.attempts.length,
-      uploadsBefore,
-      reason: 'acknowledgement resolves by polling, never by re-uploading bytes',
-    );
+    expect(world.uploads.attempts.length, uploadsBefore,
+        reason: 'acknowledgement resolves by polling, never by re-uploading bytes');
   });
 
   test('a job the server refuses for an input reason stops re-uploading the same bytes', () async {
@@ -561,18 +529,12 @@ void main() {
       await world.settle();
     }
 
-    expect(
-      world.uploads.attempts,
-      hasLength(1),
-      reason: 'a permanently refused recording must not buy another upload on every wake',
-    );
+    expect(world.uploads.attempts, hasLength(1),
+        reason: 'a permanently refused recording must not buy another upload on every wake');
 
     final wal = (await world.wal.syncs.phone.getAllWals()).single;
-    expect(
-      wal.status,
-      WalStatus.unsupportedAudio,
-      reason: 'audio is never dropped — only the sync attempt is terminal',
-    );
+    expect(wal.status, WalStatus.unsupportedAudio,
+        reason: 'audio is never dropped — only the sync attempt is terminal');
     expect(wal.syncDisplayState, WalSyncDisplayState.unsupportedAudio);
     expect(File(walPath).lengthSync(), bytesAfterVerdict, reason: 'the local recording is retained untouched');
 
@@ -592,7 +554,10 @@ void main() {
     await world.coordinator.wake(WakeTrigger.cooldownElapsed);
     await world.settle();
     expect(world.uploads.attempts, hasLength(2), reason: 'one deliberate tap buys exactly one upload');
-    expect((await world.wal.syncs.phone.getAllWals()).single.syncDisplayState, WalSyncDisplayState.unsupportedAudio);
+    expect(
+      (await world.wal.syncs.phone.getAllWals()).single.syncDisplayState,
+      WalSyncDisplayState.unsupportedAudio,
+    );
   });
 
   test('a transient job failure keeps its per-attempt retry budget', () async {
@@ -614,11 +579,8 @@ void main() {
 
     await world.coordinator.wake(WakeTrigger.userRetry);
     await world.settle();
-    expect(
-      (await world.wal.syncs.phone.getAllWals()).single.retryCount,
-      1,
-      reason: 'an upstream failure costs one attempt, not the whole budget',
-    );
+    expect((await world.wal.syncs.phone.getAllWals()).single.retryCount, 1,
+        reason: 'an upstream failure costs one attempt, not the whole budget');
 
     await world.coordinator.wake(WakeTrigger.userRetry);
     await world.settle();
@@ -649,11 +611,8 @@ void main() {
     await world.settle();
     expect(world.uploads.attempts, isNotEmpty, reason: 'the refused attempt is visible');
     expect((await world.walCounts())[WalStatus.miss], 1, reason: 'refused upload keeps work local and retryable');
-    expect(
-      File((await Wal.getFilePath(walBefore.filePath))!).lengthSync(),
-      bytesBefore,
-      reason: 'refused attempts must not mutate the local artifact',
-    );
+    expect(File((await Wal.getFilePath(walBefore.filePath))!).lengthSync(), bytesBefore,
+        reason: 'refused attempts must not mutate the local artifact');
 
     // Socket reconnects are cancelled while signed out: after a transport
     // drop, the keepalive must not create new connections.
@@ -672,21 +631,15 @@ void main() {
     await world.coordinator.wake(WakeTrigger.userRetry);
     await world.settle();
     expect((await world.walCounts())[WalStatus.synced], 1);
-    expect(
-      world.uploads.attempts.last.totalBytes,
-      bytesBefore,
-      reason: 'the acknowledged upload carries exactly the persisted bytes',
-    );
+    expect(world.uploads.attempts.last.totalBytes, bytesBefore,
+        reason: 'the acknowledged upload carries exactly the persisted bytes');
   });
 
   test('websocket close 4001 refreshes the rejected token at most once per 30s window', () async {
     Future<void> flowFor(int seconds, int fromFrame) async {
       for (var s = 0; s < seconds; s++) {
-        world.injectAudioFrames(
-          100,
-          sessionId: world.hostApi.lastStartSessionId!,
-          firstFrameIndex: fromFrame + s * 100,
-        );
+        world.injectAudioFrames(100,
+            sessionId: world.hostApi.lastStartSessionId!, firstFrameIndex: fromFrame + s * 100);
         await world.elapse(const Duration(seconds: 1));
       }
     }
@@ -780,18 +733,12 @@ void main() {
     await world.stopLiveCapture();
 
     expect(second, greaterThan(first));
-    expect(world.hostApi.startSessionIds, [
-      first,
-      second,
-    ], reason: 'exactly one authoritative native session at a time');
+    expect(world.hostApi.startSessionIds, [first, second],
+        reason: 'exactly one authoritative native session at a time');
     expect(secondRecordingId, isNot(firstRecordingId), reason: 'each capture session mints a fresh recording identity');
-    expect(
-      secondCaptureSessionId,
-      firstCaptureSessionId,
-      reason:
-          'activeCaptureSessionId is the conversation/WAL window and is not '
-          'reset on phone-mic stop/next-start; C2 must consume activeRecordingId',
-    );
+    expect(secondCaptureSessionId, firstCaptureSessionId,
+        reason: 'activeCaptureSessionId is the conversation/WAL window and is not '
+            'reset on phone-mic stop/next-start; C2 must consume activeRecordingId');
   });
 
   // ---------------------------------------------------------------------------
@@ -856,7 +803,10 @@ void main() {
         case NativeCaptureEventKind.audioFrame:
           service.onAudioFrame(Uint8List.fromList(event.pcmFrame ?? const []), event.sessionId);
         case NativeCaptureEventKind.stateChanged:
-          service.onStateChanged(PhoneMicCaptureState.values.byName(event.state ?? 'idle'), event.sessionId);
+          service.onStateChanged(
+            PhoneMicCaptureState.values.byName(event.state ?? 'idle'),
+            event.sessionId,
+          );
         case NativeCaptureEventKind.captureError:
           service.onCaptureError(event.errorCode ?? '', event.errorMessage ?? '', event.sessionId);
         case NativeCaptureEventKind.batchProgress:

@@ -102,10 +102,7 @@ class _PermissionsGateState extends State<_PermissionsGate> {
   @override
   Widget build(BuildContext context) {
     if (_permissionsGranted == null) {
-      return const Scaffold(
-        backgroundColor: OmiColors.surface0,
-        body: Center(child: OmiSpinner()),
-      );
+      return const Scaffold(backgroundColor: OmiColors.surface0, body: Center(child: OmiSpinner()));
     }
     if (_permissionsGranted!) {
       return const HomePageWrapper();

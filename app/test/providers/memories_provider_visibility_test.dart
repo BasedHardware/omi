@@ -33,14 +33,14 @@ void main() {
   });
 
   Memory publicMemory(String id) => Memory(
-    id: id,
-    uid: 'memory-visibility-test-user',
-    content: 'Memory $id',
-    category: MemoryCategory.manual,
-    createdAt: DateTime(2026, 1, 1),
-    updatedAt: DateTime(2026, 1, 1),
-    visibility: MemoryVisibility.public,
-  );
+        id: id,
+        uid: 'memory-visibility-test-user',
+        content: 'Memory $id',
+        category: MemoryCategory.manual,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+        visibility: MemoryVisibility.public,
+      );
 
   test('making all memories private keeps them public when the server rejects it', () async {
     final provider = MemoriesProvider(

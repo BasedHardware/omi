@@ -48,7 +48,12 @@ void main() {
 
     testWidgets('a runtime failure offers Try Again, which re-runs start-up, and Contact Support', (tester) async {
       var retries = 0;
-      await tester.pumpWidget(StartupFailureApp(error: Exception('socket closed'), onRetry: () async => retries++));
+      await tester.pumpWidget(
+        StartupFailureApp(
+          error: Exception('socket closed'),
+          onRetry: () async => retries++,
+        ),
+      );
 
       expect(find.textContaining('Check your connection'), findsOneWidget);
       expect(find.byKey(const Key('startup_failure_contact_support')), findsOneWidget);

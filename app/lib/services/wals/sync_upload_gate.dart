@@ -12,14 +12,13 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/mutex.dart';
 import 'package:uuid/uuid.dart';
 
-typedef SyncFilesUploader =
-    Future<UploadFilesResult> Function(
-      List<File> files, {
-      UploadProgressCallback? onUploadProgress,
-      String? conversationId,
-      bool claimLiveCapture,
-      Geolocation? geolocation,
-    });
+typedef SyncFilesUploader = Future<UploadFilesResult> Function(
+  List<File> files, {
+  UploadProgressCallback? onUploadProgress,
+  String? conversationId,
+  bool claimLiveCapture,
+  Geolocation? geolocation,
+});
 typedef FairUseStatusLoader = Future<Map<String, dynamic>?> Function();
 typedef UploadTelemetryEmitter = void Function(String eventName, Map<String, dynamic> properties);
 typedef UploadAttemptIdFactory = String Function();
@@ -39,12 +38,12 @@ class SyncUploadGate {
     UploadTelemetryEmitter? telemetryEmitter,
     UploadAttemptIdFactory? attemptIdFactory,
     UploadClock? clock,
-  }) : _limiter = limiter,
-       _uploader = uploader,
-       _fairUseStatusLoader = fairUseStatusLoader,
-       _telemetryEmitter = telemetryEmitter,
-       _attemptIdFactory = attemptIdFactory ?? _defaultAttemptId,
-       _clock = clock ?? DateTime.now;
+  })  : _limiter = limiter,
+        _uploader = uploader,
+        _fairUseStatusLoader = fairUseStatusLoader,
+        _telemetryEmitter = telemetryEmitter,
+        _attemptIdFactory = attemptIdFactory ?? _defaultAttemptId,
+        _clock = clock ?? DateTime.now;
 
   static final SyncUploadGate instance = SyncUploadGate(
     limiter: SyncRateLimiter.instance,
@@ -307,13 +306,14 @@ class RecordingUploadTelemetry {
     required int fileCount,
     required int totalBytes,
     required bool claimsLiveCapture,
-  }) => _basePayload(
-    attemptId: attemptId,
-    recordingId: recordingId,
-    fileCount: fileCount,
-    totalBytes: totalBytes,
-    claimsLiveCapture: claimsLiveCapture,
-  );
+  }) =>
+      _basePayload(
+        attemptId: attemptId,
+        recordingId: recordingId,
+        fileCount: fileCount,
+        totalBytes: totalBytes,
+        claimsLiveCapture: claimsLiveCapture,
+      );
 
   static Map<String, dynamic> completedPayload({
     required String attemptId,
@@ -323,17 +323,18 @@ class RecordingUploadTelemetry {
     required bool claimsLiveCapture,
     required double durationSeconds,
     required String result,
-  }) => {
-    ..._basePayload(
-      attemptId: attemptId,
-      recordingId: recordingId,
-      fileCount: fileCount,
-      totalBytes: totalBytes,
-      claimsLiveCapture: claimsLiveCapture,
-    ),
-    'duration_seconds': durationSeconds < 0 ? 0.0 : durationSeconds,
-    'result': result == 'completed' ? 'completed' : 'accepted',
-  };
+  }) =>
+      {
+        ..._basePayload(
+          attemptId: attemptId,
+          recordingId: recordingId,
+          fileCount: fileCount,
+          totalBytes: totalBytes,
+          claimsLiveCapture: claimsLiveCapture,
+        ),
+        'duration_seconds': durationSeconds < 0 ? 0.0 : durationSeconds,
+        'result': result == 'completed' ? 'completed' : 'accepted',
+      };
 
   static Map<String, dynamic> failedPayload({
     required String attemptId,
@@ -343,17 +344,18 @@ class RecordingUploadTelemetry {
     required bool claimsLiveCapture,
     required double durationSeconds,
     required String failureClass,
-  }) => {
-    ..._basePayload(
-      attemptId: attemptId,
-      recordingId: recordingId,
-      fileCount: fileCount,
-      totalBytes: totalBytes,
-      claimsLiveCapture: claimsLiveCapture,
-    ),
-    'duration_seconds': durationSeconds < 0 ? 0.0 : durationSeconds,
-    'failure_class': _failureClasses.contains(failureClass) ? failureClass : 'unknown',
-  };
+  }) =>
+      {
+        ..._basePayload(
+          attemptId: attemptId,
+          recordingId: recordingId,
+          fileCount: fileCount,
+          totalBytes: totalBytes,
+          claimsLiveCapture: claimsLiveCapture,
+        ),
+        'duration_seconds': durationSeconds < 0 ? 0.0 : durationSeconds,
+        'failure_class': _failureClasses.contains(failureClass) ? failureClass : 'unknown',
+      };
 
   static const Set<String> _failureClasses = {
     'rate_limited',
@@ -394,14 +396,15 @@ class RecordingUploadTelemetry {
     required int fileCount,
     required int totalBytes,
     required bool claimsLiveCapture,
-  }) => {
-    'upload_attempt_id': attemptId,
-    if (recordingId != null && recordingId.isNotEmpty) 'recording_id': recordingId,
-    'file_count': fileCount < 0 ? 0 : fileCount,
-    'total_bytes': totalBytes < 0 ? 0 : totalBytes,
-    'claims_live_capture': claimsLiveCapture,
-    'upload_source': 'offline_audio_queue',
-  };
+  }) =>
+      {
+        'upload_attempt_id': attemptId,
+        if (recordingId != null && recordingId.isNotEmpty) 'recording_id': recordingId,
+        'file_count': fileCount < 0 ? 0 : fileCount,
+        'total_bytes': totalBytes < 0 ? 0 : totalBytes,
+        'claims_live_capture': claimsLiveCapture,
+        'upload_source': 'offline_audio_queue',
+      };
 }
 
 /// Raised when the server cutover control quarantines legacy offline uploads.

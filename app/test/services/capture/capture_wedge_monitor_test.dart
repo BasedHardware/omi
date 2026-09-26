@@ -189,11 +189,8 @@ void main() {
   });
 
   group('rapid BLE drops', () {
-    void bleDrop(
-      CaptureWedgeMonitor monitor, {
-      String deviceId = 'dev-a',
-      Duration duration = const Duration(seconds: 3),
-    }) {
+    void bleDrop(CaptureWedgeMonitor monitor,
+        {String deviceId = 'dev-a', Duration duration = const Duration(seconds: 3)}) {
       monitor.onBleSessionEnded(deviceId: deviceId, deviceType: DeviceType.omi, duration: duration);
     }
 
@@ -294,7 +291,10 @@ void main() {
 
     test('the retry-induced BLE end neither counts as a drop nor clears the episode', () async {
       final retryGate = Completer<void>();
-      final monitor = makeMonitor(withRetry: true, bleRetry: (_) => retryGate.future);
+      final monitor = makeMonitor(
+        withRetry: true,
+        bleRetry: (_) => retryGate.future,
+      );
       bleDrop(monitor);
       bleDrop(monitor);
       bleDrop(monitor);
@@ -360,7 +360,10 @@ void main() {
 
     test('dismissDeviceEpisode during an in-flight retry suppresses the prompt', () async {
       final retryGate = Completer<void>();
-      final monitor = makeMonitor(withRetry: true, bleRetry: (deviceId) => retryGate.future);
+      final monitor = makeMonitor(
+        withRetry: true,
+        bleRetry: (deviceId) => retryGate.future,
+      );
       zeroSession(monitor);
       zeroSession(monitor);
       zeroSession(monitor);
@@ -384,7 +387,10 @@ void main() {
 
     test('a positive session during retry resolves without a prompt', () async {
       final retryGate = Completer<void>();
-      final monitor = makeMonitor(withRetry: true, bleRetry: (deviceId) => retryGate.future);
+      final monitor = makeMonitor(
+        withRetry: true,
+        bleRetry: (deviceId) => retryGate.future,
+      );
       zeroSession(monitor);
       zeroSession(monitor);
       zeroSession(monitor);
@@ -451,7 +457,11 @@ void main() {
       zeroSession(monitor);
       zeroSession(monitor);
       for (var i = 0; i < 3; i++) {
-        monitor.onBleSessionEnded(deviceId: 'dev-a', deviceType: DeviceType.omi, duration: const Duration(seconds: 2));
+        monitor.onBleSessionEnded(
+          deviceId: 'dev-a',
+          deviceType: DeviceType.omi,
+          duration: const Duration(seconds: 2),
+        );
       }
       await pumpEventQueue();
       expect(monitor.visiblePrompt, isNull);

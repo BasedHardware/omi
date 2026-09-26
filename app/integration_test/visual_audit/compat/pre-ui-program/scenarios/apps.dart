@@ -42,8 +42,8 @@ App _app({required String id, String name = 'Asana', String? uid, bool externalI
 /// An AppProvider whose catalog is [apps] under one "Popular" section, with nothing enabled.
 AppProvider _catalog(List<App> apps) => AppProvider()
   ..retrieveAppsGroupedOverride = (() async => [
-    {'title': 'Popular', 'data': apps},
-  ])
+        {'title': 'Popular', 'data': apps},
+      ])
   ..getEnabledAppsOverride = (() async => const [])
   ..retrievePopularAppsOverride = (() async => apps);
 
@@ -56,13 +56,10 @@ final appsScenarios = <AuditScenario>[
     run: (a) async {
       final apps = [_app(id: 'asana'), _app(id: 'notion', name: 'Notion')];
       await primeNetworkImages(a.tester, apps.map((app) => app.getImageUrl()));
-      await a.pump(
-        const AppsPage(showAppBar: true),
-        providers: [
-          ChangeNotifierProvider<AppProvider>.value(value: _catalog(apps)),
-          ChangeNotifierProvider<AddAppProvider>(create: (_) => InertAddAppProvider()),
-        ],
-      );
+      await a.pump(const AppsPage(showAppBar: true), providers: [
+        ChangeNotifierProvider<AppProvider>.value(value: _catalog(apps)),
+        ChangeNotifierProvider<AddAppProvider>(create: (_) => InertAddAppProvider()),
+      ]);
       await a.shot('Open the Apps tab');
     },
   ),
@@ -74,16 +71,15 @@ final appsScenarios = <AuditScenario>[
     run: (a) async {
       // As lib/pages/apps/explore_install_page.dart opened it at this revision.
       await a.pumpHost(
-        (context) => showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-          builder: (_) => const FilterBottomSheet(),
-        ),
-        providers: [
-          ChangeNotifierProvider<AppProvider>.value(value: _catalog([_app(id: 'asana')])),
-        ],
-      );
+          (context) => showModalBottomSheet(
+                context: context,
+                isScrollControlled: true,
+                shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+                builder: (_) => const FilterBottomSheet(),
+              ),
+          providers: [
+            ChangeNotifierProvider<AppProvider>.value(value: _catalog([_app(id: 'asana')]))
+          ]);
       await a.shot('Open the Apps filter sheet');
     },
   ),
@@ -95,13 +91,10 @@ final appsScenarios = <AuditScenario>[
     run: (a) async {
       final app = _app(id: 'asana', externalIntegration: true);
       await primeNetworkImages(a.tester, [app.getImageUrl()]);
-      await a.pump(
-        AppDetailPage(app: app),
-        providers: [
-          ChangeNotifierProvider<AppProvider>.value(value: _catalog([app])),
-          ChangeNotifierProvider<AddAppProvider>(create: (_) => InertAddAppProvider()),
-        ],
-      );
+      await a.pump(AppDetailPage(app: app), providers: [
+        ChangeNotifierProvider<AppProvider>.value(value: _catalog([app])),
+        ChangeNotifierProvider<AddAppProvider>(create: (_) => InertAddAppProvider()),
+      ]);
       await a.shot('Open an app detail page');
     },
   ),
@@ -111,10 +104,9 @@ final appsScenarios = <AuditScenario>[
     page: 'lib/pages/apps/add_app.dart (AddAppPage)',
     state: 'AddAppProvider with one category and no capabilities or payment plans loaded',
     run: (a) async {
-      await a.pump(
-        const AddAppPage(),
-        providers: [ChangeNotifierProvider<AddAppProvider>(create: (_) => InertAddAppProvider())],
-      );
+      await a.pump(const AddAppPage(), providers: [
+        ChangeNotifierProvider<AddAppProvider>(create: (_) => InertAddAppProvider()),
+      ]);
       await a.shot('Open the Submit App form');
     },
   ),
@@ -126,10 +118,9 @@ final appsScenarios = <AuditScenario>[
     run: (a) async {
       final owned = _app(id: 'my-app', name: 'My Own App', uid: JourneyFixtureBackend.fixtureUid);
       await primeNetworkImages(a.tester, [owned.image, owned.getImageUrl()]);
-      await a.pump(
-        UpdateAppPage(app: owned),
-        providers: [ChangeNotifierProvider<AddAppProvider>(create: (_) => InertAddAppProvider())],
-      );
+      await a.pump(UpdateAppPage(app: owned), providers: [
+        ChangeNotifierProvider<AddAppProvider>(create: (_) => InertAddAppProvider()),
+      ]);
       await a.shot('Open Manage App for an owned app');
     },
   ),
@@ -149,10 +140,9 @@ final appsScenarios = <AuditScenario>[
     page: 'lib/pages/settings/ai_app_generator_page.dart (AiAppGeneratorPage)',
     state: 'Empty AppProvider catalog',
     run: (a) async {
-      await a.pump(
-        const AiAppGeneratorPage(),
-        providers: [ChangeNotifierProvider<AppProvider>.value(value: _catalog([]))],
-      );
+      await a.pump(const AiAppGeneratorPage(), providers: [
+        ChangeNotifierProvider<AppProvider>.value(value: _catalog([])),
+      ]);
       await a.shot('Open the AI app generator prompt step');
     },
   ),

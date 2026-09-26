@@ -57,14 +57,14 @@ abstract final class OmiFeedback {
 
   /// Reports a failure. Stays 8 s with a close button, or until [onAction] ("Try Again").
   static void error(BuildContext context, String message, {String? actionLabel, VoidCallback? onAction}) => _show(
-    context,
-    message,
-    kind: OmiFeedbackKind.error,
-    duration: OmiFeedbackTiming.error,
-    actionLabel: actionLabel,
-    onAction: onAction,
-    showClose: true,
-  );
+        context,
+        message,
+        kind: OmiFeedbackKind.error,
+        duration: OmiFeedbackTiming.error,
+        actionLabel: actionLabel,
+        onAction: onAction,
+        showClose: true,
+      );
 
   /// Shows ongoing work until the next feedback replaces it (at most a minute).
   static void progress(BuildContext context, String message) =>
@@ -168,12 +168,12 @@ abstract final class OmiFeedback {
       OmiFeedbackKind.undo => const Icon(Icons.delete_outline_rounded, size: 20, color: _infoIconColor),
       OmiFeedbackKind.info => const Icon(Icons.info_outline_rounded, size: 20, color: _infoIconColor),
       OmiFeedbackKind.progress => const SizedBox.square(
-        dimension: 20,
-        child: Padding(
-          padding: EdgeInsets.all(2),
-          child: CircularProgressIndicator(strokeWidth: 2, color: _infoIconColor),
+          dimension: 20,
+          child: Padding(
+            padding: EdgeInsets.all(2),
+            child: CircularProgressIndicator(strokeWidth: 2, color: _infoIconColor),
+          ),
         ),
-      ),
     };
   }
 }

@@ -35,12 +35,8 @@ Future<void> openConversationTask(BuildContext context, ConversationDetailProvid
   final refreshed = await tryGetActionItems(conversationId: conversationId, limit: 200);
   if (refreshed == null || provider.conversationOrNull?.id != conversationId) return;
   final updated = refreshed.actionItems.firstWhereOrNull((task) => task.id == match.id);
-  provider.applyTaskEdit(
-    item,
-    description: updated?.description,
-    completed: updated?.completed,
-    deleted: updated == null,
-  );
+  provider.applyTaskEdit(item,
+      description: updated?.description, completed: updated?.completed, deleted: updated == null);
 }
 
 /// One task row of a conversation: a checkbox that completes it at once, and a tap that opens the
@@ -161,9 +157,8 @@ class _ActionItemDetailWidgetState extends State<ActionItemDetailWidget> {
         if (mounted) setState(() => _pendingStates.remove(itemDescription));
       });
 
-      final currentIndex = provider.conversation.structured.actionItems.indexWhere(
-        (item) => item.description == itemDescription,
-      );
+      final currentIndex =
+          provider.conversation.structured.actionItems.indexWhere((item) => item.description == itemDescription);
       if (currentIndex != -1) {
         if (newValue) {
           PlatformManager.instance.analytics.checkedActionItem(provider.conversation, currentIndex);
@@ -252,13 +247,13 @@ class ActionItemsTab extends StatelessWidget {
         }
 
         Widget itemList(List<ActionItem> items) => SliverList(
-          delegate: SliverChildBuilderDelegate((context, index) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: 6),
-              child: ActionItemDetailWidget(actionItem: items[index], conversationId: provider.conversation.id),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: 6),
+                  child: ActionItemDetailWidget(actionItem: items[index], conversationId: provider.conversation.id),
+                );
+              }, childCount: items.length),
             );
-          }, childCount: items.length),
-        );
 
         return CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),

@@ -127,9 +127,7 @@ class _EditSegmentSheetState extends State<EditSegmentSheet> {
                     ),
                   ),
                   const SizedBox(width: OmiSpacing.sm),
-                  Expanded(
-                    child: OmiButton(label: context.l10n.save, expand: true, onPressed: _save),
-                  ),
+                  Expanded(child: OmiButton(label: context.l10n.save, expand: true, onPressed: _save)),
                 ],
               ),
             ],

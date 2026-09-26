@@ -40,7 +40,10 @@ class ChatJumpToLatestButton extends StatelessWidget {
                   children: [
                     const Icon(Icons.keyboard_arrow_down_rounded, color: OmiColors.textPrimary, size: 22),
                     const SizedBox(width: 6),
-                    Text(label, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
+                    Text(
+                      label,
+                      style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
+                    ),
                   ],
                 ),
               ),

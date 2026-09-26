@@ -338,17 +338,14 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       try {
         final diagnostics = await BleHostApi().getDeviceDiagnostics(diagnosticsDeviceId);
         final startMs = backgroundStartedAt.millisecondsSinceEpoch;
-        final recentEvents = diagnostics.disconnectHistory
-            .where((event) => event.timestamp >= startMs && !event.isManual)
-            .toList();
-        final backgroundEvents = recentEvents
-            .where((event) => event.appState == 'background' || event.appState == 'inactive')
-            .toList();
+        final recentEvents =
+            diagnostics.disconnectHistory.where((event) => event.timestamp >= startMs && !event.isManual).toList();
+        final backgroundEvents =
+            recentEvents.where((event) => event.appState == 'background' || event.appState == 'inactive').toList();
         backgroundDisconnectCount = backgroundEvents.where((event) => event.eventType == 'disconnect').length;
         failToConnectCount = backgroundEvents.where((event) => event.eventType == 'fail_to_connect').length;
-        connectionTimeoutCount = backgroundEvents
-            .where((event) => event.reason.toLowerCase().contains('timeout'))
-            .length;
+        connectionTimeoutCount =
+            backgroundEvents.where((event) => event.reason.toLowerCase().contains('timeout')).length;
         final reconnectedEvents = backgroundEvents.where((event) => event.timeToReconnectMs > 0).toList();
         reconnectCount = reconnectedEvents.length;
         for (final event in reconnectedEvents) {
@@ -358,8 +355,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         }
         reconnectionCountTotal = diagnostics.reconnectionCount;
         failToConnectCountTotal = diagnostics.failToConnectCount;
-        bleHistorySaturated =
-            diagnostics.disconnectHistory.length >= 20 &&
+        bleHistorySaturated = diagnostics.disconnectHistory.length >= 20 &&
             diagnostics.disconnectHistory.every((event) => event.timestamp >= startMs);
         nativeBackgroundBytesConsumed = diagnostics.nativeBackgroundBytesConsumed;
         nativeBackgroundPacketsConsumed = diagnostics.nativeBackgroundPacketsConsumed;
@@ -958,16 +954,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       color: isSyncing
                           ? OmiColors.surface3
                           : hasPendingOnDevice
-                          ? OmiColors.warning.withValues(alpha: 0.15)
-                          : OmiColors.surface1,
+                              ? OmiColors.warning.withValues(alpha: 0.15)
+                              : OmiColors.surface1,
                       icon: Icon(
                         Icons.cloud_rounded,
                         size: 18,
                         color: isSyncing
                             ? OmiColors.textPrimary
                             : hasPendingOnDevice
-                            ? OmiColors.warning
-                            : OmiColors.textSecondary,
+                                ? OmiColors.warning
+                                : OmiColors.textSecondary,
                       ),
                     );
                   }

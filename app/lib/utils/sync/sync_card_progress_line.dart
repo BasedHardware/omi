@@ -22,7 +22,10 @@ class SyncCardProgressLine {
       current -= 1;
     }
 
-    final normalized = OfflineProcessingDisplay.normalizeCounts(current: current, total: totalFiles ?? 0);
+    final normalized = OfflineProcessingDisplay.normalizeCounts(
+      current: current,
+      total: totalFiles ?? 0,
+    );
     if (normalized.total <= 0) {
       return speedSuffix;
     }

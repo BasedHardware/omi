@@ -65,25 +65,25 @@ class _FairUsePageState extends State<FairUsePage> {
       body: _isLoading
           ? const OmiLoadingState()
           : _error != null || _status == null
-          ? OmiErrorState(message: context.l10n.fairUseLoadError, onRetry: _loadStatus)
-          : RefreshIndicator(
-              onRefresh: _loadStatus,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(OmiSpacing.md),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildStatusBanner(),
-                    _buildUsageSection(),
-                    _buildBudgetSection(),
-                    _buildMessageBanner(),
-                    const SizedBox(height: OmiSpacing.xl),
-                    _buildAboutFooter(),
-                  ],
+              ? OmiErrorState(message: context.l10n.fairUseLoadError, onRetry: _loadStatus)
+              : RefreshIndicator(
+                  onRefresh: _loadStatus,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(OmiSpacing.md),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildStatusBanner(),
+                        _buildUsageSection(),
+                        _buildBudgetSection(),
+                        _buildMessageBanner(),
+                        const SizedBox(height: OmiSpacing.xl),
+                        _buildAboutFooter(),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ),
     );
   }
 
@@ -128,10 +128,7 @@ class _FairUsePageState extends State<FairUsePage> {
             ),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                stageLabel,
-                style: OmiType.subhead.copyWith(color: dotColor, fontWeight: FontWeight.w500),
-              ),
+              child: Text(stageLabel, style: OmiType.subhead.copyWith(color: dotColor, fontWeight: FontWeight.w500)),
             ),
             if (caseRef.isNotEmpty)
               Semantics(
@@ -213,8 +210,8 @@ class _FairUsePageState extends State<FairUsePage> {
     final barColor = pct >= 100
         ? OmiColors.danger
         : pct >= 80
-        ? OmiColors.warning
-        : OmiColors.accent;
+            ? OmiColors.warning
+            : OmiColors.accent;
     final l10n = context.l10n;
 
     return Column(

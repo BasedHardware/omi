@@ -148,10 +148,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
     return Consumer<PhoneCallProvider>(
       builder: (context, provider, _) {
         if (!provider.numbersLoaded) {
-          return Scaffold(
-            appBar: AppBar(leading: const OmiBackButton()),
-            body: const OmiLoadingState(),
-          );
+          return Scaffold(appBar: AppBar(leading: const OmiBackButton()), body: const OmiLoadingState());
         }
         if (provider.verifiedNumbers.isEmpty) {
           return const PhoneSetupIntroPage();
@@ -282,8 +279,8 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
                       style: TextStyle(
                         fontSize: hasDigits
                             ? (_dialpadController.text.length > 12
-                                  ? OmiType.title2.fontSize
-                                  : OmiType.largeTitle.fontSize)
+                                ? OmiType.title2.fontSize
+                                : OmiType.largeTitle.fontSize)
                             : OmiType.title3.fontSize,
                         fontWeight: FontWeight.w300,
                         letterSpacing: hasDigits ? 2 : 0,
@@ -567,9 +564,7 @@ class _FreeQuotaBanner extends StatelessWidget {
             children: [
               const ExcludeSemantics(child: Icon(Icons.info_outline, size: 16, color: OmiColors.textTertiary)),
               const SizedBox(width: OmiSpacing.xs),
-              Expanded(
-                child: Text(text, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-              ),
+              Expanded(child: Text(text, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary))),
             ],
           ),
         );

@@ -73,7 +73,10 @@ class PaymentMethodCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(title, style: OmiType.headline),
+                      Text(
+                        title,
+                        style: OmiType.headline,
+                      ),
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

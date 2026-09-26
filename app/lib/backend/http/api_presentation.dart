@@ -12,24 +12,26 @@ class ApiViewState<T> {
 }
 
 bool _hidesProtectedData(ApiProblemKind kind) => switch (kind) {
-  ApiProblemKind.authTerminal ||
-  ApiProblemKind.forbidden ||
-  ApiProblemKind.paymentRequired ||
-  ApiProblemKind.notFound ||
-  ApiProblemKind.unprocessable ||
-  ApiProblemKind.rejected => true,
-  _ => false,
-};
+      ApiProblemKind.authTerminal ||
+      ApiProblemKind.forbidden ||
+      ApiProblemKind.paymentRequired ||
+      ApiProblemKind.notFound ||
+      ApiProblemKind.unprocessable ||
+      ApiProblemKind.rejected =>
+        true,
+      _ => false,
+    };
 
 ApiViewPhase _phaseForFailure(ApiProblemKind kind) => switch (kind) {
-  ApiProblemKind.authTerminal => ApiViewPhase.authenticationRequired,
-  ApiProblemKind.paymentRequired => ApiViewPhase.locked,
-  ApiProblemKind.forbidden ||
-  ApiProblemKind.notFound ||
-  ApiProblemKind.unprocessable ||
-  ApiProblemKind.rejected => ApiViewPhase.terminal,
-  _ => ApiViewPhase.error,
-};
+      ApiProblemKind.authTerminal => ApiViewPhase.authenticationRequired,
+      ApiProblemKind.paymentRequired => ApiViewPhase.locked,
+      ApiProblemKind.forbidden ||
+      ApiProblemKind.notFound ||
+      ApiProblemKind.unprocessable ||
+      ApiProblemKind.rejected =>
+        ApiViewPhase.terminal,
+      _ => ApiViewPhase.error,
+    };
 
 /// No scheduling/caching policy here: only projection of a completed request.
 ApiViewState<T> presentApiResult<T>(

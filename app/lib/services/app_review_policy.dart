@@ -1,7 +1,10 @@
 /// The moments at which a reading surface may ask the operating system for a
 /// review. The caller is responsible for calling [recordEngagement] only after
 /// valid reading content has loaded.
-enum AppReviewMoment { dailySummaryRead, conversationRead }
+enum AppReviewMoment {
+  dailySummaryRead,
+  conversationRead,
+}
 
 /// Closed decisions emitted by the review opportunity telemetry.
 enum AppReviewDecision {
@@ -23,28 +26,28 @@ enum AppReviewDecision {
 
 extension AppReviewMomentName on AppReviewMoment {
   String get telemetryName => switch (this) {
-    AppReviewMoment.dailySummaryRead => 'daily_summary_read',
-    AppReviewMoment.conversationRead => 'conversation_read',
-  };
+        AppReviewMoment.dailySummaryRead => 'daily_summary_read',
+        AppReviewMoment.conversationRead => 'conversation_read',
+      };
 }
 
 extension AppReviewDecisionName on AppReviewDecision {
   String get telemetryName => switch (this) {
-    AppReviewDecision.eligible => 'eligible',
-    AppReviewDecision.notIosOrAndroid => 'not_ios_or_android',
-    AppReviewDecision.storageError => 'storage_error',
-    AppReviewDecision.notFamiliar => 'not_familiar',
-    AppReviewDecision.migrationCooldown => 'migration_cooldown',
-    AppReviewDecision.cooldown => 'cooldown',
-    AppReviewDecision.budgetExhausted => 'budget_exhausted',
-    AppReviewDecision.versionAlreadyAttempted => 'version_already_attempted',
-    AppReviewDecision.sessionAlreadyAttempted => 'session_already_attempted',
-    AppReviewDecision.lifecycleNotAppropriate => 'lifecycle_not_appropriate',
-    AppReviewDecision.lifecycleChanged => 'lifecycle_changed',
-    AppReviewDecision.availabilityError => 'availability_error',
-    AppReviewDecision.unavailable => 'unavailable',
-    AppReviewDecision.requestError => 'request_error',
-  };
+        AppReviewDecision.eligible => 'eligible',
+        AppReviewDecision.notIosOrAndroid => 'not_ios_or_android',
+        AppReviewDecision.storageError => 'storage_error',
+        AppReviewDecision.notFamiliar => 'not_familiar',
+        AppReviewDecision.migrationCooldown => 'migration_cooldown',
+        AppReviewDecision.cooldown => 'cooldown',
+        AppReviewDecision.budgetExhausted => 'budget_exhausted',
+        AppReviewDecision.versionAlreadyAttempted => 'version_already_attempted',
+        AppReviewDecision.sessionAlreadyAttempted => 'session_already_attempted',
+        AppReviewDecision.lifecycleNotAppropriate => 'lifecycle_not_appropriate',
+        AppReviewDecision.lifecycleChanged => 'lifecycle_changed',
+        AppReviewDecision.availabilityError => 'availability_error',
+        AppReviewDecision.unavailable => 'unavailable',
+        AppReviewDecision.requestError => 'request_error',
+      };
 }
 
 /// Tunable hypotheses for when review requests are useful and respectful.

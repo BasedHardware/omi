@@ -340,9 +340,9 @@ class _TransferHarness {
     List<String>? drainedWalIds,
     Future<void> Function()? onTransferStarted,
     Future<void> Function()? onTransferFinished,
-  }) : _autoUploadEnabled = autoUploadEnabled,
-       backlog = backlog ?? <String>['wal-1'],
-       drainedWalIds = drainedWalIds ?? <String>[] {
+  })  : _autoUploadEnabled = autoUploadEnabled,
+        backlog = backlog ?? <String>['wal-1'],
+        drainedWalIds = drainedWalIds ?? <String>[] {
     coordinator = RecordingTransferCoordinator(
       reconcile: _reconcile,
       discover: _discover,

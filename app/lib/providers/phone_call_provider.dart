@@ -610,9 +610,8 @@ class PhoneCallProvider extends ChangeNotifier {
     _transcriptionStatus = TranscriptionStatus.connecting;
     notifyListeners();
 
-    var language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : 'multi';
+    var language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : 'multi';
 
     var wsUrl = api.buildPhoneCallWebSocketUrl(
       callId: _currentCallId!,
@@ -674,8 +673,11 @@ class PhoneCallProvider extends ChangeNotifier {
   Future<Map<String, String>> _productionHeaderBuilder(String url) =>
       buildHeaders(requireAuthCheck: true, url: url, forWebSocket: true);
 
-  WebSocketChannel _productionSocketFactory(String url, Map<String, String> headers) =>
-      IOWebSocketChannel.connect(url, headers: headers, pingInterval: const Duration(seconds: 20));
+  WebSocketChannel _productionSocketFactory(String url, Map<String, String> headers) => IOWebSocketChannel.connect(
+        url,
+        headers: headers,
+        pingInterval: const Duration(seconds: 20),
+      );
 
   void _resetTranscriptSessionStats() {
     _wsAccepted = false;

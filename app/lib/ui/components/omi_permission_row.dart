@@ -26,10 +26,10 @@ enum OmiPermissionStatus {
   /// Maps a `permission_handler` status. `denied` stays [askable] because both platforms prompt
   /// again after a plain denial; they report `permanentlyDenied` once they stop prompting.
   static OmiPermissionStatus fromStatus(PermissionStatus status) => switch (status) {
-    PermissionStatus.granted || PermissionStatus.limited || PermissionStatus.provisional => granted,
-    PermissionStatus.permanentlyDenied || PermissionStatus.restricted => blocked,
-    PermissionStatus.denied => askable,
-  };
+        PermissionStatus.granted || PermissionStatus.limited || PermissionStatus.provisional => granted,
+        PermissionStatus.permanentlyDenied || PermissionStatus.restricted => blocked,
+        PermissionStatus.denied => askable,
+      };
 }
 
 /// One permission as a pre-prompt: what it is, why Omi wants it, and one action that fits its state.
@@ -107,30 +107,30 @@ class OmiPermissionRow extends StatelessWidget {
 
     final Widget trailing = switch (status) {
       OmiPermissionStatus.granted => Semantics(
-        label: l10n.permissionAllowed,
-        child: ExcludeSemantics(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.check_circle, color: OmiColors.success, size: 20),
-              const SizedBox(width: OmiSpacing.xxs),
-              Text(l10n.permissionAllowed, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
-            ],
+          label: l10n.permissionAllowed,
+          child: ExcludeSemantics(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.check_circle, color: OmiColors.success, size: 20),
+                const SizedBox(width: OmiSpacing.xxs),
+                Text(l10n.permissionAllowed, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+              ],
+            ),
           ),
         ),
-      ),
       OmiPermissionStatus.askable => OmiButton(
-        key: const Key('omi_permission_allow'),
-        label: l10n.allow,
-        onPressed: onAllow,
-        size: OmiButtonSize.compact,
-      ),
+          key: const Key('omi_permission_allow'),
+          label: l10n.allow,
+          onPressed: onAllow,
+          size: OmiButtonSize.compact,
+        ),
       OmiPermissionStatus.blocked || OmiPermissionStatus.serviceOff => OmiButton.secondary(
-        key: const Key('omi_permission_open_settings'),
-        label: l10n.openSettings,
-        onPressed: _openSettings,
-        size: OmiButtonSize.compact,
-      ),
+          key: const Key('omi_permission_open_settings'),
+          label: l10n.openSettings,
+          onPressed: _openSettings,
+          size: OmiButtonSize.compact,
+        ),
     };
 
     return Container(

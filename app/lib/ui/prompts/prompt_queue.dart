@@ -106,11 +106,7 @@ class PromptQueue {
     } catch (error, stack) {
       FlutterError.reportError(
         FlutterErrorDetails(
-          exception: error,
-          stack: stack,
-          library: 'prompt_queue',
-          context: ErrorDescription(prompt.id),
-        ),
+            exception: error, stack: stack, library: 'prompt_queue', context: ErrorDescription(prompt.id)),
       );
     } finally {
       if (identical(_showing, prompt)) _showing = null;

@@ -48,12 +48,12 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO {
     _recording = true;
     try {
       await ServiceManager.instance().mic.start(
-        onByteReceived: onAudio,
-        onStalled: onInterrupted,
-        onInterruption: (began) {
-          if (began) onInterrupted();
-        },
-      );
+            onByteReceived: onAudio,
+            onStalled: onInterrupted,
+            onInterruption: (began) {
+              if (began) onInterrupted();
+            },
+          );
       PlatformManager.instance.analytics.speechProfileCapturePageClicked();
     } catch (_) {
       _recording = false;
@@ -79,8 +79,7 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO {
   Future<String> transcribe(Uint8List pcm) async {
     String text;
     if (_local) {
-      text =
-          (await _recognizer!.transcribe(_wav(pcm), language: _language).timeout(const Duration(seconds: 25)))
+      text = (await _recognizer!.transcribe(_wav(pcm), language: _language).timeout(const Duration(seconds: 25)))
               ?.rawText ??
           '';
     } else {
@@ -107,10 +106,8 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO {
       }
       return saved;
     } on SpeechProfileUploadException catch (e) {
-      PlatformManager.instance.analytics.speechProfileUploadFailed(
-        reason: 'http_${e.statusCode}',
-        statusCode: e.statusCode,
-      );
+      PlatformManager.instance.analytics
+          .speechProfileUploadFailed(reason: 'http_${e.statusCode}', statusCode: e.statusCode);
       if (e.statusCode == 503) throw VoiceEnrollmentUnavailable();
       rethrow;
     } catch (_) {

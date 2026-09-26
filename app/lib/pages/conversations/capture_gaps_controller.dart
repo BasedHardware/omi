@@ -2,8 +2,10 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/utils/logger.dart';
 
-typedef CaptureGapsFetcher =
-    Future<({List<CalendarCaptureGap> items, bool ok})> Function({required DateTime start, required DateTime end});
+typedef CaptureGapsFetcher = Future<({List<CalendarCaptureGap> items, bool ok})> Function({
+  required DateTime start,
+  required DateTime end,
+});
 
 /// Owns the capture-gap rows the Conversations list shows: the rows, the loaded
 /// date span they belong to, and the in-flight read.

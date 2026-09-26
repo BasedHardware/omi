@@ -207,10 +207,7 @@ class _FolderTab extends StatelessWidget {
     // Track context menu opened
     PlatformManager.instance.analytics.folderContextMenuOpened(folderId: folder!.id, folderName: folder!.name);
 
-    showOmiSheet<void>(
-      context: context,
-      builder: (ctx) => _FolderContextMenu(folder: folder!),
-    );
+    showOmiSheet<void>(context: context, builder: (ctx) => _FolderContextMenu(folder: folder!));
   }
 
   @override
@@ -358,10 +355,8 @@ class _FolderContextMenu extends StatelessWidget {
               children: [
                 FaIcon(folderIconToFa(folder.icon), size: 18, color: folder.colorValue),
                 const SizedBox(width: 8),
-                Text(
-                  folder.name,
-                  style: OmiType.callout.copyWith(color: folder.colorValue, fontWeight: FontWeight.w600),
-                ),
+                Text(folder.name,
+                    style: OmiType.callout.copyWith(color: folder.colorValue, fontWeight: FontWeight.w600)),
               ],
             ),
           ),

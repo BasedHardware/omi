@@ -53,7 +53,10 @@ void main() {
   test('a slow provider stays single-flight beyond the former polling timeout', () {
     fakeAsync((async) {
       final provider = _HangingSttProvider();
-      final socket = PurePollingSocket(config: const AudioPollingConfig(minBufferSizeBytes: 1), sttProvider: provider);
+      final socket = PurePollingSocket(
+        config: const AudioPollingConfig(minBufferSizeBytes: 1),
+        sttProvider: provider,
+      );
       final listener = _FakeListener();
       socket.setListener(listener);
       socket.connect();

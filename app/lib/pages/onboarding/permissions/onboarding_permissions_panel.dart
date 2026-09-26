@@ -34,10 +34,10 @@ class PlatformOnboardingPermissionsSource implements OnboardingPermissionsSource
 
   @override
   List<OnboardingPermission> get permissions => [
-    if (Platform.isAndroid) OnboardingPermission.background,
-    OnboardingPermission.location,
-    OnboardingPermission.notifications,
-  ];
+        if (Platform.isAndroid) OnboardingPermission.background,
+        OnboardingPermission.location,
+        OnboardingPermission.notifications,
+      ];
 
   @override
   Future<OmiPermissionStatus> status(OnboardingPermission permission) async {

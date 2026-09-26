@@ -47,7 +47,10 @@ void main() {
   });
 
   test('initialization migrates legacy flags and removes them after persistence', () async {
-    SharedPreferences.setMockInitialValues(<String, Object>{'deviceMuted': false, 'batchMuted': true});
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      'deviceMuted': false,
+      'batchMuted': true,
+    });
 
     await SharedPreferencesUtil.init();
     final prefs = await SharedPreferences.getInstance();
@@ -199,7 +202,8 @@ void main() {
     };
     final store = _GatedPreferencesStore(<String, Object>{
       'flutter.capturePolicy': '{"version":1,"revision":4,"muted":false}',
-    })..failWrites = true;
+    })
+      ..failWrites = true;
     await _initWithStore(store);
 
     await expectLater(SharedPreferencesUtil().setCaptureMuted(true), throwsStateError);
@@ -241,7 +245,8 @@ void main() {
   test('failed unmute is surfaced and leaves effective state muted', () async {
     final store = _GatedPreferencesStore(<String, Object>{
       'flutter.capturePolicy': '{"version":1,"revision":4,"muted":true}',
-    })..failWrites = true;
+    })
+      ..failWrites = true;
     await _initWithStore(store);
     final prefs = SharedPreferencesUtil();
 
@@ -250,7 +255,10 @@ void main() {
   });
 
   test('failed migration does not remove legacy flags', () async {
-    final store = _GatedPreferencesStore(<String, Object>{'flutter.deviceMuted': false, 'flutter.batchMuted': false})
+    final store = _GatedPreferencesStore(<String, Object>{
+      'flutter.deviceMuted': false,
+      'flutter.batchMuted': false,
+    })
       ..failWrites = true;
     await _initWithStore(store);
 

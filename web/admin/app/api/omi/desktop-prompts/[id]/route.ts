@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 // poll (~5 minutes) — this is the no-release kill path.
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
@@ -26,7 +26,7 @@ export async function PATCH(
   if (body?.rollout_pct !== undefined) {
     updates["audience.rollout_pct"] = Math.min(
       Math.max(Number(body.rollout_pct), 0),
-      100
+      100,
     );
   }
   await getDb().collection("desktop_prompts").doc(id).update(updates);
@@ -35,7 +35,7 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;

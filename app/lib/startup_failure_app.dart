@@ -54,10 +54,10 @@ class StartupFailureApp extends StatelessWidget {
   bool get _isConfiguration => error is StartupConfigurationError;
 
   static Uri _supportUri(AppLocalizations l10n) => Uri(
-    scheme: 'mailto',
-    path: kStartupSupportEmail,
-    query: 'subject=${Uri.encodeComponent(l10n.startupFailedTitle)}',
-  );
+        scheme: 'mailto',
+        path: kStartupSupportEmail,
+        query: 'subject=${Uri.encodeComponent(l10n.startupFailedTitle)}',
+      );
 
   static AppLocalizations _strings() {
     try {
@@ -81,7 +81,10 @@ class StartupFailureApp extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Semantics(header: true, child: Text(l10n.startupFailedTitle, style: OmiType.title2)),
+                Semantics(
+                  header: true,
+                  child: Text(l10n.startupFailedTitle, style: OmiType.title2),
+                ),
                 const SizedBox(height: OmiSpacing.sm),
                 Text(
                   _isConfiguration ? l10n.startupFailedConfigMessage : l10n.startupFailedMessage,

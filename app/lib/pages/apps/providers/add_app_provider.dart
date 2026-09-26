@@ -29,8 +29,8 @@ class AddAppProvider extends ChangeNotifier {
   AddAppProvider({
     Future<bool> Function(String appId, String keyId)? deleteApiKeyServerFn,
     Future<List<AppApiKey>> Function(String appId)? listApiKeysServerFn,
-  }) : _deleteApiKeyServer = deleteApiKeyServerFn ?? deleteApiKeyServer,
-       _listApiKeysServer = listApiKeysServerFn ?? listApiKeysServer;
+  })  : _deleteApiKeyServer = deleteApiKeyServerFn ?? deleteApiKeyServer,
+        _listApiKeysServer = listApiKeysServerFn ?? listApiKeysServer;
   AppProvider? appProvider;
 
   GlobalKey<FormState> formKey = GlobalKey<FormState>();

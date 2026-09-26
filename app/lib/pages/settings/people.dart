@@ -199,71 +199,69 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                 child: provider.loading
                     ? const OmiLoadingState()
                     : provider.people.isEmpty
-                    ? OmiEmptyState(
-                        icon: Icons.people_outline,
-                        title: l10n.noPeopleYet,
-                        message: l10n.createPersonHint,
-                        action: OmiButton(
-                          label: l10n.addPerson,
-                          icon: Icons.add,
-                          size: OmiButtonSize.compact,
-                          onPressed: () {
-                            _showPersonDialog(context, provider);
-                          },
-                        ),
-                      )
-                    : ListView.separated(
-                        itemCount: provider.people.length,
-                        separatorBuilder: (context, index) => const Divider(height: 1, color: OmiColors.border),
-                        itemBuilder: (context, index) {
-                          final person = provider.people[index];
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              ListTile(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                                title: Text(person.name, style: OmiType.body.copyWith(fontWeight: FontWeight.w500)),
-                                subtitle: Text(
-                                  l10n.voiceRecognitionStatus(person.voiceReadiness),
-                                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                                ),
-                                onTap: () => _showPersonDialog(context, provider, person: person),
-                                trailing: OmiIconButton(
-                                  icon: const Icon(Icons.delete_outline, size: 20),
-                                  label: l10n.deletePersonLabel,
-                                  color: OmiColors.textSecondary,
-                                  onPressed: () => _confirmDeletePerson(person, provider),
-                                ),
-                              ),
-                              if (person.speechSamples != null && person.speechSamples!.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(left: 6, right: 16, bottom: 8),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      for (final (j, sample) in person.speechSamples!.indexed)
-                                        _SampleRow(
-                                          title: l10n.sampleNumber(j + 1),
-                                          transcript:
-                                              person.speechSampleTranscripts != null &&
-                                                  j < person.speechSampleTranscripts!.length
-                                              ? person.speechSampleTranscripts![j]
-                                              : null,
-                                          playing:
-                                              provider.currentPlayingPersonIndex == index &&
-                                              provider.currentPlayingIndex == j &&
-                                              provider.isPlaying,
-                                          // The row plays: a tap no longer deletes (it used to).
-                                          onPlayPause: () => provider.playPause(index, j, sample),
-                                          onDelete: () => _confirmDeleteSample(index, person, j, provider),
-                                        ),
-                                    ],
+                        ? OmiEmptyState(
+                            icon: Icons.people_outline,
+                            title: l10n.noPeopleYet,
+                            message: l10n.createPersonHint,
+                            action: OmiButton(
+                              label: l10n.addPerson,
+                              icon: Icons.add,
+                              size: OmiButtonSize.compact,
+                              onPressed: () {
+                                _showPersonDialog(context, provider);
+                              },
+                            ),
+                          )
+                        : ListView.separated(
+                            itemCount: provider.people.length,
+                            separatorBuilder: (context, index) => const Divider(height: 1, color: OmiColors.border),
+                            itemBuilder: (context, index) {
+                              final person = provider.people[index];
+                              return Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                                    title: Text(person.name, style: OmiType.body.copyWith(fontWeight: FontWeight.w500)),
+                                    subtitle: Text(
+                                      l10n.voiceRecognitionStatus(person.voiceReadiness),
+                                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                                    ),
+                                    onTap: () => _showPersonDialog(context, provider, person: person),
+                                    trailing: OmiIconButton(
+                                      icon: const Icon(Icons.delete_outline, size: 20),
+                                      label: l10n.deletePersonLabel,
+                                      color: OmiColors.textSecondary,
+                                      onPressed: () => _confirmDeletePerson(person, provider),
+                                    ),
                                   ),
-                                ),
-                            ],
-                          );
-                        },
-                      ),
+                                  if (person.speechSamples != null && person.speechSamples!.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 6, right: 16, bottom: 8),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          for (final (j, sample) in person.speechSamples!.indexed)
+                                            _SampleRow(
+                                              title: l10n.sampleNumber(j + 1),
+                                              transcript: person.speechSampleTranscripts != null &&
+                                                      j < person.speechSampleTranscripts!.length
+                                                  ? person.speechSampleTranscripts![j]
+                                                  : null,
+                                              playing: provider.currentPlayingPersonIndex == index &&
+                                                  provider.currentPlayingIndex == j &&
+                                                  provider.isPlaying,
+                                              // The row plays: a tap no longer deletes (it used to).
+                                              onPlayPause: () => provider.playPause(index, j, sample),
+                                              onDelete: () => _confirmDeleteSample(index, person, j, provider),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
+                          ),
               ),
             ],
           ),

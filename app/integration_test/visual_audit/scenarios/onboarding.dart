@@ -85,13 +85,10 @@ final onboardingScenarios = <AuditScenario>[
     state:
         'OnboardingProvider with no discovered devices and pairing instructions enabled; BLE scan and speaker-profile check are no-ops',
     run: (a) async {
-      await a.pump(
-        FindDevicesPage(goNext: () {}, includeSkip: true, isFromOnboarding: true),
-        providers: [
-          ChangeNotifierProvider<OnboardingProvider>.value(value: _NoDevicesOnboardingProvider()),
-          ChangeNotifierProvider<HomeProvider>(create: (_) => _NoSpeakerCheckHomeProvider()),
-        ],
-      );
+      await a.pump(FindDevicesPage(goNext: () {}, includeSkip: true, isFromOnboarding: true), providers: [
+        ChangeNotifierProvider<OnboardingProvider>.value(value: _NoDevicesOnboardingProvider()),
+        ChangeNotifierProvider<HomeProvider>(create: (_) => _NoSpeakerCheckHomeProvider()),
+      ]);
       await a.shot("The can't-find-your-device state");
     },
   ),
@@ -99,10 +96,8 @@ final onboardingScenarios = <AuditScenario>[
 
 class _FixedPermissionsSource implements OnboardingPermissionsSource {
   @override
-  List<OnboardingPermission> get permissions => const [
-    OnboardingPermission.location,
-    OnboardingPermission.notifications,
-  ];
+  List<OnboardingPermission> get permissions =>
+      const [OnboardingPermission.location, OnboardingPermission.notifications];
   @override
   Future<OmiPermissionStatus> status(OnboardingPermission permission) async =>
       permission == OnboardingPermission.notifications ? OmiPermissionStatus.blocked : OmiPermissionStatus.askable;

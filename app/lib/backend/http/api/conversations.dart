@@ -316,8 +316,8 @@ String conversationCollectionUrl(
 /// stay for unmigrated callers; 403/503/missing are distinct here instead of null.
 class ConversationApi {
   ConversationApi({required String baseUrl, ApiSend? send})
-    : _baseUrl = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/',
-      _send = send;
+      : _baseUrl = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/',
+        _send = send;
 
   final String _baseUrl;
   final ApiSend? _send;
@@ -353,10 +353,10 @@ class ConversationApi {
     return switch (sent) {
       ApiFailure(:final problem) => ApiFailure(problem),
       ApiSuccess(:final data) => decodeApiRows<ServerConversation>(
-        data,
-        ServerConversation.fromJson,
-        fallback: recordFallback,
-      ),
+          data,
+          ServerConversation.fromJson,
+          fallback: recordFallback,
+        ),
     };
   }
 
@@ -504,7 +504,10 @@ Future<bool> assignBulkConversationTranscriptSegments(
   var response = await makeApiCall(
     url: speakerId == null
         ? '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/assign-bulk'
-        : '${Env.apiBaseUrl}v1/conversations/$conversationId/assign-speaker/$speakerId?${Uri(queryParameters: {'assign_type': assignType, 'value': value ?? 'null'}).query}',
+        : '${Env.apiBaseUrl}v1/conversations/$conversationId/assign-speaker/$speakerId?${Uri(queryParameters: {
+                'assign_type': assignType,
+                'value': value ?? 'null'
+              }).query}',
     headers: {},
     method: 'PATCH',
     body: jsonEncode({'segment_ids': segmentIds, 'assign_type': assignType, 'value': value}),
@@ -938,10 +941,10 @@ class ConversationSearchResult {
   });
 
   const ConversationSearchResult.failure({this.statusCode})
-    : items = const [],
-      currentPage = 0,
-      totalPages = 0,
-      outcome = ConversationSearchResultOutcome.failure;
+      : items = const [],
+        currentPage = 0,
+        totalPages = 0,
+        outcome = ConversationSearchResultOutcome.failure;
 
   bool get isSuccess => outcome == ConversationSearchResultOutcome.success;
 }

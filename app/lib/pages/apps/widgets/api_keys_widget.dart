@@ -157,7 +157,10 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
           ),
           if (_isLoading)
             const Center(
-              child: Padding(padding: EdgeInsets.all(OmiSpacing.md), child: OmiSpinner()),
+              child: Padding(
+                padding: EdgeInsets.all(OmiSpacing.md),
+                child: OmiSpinner(),
+              ),
             ),
           if (provider.apiKeys.isEmpty)
             Padding(
@@ -183,9 +186,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Center(
-          child: Text(l10n.yourNewKey, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
-        ),
+        Center(child: Text(l10n.yourNewKey, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600))),
         const SizedBox(height: OmiSpacing.md),
         Container(
           padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
@@ -214,10 +215,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
           TextSpan(
             children: [
               TextSpan(text: l10n.pleaseCopyKeyNow),
-              TextSpan(
-                text: l10n.willNotSeeAgain,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
+              TextSpan(text: l10n.willNotSeeAgain, style: const TextStyle(fontWeight: FontWeight.bold)),
             ],
           ),
         ),
@@ -257,9 +255,7 @@ class _ApiKeysWidgetState extends State<ApiKeysWidget> {
                 width: kOmiMinTapTarget,
                 height: kOmiMinTapTarget,
                 child: _deletingKeyId == key.id
-                    ? const Center(
-                        child: OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.danger),
-                      )
+                    ? const Center(child: OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.danger))
                     : OmiIconButton(
                         icon: const Icon(Icons.delete_outline),
                         label: l10n.revokeKey,

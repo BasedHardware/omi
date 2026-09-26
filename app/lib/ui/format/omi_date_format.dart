@@ -29,9 +29,9 @@ class OmiDateFormat {
     required this.use24HourFormat,
     required AppLocalizations l10n,
     DateTime Function()? clock,
-  }) : localeName = resolveIntlLocale(locale),
-       _l10n = l10n,
-       _clock = clock ?? DateTime.now;
+  })  : localeName = resolveIntlLocale(locale),
+        _l10n = l10n,
+        _clock = clock ?? DateTime.now;
 
   /// Reads the app locale, its strings and the device's 24-hour setting from [context].
   factory OmiDateFormat.of(BuildContext context) {

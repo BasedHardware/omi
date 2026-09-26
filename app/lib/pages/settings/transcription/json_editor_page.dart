@@ -79,7 +79,9 @@ class _TranscriptionJsonEditorPageState extends State<TranscriptionJsonEditorPag
       appBar: AppBar(
         leading: const OmiBackButton(),
         title: Text(widget.title),
-        actions: [TextButton(onPressed: () => _setJson(widget.onReset()), child: Text(context.l10n.reset))],
+        actions: [
+          TextButton(onPressed: () => _setJson(widget.onReset()), child: Text(context.l10n.reset)),
+        ],
       ),
       body: Column(
         children: [
@@ -116,9 +118,8 @@ class _TranscriptionJsonEditorPageState extends State<TranscriptionJsonEditorPag
 
   Widget _buildTemplateSelector() {
     final isResponseSchema = widget.isResponseSchema;
-    final templates = isResponseSchema
-        ? SttResponseSchema.templates.keys.toList()
-        : SttProviderConfig.requestTemplates.keys.toList();
+    final templates =
+        isResponseSchema ? SttResponseSchema.templates.keys.toList() : SttProviderConfig.requestTemplates.keys.toList();
     final liveTemplates = isResponseSchema ? SttResponseSchema.liveTemplates : SttProviderConfig.liveRequestTemplates;
 
     return Column(

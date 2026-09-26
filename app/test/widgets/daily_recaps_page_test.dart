@@ -7,26 +7,25 @@ import 'package:omi/pages/conversations/daily_recaps_page.dart';
 import 'package:omi/ui/ui.dart';
 
 DailySummary _summary() => DailySummary(
-  id: 'summary-1',
-  date: '2026-09-20',
-  createdAt: DateTime.utc(2026, 9, 20, 12),
-  headline: 'A quiet day',
-  overview: 'Nothing much happened',
-  stats: DayStats(totalConversations: 5, actionItemsCount: 3),
-);
+      id: 'summary-1',
+      date: '2026-09-20',
+      createdAt: DateTime.utc(2026, 9, 20, 12),
+      headline: 'A quiet day',
+      overview: 'Nothing much happened',
+      stats: DayStats(totalConversations: 5, actionItemsCount: 3),
+    );
 
 Widget _app(Widget home) => MaterialApp(
-  localizationsDelegates: AppLocalizations.localizationsDelegates,
-  supportedLocales: AppLocalizations.supportedLocales,
-  home: home,
-);
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: home,
+    );
 
 void main() {
   testWidgets('Daily Recaps is a pushed page with a back button', (tester) async {
     await tester.pumpWidget(
       _app(
-        DailyRecapsPage(fetchSummaries: ({int limit = 20, int offset = 0}) async => (items: [_summary()], ok: true)),
-      ),
+          DailyRecapsPage(fetchSummaries: ({int limit = 20, int offset = 0}) async => (items: [_summary()], ok: true))),
     );
     await tester.pumpAndSettle();
 

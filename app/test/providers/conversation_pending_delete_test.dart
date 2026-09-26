@@ -90,8 +90,8 @@ void main() {
 }
 
 ServerConversation _conversation(String id) => ServerConversation(
-  id: id,
-  createdAt: DateTime(2026, 9, 20, 10),
-  structured: Structured('Title $id', 'Overview'),
-  status: ConversationStatus.completed,
-);
+      id: id,
+      createdAt: DateTime(2026, 9, 20, 10),
+      structured: Structured('Title $id', 'Overview'),
+      status: ConversationStatus.completed,
+    );

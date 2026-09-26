@@ -429,7 +429,10 @@ class _ReviewReadingMomentState extends State<ReviewReadingMoment> with WidgetsB
 
     return NotificationListener<ScrollMetricsNotification>(
       onNotification: _handleMetricsNotification,
-      child: NotificationListener<ScrollNotification>(onNotification: _handleScrollNotification, child: widget.child),
+      child: NotificationListener<ScrollNotification>(
+        onNotification: _handleScrollNotification,
+        child: widget.child,
+      ),
     );
   }
 }

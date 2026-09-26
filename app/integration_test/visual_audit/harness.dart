@@ -151,32 +151,27 @@ class AuditRun {
   Future<void> pump(Widget page, {List<SingleChildWidget> providers = const [], bool scaffold = true}) async {
     tester.view.physicalSize = auditViewport;
     tester.view.devicePixelRatio = 1;
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [..._suite.providers(), ...providers],
-        child: RepaintBoundary(
-          key: _surface,
-          child: MaterialApp(
-            debugShowCheckedModeBanner: false,
-            navigatorKey: globalNavigatorKey,
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: const [Locale('en')],
-            // The app's own theme at this revision; Android font metrics (Roboto).
-            theme: _suite.theme(),
-            home: scaffold ? Scaffold(backgroundColor: _suite.hostBackground, body: page) : page,
-          ),
+    await tester.pumpWidget(MultiProvider(
+      providers: [..._suite.providers(), ...providers],
+      child: RepaintBoundary(
+        key: _surface,
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          navigatorKey: globalNavigatorKey,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          // The app's own theme at this revision; Android font metrics (Roboto).
+          theme: _suite.theme(),
+          home: scaffold ? Scaffold(backgroundColor: _suite.hostBackground, body: page) : page,
         ),
       ),
-    );
+    ));
     await settle();
   }
 
   /// Pumps a neutral host whose only job is to open [open] (a sheet or dialog), then opens it.
-  Future<void> pumpHost(
-    void Function(BuildContext context) open, {
-    List<SingleChildWidget> providers = const [],
-    Color? background,
-  }) async {
+  Future<void> pumpHost(void Function(BuildContext context) open,
+      {List<SingleChildWidget> providers = const [], Color? background}) async {
     await pump(
       Scaffold(
         backgroundColor: background,
@@ -282,9 +277,9 @@ void runAuditScenarios(AuditSuite suite, {List<AuditScenario>? only, Directory? 
       // timers before tearDowns run, and 16 s of fake time outlasts the pooled HTTP client's 15 s
       // idle timer. A live binding would wait in real time and does not check timers.
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump(
-        tester.binding is AutomatedTestWidgetsFlutterBinding ? const Duration(seconds: 16) : const Duration(seconds: 1),
-      );
+      await tester.pump(tester.binding is AutomatedTestWidgetsFlutterBinding
+          ? const Duration(seconds: 16)
+          : const Duration(seconds: 1));
       expect(shots, isNotEmpty, reason: '${scenario.id} captured nothing');
       if (output == null) return;
       for (final shot in shots) {

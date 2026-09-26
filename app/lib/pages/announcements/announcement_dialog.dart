@@ -94,11 +94,7 @@ class AnnouncementDialog extends StatelessWidget {
                   ),
                 Padding(
                   padding: EdgeInsets.fromLTRB(
-                    OmiSpacing.xl,
-                    imageUrl != null ? OmiSpacing.xl : 0,
-                    OmiSpacing.xl,
-                    OmiSpacing.lg,
-                  ),
+                      OmiSpacing.xl, imageUrl != null ? OmiSpacing.xl : 0, OmiSpacing.xl, OmiSpacing.lg),
                   child: Column(
                     children: [
                       Semantics(

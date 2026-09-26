@@ -123,11 +123,8 @@ void main() {
       final pendantRecording = world.controller.activeRecordingId;
 
       await startPhone();
-      expect(
-        world.controller.activeRecordingId,
-        isNot(pendantRecording),
-        reason: 'the phone recording is its own conversation, not a continuation of the pendant\'s',
-      );
+      expect(world.controller.activeRecordingId, isNot(pendantRecording),
+          reason: 'the phone recording is its own conversation, not a continuation of the pendant\'s');
       expect(world.sockets.last.source, isNot('omi'), reason: 'the phone opens its own socket');
       expect(link.openAudioSubscriptions, 0, reason: 'the pendant stream is paused during the phone recording');
       expect(await pendantBytesReaching(link), 0);

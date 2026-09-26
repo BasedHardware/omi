@@ -268,129 +268,130 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                   child: provider.isLoadingMessages && !provider.hasCachedMessages
                       ? OmiLoadingState(label: provider.firstTimeLoadingText)
                       : provider.isClearingChat
-                      ? OmiLoadingState(label: context.l10n.deletingMessages)
-                      : (provider.messages.isEmpty)
-                      ? ChatStarters(
-                          isConnected: connectivityProvider.isConnected,
-                          hasExistingData:
-                              _chatScope != null ||
-                              (context.watch<ConversationProvider?>()?.conversations.isNotEmpty ?? false) ||
-                              (context.watch<MemoriesProvider?>()?.memories.isNotEmpty ?? false) ||
-                              SharedPreferencesUtil().cachedMemories.isNotEmpty ||
-                              SharedPreferencesUtil().pendingMemories.isNotEmpty,
-                          onSelected: (prompt) {
-                            textController.text = prompt;
-                            textController.selection = TextSelection.collapsed(offset: prompt.length);
-                            textFieldFocusNode.requestFocus();
-                            OmiHaptics.selection();
-                          },
-                        )
-                      : LayoutBuilder(
-                          builder: (context, constraints) {
-                            return Theme(
-                              data: Theme.of(context).copyWith(
-                                textSelectionTheme: TextSelectionThemeData(
-                                  selectionColor: Colors.white.withValues(alpha: 0.3),
-                                  selectionHandleColor: OmiColors.accent,
-                                ),
-                              ),
-                              // Tight width: under the Column's loose constraints this Stack
-                              // otherwise shrink-wraps to its only non-positioned child (the
-                              // jump-to-latest chip, ~100pt), and every message collapses to a
-                              // character-wide column whenever that chip is visible.
-                              child: SizedBox(
-                                width: constraints.maxWidth,
-                                child: Stack(
-                                  alignment: Alignment.bottomCenter,
-                                  children: [
-                                    Positioned.fill(
-                                      child: NotificationListener<ScrollNotification>(
-                                        onNotification: _handleScrollNotification,
-                                        child: ListView.builder(
-                                          shrinkWrap: false,
-                                          reverse: false,
-                                          controller: scrollController,
-                                          padding: const EdgeInsets.fromLTRB(
-                                            18,
-                                            16,
-                                            18,
-                                            ChatScrollPolicy.transcriptBottomPadding,
-                                          ),
-                                          itemCount: provider.messages.length,
-                                          itemBuilder: (context, chatIndex) {
-                                            if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
-                                              _hasInitialScrolled = true;
-                                              _schedulePostFrameModeAwareScroll();
-                                            }
-
-                                            final message = provider.messages[chatIndex];
-                                            double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
-                                            double bottomPadding = chatIndex == 0 ? 16 : 0;
-
-                                            final messageBody = message.sender == MessageSender.ai
-                                                ? AIMessage(
-                                                    showTypingIndicator:
-                                                        provider.showTypingIndicator &&
-                                                        chatIndex == provider.messages.length - 1,
-                                                    showThinkingAfterText: provider.agentThinkingAfterText,
-                                                    message: message,
-                                                    sendMessage: _sendMessageUtil,
-                                                    onAskOmi: (text) {
-                                                      setState(() {
-                                                        _selectedContext = text;
-                                                      });
-                                                      textFieldFocusNode.requestFocus();
-                                                    },
-                                                    displayOptions: provider.messages.length <= 1,
-                                                    appSender: provider.messageSenderApp(message.appId),
-                                                    updateConversation: (ServerConversation conversation) {
-                                                      context.read<ConversationProvider>().updateConversation(
-                                                        conversation,
-                                                      );
-                                                    },
-                                                    setMessageNps: (int value, {String? reason}) =>
-                                                        provider.setMessageNps(message, value, reason: reason),
-                                                    replyFailed: provider.isReplyFailed(message),
-                                                    onRetry: provider.canRetryReply(message)
-                                                        ? () => _retryReply(message)
-                                                        : null,
-                                                  )
-                                                : HumanMessage(
-                                                    message: message,
-                                                    onAskOmi: (text) {
-                                                      setState(() {
-                                                        _selectedContext = text;
-                                                      });
-                                                      textFieldFocusNode.requestFocus();
-                                                    },
-                                                  );
-                                            return VisibilityDetector(
-                                              key: ValueKey('chat-result-visibility-${message.id}'),
-                                              onVisibilityChanged: (info) {
-                                                if (message.sender == MessageSender.ai &&
-                                                    !message.isEmpty &&
-                                                    info.visibleFraction > 0 &&
-                                                    context.mounted) {
-                                                  provider.markChatResultVisible(message.id);
-                                                }
-                                              },
-                                              child: Padding(
-                                                key: ValueKey(message.id),
-                                                padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
-                                                child: messageBody,
-                                              ),
-                                            );
-                                          },
+                          ? OmiLoadingState(label: context.l10n.deletingMessages)
+                          : (provider.messages.isEmpty)
+                              ? ChatStarters(
+                                  isConnected: connectivityProvider.isConnected,
+                                  hasExistingData: _chatScope != null ||
+                                      (context.watch<ConversationProvider?>()?.conversations.isNotEmpty ?? false) ||
+                                      (context.watch<MemoriesProvider?>()?.memories.isNotEmpty ?? false) ||
+                                      SharedPreferencesUtil().cachedMemories.isNotEmpty ||
+                                      SharedPreferencesUtil().pendingMemories.isNotEmpty,
+                                  onSelected: (prompt) {
+                                    textController.text = prompt;
+                                    textController.selection = TextSelection.collapsed(offset: prompt.length);
+                                    textFieldFocusNode.requestFocus();
+                                    OmiHaptics.selection();
+                                  },
+                                )
+                              : LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    return Theme(
+                                      data: Theme.of(context).copyWith(
+                                        textSelectionTheme: TextSelectionThemeData(
+                                          selectionColor: Colors.white.withValues(alpha: 0.3),
+                                          selectionHandleColor: OmiColors.accent,
                                         ),
                                       ),
-                                    ),
-                                    if (_chatScrollMode == ChatScrollMode.freeScrolling) _buildJumpToLatestButton(),
-                                  ],
+                                      // Tight width: under the Column's loose constraints this Stack
+                                      // otherwise shrink-wraps to its only non-positioned child (the
+                                      // jump-to-latest chip, ~100pt), and every message collapses to a
+                                      // character-wide column whenever that chip is visible.
+                                      child: SizedBox(
+                                        width: constraints.maxWidth,
+                                        child: Stack(
+                                          alignment: Alignment.bottomCenter,
+                                          children: [
+                                            Positioned.fill(
+                                              child: NotificationListener<ScrollNotification>(
+                                                onNotification: _handleScrollNotification,
+                                                child: ListView.builder(
+                                                  shrinkWrap: false,
+                                                  reverse: false,
+                                                  controller: scrollController,
+                                                  padding: const EdgeInsets.fromLTRB(
+                                                    18,
+                                                    16,
+                                                    18,
+                                                    ChatScrollPolicy.transcriptBottomPadding,
+                                                  ),
+                                                  itemCount: provider.messages.length,
+                                                  itemBuilder: (context, chatIndex) {
+                                                    if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
+                                                      _hasInitialScrolled = true;
+                                                      _schedulePostFrameModeAwareScroll();
+                                                    }
+
+                                                    final message = provider.messages[chatIndex];
+                                                    double topPadding =
+                                                        chatIndex == provider.messages.length - 1 ? 8 : 16;
+                                                    double bottomPadding = chatIndex == 0 ? 16 : 0;
+
+                                                    final messageBody = message.sender == MessageSender.ai
+                                                        ? AIMessage(
+                                                            showTypingIndicator: provider.showTypingIndicator &&
+                                                                chatIndex == provider.messages.length - 1,
+                                                            showThinkingAfterText: provider.agentThinkingAfterText,
+                                                            message: message,
+                                                            sendMessage: _sendMessageUtil,
+                                                            onAskOmi: (text) {
+                                                              setState(() {
+                                                                _selectedContext = text;
+                                                              });
+                                                              textFieldFocusNode.requestFocus();
+                                                            },
+                                                            displayOptions: provider.messages.length <= 1,
+                                                            appSender: provider.messageSenderApp(message.appId),
+                                                            updateConversation: (ServerConversation conversation) {
+                                                              context.read<ConversationProvider>().updateConversation(
+                                                                    conversation,
+                                                                  );
+                                                            },
+                                                            setMessageNps: (int value, {String? reason}) =>
+                                                                provider.setMessageNps(message, value, reason: reason),
+                                                            replyFailed: provider.isReplyFailed(message),
+                                                            onRetry: provider.canRetryReply(message)
+                                                                ? () => _retryReply(message)
+                                                                : null,
+                                                          )
+                                                        : HumanMessage(
+                                                            message: message,
+                                                            onAskOmi: (text) {
+                                                              setState(() {
+                                                                _selectedContext = text;
+                                                              });
+                                                              textFieldFocusNode.requestFocus();
+                                                            },
+                                                          );
+                                                    return VisibilityDetector(
+                                                      key: ValueKey('chat-result-visibility-${message.id}'),
+                                                      onVisibilityChanged: (info) {
+                                                        if (message.sender == MessageSender.ai &&
+                                                            !message.isEmpty &&
+                                                            info.visibleFraction > 0 &&
+                                                            context.mounted) {
+                                                          provider.markChatResultVisible(message.id);
+                                                        }
+                                                      },
+                                                      child: Padding(
+                                                        key: ValueKey(message.id),
+                                                        padding:
+                                                            EdgeInsets.only(bottom: bottomPadding, top: topPadding),
+                                                        child: messageBody,
+                                                      ),
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                            ),
+                                            if (_chatScrollMode == ChatScrollMode.freeScrolling)
+                                              _buildJumpToLatestButton(),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
                                 ),
-                              ),
-                            );
-                          },
-                        ),
                 ),
                 // Send message area
                 Container(
@@ -453,9 +454,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                 bottom: widget.isPivotBottom
                                     ? 6
                                     : (textFieldFocusNode.hasFocus &&
-                                              (textController.text.length > 40 || textController.text.contains('\n'))
-                                          ? 4
-                                          : 10),
+                                            (textController.text.length > 40 || textController.text.contains('\n'))
+                                        ? 4
+                                        : 10),
                               ),
                               child: Stack(
                                 clipBehavior: Clip.none,
@@ -589,8 +590,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                                     bool hasText = value.text.trim().isNotEmpty;
                                                     if (!hasText) return const SizedBox.shrink();
 
-                                                    bool canSend =
-                                                        hasText &&
+                                                    bool canSend = hasText &&
                                                         !provider.sendingMessage &&
                                                         !provider.isUploadingFiles &&
                                                         connectivityProvider.isConnected;

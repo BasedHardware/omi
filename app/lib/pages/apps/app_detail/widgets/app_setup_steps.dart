@@ -76,7 +76,11 @@ class AppSetupSteps extends StatelessWidget {
                         ),
                       ),
                       const ExcludeSemantics(
-                        child: FaIcon(FontAwesomeIcons.arrowUpRightFromSquare, size: 16, color: OmiColors.textTertiary),
+                        child: FaIcon(
+                          FontAwesomeIcons.arrowUpRightFromSquare,
+                          size: 16,
+                          color: OmiColors.textTertiary,
+                        ),
                       ),
                     ],
                   ),

@@ -91,7 +91,10 @@ class _Header extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(context.l10n.speakerTagPromptTitle, style: OmiType.callout.copyWith(fontWeight: FontWeight.w600)),
+              Text(
+                context.l10n.speakerTagPromptTitle,
+                style: OmiType.callout.copyWith(fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 2),
               Text(
                 context.l10n.speakerTagPromptSubtitle,
@@ -121,7 +124,9 @@ class _Finished extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: Text(context.l10n.speakerTagPromptThanks, style: OmiType.subhead)),
+        Expanded(
+          child: Text(context.l10n.speakerTagPromptThanks, style: OmiType.subhead),
+        ),
         TextButton(
           key: const Key('speaker_tag_prompt_done'),
           onPressed: provider.close,
@@ -146,7 +151,10 @@ class _Question extends StatelessWidget {
         _ClipRow(provider: provider, prompt: prompt),
         if (provider.clipErrorPromptId == prompt.id) ...[
           const SizedBox(height: 6),
-          Text(context.l10n.speakerTagPromptClipUnavailable, style: OmiType.footnote.copyWith(color: OmiColors.danger)),
+          Text(
+            context.l10n.speakerTagPromptClipUnavailable,
+            style: OmiType.footnote.copyWith(color: OmiColors.danger),
+          ),
         ],
         const SizedBox(height: 14),
         Row(
@@ -165,7 +173,10 @@ class _Question extends StatelessWidget {
         _Answers(provider: provider, prompt: prompt),
         if (provider.answerFailed) ...[
           const SizedBox(height: 8),
-          Text(context.l10n.speakerTagPromptAnswerFailed, style: OmiType.footnote.copyWith(color: OmiColors.danger)),
+          Text(
+            context.l10n.speakerTagPromptAnswerFailed,
+            style: OmiType.footnote.copyWith(color: OmiColors.danger),
+          ),
         ],
       ],
     );

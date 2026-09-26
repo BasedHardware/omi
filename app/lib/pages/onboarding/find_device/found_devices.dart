@@ -330,10 +330,8 @@ class _FoundDevicesState extends State<FoundDevices> {
                           color: provider.batteryPercentage <= 25 ? OmiColors.danger : OmiColors.textSecondary,
                         ),
                         const SizedBox(width: OmiSpacing.xxs),
-                        Text(
-                          '${provider.batteryPercentage}%',
-                          style: OmiType.body.copyWith(fontWeight: FontWeight.w500),
-                        ),
+                        Text('${provider.batteryPercentage}%',
+                            style: OmiType.body.copyWith(fontWeight: FontWeight.w500)),
                       ],
                     ),
                   ),

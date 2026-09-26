@@ -34,26 +34,28 @@ void main() {
   late Directory tempDir;
 
   SyncJobStatusResponse failedJob({required String reasonCode, int totalSegments = 1}) => SyncJobStatusResponse(
-    jobId: 'job-1',
-    status: 'failed',
-    totalSegments: totalSegments,
-    processedSegments: totalSegments,
-    failedSegments: totalSegments,
-    reasonCode: reasonCode,
-  );
+        jobId: 'job-1',
+        status: 'failed',
+        totalSegments: totalSegments,
+        processedSegments: totalSegments,
+        failedSegments: totalSegments,
+        reasonCode: reasonCode,
+      );
 
   Wal uploadedWal({int timerStart = 1700000000}) => Wal(
-    timerStart: timerStart,
-    codec: BleAudioCodec.opus,
-    seconds: 31,
-    status: WalStatus.uploaded,
-    storage: WalStorage.disk,
-    device: 'omi',
-    filePath: 'audio_$timerStart.bin',
-  )..jobId = 'job-1';
+        timerStart: timerStart,
+        codec: BleAudioCodec.opus,
+        seconds: 31,
+        status: WalStatus.uploaded,
+        storage: WalStorage.disk,
+        device: 'omi',
+        filePath: 'audio_$timerStart.bin',
+      )..jobId = 'job-1';
 
-  LocalWalSyncImpl syncWithVerdict(SyncJobStatusResponse status) =>
-      LocalWalSyncImpl(_Listener(), jobStatusFetcher: (jobId) async => SyncJobFetch(SyncJobFetchOutcome.ok, status));
+  LocalWalSyncImpl syncWithVerdict(SyncJobStatusResponse status) => LocalWalSyncImpl(
+        _Listener(),
+        jobStatusFetcher: (jobId) async => SyncJobFetch(SyncJobFetchOutcome.ok, status),
+      );
 
   setUp(() async {
     TestWidgetsFlutterBinding.ensureInitialized();

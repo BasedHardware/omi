@@ -41,7 +41,10 @@ class PendingTranscriptionsBanner extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: () {
             final deviceProvider = context.read<DeviceProvider>();
-            routeToPage(context, deviceProvider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage());
+            routeToPage(
+              context,
+              deviceProvider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage(),
+            );
           },
           child: Container(
             key: const Key('pending_transcriptions_banner'),

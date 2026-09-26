@@ -45,119 +45,119 @@ void fireC8Slice2(AnalyticsManager analytics) {
 }
 
 List<List<Object>> c8Slice2Goldens(Map<String, Object> globals) => [
-  [
-    'Device Onboarding Abandoned',
-    {...globals, 'step': 0},
-  ],
-  [
-    'Device Onboarding Abandoned',
-    {...globals, 'step': 3},
-  ],
-  [
-    'Device Onboarding Double Tap Configured',
-    {...globals, 'action': 0},
-  ],
-  [
-    'Device Onboarding Double Tap Configured',
-    {...globals, 'action': 2},
-  ],
-  [
-    'Phone Call Ended',
-    {...globals, 'duration_seconds': 0},
-  ],
-  [
-    'Phone Call Ended',
-    {...globals, 'duration_seconds': 42},
-  ],
-  [
-    'Short Conversation Threshold Changed',
-    {...globals, 'threshold_seconds': 0, 'threshold_minutes': 0},
-  ],
-  [
-    'Short Conversation Threshold Changed',
-    {...globals, 'threshold_seconds': 60, 'threshold_minutes': 1},
-  ],
-  [
-    'Short Conversation Threshold Changed',
-    {...globals, 'threshold_seconds': 119, 'threshold_minutes': 1},
-  ],
-  [
-    'Fact Search Cleared',
-    {...globals, 'total_facts_count': 0},
-  ],
-  [
-    'Fact Search Cleared',
-    {...globals, 'total_facts_count': 12},
-  ],
-  [
-    'All Facts Deleted',
-    {...globals, 'facts_count_before_deletion': 0},
-  ],
-  [
-    'All Facts Deleted',
-    {...globals, 'facts_count_before_deletion': 4},
-  ],
-  [
-    'Notification Frequency Changed',
-    {...globals, 'old_frequency': 0, 'new_frequency': 1},
-  ],
-  [
-    'Notification Frequency Changed',
-    {...globals, 'old_frequency': 24, 'new_frequency': 7},
-  ],
-  [
-    'Changelog Dismissed',
-    {...globals, 'changelog_count': 0},
-  ],
-  [
-    'Changelog Dismissed',
-    {...globals, 'changelog_count': 3},
-  ],
-  [
-    'Apps Filter Rating',
-    {...globals, 'rating': 1},
-  ],
-  [
-    'Apps Filter Rating',
-    {...globals, 'rating': 5},
-  ],
-  [
-    'AI App Generator Prompt Submitted',
-    {...globals, 'prompt_length': 0},
-  ],
-  [
-    'AI App Generator Prompt Submitted',
-    {...globals, 'prompt_length': 40},
-  ],
-  [
-    'Voice Response Mode Changed',
-    {...globals, 'mode': 'off', 'mode_int': 0},
-  ],
-  [
-    'Voice Response Mode Changed',
-    {...globals, 'mode': 'headphones_only', 'mode_int': 1},
-  ],
-  [
-    'Voice Response Mode Changed',
-    {...globals, 'mode': 'always', 'mode_int': 2},
-  ],
-  [
-    'Voice Response Mode Changed',
-    {...globals, 'mode': 'unknown', 'mode_int': 99},
-  ],
-  [
-    'All Facts Visibility Changed',
-    {...globals, 'new_visibility': 'private', 'facts_count': 0},
-  ],
-  [
-    'All Facts Visibility Changed',
-    {...globals, 'new_visibility': 'public', 'facts_count': 1},
-  ],
-  [
-    'All Facts Visibility Changed',
-    {...globals, 'new_visibility': 'shared', 'facts_count': 3},
-  ],
-];
+      [
+        'Device Onboarding Abandoned',
+        {...globals, 'step': 0}
+      ],
+      [
+        'Device Onboarding Abandoned',
+        {...globals, 'step': 3}
+      ],
+      [
+        'Device Onboarding Double Tap Configured',
+        {...globals, 'action': 0}
+      ],
+      [
+        'Device Onboarding Double Tap Configured',
+        {...globals, 'action': 2}
+      ],
+      [
+        'Phone Call Ended',
+        {...globals, 'duration_seconds': 0}
+      ],
+      [
+        'Phone Call Ended',
+        {...globals, 'duration_seconds': 42}
+      ],
+      [
+        'Short Conversation Threshold Changed',
+        {...globals, 'threshold_seconds': 0, 'threshold_minutes': 0}
+      ],
+      [
+        'Short Conversation Threshold Changed',
+        {...globals, 'threshold_seconds': 60, 'threshold_minutes': 1}
+      ],
+      [
+        'Short Conversation Threshold Changed',
+        {...globals, 'threshold_seconds': 119, 'threshold_minutes': 1}
+      ],
+      [
+        'Fact Search Cleared',
+        {...globals, 'total_facts_count': 0}
+      ],
+      [
+        'Fact Search Cleared',
+        {...globals, 'total_facts_count': 12}
+      ],
+      [
+        'All Facts Deleted',
+        {...globals, 'facts_count_before_deletion': 0}
+      ],
+      [
+        'All Facts Deleted',
+        {...globals, 'facts_count_before_deletion': 4}
+      ],
+      [
+        'Notification Frequency Changed',
+        {...globals, 'old_frequency': 0, 'new_frequency': 1}
+      ],
+      [
+        'Notification Frequency Changed',
+        {...globals, 'old_frequency': 24, 'new_frequency': 7}
+      ],
+      [
+        'Changelog Dismissed',
+        {...globals, 'changelog_count': 0}
+      ],
+      [
+        'Changelog Dismissed',
+        {...globals, 'changelog_count': 3}
+      ],
+      [
+        'Apps Filter Rating',
+        {...globals, 'rating': 1}
+      ],
+      [
+        'Apps Filter Rating',
+        {...globals, 'rating': 5}
+      ],
+      [
+        'AI App Generator Prompt Submitted',
+        {...globals, 'prompt_length': 0}
+      ],
+      [
+        'AI App Generator Prompt Submitted',
+        {...globals, 'prompt_length': 40}
+      ],
+      [
+        'Voice Response Mode Changed',
+        {...globals, 'mode': 'off', 'mode_int': 0}
+      ],
+      [
+        'Voice Response Mode Changed',
+        {...globals, 'mode': 'headphones_only', 'mode_int': 1}
+      ],
+      [
+        'Voice Response Mode Changed',
+        {...globals, 'mode': 'always', 'mode_int': 2}
+      ],
+      [
+        'Voice Response Mode Changed',
+        {...globals, 'mode': 'unknown', 'mode_int': 99}
+      ],
+      [
+        'All Facts Visibility Changed',
+        {...globals, 'new_visibility': 'private', 'facts_count': 0}
+      ],
+      [
+        'All Facts Visibility Changed',
+        {...globals, 'new_visibility': 'public', 'facts_count': 1}
+      ],
+      [
+        'All Facts Visibility Changed',
+        {...globals, 'new_visibility': 'shared', 'facts_count': 3}
+      ],
+    ];
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -165,12 +165,7 @@ void main() {
     AnalyticsManager.resetForTesting();
     SharedPreferences.setMockInitialValues({});
     PackageInfo.setMockInitialValues(
-      appName: 'Omi Test',
-      packageName: 'com.omi.test',
-      version: '1.0.543',
-      buildNumber: '992',
-      buildSignature: '',
-    );
+        appName: 'Omi Test', packageName: 'com.omi.test', version: '1.0.543', buildNumber: '992', buildSignature: '');
     await SharedPreferencesUtil.init();
   });
   tearDown(AnalyticsManager.resetForTesting);

@@ -150,7 +150,7 @@ env:
   # Admits new eligible recordings only (single-channel, server STT);
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
-    value: "true"
+    value: "false"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
   - name: OMI_LLM_CHAT_AGENT_ROUTE

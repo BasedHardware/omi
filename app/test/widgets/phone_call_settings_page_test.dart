@@ -12,8 +12,8 @@ import 'package:omi/providers/phone_call_provider.dart';
 /// Drives [PhoneCallSettingsPage] without the network: numbers, load state and delete are faked.
 class _FakePhoneCallProvider extends PhoneCallProvider {
   _FakePhoneCallProvider({required List<VerifiedPhoneNumber> numbers, this.loaded = true})
-    : _numbers = numbers,
-      super.forTesting();
+      : _numbers = numbers,
+        super.forTesting();
 
   List<VerifiedPhoneNumber> _numbers;
   bool loaded;

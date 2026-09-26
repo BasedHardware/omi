@@ -36,9 +36,8 @@ void main() {
 
   test('every Settings row in the sheet opens a destination and is searchable', () {
     final drawer = File('lib/pages/settings/settings_drawer.dart').readAsStringSync();
-    final rowDestinations = RegExp(
-      r'_row\(\s*SettingsDestination\.(\w+)',
-    ).allMatches(drawer).map((m) => m.group(1)!).toSet();
+    final rowDestinations =
+        RegExp(r'_row\(\s*SettingsDestination\.(\w+)').allMatches(drawer).map((m) => m.group(1)!).toSet();
     expect(rowDestinations, isNotEmpty);
     final searchable = settingsSearchEntries.map((e) => e.destination.name).toSet();
     for (final destination in rowDestinations) {
@@ -81,10 +80,8 @@ void main() {
   test('"Profile" still finds the Account row (its old name) and Voice Profile', () {
     const scope = SettingsSearchScope(deviceConnected: false, supportLinks: false, android: false);
     final results = searchSettings(en, 'profile', scope);
-    expect(
-      results.map((e) => e.destination),
-      containsAll([SettingsDestination.profile, SettingsDestination.voiceProfile]),
-    );
+    expect(results.map((e) => e.destination),
+        containsAll([SettingsDestination.profile, SettingsDestination.voiceProfile]));
     expect(results.firstWhere((e) => e.destination == SettingsDestination.profile).title(en), 'Account');
   });
 }

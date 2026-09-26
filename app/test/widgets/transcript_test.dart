@@ -49,21 +49,18 @@ void main() {
     var loaded = <Person>[];
     final people = PeopleProvider(loadPeople: () async => loaded, renamePerson: (_, __) async => true);
     final segment = segmentFor('reactive', 2)..personId = 'later';
-    await tester.pumpWidget(
-      ChangeNotifierProvider.value(
+    await tester.pumpWidget(ChangeNotifierProvider.value(
         value: people,
         child: MaterialApp(
           localizationsDelegates: const [
             AppLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate
           ],
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(body: TranscriptWidget(segments: [segment])),
-        ),
-      ),
-    );
+        )));
     await tester.pumpAndSettle();
     // SPEAKER_02 is the conversation's only anonymous speaker, so it reads "Speaker 1" (dense numbering).
     expect(find.text('Speaker 1'), findsOneWidget);
@@ -159,7 +156,9 @@ void main() {
             GlobalCupertinoLocalizations.delegate,
           ],
           supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: TranscriptWidget(segments: [segment], isConversationDetail: true)),
+          home: Scaffold(
+            body: TranscriptWidget(segments: [segment], isConversationDetail: true),
+          ),
         ),
       );
       await tester.pumpAndSettle();

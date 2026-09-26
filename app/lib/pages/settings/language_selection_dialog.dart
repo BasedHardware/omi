@@ -39,14 +39,19 @@ class LanguageSelectionDialog {
       showCloseButton: !isRequired,
       isDismissible: !isRequired,
       enableDrag: !isRequired,
-      builder: (sheetContext) =>
-          _PrimaryLanguagePicker(homeProvider: homeProvider, showSingleLanguageWarning: showSingleLanguageWarning),
+      builder: (sheetContext) => _PrimaryLanguagePicker(
+        homeProvider: homeProvider,
+        showSingleLanguageWarning: showSingleLanguageWarning,
+      ),
     );
   }
 }
 
 class _PrimaryLanguagePicker extends StatefulWidget {
-  const _PrimaryLanguagePicker({required this.homeProvider, required this.showSingleLanguageWarning});
+  const _PrimaryLanguagePicker({
+    required this.homeProvider,
+    required this.showSingleLanguageWarning,
+  });
 
   final HomeProvider homeProvider;
   final bool showSingleLanguageWarning;
@@ -62,9 +67,8 @@ class _PrimaryLanguagePickerState extends State<_PrimaryLanguagePicker> {
   final ScrollController _scrollController = ScrollController();
 
   // Preset the selected language if the user has one
-  late String? _selected = widget.homeProvider.userPrimaryLanguage.isNotEmpty
-      ? widget.homeProvider.userPrimaryLanguage
-      : null;
+  late String? _selected =
+      widget.homeProvider.userPrimaryLanguage.isNotEmpty ? widget.homeProvider.userPrimaryLanguage : null;
   late String? _selectedName = _selected != null ? widget.homeProvider.getLanguageName(_selected!) : null;
 
   @override
@@ -96,8 +100,8 @@ class _PrimaryLanguagePickerState extends State<_PrimaryLanguagePicker> {
       _filtered = q.isEmpty
           ? _languages
           : _languages
-                .where((lang) => lang.key.toLowerCase().contains(q) || lang.value.toLowerCase().contains(q))
-                .toList();
+              .where((lang) => lang.key.toLowerCase().contains(q) || lang.value.toLowerCase().contains(q))
+              .toList();
     });
   }
 

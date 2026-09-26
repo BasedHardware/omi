@@ -20,12 +20,22 @@ void main() {
   test('sendUncaughtApiCall is the uncaught path makeApiCall wraps as null', () async {
     Object? uncaught;
     try {
-      await sendUncaughtApiCall(url: 'http://127.0.0.1:1/v1/conversations', headers: {}, body: '', method: 'GET');
+      await sendUncaughtApiCall(
+        url: 'http://127.0.0.1:1/v1/conversations',
+        headers: {},
+        body: '',
+        method: 'GET',
+      );
     } catch (e) {
       uncaught = e;
     }
     expect(uncaught, isNotNull);
-    final wrapped = await makeApiCall(url: 'http://127.0.0.1:1/v1/conversations', headers: {}, body: '', method: 'GET');
+    final wrapped = await makeApiCall(
+      url: 'http://127.0.0.1:1/v1/conversations',
+      headers: {},
+      body: '',
+      method: 'GET',
+    );
     expect(wrapped, isNull);
   });
 

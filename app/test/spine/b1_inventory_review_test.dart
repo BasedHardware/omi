@@ -13,15 +13,11 @@ void main() {
     pendingContract('B1');
     final routes = (jsonDecode(addressableRoutesJson) as List).cast<Map<String, dynamic>>();
     final controls = jsonDecode(addressableControlsJson) as Map<String, dynamic>;
-    expect(
-      {for (final route in routes.where((r) => r['reach']['kind'] == 'tab')) route['reach']['tab']: route['id']},
-      {0: 'home', 1: 'conversations', 2: 'tasks', 3: 'apps'},
-    );
+    expect({for (final route in routes.where((r) => r['reach']['kind'] == 'tab')) route['reach']['tab']: route['id']},
+        {0: 'home', 1: 'conversations', 2: 'tasks', 3: 'apps'});
     expect((controls['home'] as List).map((c) => c['key']), contains('omi.home.tab_apps'));
-    expect(
-      (controls['onboarding'] as List).map((c) => c['key']),
-      containsAll(['omi.onboarding.google', 'omi.onboarding.local_dev']),
-    );
+    expect((controls['onboarding'] as List).map((c) => c['key']),
+        containsAll(['omi.onboarding.google', 'omi.onboarding.local_dev']));
     final apps = routes.singleWhere((route) => route['id'] == 'apps');
     expect(apps['widget'], 'AppsPage');
     expect(apps['root'], 'omi.apps.root');
@@ -68,14 +64,10 @@ void main() {
   testWidgets('B1 root scoping tolerates cached copies but preserves ambiguity within a visible root', (tester) async {
     const key = ValueKey<String>('omi.conversations.row.rsynthetic');
     Widget root(String id, {int count = 1}) => Column(
-      key: ValueKey(id),
-      children: List.generate(
-        count,
-        (_) => const SizedBox(
-          child: TextButton(key: key, onPressed: null, child: Text('Row')),
-        ),
-      ),
-    );
+          key: ValueKey(id),
+          children: List.generate(
+              count, (_) => const SizedBox(child: TextButton(key: key, onPressed: null, child: Text('Row')))),
+        );
     await tester.pumpWidget(MaterialApp(home: Column(children: [root('one'), root('two')])));
     expect(find.byKey(key), findsNWidgets(2));
     expect(catalogControl(find.byKey(const ValueKey('one')), key, scope: 'root'), findsOneWidget);

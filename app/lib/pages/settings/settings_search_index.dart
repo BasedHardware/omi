@@ -113,13 +113,8 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
   SettingsSearchEntry('referralProgram', (l) => l.referralProgram, SettingsDestination.referral, _drawer),
 
   // Device group
-  SettingsSearchEntry(
-    'deviceSettings',
-    (l) => l.deviceSettings,
-    SettingsDestination.device,
-    _groups,
-    visible: _whenDeviceConnected,
-  ),
+  SettingsSearchEntry('deviceSettings', (l) => l.deviceSettings, SettingsDestination.device, _groups,
+      visible: _whenDeviceConnected),
   SettingsSearchEntry('offlineSync', (l) => l.offlineSync, SettingsDestination.offlineSync, _groups),
   SettingsSearchEntry('phoneCalls', (l) => l.phoneCalls, SettingsDestination.phoneCalls, _groups),
   SettingsSearchEntry('permissions', (l) => l.permissions, SettingsDestination.permissions, _groups),
@@ -133,46 +128,21 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
   SettingsSearchEntry('identifyingOthers', (l) => l.identifyingOthers, SettingsDestination.people, _groups),
   SettingsSearchEntry('voiceResponseMode', (l) => l.voiceResponseMode, SettingsDestination.recordingGroup, _groups),
   SettingsSearchEntry(
-    'conversationTimeout',
-    (l) => l.conversationTimeout,
-    SettingsDestination.conversationTimeout,
-    _groups,
-  ),
+      'conversationTimeout', (l) => l.conversationTimeout, SettingsDestination.conversationTimeout, _groups),
   SettingsSearchEntry(
-    'transcribeLaterTitle',
-    (l) => l.transcribeLaterTitle,
-    SettingsDestination.recordingGroup,
-    _groups,
-  ),
+      'transcribeLaterTitle', (l) => l.transcribeLaterTitle, SettingsDestination.recordingGroup, _groups),
+  SettingsSearchEntry('backgroundModeTitle', (l) => l.backgroundModeTitle, SettingsDestination.recordingGroup, _groups,
+      visible: _whenAndroid),
   SettingsSearchEntry(
-    'backgroundModeTitle',
-    (l) => l.backgroundModeTitle,
-    SettingsDestination.recordingGroup,
-    _groups,
-    visible: _whenAndroid,
-  ),
-  SettingsSearchEntry(
-    'recordingAndTranscription',
-    (l) => l.recordingAndTranscription,
-    SettingsDestination.recordingGroup,
-    _drawer,
-  ),
+      'recordingAndTranscription', (l) => l.recordingAndTranscription, SettingsDestination.recordingGroup, _drawer),
 
   // Notifications & Display group
   SettingsSearchEntry('notifications', (l) => l.notifications, SettingsDestination.notifications, _groups),
   SettingsSearchEntry('homeScreen', (l) => l.homeScreen, SettingsDestination.homeScreen, _groups),
   SettingsSearchEntry(
-    'conversationDisplay',
-    (l) => l.conversationDisplay,
-    SettingsDestination.conversationDisplay,
-    _groups,
-  ),
+      'conversationDisplay', (l) => l.conversationDisplay, SettingsDestination.conversationDisplay, _groups),
   SettingsSearchEntry(
-    'notificationsAndDisplay',
-    (l) => l.notificationsAndDisplay,
-    SettingsDestination.notificationsGroup,
-    _drawer,
-  ),
+      'notificationsAndDisplay', (l) => l.notificationsAndDisplay, SettingsDestination.notificationsGroup, _drawer),
 
   // Integrations (opens the Integrations page directly)
   SettingsSearchEntry('integrations', (l) => l.integrations, SettingsDestination.integrations, _drawer),
@@ -185,68 +155,34 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
   SettingsSearchEntry('dataAndPrivacy', (l) => l.dataAndPrivacy, SettingsDestination.privacyGroup, _drawer),
 
   // Help & About group
-  SettingsSearchEntry(
-    'helpCenter',
-    (l) => l.helpCenter,
-    SettingsDestination.helpCenter,
-    _groups,
-    visible: _whenSupportLinks,
-  ),
+  SettingsSearchEntry('helpCenter', (l) => l.helpCenter, SettingsDestination.helpCenter, _groups,
+      visible: _whenSupportLinks),
   SettingsSearchEntry('whatsNew', (l) => l.whatsNew, SettingsDestination.whatsNew, _groups),
   SettingsSearchEntry('helpAndAbout', (l) => l.helpAndAbout, SettingsDestination.helpGroup, _drawer),
 
   // Feedback (on the sheet, where Intercom is supported)
-  SettingsSearchEntry(
-    'feedbackBug',
-    (l) => l.feedbackBug,
-    SettingsDestination.feedback,
-    _drawer,
-    visible: _whenSupportLinks,
-  ),
+  SettingsSearchEntry('feedbackBug', (l) => l.feedbackBug, SettingsDestination.feedback, _drawer,
+      visible: _whenSupportLinks),
 
   // Developer Settings (opens the page directly)
   SettingsSearchEntry('developerSettings', (l) => l.developerSettings, SettingsDestination.developer, _drawer),
 
   // Notifications
   SettingsSearchEntry(
-    'notificationFrequency',
-    (l) => l.notificationFrequency,
-    SettingsDestination.notifications,
-    _notifications,
-  ),
+      'notificationFrequency', (l) => l.notificationFrequency, SettingsDestination.notifications, _notifications),
   SettingsSearchEntry('dailySummary', (l) => l.dailySummary, SettingsDestination.notifications, _notifications),
   SettingsSearchEntry('deliveryTime', (l) => l.deliveryTime, SettingsDestination.notifications, _notifications),
 
   // Device (only while connected)
-  SettingsSearchEntry(
-    'firmware',
-    (l) => l.firmware,
-    SettingsDestination.device,
-    _deviceInfo,
-    visible: _whenDeviceConnected,
-  ),
-  SettingsSearchEntry(
-    'doubleTap',
-    (l) => l.doubleTap,
-    SettingsDestination.device,
-    _device,
-    visible: _whenDeviceConnected,
-  ),
-  SettingsSearchEntry(
-    'ledBrightness',
-    (l) => l.ledBrightness,
-    SettingsDestination.device,
-    _device,
-    visible: _whenDeviceConnected,
-  ),
+  SettingsSearchEntry('firmware', (l) => l.firmware, SettingsDestination.device, _deviceInfo,
+      visible: _whenDeviceConnected),
+  SettingsSearchEntry('doubleTap', (l) => l.doubleTap, SettingsDestination.device, _device,
+      visible: _whenDeviceConnected),
+  SettingsSearchEntry('ledBrightness', (l) => l.ledBrightness, SettingsDestination.device, _device,
+      visible: _whenDeviceConnected),
   SettingsSearchEntry('micGain', (l) => l.micGain, SettingsDestination.device, _device, visible: _whenDeviceConnected),
-  SettingsSearchEntry(
-    'findDevice',
-    (l) => l.findDevice,
-    SettingsDestination.device,
-    _device,
-    visible: _whenDeviceConnected,
-  ),
+  SettingsSearchEntry('findDevice', (l) => l.findDevice, SettingsDestination.device, _device,
+      visible: _whenDeviceConnected),
 
   // Permissions
   SettingsSearchEntry('microphone', (l) => l.microphone, SettingsDestination.permissions, _permissions),
@@ -258,38 +194,22 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
   SettingsSearchEntry('goalTracker', (l) => l.goalTracker, SettingsDestination.homeScreen, _homeScreen),
   SettingsSearchEntry('dailyScore', (l) => l.dailyScore, SettingsDestination.homeScreen, _homeScreen),
   SettingsSearchEntry(
-    'showPhoneCallButtonTitle',
-    (l) => l.showPhoneCallButtonTitle,
-    SettingsDestination.homeScreen,
-    _homeScreen,
-  ),
+      'showPhoneCallButtonTitle', (l) => l.showPhoneCallButtonTitle, SettingsDestination.homeScreen, _homeScreen),
 
   // Developer settings
   SettingsSearchEntry('creatorPayouts', (l) => l.creatorPayouts, SettingsDestination.creatorPayouts, _developer),
   SettingsSearchEntry('debugLogs', (l) => l.debugLogs, SettingsDestination.developer, _developer),
+  SettingsSearchEntry('developerApi', (l) => l.developerApi, SettingsDestination.developer,
+      'lib/pages/settings/widgets/developer_api_keys_section.dart'),
   SettingsSearchEntry(
-    'developerApi',
-    (l) => l.developerApi,
-    SettingsDestination.developer,
-    'lib/pages/settings/widgets/developer_api_keys_section.dart',
-  ),
-  SettingsSearchEntry(
-    'mcp',
-    (l) => l.mcp,
-    SettingsDestination.developer,
-    'lib/pages/settings/developer_mcp_section.dart',
-  ),
+      'mcp', (l) => l.mcp, SettingsDestination.developer, 'lib/pages/settings/developer_mcp_section.dart'),
   SettingsSearchEntry('webhooks', (l) => l.webhooks, SettingsDestination.developer, _developer),
   SettingsSearchEntry('conversationEvents', (l) => l.conversationEvents, SettingsDestination.developer, _developer),
   SettingsSearchEntry('realTimeTranscript', (l) => l.realTimeTranscript, SettingsDestination.developer, _developer),
   SettingsSearchEntry('audioBytes', (l) => l.audioBytes, SettingsDestination.developer, _developer),
   SettingsSearchEntry('daySummary', (l) => l.daySummary, SettingsDestination.developer, _developer),
   SettingsSearchEntry(
-    'transcriptionDiagnostics',
-    (l) => l.transcriptionDiagnostics,
-    SettingsDestination.developer,
-    _developer,
-  ),
+      'transcriptionDiagnostics', (l) => l.transcriptionDiagnostics, SettingsDestination.developer, _developer),
 ];
 
 /// The entries whose rows are on screen for [scope] and whose title contains [query]

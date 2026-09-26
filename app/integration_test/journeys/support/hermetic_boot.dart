@@ -155,7 +155,10 @@ class _SyntheticGateway implements AuthTokenGateway {
 class ScriptableGateway implements AuthTokenGateway {
   ScriptableGateway({
     required this.user,
-    this.refreshOutcome = const AuthTokenSuccess(token: JourneyHermeticBoot.fixtureToken, expirationTime: null),
+    this.refreshOutcome = const AuthTokenSuccess(
+      token: JourneyHermeticBoot.fixtureToken,
+      expirationTime: null,
+    ),
   });
 
   AuthUserSnapshot? user;

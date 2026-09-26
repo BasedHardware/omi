@@ -6,15 +6,22 @@
 /// empty string, so a PostHog / Crashlytics query for a real SHA cannot collide
 /// with a local `flutter run` that forgot the flags.
 class BuildProvenance {
-  BuildProvenance({required String gitSha, required String buildNumber, required this.dirty})
-    : gitSha = _resolveSha(gitSha, dirty),
-      buildNumber = buildNumber.isEmpty ? 'unknown' : buildNumber;
+  BuildProvenance({
+    required String gitSha,
+    required String buildNumber,
+    required this.dirty,
+  })  : gitSha = _resolveSha(gitSha, dirty),
+        buildNumber = buildNumber.isEmpty ? 'unknown' : buildNumber;
 
   factory BuildProvenance.fromEnvironment() {
     const sha = String.fromEnvironment('OMI_GIT_SHA');
     const build = String.fromEnvironment('OMI_BUILD_NUMBER');
     const dirtyRaw = String.fromEnvironment('OMI_GIT_DIRTY');
-    return BuildProvenance(gitSha: sha, buildNumber: build, dirty: dirtyRaw == 'true');
+    return BuildProvenance(
+      gitSha: sha,
+      buildNumber: build,
+      dirty: dirtyRaw == 'true',
+    );
   }
 
   final String gitSha;
@@ -28,5 +35,8 @@ class BuildProvenance {
     return sha;
   }
 
-  Map<String, String> get asProperties => {'git_sha': gitSha, 'build_number': buildNumber};
+  Map<String, String> get asProperties => {
+        'git_sha': gitSha,
+        'build_number': buildNumber,
+      };
 }

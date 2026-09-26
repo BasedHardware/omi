@@ -27,14 +27,14 @@ class AppReviewService {
   factory AppReviewService() => _instance;
 
   AppReviewService._internal()
-    : _providedStorage = null,
-      _clock = DateTime.now,
-      _platform = _currentPlatform,
-      _appVersion = _productionAppVersion,
-      _isAvailable = InAppReview.instance.isAvailable,
-      _requestNativeReview = InAppReview.instance.requestReview,
-      _writeState = null,
-      _telemetry = _productionTelemetry;
+      : _providedStorage = null,
+        _clock = DateTime.now,
+        _platform = _currentPlatform,
+        _appVersion = _productionAppVersion,
+        _isAvailable = InAppReview.instance.isAvailable,
+        _requestNativeReview = InAppReview.instance.requestReview,
+        _writeState = null,
+        _telemetry = _productionTelemetry;
 
   /// Creates an isolated service for hermetic tests and local policy checks.
   AppReviewService.forTesting({
@@ -46,14 +46,14 @@ class AppReviewService {
     Future<void> Function()? requestNativeReview,
     Future<bool> Function(String key, String value)? writeState,
     AppReviewTelemetry? telemetry,
-  }) : _providedStorage = storage,
-       _clock = clock ?? DateTime.now,
-       _platform = (() => platform ?? _currentPlatform()),
-       _appVersion = (() => appVersion ?? _productionAppVersion()),
-       _isAvailable = isAvailable ?? InAppReview.instance.isAvailable,
-       _requestNativeReview = requestNativeReview ?? InAppReview.instance.requestReview,
-       _writeState = writeState,
-       _telemetry = telemetry ?? _productionTelemetry;
+  })  : _providedStorage = storage,
+        _clock = clock ?? DateTime.now,
+        _platform = (() => platform ?? _currentPlatform()),
+        _appVersion = (() => appVersion ?? _productionAppVersion()),
+        _isAvailable = isAvailable ?? InAppReview.instance.isAvailable,
+        _requestNativeReview = requestNativeReview ?? InAppReview.instance.requestReview,
+        _writeState = writeState,
+        _telemetry = telemetry ?? _productionTelemetry;
 
   static const String _stateKey = 'app_review_policy_v1';
   static const String _legacyPromptKey = 'has_shown_review_prompt';
@@ -80,28 +80,31 @@ class AppReviewService {
   /// service stores a local calendar day and first-seen timestamp, never the
   /// conversation, summary, or any other content.
   Future<void> recordEngagement() => _enqueue<void>(() async {
-    if (_storageBroken) return;
-    final now = _clock();
-    final storage = await _storage();
-    if (storage == null) return;
+        if (_storageBroken) return;
+        final now = _clock();
+        final storage = await _storage();
+        if (storage == null) return;
 
-    final state = await _loadState(storage, now);
-    if (state == null) return;
-    state.firstSeenAtMs ??= now.millisecondsSinceEpoch;
-    state.readingDays.add(_localDayKey(now));
-    if (state.readingDays.length > AppReviewPolicy.maximumStoredReadingDays) {
-      final sorted = state.readingDays.toList()..sort();
-      state.readingDays
-        ..clear()
-        ..addAll(sorted.skip(sorted.length - AppReviewPolicy.maximumStoredReadingDays));
-    }
-    await _persistState(storage, state);
-  });
+        final state = await _loadState(storage, now);
+        if (state == null) return;
+        state.firstSeenAtMs ??= now.millisecondsSinceEpoch;
+        state.readingDays.add(_localDayKey(now));
+        if (state.readingDays.length > AppReviewPolicy.maximumStoredReadingDays) {
+          final sorted = state.readingDays.toList()..sort();
+          state.readingDays
+            ..clear()
+            ..addAll(sorted.skip(sorted.length - AppReviewPolicy.maximumStoredReadingDays));
+        }
+        await _persistState(storage, state);
+      });
 
   /// Requests the platform review dialog when local policy and lifecycle
   /// checks permit it. The lifecycle guard is checked before and after the
   /// asynchronous native availability query.
-  Future<void> requestReview({required AppReviewMoment moment, required bool Function() isStillAppropriate}) =>
+  Future<void> requestReview({
+    required AppReviewMoment moment,
+    required bool Function() isStillAppropriate,
+  }) =>
       _enqueue<void>(() => _requestReviewSerialized(moment, isStillAppropriate));
 
   Future<void> _requestReviewSerialized(AppReviewMoment moment, bool Function() isStillAppropriate) async {
@@ -244,9 +247,8 @@ class AppReviewService {
     if (_storageBroken) return false;
     try {
       final encoded = jsonEncode(state.toJson());
-      final ok = _writeState == null
-          ? await storage.setString(_stateKey, encoded)
-          : await _writeState!(_stateKey, encoded);
+      final ok =
+          _writeState == null ? await storage.setString(_stateKey, encoded) : await _writeState!(_stateKey, encoded);
       if (!ok) {
         _storageBroken = true;
         return false;
@@ -318,11 +320,17 @@ class AppReviewService {
   }
 
   void _opportunity(String moment, AppReviewDecision decision) {
-    _telemetrySafe('App Review Opportunity', <String, Object>{'moment': moment, 'decision': decision.telemetryName});
+    _telemetrySafe('App Review Opportunity', <String, Object>{
+      'moment': moment,
+      'decision': decision.telemetryName,
+    });
   }
 
   void _finished(String moment, String result) {
-    _telemetrySafe('App Review Request Finished', <String, Object>{'moment': moment, 'result': result});
+    _telemetrySafe('App Review Request Finished', <String, Object>{
+      'moment': moment,
+      'result': result,
+    });
   }
 
   void _telemetrySafe(String eventName, Map<String, Object> properties) {
@@ -407,8 +415,10 @@ final class _StoredAttempt {
 
   Map<String, Object> toJson() => <String, Object>{'atMs': atMs, 'version': version};
 
-  AppReviewAttempt toPolicyAttempt() =>
-      AppReviewAttempt(at: DateTime.fromMillisecondsSinceEpoch(atMs), version: version);
+  AppReviewAttempt toPolicyAttempt() => AppReviewAttempt(
+        at: DateTime.fromMillisecondsSinceEpoch(atMs),
+        version: version,
+      );
 }
 
 final class _ReviewState {
@@ -421,12 +431,12 @@ final class _ReviewState {
   });
 
   factory _ReviewState.empty() => _ReviewState(
-    migrationComplete: false,
-    migratedAtMs: null,
-    firstSeenAtMs: null,
-    readingDays: <String>{},
-    attempts: <_StoredAttempt>[],
-  );
+        migrationComplete: false,
+        migratedAtMs: null,
+        firstSeenAtMs: null,
+        readingDays: <String>{},
+        attempts: <_StoredAttempt>[],
+      );
 
   factory _ReviewState.fromJson(Object? raw) {
     if (raw is! Map || raw['schema'] != 1 || raw['migrationComplete'] is! bool) {
@@ -461,11 +471,11 @@ final class _ReviewState {
   DateTime? get migratedAt => migratedAtMs == null ? null : DateTime.fromMillisecondsSinceEpoch(migratedAtMs!);
 
   Map<String, Object?> toJson() => <String, Object?>{
-    'schema': 1,
-    'migrationComplete': migrationComplete,
-    'migratedAtMs': migratedAtMs,
-    'firstSeenAtMs': firstSeenAtMs,
-    'readingDays': readingDays.toList()..sort(),
-    'attempts': attempts.map((attempt) => attempt.toJson()).toList(growable: false),
-  };
+        'schema': 1,
+        'migrationComplete': migrationComplete,
+        'migratedAtMs': migratedAtMs,
+        'firstSeenAtMs': firstSeenAtMs,
+        'readingDays': readingDays.toList()..sort(),
+        'attempts': attempts.map((attempt) => attempt.toJson()).toList(growable: false),
+      };
 }

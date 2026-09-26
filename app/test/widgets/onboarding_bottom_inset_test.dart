@@ -23,9 +23,7 @@ void main() {
               padding: EdgeInsets.only(bottom: bottomInset),
               viewPadding: EdgeInsets.only(bottom: bottomInset),
             ),
-            child: Scaffold(
-              body: NameWidget(key: ValueKey(bottomInset), goNext: () {}),
-            ),
+            child: Scaffold(body: NameWidget(key: ValueKey(bottomInset), goNext: () {})),
           ),
         ),
       ),

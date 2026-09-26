@@ -17,18 +17,19 @@ Future<ActionItemsResponse?> _items({
   DateTime? endDate,
   DateTime? dueStartDate,
   DateTime? dueEndDate,
-}) async => const ActionItemsResponse(
-  actionItems: [
-    ActionItemWithMetadata(id: 'parent', description: 'Plan the launch', completed: false, sortOrder: 1000),
-    ActionItemWithMetadata(
-      id: 'child',
-      description: 'Book the venue',
-      completed: false,
-      sortOrder: 2000,
-      indentLevel: 1,
-    ),
-  ],
-);
+}) async =>
+    const ActionItemsResponse(
+      actionItems: [
+        ActionItemWithMetadata(id: 'parent', description: 'Plan the launch', completed: false, sortOrder: 1000),
+        ActionItemWithMetadata(
+          id: 'child',
+          description: 'Book the venue',
+          completed: false,
+          sortOrder: 2000,
+          indentLevel: 1,
+        ),
+      ],
+    );
 
 /// Swipes mean the same thing on every task row (hub #4) and deletes offer Undo (hub #3, D5).
 void main() {

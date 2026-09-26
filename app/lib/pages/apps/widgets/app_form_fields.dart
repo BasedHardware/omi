@@ -71,12 +71,7 @@ class AppFormSectionTitle extends StatelessWidget {
       TextSpan(
         text: text,
         style: style,
-        children: const [
-          TextSpan(
-            text: ' *',
-            style: TextStyle(color: OmiColors.danger),
-          ),
-        ],
+        children: const [TextSpan(text: ' *', style: TextStyle(color: OmiColors.danger))],
       ),
     );
   }
@@ -136,7 +131,9 @@ class AppFormSelectorField extends StatelessWidget {
                 Expanded(
                   child: Text(
                     hasValue ? value! : placeholder,
-                    style: OmiType.callout.copyWith(color: hasValue ? OmiColors.textPrimary : OmiColors.textTertiary),
+                    style: OmiType.callout.copyWith(
+                      color: hasValue ? OmiColors.textPrimary : OmiColors.textTertiary,
+                    ),
                   ),
                 ),
                 const FaIcon(FontAwesomeIcons.chevronRight, color: OmiColors.textTertiary, size: 14),
@@ -317,17 +314,17 @@ class AppScreenshotsSection extends StatelessWidget {
 
   Widget _thumbnail(BuildContext context, int index) {
     Widget frame({Color? color, DecorationImage? image, Widget? child, bool bordered = false}) => Container(
-      width: _width,
-      height: _height,
-      margin: const EdgeInsets.only(right: 8),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: OmiRadius.smAll,
-        border: bordered ? Border.all(color: OmiColors.border, width: 1) : null,
-        image: image,
-      ),
-      child: child,
-    );
+          width: _width,
+          height: _height,
+          margin: const EdgeInsets.only(right: 8),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: OmiRadius.smAll,
+            border: bordered ? Border.all(color: OmiColors.border, width: 1) : null,
+            image: image,
+          ),
+          child: child,
+        );
 
     return Stack(
       children: [
@@ -338,10 +335,8 @@ class AppScreenshotsSection extends StatelessWidget {
             onTap: () => openAppScreenshots(context, urls, index),
             child: CachedNetworkImage(
               imageUrl: urls[index],
-              imageBuilder: (context, imageProvider) => frame(
-                bordered: true,
-                image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
-              ),
+              imageBuilder: (context, imageProvider) =>
+                  frame(bordered: true, image: DecorationImage(image: imageProvider, fit: BoxFit.cover)),
               placeholder: (context, url) => ShimmerWithTimeout(
                 baseColor: OmiColors.surface1,
                 highlightColor: OmiColors.surface2,

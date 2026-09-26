@@ -11,10 +11,13 @@ import 'package:omi/utils/logger.dart';
 /// The last release, [releaseAll], or engine teardown stops it. iOS and tests
 /// that do not inject an Android seam are no-ops.
 class SyncTransferKeepAlive {
-  SyncTransferKeepAlive({bool Function()? isAndroid, Future<void> Function()? start, Future<void> Function()? stop})
-    : _isAndroid = isAndroid ?? _defaultIsAndroid,
-      _start = start,
-      _stop = stop;
+  SyncTransferKeepAlive({
+    bool Function()? isAndroid,
+    Future<void> Function()? start,
+    Future<void> Function()? stop,
+  })  : _isAndroid = isAndroid ?? _defaultIsAndroid,
+        _start = start,
+        _stop = stop;
 
   static final SyncTransferKeepAlive instance = SyncTransferKeepAlive();
 

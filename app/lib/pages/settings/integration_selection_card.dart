@@ -93,9 +93,7 @@ class IntegrationConnectedBanner extends StatelessWidget {
         children: [
           const Icon(Icons.check_circle, color: OmiColors.success, size: 16),
           const SizedBox(width: OmiSpacing.xs),
-          Expanded(
-            child: Text(message, style: OmiType.footnote.copyWith(color: OmiColors.success)),
-          ),
+          Expanded(child: Text(message, style: OmiType.footnote.copyWith(color: OmiColors.success))),
         ],
       ),
     );
@@ -122,10 +120,7 @@ class IntegrationStatusChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
       decoration: BoxDecoration(color: background, borderRadius: OmiRadius.pillAll),
-      child: Text(
-        label,
-        style: OmiType.footnote.copyWith(color: foreground, fontWeight: FontWeight.w500),
-      ),
+      child: Text(label, style: OmiType.footnote.copyWith(color: foreground, fontWeight: FontWeight.w500)),
     );
   }
 }

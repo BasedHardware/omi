@@ -23,26 +23,24 @@ typedef ConversationLifecycleFetcher = Future<({ServerConversation? item, bool o
 /// Returns null when the check could not be made, so the caller keeps the
 /// last known answer instead of reading a failure as "no recaps".
 typedef DailySummariesChecker = Future<bool?> Function();
-typedef ConversationSearchFetcher =
-    Future<(List<ServerConversation>, int, int)> Function(
-      String query, {
-      int? page,
-      int? limit,
-      required bool includeDiscarded,
-      DateTime? startDate,
-      DateTime? endDate,
-      String? speakerId,
-    });
-typedef ConversationSearchResultFetcher =
-    Future<ConversationSearchResult> Function(
-      String query, {
-      int? page,
-      int? limit,
-      required bool includeDiscarded,
-      DateTime? startDate,
-      DateTime? endDate,
-      String? speakerId,
-    });
+typedef ConversationSearchFetcher = Future<(List<ServerConversation>, int, int)> Function(
+  String query, {
+  int? page,
+  int? limit,
+  required bool includeDiscarded,
+  DateTime? startDate,
+  DateTime? endDate,
+  String? speakerId,
+});
+typedef ConversationSearchResultFetcher = Future<ConversationSearchResult> Function(
+  String query, {
+  int? page,
+  int? limit,
+  required bool includeDiscarded,
+  DateTime? startDate,
+  DateTime? endDate,
+  String? speakerId,
+});
 typedef ConversationDetailsFetcher = Future<ServerConversation?> Function(String conversationId);
 
 /// Day-bucket key for a conversation timestamp, in the viewer's **local** timezone.
@@ -188,36 +186,34 @@ class ConversationProvider extends ChangeNotifier {
     ConversationSearchResultFetcher? conversationSearchResultFetcher,
     bool Function()? isSignedIn,
     ConversationApi? conversationApi,
-  }) : _conversationListFetcher = conversationListFetcher,
-       _conversationLifecycleFetcher =
-           conversationLifecycleFetcher ??
-           (conversationApi == null
-               ? getConversationByIdResult
-               : (id) => _legacyLifecycleFromTyped(conversationApi, id)),
-       _dailySummariesChecker = dailySummariesChecker,
-       _conversationSearchResultFetcher =
-           conversationSearchResultFetcher ??
-           (conversationSearchFetcher == null
-               ? searchConversationsServerResult
-               : (query, {page, limit, required includeDiscarded, startDate, endDate, speakerId}) async {
-                   final (items, currentPage, totalPages) = await conversationSearchFetcher(
-                     query,
-                     page: page,
-                     limit: limit,
-                     includeDiscarded: includeDiscarded,
-                     startDate: startDate,
-                     endDate: endDate,
-                     speakerId: speakerId,
-                   );
-                   return ConversationSearchResult(
-                     items: items,
-                     currentPage: currentPage,
-                     totalPages: totalPages,
-                     outcome: ConversationSearchResultOutcome.success,
-                   );
-                 }),
-       _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn,
-       _conversationApi = conversationApi {
+  })  : _conversationListFetcher = conversationListFetcher,
+        _conversationLifecycleFetcher = conversationLifecycleFetcher ??
+            (conversationApi == null
+                ? getConversationByIdResult
+                : (id) => _legacyLifecycleFromTyped(conversationApi, id)),
+        _dailySummariesChecker = dailySummariesChecker,
+        _conversationSearchResultFetcher = conversationSearchResultFetcher ??
+            (conversationSearchFetcher == null
+                ? searchConversationsServerResult
+                : (query, {page, limit, required includeDiscarded, startDate, endDate, speakerId}) async {
+                    final (items, currentPage, totalPages) = await conversationSearchFetcher(
+                      query,
+                      page: page,
+                      limit: limit,
+                      includeDiscarded: includeDiscarded,
+                      startDate: startDate,
+                      endDate: endDate,
+                      speakerId: speakerId,
+                    );
+                    return ConversationSearchResult(
+                      items: items,
+                      currentPage: currentPage,
+                      totalPages: totalPages,
+                      outcome: ConversationSearchResultOutcome.success,
+                    );
+                  }),
+        _isSignedIn = isSignedIn ?? AuthService.instance.isSignedIn,
+        _conversationApi = conversationApi {
     _setupMergeListener();
     _loadSettings();
   }
@@ -248,9 +244,10 @@ class ConversationProvider extends ChangeNotifier {
     if (api == null) return;
     final result = await api.byId(id);
     _typedDetailStates[id] = presentApiResult(result, isEmpty: (_) => false);
-    if (result case ApiFailure(
-      :final problem,
-    ) when problem.kind == ApiProblemKind.paymentRequired || problem.kind == ApiProblemKind.unprocessable) {
+    if (result
+        case ApiFailure(
+          :final problem,
+        ) when problem.kind == ApiProblemKind.paymentRequired || problem.kind == ApiProblemKind.unprocessable) {
       processingConversations = processingConversations.where((conversation) => conversation.id != id).toList();
     }
     notifyListeners();
@@ -607,9 +604,8 @@ class ConversationProvider extends ChangeNotifier {
   Future<bool> checkHasDailySummaries() async {
     if (!_isSignedIn()) return false;
     final generation = _sessionGeneration;
-    final hasSummaries =
-        await (_dailySummariesChecker?.call() ??
-            getDailySummaries(limit: 1, offset: 0).then((result) => result.ok ? result.items.isNotEmpty : null));
+    final hasSummaries = await (_dailySummariesChecker?.call() ??
+        getDailySummaries(limit: 1, offset: 0).then((result) => result.ok ? result.items.isNotEmpty : null));
     if (generation != _sessionGeneration || !_isSignedIn()) return false;
     if (hasSummaries == null) return true;
     hasDailySummaries = hasSummaries;
@@ -1133,7 +1129,7 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   ({List<ServerConversation> items, bool ok, bool truncated, ApiResult<List<ServerConversation>>? typed})
-  _packTypedConversationList(ApiResult<List<ServerConversation>> typed) {
+      _packTypedConversationList(ApiResult<List<ServerConversation>> typed) {
     return switch (typed) {
       ApiSuccess(:final data) => (items: data, ok: true, truncated: false, typed: typed),
       ApiFailure() => (items: <ServerConversation>[], ok: false, truncated: false, typed: typed),
@@ -1141,7 +1137,7 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   Future<({List<ServerConversation> items, bool ok, bool truncated, ApiResult<List<ServerConversation>>? typed})>
-  _getConversationsFromServer() async {
+      _getConversationsFromServer() async {
     final typedApi = _conversationApi;
     if (typedApi != null) {
       final (startDate, endDate) = _getDateFilterRange();
@@ -1177,9 +1173,9 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   Map<String, ServerConversation> _realProcessingConversationsById() => {
-    for (final conversation in processingConversations)
-      if (conversation.id != '0') conversation.id: conversation,
-  };
+        for (final conversation in processingConversations)
+          if (conversation.id != '0') conversation.id: conversation,
+      };
 
   Future<Map<String, ({ServerConversation? item, bool ok})>> _loadProcessingLifecycleResults(
     List<ServerConversation> pageItems,
@@ -1221,9 +1217,8 @@ class ConversationProvider extends ChangeNotifier {
       }
     }
 
-    final workerCount = ids.length < _processingLifecycleMaxConcurrency
-        ? ids.length
-        : _processingLifecycleMaxConcurrency;
+    final workerCount =
+        ids.length < _processingLifecycleMaxConcurrency ? ids.length : _processingLifecycleMaxConcurrency;
     final workers = List<Future<void>>.generate(workerCount, (_) => worker());
     try {
       await Future.wait(workers).timeout(_processingLifecycleDeadline);
@@ -1323,8 +1318,12 @@ class ConversationProvider extends ChangeNotifier {
 
     final pageOffset = _conversationServerOffset;
     final typedApi = _conversationApi;
-    late final ({List<ServerConversation> items, bool ok, bool truncated, ApiResult<List<ServerConversation>>? typed})
-    pageResult;
+    late final ({
+      List<ServerConversation> items,
+      bool ok,
+      bool truncated,
+      ApiResult<List<ServerConversation>>? typed
+    }) pageResult;
     if (conversationPageFetcherOverride != null) {
       final fetched = await conversationPageFetcherOverride!.call();
       pageResult = (items: fetched.items, ok: fetched.ok, truncated: fetched.truncated, typed: null);
@@ -1613,8 +1612,8 @@ class ConversationProvider extends ChangeNotifier {
     final originalConvoIndex = conversations.indexWhere((c) => c.id == convoId);
     if (originalConvoIndex != -1) {
       final itemIndex = conversations[originalConvoIndex].structured.actionItems.indexWhere(
-        (item) => item.description == actionItemDescription,
-      );
+            (item) => item.description == actionItemDescription,
+          );
       if (itemIndex != -1) {
         conversations[originalConvoIndex].structured.actionItems[itemIndex].completed = newState;
         conversationFoundAndUpdated = true;
@@ -1627,8 +1626,8 @@ class ConversationProvider extends ChangeNotifier {
       final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
       if (groupIndex != -1) {
         final itemIndex = groupedConversations[dateKey]![groupIndex].structured.actionItems.indexWhere(
-          (item) => item.description == actionItemDescription,
-        );
+              (item) => item.description == actionItemDescription,
+            );
         if (itemIndex != -1) {
           groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndex].completed = newState;
         }

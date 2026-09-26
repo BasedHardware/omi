@@ -7,9 +7,7 @@ import 'package:omi/ui/ui.dart';
 import 'ui_test_app.dart';
 
 void main() {
-  Widget pushedPage(Widget leading) => Scaffold(
-    appBar: AppBar(leading: leading, title: const Text('Detail')),
-  );
+  Widget pushedPage(Widget leading) => Scaffold(appBar: AppBar(leading: leading, title: const Text('Detail')));
 
   testWidgets('OmiBackButton is a labelled 44pt target that pops the page', (tester) async {
     final semantics = tester.ensureSemantics();
@@ -43,17 +41,11 @@ void main() {
     expect(find.byIcon(Icons.arrow_back), findsOneWidget);
   });
 
-  testWidgets('OmiBackButton.circled paints a circle inside the same 44pt target and honours onPressed', (
-    tester,
-  ) async {
+  testWidgets('OmiBackButton.circled paints a circle inside the same 44pt target and honours onPressed',
+      (tester) async {
     var pressed = 0;
     // In a floating header the control sits in plain layout, not an AppBar slot.
-    await pumpUi(
-      tester,
-      Scaffold(
-        body: Center(child: OmiBackButton.circled(onPressed: () => pressed++)),
-      ),
-    );
+    await pumpUi(tester, Scaffold(body: Center(child: OmiBackButton.circled(onPressed: () => pressed++))));
     final target = tester.getRect(find.byType(OmiIconButton));
     expect(target.size, const Size(44, 44));
     final circle = tester.getRect(find.descendant(of: find.byType(OmiIconButton), matching: find.byType(Container)));
@@ -67,11 +59,7 @@ void main() {
   testWidgets('OmiCloseButton is labelled Close and dismisses the route', (tester) async {
     await pumpUi(
       tester,
-      PushHost(
-        page: Scaffold(
-          appBar: AppBar(title: const Text('Viewer'), actions: const [OmiCloseButton()]),
-        ),
-      ),
+      PushHost(page: Scaffold(appBar: AppBar(title: const Text('Viewer'), actions: const [OmiCloseButton()]))),
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();

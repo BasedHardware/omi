@@ -62,10 +62,9 @@ final onboardingScenarios = <AuditScenario>[
     state: 'OnboardingProvider with no permission granted yet (this revision reads no permission source)',
     run: (a) async {
       // .value: OnboardingProvider.dispose reaches the uninitialised ServiceManager.
-      await a.pump(
-        PermissionsWidget(goNext: () {}),
-        providers: [ChangeNotifierProvider<OnboardingProvider>.value(value: OnboardingProvider())],
-      );
+      await a.pump(PermissionsWidget(goNext: () {}), providers: [
+        ChangeNotifierProvider<OnboardingProvider>.value(value: OnboardingProvider()),
+      ]);
       await a.shot('Onboarding permissions step');
     },
   ),
@@ -76,13 +75,10 @@ final onboardingScenarios = <AuditScenario>[
     state:
         'OnboardingProvider with no discovered devices and pairing instructions enabled; BLE scan and speaker-profile check are no-ops',
     run: (a) async {
-      await a.pump(
-        FindDevicesPage(goNext: () {}, includeSkip: true, isFromOnboarding: true),
-        providers: [
-          ChangeNotifierProvider<OnboardingProvider>.value(value: _NoDevicesOnboardingProvider()),
-          ChangeNotifierProvider<HomeProvider>(create: (_) => _NoSpeakerCheckHomeProvider()),
-        ],
-      );
+      await a.pump(FindDevicesPage(goNext: () {}, includeSkip: true, isFromOnboarding: true), providers: [
+        ChangeNotifierProvider<OnboardingProvider>.value(value: _NoDevicesOnboardingProvider()),
+        ChangeNotifierProvider<HomeProvider>(create: (_) => _NoSpeakerCheckHomeProvider()),
+      ]);
       await a.shot("The can't-find-your-device state");
     },
   ),

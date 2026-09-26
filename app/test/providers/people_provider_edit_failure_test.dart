@@ -37,15 +37,14 @@ void main() {
 
   test('accepted rename preserves verified sample metadata in provider and cache', () async {
     final person = Person(
-      id: 'voice',
-      name: 'Old',
-      createdAt: DateTime(2026),
-      updatedAt: DateTime(2026),
-      speechSamples: ['sample.wav'],
-      speechSampleTranscripts: ['Synthetic sample'],
-      speechSamplesVersion: 3,
-      colorIdx: 2,
-    );
+        id: 'voice',
+        name: 'Old',
+        createdAt: DateTime(2026),
+        updatedAt: DateTime(2026),
+        speechSamples: ['sample.wav'],
+        speechSampleTranscripts: ['Synthetic sample'],
+        speechSamplesVersion: 3,
+        colorIdx: 2);
     SharedPreferencesUtil().cachedPeople = [person];
     final provider = PeopleProvider(renamePerson: (id, name) async => true);
     await provider.updatePersonProvider(person, 'New');

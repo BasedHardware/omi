@@ -182,10 +182,7 @@ class DailySummariesListState extends State<DailySummariesList> {
         // Extra tail item for spinner / bottom padding
         if (index == _summaries.length) {
           if (_isLoadingMore) {
-            return const Padding(
-              padding: EdgeInsets.all(OmiSpacing.md),
-              child: Center(child: OmiSpinner()),
-            );
+            return const Padding(padding: EdgeInsets.all(OmiSpacing.md), child: Center(child: OmiSpinner()));
           }
           return SizedBox(height: widget.bottomPadding);
         }

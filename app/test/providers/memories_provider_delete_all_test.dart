@@ -31,10 +31,10 @@ final _memory = Memory(
 );
 
 MemoriesProvider _provider() => MemoriesProvider(
-  fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
-    return GetMemoriesResult([_memory], true);
-  },
-);
+      fetchMemoriesRequest: ({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+        return GetMemoriesResult([_memory], true);
+      },
+    );
 
 void main() {
   setUpAll(() {

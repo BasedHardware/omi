@@ -311,10 +311,8 @@ class HomeConversationsPreview extends StatelessWidget {
                   highlightColor: AppStyles.backgroundTertiary,
                   child: Container(
                     height: 80,
-                    decoration: const BoxDecoration(
-                      color: AppStyles.backgroundSecondary,
-                      borderRadius: OmiRadius.xlAll,
-                    ),
+                    decoration:
+                        const BoxDecoration(color: AppStyles.backgroundSecondary, borderRadius: OmiRadius.xlAll),
                   ),
                 ),
               ),

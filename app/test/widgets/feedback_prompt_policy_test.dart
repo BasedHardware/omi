@@ -25,12 +25,9 @@ void main() {
   test('malformed state fails closed and sampling is deterministic', () async {
     SharedPreferences.setMockInitialValues({
       'mobile_feedback_prompt_last_exposure_ms_'
-              'fc95297aa4f56781':
-          'bad',
+          'fc95297aa4f56781': 'bad',
       'mobile_feedback_prompt_suppressed_targets_'
-          'fc95297aa4f56781': <String>[
-        'conversation-1',
-      ],
+          'fc95297aa4f56781': <String>['conversation-1'],
     });
     final policy = FeedbackPromptPolicy(sampleFraction: 1, ownerKey: () => 'user-a');
     expect(await policy.canShow('conversation-2'), isFalse);
@@ -74,7 +71,11 @@ void main() {
       return preferences;
     }
 
-    final policy = FeedbackPromptPolicy(preferencesLoader: loader, sampleFraction: 1, ownerKey: () => 'user-a');
+    final policy = FeedbackPromptPolicy(
+      preferencesLoader: loader,
+      sampleFraction: 1,
+      ownerKey: () => 'user-a',
+    );
 
     final first = policy.claim('conversation-1');
     final second = policy.claim('conversation-2');
@@ -101,16 +102,31 @@ void main() {
       feedbackPromptKindForTarget(targetId: 'conversation-1', hasSummary: false, hasRecording: true),
       FeedbackPromptKind.recording,
     );
-    final first = feedbackPromptKindForTarget(targetId: 'conversation-1', hasSummary: true, hasRecording: true);
-    final second = feedbackPromptKindForTarget(targetId: 'conversation-1', hasSummary: true, hasRecording: true);
+    final first = feedbackPromptKindForTarget(
+      targetId: 'conversation-1',
+      hasSummary: true,
+      hasRecording: true,
+    );
+    final second = feedbackPromptKindForTarget(
+      targetId: 'conversation-1',
+      hasSummary: true,
+      hasRecording: true,
+    );
     expect(first, isNotNull);
     expect(second, first);
     final populations = [
       for (var index = 0; index < 32; index++)
-        feedbackPromptKindForTarget(targetId: 'conversation-$index', hasSummary: true, hasRecording: true),
+        feedbackPromptKindForTarget(
+          targetId: 'conversation-$index',
+          hasSummary: true,
+          hasRecording: true,
+        ),
     ];
     expect(populations, contains(FeedbackPromptKind.summary));
     expect(populations, contains(FeedbackPromptKind.recording));
-    expect(feedbackPromptKindForTarget(targetId: 'conversation-1', hasSummary: false, hasRecording: false), isNull);
+    expect(
+      feedbackPromptKindForTarget(targetId: 'conversation-1', hasSummary: false, hasRecording: false),
+      isNull,
+    );
   });
 }

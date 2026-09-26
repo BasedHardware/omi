@@ -20,9 +20,10 @@ class TaskIntegrationProvider extends ChangeNotifier {
   bool _appleRemindersPermissionManuallySet = false;
   int _sessionGeneration = 0;
 
-  TaskIntegrationProvider({Future<bool> Function(String appKey)? setDefaultTaskIntegrationFn})
-    : _setDefaultTaskIntegration = setDefaultTaskIntegrationFn ?? setDefaultTaskIntegration,
-      _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
+  TaskIntegrationProvider({
+    Future<bool> Function(String appKey)? setDefaultTaskIntegrationFn,
+  })  : _setDefaultTaskIntegration = setDefaultTaskIntegrationFn ?? setDefaultTaskIntegration,
+        _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
 
   TaskIntegrationApp get selectedApp => _selectedApp;
   Map<String, dynamic> get connectionDetails => _connectionDetails;

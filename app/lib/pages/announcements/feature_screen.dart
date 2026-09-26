@@ -197,9 +197,15 @@ class _FeatureScreenState extends State<FeatureScreen> {
         Container(
           width: 32,
           height: 32,
-          decoration: BoxDecoration(color: OmiColors.accent.withValues(alpha: 0.15), borderRadius: OmiRadius.mdAll),
+          decoration: BoxDecoration(
+            color: OmiColors.accent.withValues(alpha: 0.15),
+            borderRadius: OmiRadius.mdAll,
+          ),
           child: Center(
-            child: Text('$number', style: OmiType.subhead.copyWith(fontWeight: FontWeight.w700)),
+            child: Text(
+              '$number',
+              style: OmiType.subhead.copyWith(fontWeight: FontWeight.w700),
+            ),
           ),
         ),
         const SizedBox(width: 14),
@@ -208,7 +214,10 @@ class _FeatureScreenState extends State<FeatureScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(step.title, style: OmiType.headline.copyWith(height: 1.3)),
+              Text(
+                step.title,
+                style: OmiType.headline.copyWith(height: 1.3),
+              ),
               const SizedBox(height: 6),
               _buildListDescription(step),
             ],
@@ -318,11 +327,17 @@ class _FeatureScreenState extends State<FeatureScreen> {
           imageUrl: imageUrl,
           fit: BoxFit.cover,
           placeholder: (context, url) => Container(
-            decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+            decoration: const BoxDecoration(
+              color: OmiColors.surface1,
+              borderRadius: OmiRadius.xlAll,
+            ),
             child: const Center(child: OmiSpinner(color: OmiColors.textSecondary)),
           ),
           errorWidget: (context, url, error) => Container(
-            decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+            decoration: const BoxDecoration(
+              color: OmiColors.surface1,
+              borderRadius: OmiRadius.xlAll,
+            ),
             child: const Icon(Icons.image_not_supported_outlined, color: OmiColors.textTertiary, size: 48),
           ),
         ),
@@ -437,8 +452,8 @@ class _FeatureScreenState extends State<FeatureScreen> {
         color: isActive
             ? Colors.white
             : isPast
-            ? Colors.white54
-            : OmiColors.surface2,
+                ? Colors.white54
+                : OmiColors.surface2,
         borderRadius: OmiRadius.smAll,
       ),
     );

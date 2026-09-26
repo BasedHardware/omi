@@ -49,7 +49,10 @@ class DetailSearchBar extends StatelessWidget {
           ),
           if (query.isNotEmpty) ...[
             const SizedBox(width: OmiSpacing.xs),
-            Text('$currentIndex/$totalResults', style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+            Text(
+              '$currentIndex/$totalResults',
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+            ),
             OmiIconButton(
               icon: const Icon(Icons.keyboard_arrow_up),
               label: context.l10n.previousResult,

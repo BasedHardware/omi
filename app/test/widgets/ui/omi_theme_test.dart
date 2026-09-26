@@ -54,23 +54,19 @@ void main() {
     await tester.pumpWidget(
       MediaQuery(
         data: const MediaQueryData(disableAnimations: true),
-        child: Builder(
-          builder: (context) {
-            reduced = OmiMotion.of(context);
-            return const SizedBox();
-          },
-        ),
+        child: Builder(builder: (context) {
+          reduced = OmiMotion.of(context);
+          return const SizedBox();
+        }),
       ),
     );
     await tester.pumpWidget(
       MediaQuery(
         data: const MediaQueryData(),
-        child: Builder(
-          builder: (context) {
-            full = OmiMotion.of(context);
-            return const SizedBox();
-          },
-        ),
+        child: Builder(builder: (context) {
+          full = OmiMotion.of(context);
+          return const SizedBox();
+        }),
       ),
     );
     expect(reduced.quick, Duration.zero);

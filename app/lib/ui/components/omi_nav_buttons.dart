@@ -20,7 +20,9 @@ import 'package:omi/ui/components/omi_icon_button.dart';
 /// Use [OmiBackButton.circled] when the header floats over content (conversation detail, app
 /// detail): same glyph, drawn in a 36pt circle.
 class OmiBackButton extends StatelessWidget {
-  const OmiBackButton({super.key, this.onPressed, this.color}) : circled = false, fillColor = null;
+  const OmiBackButton({super.key, this.onPressed, this.color})
+      : circled = false,
+        fillColor = null;
 
   const OmiBackButton.circled({super.key, this.onPressed, this.color, this.fillColor}) : circled = true;
 
@@ -58,7 +60,9 @@ class OmiBackButton extends StatelessWidget {
 /// the push/modal rule. [OmiCloseButton.circled] draws it in a 36pt circle for headers that float
 /// over content (viewers).
 class OmiCloseButton extends StatelessWidget {
-  const OmiCloseButton({super.key, this.onPressed, this.color}) : circled = false, fillColor = null;
+  const OmiCloseButton({super.key, this.onPressed, this.color})
+      : circled = false,
+        fillColor = null;
 
   const OmiCloseButton.circled({super.key, this.onPressed, this.color, this.fillColor}) : circled = true;
 

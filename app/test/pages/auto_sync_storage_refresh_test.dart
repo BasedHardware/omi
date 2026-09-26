@@ -20,9 +20,8 @@ void main() {
   /// what its action did and — just as importantly — what the others did not.
   ({
     List<String> calls,
-    ({Future<void> Function() synced, Future<void> Function() pending, Future<void> Function() all}) actions,
-  })
-  subject({Future<void> Function()? clearPending}) {
+    ({Future<void> Function() synced, Future<void> Function() pending, Future<void> Function() all}) actions
+  }) subject({Future<void> Function()? clearPending}) {
     final calls = <String>[];
     return (
       calls: calls,
@@ -71,7 +70,9 @@ void main() {
   });
 
   test('the storage snapshot is re-read even when the clear fails part-way', () async {
-    final s = subject(clearPending: () async => throw StateError('device dropped the connection mid-delete'));
+    final s = subject(
+      clearPending: () async => throw StateError('device dropped the connection mid-delete'),
+    );
 
     await expectLater(s.actions.pending(), throwsStateError);
 

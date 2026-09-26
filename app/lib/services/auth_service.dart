@@ -27,11 +27,7 @@ final class _FirebaseAuthTokenGateway implements AuthTokenGateway {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return null;
     return AuthUserSnapshot(
-      uid: user.uid,
-      email: user.email,
-      displayName: user.displayName,
-      isAnonymous: user.isAnonymous,
-    );
+        uid: user.uid, email: user.email, displayName: user.displayName, isAnonymous: user.isAnonymous);
   }
 
   @override
@@ -77,9 +73,8 @@ Future<ProviderLinkResult> resolveProviderCredentialCollision({
   required Future<String?> Function() establishDestination,
 }) async {
   final sourceToken = sourceIsAnonymous ? await captureSourceToken() : null;
-  final anonymousSourceMigration = sourceToken == null
-      ? null
-      : AnonymousSourceMigration(uid: sourceUid, token: sourceToken);
+  final anonymousSourceMigration =
+      sourceToken == null ? null : AnonymousSourceMigration(uid: sourceUid, token: sourceToken);
   final destinationUid = await establishDestination();
   return ProviderLinkResult(destinationUid: destinationUid, anonymousSourceMigration: anonymousSourceMigration);
 }
@@ -89,11 +84,11 @@ class AuthService {
   static AuthService get instance => _instance;
 
   AuthService._internal()
-    : _tokenGateway = _FirebaseAuthTokenGateway(),
-      _refreshAttemptTimeout = _defaultRefreshAttemptTimeout,
-      _refreshDelay = _defaultRefreshDelay,
-      _recordTelemetry = _recordProductionTelemetry,
-      _telemetryContextProvider = _productionTelemetryContext;
+      : _tokenGateway = _FirebaseAuthTokenGateway(),
+        _refreshAttemptTimeout = _defaultRefreshAttemptTimeout,
+        _refreshDelay = _defaultRefreshDelay,
+        _recordTelemetry = _recordProductionTelemetry,
+        _telemetryContextProvider = _productionTelemetryContext;
 
   @visibleForTesting
   AuthService.forTesting({
@@ -102,11 +97,11 @@ class AuthService {
     Duration? refreshAttemptTimeout,
     AuthTelemetryRecorder? recordTelemetry,
     AuthTelemetryContextProvider? telemetryContextProvider,
-  }) : _tokenGateway = tokenGateway,
-       _refreshAttemptTimeout = refreshAttemptTimeout ?? _defaultRefreshAttemptTimeout,
-       _refreshDelay = refreshDelay ?? _defaultRefreshDelay,
-       _recordTelemetry = recordTelemetry ?? ((eventName, properties) {}),
-       _telemetryContextProvider = telemetryContextProvider ?? (() => const {});
+  })  : _tokenGateway = tokenGateway,
+        _refreshAttemptTimeout = refreshAttemptTimeout ?? _defaultRefreshAttemptTimeout,
+        _refreshDelay = refreshDelay ?? _defaultRefreshDelay,
+        _recordTelemetry = recordTelemetry ?? ((eventName, properties) {}),
+        _telemetryContextProvider = telemetryContextProvider ?? (() => const {});
 
   /// Replaces the production Firebase token gateway on the **singleton** for
   /// the local hermetic journey lane (SCA-488).
@@ -169,10 +164,10 @@ class AuthService {
   }
 
   static Map<String, dynamic> _productionTelemetryContext() => {
-    'platform': PlatformManager.instance.platform,
-    'app_version': PlatformManager.instance.appVersion,
-    'release_channel': Env.isTestFlight ? 'testflight' : (F.env == Environment.prod ? 'app_store' : 'dev'),
-  };
+        'platform': PlatformManager.instance.platform,
+        'app_version': PlatformManager.instance.appVersion,
+        'release_channel': Env.isTestFlight ? 'testflight' : (F.env == Environment.prod ? 'app_store' : 'dev'),
+      };
 
   /// Routes through the token gateway so the declared Firebase I/O seam
   /// covers identity reads too: the production gateway still answers from
@@ -382,28 +377,26 @@ class AuthService {
     if (_localDevRecoveryInFlight) return;
     _localDevRecoveryInFlight = true;
 
-    unawaited(
-      Future<void>.delayed(Duration.zero, () async {
-        try {
-          Logger.debug('local-dev: refresh failed, re-minting a session out of band');
-          final credential = await signInWithLocalDevToken();
-          final user = credential?.user;
-          if (user == null) return;
-          // Unforced: sign-in just populated a fresh token, so read the cached one
-          // rather than re-entering the forced-refresh path that just failed.
-          final token = await user.getIdToken();
-          if (token == null || token.isEmpty) return;
-          SharedPreferencesUtil().authToken = token;
-          _sessionExpired = false;
-          markAuthenticatedUser(user.uid);
-          Logger.debug('local-dev: session re-minted; the next request will use it');
-        } catch (e) {
-          Logger.debug('local-dev: re-mint failed: $e');
-        } finally {
-          _localDevRecoveryInFlight = false;
-        }
-      }),
-    );
+    unawaited(Future<void>.delayed(Duration.zero, () async {
+      try {
+        Logger.debug('local-dev: refresh failed, re-minting a session out of band');
+        final credential = await signInWithLocalDevToken();
+        final user = credential?.user;
+        if (user == null) return;
+        // Unforced: sign-in just populated a fresh token, so read the cached one
+        // rather than re-entering the forced-refresh path that just failed.
+        final token = await user.getIdToken();
+        if (token == null || token.isEmpty) return;
+        SharedPreferencesUtil().authToken = token;
+        _sessionExpired = false;
+        markAuthenticatedUser(user.uid);
+        Logger.debug('local-dev: session re-minted; the next request will use it');
+      } catch (e) {
+        Logger.debug('local-dev: re-mint failed: $e');
+      } finally {
+        _localDevRecoveryInFlight = false;
+      }
+    }));
   }
 
   Future<AuthTokenResult> refreshIdToken() {
@@ -569,17 +562,15 @@ class AuthService {
 
       Logger.debug('Starting OAuth flow for provider: $provider');
 
-      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize')
-          .replace(
-            queryParameters: {
-              'provider': provider,
-              'redirect_uri': redirectUri,
-              'state': state,
-              'code_challenge': codeChallenge,
-              'code_challenge_method': 'S256',
-            },
-          )
-          .toString();
+      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize').replace(
+        queryParameters: {
+          'provider': provider,
+          'redirect_uri': redirectUri,
+          'state': state,
+          'code_challenge': codeChallenge,
+          'code_challenge_method': 'S256',
+        },
+      ).toString();
 
       Logger.debug('Authorization URL: $authUrl');
 
@@ -888,15 +879,13 @@ class AuthService {
           Logger.debug('Web platform detected - attempting updateProfile with caution');
 
           // Try with a timeout to prevent hanging
-          await user
-              .updateProfile(displayName: fullName)
-              .timeout(
-                const Duration(seconds: 5),
-                onTimeout: () {
-                  Logger.debug('updateProfile timed out on web platform');
-                  throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
-                },
-              );
+          await user.updateProfile(displayName: fullName).timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              Logger.debug('updateProfile timed out on web platform');
+              throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
+            },
+          );
         } else {
           await user.updateProfile(displayName: fullName);
         }
@@ -955,17 +944,15 @@ class AuthService {
 
       Logger.debug('Starting OAuth linking flow for provider: $provider');
 
-      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize')
-          .replace(
-            queryParameters: {
-              'provider': provider,
-              'redirect_uri': redirectUri,
-              'state': state,
-              'code_challenge': codeChallenge,
-              'code_challenge_method': 'S256',
-            },
-          )
-          .toString();
+      final authUrl = Uri.parse('${Env.authApiBaseUrl}v1/auth/authorize').replace(
+        queryParameters: {
+          'provider': provider,
+          'redirect_uri': redirectUri,
+          'state': state,
+          'code_challenge': codeChallenge,
+          'code_challenge_method': 'S256',
+        },
+      ).toString();
 
       Logger.debug('Authorization URL: $authUrl');
 

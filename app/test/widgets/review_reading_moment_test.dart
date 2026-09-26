@@ -109,7 +109,11 @@ void main() {
   testWidgets('a real drag to the end arms the idle gate', (tester) async {
     var requests = 0;
 
-    await pumpMoment(tester, child: longList(), onFinishedReading: (_) async => requests++);
+    await pumpMoment(
+      tester,
+      child: longList(),
+      onFinishedReading: (_) async => requests++,
+    );
     await tester.pump(readingDuration);
     await tester.drag(find.byType(ListView), const Offset(0, -3000));
     await tester.pump();
@@ -151,21 +155,18 @@ void main() {
     var engagements = 0;
     var requests = 0;
     await tester.pumpWidget(MaterialApp(navigatorKey: navigator, home: const Scaffold()));
-    navigator.currentState!.push<void>(
-      MaterialPageRoute<void>(
+    navigator.currentState!.push<void>(MaterialPageRoute<void>(
         builder: (_) => Scaffold(
-          body: ReviewReadingMoment(
-            contentId: 'pushed-content',
-            enabled: true,
-            minimumReadingDuration: const Duration(seconds: 1),
-            bottomIdleDuration: bottomIdleDuration,
-            onEngaged: () => engagements++,
-            onFinishedReading: (_) async => requests++,
-            child: shortList(),
-          ),
-        ),
-      ),
-    );
+              body: ReviewReadingMoment(
+                contentId: 'pushed-content',
+                enabled: true,
+                minimumReadingDuration: const Duration(seconds: 1),
+                bottomIdleDuration: bottomIdleDuration,
+                onEngaged: () => engagements++,
+                onFinishedReading: (_) async => requests++,
+                child: shortList(),
+              ),
+            )));
     await tester.pump();
     expect(engagements, 0);
     await tester.pumpAndSettle();
@@ -284,7 +285,11 @@ void main() {
   testWidgets('keyboard visibility blocks and then restarts the opportunity', (tester) async {
     var requests = 0;
 
-    await pumpMoment(tester, child: shortList(), onFinishedReading: (_) async => requests++);
+    await pumpMoment(
+      tester,
+      child: shortList(),
+      onFinishedReading: (_) async => requests++,
+    );
     await tester.pump(const Duration(milliseconds: 50));
     tester.view.viewInsets = const FakeViewPadding(bottom: 220);
     await tester.pump();
@@ -302,7 +307,11 @@ void main() {
   testWidgets('disposing the surface cancels timers without a late request', (tester) async {
     var requests = 0;
 
-    await pumpMoment(tester, child: shortList(), onFinishedReading: (_) async => requests++);
+    await pumpMoment(
+      tester,
+      child: shortList(),
+      onFinishedReading: (_) async => requests++,
+    );
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(milliseconds: 300));

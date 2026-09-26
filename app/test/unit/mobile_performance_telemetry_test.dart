@@ -28,9 +28,7 @@ void main() {
     final observer = MobilePerformanceTelemetry(emit: (_, props) => events.add(props), identityEpoch: () => 1);
     observer.attach();
     final privateRoute = MaterialPageRoute<void>(
-      settings: const RouteSettings(name: '/conversation/private-id?text=secret'),
-      builder: (_) => const SizedBox(),
-    );
+        settings: const RouteSettings(name: '/conversation/private-id?text=secret'), builder: (_) => const SizedBox());
     observer.didChangeTop(privateRoute, null);
     await tester.pumpWidget(const SizedBox());
     expect(events, hasLength(1));

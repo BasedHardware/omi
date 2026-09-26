@@ -62,23 +62,26 @@ class JourneyEvidence {
   }
 
   Map<String, Object?> toJson() => {
-    'journey_id': journeyId,
-    'lane': lane,
-    'contract_versions': {'evidence': 'session-evidence-v1-accounting', 'journeys': 'seeded-journeys/v1'},
-    'artifact': artifactIdentity,
-    'started_at': startedAt.toIso8601String(),
-    'finished_at': (_finishedAt ?? DateTime.now().toUtc()).toIso8601String(),
-    'counts': {'passed': passed, 'failed': failed, 'skipped': skipped, 'executed': passed + failed + skipped},
-    'outcome': failed > 0
-        ? 'failed'
-        : (passed + failed) == 0
-        ? 'zero-execution'
-        : 'passed',
-    'assertions': assertions,
-    'state_before': stateBefore,
-    'state_after': stateAfter,
-    'timeline': timeline,
-  };
+        'journey_id': journeyId,
+        'lane': lane,
+        'contract_versions': {
+          'evidence': 'session-evidence-v1-accounting',
+          'journeys': 'seeded-journeys/v1',
+        },
+        'artifact': artifactIdentity,
+        'started_at': startedAt.toIso8601String(),
+        'finished_at': (_finishedAt ?? DateTime.now().toUtc()).toIso8601String(),
+        'counts': {'passed': passed, 'failed': failed, 'skipped': skipped, 'executed': passed + failed + skipped},
+        'outcome': failed > 0
+            ? 'failed'
+            : (passed + failed) == 0
+                ? 'zero-execution'
+                : 'passed',
+        'assertions': assertions,
+        'state_before': stateBefore,
+        'state_after': stateAfter,
+        'timeline': timeline,
+      };
 
   /// Writes the receipt. Directory defaults to a temp dir; the runner passes
   /// `OMI_JOURNEY_EVIDENCE_DIR` to collect receipts for handoff.

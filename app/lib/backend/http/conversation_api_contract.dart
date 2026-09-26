@@ -12,7 +12,10 @@ export 'package:omi/backend/http/api/conversations.dart' show ConversationApi;
 /// Production constructor. [main.dart] calls this with no arguments so the
 /// shipped app always takes the typed list/detail path. Tests may pass [send]
 /// (loopback fixture) and [isSignedIn]; they must not skip [ConversationApi].
-ConversationProvider createProductionConversationProvider({ApiSend? send, bool Function()? isSignedIn}) {
+ConversationProvider createProductionConversationProvider({
+  ApiSend? send,
+  bool Function()? isSignedIn,
+}) {
   final baseUrl = Env.apiBaseUrl ?? 'http://127.0.0.1:8000/';
   return ConversationProvider(
     conversationApi: ConversationApi(baseUrl: baseUrl, send: send),

@@ -22,23 +22,22 @@ void main() {
     500: ApiProblemKind.server,
     400: ApiProblemKind.rejected,
     409: ApiProblemKind.rejected,
-    302: ApiProblemKind.rejected,
+    302: ApiProblemKind.rejected
   };
   for (final entry in statuses.entries) {
     contractTest('C3 HTTP ${entry.key} retains its distinct cause and never decodes/retries', () async {
       var sends = 0;
       var decodes = 0;
       final result = await executeApi(
-        request: request,
-        send: (_) async {
-          sends++;
-          return http.Response('sensitive-server-body', entry.key);
-        },
-        decode: (_) {
-          decodes++;
-          return ['must-not-render'];
-        },
-      );
+          request: request,
+          send: (_) async {
+            sends++;
+            return http.Response('sensitive-server-body', entry.key);
+          },
+          decode: (_) {
+            decodes++;
+            return ['must-not-render'];
+          });
       expect(result, isA<ApiFailure<List<String>>>());
       final error = (result as ApiFailure<List<String>>).problem;
       expect(error.kind, entry.value);
@@ -53,7 +52,7 @@ void main() {
     const SocketException('synthetic'),
     const HandshakeException('synthetic'),
     TimeoutException('synthetic'),
-    http.ClientException('synthetic'),
+    http.ClientException('synthetic')
   ]) {
     contractTest('C3 ${error.runtimeType} is transport, never null/success', () async {
       final result = await executeApi<String>(request: request, send: (_) async => throw error, decode: (s) => s);
@@ -68,14 +67,11 @@ void main() {
     const AuthTokenMissingUser(),
     const AuthTokenMissingToken(),
     const AuthTokenTerminalFailure(code: 'user-disabled'),
-    const AuthTokenTransientFailure(failureClass: 'network'),
+    const AuthTokenTransientFailure(failureClass: 'network')
   ]) {
     contractTest('C3 preserves ${auth.runtimeType} without a second auth interpretation', () async {
       final result = await executeApi<String>(
-        request: request,
-        send: (_) async => throw AuthTokenUnavailableException(auth),
-        decode: (s) => s,
-      );
+          request: request, send: (_) async => throw AuthTokenUnavailableException(auth), decode: (s) => s);
       final p = (result as ApiFailure<String>).problem;
       expect(p.kind, auth is AuthTokenTransientFailure ? ApiProblemKind.authTransient : ApiProblemKind.authTerminal);
       expect(p.retryable, auth is AuthTokenTransientFailure);
@@ -84,48 +80,42 @@ void main() {
   contractTest('C3 success decodes once and programmer failures do not become transport', () async {
     var decodes = 0;
     final ok = await executeApi(
-      request: request,
-      send: (_) async => http.Response('[]', 200),
-      decode: (s) {
-        decodes++;
-        expect(s, '[]');
-        return <String>[];
-      },
-    );
+        request: request,
+        send: (_) async => http.Response('[]', 200),
+        decode: (s) {
+          decodes++;
+          expect(s, '[]');
+          return <String>[];
+        });
     expect((ok as ApiSuccess<List<String>>).data, isEmpty);
     expect(decodes, 1);
     await expectLater(
-      executeApi<String>(request: request, send: (_) async => throw StateError('bug'), decode: (s) => s),
-      throwsStateError,
-    );
+        executeApi<String>(request: request, send: (_) async => throw StateError('bug'), decode: (s) => s),
+        throwsStateError);
     await expectLater(
-      executeApi<String>(
-        request: request,
-        send: (_) async => http.Response('valid response', 200),
-        decode: (_) => throw StateError('programmer bug'),
-      ),
-      throwsStateError,
-    );
+        executeApi<String>(
+            request: request,
+            send: (_) async => http.Response('valid response', 200),
+            decode: (_) => throw StateError('programmer bug')),
+        throwsStateError);
     final bad = await executeApi<String>(
-      request: request,
-      send: (_) async => http.Response('bad', 200),
-      decode: (_) => throw const FormatException('invalid response'),
-    );
+        request: request,
+        send: (_) async => http.Response('bad', 200),
+        decode: (_) => throw const FormatException('invalid response'));
     expect((bad as ApiFailure<String>).problem.kind, ApiProblemKind.decode);
   });
   for (final header in ['30', 'Thu, 17 Sep 2026 00:00:45 GMT', 'invalid', '-1']) {
     contractTest('C3 Retry-After $header is bounded metadata, not a timer', () async {
       final r = await executeApi<String>(
-        request: request,
-        decode: (s) => s,
-        now: () => DateTime.utc(2026, 9, 17),
-        send: (_) async => http.Response('{}', 429, headers: {'retry-after': header}),
-      );
+          request: request,
+          decode: (s) => s,
+          now: () => DateTime.utc(2026, 9, 17),
+          send: (_) async => http.Response('{}', 429, headers: {'retry-after': header}));
       final expected = header == '30'
           ? const Duration(seconds: 30)
           : header.contains('GMT')
-          ? const Duration(seconds: 45)
-          : null;
+              ? const Duration(seconds: 45)
+              : null;
       expect((r as ApiFailure<String>).problem.retryAfter, expected);
     });
   }

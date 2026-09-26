@@ -11,9 +11,9 @@ class PeopleProvider extends BaseProvider {
     Future<bool> Function(String, String)? renamePerson,
     Future<List<Person>?> Function()? loadPeople,
     Future<bool> Function(String, int)? deleteSample,
-  }) : _renamePerson = renamePerson ?? updatePersonName,
-       _loadPeople = loadPeople ?? getAllPeople,
-       _deleteSample = deleteSample ?? deletePersonSpeechSample;
+  })  : _renamePerson = renamePerson ?? updatePersonName,
+        _loadPeople = loadPeople ?? getAllPeople,
+        _deleteSample = deleteSample ?? deletePersonSpeechSample;
   final Future<List<Person>?> Function() _loadPeople;
   final Future<bool> Function(String, String) _renamePerson;
   final Future<bool> Function(String, int) _deleteSample;
@@ -46,7 +46,10 @@ class PeopleProvider extends BaseProvider {
     final value = await _loadPeople();
     loading = false;
     if (value != null) {
-      people = [...value, ...people.where((person) => person.id.startsWith('optimistic-person:'))];
+      people = [
+        ...value,
+        ...people.where((person) => person.id.startsWith('optimistic-person:')),
+      ];
       SharedPreferencesUtil().cachedPeople = value;
     }
     Logger.debug("${SharedPreferencesUtil().cachedPeople.length} people");
@@ -98,9 +101,8 @@ class PeopleProvider extends BaseProvider {
 
     people.add(newPerson);
     people.sort((a, b) => a.name.compareTo(b.name));
-    SharedPreferencesUtil().cachedPeople = people
-        .where((person) => !person.id.startsWith('optimistic-person:'))
-        .toList();
+    SharedPreferencesUtil().cachedPeople =
+        people.where((person) => !person.id.startsWith('optimistic-person:')).toList();
 
     loading = false;
     notifyListeners();
@@ -151,7 +153,10 @@ class PeopleProvider extends BaseProvider {
     if (success) {
       people[personIdx].speechSamples!.removeAt(sampleIdx);
       if (people[personIdx].speechSamples!.isEmpty) {
-        people[personIdx] = Person.fromJson({...people[personIdx].toJson(), 'voice_readiness': 'not_learned'});
+        people[personIdx] = Person.fromJson({
+          ...people[personIdx].toJson(),
+          'voice_readiness': 'not_learned',
+        });
       }
       SharedPreferencesUtil().replaceCachedPerson(people[personIdx]);
       await setPeople();

@@ -35,7 +35,10 @@ void main() {
       ]),
       digest,
     );
-    expect(transcriptSha256([_seg('I agree', speaker: 'Alice'), _seg('I refuse', speaker: 'Bob')]), digest);
+    expect(
+      transcriptSha256([_seg('I agree', speaker: 'Alice'), _seg('I refuse', speaker: 'Bob')]),
+      digest,
+    );
   });
 
   test('empty list hashes the empty byte string', () {

@@ -518,7 +518,11 @@ class RingStorageSyncImpl implements RingStorageSync {
           if (wal.storageTotalBytes > 0) {
             final consumedBytes = recordsConsumed * RingProtocol.recordSize;
             final pct = (consumedBytes / wal.storageTotalBytes).clamp(0.0, 1.0);
-            progress?.onWalSyncedProgress(pct, speedKBps: _currentSpeedKBps, phase: SyncPhase.downloadingFromDevice);
+            progress?.onWalSyncedProgress(
+              pct,
+              speedKBps: _currentSpeedKBps,
+              phase: SyncPhase.downloadingFromDevice,
+            );
           }
         }
 
@@ -653,12 +657,7 @@ class RingStorageSyncImpl implements RingStorageSync {
   }
 
   Future<void> _registerWithLocalSync(
-    Wal wal,
-    File file,
-    int timerStart,
-    int frameCount,
-    int admittedGeneration,
-  ) async {
+      Wal wal, File file, int timerStart, int frameCount, int admittedGeneration) async {
     if (_localSync == null) {
       Logger.debug('RingStorageSync: WARNING - LocalWalSync not available, chunk will not be uploaded');
       return;

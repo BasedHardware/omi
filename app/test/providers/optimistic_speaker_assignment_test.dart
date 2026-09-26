@@ -7,22 +7,21 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 
 ServerConversation _conversation() => ServerConversation(
-  id: 'conversation',
-  createdAt: DateTime(2026),
-  structured: Structured('Title', 'Overview'),
-  transcriptSegments: [
-    TranscriptSegment(
-      id: 'segment',
-      text: 'Hello',
-      speaker: 'SPEAKER_00',
-      isUser: false,
-      personId: null,
-      translations: [],
-      start: 0,
-      end: 1,
-    ),
-  ],
-);
+      id: 'conversation',
+      createdAt: DateTime(2026),
+      structured: Structured('Title', 'Overview'),
+      transcriptSegments: [
+        TranscriptSegment(
+            id: 'segment',
+            text: 'Hello',
+            speaker: 'SPEAKER_00',
+            isUser: false,
+            personId: null,
+            translations: [],
+            start: 0,
+            end: 1)
+      ],
+    );
 
 void _select(ConversationDetailProvider provider, ServerConversation value) {
   provider.selectedDate = value.createdAt;
@@ -32,9 +31,8 @@ void _select(ConversationDetailProvider provider, ServerConversation value) {
 void main() {
   test('applies immediately and rolls back after a failed save', () async {
     final response = Completer<bool>();
-    final provider = ConversationDetailProvider(
-      assignSpeaker: (_, __, {isUser, personId, speakerId}) => response.future,
-    );
+    final provider =
+        ConversationDetailProvider(assignSpeaker: (_, __, {isUser, personId, speakerId}) => response.future);
     _select(provider, _conversation());
     var failures = 0;
     final pending = provider.startSpeakerAssignment(['segment'], 'alice', onFailed: () => failures++)!;
@@ -50,8 +48,7 @@ void main() {
     final old = Completer<bool>();
     final newer = Completer<bool>();
     final provider = ConversationDetailProvider(
-      assignSpeaker: (_, __, {isUser, personId, speakerId}) => personId == 'alice' ? old.future : newer.future,
-    );
+        assignSpeaker: (_, __, {isUser, personId, speakerId}) => personId == 'alice' ? old.future : newer.future);
     _select(provider, _conversation());
     final first = provider.startSpeakerAssignment(['segment'], 'alice')!;
     final second = provider.startSpeakerAssignment(['segment'], 'bob')!;
@@ -62,9 +59,8 @@ void main() {
     expect(await second, isTrue);
 
     final stale = Completer<bool>();
-    final reloadProvider = ConversationDetailProvider(
-      assignSpeaker: (_, __, {isUser, personId, speakerId}) => stale.future,
-    );
+    final reloadProvider =
+        ConversationDetailProvider(assignSpeaker: (_, __, {isUser, personId, speakerId}) => stale.future);
     _select(reloadProvider, _conversation());
     final pending = reloadProvider.startSpeakerAssignment(['segment'], 'alice')!;
     final reloaded = _conversation();
@@ -81,20 +77,14 @@ void main() {
     final created = Completer<String?>();
     final saved = Completer<bool>();
     String? wirePerson;
-    final provider = ConversationDetailProvider(
-      assignSpeaker: (_, __, {isUser, personId, speakerId}) {
-        wirePerson = personId;
-        return saved.future;
-      },
-    );
+    final provider = ConversationDetailProvider(assignSpeaker: (_, __, {isUser, personId, speakerId}) {
+      wirePerson = personId;
+      return saved.future;
+    });
     _select(provider, _conversation());
     String? reconciled;
-    final pending = provider.startSpeakerAssignment(
-      ['segment'],
-      'optimistic-person:1',
-      createPerson: () => created.future,
-      onReconciled: (id) => reconciled = id,
-    )!;
+    final pending = provider.startSpeakerAssignment(['segment'], 'optimistic-person:1',
+        createPerson: () => created.future, onReconciled: (id) => reconciled = id)!;
     expect(provider.conversation.transcriptSegments.single.personId, 'optimistic-person:1');
     created.complete('real-person');
     await Future<void>.delayed(Duration.zero);

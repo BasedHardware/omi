@@ -2,14 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 
 TranscriptSegment decode(String id, {int? speakerId, String speaker = 'SPEAKER_00'}) => TranscriptSegment.fromJson({
-  'id': id,
-  'text': 'Synthetic speech',
-  'speaker': speaker,
-  'speaker_id': speakerId,
-  'is_user': false,
-  'start': 0.0,
-  'end': 10.0,
-});
+      'id': id,
+      'text': 'Synthetic speech',
+      'speaker': speaker,
+      'speaker_id': speakerId,
+      'is_user': false,
+      'start': 0.0,
+      'end': 10.0,
+    });
 
 void main() {
   test('explicit canonical identity wins, including zero, and round trips', () {

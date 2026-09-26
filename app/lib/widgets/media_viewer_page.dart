@@ -63,9 +63,9 @@ class MediaViewerItem {
     this.caption,
     this.discarded = false,
   }) : assert(
-         (base64 != null ? 1 : 0) + (imageUrl != null ? 1 : 0) + (bytesLoader != null ? 1 : 0) == 1,
-         'MediaViewerItem needs exactly one image source',
-       );
+          (base64 != null ? 1 : 0) + (imageUrl != null ? 1 : 0) + (bytesLoader != null ? 1 : 0) == 1,
+          'MediaViewerItem needs exactly one image source',
+        );
 }
 
 class MediaViewerPage extends StatefulWidget {
@@ -172,9 +172,9 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
   }
 
   void _onPageChanged(int index) => setState(() {
-    _currentIndex = index;
-    _zoomed = false;
-  });
+        _currentIndex = index;
+        _zoomed = false;
+      });
 
   void _onDragUpdate(DragUpdateDetails details) {
     setState(() => _dragOffset = (_dragOffset + details.delta.dy).clamp(0, double.infinity));
@@ -277,7 +277,10 @@ class _MediaViewerPageState extends State<MediaViewerPage> {
     final isProcessing = item.caption == null;
 
     if (item.discarded) {
-      return _captionText(context.l10n.photoDiscardedMessage, color: Colors.white70);
+      return _captionText(
+        context.l10n.photoDiscardedMessage,
+        color: Colors.white70,
+      );
     }
     if (isProcessing) {
       return Padding(

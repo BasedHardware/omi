@@ -165,7 +165,10 @@ class _AsanaSettingsPageState extends State<AsanaSettingsPage> {
       children: [
         if (_asanaService.currentUserGid != null)
           IntegrationConnectedBanner(context.l10n.connectedAsUser(_asanaService.currentUserGid!)),
-        Text(context.l10n.defaultWorkspace, style: OmiType.title3),
+        Text(
+          context.l10n.defaultWorkspace,
+          style: OmiType.title3,
+        ),
         const SizedBox(height: OmiSpacing.xs),
         Text(context.l10n.tasksCreatedInWorkspace, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
         const SizedBox(height: OmiSpacing.md),

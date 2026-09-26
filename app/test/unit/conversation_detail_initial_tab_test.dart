@@ -34,7 +34,10 @@ TranscriptSegment _segment(String text) {
   );
 }
 
-ServerConversation _conversation({String overview = '', List<TranscriptSegment>? segments}) {
+ServerConversation _conversation({
+  String overview = '',
+  List<TranscriptSegment>? segments,
+}) {
   return ServerConversation(
     id: 'conversation-1',
     createdAt: DateTime.utc(2026, 9, 21, 12),
@@ -58,14 +61,28 @@ void main() {
   });
 
   test('keeps normal summarized conversations on Summary', () {
-    expect(conversationDetailInitialTabIndex(_conversation(overview: 'A useful summary.')), 1);
+    expect(
+      conversationDetailInitialTabIndex(
+        _conversation(overview: 'A useful summary.'),
+      ),
+      1,
+    );
   });
 
-  test('preserves an explicit tab choice for transcript-only conversations', () {
-    final conversation = _conversation();
-    expect(conversationDetailInitialTabIndex(conversation, requestedTabIndex: 1), 1);
-    expect(conversationDetailInitialTabIndex(conversation, requestedTabIndex: 2), 2);
-  });
+  test(
+    'preserves an explicit tab choice for transcript-only conversations',
+    () {
+      final conversation = _conversation();
+      expect(
+        conversationDetailInitialTabIndex(conversation, requestedTabIndex: 1),
+        1,
+      );
+      expect(
+        conversationDetailInitialTabIndex(conversation, requestedTabIndex: 2),
+        2,
+      );
+    },
+  );
 
   test('re-evaluates after detail hydration adds a summary', () {
     final conversation = _conversation();
@@ -76,13 +93,21 @@ void main() {
   });
 
   test('does not treat blank transcript segments as meaningful content', () {
-    expect(conversationDetailInitialTabIndex(_conversation(segments: [_segment('  ')])), 1);
+    expect(
+      conversationDetailInitialTabIndex(
+        _conversation(segments: [_segment('  ')]),
+      ),
+      1,
+    );
   });
 
-  test('keeps an in-progress capture on Summary until processing completes', () {
-    final conversation = _conversation()..status = ConversationStatus.processing;
-    expect(conversationDetailInitialTabIndex(conversation), 1);
-  });
+  test(
+    'keeps an in-progress capture on Summary until processing completes',
+    () {
+      final conversation = _conversation()..status = ConversationStatus.processing;
+      expect(conversationDetailInitialTabIndex(conversation), 1);
+    },
+  );
 
   testWidgets('waits for detail hydration before auto-selecting Transcript', (tester) async {
     final initial = _conversation();
@@ -131,9 +156,8 @@ void main() {
     await tester.pumpWidget(_detailApp(initial, detail, conversations, apps));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(
-      find.byWidgetPredicate((widget) => widget is Semantics && widget.properties.label == 'Transcript'),
-    );
+    await tester
+        .tap(find.byWidgetPredicate((widget) => widget is Semantics && widget.properties.label == 'Transcript'));
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(find.byWidgetPredicate((widget) => widget is Semantics && widget.properties.label == 'Summary'));
     await tester.pump(const Duration(milliseconds: 300));
@@ -150,12 +174,15 @@ void main() {
   });
 }
 
-ConversationProvider _conversationProvider(ServerConversation initial, Completer<ServerConversation?> details) {
+ConversationProvider _conversationProvider(
+  ServerConversation initial,
+  Completer<ServerConversation?> details,
+) {
   final provider = ConversationProvider(isSignedIn: () => false);
   final date = conversationLocalDayKey(initial.createdAt);
   provider.conversations = [initial];
   provider.groupedConversations = {
-    date: [initial],
+    date: [initial]
   };
   provider.conversationDetailsFetcherOverride = (_) => details.future;
   return provider;

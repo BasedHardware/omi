@@ -36,8 +36,7 @@ class _ForegroundFirstTaskHandler extends TaskHandler {
       if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
         Position? lastKnown;
         try {
-          lastKnown =
-              await Geolocator.getLastKnownPosition() ??
+          lastKnown = await Geolocator.getLastKnownPosition() ??
               await Geolocator.getLastKnownPosition(forceAndroidLocationManager: true);
         } catch (_) {}
         late final Position locationData;

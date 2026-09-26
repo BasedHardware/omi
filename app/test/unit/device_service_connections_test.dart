@@ -53,13 +53,8 @@ class _FakeConnection implements DeviceConnection {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
-BtDevice _device(String id, {DeviceType type = DeviceType.omi}) => BtDevice(
-  id: id,
-  name: id,
-  type: type,
-  rssi: 0,
-  locator: DeviceLocator.bluetooth(deviceId: id),
-);
+BtDevice _device(String id, {DeviceType type = DeviceType.omi}) =>
+    BtDevice(id: id, name: id, type: type, rssi: 0, locator: DeviceLocator.bluetooth(deviceId: id));
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -99,13 +94,11 @@ void main() {
     await SharedPreferencesUtil().btDeviceAdd(glass);
 
     built = {};
-    service = DeviceService(
-      connectionBuilder: (device) {
-        final connection = _FakeConnection(device);
-        built[device.id] = connection;
-        return connection;
-      },
-    );
+    service = DeviceService(connectionBuilder: (device) {
+      final connection = _FakeConnection(device);
+      built[device.id] = connection;
+      return connection;
+    });
   });
 
   test('connecting a second device leaves the first connected', () async {

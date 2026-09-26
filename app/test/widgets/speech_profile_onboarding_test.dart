@@ -8,37 +8,25 @@ import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/guided_voice_controller.dart';
 import '../providers/guided_voice_controller_test.dart' show FakeVoiceIO;
 
-Future<void> pump(
-  WidgetTester tester,
-  GuidedVoiceController flow, {
-  double scale = 1,
-  Size size = const Size(390, 844),
-  VoidCallback? skip,
-  VoidCallback? next,
-}) async {
+Future<void> pump(WidgetTester tester, GuidedVoiceController flow,
+    {double scale = 1, Size size = const Size(390, 844), VoidCallback? skip, VoidCallback? next}) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  await tester.pumpWidget(
-    MaterialApp(
-      theme: ThemeData.dark(),
-      localizationsDelegates: const [
-        AppLocalizations.delegate,
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: AppLocalizations.supportedLocales,
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)),
-        child: child!,
-      ),
-      home: Scaffold(
-        body: SpeechProfileWidget(controller: flow, goNext: next ?? () {}, onSkip: skip ?? () {}),
-      ),
-    ),
-  );
+  await tester.pumpWidget(MaterialApp(
+    theme: ThemeData.dark(),
+    localizationsDelegates: const [
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate
+    ],
+    supportedLocales: AppLocalizations.supportedLocales,
+    builder: (context, child) =>
+        MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)), child: child!),
+    home: Scaffold(body: SpeechProfileWidget(controller: flow, goNext: next ?? () {}, onSkip: skip ?? () {})),
+  ));
 }
 
 void main() {

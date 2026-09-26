@@ -23,7 +23,11 @@ class DevicePageHeader extends StatelessWidget {
       children: [
         Semantics(
           header: true,
-          child: Text(pairedDevice?.name ?? l10n.unknownDevice, style: OmiType.title1, textAlign: TextAlign.center),
+          child: Text(
+            pairedDevice?.name ?? l10n.unknownDevice,
+            style: OmiType.title1,
+            textAlign: TextAlign.center,
+          ),
         ),
         const SizedBox(height: OmiSpacing.sm),
         Container(
@@ -123,7 +127,9 @@ class DeviceDisconnectedCard extends StatelessWidget {
             width: 64,
             height: 64,
             decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
-            child: const Center(child: FaIcon(FontAwesomeIcons.linkSlash, color: OmiColors.textTertiary, size: 24)),
+            child: const Center(
+              child: FaIcon(FontAwesomeIcons.linkSlash, color: OmiColors.textTertiary, size: 24),
+            ),
           ),
           const SizedBox(height: OmiSpacing.lg),
           Text(context.l10n.deviceNotConnected, style: OmiType.headline, textAlign: TextAlign.center),

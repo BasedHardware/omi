@@ -30,8 +30,12 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 
 typedef ChatFilesUploader = Future<List<MessageFile>?> Function(List<File> files, {String? appId});
-typedef ChatReplyStreamer =
-    Stream<ServerMessageChunk> Function(String text, {String? appId, List<String>? filesId, ChatPageContext? context});
+typedef ChatReplyStreamer = Stream<ServerMessageChunk> Function(
+  String text, {
+  String? appId,
+  List<String>? filesId,
+  ChatPageContext? context,
+});
 
 class _ChatTelemetryAttempt {
   _ChatTelemetryAttempt(this.attempt);
@@ -137,11 +141,8 @@ class MessageProvider extends ChangeNotifier {
     _chatTelemetryAttempts[newMessageId] = state;
   }
 
-  void _finishChatTelemetryAttempt(
-    String messageId,
-    ProductOutcome outcome, {
-    ProductFailure failure = ProductFailure.none,
-  }) {
+  void _finishChatTelemetryAttempt(String messageId, ProductOutcome outcome,
+      {ProductFailure failure = ProductFailure.none}) {
     final state = _chatTelemetryAttempts[messageId];
     if (state == null) return;
     state.outcome = outcome;
@@ -593,7 +594,10 @@ class MessageProvider extends ChangeNotifier {
     if (_voiceSendInFlight) return;
     if (audioBytes.isEmpty) return;
     _voiceSendInFlight = true;
-    final chatAttempt = ProductTelemetry.instance.start(ProductJourney.chatVoice, surface: ProductSurface.chat);
+    final chatAttempt = ProductTelemetry.instance.start(
+      ProductJourney.chatVoice,
+      surface: ProductSurface.chat,
+    );
     var chatAttemptCompleted = false;
     late String responseMessageId;
     void completeChat(ProductOutcome outcome, {ProductFailure failure = ProductFailure.none}) {
@@ -703,8 +707,7 @@ class MessageProvider extends ChangeNotifier {
         if (chunk.type == MessageChunkType.error) {
           if (_tryParseQuotaError(chunk.text)) {
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text =
-                l10n?.chatQuotaExceededReply ??
+            message.text = l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             if (playResponseAudio) {
               await OmiVoicePlaybackService.instance.interrupt();
@@ -769,7 +772,10 @@ class MessageProvider extends ChangeNotifier {
     );
     _isNextMessageFromVoice = false;
 
-    final chatAttempt = ProductTelemetry.instance.start(ProductJourney.chatText, surface: ProductSurface.chat);
+    final chatAttempt = ProductTelemetry.instance.start(
+      ProductJourney.chatText,
+      surface: ProductSurface.chat,
+    );
     var chatAttemptCompleted = false;
     late String responseMessageId;
     void completeChat(ProductOutcome outcome, {ProductFailure failure = ProductFailure.none}) {
@@ -850,8 +856,7 @@ class MessageProvider extends ChangeNotifier {
           if (_tryParseQuotaError(chunk.text)) {
             // Keep the user's message visible; replace AI placeholder with quota message
             final l10n = globalNavigatorKey.currentContext?.l10n;
-            message.text =
-                l10n?.chatQuotaExceededReply ??
+            message.text = l10n?.chatQuotaExceededReply ??
                 "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
             completeChat(ProductOutcome.failure, failure: ProductFailure.quota);
             notifyListeners();

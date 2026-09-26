@@ -56,11 +56,9 @@ void main() {
     await tester.pump();
 
     OmiSwitch forwardingTile() => tester.widget<OmiSwitch>(
-      find.descendant(
-        of: find.widgetWithText(OmiSettingsRow, 'Send raw audio to Omi'),
-        matching: find.byType(OmiSwitch),
-      ),
-    );
+          find.descendant(
+              of: find.widgetWithText(OmiSettingsRow, 'Send raw audio to Omi'), matching: find.byType(OmiSwitch)),
+        );
 
     expect(forwardingTile().value, isFalse);
 

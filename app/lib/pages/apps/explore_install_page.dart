@@ -161,12 +161,12 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                 localizedSectionTitle = capability.getLocalizedTitle(context);
               } else {
                 final category = context.read<AddAppProvider>().categories.firstWhere(
-                  (cat) => cat.id == groupId || cat.title == groupTitle,
-                  orElse: () => Category(
-                    title: fallbackGroupTitle,
-                    id: groupId.isEmpty ? groupTitle.toLowerCase().replaceAll(' ', '-') : groupId,
-                  ),
-                );
+                      (cat) => cat.id == groupId || cat.title == groupTitle,
+                      orElse: () => Category(
+                        title: fallbackGroupTitle,
+                        id: groupId.isEmpty ? groupTitle.toLowerCase().replaceAll(' ', '-') : groupId,
+                      ),
+                    );
                 localizedSectionTitle = category.getLocalizedTitle(context);
               }
 
@@ -185,12 +185,12 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
                   } else {
                     // Legacy category-based navigation
                     final category = context.read<AddAppProvider>().categories.firstWhere(
-                      (cat) => cat.id == groupId || cat.title == groupTitle,
-                      orElse: () => Category(
-                        title: fallbackGroupTitle,
-                        id: groupId.isEmpty ? groupTitle.toLowerCase().replaceAll(' ', '-') : groupId,
-                      ),
-                    );
+                          (cat) => cat.id == groupId || cat.title == groupTitle,
+                          orElse: () => Category(
+                            title: fallbackGroupTitle,
+                            id: groupId.isEmpty ? groupTitle.toLowerCase().replaceAll(' ', '-') : groupId,
+                          ),
+                        );
                     routeToPage(context, CategoryAppsPage(category: category, apps: groupApps));
                   }
                 },
@@ -349,351 +349,331 @@ class ExploreInstallPageState extends State<ExploreInstallPage> with AutomaticKe
     super.build(context);
     return NotificationListener<SelectAppNotification>(
       onNotification: _handleSelectAppNotification,
-      child:
-          Selector<
-            AppProvider,
-            ({
-              bool isLoading,
-              bool isSearching,
-              Map<String, dynamic> filters,
-              bool isSearchActive,
-              bool isFilterActive,
-              int filterCount,
-              bool isInstalledSelected,
-              int visibleFilterCount,
-              String? firstFilterText,
-            })
-          >(
-            selector: (context, provider) {
-              // Installed has its own control; every other filter shows as a chip.
-              final visibleFilters = provider.filters.entries.where((entry) {
-                if (entry.key == 'Apps') {
-                  return entry.value != 'Installed Apps';
-                }
-                return true;
-              }).toList();
+      child: Selector<
+          AppProvider,
+          ({
+            bool isLoading,
+            bool isSearching,
+            Map<String, dynamic> filters,
+            bool isSearchActive,
+            bool isFilterActive,
+            int filterCount,
+            bool isInstalledSelected,
+            int visibleFilterCount,
+            String? firstFilterText,
+          })>(
+        selector: (context, provider) {
+          // Installed has its own control; every other filter shows as a chip.
+          final visibleFilters = provider.filters.entries.where((entry) {
+            if (entry.key == 'Apps') {
+              return entry.value != 'Installed Apps';
+            }
+            return true;
+          }).toList();
 
-              return (
-                isLoading: provider.isLoading,
-                isSearching: provider.isSearching,
-                filters: provider.filters,
-                isSearchActive: provider.isSearchActive(),
-                isFilterActive: provider.isFilterActive(),
-                filterCount: provider.filters.length,
-                isInstalledSelected: provider.isFilterSelected('Installed Apps', 'Apps'),
-                visibleFilterCount: visibleFilters.length,
-                firstFilterText: visibleFilters.isNotEmpty ? filterValueToString(visibleFilters.first.value) : null,
-              );
+          return (
+            isLoading: provider.isLoading,
+            isSearching: provider.isSearching,
+            filters: provider.filters,
+            isSearchActive: provider.isSearchActive(),
+            isFilterActive: provider.isFilterActive(),
+            filterCount: provider.filters.length,
+            isInstalledSelected: provider.isFilterSelected('Installed Apps', 'Apps'),
+            visibleFilterCount: visibleFilters.length,
+            firstFilterText: visibleFilters.isNotEmpty ? filterValueToString(visibleFilters.first.value) : null,
+          );
+        },
+        builder: (context, state, child) {
+          return RefreshIndicator(
+            onRefresh: () async {
+              HapticFeedback.mediumImpact();
+              await context.read<AppProvider>().forceRefreshApps();
             },
-            builder: (context, state, child) {
-              return RefreshIndicator(
-                onRefresh: () async {
-                  HapticFeedback.mediumImpact();
-                  await context.read<AppProvider>().forceRefreshApps();
-                },
-                color: OmiColors.onAccent,
-                backgroundColor: OmiColors.accent,
-                child: CustomScrollView(
-                  controller: widget.scrollController,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  slivers: [
-                    const SliverToBoxAdapter(child: SizedBox(height: 4)),
+            color: OmiColors.onAccent,
+            backgroundColor: OmiColors.accent,
+            child: CustomScrollView(
+              controller: widget.scrollController,
+              physics: const AlwaysScrollableScrollPhysics(),
+              slivers: [
+                const SliverToBoxAdapter(child: SizedBox(height: 4)),
 
-                    // Top bar with search and filters - show shimmer when loading
-                    SliverToBoxAdapter(
-                      child: state.isLoading
-                          ? _buildShimmerSearchBar()
-                          : Container(
-                              margin: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xxs, OmiSpacing.md, 0),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Search bar - shrinks to square when filters are active (but not when search is active)
-                                  AnimatedContainer(
-                                    duration: const Duration(milliseconds: 200),
-                                    curve: Curves.easeInOut,
-                                    width:
-                                        (!state.isSearchActive &&
-                                            (state.isInstalledSelected || state.visibleFilterCount > 0))
-                                        ? kOmiMinTapTarget
-                                        : null,
-                                    child:
-                                        (!state.isSearchActive &&
-                                            (state.isInstalledSelected || state.visibleFilterCount > 0))
-                                        ? SizedBox(
-                                            height: kOmiMinTapTarget,
-                                            child: Container(
-                                              decoration: const BoxDecoration(
-                                                color: OmiColors.surface1,
-                                                borderRadius: OmiRadius.mdAll,
-                                              ),
-                                              child: OmiIconButton(
-                                                icon: const Icon(Icons.search, size: 20),
-                                                color: OmiColors.textSecondary,
-                                                label: context.l10n.search,
-                                                onPressed: () {
-                                                  // Clear all filters and expand search
-                                                  final provider = context.read<AppProvider>();
-                                                  if (state.isInstalledSelected) {
-                                                    provider.addOrRemoveFilter('Installed Apps', 'Apps');
-                                                  }
-                                                  // Clear other filters
-                                                  final visibleFilters = state.filters.entries.where((entry) {
-                                                    if (entry.key == 'Apps') {
-                                                      return entry.value != 'Installed Apps';
-                                                    }
-                                                    return true;
-                                                  }).toList();
-                                                  for (final entry in visibleFilters) {
-                                                    provider.removeFilter(entry.key);
-                                                  }
-                                                  provider.applyFilters();
+                // Top bar with search and filters - show shimmer when loading
+                SliverToBoxAdapter(
+                  child: state.isLoading
+                      ? _buildShimmerSearchBar()
+                      : Container(
+                          margin: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xxs, OmiSpacing.md, 0),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Search bar - shrinks to square when filters are active (but not when search is active)
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                curve: Curves.easeInOut,
+                                width: (!state.isSearchActive &&
+                                        (state.isInstalledSelected || state.visibleFilterCount > 0))
+                                    ? kOmiMinTapTarget
+                                    : null,
+                                child: (!state.isSearchActive &&
+                                        (state.isInstalledSelected || state.visibleFilterCount > 0))
+                                    ? SizedBox(
+                                        height: kOmiMinTapTarget,
+                                        child: Container(
+                                          decoration: const BoxDecoration(
+                                              color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+                                          child: OmiIconButton(
+                                            icon: const Icon(Icons.search, size: 20),
+                                            color: OmiColors.textSecondary,
+                                            label: context.l10n.search,
+                                            onPressed: () {
+                                              // Clear all filters and expand search
+                                              final provider = context.read<AppProvider>();
+                                              if (state.isInstalledSelected) {
+                                                provider.addOrRemoveFilter('Installed Apps', 'Apps');
+                                              }
+                                              // Clear other filters
+                                              final visibleFilters = state.filters.entries.where((entry) {
+                                                if (entry.key == 'Apps') {
+                                                  return entry.value != 'Installed Apps';
+                                                }
+                                                return true;
+                                              }).toList();
+                                              for (final entry in visibleFilters) {
+                                                provider.removeFilter(entry.key);
+                                              }
+                                              provider.applyFilters();
+                                            },
+                                          ),
+                                        ),
+                                      )
+                                    : Expanded(
+                                        child: Column(
+                                          children: [
+                                            SizedBox(
+                                              height: 44,
+                                              child: SearchBar(
+                                                hintText: context.l10n.searchAppsPlaceholder,
+                                                leading: const Padding(
+                                                  padding: EdgeInsets.only(left: OmiSpacing.xs),
+                                                  child: Icon(Icons.search, color: OmiColors.textSecondary, size: 20),
+                                                ),
+                                                backgroundColor: WidgetStateProperty.all(OmiColors.surface1),
+                                                elevation: WidgetStateProperty.all(0),
+                                                padding: WidgetStateProperty.all(
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: OmiSpacing.sm, vertical: OmiSpacing.xxs),
+                                                ),
+                                                focusNode: context.read<HomeProvider>().appsSearchFieldFocusNode,
+                                                controller: searchController,
+                                                trailing: state.isSearchActive
+                                                    ? [
+                                                        OmiIconButton(
+                                                          icon: const Icon(Icons.close, size: 16),
+                                                          color: OmiColors.textSecondary,
+                                                          label: context.l10n.clearSearch,
+                                                          onPressed: () {
+                                                            searchController.clear();
+                                                            context.read<AppProvider>().searchApps('');
+                                                          },
+                                                        ),
+                                                      ]
+                                                    : null,
+                                                hintStyle: WidgetStateProperty.all(
+                                                  OmiType.subhead.copyWith(color: OmiColors.textTertiary),
+                                                ),
+                                                textStyle: WidgetStateProperty.all(
+                                                  OmiType.subhead.copyWith(color: OmiColors.textPrimary),
+                                                ),
+                                                shape: WidgetStateProperty.all(
+                                                  const RoundedRectangleBorder(borderRadius: OmiRadius.mdAll),
+                                                ),
+                                                onChanged: (value) {
+                                                  debouncer.run(() {
+                                                    context.read<AppProvider>().searchApps(value);
+                                                  });
                                                 },
                                               ),
                                             ),
-                                          )
-                                        : Expanded(
-                                            child: Column(
-                                              children: [
-                                                SizedBox(
-                                                  height: 44,
-                                                  child: SearchBar(
-                                                    hintText: context.l10n.searchAppsPlaceholder,
-                                                    leading: const Padding(
-                                                      padding: EdgeInsets.only(left: OmiSpacing.xs),
-                                                      child: Icon(
-                                                        Icons.search,
-                                                        color: OmiColors.textSecondary,
-                                                        size: 20,
-                                                      ),
-                                                    ),
-                                                    backgroundColor: WidgetStateProperty.all(OmiColors.surface1),
-                                                    elevation: WidgetStateProperty.all(0),
-                                                    padding: WidgetStateProperty.all(
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: OmiSpacing.sm,
-                                                        vertical: OmiSpacing.xxs,
-                                                      ),
-                                                    ),
-                                                    focusNode: context.read<HomeProvider>().appsSearchFieldFocusNode,
-                                                    controller: searchController,
-                                                    trailing: state.isSearchActive
-                                                        ? [
-                                                            OmiIconButton(
-                                                              icon: const Icon(Icons.close, size: 16),
-                                                              color: OmiColors.textSecondary,
-                                                              label: context.l10n.clearSearch,
-                                                              onPressed: () {
-                                                                searchController.clear();
-                                                                context.read<AppProvider>().searchApps('');
-                                                              },
-                                                            ),
-                                                          ]
-                                                        : null,
-                                                    hintStyle: WidgetStateProperty.all(
-                                                      OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-                                                    ),
-                                                    textStyle: WidgetStateProperty.all(
-                                                      OmiType.subhead.copyWith(color: OmiColors.textPrimary),
-                                                    ),
-                                                    shape: WidgetStateProperty.all(
-                                                      const RoundedRectangleBorder(borderRadius: OmiRadius.mdAll),
-                                                    ),
-                                                    onChanged: (value) {
-                                                      debouncer.run(() {
-                                                        context.read<AppProvider>().searchApps(value);
-                                                      });
-                                                    },
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                  ),
+                                          ],
+                                        ),
+                                      ),
+                              ),
 
-                                  // Installed Apps button - expands when selected
-                                  state.isInstalledSelected
-                                      ? Expanded(
-                                          child: AnimatedContainer(
-                                            duration: const Duration(milliseconds: 200),
-                                            curve: Curves.easeInOut,
-                                            height: 44,
-                                            decoration: BoxDecoration(
-                                              color: OmiColors.textPrimary.withValues(alpha: 0.22),
-                                              borderRadius: OmiRadius.mdAll,
-                                            ),
-                                            child: TextButton.icon(
-                                              onPressed: () {
-                                                HapticFeedback.mediumImpact();
-                                                final provider = context.read<AppProvider>();
-                                                final wasSelected = provider.isFilterSelected('Installed Apps', 'Apps');
-                                                provider.addOrRemoveFilter('Installed Apps', 'Apps');
-                                                provider.applyFilters();
-                                                PlatformManager.instance.analytics.appsTypeFilter(
-                                                  'Installed Apps',
-                                                  !wasSelected,
-                                                );
-                                              },
-                                              icon: const FaIcon(
-                                                FontAwesomeIcons.download,
-                                                size: 16,
-                                                color: OmiColors.textPrimary,
-                                              ),
-                                              label: Text(
-                                                (state.visibleFilterCount > 0 && !state.isSearchActive)
-                                                    ? context.l10n.installed
-                                                    : context.l10n.installedApps,
-                                                style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
-                                              ),
-                                              style: TextButton.styleFrom(
-                                                padding: const EdgeInsets.symmetric(
-                                                  horizontal: OmiSpacing.sm,
-                                                  vertical: 0,
-                                                ),
-                                              ),
-                                            ),
+                              // Installed Apps button - expands when selected
+                              state.isInstalledSelected
+                                  ? Expanded(
+                                      child: AnimatedContainer(
+                                        duration: const Duration(milliseconds: 200),
+                                        curve: Curves.easeInOut,
+                                        height: 44,
+                                        decoration: BoxDecoration(
+                                          color: OmiColors.textPrimary.withValues(alpha: 0.22),
+                                          borderRadius: OmiRadius.mdAll,
+                                        ),
+                                        child: TextButton.icon(
+                                          onPressed: () {
+                                            HapticFeedback.mediumImpact();
+                                            final provider = context.read<AppProvider>();
+                                            final wasSelected = provider.isFilterSelected('Installed Apps', 'Apps');
+                                            provider.addOrRemoveFilter('Installed Apps', 'Apps');
+                                            provider.applyFilters();
+                                            PlatformManager.instance.analytics.appsTypeFilter(
+                                              'Installed Apps',
+                                              !wasSelected,
+                                            );
+                                          },
+                                          icon: const FaIcon(
+                                            FontAwesomeIcons.download,
+                                            size: 16,
+                                            color: OmiColors.textPrimary,
                                           ),
-                                        )
-                                      : SizedBox(
-                                          width: 44,
-                                          height: 44,
-                                          child: AnimatedContainer(
+                                          label: Text(
+                                            (state.visibleFilterCount > 0 && !state.isSearchActive)
+                                                ? context.l10n.installed
+                                                : context.l10n.installedApps,
+                                            style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
+                                          ),
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 0),
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  : SizedBox(
+                                      width: 44,
+                                      height: 44,
+                                      child: AnimatedContainer(
+                                        duration: const Duration(milliseconds: 200),
+                                        curve: Curves.easeInOut,
+                                        decoration: const BoxDecoration(
+                                            color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+                                        child: OmiIconButton(
+                                          icon: const FaIcon(FontAwesomeIcons.download, size: 16),
+                                          label: context.l10n.installedApps,
+                                          onPressed: () {
+                                            HapticFeedback.mediumImpact();
+                                            final provider = context.read<AppProvider>();
+                                            final wasSelected = provider.isFilterSelected('Installed Apps', 'Apps');
+                                            provider.addOrRemoveFilter('Installed Apps', 'Apps');
+                                            provider.applyFilters();
+                                            PlatformManager.instance.analytics.appsTypeFilter(
+                                              'Installed Apps',
+                                              !wasSelected,
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    ),
+
+                              const SizedBox(width: OmiSpacing.xs),
+
+                              // Filter button - expands when filters are active (but not when search is active)
+                              state.visibleFilterCount > 0 && !state.isSearchActive
+                                  ? Expanded(
+                                      child: AnimatedContainer(
+                                        duration: const Duration(milliseconds: 200),
+                                        curve: Curves.easeInOut,
+                                        height: 44,
+                                        decoration: BoxDecoration(
+                                          color: OmiColors.textPrimary.withValues(alpha: 0.22),
+                                          borderRadius: OmiRadius.mdAll,
+                                        ),
+                                        child: TextButton.icon(
+                                          onPressed: () {
+                                            HapticFeedback.mediumImpact();
+                                            FilterBottomSheet.show(context);
+                                          },
+                                          icon: const FaIcon(
+                                            FontAwesomeIcons.filter,
+                                            size: 16,
+                                            color: OmiColors.textPrimary,
+                                          ),
+                                          label: Text(
+                                            context.l10n.filters,
+                                            style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
+                                          ),
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 0),
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  : SizedBox(
+                                      width: 44,
+                                      height: 44,
+                                      child: Stack(
+                                        clipBehavior: Clip.none,
+                                        children: [
+                                          AnimatedContainer(
                                             duration: const Duration(milliseconds: 200),
                                             curve: Curves.easeInOut,
-                                            decoration: const BoxDecoration(
-                                              color: OmiColors.surface1,
+                                            decoration: BoxDecoration(
+                                              color: state.visibleFilterCount > 0
+                                                  ? OmiColors.textPrimary.withValues(alpha: 0.22)
+                                                  : OmiColors.surface1,
                                               borderRadius: OmiRadius.mdAll,
                                             ),
                                             child: OmiIconButton(
-                                              icon: const FaIcon(FontAwesomeIcons.download, size: 16),
-                                              label: context.l10n.installedApps,
-                                              onPressed: () {
-                                                HapticFeedback.mediumImpact();
-                                                final provider = context.read<AppProvider>();
-                                                final wasSelected = provider.isFilterSelected('Installed Apps', 'Apps');
-                                                provider.addOrRemoveFilter('Installed Apps', 'Apps');
-                                                provider.applyFilters();
-                                                PlatformManager.instance.analytics.appsTypeFilter(
-                                                  'Installed Apps',
-                                                  !wasSelected,
-                                                );
-                                              },
-                                            ),
-                                          ),
-                                        ),
-
-                                  const SizedBox(width: OmiSpacing.xs),
-
-                                  // Filter button - expands when filters are active (but not when search is active)
-                                  state.visibleFilterCount > 0 && !state.isSearchActive
-                                      ? Expanded(
-                                          child: AnimatedContainer(
-                                            duration: const Duration(milliseconds: 200),
-                                            curve: Curves.easeInOut,
-                                            height: 44,
-                                            decoration: BoxDecoration(
-                                              color: OmiColors.textPrimary.withValues(alpha: 0.22),
-                                              borderRadius: OmiRadius.mdAll,
-                                            ),
-                                            child: TextButton.icon(
+                                              icon: const FaIcon(FontAwesomeIcons.filter, size: 16),
+                                              label: context.l10n.filters,
                                               onPressed: () {
                                                 HapticFeedback.mediumImpact();
                                                 FilterBottomSheet.show(context);
                                               },
-                                              icon: const FaIcon(
-                                                FontAwesomeIcons.filter,
-                                                size: 16,
-                                                color: OmiColors.textPrimary,
-                                              ),
-                                              label: Text(
-                                                context.l10n.filters,
-                                                style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
-                                              ),
-                                              style: TextButton.styleFrom(
-                                                padding: const EdgeInsets.symmetric(
-                                                  horizontal: OmiSpacing.sm,
-                                                  vertical: 0,
-                                                ),
-                                              ),
                                             ),
                                           ),
-                                        )
-                                      : SizedBox(
-                                          width: 44,
-                                          height: 44,
-                                          child: Stack(
-                                            clipBehavior: Clip.none,
-                                            children: [
-                                              AnimatedContainer(
-                                                duration: const Duration(milliseconds: 200),
-                                                curve: Curves.easeInOut,
-                                                decoration: BoxDecoration(
-                                                  color: state.visibleFilterCount > 0
-                                                      ? OmiColors.textPrimary.withValues(alpha: 0.22)
-                                                      : OmiColors.surface1,
-                                                  borderRadius: OmiRadius.mdAll,
-                                                ),
-                                                child: OmiIconButton(
-                                                  icon: const FaIcon(FontAwesomeIcons.filter, size: 16),
-                                                  label: context.l10n.filters,
-                                                  onPressed: () {
-                                                    HapticFeedback.mediumImpact();
-                                                    FilterBottomSheet.show(context);
-                                                  },
-                                                ),
-                                              ),
-                                              // Badge showing filter count when filters are active
-                                              if (state.visibleFilterCount > 0)
-                                                Positioned(
-                                                  top: -4,
-                                                  right: -4,
-                                                  child: ExcludeSemantics(
-                                                    child: Container(
-                                                      padding: const EdgeInsets.all(OmiSpacing.xxs),
-                                                      decoration: BoxDecoration(
-                                                        color: OmiColors.textPrimary,
-                                                        shape: BoxShape.circle,
-                                                        border: Border.all(color: OmiColors.surface0, width: 1.5),
+                                          // Badge showing filter count when filters are active
+                                          if (state.visibleFilterCount > 0)
+                                            Positioned(
+                                              top: -4,
+                                              right: -4,
+                                              child: ExcludeSemantics(
+                                                child: Container(
+                                                  padding: const EdgeInsets.all(OmiSpacing.xxs),
+                                                  decoration: BoxDecoration(
+                                                    color: OmiColors.textPrimary,
+                                                    shape: BoxShape.circle,
+                                                    border: Border.all(color: OmiColors.surface0, width: 1.5),
+                                                  ),
+                                                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                                                  child: Center(
+                                                    child: Text(
+                                                      state.visibleFilterCount.toString(),
+                                                      style: OmiType.caption.copyWith(
+                                                        color: OmiColors.onAccent,
+                                                        fontWeight: FontWeight.w600,
+                                                        height: 1.0,
                                                       ),
-                                                      constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                                                      child: Center(
-                                                        child: Text(
-                                                          state.visibleFilterCount.toString(),
-                                                          style: OmiType.caption.copyWith(
-                                                            color: OmiColors.onAccent,
-                                                            fontWeight: FontWeight.w600,
-                                                            height: 1.0,
-                                                          ),
-                                                          textAlign: TextAlign.center,
-                                                        ),
-                                                      ),
+                                                      textAlign: TextAlign.center,
                                                     ),
                                                   ),
                                                 ),
-                                            ],
-                                          ),
-                                        ),
-                                ],
-                              ),
-                            ),
-                    ),
-
-                    const SliverToBoxAdapter(child: SizedBox(height: 0)),
-
-                    // Main content - show shimmer when loading
-                    if (state.isLoading)
-                      SliverToBoxAdapter(child: _buildShimmerAppsView())
-                    else if (state.isSearching)
-                      const SearchLoadingSliver()
-                    else if (state.isFilterActive || state.isSearchActive)
-                      _buildFilteredAppsSlivers()
-                    else
-                      _buildCategorizedAppsSlivers(),
-                  ],
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                            ],
+                          ),
+                        ),
                 ),
-              );
-            },
-          ),
+
+                const SliverToBoxAdapter(child: SizedBox(height: 0)),
+
+                // Main content - show shimmer when loading
+                if (state.isLoading)
+                  SliverToBoxAdapter(child: _buildShimmerAppsView())
+                else if (state.isSearching)
+                  const SearchLoadingSliver()
+                else if (state.isFilterActive || state.isSearchActive)
+                  _buildFilteredAppsSlivers()
+                else
+                  _buildCategorizedAppsSlivers(),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 

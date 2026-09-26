@@ -58,8 +58,7 @@ final memoriesScenarios = <AuditScenario>[
     run: (a) async {
       final memories = MemoriesProvider();
       await a.tester.runAsync(
-        () => memories.createMemory('Prefers morning meetings and keeps Fridays free.', MemoryVisibility.private),
-      );
+          () => memories.createMemory('Prefers morning meetings and keeps Fridays free.', MemoryVisibility.private));
       await a.pump(const MemoriesPage(), providers: [ChangeNotifierProvider<MemoriesProvider>.value(value: memories)]);
       await a.shot('Memories list with one saved memory', step: 'list');
       await a.tester.drag(find.byType(Dismissible).first, const Offset(-500, 0));

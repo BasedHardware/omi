@@ -23,35 +23,35 @@ class _TestConnectivityPlatform extends ConnectivityPlatform {
 }
 
 BtDevice _device() => BtDevice(
-  id: 'AA:AA:AA:AA:AA:04',
-  name: 'Omi',
-  type: DeviceType.omi,
-  rssi: -50,
-  modelNumber: 'Omi DevKit 2',
-  firmwareRevision: '3.0.20',
-);
+      id: 'AA:AA:AA:AA:AA:04',
+      name: 'Omi',
+      type: DeviceType.omi,
+      rssi: -50,
+      modelNumber: 'Omi DevKit 2',
+      firmwareRevision: '3.0.20',
+    );
 
 BleDeviceDiagnostics _diagnostics() => BleDeviceDiagnostics(
-  disconnectHistory: [
-    BleDisconnectEvent(
-      timestamp: DateTime.now().millisecondsSinceEpoch,
-      reason: 'connection_timeout',
-      reasonCode: 8,
-      isManual: false,
-      eventType: 'disconnect',
-      lastRssi: -82,
-      connectionDurationMs: 1250,
-      appState: 'foreground',
-      timeToReconnectMs: 0,
-      rssiTrend: 'falling',
-    ),
-  ],
-  nativeBackgroundBytesConsumed: 0,
-  nativeBackgroundPacketsConsumed: 0,
-  reconnectionCount: 0,
-  connectedAt: 0,
-  failToConnectCount: 0,
-);
+      disconnectHistory: [
+        BleDisconnectEvent(
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+          reason: 'connection_timeout',
+          reasonCode: 8,
+          isManual: false,
+          eventType: 'disconnect',
+          lastRssi: -82,
+          connectionDurationMs: 1250,
+          appState: 'foreground',
+          timeToReconnectMs: 0,
+          rssiTrend: 'falling',
+        ),
+      ],
+      nativeBackgroundBytesConsumed: 0,
+      nativeBackgroundPacketsConsumed: 0,
+      reconnectionCount: 0,
+      connectedAt: 0,
+      failToConnectCount: 0,
+    );
 
 void main() {
   setUpAll(() async {

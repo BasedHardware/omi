@@ -32,12 +32,8 @@ class DataExport {
       final exportedPath = await exportUserDataToFile('${directory.path}/omi-export.json');
       if (!context.mounted) return;
       if (exportedPath == null) {
-        OmiFeedback.error(
-          context,
-          failed,
-          actionLabel: l10n.tryAgain,
-          onAction: () => run(context, shareOrigin: shareOrigin),
-        );
+        OmiFeedback.error(context, failed,
+            actionLabel: l10n.tryAgain, onAction: () => run(context, shareOrigin: shareOrigin));
         return;
       }
       OmiFeedback.hide(context);

@@ -50,7 +50,11 @@ Map<TaskCategory, List<ActionItemWithMetadata>> categorizeTasks(
 /// [showCompleted] reads a past-due completed task as overdue while the list
 /// shows it under Today, and a reorder inside that section then looks like a
 /// move and rewrites the task's due date.
-TaskCategory categoryForItem(ActionItemWithMetadata item, bool showCompleted, {DateTime? now}) {
+TaskCategory categoryForItem(
+  ActionItemWithMetadata item,
+  bool showCompleted, {
+  DateTime? now,
+}) {
   final current = now ?? DateTime.now();
   final startOfToday = DateTime(current.year, current.month, current.day);
   final startOfTomorrow = DateTime(current.year, current.month, current.day + 1);

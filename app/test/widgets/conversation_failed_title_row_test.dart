@@ -103,18 +103,27 @@ void main() {
       find.text(AppLocalizations.of(tester.element(find.byType(Scaffold))).conversationTitleDidntGenerate),
       findsOneWidget,
     );
-    expect(find.text(AppLocalizations.of(tester.element(find.byType(Scaffold))).conversationReprocess), findsOneWidget);
+    expect(
+      find.text(AppLocalizations.of(tester.element(find.byType(Scaffold))).conversationReprocess),
+      findsOneWidget,
+    );
   });
 
   testWidgets('short transcript stays a quiet untitled row', (tester) async {
-    await _pumpRow(tester, conversation: _conversation(segments: [_segment('one two three four')]));
+    await _pumpRow(
+      tester,
+      conversation: _conversation(segments: [_segment('one two three four')]),
+    );
 
     expect(_indicator, findsNothing);
     expect(_reprocessButton, findsNothing);
   });
 
   testWidgets('titled rows do not show the failed-title affordance', (tester) async {
-    await _pumpRow(tester, conversation: _conversation(title: 'Morning standup'));
+    await _pumpRow(
+      tester,
+      conversation: _conversation(title: 'Morning standup'),
+    );
 
     expect(_indicator, findsNothing);
     expect(_reprocessButton, findsNothing);
@@ -122,13 +131,19 @@ void main() {
 
   testWidgets('Reprocess loading then processing result moves the row off the completed list', (tester) async {
     final gate = Completer<ServerConversation?>();
-    final provider = await _pumpRow(tester, conversation: _conversation(), reprocess: (_) => gate.future);
+    final provider = await _pumpRow(
+      tester,
+      conversation: _conversation(),
+      reprocess: (_) => gate.future,
+    );
 
     await tester.tap(_reprocessButton);
     await tester.pump();
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
-    gate.complete(_conversation(status: ConversationStatus.processing, title: '', emoji: ''));
+    gate.complete(
+      _conversation(status: ConversationStatus.processing, title: '', emoji: ''),
+    );
     await tester.pumpAndSettle();
 
     expect(provider.processingConversations, hasLength(1));
@@ -156,7 +171,11 @@ void main() {
   });
 
   testWidgets('Reprocess failure keeps the recoverable row and shows a snackbar', (tester) async {
-    await _pumpRow(tester, conversation: _conversation(), reprocess: (_) async => null);
+    await _pumpRow(
+      tester,
+      conversation: _conversation(),
+      reprocess: (_) async => null,
+    );
 
     await tester.tap(_reprocessButton);
     await tester.pump();
@@ -165,7 +184,10 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(_indicator, findsOneWidget);
     expect(_reprocessButton, findsOneWidget);
-    expect(find.text(AppLocalizations.of(tester.element(find.byType(Scaffold))).somethingWentWrong), findsOneWidget);
+    expect(
+      find.text(AppLocalizations.of(tester.element(find.byType(Scaffold))).somethingWentWrong),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Reprocess thrown error keeps the recoverable row and shows a snackbar', (tester) async {
@@ -183,6 +205,9 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(_indicator, findsOneWidget);
-    expect(find.text(AppLocalizations.of(tester.element(find.byType(Scaffold))).somethingWentWrong), findsOneWidget);
+    expect(
+      find.text(AppLocalizations.of(tester.element(find.byType(Scaffold))).somethingWentWrong),
+      findsOneWidget,
+    );
   });
 }

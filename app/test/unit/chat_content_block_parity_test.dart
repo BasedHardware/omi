@@ -90,9 +90,10 @@ void main() {
   });
 
   test('prose the model actually wrote survives alongside its cards', () {
-    final message = messageWith([
-      desktopRenderedBlocks['taskCard']!,
-    ], text: 'Start with the hackathon — the deadline is closest.');
+    final message = messageWith(
+      [desktopRenderedBlocks['taskCard']!],
+      text: 'Start with the hackathon — the deadline is closest.',
+    );
 
     expect(message.textIsStructuredFallback, isFalse);
   });

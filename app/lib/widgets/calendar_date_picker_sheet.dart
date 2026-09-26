@@ -8,15 +8,14 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/ui/ui.dart';
 
-typedef CalendarYearBuilder =
-    Widget Function({
-      required int year,
-      TextStyle? textStyle,
-      BoxDecoration? decoration,
-      bool? isSelected,
-      bool? isDisabled,
-      bool? isCurrentYear,
-    });
+typedef CalendarYearBuilder = Widget Function({
+  required int year,
+  TextStyle? textStyle,
+  BoxDecoration? decoration,
+  bool? isSelected,
+  bool? isDisabled,
+  bool? isCurrentYear,
+});
 
 CalendarDatePicker2Config getDefaultCalendarConfig({
   DateTime? firstDate,

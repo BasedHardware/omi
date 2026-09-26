@@ -98,7 +98,11 @@ class CrashlyticsManager {
     FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(isEnabled && !PhysicalQualification.enabled);
   }
 
-  Future<void> reportCrash(Object exception, StackTrace stackTrace, {Map<String, String>? userAttributes}) async {
+  Future<void> reportCrash(
+    Object exception,
+    StackTrace stackTrace, {
+    Map<String, String>? userAttributes,
+  }) async {
     if (!_deliverable) return;
     if (userAttributes != null) {
       for (final entry in userAttributes.entries) {

@@ -25,10 +25,9 @@ Future<void> pumpPage(WidgetTester tester, ConversationProvider provider) async 
   final screen = await buildTypedConversationScreen(provider);
   SharedPreferencesUtil().showGoalTrackerEnabled = true;
   final goals = GoalsProvider(
-    goalsFetcher: () async => [
-      Goal.fromJson({'id': 'goal', 'title': 'Read a book'}),
-    ],
-  );
+      goalsFetcher: () async => [
+            Goal.fromJson({'id': 'goal', 'title': 'Read a book'})
+          ]);
   addTearDown(goals.dispose);
   await goals.init();
   await tester.pumpWidget(ChangeNotifierProvider.value(value: goals, child: screen));
@@ -37,12 +36,12 @@ Future<void> pumpPage(WidgetTester tester, ConversationProvider provider) async 
 }
 
 ServerConversation completed(String id, {DateTime? createdAt, DateTime? finishedAt}) => ServerConversation(
-  id: id,
-  createdAt: createdAt ?? DateTime.now(),
-  finishedAt: finishedAt,
-  structured: Structured('Finished recording', 'Overview', emoji: '🧠'),
-  status: ConversationStatus.completed,
-);
+      id: id,
+      createdAt: createdAt ?? DateTime.now(),
+      finishedAt: finishedAt,
+      structured: Structured('Finished recording', 'Overview', emoji: '🧠'),
+      status: ConversationStatus.completed,
+    );
 
 void main() {
   setUp(() => VisibilityDetectorController.instance.updateInterval = Duration.zero);
@@ -81,9 +80,7 @@ void main() {
     await tester.pump();
     expect(find.byType(ProcessingConversationWidget), findsOneWidget);
     expect(
-      tester.widget<ProcessingConversationWidget>(find.byType(ProcessingConversationWidget)).conversation.id,
-      'real',
-    );
+        tester.widget<ProcessingConversationWidget>(find.byType(ProcessingConversationWidget)).conversation.id, 'real');
 
     provider.removeProcessingConversation('real');
     await provider.addConversation(completed('real'));

@@ -5,7 +5,9 @@ import 'package:omi/providers/user_provider.dart';
 void main() {
   group('UserProvider training data opt-in loading', () {
     test('applies the fetched record on success', () async {
-      final provider = UserProvider(trainingDataFetcher: () async => {'opted_in': true, 'status': 'approved'});
+      final provider = UserProvider(
+        trainingDataFetcher: () async => {'opted_in': true, 'status': 'approved'},
+      );
       addTearDown(provider.dispose);
 
       await provider.loadTrainingDataOptIn();

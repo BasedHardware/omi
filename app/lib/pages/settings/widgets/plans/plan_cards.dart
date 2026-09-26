@@ -222,21 +222,13 @@ class PlanOptionShimmer extends StatelessWidget {
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _bar(18, double.infinity),
-                const SizedBox(height: OmiSpacing.xxs),
-                _bar(14, 100),
-              ],
+              children: [_bar(18, double.infinity), const SizedBox(height: OmiSpacing.xxs), _bar(14, 100)],
             ),
           ),
           const SizedBox(width: OmiSpacing.md),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              _bar(18, 100),
-              const SizedBox(height: OmiSpacing.xs),
-              _bar(14, 60),
-            ],
+            children: [_bar(18, 100), const SizedBox(height: OmiSpacing.xs), _bar(14, 60)],
           ),
         ],
       ),
@@ -378,11 +370,7 @@ class PlanStatusCard extends StatelessWidget {
           const SizedBox(height: OmiSpacing.xs),
           Text(title, textAlign: TextAlign.center, style: OmiType.headline),
           const SizedBox(height: OmiSpacing.xxs),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-          ),
+          Text(message, textAlign: TextAlign.center, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
         ],
       ),
     );
@@ -406,13 +394,7 @@ class PlanDialogLine extends StatelessWidget {
         children: [
           ExcludeSemantics(child: FaIcon(icon, color: color, size: 16)),
           const SizedBox(width: OmiSpacing.xs),
-          Expanded(
-            child: Text(
-              text,
-              textAlign: TextAlign.start,
-              style: OmiType.subhead.copyWith(color: color),
-            ),
-          ),
+          Expanded(child: Text(text, textAlign: TextAlign.start, style: OmiType.subhead.copyWith(color: color))),
         ],
       ),
     );

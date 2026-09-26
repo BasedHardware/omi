@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
-import { getDb } from "@/lib/firebase/admin";
-import { isSafeDocumentId } from "@/lib/firestore-doc-id.mjs";
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyAdmin } from '@/lib/auth';
+import { getDb } from '@/lib/firebase/admin';
+import { isSafeDocumentId } from '@/lib/firestore-doc-id.mjs';
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 
 export async function POST(
   request: NextRequest,
@@ -14,24 +14,20 @@ export async function POST(
 
   const { uid, eventId } = await params;
   if (!isSafeDocumentId(uid) || !isSafeDocumentId(eventId)) {
-    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid id' }, { status: 400 });
   }
   const adminUid = authResult.uid;
 
   const { searchParams } = new URL(request.url);
-  const notes = searchParams.get("notes") || "";
+  const notes = searchParams.get('notes') || '';
 
   try {
     const db = getDb();
-    const ref = db
-      .collection("users")
-      .doc(uid)
-      .collection("fair_use_events")
-      .doc(eventId);
+    const ref = db.collection('users').doc(uid).collection('fair_use_events').doc(eventId);
 
     const doc = await ref.get();
     if (!doc.exists) {
-      return NextResponse.json({ error: "Event not found" }, { status: 404 });
+      return NextResponse.json({ error: 'Event not found' }, { status: 404 });
     }
 
     await ref.update({
@@ -41,12 +37,9 @@ export async function POST(
       admin_notes: notes,
     });
 
-    return NextResponse.json({ status: "resolved" });
+    return NextResponse.json({ status: 'resolved' });
   } catch (error) {
-    console.error("Error resolving fair use event:", error);
-    return NextResponse.json(
-      { error: "Failed to resolve event" },
-      { status: 500 }
-    );
+    console.error('Error resolving fair use event:', error);
+    return NextResponse.json({ error: 'Failed to resolve event' }, { status: 500 });
   }
 }

@@ -131,8 +131,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
-      _app(const Scaffold(appBar: ConversationStateAppBar(state: CaptureDisplayState.transcriptionUnavailable))),
-    );
+        _app(const Scaffold(appBar: ConversationStateAppBar(state: CaptureDisplayState.transcriptionUnavailable))));
     await tester.pump();
 
     final text = tester.widget<Text>(find.textContaining('recording continues on device'));
@@ -172,10 +171,8 @@ void main() {
   });
 
   group('audio download sheet (nav #14)', () {
-    Future<(AudioDownloadSheetHandle, NavigatorState)> openOverPage(
-      WidgetTester tester, {
-      VoidCallback? onCancel,
-    }) async {
+    Future<(AudioDownloadSheetHandle, NavigatorState)> openOverPage(WidgetTester tester,
+        {VoidCallback? onCancel}) async {
       late BuildContext pageContext;
       await tester.pumpWidget(
         _app(

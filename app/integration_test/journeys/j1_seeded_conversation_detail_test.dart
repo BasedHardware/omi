@@ -57,28 +57,19 @@ void main() {
     final conversationProvider = ConversationProvider(isSignedIn: () => true);
     await conversationProvider.forceRefreshConversations();
     final fetched = conversationProvider.conversations;
-    evidence.record(
-      'server-returned-seeded-record',
-      ok: fetched.any((c) => c.id == seededId),
-      invariant: 'the seeded conversation is served through the real API path',
-      detail: fetched.map((c) => c.id).toList(),
-    );
-    expect(
-      fetched.any((c) => c.id == seededId),
-      isTrue,
-      reason: 'fixture must serve the seeded record via GET /v1/conversations',
-    );
+    evidence.record('server-returned-seeded-record',
+        ok: fetched.any((c) => c.id == seededId),
+        invariant: 'the seeded conversation is served through the real API path',
+        detail: fetched.map((c) => c.id).toList());
+    expect(fetched.any((c) => c.id == seededId), isTrue,
+        reason: 'fixture must serve the seeded record via GET /v1/conversations');
 
     final seeded = fetched.firstWhere((c) => c.id == seededId);
-    final identityExact =
-        seeded.structured.title == seededTitle &&
+    final identityExact = seeded.structured.title == seededTitle &&
         seeded.createdAt.isAtSameMomentAs(DateTime.utc(2026, 9, 16, 9, 0, 0)) &&
         seeded.id == seededId;
-    evidence.record(
-      'exact-synthetic-identity',
-      ok: identityExact,
-      invariant: 'the fetched record carries the exact synthetic identity (id, title, timestamp)',
-    );
+    evidence.record('exact-synthetic-identity',
+        ok: identityExact, invariant: 'the fetched record carries the exact synthetic identity (id, title, timestamp)');
     expect(identityExact, isTrue, reason: 'record identity must be the seeded identity, not a local echo');
 
     await JourneyHermeticBoot.pumpPage(
@@ -98,11 +89,8 @@ void main() {
     await tester.pumpAndSettle(const Duration(seconds: 3));
 
     final titleRendered = find.textContaining(seededTitle).evaluate().isNotEmpty;
-    evidence.record(
-      'detail-renders-seeded-title',
-      ok: titleRendered,
-      invariant: 'the conversation detail screen renders the seeded record',
-    );
+    evidence.record('detail-renders-seeded-title',
+        ok: titleRendered, invariant: 'the conversation detail screen renders the seeded record');
     expect(titleRendered, isTrue, reason: 'detail page must render the seeded conversation title');
 
     evidence.stateAfter = SemanticControls.instance.state().toJson();
@@ -111,10 +99,8 @@ void main() {
   });
 
   testWidgets('negative: wrong-owner session cannot read the seeded record', (tester) async {
-    final evidence = JourneyEvidence.begin(
-      journeyId: 'j1_seeded_conversation_detail.wrong-owner-session',
-      lane: journeyLane,
-    );
+    final evidence =
+        JourneyEvidence.begin(journeyId: 'j1_seeded_conversation_detail.wrong-owner-session', lane: journeyLane);
     final server = await JourneyHermeticBoot.start();
     addTearDown(JourneyHermeticBoot.stop);
     server.conversations.add(seedConversation().toJson());
@@ -127,12 +113,10 @@ void main() {
     await conversationProvider.forceRefreshConversations();
     final fetched = conversationProvider.conversations;
     final leaked = fetched.any((c) => c.id == seededId);
-    evidence.record(
-      'ownership-rejected',
-      ok: !leaked,
-      invariant: JourneyFault.wrongOwnerSession.invariant,
-      detail: 'fetched ${fetched.length} records under wrong owner',
-    );
+    evidence.record('ownership-rejected',
+        ok: !leaked,
+        invariant: JourneyFault.wrongOwnerSession.invariant,
+        detail: 'fetched ${fetched.length} records under wrong owner');
     if (leaked) {
       await evidence.write();
       fail('seeded record readable under wrong-owner session');

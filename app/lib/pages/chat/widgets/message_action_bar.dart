@@ -24,12 +24,12 @@ enum FeedbackReason {
   const FeedbackReason(this.key);
 
   String label(AppLocalizations l10n) => switch (this) {
-    FeedbackReason.tooVerbose => l10n.feedbackReasonTooVerbose,
-    FeedbackReason.incorrectOrHallucination => l10n.feedbackReasonIncorrect,
-    FeedbackReason.notHelpfulOrIrrelevant => l10n.feedbackReasonNotHelpful,
-    FeedbackReason.didntFollowInstructions => l10n.feedbackReasonIgnoredInstructions,
-    FeedbackReason.other => l10n.cancelReasonOther,
-  };
+        FeedbackReason.tooVerbose => l10n.feedbackReasonTooVerbose,
+        FeedbackReason.incorrectOrHallucination => l10n.feedbackReasonIncorrect,
+        FeedbackReason.notHelpfulOrIrrelevant => l10n.feedbackReasonNotHelpful,
+        FeedbackReason.didntFollowInstructions => l10n.feedbackReasonIgnoredInstructions,
+        FeedbackReason.other => l10n.cancelReasonOther,
+      };
 }
 
 /// The body of the "What went wrong?" sheet shown for a thumbs-down: a reason (required), an

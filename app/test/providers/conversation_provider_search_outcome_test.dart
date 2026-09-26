@@ -18,14 +18,14 @@ void main() {
 
   test('an empty successful search remains distinct from a failed request', () async {
     final provider = ConversationProvider(
-      conversationSearchResultFetcher:
-          (query, {page, limit, required includeDiscarded, startDate, endDate, speakerId}) async =>
-              const ConversationSearchResult(
-                items: [],
-                currentPage: 1,
-                totalPages: 1,
-                outcome: ConversationSearchResultOutcome.success,
-              ),
+      conversationSearchResultFetcher: (query,
+              {page, limit, required includeDiscarded, startDate, endDate, speakerId}) async =>
+          const ConversationSearchResult(
+        items: [],
+        currentPage: 1,
+        totalPages: 1,
+        outcome: ConversationSearchResultOutcome.success,
+      ),
       isSignedIn: () => true,
     );
     addTearDown(provider.dispose);
@@ -44,13 +44,13 @@ void main() {
     final provider = ConversationProvider(
       conversationSearchResultFetcher:
           (query, {page, limit, required includeDiscarded, startDate, endDate, speakerId}) async => shouldFail
-          ? const ConversationSearchResult.failure(statusCode: 503)
-          : ConversationSearchResult(
-              items: [existing],
-              currentPage: 1,
-              totalPages: 1,
-              outcome: ConversationSearchResultOutcome.success,
-            ),
+              ? const ConversationSearchResult.failure(statusCode: 503)
+              : ConversationSearchResult(
+                  items: [existing],
+                  currentPage: 1,
+                  totalPages: 1,
+                  outcome: ConversationSearchResultOutcome.success,
+                ),
       isSignedIn: () => true,
     );
     addTearDown(provider.dispose);
@@ -70,9 +70,9 @@ void main() {
     final second = Completer<ConversationSearchResult>();
     var calls = 0;
     final provider = ConversationProvider(
-      conversationSearchResultFetcher:
-          (query, {page, limit, required includeDiscarded, startDate, endDate, speakerId}) =>
-              ++calls == 1 ? first.future : second.future,
+      conversationSearchResultFetcher: (query,
+              {page, limit, required includeDiscarded, startDate, endDate, speakerId}) =>
+          ++calls == 1 ? first.future : second.future,
       isSignedIn: () => true,
     );
     addTearDown(provider.dispose);
@@ -131,28 +131,28 @@ void main() {
   test('a late pagination page cannot append after the query changes', () async {
     final oldPage = Completer<ConversationSearchResult>();
     final provider = ConversationProvider(
-      conversationSearchResultFetcher:
-          (query, {page, limit, required includeDiscarded, startDate, endDate, speakerId}) {
-            if (query == 'old' && page == null) {
-              return Future.value(
-                ConversationSearchResult(
-                  items: [_conversation('old-first')],
-                  currentPage: 1,
-                  totalPages: 2,
-                  outcome: ConversationSearchResultOutcome.success,
-                ),
-              );
-            }
-            if (query == 'old') return oldPage.future;
-            return Future.value(
-              ConversationSearchResult(
-                items: [_conversation('new-first')],
-                currentPage: 1,
-                totalPages: 1,
-                outcome: ConversationSearchResultOutcome.success,
-              ),
-            );
-          },
+      conversationSearchResultFetcher: (query,
+          {page, limit, required includeDiscarded, startDate, endDate, speakerId}) {
+        if (query == 'old' && page == null) {
+          return Future.value(
+            ConversationSearchResult(
+              items: [_conversation('old-first')],
+              currentPage: 1,
+              totalPages: 2,
+              outcome: ConversationSearchResultOutcome.success,
+            ),
+          );
+        }
+        if (query == 'old') return oldPage.future;
+        return Future.value(
+          ConversationSearchResult(
+            items: [_conversation('new-first')],
+            currentPage: 1,
+            totalPages: 1,
+            outcome: ConversationSearchResultOutcome.success,
+          ),
+        );
+      },
       isSignedIn: () => true,
     );
     addTearDown(provider.dispose);
@@ -174,5 +174,8 @@ void main() {
   });
 }
 
-ServerConversation _conversation(String id) =>
-    ServerConversation(id: id, createdAt: DateTime.utc(2026), structured: Structured(id, 'Test result'));
+ServerConversation _conversation(String id) => ServerConversation(
+      id: id,
+      createdAt: DateTime.utc(2026),
+      structured: Structured(id, 'Test result'),
+    );

@@ -46,7 +46,10 @@ void main() {
     final source = File('ios/Runner/AppDelegate.swift').readAsStringSync();
 
     expect(source, contains('request.taskHint = .dictation'));
-    expect(source, matches(RegExp(r'if #available\(iOS 16, \*\) \{\s+request.addsPunctuation = true\s+\}')));
+    expect(
+      source,
+      matches(RegExp(r'if #available\(iOS 16, \*\) \{\s+request.addsPunctuation = true\s+\}')),
+    );
   });
 
   test('Apple recognition timeouts propagate for retry and remove the temporary audio', () async {
@@ -95,7 +98,10 @@ void main() {
         pathProviderChannel,
         null,
       );
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(speechChannel, null);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        speechChannel,
+        null,
+      );
       if (await tempDir.exists()) await tempDir.delete(recursive: true);
     }
   });

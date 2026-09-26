@@ -196,10 +196,8 @@ Future _init() async {
   await PhysicalQualification.startupStage('firebase_init', _ensureFirebaseApp);
 
   if (Env.profile.usesFirebaseAuthEmulator) {
-    await PhysicalQualification.startupStage(
-      'auth_emulator',
-      () => FirebaseAuth.instance.useAuthEmulator(Env.firebaseAuthEmulatorHost, Env.firebaseAuthEmulatorPort),
-    );
+    await PhysicalQualification.startupStage('auth_emulator',
+        () => FirebaseAuth.instance.useAuthEmulator(Env.firebaseAuthEmulatorHost, Env.firebaseAuthEmulatorPort));
   }
 
   await PhysicalQualification.startupStage('platform_services', PlatformManager.initializeServices);
@@ -226,23 +224,18 @@ Future _init() async {
     }
     if (restored == null) {
       await PhysicalQualification.startupStage(
-        'fixture_signin',
-        () => AuthService.instance.signInWithLocalDevToken(uid: PhysicalQualification.fixtureUid),
-      );
+          'fixture_signin', () => AuthService.instance.signInWithLocalDevToken(uid: PhysicalQualification.fixtureUid));
     }
     SharedPreferencesUtil().onboardingCompleted = true;
   }
 
   bool isAuth = await PhysicalQualification.startupStage(
-    'resolve_auth',
-    () => resolveStartupAuth(() => AuthService.instance.getIdToken()),
-  );
+      'resolve_auth', () => resolveStartupAuth(() => AuthService.instance.getIdToken()));
   if (isAuth) {
     final firebaseUser = FirebaseAuth.instance.currentUser;
     PlatformManager.instance.analytics.identify(
-      authMethod: firebaseUser == null || firebaseUser.providerData.isEmpty
-          ? null
-          : firebaseUser.providerData.first.providerId,
+      authMethod:
+          firebaseUser == null || firebaseUser.providerData.isEmpty ? null : firebaseUser.providerData.first.providerId,
       userCreatedAt: firebaseUser?.metadata.creationTime,
     );
     // Restore onboarding state from server if not already set locally
@@ -255,9 +248,7 @@ Future _init() async {
     final bootstrapUser = FirebaseAuth.instance.currentUser;
     if (bootstrapUser != null && !bootstrapUser.isAnonymous) {
       await PhysicalQualification.startupStage(
-        'bind_owner',
-        () => AccountCutoverRuntime.instance.bindAuthenticatedOwner(bootstrapUser.uid),
-      );
+          'bind_owner', () => AccountCutoverRuntime.instance.bindAuthenticatedOwner(bootstrapUser.uid));
     }
   }
   initOpus(await PhysicalQualification.startupStage<dynamic>('opus_load', opus_flutter.load));
@@ -476,13 +467,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, value, MessageProvider? previous) =>
               (previous?..updateAppProvider(value)) ?? MessageProvider(),
         ),
-        ChangeNotifierProxyProvider4<
-          ConversationProvider,
-          MessageProvider,
-          PeopleProvider,
-          UsageProvider,
-          CaptureProvider
-        >(
+        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
+            CaptureProvider>(
           create: (context) => composeProductionCaptureProvider(localSegmentStore: LocalSegmentStore.appSupport()),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
             final externalActions = ProviderCaptureExternalActions(

@@ -43,13 +43,8 @@ class MemoryEditSheet extends StatefulWidget {
   /// Show the memory without editing controls. Forced for memories that cannot be edited.
   final bool readOnly;
 
-  const MemoryEditSheet({
-    super.key,
-    required this.memory,
-    required this.provider,
-    this.onDelete,
-    this.readOnly = false,
-  });
+  const MemoryEditSheet(
+      {super.key, required this.memory, required this.provider, this.onDelete, this.readOnly = false});
 
   @override
   State<MemoryEditSheet> createState() => _MemoryEditSheetState();

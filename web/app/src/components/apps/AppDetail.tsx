@@ -37,27 +37,27 @@ const CAPABILITY_INFO: Record<
   { icon: React.ReactNode; label: string; color: string }
 > = {
   chat: {
-    icon: <MessageSquare className="h-4 w-4" />,
+    icon: <MessageSquare className="w-4 h-4" />,
     label: 'Chat',
     color: 'text-blue-400',
   },
   persona: {
-    icon: <Brain className="h-4 w-4" />,
+    icon: <Brain className="w-4 h-4" />,
     label: 'Persona',
     color: 'text-text-secondary',
   },
   memories: {
-    icon: <Brain className="h-4 w-4" />,
+    icon: <Brain className="w-4 h-4" />,
     label: 'Conversations',
     color: 'text-green-400',
   },
   external_integration: {
-    icon: <ExternalLink className="h-4 w-4" />,
+    icon: <ExternalLink className="w-4 h-4" />,
     label: 'External Integration',
     color: 'text-orange-400',
   },
   proactive_notification: {
-    icon: <Zap className="h-4 w-4" />,
+    icon: <Zap className="w-4 h-4" />,
     label: 'Proactive Notifications',
     color: 'text-yellow-400',
   },
@@ -168,18 +168,18 @@ export function AppDetail({ appId }: AppDetailProps) {
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-text-primary" />
+        <Loader2 className="w-8 h-8 text-text-primary animate-spin" />
       </div>
     );
   }
 
   if (error || !app) {
     return (
-      <div className="py-12 text-center">
+      <div className="text-center py-12">
         <p className="text-text-tertiary">{error || 'App not found'}</p>
         <Link
           href="/connectors"
-          className="mt-2 inline-block text-text-primary hover:underline"
+          className="text-text-primary hover:underline mt-2 inline-block"
         >
           Back to Apps
         </Link>
@@ -188,12 +188,12 @@ export function AppDetail({ appId }: AppDetailProps) {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex flex-col h-full">
       {/* Page Header */}
       <PageHeader title="App Details" icon={LayoutGrid} showBackButton />
 
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-4xl px-4 py-6">
+        <div className="max-w-4xl mx-auto px-4 py-6">
           {app.disabled && (
             <AppDisabledNotice
               app={app}
@@ -205,19 +205,19 @@ export function AppDetail({ appId }: AppDetailProps) {
           )}
 
           {/* App Hero */}
-          <div className="mb-8 flex flex-col gap-6 sm:flex-row">
+          <div className="flex flex-col sm:flex-row gap-6 mb-8">
             {/* App icon */}
-            <div className="mx-auto h-24 w-24 flex-shrink-0 overflow-hidden rounded-2xl bg-bg-tertiary sm:mx-0 sm:h-28 sm:w-28">
+            <div className="flex-shrink-0 w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden bg-bg-tertiary mx-auto sm:mx-0">
               {app.image ? (
                 <Image
                   src={app.image}
                   alt={app.name}
                   width={112}
                   height={112}
-                  className="h-full w-full object-cover"
+                  className="object-cover w-full h-full"
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center text-3xl font-medium text-text-tertiary">
+                <div className="w-full h-full flex items-center justify-center text-text-tertiary text-3xl font-medium">
                   {app.name.charAt(0)}
                 </div>
               )}
@@ -225,29 +225,29 @@ export function AppDetail({ appId }: AppDetailProps) {
 
             {/* App info */}
             <div className="flex-1 text-center sm:text-left">
-              <h1 className="flex items-center justify-center gap-2 text-2xl font-bold text-text-primary sm:justify-start">
+              <h1 className="text-2xl font-bold text-text-primary flex items-center justify-center sm:justify-start gap-2">
                 {app.name}
-                {app.private && <Lock className="h-5 w-5 text-text-quaternary" />}
+                {app.private && <Lock className="w-5 h-5 text-text-quaternary" />}
               </h1>
-              <p className="mt-1 text-text-secondary">{app.author || 'Unknown author'}</p>
+              <p className="text-text-secondary mt-1">{app.author || 'Unknown author'}</p>
 
               {/* Stats */}
-              <div className="mt-3 flex items-center justify-center gap-4 text-sm text-text-tertiary sm:justify-start">
+              <div className="flex items-center justify-center sm:justify-start gap-4 mt-3 text-sm text-text-tertiary">
                 {app.rating_avg !== undefined && app.rating_avg > 0 && (
                   <span className="flex items-center gap-1">
-                    <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                    <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                     {app.rating_avg.toFixed(1)}
                     {app.rating_count ? ` (${app.rating_count} reviews)` : ''}
                   </span>
                 )}
                 <span className="flex items-center gap-1">
-                  <Download className="h-4 w-4" />
+                  <Download className="w-4 h-4" />
                   {formatInstalls(app.installs)} installs
                 </span>
               </div>
 
               {/* Action buttons */}
-              <div className="mt-4 flex items-center justify-center gap-3 sm:justify-start">
+              <div className="flex items-center justify-center sm:justify-start gap-3 mt-4">
                 <button
                   onClick={handleToggle}
                   disabled={
@@ -259,21 +259,21 @@ export function AppDetail({ appId }: AppDetailProps) {
                       : undefined
                   }
                   className={cn(
-                    'rounded-xl px-6 py-2.5 font-medium',
-                    'flex items-center gap-2 transition-colors',
+                    'px-6 py-2.5 rounded-xl font-medium',
+                    'transition-colors flex items-center gap-2',
                     app.enabled
                       ? 'bg-red-500/10 text-red-500 hover:bg-red-500/20'
                       : 'bg-white text-black hover:bg-white/90',
-                    'disabled:cursor-not-allowed disabled:opacity-50',
+                    'disabled:opacity-50 disabled:cursor-not-allowed',
                   )}
                 >
                   {isToggling ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <Loader2 className="w-5 h-5 animate-spin" />
                   ) : app.enabled ? (
                     <>Uninstall</>
                   ) : (
                     <>
-                      <Download className="h-5 w-5" />
+                      <Download className="w-5 h-5" />
                       Install
                     </>
                   )}
@@ -282,26 +282,26 @@ export function AppDetail({ appId }: AppDetailProps) {
                 <button
                   onClick={handleShare}
                   className={cn(
-                    'rounded-xl p-2.5',
+                    'p-2.5 rounded-xl',
                     'border border-bg-quaternary',
                     'text-text-secondary hover:bg-bg-tertiary',
                     'transition-colors',
                   )}
                 >
-                  <Share2 className="h-5 w-5" />
+                  <Share2 className="w-5 h-5" />
                 </button>
 
                 {isOwner && (
                   <button
                     onClick={() => router.push(`/connectors/${app.id}/edit`)}
                     className={cn(
-                      'rounded-xl px-4 py-2.5 font-medium',
+                      'px-4 py-2.5 rounded-xl font-medium',
                       'border border-bg-quaternary',
                       'text-text-secondary hover:bg-bg-tertiary',
-                      'flex items-center gap-2 transition-colors',
+                      'transition-colors flex items-center gap-2',
                     )}
                   >
-                    <Pencil className="h-4 w-4" />
+                    <Pencil className="w-4 h-4" />
                     Edit
                   </button>
                 )}
@@ -312,13 +312,13 @@ export function AppDetail({ appId }: AppDetailProps) {
                     target="_blank"
                     rel="noopener noreferrer"
                     className={cn(
-                      'rounded-xl px-4 py-2.5 font-medium',
+                      'px-4 py-2.5 rounded-xl font-medium',
                       'border border-bg-quaternary',
                       'text-text-secondary hover:bg-bg-tertiary',
-                      'flex items-center gap-2 transition-colors',
+                      'transition-colors flex items-center gap-2',
                     )}
                   >
-                    <ExternalLink className="h-4 w-4" />
+                    <ExternalLink className="w-4 h-4" />
                     Open App
                   </a>
                 )}
@@ -330,7 +330,7 @@ export function AppDetail({ appId }: AppDetailProps) {
           <div className="space-y-8">
             {/* About */}
             <Section title="About">
-              <p className="whitespace-pre-wrap text-text-secondary">{app.description}</p>
+              <p className="text-text-secondary whitespace-pre-wrap">{app.description}</p>
             </Section>
 
             {/* Thumbnails */}
@@ -340,14 +340,14 @@ export function AppDetail({ appId }: AppDetailProps) {
                   {app.thumbnail_urls.map((url, index) => (
                     <div
                       key={index}
-                      className="h-32 w-48 flex-shrink-0 overflow-hidden rounded-lg bg-bg-tertiary"
+                      className="flex-shrink-0 w-48 h-32 rounded-lg overflow-hidden bg-bg-tertiary"
                     >
                       <Image
                         src={url}
                         alt={`Preview ${index + 1}`}
                         width={192}
                         height={128}
-                        className="h-full w-full object-cover"
+                        className="object-cover w-full h-full"
                       />
                     </div>
                   ))}
@@ -361,7 +361,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                 <div className="flex flex-wrap gap-2">
                   {app.capabilities.map((cap) => {
                     const info = CAPABILITY_INFO[cap] || {
-                      icon: <Zap className="h-4 w-4" />,
+                      icon: <Zap className="w-4 h-4" />,
                       label: cap
                         .replace(/_/g, ' ')
                         .replace(/\b\w/g, (l) => l.toUpperCase()),
@@ -371,7 +371,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                       <span
                         key={cap}
                         className={cn(
-                          'inline-flex items-center gap-2 rounded-lg px-3 py-1.5',
+                          'inline-flex items-center gap-2 px-3 py-1.5 rounded-lg',
                           'bg-bg-tertiary text-sm',
                           info.color,
                         )}
@@ -388,8 +388,8 @@ export function AppDetail({ appId }: AppDetailProps) {
             {/* Chat prompt */}
             {app.chat_prompt && (
               <Section title="Chat Personality">
-                <div className="rounded-lg bg-bg-tertiary p-4">
-                  <p className="whitespace-pre-wrap text-sm text-text-secondary">
+                <div className="bg-bg-tertiary rounded-lg p-4">
+                  <p className="text-sm text-text-secondary whitespace-pre-wrap">
                     {app.chat_prompt}
                   </p>
                 </div>
@@ -399,8 +399,8 @@ export function AppDetail({ appId }: AppDetailProps) {
             {/* Memory prompt */}
             {app.memory_prompt && (
               <Section title="Summary Prompt">
-                <div className="rounded-lg bg-bg-tertiary p-4">
-                  <p className="whitespace-pre-wrap text-sm text-text-secondary">
+                <div className="bg-bg-tertiary rounded-lg p-4">
+                  <p className="text-sm text-text-secondary whitespace-pre-wrap">
                     {app.memory_prompt}
                   </p>
                 </div>
@@ -424,7 +424,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                   {app.external_integration.auth_steps &&
                     app.external_integration.auth_steps.length > 0 && (
                       <div>
-                        <p className="mb-2 text-sm text-text-tertiary">Setup Steps:</p>
+                        <p className="text-sm text-text-tertiary mb-2">Setup Steps:</p>
                         <div className="space-y-2">
                           {app.external_integration.auth_steps.map((step, index) => (
                             <a
@@ -433,16 +433,16 @@ export function AppDetail({ appId }: AppDetailProps) {
                               target="_blank"
                               rel="noopener noreferrer"
                               className={cn(
-                                'flex items-center gap-2 rounded-lg px-4 py-2',
+                                'flex items-center gap-2 px-4 py-2 rounded-lg',
                                 'bg-bg-tertiary text-text-secondary',
-                                'transition-colors hover:bg-bg-quaternary',
+                                'hover:bg-bg-quaternary transition-colors',
                               )}
                             >
-                              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/20 text-sm text-text-primary">
+                              <span className="w-6 h-6 rounded-full bg-white/20 text-text-primary text-sm flex items-center justify-center">
                                 {index + 1}
                               </span>
                               {step.name}
-                              <ExternalLink className="ml-auto h-4 w-4" />
+                              <ExternalLink className="w-4 h-4 ml-auto" />
                             </a>
                           ))}
                         </div>
@@ -461,13 +461,13 @@ export function AppDetail({ appId }: AppDetailProps) {
                       key={index}
                       className="border-b border-bg-tertiary pb-4 last:border-0"
                     >
-                      <div className="mb-2 flex items-center gap-2">
+                      <div className="flex items-center gap-2 mb-2">
                         <div className="flex items-center gap-1">
                           {[...Array(5)].map((_, i) => (
                             <Star
                               key={i}
                               className={cn(
-                                'h-4 w-4',
+                                'w-4 h-4',
                                 i < review.score
                                   ? 'fill-yellow-400 text-yellow-400'
                                   : 'text-text-quaternary',
@@ -483,8 +483,8 @@ export function AppDetail({ appId }: AppDetailProps) {
                         <p className="text-sm text-text-secondary">{review.review}</p>
                       )}
                       {review.response && (
-                        <div className="mt-2 border-l-2 border-white/30 pl-4">
-                          <p className="mb-1 text-xs text-text-tertiary">
+                        <div className="mt-2 pl-4 border-l-2 border-white/30">
+                          <p className="text-xs text-text-tertiary mb-1">
                             Developer response:
                           </p>
                           <p className="text-sm text-text-secondary">{review.response}</p>
@@ -499,14 +499,14 @@ export function AppDetail({ appId }: AppDetailProps) {
             {/* Pricing */}
             {app.is_paid && app.price !== undefined && (
               <Section title="Pricing">
-                <div className="rounded-lg bg-bg-tertiary p-4">
+                <div className="bg-bg-tertiary rounded-lg p-4">
                   <p className="text-lg font-medium text-text-primary">
                     ${(app.price / 100).toFixed(2)}
                     {app.payment_plan === 'monthly' && '/month'}
                   </p>
                   {app.is_user_paid && (
-                    <p className="mt-1 flex items-center gap-1 text-sm text-green-400">
-                      <Check className="h-4 w-4" />
+                    <p className="text-sm text-green-400 mt-1 flex items-center gap-1">
+                      <Check className="w-4 h-4" />
                       Subscribed
                     </p>
                   )}
@@ -523,7 +523,7 @@ export function AppDetail({ appId }: AppDetailProps) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 className="mb-3 text-lg font-semibold text-text-primary">{title}</h2>
+      <h2 className="text-lg font-semibold text-text-primary mb-3">{title}</h2>
       {children}
     </section>
   );

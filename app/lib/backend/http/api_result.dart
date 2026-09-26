@@ -29,12 +29,13 @@ class ApiProblem {
   final int? statusCode;
   final Duration? retryAfter;
   bool get retryable => switch (kind) {
-    ApiProblemKind.transport ||
-    ApiProblemKind.authTransient ||
-    ApiProblemKind.rateLimited ||
-    ApiProblemKind.server => true,
-    _ => false,
-  };
+        ApiProblemKind.transport ||
+        ApiProblemKind.authTransient ||
+        ApiProblemKind.rateLimited ||
+        ApiProblemKind.server =>
+          true,
+        _ => false,
+      };
 
   @override
   String toString() => 'ApiProblem($kind, statusCode: $statusCode)';
@@ -75,15 +76,15 @@ class ApiExecutionSeams {
 }
 
 ApiProblemKind _kindForStatus(int statusCode) => switch (statusCode) {
-  401 => ApiProblemKind.authTerminal,
-  403 => ApiProblemKind.forbidden,
-  404 => ApiProblemKind.notFound,
-  402 => ApiProblemKind.paymentRequired,
-  422 => ApiProblemKind.unprocessable,
-  429 => ApiProblemKind.rateLimited,
-  >= 500 && <= 599 => ApiProblemKind.server,
-  _ => ApiProblemKind.rejected,
-};
+      401 => ApiProblemKind.authTerminal,
+      403 => ApiProblemKind.forbidden,
+      404 => ApiProblemKind.notFound,
+      402 => ApiProblemKind.paymentRequired,
+      422 => ApiProblemKind.unprocessable,
+      429 => ApiProblemKind.rateLimited,
+      >= 500 && <= 599 => ApiProblemKind.server,
+      _ => ApiProblemKind.rejected,
+    };
 
 ApiFailure<T> _authFailure<T>(AuthTokenResult result) {
   final transient = result is AuthTokenTransientFailure;

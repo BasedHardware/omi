@@ -101,13 +101,10 @@ void main() {
   test('concurrent connects reserve ownership before awaiting auth', () async {
     final headers = Completer<Map<String, String>>();
     var authCalls = 0;
-    socket = PureSocket(
-      'ws://127.0.0.1:${server.port}',
-      headersProvider: () {
-        authCalls++;
-        return headers.future;
-      },
-    );
+    socket = PureSocket('ws://127.0.0.1:${server.port}', headersProvider: () {
+      authCalls++;
+      return headers.future;
+    });
     socket.setListener(listener);
     final first = socket.connect();
     final second = socket.connect();
@@ -144,12 +141,9 @@ void main() {
   test('a retired auth completion cannot replace a recovered connection', () async {
     final oldHeaders = Completer<Map<String, String>>();
     var calls = 0;
-    socket = PureSocket(
-      'ws://127.0.0.1:${server.port}',
-      headersProvider: () {
-        return ++calls == 1 ? oldHeaders.future : Future.value({});
-      },
-    );
+    socket = PureSocket('ws://127.0.0.1:${server.port}', headersProvider: () {
+      return ++calls == 1 ? oldHeaders.future : Future.value({});
+    });
     socket.setListener(listener);
     final old = socket.connect();
     await socket.stop();
@@ -164,12 +158,9 @@ void main() {
   test('a retired auth failure cannot reset a recovered connection', () async {
     final oldHeaders = Completer<Map<String, String>>();
     var calls = 0;
-    socket = PureSocket(
-      'ws://127.0.0.1:${server.port}',
-      headersProvider: () {
-        return ++calls == 1 ? oldHeaders.future : Future.value({});
-      },
-    );
+    socket = PureSocket('ws://127.0.0.1:${server.port}', headersProvider: () {
+      return ++calls == 1 ? oldHeaders.future : Future.value({});
+    });
     socket.setListener(listener);
     final old = socket.connect();
     await socket.stop();
@@ -219,13 +210,10 @@ void main() {
 
   test('unexpected auth errors release the attempt for retry', () async {
     var calls = 0;
-    socket = PureSocket(
-      'ws://127.0.0.1:${server.port}',
-      headersProvider: () async {
-        if (++calls == 1) throw StateError('synthetic credential failure');
-        return {};
-      },
-    );
+    socket = PureSocket('ws://127.0.0.1:${server.port}', headersProvider: () async {
+      if (++calls == 1) throw StateError('synthetic credential failure');
+      return {};
+    });
     await expectLater(socket.connect(), throwsStateError);
     expect(await socket.connect(), isTrue);
     expect(upgrades, 1);

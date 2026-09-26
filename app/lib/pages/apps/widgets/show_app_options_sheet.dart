@@ -98,9 +98,5 @@ class ShowAppOptionsSheet extends StatelessWidget {
 
 /// Shows the owner's options for [app] in the shared sheet shell.
 Future<void> showAppOptionsSheet(BuildContext context, App app) {
-  return showOmiSheet(
-    context: context,
-    title: app.name,
-    builder: (context) => ShowAppOptionsSheet(app: app),
-  );
+  return showOmiSheet(context: context, title: app.name, builder: (context) => ShowAppOptionsSheet(app: app));
 }

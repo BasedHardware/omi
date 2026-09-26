@@ -6,11 +6,11 @@ import 'package:omi/pages/conversations/capture_gaps_controller.dart';
 final _day = DateTime(2026, 9, 20);
 
 CalendarCaptureGap _gap(String eventId) => CalendarCaptureGap(
-  eventId: eventId,
-  title: 'Board review',
-  startTime: DateTime(2026, 9, 20, 19, 30),
-  endTime: DateTime(2026, 9, 20, 20),
-);
+      eventId: eventId,
+      title: 'Board review',
+      startTime: DateTime(2026, 9, 20, 19, 30),
+      endTime: DateTime(2026, 9, 20, 20),
+    );
 
 class _FakeGapsApi {
   _FakeGapsApi(this.responses);

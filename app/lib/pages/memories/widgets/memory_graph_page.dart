@@ -42,9 +42,9 @@ class GraphNode3D {
     required this.baseColor,
     required v.Vector3 initialPosition,
     this.isFixed = false,
-  }) : position = initialPosition,
-       velocity = v.Vector3.zero(),
-       force = v.Vector3.zero();
+  })  : position = initialPosition,
+        velocity = v.Vector3.zero(),
+        force = v.Vector3.zero();
 }
 
 class GraphEdge3D {
@@ -587,9 +587,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
     if (_error != null) {
       return SafeArea(
-        child: SingleChildScrollView(
-          child: OmiErrorState(message: _error!, onRetry: _loadGraph),
-        ),
+        child: SingleChildScrollView(child: OmiErrorState(message: _error!, onRetry: _loadGraph)),
       );
     }
 

@@ -260,9 +260,7 @@ class LeaveFlowNotice extends StatelessWidget {
               child: ExcludeSemantics(child: FaIcon(icon, size: 14, color: color)),
             ),
             const SizedBox(width: OmiSpacing.sm),
-            Expanded(
-              child: Text(text, style: OmiType.footnote.copyWith(color: color, height: 1.5)),
-            ),
+            Expanded(child: Text(text, style: OmiType.footnote.copyWith(color: color, height: 1.5))),
           ],
         ),
       ),
@@ -295,10 +293,8 @@ class LeaveFlowTextField extends StatelessWidget {
 
 /// Input decoration shared by the leave flows' text fields.
 InputDecoration leaveFlowInputDecoration({String? hint, Color focusColor = OmiColors.textTertiary}) {
-  OutlineInputBorder border(Color color) => OutlineInputBorder(
-    borderRadius: OmiRadius.mdAll,
-    borderSide: BorderSide(color: color),
-  );
+  OutlineInputBorder border(Color color) =>
+      OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide(color: color));
   return InputDecoration(
     hintText: hint,
     hintStyle: OmiType.footnote.copyWith(color: OmiColors.textTertiary),

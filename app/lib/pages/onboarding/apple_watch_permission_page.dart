@@ -22,7 +22,10 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: OmiColors.surface0,
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.appleWatchSetup)),
+      appBar: AppBar(
+        leading: const OmiBackButton(),
+        title: Text(context.l10n.appleWatchSetup),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(OmiSpacing.xxl),
@@ -53,7 +56,11 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
               ),
               const SizedBox(height: 48),
               if (!_permissionRequested)
-                OmiButton(label: context.l10n.grantPermissionButton, expand: true, onPressed: _requestPermission)
+                OmiButton(
+                  label: context.l10n.grantPermissionButton,
+                  expand: true,
+                  onPressed: _requestPermission,
+                )
               else ...[
                 OmiButton(label: context.l10n.continueButton, expand: true, onPressed: _continueAndStartRecording),
                 const SizedBox(height: OmiSpacing.md),

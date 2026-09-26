@@ -19,11 +19,8 @@ void main() {
       },
       autoUploadEnabled: () => false,
     );
-    final owner = CaptureSessionOwner(
-      coordinator: coordinator,
-      startForeground: () async {},
-      stopForeground: () async {},
-    );
+    final owner =
+        CaptureSessionOwner(coordinator: coordinator, startForeground: () async {}, stopForeground: () async {});
     final startup = owner.requestRecovery(WakeTrigger.startup);
     await pumpEventQueue();
     final retry = owner.requestRecovery(WakeTrigger.userRetry);
@@ -55,11 +52,8 @@ void main() {
       },
       autoUploadEnabled: () => true,
     );
-    final owner = CaptureSessionOwner(
-      coordinator: coordinator,
-      startForeground: () async {},
-      stopForeground: () async {},
-    );
+    final owner =
+        CaptureSessionOwner(coordinator: coordinator, startForeground: () async {}, stopForeground: () async {});
     final first = owner.requestRecovery(WakeTrigger.startup, inventoryRevision: 1);
     await pumpEventQueue();
     final duplicate = owner.requestRecovery(WakeTrigger.deviceConnected, inventoryRevision: 1);

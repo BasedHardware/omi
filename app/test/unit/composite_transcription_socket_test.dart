@@ -113,7 +113,10 @@ void main() {
     });
 
     test('user custom STT still requests a speech profile on the Omi secondary', () {
-      expect(TranscriptSocketServiceFactory.includeSpeechProfileForCustomSecondary('custom:deepgram'), isTrue);
+      expect(
+        TranscriptSocketServiceFactory.includeSpeechProfileForCustomSecondary('custom:deepgram'),
+        isTrue,
+      );
     });
 
     test('factory applies the persisted forwarding setting', () {

@@ -306,8 +306,8 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                 label: selectedCount == 0
                     ? context.l10n.selectContactsToShare
                     : selectedCount > 1
-                    ? context.l10n.shareWithContactsCount(selectedCount)
-                    : context.l10n.shareWithContactCount(selectedCount),
+                        ? context.l10n.shareWithContactsCount(selectedCount)
+                        : context.l10n.shareWithContactCount(selectedCount),
                 onPressed: selectedCount == 0 ? null : _openNativeSms,
               ),
             ),

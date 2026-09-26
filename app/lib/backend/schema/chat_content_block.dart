@@ -200,7 +200,12 @@ sealed class ChatContentBlock {
       final item = Map<String, dynamic>.from(entry);
       final description = _string(item, 'description');
       if (description == null) continue;
-      items.add(ConversationLinkActionItem(description: description, taskId: _string(item, 'taskId', 'task_id')));
+      items.add(
+        ConversationLinkActionItem(
+          description: description,
+          taskId: _string(item, 'taskId', 'task_id'),
+        ),
+      );
     }
     return List.unmodifiable(items);
   }

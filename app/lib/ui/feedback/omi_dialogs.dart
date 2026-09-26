@@ -114,7 +114,11 @@ class OmiAlertDialog extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: omiUsesCupertinoDialogs(context) ? CrossAxisAlignment.center : CrossAxisAlignment.start,
-      children: [if (message != null) Text(message!), if (message != null) const SizedBox(height: 12), content!],
+      children: [
+        if (message != null) Text(message!),
+        if (message != null) const SizedBox(height: 12),
+        content!,
+      ],
     );
   }
 }

@@ -40,7 +40,11 @@ void main() {
   });
 
   test('Crashlytics provenance keys match the analytics property names', () {
-    final keys = BuildProvenance(gitSha: 'deadbeef', buildNumber: '1001', dirty: false).asProperties;
+    final keys = BuildProvenance(
+      gitSha: 'deadbeef',
+      buildNumber: '1001',
+      dirty: false,
+    ).asProperties;
     expect(keys.keys.toList(), ['git_sha', 'build_number']);
     expect(keys['git_sha'], 'deadbeef');
     expect(keys['build_number'], '1001');

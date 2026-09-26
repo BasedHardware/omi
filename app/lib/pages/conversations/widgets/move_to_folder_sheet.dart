@@ -138,7 +138,11 @@ class _FolderListItem extends StatelessWidget {
 
 /// Shows the Move to Folder sheet for one conversation and moves it.
 /// Returns the new folder ID if moved, null if dismissed.
-Future<String?> showMoveToFolderSheet(BuildContext context, {required String conversationId, String? currentFolderId}) {
+Future<String?> showMoveToFolderSheet(
+  BuildContext context, {
+  required String conversationId,
+  String? currentFolderId,
+}) {
   return showOmiSheet<String?>(
     context: context,
     title: context.l10n.moveToFolder,

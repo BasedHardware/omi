@@ -84,9 +84,8 @@ void main() {
         ),
       ),
     );
-    final disabled = tester.widget<TextButton>(
-      find.descendant(of: find.byType(OmiButton).first, matching: find.byType(TextButton)),
-    );
+    final disabled =
+        tester.widget<TextButton>(find.descendant(of: find.byType(OmiButton).first, matching: find.byType(TextButton)));
     expect(disabled.onPressed, isNull);
     expect(find.bySemanticsLabel('Saving'), findsOneWidget);
     expect(spinner(), findsOneWidget);

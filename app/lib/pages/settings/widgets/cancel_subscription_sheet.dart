@@ -68,15 +68,15 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
   }
 
   String _label(String key) => switch (key) {
-    'too_expensive' => context.l10n.cancelReasonTooExpensive,
-    'not_using_enough' => context.l10n.cancelReasonNotUsing,
-    'missing_features' => context.l10n.cancelReasonMissingFeatures,
-    'audio_quality' => context.l10n.cancelReasonAudioQuality,
-    'battery_drain' => context.l10n.cancelReasonBatteryDrain,
-    'found_alternative' => context.l10n.cancelReasonFoundAlternative,
-    'other' => context.l10n.cancelReasonOther,
-    _ => key,
-  };
+        'too_expensive' => context.l10n.cancelReasonTooExpensive,
+        'not_using_enough' => context.l10n.cancelReasonNotUsing,
+        'missing_features' => context.l10n.cancelReasonMissingFeatures,
+        'audio_quality' => context.l10n.cancelReasonAudioQuality,
+        'battery_drain' => context.l10n.cancelReasonBatteryDrain,
+        'found_alternative' => context.l10n.cancelReasonFoundAlternative,
+        'other' => context.l10n.cancelReasonOther,
+        _ => key,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -183,10 +183,8 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
     setState(() => _isCancelling = true);
     final provider = context.read<UsageProvider>();
     final details = _flow.details.text.trim().isNotEmpty ? _flow.details.text.trim() : null;
-    final attempt = ProductTelemetry.instance.start(
-      ProductJourney.subscriptionCancel,
-      surface: ProductSurface.settings,
-    );
+    final attempt =
+        ProductTelemetry.instance.start(ProductJourney.subscriptionCancel, surface: ProductSurface.settings);
     PlatformManager.instance.analytics.subscriptionCancelConfirmed(reason: _flow.reason!, details: details);
 
     try {
@@ -221,9 +219,8 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
   Widget build(BuildContext context) {
     final sub = context.read<UsageProvider>().subscription?.subscription;
     final periodEnd = sub?.currentPeriodEnd;
-    final renewalDate = periodEnd == null
-        ? ''
-        : OmiDateFormat.of(context).date(DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000));
+    final renewalDate =
+        periodEnd == null ? '' : OmiDateFormat.of(context).date(DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000));
 
     return LeaveFlowStepScaffold(
       step: 2,
@@ -251,7 +248,10 @@ class _CancelConfirmStepState extends State<_CancelConfirmStep> {
                 ),
                 LeaveFlowConsequenceRow(icon: FontAwesomeIcons.gaugeHigh, text: context.l10n.cancelConsequenceDelay),
                 LeaveFlowConsequenceRow(icon: FontAwesomeIcons.userGroup, text: context.l10n.cancelConsequenceSpeakers),
-                LeaveFlowConsequenceRow(icon: FontAwesomeIcons.phone, text: context.l10n.cancelConsequencePhoneCalls),
+                LeaveFlowConsequenceRow(
+                  icon: FontAwesomeIcons.phone,
+                  text: context.l10n.cancelConsequencePhoneCalls,
+                ),
               ],
             ),
           ),

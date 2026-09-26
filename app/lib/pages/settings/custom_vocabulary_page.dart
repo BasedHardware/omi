@@ -164,9 +164,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
                         const SizedBox(
                           width: kOmiMinTapTarget,
                           height: kOmiMinTapTarget,
-                          child: Center(
-                            child: OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textTertiary),
-                          ),
+                          child: Center(child: OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textTertiary)),
                         )
                       else
                         OmiIconButton.filled(

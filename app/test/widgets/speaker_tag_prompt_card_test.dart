@@ -42,37 +42,35 @@ void main() {
       },
       emit: (_) {},
     );
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider(create: (_) => PeopleProvider(loadPeople: () async => [])),
-          ChangeNotifierProvider.value(value: provider),
-        ],
-        child: const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: SingleChildScrollView(child: SpeakerTagPromptCard())),
-        ),
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => PeopleProvider(loadPeople: () async => [])),
+        ChangeNotifierProvider.value(value: provider),
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: SingleChildScrollView(child: SpeakerTagPromptCard())),
       ),
-    );
+    ));
     await tester.pumpAndSettle();
     return (answers, saves);
   }
 
   GeneratedSpeakerTagPrompt prompt(String id, String kind) => GeneratedSpeakerTagPrompt(
-    id: id,
-    kind: kind,
-    origin: kind == 'confirm_person' ? 'auto_person' : 'unnamed',
-    conversationId: 'c1',
-    conversationTitle: 'Coffee chat',
-    speakerId: 1,
-    segmentIds: const ['s1'],
-    clipStart: 0,
-    clipEnd: 8,
-    excerpt: 'We should ship it on Friday',
-    suggestedPersonId: kind == 'confirm_person' ? 'p1' : null,
-    suggestedPersonName: kind == 'confirm_person' ? 'Sam' : null,
-  );
+        id: id,
+        kind: kind,
+        origin: kind == 'confirm_person' ? 'auto_person' : 'unnamed',
+        conversationId: 'c1',
+        conversationTitle: 'Coffee chat',
+        speakerId: 1,
+        segmentIds: const ['s1'],
+        clipStart: 0,
+        clipEnd: 8,
+        excerpt: 'We should ship it on Friday',
+        suggestedPersonId: kind == 'confirm_person' ? 'p1' : null,
+        suggestedPersonName: kind == 'confirm_person' ? 'Sam' : null,
+      );
 
   testWidgets('walks through owner and confirm questions, then thanks the user', (tester) async {
     final (answers, _) = await pumpCard(tester, prompts: [prompt('a', 'owner_check'), prompt('b', 'confirm_person')]);
@@ -144,42 +142,38 @@ void main() {
     );
     addTearDown(people.dispose);
     final provider = SpeakerTagPromptsProvider(
-      fetchPrompts: () async => const ApiSuccess(
-        GeneratedSpeakerTagPromptsResponse(
-          prompts: [
-            GeneratedSpeakerTagPrompt(
-              id: 'a',
-              kind: 'identify',
-              origin: 'unnamed',
-              conversationId: 'c1',
-              conversationTitle: 'Coffee chat',
-              speakerId: 1,
-              segmentIds: ['s1'],
-              clipStart: 0,
-              clipEnd: 8,
-              excerpt: '',
-              suggestedPersonIds: ['p2'],
-            ),
-          ],
-          firstTime: false,
-        ),
-      ),
+      fetchPrompts: () async => const ApiSuccess(GeneratedSpeakerTagPromptsResponse(
+        prompts: [
+          GeneratedSpeakerTagPrompt(
+            id: 'a',
+            kind: 'identify',
+            origin: 'unnamed',
+            conversationId: 'c1',
+            conversationTitle: 'Coffee chat',
+            speakerId: 1,
+            segmentIds: ['s1'],
+            clipStart: 0,
+            clipEnd: 8,
+            excerpt: '',
+            suggestedPersonIds: ['p2'],
+          ),
+        ],
+        firstTime: false,
+      )),
       markShown: (_) async => const ApiSuccess(false),
       emit: (_) {},
     );
-    await tester.pumpWidget(
-      MultiProvider(
-        providers: [
-          ChangeNotifierProvider<PeopleProvider>.value(value: people),
-          ChangeNotifierProvider.value(value: provider),
-        ],
-        child: const MaterialApp(
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: AppLocalizations.supportedLocales,
-          home: Scaffold(body: SingleChildScrollView(child: SpeakerTagPromptCard())),
-        ),
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<PeopleProvider>.value(value: people),
+        ChangeNotifierProvider.value(value: provider),
+      ],
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: SingleChildScrollView(child: SpeakerTagPromptCard())),
       ),
-    );
+    ));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('speaker_tag_prompt_answer_person_p2')), findsNothing);
 

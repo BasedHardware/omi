@@ -268,7 +268,10 @@ class FilterBottomSheet extends StatelessWidget {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       color: isSelected ? OmiColors.textPrimary : Colors.transparent,
-                      border: Border.all(color: isSelected ? OmiColors.textPrimary : OmiColors.textTertiary, width: 2),
+                      border: Border.all(
+                        color: isSelected ? OmiColors.textPrimary : OmiColors.textTertiary,
+                        width: 2,
+                      ),
                     ),
                     child: isSelected ? const Icon(Icons.check, size: 12, color: OmiColors.onAccent) : null,
                   ),

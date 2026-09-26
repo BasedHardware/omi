@@ -183,10 +183,8 @@ Future<void> shareConversation(BuildContext context, ServerConversation conversa
     sharePositionOrigin: box == null || !box.hasSize ? null : box.localToGlobal(Offset.zero) & box.size,
   );
   if (wasPrivate && outcome.status == ShareResultStatus.dismissed) {
-    final reverted = await setConversationVisibility(
-      conversation.id,
-      visibility: ConversationVisibility.private_.value,
-    );
+    final reverted =
+        await setConversationVisibility(conversation.id, visibility: ConversationVisibility.private_.value);
     if (reverted) conversation.visibility = ConversationVisibility.private_;
   }
 }

@@ -33,7 +33,10 @@ class ChartMessageWidget extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(chartData.title, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
+          Text(
+            chartData.title,
+            style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 20),
           SizedBox(height: 200, child: chartData.chartType == 'bar' ? _buildBarChart() : _buildLineChart()),
         ],

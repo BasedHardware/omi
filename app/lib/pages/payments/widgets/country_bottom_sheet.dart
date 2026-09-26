@@ -61,7 +61,9 @@ class _CountryBottomSheetState extends State<CountryBottomSheet> {
                             contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 4),
                             title: Text(
                               (country['name'] as String).decodeString,
-                              style: OmiType.body.copyWith(fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400),
+                              style: OmiType.body.copyWith(
+                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                              ),
                             ),
                             leading: Text(countryFlagFromCode(country['id'] as String), style: OmiType.title2),
                             trailing: isSelected ? const Icon(Icons.check, color: OmiColors.accent) : null,

@@ -152,8 +152,8 @@ ApiResult<ActionItemsResponse> decodeActionItemsEnvelope(String body, {void Func
 /// unmigrated callers; a 503 is distinct here instead of an empty task list.
 class ActionItemsApi {
   ActionItemsApi({required String baseUrl, ApiSend? send})
-    : _baseUrl = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/',
-      _send = send;
+      : _baseUrl = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/',
+        _send = send;
 
   final String _baseUrl;
   final ApiSend? _send;

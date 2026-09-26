@@ -68,7 +68,10 @@ class CapabilityCategorySection extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
             child: Row(
               children: [
-                Text(categoryName, style: OmiType.title3),
+                Text(
+                  categoryName,
+                  style: OmiType.title3,
+                ),
                 const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

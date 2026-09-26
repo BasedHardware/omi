@@ -11,19 +11,23 @@ import 'package:omi/ui/format/speaker_names.dart';
 import 'package:omi/utils/constants.dart';
 
 TranscriptSegment seg(int speakerId, {bool isUser = false, String? personId, String text = 'hi'}) => TranscriptSegment(
-  id: '$speakerId-$text',
-  text: text,
-  speaker: 'SPEAKER_${speakerId.toString().padLeft(2, '0')}',
-  speakerId: speakerId,
-  isUser: isUser,
-  personId: personId,
-  start: 0,
-  end: 1,
-  translations: const [],
-);
+      id: '$speakerId-$text',
+      text: text,
+      speaker: 'SPEAKER_${speakerId.toString().padLeft(2, '0')}',
+      speakerId: speakerId,
+      isUser: isUser,
+      personId: personId,
+      start: 0,
+      end: 1,
+      translations: const [],
+    );
 
-Person person(String id, String name) =>
-    Person(id: id, name: name, createdAt: DateTime(2026), updatedAt: DateTime(2026));
+Person person(String id, String name) => Person(
+      id: id,
+      name: name,
+      createdAt: DateTime(2026),
+      updatedAt: DateTime(2026),
+    );
 
 /// One speaker vocabulary on every surface: "You", people's names, "Omi", and dense "Speaker N".
 void main() {
@@ -83,7 +87,11 @@ void main() {
     tearDown(() => Intl.defaultLocale = null);
 
     test('uses the same names as the screen, localized, owner by given name', () {
-      final segments = [seg(0, isUser: true, text: 'Hello'), seg(3, text: 'Hi'), seg(omiSpeakerId, text: 'Noted')];
+      final segments = [
+        seg(0, isUser: true, text: 'Hello'),
+        seg(3, text: 'Hi'),
+        seg(omiSpeakerId, text: 'Noted'),
+      ];
       final de = lookupAppLocalizations(const Locale('de'));
       final out = TranscriptSegment.segmentsAsString(segments, l10n: de, ownerName: 'Dana', people: const []);
       expect(out, contains('Dana: Hello'));

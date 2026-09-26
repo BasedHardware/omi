@@ -147,10 +147,8 @@ void main() {
           body: SizedBox(
             width: 200,
             height: 100,
-            child: OmiMapPreview(
-              pins: [OmiMapPin(latitude: 1, longitude: 2)],
-              imageUrl: 'https://example.test/map.png',
-            ),
+            child:
+                OmiMapPreview(pins: [OmiMapPin(latitude: 1, longitude: 2)], imageUrl: 'https://example.test/map.png'),
           ),
         ),
       ),

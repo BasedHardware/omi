@@ -126,9 +126,8 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                   const SizedBox(height: OmiSpacing.xxl),
                   Consumer<AppProvider>(
                     builder: (context, appProvider, child) {
-                      final appsWithDataAccess = appProvider.apps
-                          .where((app) => app.enabled && app.worksExternally())
-                          .toList();
+                      final appsWithDataAccess =
+                          appProvider.apps.where((app) => app.enabled && app.worksExternally()).toList();
 
                       if (appsWithDataAccess.isEmpty) {
                         return Column(

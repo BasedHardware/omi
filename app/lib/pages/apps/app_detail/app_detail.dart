@@ -433,8 +433,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                           ),
                         ),
-                        placeholder: (context, url) =>
-                            const SizedBox.square(dimension: 108, child: Center(child: OmiSpinner())),
+                        placeholder: (context, url) => const SizedBox.square(
+                          dimension: 108,
+                          child: Center(child: OmiSpinner()),
+                        ),
                         errorWidget: (context, url, error) => const FaIcon(FontAwesomeIcons.circleExclamation),
                       ),
                       const SizedBox(width: 20),
@@ -628,10 +630,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     ),
                                     const SizedBox(height: OmiSpacing.md),
                                     RecentReviewsSection(
-                                      reviews: app.reviews
-                                          .sorted((a, b) => b.ratedAt.compareTo(a.ratedAt))
-                                          .take(3)
-                                          .toList(),
+                                      reviews:
+                                          app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
                                       userReview: app.userReview,
                                       app: app,
                                       onReviewUpdated: () => setState(() {}),
@@ -936,8 +936,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     // iPad needs the share button's position for the popover.
     final box = buttonContext.findRenderObject() as RenderBox?;
     final origin = box != null ? box.localToGlobal(Offset.zero) & box.size : null;
-    await SharePlus.instance.share(
-      ShareParams(text: appShareUrl(app.id), subject: app.name, sharePositionOrigin: origin),
-    );
+    await SharePlus.instance
+        .share(ShareParams(text: appShareUrl(app.id), subject: app.name, sharePositionOrigin: origin));
   }
 }

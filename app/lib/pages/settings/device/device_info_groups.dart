@@ -94,13 +94,8 @@ class DeviceInfoGroups extends StatelessWidget {
               ),
             ] else
               _copyRow(context, icon: FontAwesomeIcons.code, title: l10n.firmware, value: device?.firmwareRevision),
-            _copyRow(
-              context,
-              icon: FontAwesomeIcons.fingerprint,
-              title: l10n.deviceId,
-              value: deviceId,
-              truncate: true,
-            ),
+            _copyRow(context,
+                icon: FontAwesomeIcons.fingerprint, title: l10n.deviceId, value: deviceId, truncate: true),
             if (showSerialNumber)
               _copyRow(
                 context,
@@ -115,19 +110,11 @@ class DeviceInfoGroups extends StatelessWidget {
         OmiSettingsGroup(
           header: l10n.hardwareSection,
           children: [
-            _copyRow(
-              context,
-              icon: FontAwesomeIcons.gears,
-              title: l10n.hardwareRevision,
-              value: device?.hardwareRevision,
-            ),
+            _copyRow(context,
+                icon: FontAwesomeIcons.gears, title: l10n.hardwareRevision, value: device?.hardwareRevision),
             _copyRow(context, icon: FontAwesomeIcons.hashtag, title: l10n.modelNumber, value: device?.modelNumber),
-            _copyRow(
-              context,
-              icon: FontAwesomeIcons.industry,
-              title: l10n.manufacturer,
-              value: device?.manufacturerName,
-            ),
+            _copyRow(context,
+                icon: FontAwesomeIcons.industry, title: l10n.manufacturer, value: device?.manufacturerName),
           ],
         ),
       ],

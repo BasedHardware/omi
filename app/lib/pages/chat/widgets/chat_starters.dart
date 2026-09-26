@@ -17,9 +17,9 @@ class ChatStarters extends StatelessWidget {
     }
     final prompts = hasExistingData ? ['activity', 'improve'] : ['capabilities', 'goal'];
     return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
+        child: SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 400),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -31,31 +31,26 @@ class ChatStarters extends StatelessWidget {
               const SizedBox(height: 24),
               for (final kind in prompts)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: OutlinedButton(
-                    key: ValueKey('chat_starter_$kind'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      backgroundColor: Colors.white.withValues(alpha: 0.04),
-                      minimumSize: const Size.fromHeight(56),
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                      side: const BorderSide(color: OmiColors.border),
-                      shape: const RoundedRectangleBorder(borderRadius: OmiRadius.lgAll),
-                    ),
-                    onPressed: () => onSelected(context.l10n.chatStarterPrompt(kind)),
-                    child: Row(
-                      children: [
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: OutlinedButton(
+                      key: ValueKey('chat_starter_$kind'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        backgroundColor: Colors.white.withValues(alpha: 0.04),
+                        minimumSize: const Size.fromHeight(56),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                        side: const BorderSide(color: OmiColors.border),
+                        shape: const RoundedRectangleBorder(borderRadius: OmiRadius.lgAll),
+                      ),
+                      onPressed: () => onSelected(context.l10n.chatStarterPrompt(kind)),
+                      child: Row(children: [
                         Expanded(child: Text(context.l10n.chatStarterPrompt(kind))),
                         const SizedBox(width: 12),
                         const Icon(Icons.north_west, size: 18, color: OmiColors.textTertiary),
-                      ],
-                    ),
-                  ),
-                ),
+                      ]),
+                    )),
             ],
-          ),
-        ),
-      ),
-    );
+          )),
+    ));
   }
 }

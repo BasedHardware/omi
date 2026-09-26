@@ -75,15 +75,15 @@ class _DeleteAccountState extends State<DeleteAccount> {
   }
 
   String _label(String key) => switch (key) {
-    'privacy_concerns' => context.l10n.deleteReasonPrivacy,
-    'not_using_enough' => context.l10n.deleteReasonNotUsing,
-    'missing_features' => context.l10n.deleteReasonMissingFeatures,
-    'technical_issues' => context.l10n.deleteReasonTechnicalIssues,
-    'found_alternative' => context.l10n.deleteReasonFoundAlternative,
-    'taking_break' => context.l10n.deleteReasonTakingBreak,
-    'other' => context.l10n.deleteReasonOther,
-    _ => key,
-  };
+        'privacy_concerns' => context.l10n.deleteReasonPrivacy,
+        'not_using_enough' => context.l10n.deleteReasonNotUsing,
+        'missing_features' => context.l10n.deleteReasonMissingFeatures,
+        'technical_issues' => context.l10n.deleteReasonTechnicalIssues,
+        'found_alternative' => context.l10n.deleteReasonFoundAlternative,
+        'taking_break' => context.l10n.deleteReasonTakingBreak,
+        'other' => context.l10n.deleteReasonOther,
+        _ => key,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -262,10 +262,8 @@ class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
                   textCapitalization: TextCapitalization.characters,
                   inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z]'))],
                   style: OmiType.callout.copyWith(fontWeight: FontWeight.w600, letterSpacing: 2),
-                  decoration: leaveFlowInputDecoration(
-                    hint: confirmWord,
-                    focusColor: OmiColors.danger,
-                  ).copyWith(hintStyle: OmiType.callout.copyWith(color: OmiColors.textTertiary, letterSpacing: 2)),
+                  decoration: leaveFlowInputDecoration(hint: confirmWord, focusColor: OmiColors.danger)
+                      .copyWith(hintStyle: OmiType.callout.copyWith(color: OmiColors.textTertiary, letterSpacing: 2)),
                 ),
               ],
             ),

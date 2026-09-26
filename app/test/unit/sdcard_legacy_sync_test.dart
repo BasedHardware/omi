@@ -123,11 +123,9 @@ void main() {
 
   test('a cancel after the first chunk keeps the SD card and does not mark the recording synced', () async {
     late SDCardWalSyncImpl sync;
-    final local = _FakeLocalSync(
-      afterChunk: (count) {
-        if (count == 1) sync.cancelSync();
-      },
-    );
+    final local = _FakeLocalSync(afterChunk: (count) {
+      if (count == 1) sync.cancelSync();
+    });
     sync = syncWith(local);
 
     await expectLater(sync.syncWal(wal: wal), throwsA(anything));

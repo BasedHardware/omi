@@ -10,7 +10,12 @@ import 'package:omi/utils/logger.dart';
 const String captureRecoveryFeatureFlag = 'mobile-capture-recovery-v1';
 
 class CaptureWedgeEpisode {
-  CaptureWedgeEpisode({required this.deviceId, required this.source, required this.trigger, required this.declaredAt});
+  CaptureWedgeEpisode({
+    required this.deviceId,
+    required this.source,
+    required this.trigger,
+    required this.declaredAt,
+  });
 
   final String deviceId;
   final String source;
@@ -32,12 +37,12 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     required Future<void> Function(String deviceId) bleRetry,
     required String Function() appBuild,
     required String Function() platform,
-  }) : _now = now ?? DateTime.now,
-       _featureGate = featureGate,
-       _track = track,
-       _bleRetry = bleRetry,
-       _appBuild = appBuild,
-       _platform = platform;
+  })  : _now = now ?? DateTime.now,
+        _featureGate = featureGate,
+        _track = track,
+        _bleRetry = bleRetry,
+        _appBuild = appBuild,
+        _platform = platform;
 
   static CaptureWedgeMonitor? _instance;
   static CaptureWedgeMonitor get instance => _instance ??= composeCaptureWedgeMonitor();
@@ -77,7 +82,11 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     return handle;
   }
 
-  void onCaptureSessionEnded(int handle, {required int binaryBytesSent, bool intentional = false}) {
+  void onCaptureSessionEnded(
+    int handle, {
+    required int binaryBytesSent,
+    bool intentional = false,
+  }) {
     final session = _openSessions.remove(handle);
     if (session == null) return;
     final state = _stateFor(session.deviceId);
@@ -93,9 +102,12 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     ends.removeWhere((t) => now.difference(t) > zeroByteWindow);
     if (ends.length >= zeroByteThreshold &&
         ends.last.difference(ends[ends.length - zeroByteThreshold]) <= zeroByteWindow) {
-      unawaited(
-        _maybeDeclare(state, deviceId: session.deviceId, source: session.source, trigger: triggerZeroByteStreak),
-      );
+      unawaited(_maybeDeclare(
+        state,
+        deviceId: session.deviceId,
+        source: session.source,
+        trigger: triggerZeroByteStreak,
+      ));
     }
   }
 
@@ -123,7 +135,12 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     drops.add(now);
     drops.removeWhere((t) => now.difference(t) > rapidDropWindow);
     if (drops.length >= rapidDropThreshold) {
-      unawaited(_maybeDeclare(state, deviceId: deviceId, source: source!, trigger: triggerRapidReconnects));
+      unawaited(_maybeDeclare(
+        state,
+        deviceId: deviceId,
+        source: source!,
+        trigger: triggerRapidReconnects,
+      ));
     }
   }
 

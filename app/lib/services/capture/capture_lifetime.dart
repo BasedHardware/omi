@@ -244,10 +244,10 @@ class _LifetimeSubscription<T> implements StreamSubscription<T> {
 
   @override
   void onDone(void Function()? handleDone) => _inner.onDone(() {
-    _drop();
-    if (_isClosed()) return;
-    handleDone?.call();
-  });
+        _drop();
+        if (_isClosed()) return;
+        handleDone?.call();
+      });
   @override
   void pause([Future<void>? resumeSignal]) => _inner.pause(resumeSignal);
   @override

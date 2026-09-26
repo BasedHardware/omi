@@ -45,10 +45,10 @@ class CaptureScenarioTimelineEntry {
   const CaptureScenarioTimelineEntry({required this.at, required this.event, this.details = const {}});
 
   Map<String, Object?> toJson() => {
-    'at_ms': at.inMilliseconds,
-    'event': event,
-    if (details.isNotEmpty) 'details': details,
-  };
+        'at_ms': at.inMilliseconds,
+        'event': event,
+        if (details.isNotEmpty) 'details': details,
+      };
 }
 
 enum CaptureScenarioOutcome { passed, failed }
@@ -77,13 +77,13 @@ class CaptureScenarioResult {
   bool get passed => outcome == CaptureScenarioOutcome.passed;
 
   Map<String, Object?> toJson() => {
-    'scenario_id': scenarioId,
-    'contract_version': contractVersion,
-    'outcome': outcome.name,
-    if (failureReason != null) 'failure_reason': failureReason,
-    'timeline': timeline.map((e) => e.toJson()).toList(),
-    'observations': observations,
-  };
+        'scenario_id': scenarioId,
+        'contract_version': contractVersion,
+        'outcome': outcome.name,
+        if (failureReason != null) 'failure_reason': failureReason,
+        'timeline': timeline.map((e) => e.toJson()).toList(),
+        'observations': observations,
+      };
 
   String toJsonString() => const JsonEncoder.withIndent('  ').convert(toJson());
 }
@@ -99,39 +99,33 @@ class CaptureScenarioCatalog {
   static const List<CaptureScenarioDescriptor> recordingRecovery = [
     CaptureScenarioDescriptor(
       id: 'network-loss-reconnect-during-capture',
-      description:
-          'Socket drops mid-capture; unsynced frames must persist to disk WAL, '
+      description: 'Socket drops mid-capture; unsynced frames must persist to disk WAL, '
           'reconnect restores streaming, recovery drain uploads without local duplicates.',
     ),
     CaptureScenarioDescriptor(
       id: 'stale-native-event-after-stop-new-session',
-      description:
-          'Native events carrying a retired session id must be dropped; a stale '
+      description: 'Native events carrying a retired session id must be dropped; a stale '
           'terminal idle cannot clobber the fresh session.',
       negative: true,
     ),
     CaptureScenarioDescriptor(
       id: 'interruption-resumption',
-      description:
-          'Native audio-session interruption mirrors state without teardown; '
+      description: 'Native audio-session interruption mirrors state without teardown; '
           'recovery resumes the same authoritative session.',
     ),
     CaptureScenarioDescriptor(
       id: 'partial-torn-persistence-reconstruction',
-      description:
-          'Process reconstruction reloads WAL state from real temp files; torn '
+      description: 'Process reconstruction reloads WAL state from real temp files; torn '
           'wals.json falls back to the backup file; missing audio marks corrupted.',
     ),
     CaptureScenarioDescriptor(
       id: 'failed-upload-retry-recovery',
-      description:
-          'Failed uploads stay retryable with bounded backoff; uploaded jobs '
+      description: 'Failed uploads stay retryable with bounded backoff; uploaded jobs '
           'resolve to synced only after server acknowledgement.',
     ),
     CaptureScenarioDescriptor(
       id: 'ownership-transition-outstanding-work',
-      description:
-          'Account/device ownership transition during outstanding WAL work must '
+      description: 'Account/device ownership transition during outstanding WAL work must '
           'not upload under a wrong identity; work stays local and retryable.',
     ),
   ];
