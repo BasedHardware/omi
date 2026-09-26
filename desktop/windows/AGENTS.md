@@ -18,9 +18,9 @@ produces a stray, untracked `package-lock.json` — if you see unexplained diffs
 in those three files with no matching commit, this is almost certainly why;
 `git restore` them and reinstall with pnpm.
 
-**pnpm major-version pin:** CI pins `pnpm/action-setup@v6` to **version 10**.
-If your local `pnpm --version` is a different major (e.g. a system package
-manager installed 11+), `.npmrc`'s `node-linker=hoisted` may be silently
+**pnpm major-version pin:** CI pins `pnpm/action-setup` to a **version-10**
+commit SHA. If your local `pnpm --version` is a different major (e.g. a system
+package manager installed 11+), `.npmrc`'s `node-linker=hoisted` may be silently
 ignored, breaking the pi-mono dependency-closure postinstall check
 (`scripts/verify-pimono-unpack.mjs`) with "closure package(s) do
 not resolve on disk" error. Use `npx pnpm@10 <command>` if your system pnpm

@@ -633,7 +633,7 @@ def test_typesense_provision_checks_out_admitted_source_before_auth_and_mutation
     provision = text[text.index("  provision:") : text.index("\n  deploy:")]
     checkout = provision.index("uses: actions/checkout@v7")
     helper_check = provision.index("Verify the checked-in Typesense key-shape helper")
-    auth = provision.index("uses: google-github-actions/auth@v3")
+    auth = provision.index("uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093")
     first_secret_mutation = provision.index('gcloud secrets create "$QA_TYPESENSE_SECRET"')
     assert checkout < helper_check < auth < first_secret_mutation
     assert 'ref: ${{ needs.admit.outputs.source_sha }}' in provision

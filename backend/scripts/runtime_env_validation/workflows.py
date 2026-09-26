@@ -642,7 +642,11 @@ def _validate_firestore_readiness_workflow_contract(
     serialized_readiness_job = json.dumps(readiness_job, sort_keys=True)
     if 'secrets.GCP_CREDENTIALS' in serialized_readiness_job:
         errors.append(ValidationError(scope, 'Firestore readiness must not receive backend deployment credentials'))
-    auth_steps = [step for step in parsed_steps if step.get('uses') == 'google-github-actions/auth@v3']
+    auth_steps = [
+        step
+        for step in parsed_steps
+        if step.get('uses') == 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093'
+    ]
     if len(auth_steps) != 1 or (_as_config_dict(auth_steps[0].get('with')) or {}).get('credentials_json') != (
         '${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}'
     ):

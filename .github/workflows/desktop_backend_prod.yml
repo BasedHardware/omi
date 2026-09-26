@@ -170,20 +170,20 @@ jobs:
 
       - name: Google Auth
         id: auth
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
           # Prod GitHub WIF (credential-hygiene WS-C); no JSON key, no Owner.
           workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
           service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
 
       - name: Set up gcloud
-        uses: google-github-actions/setup-gcloud@v3
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
 
       - name: Login to GCR
         run: gcloud auth configure-docker
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
 
       - name: Validate production desktop backend authority
         env:
@@ -262,7 +262,7 @@ jobs:
 
       - name: Build and push immutable Docker image
         id: build-image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
         with:
           context: .
           file: ./backend/Dockerfile.desktop_backend
@@ -281,7 +281,7 @@ jobs:
         run: python3 -m pip install -q pyyaml
 
       - name: Get GKE credentials for the gateway serving gate
-        uses: google-github-actions/get-gke-credentials@v3
+        uses: google-github-actions/get-gke-credentials@3da1e46a907576cefaa90c484278bb5b259dd395
         with:
           cluster_name: ${{ vars.GKE_CLUSTER }}
           location: ${{ env.REGION }}
@@ -318,7 +318,7 @@ jobs:
 
       - name: Deploy production candidate at zero traffic
         id: deploy-candidate
-        uses: google-github-actions/deploy-cloudrun@v3
+        uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}

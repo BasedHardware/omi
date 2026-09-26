@@ -8,6 +8,9 @@ on:
   # reads as "green" and proves nothing.
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: mobile-app-checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -53,7 +56,7 @@ jobs:
           fetch-depth: 1
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           channel: stable
           # Match repo-checks.yml so dependency resolution cannot drift when
@@ -67,9 +70,13 @@ jobs:
         uses: actions/cache@v6
         with:
           path: app/.dart_tool/build
-          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}
+          # Caches are immutable: once a key is saved, later Dart-source changes
+          # can never update it. The source hash rotates the key when inputs to
+          # codegen change, while the restore-keys prefix still restores the
+          # closest earlier state so build_runner stays incremental.
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-${{ hashFiles('app/lib/**/*.dart') }}
           restore-keys: |
-            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}-
+            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-
             ${{ runner.os }}-flutter-buildrunner-
 
       - name: Resolve Flutter dependencies
@@ -117,7 +124,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           channel: stable
           flutter-version: 3.44.5
@@ -127,9 +134,13 @@ jobs:
         uses: actions/cache@v6
         with:
           path: app/.dart_tool/build
-          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}
+          # Caches are immutable: once a key is saved, later Dart-source changes
+          # can never update it. The source hash rotates the key when inputs to
+          # codegen change, while the restore-keys prefix still restores the
+          # closest earlier state so build_runner stays incremental.
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-${{ hashFiles('app/lib/**/*.dart') }}
           restore-keys: |
-            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}-
+            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-
             ${{ runner.os }}-flutter-buildrunner-
 
       - name: Resolve Flutter dependencies
@@ -246,7 +257,7 @@ jobs:
           fetch-depth: 1
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           channel: stable
           flutter-version: 3.44.5
@@ -319,7 +330,7 @@ jobs:
           df -h /
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           channel: stable
           flutter-version: 3.44.5
@@ -329,9 +340,13 @@ jobs:
         uses: actions/cache@v6
         with:
           path: app/.dart_tool/build
-          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}
+          # Caches are immutable: once a key is saved, later Dart-source changes
+          # can never update it. The source hash rotates the key when inputs to
+          # codegen change, while the restore-keys prefix still restores the
+          # closest earlier state so build_runner stays incremental.
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-${{ hashFiles('app/lib/**/*.dart') }}
           restore-keys: |
-            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}-
+            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-
             ${{ runner.os }}-flutter-buildrunner-
 
       - name: Resolve Flutter dependencies
@@ -360,7 +375,7 @@ jobs:
         run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Setup Gradle for Flutter compile smoke
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
         with:
           # This job is the Mobile App Checks wall. A main write here added
           # ~1m of Gradle save+cleanup AFTER the APK was already uploaded
@@ -436,7 +451,7 @@ jobs:
           fetch-depth: 1
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           channel: stable
           flutter-version: 3.44.5
@@ -446,9 +461,13 @@ jobs:
         uses: actions/cache@v6
         with:
           path: app/.dart_tool/build
-          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}
+          # Caches are immutable: once a key is saved, later Dart-source changes
+          # can never update it. The source hash rotates the key when inputs to
+          # codegen change, while the restore-keys prefix still restores the
+          # closest earlier state so build_runner stays incremental.
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-${{ hashFiles('app/lib/**/*.dart') }}
           restore-keys: |
-            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}-
+            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-
             ${{ runner.os }}-flutter-buildrunner-
 
       - name: Resolve Flutter dependencies
@@ -485,7 +504,7 @@ jobs:
         run: flutter build apk --debug --flavor dev --target-platform android-arm64 --config-only
 
       - name: Setup Gradle for Android JVM unit tests
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb
         with:
           # Sole Gradle User Home writer. Compile-smoke is restore-only so
           # this job's ~1m POST save is not on the workflow wall (JVM finishes
@@ -527,7 +546,7 @@ jobs:
         run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           channel: stable
           flutter-version: 3.44.5
@@ -537,9 +556,13 @@ jobs:
         uses: actions/cache@v6
         with:
           path: app/.dart_tool/build
-          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}
+          # Caches are immutable: once a key is saved, later Dart-source changes
+          # can never update it. The source hash rotates the key when inputs to
+          # codegen change, while the restore-keys prefix still restores the
+          # closest earlier state so build_runner stays incremental.
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-${{ hashFiles('app/lib/**/*.dart') }}
           restore-keys: |
-            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}-
+            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-
             ${{ runner.os }}-flutter-buildrunner-
 
       - name: Cache CocoaPods
@@ -632,7 +655,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           channel: stable
           flutter-version: 3.44.5
@@ -642,9 +665,13 @@ jobs:
         uses: actions/cache@v6
         with:
           path: app/.dart_tool/build
-          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}
+          # Caches are immutable: once a key is saved, later Dart-source changes
+          # can never update it. The source hash rotates the key when inputs to
+          # codegen change, while the restore-keys prefix still restores the
+          # closest earlier state so build_runner stays incremental.
+          key: ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-${{ hashFiles('app/lib/**/*.dart') }}
           restore-keys: |
-            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock') }}-
+            ${{ runner.os }}-flutter-buildrunner-${{ hashFiles('app/pubspec.lock', 'app/build.yaml') }}-
             ${{ runner.os }}-flutter-buildrunner-
 
       - name: Resolve Flutter dependencies

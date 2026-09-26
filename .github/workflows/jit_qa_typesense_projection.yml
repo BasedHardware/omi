@@ -105,12 +105,12 @@ jobs:
         with:
           ref: ${{ needs.admit.outputs.source_sha }}
           fetch-depth: 1
-      - uses: google-github-actions/auth@v3
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
           # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
           workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
           service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
-      - uses: google-github-actions/setup-gcloud@v3
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
       - name: Validate source, target, and upstream Typesense digest
         env:
           SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}
@@ -254,12 +254,12 @@ jobs:
           helper="backend/scripts/jit_qa_typesense_key_shape.py"
           test -r "$helper"
           python3 "$helper" --help >/dev/null
-      - uses: google-github-actions/auth@v3
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
           # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
           workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
           service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
-      - uses: google-github-actions/setup-gcloud@v3
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
       - name: Verify the named QA database and runtime identity
         run: |
           set -euo pipefail
@@ -364,12 +364,12 @@ jobs:
         with:
           ref: ${{ needs.admit.outputs.source_sha }}
           fetch-depth: 1
-      - uses: google-github-actions/auth@v3
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
           # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
           workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
           service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
-      - uses: google-github-actions/setup-gcloud@v3
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
       - name: Deploy exactly one QA Typesense instance
         env:
           TYPESENSE_IMAGE: ${{ needs.build.outputs.typesense_image }}
@@ -416,12 +416,12 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     steps:
-      - uses: google-github-actions/auth@v3
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
           # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
           workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
           service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
-      - uses: google-github-actions/setup-gcloud@v3
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
       - name: Authenticate Docker to Artifact Registry
         run: gcloud auth configure-docker gcr.io --quiet
       - name: Run canonical rebuild and real search_knowledge proof
@@ -475,12 +475,12 @@ jobs:
       id-token: write
     runs-on: ubuntu-latest
     steps:
-      - uses: google-github-actions/auth@v3
+      - uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
           # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
           workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
           service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
-      - uses: google-github-actions/setup-gcloud@v3
+      - uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db
       - name: Verify the service is healthy but intentionally unready
         env:
           SOURCE_SHA: ${{ needs.admit.outputs.source_sha }}

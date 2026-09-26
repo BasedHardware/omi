@@ -19,6 +19,9 @@ on:
   # it still compiles a HEAD whose final commit only touched another component.
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   # Supersede stale revisions of the same PR, but never let a later main push
   # cancel the exact-SHA evidence consumed by desktop release planning.
