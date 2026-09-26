@@ -61,6 +61,7 @@ void main() {
 
   Future<void> install({
     required Future<Uint8List?> Function(String text) synthesize,
+    Future<void> Function(Uint8List bytes)? play,
     VoicePlaybackOutputSnapshot output = const VoicePlaybackOutputSnapshot(
       headphonesConnected: true,
       checkFailed: false,
@@ -69,7 +70,7 @@ void main() {
   }) async {
     service.debugHooks = VoicePlaybackDebugHooks(
       synthesize: ({required String text}) => synthesize(text),
-      play: (bytes) async => plays.add(bytes),
+      play: play ?? (bytes) async => plays.add(bytes),
       stopPlayback: () async {},
       speak: (text) async => spoken.add(text),
       stopSpeak: () async {},
@@ -315,5 +316,64 @@ void main() {
     await flush();
     expect(playbackEvents(), hasLength(2));
     expect(playbackEvents().last['outcome'], 'played');
+  });
+
+  test('idle before isFinal stays open and counts the later chunk', () async {
+    SharedPreferencesUtil().voiceResponseMode = 2;
+    await install(synthesize: (_) async => _mp3);
+
+    await service.beginResponse(messageId: 'slow');
+    service.updateStreamingResponse(messageId: 'slow', fullText: _firstSentence, isFinal: false);
+    await pumpEventQueue();
+    service.debugNotifyPlaybackCompleted();
+    await pumpEventQueue();
+    await releaseDelays();
+    await flush();
+
+    expect(plays, hasLength(1));
+    expect(playbackEvents(), isEmpty);
+
+    service.updateStreamingResponse(messageId: 'slow', fullText: _twoChunkReply, isFinal: true);
+    await pumpEventQueue();
+    service.debugNotifyPlaybackCompleted();
+    await pumpEventQueue();
+    await releaseDelays();
+    await flush();
+
+    expect(plays, hasLength(2));
+    expect(playbackEvents(), hasLength(1));
+    expect(playbackEvents().single['outcome'], 'played');
+    expect(playbackEvents().single['chunks_played'], 2);
+  });
+
+  test('interrupt during the first chunk keeps first-audio latency', () async {
+    SharedPreferencesUtil().voiceResponseMode = 2;
+    final playing = Completer<void>();
+    await install(
+      synthesize: (_) async => _mp3,
+      play: (bytes) {
+        plays.add(bytes);
+        return playing.future;
+      },
+    );
+
+    await service.beginResponse(messageId: 'mid-chunk');
+    now = now.add(const Duration(milliseconds: 40));
+    service.updateStreamingResponse(messageId: 'mid-chunk', fullText: _firstSentence, isFinal: true);
+    await pumpEventQueue();
+    expect(plays, hasLength(1));
+
+    await service.interrupt(source: VoiceReplyPlaybackInterruptSource.userTyped);
+    if (!playing.isCompleted) playing.complete();
+    await pumpEventQueue();
+    await flush();
+
+    expect(playbackEvents(), hasLength(1));
+    final event = playbackEvents().single;
+    expect(event['outcome'], 'interrupted');
+    expect(event['interrupt_source'], 'user_typed');
+    expect(event['chunks_played'], 0);
+    expect(event['first_audio_latency_ms'], greaterThanOrEqualTo(0));
+    expect(event['first_audio_latency_ms'], 40);
   });
 }

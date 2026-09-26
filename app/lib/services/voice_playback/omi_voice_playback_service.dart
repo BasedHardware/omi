@@ -92,6 +92,7 @@ class OmiVoicePlaybackService {
   bool _usedFallback = false;
   VoiceReplyPlaybackFallbackReason _fallbackReason = VoiceReplyPlaybackFallbackReason.none;
   DateTime? _firstAudioAt;
+  bool _sawFinal = false;
 
   // What the client already sent to synthesize, measured against the cumulative
   // streamed text. We always use `_spoken` as the slice boundary.
@@ -258,6 +259,7 @@ class OmiVoicePlaybackService {
       return;
     }
     Logger.log('OmiVoicePlayback: updateStreamingResponse len=${fullText.length} isFinal=$isFinal spoken=$_spoken');
+    if (isFinal) _sawFinal = true;
 
     final cleaned = _cleanedPlaybackText(fullText);
     if (_spoken >= cleaned.length && !isFinal) return;
@@ -442,11 +444,9 @@ class OmiVoicePlaybackService {
     final bytes = _audioQueue.removeAt(0);
     try {
       final token = _lifecycleToken;
-      final startedAt = _now();
-      await _playCloudChunk(bytes);
+      await _playCloudChunk(bytes, token: token);
       if (token == _lifecycleToken && _lifecycleOpen) {
         _chunksPlayed++;
-        _noteFirstAudio(startedAt);
       }
     } catch (e) {
       Logger.debug('just_audio play failed: $e');
@@ -459,12 +459,14 @@ class OmiVoicePlaybackService {
   void _maybeFinish() {
     if (!_isIdle) return;
     // Small grace window so tail chunks from the SSE stream don't flap the
-    // foreground service on/off rapidly.
+    // foreground service on/off rapidly. The session still deactivates when
+    // the window elapses; a natural outcome waits until the stream is final
+    // so a slow answer is not closed between chunks.
     final token = _lifecycleToken;
     _delay(const Duration(milliseconds: 500)).then((_) async {
       if (token != _lifecycleToken || !_isIdle) return;
       await _deactivateSession();
-      if (token != _lifecycleToken || !_lifecycleOpen || !_isIdle) return;
+      if (token != _lifecycleToken || !_lifecycleOpen || !_isIdle || !_sawFinal) return;
       _emit(outcome: _naturalOutcome());
     });
   }
@@ -525,6 +527,7 @@ class OmiVoicePlaybackService {
     _usedFallback = false;
     _fallbackReason = VoiceReplyPlaybackFallbackReason.none;
     _firstAudioAt = null;
+    _sawFinal = false;
   }
 
   void _noteFirstAudio(DateTime startedAt) {
@@ -598,17 +601,21 @@ class OmiVoicePlaybackService {
     return synthesizeSpeech(text: text);
   }
 
-  Future<void> _playCloudChunk(Uint8List bytes) async {
+  Future<void> _playCloudChunk(Uint8List bytes, {required int token}) async {
     if (debugHooks != null) {
       final play = debugHooks!.play;
       if (play == null) {
         throw StateError('Voice playback test hooks are installed without a play function');
       }
-      await play(bytes);
+      final playback = play(bytes);
+      if (token == _lifecycleToken && _lifecycleOpen) _noteFirstAudio(_now());
+      await playback;
       return;
     }
     await _player.setAudioSource(_BytesAudioSource(bytes));
-    await _player.play();
+    final playback = _player.play();
+    if (token == _lifecycleToken && _lifecycleOpen) _noteFirstAudio(_now());
+    await playback;
   }
 
   Future<void> _stopPlayback() async {
@@ -716,6 +723,7 @@ class OmiVoicePlaybackService {
     _usedFallback = false;
     _fallbackReason = VoiceReplyPlaybackFallbackReason.none;
     _firstAudioAt = null;
+    _sawFinal = false;
   }
 
   // ---------------------------------------------------------------------------
