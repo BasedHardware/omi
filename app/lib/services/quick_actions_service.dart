@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/ui/ui.dart';
 
 const _kAddTask = 'add_task';
 const _kAskOmi = 'ask_omi';
@@ -98,10 +100,10 @@ class QuickActionsService {
         routeToPage(context, const ChatPage(isPivotBottom: false, autoStartVoice: true));
         break;
       case _kMute:
-        _toggleMute(context, mute: true);
+        unawaited(_toggleMute(context, mute: true));
         break;
       case _kUnmute:
-        _toggleMute(context, mute: false);
+        unawaited(_toggleMute(context, mute: false));
         break;
       case _kConnectDevice:
         Provider.of<DeviceProvider>(context, listen: false).initiateConnection('QuickActions');
@@ -126,12 +128,21 @@ class QuickActionsService {
     });
   }
 
-  void _toggleMute(BuildContext context, {required bool mute}) {
+  /// A pause or resume that fails says so, as the Live page's control does, instead of leaving an
+  /// unhandled future behind.
+  Future<void> _toggleMute(BuildContext context, {required bool mute}) async {
     final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
-    if (mute) {
-      captureProvider.pauseCapture();
-    } else {
-      captureProvider.resumeCapture();
+    try {
+      if (mute) {
+        await captureProvider.pauseCapture();
+      } else {
+        await captureProvider.resumeCapture();
+      }
+    } catch (_) {
+      if (context.mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
     }
   }
+
+  @visibleForTesting
+  void debugHandleShortcut(String shortcutType) => _handleShortcut(shortcutType);
 }
