@@ -424,15 +424,16 @@ async def auth_callback_google(
     auth_flow_id = _auth_flow_id_from_state(state)
     _log_auth_event(provider="google", stage="provider_callback_received", outcome="started", auth_flow_id=auth_flow_id)
     if error:
+        bounded_error = _bounded_provider_error(error)
         _log_auth_event(
             provider="google",
             stage="provider_callback_received",
             outcome="failed",
             auth_flow_id=auth_flow_id,
-            failure_class=_bounded_provider_error(error),
+            failure_class=bounded_error,
             status_code=400,
         )
-        raise HTTPException(status_code=400, detail=f"Auth error: {error}")
+        raise HTTPException(status_code=400, detail=f"Auth error: {bounded_error}")
 
     # Retrieve session
     session_data = await run_blocking(critical_executor, get_auth_session, state)
@@ -514,15 +515,16 @@ async def auth_callback_apple_post(
     auth_flow_id = _auth_flow_id_from_state(state)
     _log_auth_event(provider="apple", stage="provider_callback_received", outcome="started", auth_flow_id=auth_flow_id)
     if error:
+        bounded_error = _bounded_provider_error(error)
         _log_auth_event(
             provider="apple",
             stage="provider_callback_received",
             outcome="failed",
             auth_flow_id=auth_flow_id,
-            failure_class=_bounded_provider_error(error),
+            failure_class=bounded_error,
             status_code=400,
         )
-        raise HTTPException(status_code=400, detail=f"Auth error: {error}")
+        raise HTTPException(status_code=400, detail=f"Auth error: {bounded_error}")
 
     # Retrieve session
     session_data = await run_blocking(critical_executor, get_auth_session, state)
