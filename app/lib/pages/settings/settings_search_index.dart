@@ -176,7 +176,13 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
   // Device (only while connected)
   SettingsSearchEntry('firmware', (l) => l.firmware, SettingsDestination.device, _deviceInfo,
       visible: _whenDeviceConnected),
+  SettingsSearchEntry('singleTap', (l) => l.singleTap, SettingsDestination.device, _device,
+      visible: _whenDeviceConnected),
   SettingsSearchEntry('doubleTap', (l) => l.doubleTap, SettingsDestination.device, _device,
+      visible: _whenDeviceConnected),
+  SettingsSearchEntry('tripleTap', (l) => l.tripleTap, SettingsDestination.device, _device,
+      visible: _whenDeviceConnected),
+  SettingsSearchEntry('longPress', (l) => l.longPress, SettingsDestination.device, _device,
       visible: _whenDeviceConnected),
   SettingsSearchEntry('ledBrightness', (l) => l.ledBrightness, SettingsDestination.device, _device,
       visible: _whenDeviceConnected),

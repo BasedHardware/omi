@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/models/omi_button_action.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -26,29 +27,49 @@ String _micGainDescription(BuildContext context, int level) {
   return level >= 0 && level < descriptions.length ? descriptions[level] : '';
 }
 
-/// Lets the reader pick what a double tap on the device does. Resolves to the chosen action
-/// (0 end and process, 1 mute/unmute, 2 star), or null when dismissed.
-Future<int?> showDoubleTapActionSheet(BuildContext context, {required int current}) {
+/// Lets the reader pick what a remappable device-button gesture does.
+Future<OmiButtonAction?> showButtonActionSheet(
+  BuildContext context, {
+  required OmiButtonGesture gesture,
+  required OmiButtonAction current,
+}) {
   final l10n = context.l10n;
-  final options = [l10n.endAndProcess, l10n.deviceOnboardingMuteUnmute, l10n.starOngoing];
-  return showOmiSheet<int>(
+  final title = switch (gesture) {
+    OmiButtonGesture.singleTap => l10n.singleTapAction,
+    OmiButtonGesture.doubleTap => l10n.doubleTapAction,
+    OmiButtonGesture.tripleTap => l10n.tripleTapAction,
+  };
+  String optionLabel(OmiButtonAction action) {
+    return switch (action) {
+      OmiButtonAction.endConversation => l10n.endAndProcess,
+      OmiButtonAction.muteUnmute => l10n.deviceOnboardingMuteUnmute,
+      OmiButtonAction.starConversation => l10n.starOngoing,
+      OmiButtonAction.askQuestion => l10n.deviceOnboardingAskQuestionTitle,
+      OmiButtonAction.none => l10n.doNothing,
+    };
+  }
+
+  return showOmiSheet<OmiButtonAction>(
     context: context,
-    title: l10n.doubleTapAction,
+    title: title,
     padding: const EdgeInsets.only(bottom: OmiSpacing.md),
-    builder: (sheetContext) => Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < options.length; i++)
-          Semantics(
-            selected: i == current,
-            child: OmiSettingsRow(
-              title: options[i],
-              showChevron: false,
-              trailing: i == current ? const Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
-              onTap: () => Navigator.of(sheetContext).pop(i),
+    builder: (sheetContext) => SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final action in OmiButtonAction.values)
+            Semantics(
+              selected: action == current,
+              child: OmiSettingsRow(
+                key: Key('button_action_${gesture.name}_${action.name}'),
+                title: optionLabel(action),
+                showChevron: false,
+                trailing: action == current ? const Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
+                onTap: () => Navigator.of(sheetContext).pop(action),
+              ),
             ),
-          ),
-      ],
+        ],
+      ),
     ),
   );
 }

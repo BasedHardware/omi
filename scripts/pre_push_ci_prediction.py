@@ -110,6 +110,12 @@ ROUTING_INPUTS = {
     ".github/scripts/test_pre_push_ci_prediction.py",
 }
 
+# Manifest edits register checks and path triggers; they do not change which
+# Desktop Swift sources compile or which launcher scripts run. Waking the full
+# macOS debug suite from a manifest-only diff (for example adding a host-side
+# firmware test) costs an hour of runner time with no product signal (#13705).
+ROUTING_INPUTS_WAKE_DESKTOP_SWIFT_TESTS = ROUTING_INPUTS - {".github/checks-manifest.yaml"}
+
 FLUTTER_GENERATION_DEFINITION_INPUTS = {
     ".github/workflows/mobile-app-checks.yml",
 }
@@ -449,6 +455,9 @@ def resolve_impact(
         # editing routing metadata cannot make a committed generated file stale,
         # and waking build_runner from a manifest-only diff costs ~17 minutes at
         # push time. Those lanes stay owned by their real generator inputs.
+        # desktop-swift-tests is excluded for the same reason on
+        # checks-manifest.yaml-only diffs; predictor/workflow/detect-changes
+        # edits still wake it below because they can change path ownership.
         selected.update(
             {
                 "app-ci-only",
@@ -458,10 +467,15 @@ def resolve_impact(
                 "app-ios-compile",
                 "desktop-ci-only",
                 "desktop-flow-lint",
-                "desktop-swift-tests",
-                "desktop-swift-release-test-compile",
             }
         )
+
+    if any(
+        path in ROUTING_INPUTS_WAKE_DESKTOP_SWIFT_TESTS
+        or path.startswith(".github/actions/detect-changes/")
+        for path in normalized_paths
+    ):
+        selected.update({"desktop-swift-tests", "desktop-swift-release-test-compile"})
 
     if event in FULL_DESKTOP_HEALTH_EVENTS:
         # Manual dispatch is the exact-SHA recovery hatch and the scheduled run
