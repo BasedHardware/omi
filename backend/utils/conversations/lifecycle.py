@@ -450,6 +450,7 @@ def open_recording_session(
     proposed_conversation_id: str,
     *,
     firestore_client: Any = None,
+    include_conversation_snapshot: bool = False,
 ) -> dict[str, Any]:
     """Open or resume a durable session through the single lifecycle owner.
 
@@ -462,6 +463,7 @@ def open_recording_session(
             recording_session_id,
             proposed_conversation_id,
             firestore_client=firestore_client,
+            include_conversation_snapshot=include_conversation_snapshot,
         )
     except Exception:
         if recording_session_mode() == 'enforce':
@@ -728,13 +730,22 @@ def open_live_recording_session(
         recording_session_id,
         proposed_conversation_id,
         firestore_client=firestore_client,
+        include_conversation_snapshot=True,
     )
+    transactional_conversation_known = bool(binding.get('conversation_snapshot_known'))
+    transactional_conversation = binding.get('conversation_snapshot')
     if existing is None:
-        return dict(binding) | {'requires_rollover': False}
+        result = dict(binding) | {'requires_rollover': False}
+        if transactional_conversation_known:
+            result['conversation_snapshot'] = transactional_conversation
+            result['conversation_snapshot_known'] = True
+        return result
 
-    conversation = conversations_db.get_conversation(
-        uid, existing['conversation_id'], read_site=FirestoreReadSite.LIFECYCLE_OPEN_LIVE_SESSION_BINDING
-    )
+    conversation = transactional_conversation
+    if not transactional_conversation_known:
+        conversation = conversations_db.get_conversation(
+            uid, existing['conversation_id'], read_site=FirestoreReadSite.LIFECYCLE_OPEN_LIVE_SESSION_BINDING
+        )
     if conversation is not None:
         return dict(binding) | {
             'requires_rollover': False,

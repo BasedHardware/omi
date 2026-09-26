@@ -105,19 +105,6 @@ class LiveConversationController:
             proposed=proposed,
         )
 
-    async def _persist_recording_session_marker(self, conversation: dict[str, Any], conversation_id: str) -> None:
-        external_data = dict(conversation.get('external_data') or {})
-        if external_data.get('recording_session_id') == self.host.recording_session_id:
-            return
-        external_data['recording_session_id'] = self.host.recording_session_id
-        await self.host.persistence.call(
-            conversations_db.update_conversation,
-            self.host.request.uid,
-            conversation_id,
-            {'external_data': external_data},
-        )
-        conversation['external_data'] = external_data
-
     async def _resume_continuation(self, pointer: dict[str, str]) -> bool:
         binding = await self.host.persistence.call(
             lifecycle_service.open_live_recording_session,
@@ -144,7 +131,6 @@ class LiveConversationController:
         ):
             return False
         self.host.recording_session_id = pointer['recording_session_id']
-        await self._persist_recording_session_marker(existing, binding['conversation_id'])
         self.host.state.current_conversation_id = binding['conversation_id']
         self.host.recording_session_ids_by_conversation[binding['conversation_id']] = self.host.recording_session_id
         self._adopt_capture_timeline(binding['conversation_id'], (existing or {}).get('started_at'))
@@ -414,7 +400,6 @@ class LiveConversationController:
                         await self.process_conversation(conversation_id)
                     await self.create_new_in_progress_conversation(rollover=True)
                     return
-                await self._persist_recording_session_marker(existing, conversation_id)
                 self.host.state.current_conversation_id = conversation_id
                 self._adopt_capture_timeline(conversation_id, existing.get('started_at'))
                 # Persist the custom-STT marker on resume so a conversation that
@@ -575,7 +560,16 @@ class LiveConversationController:
         if binding['requires_rollover']:
             await self.create_new_in_progress_conversation(rollover=True)
             return None
-        await self._persist_recording_session_marker(existing, existing['id'])
+        if binding.get('conversation_snapshot_known'):
+            current = binding.get('conversation_snapshot')
+            if (
+                not current
+                or current.get('status') != ConversationStatus.in_progress.value
+                or any(current.get(key) for key in ('deleted', 'discarded', 'is_locked'))
+            ):
+                await self.create_new_in_progress_conversation(rollover=True)
+                return None
+            existing = current
         self.host.state.current_conversation_id = existing['id']
         self.host.recording_session_ids_by_conversation[existing['id']] = self.host.recording_session_id
         self._adopt_capture_timeline(existing['id'], existing.get('started_at'))

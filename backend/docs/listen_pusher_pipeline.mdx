@@ -666,7 +666,9 @@ for the existing dead-letter review workflow.
 
 Live listen sessions also hold a five-minute lease on their user-scoped
 `recording_sessions` document. Accepted decoded audio renews it at most once a
-minute, and the conversation stores the bound recording-session ID. A
+minute. Session opening writes the binding and the conversation's bound
+recording-session ID in one Firestore transaction, so recovery cannot observe
+a committed session without its conversation-side fence marker. A
 `SERVER_RECOVERY` admission reads that session document in the same Firestore
 transaction as the conversation and refuses an `in_progress`, unexpired,
 identity-matching lease. Lease renewal and recovery admission therefore
