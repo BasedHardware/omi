@@ -551,14 +551,11 @@ async def tool_create_issue(request: Request):
             log(f"SUCCESS: Issue #{issue_number} created")
             return ChatToolResponse(result="\n".join(result_parts))
         else:
-            error = result.get("error", "Unknown error") if result else "Failed"
-            log(f"ERROR: {error}")
-            return ChatToolResponse(error=f"Failed to create issue: {error}")
+            log("ERROR: Failed to create issue")
+            return ChatToolResponse(error="Failed to create issue.")
 
     except Exception as e:
-        import traceback
-        log(f"EXCEPTION: {e}")
-        log(traceback.format_exc())
+        log(f"EXCEPTION: {type(e).__name__}")
         return ChatToolResponse(error="Failed to create issue due to an internal error.")
 
 
@@ -607,7 +604,7 @@ async def tool_list_repos(request: Request):
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
-        log(f"Error listing repos: {e}")
+        log(f"Error listing repos: {type(e).__name__}")
         return ChatToolResponse(error="Failed to list repositories due to an internal error.")
 
 
@@ -671,7 +668,7 @@ async def tool_list_issues(request: Request):
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
-        log(f"Error listing issues: {e}")
+        log(f"Error listing issues: {type(e).__name__}")
         return ChatToolResponse(error="Failed to list issues due to an internal error.")
 
 
@@ -717,7 +714,8 @@ async def tool_get_issue(request: Request):
         if result.get("error"):
             if result.get("status") == 404:
                 return ChatToolResponse(error=f"Issue #{issue_number} not found in {repo_full_name}")
-            return ChatToolResponse(error=f"Failed to get issue: {result['error']}")
+            log(f"ERROR: Failed to get issue #{issue_number}")
+            return ChatToolResponse(error=result["error"])
 
         issue = result["issue"]
 
@@ -747,7 +745,7 @@ async def tool_get_issue(request: Request):
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
-        log(f"Error getting issue: {e}")
+        log(f"Error getting issue: {type(e).__name__}")
         return ChatToolResponse(error="Failed to get issue due to an internal error.")
 
 
@@ -795,7 +793,7 @@ async def tool_list_labels(request: Request):
         return ChatToolResponse(result="\n".join(result_parts))
 
     except Exception as e:
-        log(f"Error listing labels: {e}")
+        log(f"Error listing labels: {type(e).__name__}")
         return ChatToolResponse(error="Failed to list labels due to an internal error.")
 
 
@@ -854,11 +852,12 @@ async def tool_add_comment(request: Request):
                 result=f"**Comment Added**\n\nAdded comment to issue #{issue_number} in {repo_full_name}"
             )
         else:
-            error = result.get("error", "Unknown error") if result else "Failed"
-            return ChatToolResponse(error=f"Failed to add comment: {error}")
+            log(f"ERROR: Failed to add comment to #{issue_number}")
+            error_msg = result.get("error") if result else None
+            return ChatToolResponse(error=error_msg or "Failed to add comment.")
 
     except Exception as e:
-        log(f"Error adding comment: {e}")
+        log(f"Error adding comment: {type(e).__name__}")
         return ChatToolResponse(error="Failed to add comment due to an internal error.")
 
 
@@ -1527,7 +1526,7 @@ async def update_repo(
         else:
             return {"success": False, "error": "Failed to update repository selection"}
     except Exception as e:
-        log(f"Error updating repository: {e}")
+        log(f"Error updating repository: {type(e).__name__}")
         return {"success": False, "error": "Failed to update repository"}
 
 
@@ -1553,7 +1552,7 @@ async def refresh_repos(uid: str = Query(...)):
 
         return {"success": True, "repos_count": len(repos)}
     except Exception as e:
-        log(f"Error refreshing repositories: {e}")
+        log(f"Error refreshing repositories: {type(e).__name__}")
         return {"success": False, "error": "Failed to refresh repositories"}
 
 
@@ -1597,7 +1596,7 @@ async def check_repo_access(
             "message": f"{level} access"
         }
     except Exception as e:
-        log(f"Error checking repo access: {e}")
+        log(f"Error checking repo access: {type(e).__name__}")
         return {"success": False, "error": "Failed to check repository access"}
 
 
@@ -1621,7 +1620,7 @@ async def save_agent_provider(
             return {"success": True, "message": "Agent provider saved"}
         return {"success": False, "error": "Failed to save"}
     except Exception as e:
-        log(f"Error saving agent provider: {e}")
+        log(f"Error saving agent provider: {type(e).__name__}")
         return {"success": False, "error": "Failed to save agent provider"}
 
 
@@ -1646,7 +1645,7 @@ async def save_agent_key(
             return {"success": True, "message": "Agent API key saved"}
         return {"success": False, "error": "Failed to save"}
     except Exception as e:
-        log(f"Error saving agent key: {e}")
+        log(f"Error saving agent key: {type(e).__name__}")
         return {"success": False, "error": "Failed to save agent key"}
 
 
@@ -1666,7 +1665,7 @@ async def delete_agent_key(
             return {"success": True, "message": "Agent API key deleted"}
         return {"success": False, "error": "Key not found"}
     except Exception as e:
-        log(f"Error deleting agent key: {e}")
+        log(f"Error deleting agent key: {type(e).__name__}")
         return {"success": False, "error": "Failed to delete agent key"}
 
 
@@ -1781,7 +1780,7 @@ async def test_agent(request: Request):
         return {"success": True, "logs": logs}
 
     except Exception as e:
-        log(f"Error testing agent: {e}")
+        log(f"Error testing agent: {type(e).__name__}")
         return {"success": False, "error": "Failed to execute agent test"}
 
 
@@ -1868,7 +1867,7 @@ async def tool_code_feature(request: Request):
         )
 
         if not result.get("success"):
-            return ChatToolResponse(error=f"Failed to implement feature: {result.get('message')}")
+            return ChatToolResponse(error="Failed to implement feature.")
 
         data = result.get("data") or {}
         default_branch = data.get("default_branch") or get_default_branch(owner, repo_name, user["access_token"])
@@ -1978,10 +1977,10 @@ async def tool_code_feature(request: Request):
             error=f"Agent completed but failed to create PR. Branch `{returned_branch}` was pushed."
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
-        import traceback
-        log(f"Error in code_feature tool: {e}")
-        log(traceback.format_exc())
+        log(f"Error in code_feature tool: {type(e).__name__}")
         return ChatToolResponse(error="Failed to implement feature due to an internal error.")
 
 
