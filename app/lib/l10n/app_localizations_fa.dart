@@ -11262,4 +11262,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name و دیگران';
   }
+
+  @override
+  String get voiceResponseOmiDevice => 'دستگاه Omi';
 }

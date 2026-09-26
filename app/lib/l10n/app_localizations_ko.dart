@@ -11084,4 +11084,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name 외 여러 명';
   }
+
+  @override
+  String get voiceResponseOmiDevice => 'Omi 기기';
 }

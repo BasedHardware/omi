@@ -11297,4 +11297,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name in drugi';
   }
+
+  @override
+  String get voiceResponseOmiDevice => 'Naprava Omi';
 }

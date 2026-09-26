@@ -11256,4 +11256,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name a ďalší';
   }
+
+  @override
+  String get voiceResponseOmiDevice => 'Zariadenie Omi';
 }

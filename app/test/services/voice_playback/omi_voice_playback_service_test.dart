@@ -59,24 +59,45 @@ void main() {
     AnalyticsManager.resetForTesting();
   });
 
+  late List<Uint8List> devicePlays;
+  late List<String> synthesizeFormats;
+  var deviceReady = true;
+  var probedDevice = false;
+
   Future<void> install({
     required Future<Uint8List?> Function(String text) synthesize,
     Future<void> Function(Uint8List bytes)? play,
+    Future<bool> Function(Uint8List pcm8kMono)? playOnDevice,
     VoicePlaybackOutputSnapshot output = const VoicePlaybackOutputSnapshot(
       headphonesConnected: true,
       checkFailed: false,
       route: VoiceReplyPlaybackOutputRoute.bluetooth,
     ),
   }) async {
+    devicePlays = [];
+    synthesizeFormats = [];
+    probedDevice = false;
     service.debugHooks = VoicePlaybackDebugHooks(
-      synthesize: ({required String text}) => synthesize(text),
+      synthesize: ({required String text, String outputFormat = 'mp3_44100_128'}) {
+        synthesizeFormats.add(outputFormat);
+        return synthesize(text);
+      },
       play: play ?? (bytes) async => plays.add(bytes),
+      playOnDevice: playOnDevice ??
+          (pcm) async {
+            devicePlays.add(pcm);
+            return true;
+          },
       stopPlayback: () async {},
       speak: (text) async => spoken.add(text),
       stopSpeak: () async {},
       probeOutput: () async {
         probed = true;
         return output;
+      },
+      probeOmiDeviceSpeaker: () async {
+        probedDevice = true;
+        return deviceReady;
       },
       now: () => now,
       delay: (duration) {
@@ -404,5 +425,61 @@ void main() {
     expect(plays, [_mp3]);
     expect(playbackEvents(), hasLength(2));
     expect(playbackEvents().last['outcome'], 'played');
+  });
+
+  test('omi device mode streams PCM to the wearable and skips phone playback', () async {
+    SharedPreferencesUtil().voiceResponseMode = 3;
+    deviceReady = true;
+    // Four 16 kHz mono samples → two 8 kHz samples after downsample.
+    final pcm16000 = ByteData(8)
+      ..setInt16(0, 10, Endian.little)
+      ..setInt16(2, 20, Endian.little)
+      ..setInt16(4, 30, Endian.little)
+      ..setInt16(6, 40, Endian.little);
+    await install(synthesize: (_) async => pcm16000.buffer.asUint8List());
+
+    await service.beginResponse(messageId: 'device');
+    expect(probedDevice, isTrue);
+    expect(probed, isFalse);
+
+    service.updateStreamingResponse(messageId: 'device', fullText: _firstSentence, isFinal: true);
+    await pumpEventQueue();
+    await releaseDelays();
+    await flush();
+
+    expect(synthesizeFormats, everyElement('pcm_16000'));
+    expect(plays, isEmpty);
+    expect(devicePlays, hasLength(1));
+    expect(devicePlays.single.length, 4);
+    expectFields(playbackEvents().single, {
+      'outcome': 'played',
+      'skip_reason': 'none',
+      'mode': 'unknown',
+      'output_route': 'bluetooth',
+      'chunks_requested': 1,
+      'chunks_played': 1,
+      'chunks_dropped': 0,
+    });
+  });
+
+  test('omi device mode skips when the wearable speaker is unavailable', () async {
+    SharedPreferencesUtil().voiceResponseMode = 3;
+    deviceReady = false;
+    await install(synthesize: (_) async => _mp3);
+
+    await service.beginResponse(messageId: 'no-device');
+    await flush();
+
+    expect(probedDevice, isTrue);
+    expect(synthesizeFormats, isEmpty);
+    expect(devicePlays, isEmpty);
+    expectFields(playbackEvents().single, {
+      'outcome': 'skipped',
+      'skip_reason': 'none',
+      'mode': 'unknown',
+      'output_route': 'bluetooth',
+      'chunks_requested': 0,
+      'chunks_played': 0,
+    });
   });
 }

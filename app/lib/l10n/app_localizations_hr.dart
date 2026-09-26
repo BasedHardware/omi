@@ -11303,4 +11303,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name i drugi';
   }
+
+  @override
+  String get voiceResponseOmiDevice => 'Omi uređaj';
 }

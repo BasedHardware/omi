@@ -11275,4 +11275,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name आणि इतर';
   }
+
+  @override
+  String get voiceResponseOmiDevice => 'Omi डिव्हाइस';
 }

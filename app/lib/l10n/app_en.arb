@@ -13385,5 +13385,9 @@
                 "type": "String"
             }
         }
+    },
+    "voiceResponseOmiDevice": "Omi device",
+    "@voiceResponseOmiDevice": {
+        "description": "Voice response mode: play replies through the connected Omi wearable speaker"
     }
 }

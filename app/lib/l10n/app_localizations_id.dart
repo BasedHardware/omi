@@ -11276,4 +11276,7 @@ class AppLocalizationsId extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name dan lainnya';
   }
+
+  @override
+  String get voiceResponseOmiDevice => 'Perangkat Omi';
 }

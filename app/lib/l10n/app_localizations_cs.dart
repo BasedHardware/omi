@@ -11263,4 +11263,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name a další';
   }
+
+  @override
+  String get voiceResponseOmiDevice => 'Zařízení Omi';
 }

@@ -11278,4 +11278,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ve diğerleri';
   }
+
+  @override
+  String get voiceResponseOmiDevice => 'Omi cihazı';
 }

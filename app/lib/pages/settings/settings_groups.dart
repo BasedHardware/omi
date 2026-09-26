@@ -153,6 +153,8 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
         return context.l10n.voiceResponseOff;
       case 2:
         return context.l10n.voiceResponseAlways;
+      case 3:
+        return context.l10n.voiceResponseOmiDevice;
       case 1:
       default:
         return context.l10n.voiceResponseHeadphonesOnly;
@@ -166,7 +168,7 @@ class _RecordingGroupPageState extends State<RecordingGroupPage> with _GroupRows
       title: context.l10n.voiceResponseModeTitle,
       builder: (sheetContext) => OmiSettingsGroup(
         children: [
-          for (final mode in const [0, 1, 2])
+          for (final mode in const [0, 1, 2, 3])
             OmiSettingsRow(
               title: _voiceResponseModeLabel(mode),
               trailing: mode == current ? const Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,

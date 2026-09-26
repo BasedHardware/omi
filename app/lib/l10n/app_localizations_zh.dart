@@ -11058,4 +11058,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name等人';
   }
+
+  @override
+  String get voiceResponseOmiDevice => 'Omi 设备';
 }

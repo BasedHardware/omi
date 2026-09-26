@@ -20522,6 +20522,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{name} + others'**
   String participantsSummaryUncounted(String name);
+
+  /// Voice response mode: play replies through the connected Omi wearable speaker
+  ///
+  /// In en, this message translates to:
+  /// **'Omi device'**
+  String get voiceResponseOmiDevice;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

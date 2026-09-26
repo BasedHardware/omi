@@ -11314,4 +11314,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name మరియు ఇతరులు';
   }
+
+  @override
+  String get voiceResponseOmiDevice => 'Omi పరికరం';
 }

@@ -196,6 +196,10 @@ class NativeBleTransport extends DeviceTransport {
   }
 
   @override
+  bool hasCharacteristic(String serviceUuid, String characteristicUuid) =>
+      _hasCharacteristic(serviceUuid, characteristicUuid);
+
+  @override
   Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid) async {
     if (!_hasCharacteristic(serviceUuid, characteristicUuid)) return [];
     try {

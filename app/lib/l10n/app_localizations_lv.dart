@@ -11292,4 +11292,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name un citi';
   }
+
+  @override
+  String get voiceResponseOmiDevice => 'Omi ierīce';
 }
