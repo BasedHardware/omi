@@ -334,6 +334,7 @@ struct SiriTask: Hashable {
 /// Generated class from Pigeon that represents data sent in messages.
 struct SiriSessionConfig: Hashable {
   var uid: String
+  var generation: Int64
   var baseUrl: String
   var profile: String
   var appVersion: String
@@ -346,16 +347,18 @@ struct SiriSessionConfig: Hashable {
   // swift-format-ignore: AlwaysUseLowerCamelCase
   static func fromList(_ pigeonVar_list: [Any?]) -> SiriSessionConfig? {
     let uid = pigeonVar_list[0] as! String
-    let baseUrl = pigeonVar_list[1] as! String
-    let profile = pigeonVar_list[2] as! String
-    let appVersion = pigeonVar_list[3] as! String
-    let appBuild = pigeonVar_list[4] as! String
-    let deviceIdHash = pigeonVar_list[5] as! String
-    let token: String? = nilOrValue(pigeonVar_list[6])
-    let tokenExpiresAtMs: Int64? = nilOrValue(pigeonVar_list[7])
+    let generation = pigeonVar_list[1] as! Int64
+    let baseUrl = pigeonVar_list[2] as! String
+    let profile = pigeonVar_list[3] as! String
+    let appVersion = pigeonVar_list[4] as! String
+    let appBuild = pigeonVar_list[5] as! String
+    let deviceIdHash = pigeonVar_list[6] as! String
+    let token: String? = nilOrValue(pigeonVar_list[7])
+    let tokenExpiresAtMs: Int64? = nilOrValue(pigeonVar_list[8])
 
     return SiriSessionConfig(
       uid: uid,
+      generation: generation,
       baseUrl: baseUrl,
       profile: profile,
       appVersion: appVersion,
@@ -368,6 +371,7 @@ struct SiriSessionConfig: Hashable {
   func toList() -> [Any?] {
     return [
       uid,
+      generation,
       baseUrl,
       profile,
       appVersion,
@@ -381,12 +385,13 @@ struct SiriSessionConfig: Hashable {
     if Swift.type(of: lhs) != Swift.type(of: rhs) {
       return false
     }
-    return deepEqualsSiriPigeon(lhs.uid, rhs.uid) && deepEqualsSiriPigeon(lhs.baseUrl, rhs.baseUrl) && deepEqualsSiriPigeon(lhs.profile, rhs.profile) && deepEqualsSiriPigeon(lhs.appVersion, rhs.appVersion) && deepEqualsSiriPigeon(lhs.appBuild, rhs.appBuild) && deepEqualsSiriPigeon(lhs.deviceIdHash, rhs.deviceIdHash) && deepEqualsSiriPigeon(lhs.token, rhs.token) && deepEqualsSiriPigeon(lhs.tokenExpiresAtMs, rhs.tokenExpiresAtMs)
+    return deepEqualsSiriPigeon(lhs.uid, rhs.uid) && deepEqualsSiriPigeon(lhs.generation, rhs.generation) && deepEqualsSiriPigeon(lhs.baseUrl, rhs.baseUrl) && deepEqualsSiriPigeon(lhs.profile, rhs.profile) && deepEqualsSiriPigeon(lhs.appVersion, rhs.appVersion) && deepEqualsSiriPigeon(lhs.appBuild, rhs.appBuild) && deepEqualsSiriPigeon(lhs.deviceIdHash, rhs.deviceIdHash) && deepEqualsSiriPigeon(lhs.token, rhs.token) && deepEqualsSiriPigeon(lhs.tokenExpiresAtMs, rhs.tokenExpiresAtMs)
   }
 
   func hash(into hasher: inout Hasher) {
     hasher.combine("SiriSessionConfig")
     deepHashSiriPigeon(value: uid, hasher: &hasher)
+    deepHashSiriPigeon(value: generation, hasher: &hasher)
     deepHashSiriPigeon(value: baseUrl, hasher: &hasher)
     deepHashSiriPigeon(value: profile, hasher: &hasher)
     deepHashSiriPigeon(value: appVersion, hasher: &hasher)
@@ -511,7 +516,7 @@ protocol SiriIndexApi {
   func upsertMemories(uid: String, memories: [SiriMemory], completion: @escaping (Result<Void, Error>) -> Void)
   func upsertTasks(uid: String, tasks: [SiriTask], completion: @escaping (Result<Void, Error>) -> Void)
   func deleteEntities(uid: String, type: String, ids: [String], completion: @escaping (Result<Void, Error>) -> Void)
-  func wipe(completion: @escaping (Result<Void, Error>) -> Void)
+  func wipe(completion: @escaping (Result<Int64, Error>) -> Void)
   func setEnabled(enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void)
   func setCurrentScreen(route: String, entityId: String?) throws
   func publishSessionConfig(config: SiriSessionConfig, completion: @escaping (Result<Void, Error>) -> Void)
@@ -605,8 +610,8 @@ class SiriIndexApiSetup {
       wipeChannel.setMessageHandler { _, reply in
         api.wipe { result in
           switch result {
-          case .success:
-            reply(wrapResult(nil))
+          case .success(let res):
+            reply(wrapResult(res))
           case .failure(let error):
             reply(wrapError(error))
           }

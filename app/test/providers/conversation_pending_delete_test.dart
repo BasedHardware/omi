@@ -5,7 +5,21 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/gen/siri_pigeon.g.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/feedback/omi_feedback.dart';
+
+class _SiriUndoHost extends SiriIndexApi {
+  List<SiriConversation> restored = [];
+
+  @override
+  Future<void> upsertConversations(String uid, List<SiriConversation> rows) async {
+    restored = rows;
+  }
+
+  @override
+  Future<void> deleteEntities(String uid, String type, List<String> ids) async {}
+}
 
 /// D5: a conversation delete is held back long enough for its Undo toast to be real.
 void main() {
@@ -61,6 +75,21 @@ void main() {
     expect(provider.isDeletePending('a'), isFalse);
     provider.commitPendingDelete('a');
     expect(deleted, isEmpty);
+  });
+
+  test('undo restores the conversation to Siri after the optimistic index delete', () async {
+    final host = _SiriUndoHost();
+    SiriIntegration.testInstance = SiriIntegration.forTest(host, 'owner-a');
+    addTearDown(() => SiriIntegration.testInstance = null);
+    final a = _conversation('a');
+    final provider = makeProvider([a]);
+
+    provider.deleteConversationLocally(a);
+    await Future<void>.delayed(Duration.zero);
+    provider.undoDeletedConversation(a);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(host.restored.map((row) => row.id), ['a']);
   });
 
   test('committing sends the delete once and makes undo a no-op', () async {

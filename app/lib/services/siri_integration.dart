@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/pages/home/home_navigation.dart';
@@ -26,31 +27,49 @@ import 'package:omi/utils/platform/platform_manager.dart';
 class SiriIntegration extends SiriEventsApi {
   SiriIntegration._()
       : _host = SiriIndexApi(),
-        _isIOS = Platform.isIOS;
+        _isIOS = Platform.isIOS,
+        _testSessionConfig = null;
 
   /// Inject a Pigeon host for hermetic projection and account fencing tests.
-  SiriIntegration.forTest(SiriIndexApi host, String uid)
+  SiriIntegration.forTest(SiriIndexApi host, String uid,
+      {SiriSessionConfig Function(User, IdTokenResult, int)? sessionConfig})
       : _host = host,
         _isIOS = true,
-        _uid = uid;
+        _testSessionConfig = sessionConfig,
+        _uid = uid,
+        _nativeGeneration = 0;
   static final instance = SiriIntegration._();
+  @visibleForTesting
+  static SiriIntegration? testInstance;
+  static SiriIntegration get current => testInstance ?? instance;
   final SiriIndexApi _host;
   final bool _isIOS;
+  final SiriSessionConfig Function(User, IdTokenResult, int)? _testSessionConfig;
   void installEvents() {
     if (_isIOS) SiriEventsApi.setUp(this);
   }
 
   int _accountGeneration = 0;
+  int? _nativeGeneration;
+  Future<void> _nativeTail = Future<void>.value();
   String? _uid;
+
+  Future<T> _nativeOperation<T>(Future<T> Function() operation) {
+    final result = _nativeTail.then((_) => operation());
+    _nativeTail = result.then<void>((_) {}, onError: (Object _, StackTrace __) {});
+    return result;
+  }
 
   Future<void> accountChanged(User? user) async {
     if (!_isIOS) return;
     final generation = ++_accountGeneration;
     final uid = user?.uid;
-    if (uid == null || uid != _uid) {
+    if (uid == null || uid != _uid || _nativeGeneration == null) {
       _uid = null;
+      _nativeGeneration = null;
       try {
-        await _host.wipe();
+        final nativeGeneration = await _nativeOperation(_host.wipe);
+        if (generation == _accountGeneration) _nativeGeneration = nativeGeneration;
       } catch (error) {
         Logger.debug('Siri wipe failed: $error');
         return; // Never bind another account while the old snapshot remains.
@@ -68,22 +87,32 @@ class SiriIntegration extends SiriEventsApi {
       return;
     }
     final generation = _accountGeneration;
+    final nativeGeneration = _nativeGeneration;
+    if (nativeGeneration == null) return;
     try {
       final tokenResult = await user.getIdTokenResult();
       final token = tokenResult.token;
       if (generation != _accountGeneration || user.uid != _uid) return;
-      final platform = PlatformManager.instance;
-      await _host.publishSessionConfig(SiriSessionConfig(
-        uid: user.uid,
-        baseUrl: Env.apiBaseUrl ?? '',
-        profile: Env.profile.name,
-        appVersion: platform.appVersion,
-        appBuild: platform.appBuild,
-        deviceIdHash: platform.deviceIdHash,
-        token: token,
-        tokenExpiresAtMs: tokenResult.expirationTime?.millisecondsSinceEpoch,
-      ));
-      await _flushTelemetry();
+      final config = _testSessionConfig?.call(user, tokenResult, nativeGeneration) ??
+          (() {
+            final platform = PlatformManager.instance;
+            return SiriSessionConfig(
+              uid: user.uid,
+              generation: nativeGeneration,
+              baseUrl: Env.apiBaseUrl ?? '',
+              profile: Env.profile.name,
+              appVersion: platform.appVersion,
+              appBuild: platform.appBuild,
+              deviceIdHash: platform.deviceIdHash,
+              token: token,
+              tokenExpiresAtMs: tokenResult.expirationTime?.millisecondsSinceEpoch,
+            );
+          })();
+      await _nativeOperation(() async {
+        if (generation != _accountGeneration || user.uid != _uid || nativeGeneration != _nativeGeneration) return;
+        await _host.publishSessionConfig(config);
+      });
+      if (generation == _accountGeneration && user.uid == _uid) await _flushTelemetry();
     } catch (error) {
       Logger.debug('Siri session mirror failed: $error');
     }

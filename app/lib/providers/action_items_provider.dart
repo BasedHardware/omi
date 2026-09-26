@@ -32,6 +32,14 @@ typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
 });
 
 typedef DeleteActionItemRequest = Future<bool> Function(String id);
+typedef BulkDeleteActionItemsRequest = Future<List<String>?> Function(List<String> ids);
+typedef CreateActionItemRequest = Future<ActionItemWithMetadata?> Function({
+  required String description,
+  DateTime? dueAt,
+  String? conversationId,
+  bool completed,
+});
+typedef UpdateDueDateRequest = Future<ActionItemWithMetadata?> Function(String id, {DateTime? dueAt, bool clearDueAt});
 
 typedef UpdateActionItemRequest = Future<ActionItemWithMetadata?> Function(
   String id, {
@@ -45,10 +53,16 @@ class ActionItemsProvider extends ChangeNotifier {
     ActionItemsFetcher? getActionItems,
     DeleteActionItemRequest? deleteActionItemRequest,
     UpdateActionItemRequest? updateActionItemRequest,
+    BulkDeleteActionItemsRequest? bulkDeleteActionItemsRequest,
+    CreateActionItemRequest? createActionItemRequest,
+    UpdateDueDateRequest? updateDueDateRequest,
     api.ActionItemsApi? actionItemsApi,
   })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
         _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem,
         _updateActionItemRequest = updateActionItemRequest ?? api.updateActionItem,
+        _bulkDeleteActionItemsRequest = bulkDeleteActionItemsRequest ?? api.bulkDeleteActionItems,
+        _createActionItemRequest = createActionItemRequest ?? api.createActionItem,
+        _updateDueDateRequest = updateDueDateRequest ?? api.updateActionItem,
         _actionItemsApi = actionItemsApi {
     unawaited(_preload());
   }
@@ -56,6 +70,9 @@ class ActionItemsProvider extends ChangeNotifier {
   final ActionItemsFetcher _getActionItems;
   final DeleteActionItemRequest _deleteActionItemRequest;
   final UpdateActionItemRequest _updateActionItemRequest;
+  final BulkDeleteActionItemsRequest _bulkDeleteActionItemsRequest;
+  final CreateActionItemRequest _createActionItemRequest;
+  final UpdateDueDateRequest _updateDueDateRequest;
   final api.ActionItemsApi? _actionItemsApi;
   ApiViewState<List<ActionItemWithMetadata>> _listViewState = const ApiViewState(phase: ApiViewPhase.data);
   Future<void>? _initialLoad;
@@ -265,6 +282,7 @@ class ActionItemsProvider extends ChangeNotifier {
         _homeDayItems = _pendingDeletionIds.isEmpty
             ? List.of(response.actionItems)
             : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
+        unawaited(SiriIntegration.current.upsertTasks(_homeDayItems));
         _homeDayLoaded = true;
       }
     } catch (e) {
@@ -415,7 +433,7 @@ class ActionItemsProvider extends ChangeNotifier {
       _pendingDeletionIds.removeWhere((id) => !serverIds.contains(id));
     }
     _hasMore = response.hasMore;
-    unawaited(SiriIntegration.instance.upsertTasks(_actionItems));
+    unawaited(SiriIntegration.current.upsertTasks(_actionItems));
 
     if (!_showCompletedView && shouldAutoRevealCompleted(_actionItems)) {
       _showCompletedView = true;
@@ -439,6 +457,7 @@ class ActionItemsProvider extends ChangeNotifier {
       if (response != null) {
         final filtered = response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
         _actionItems.addAll(filtered);
+        unawaited(SiriIntegration.current.upsertTasks(filtered));
         _hasMore = response.hasMore;
       }
     } catch (e) {
@@ -472,6 +491,7 @@ class ActionItemsProvider extends ChangeNotifier {
         attempt.complete(ProductOutcome.failure, failure: ProductFailure.server);
         return false;
       }
+      unawaited(SiriIntegration.current.upsertTasks([success]));
       // Cancel notification if the action item is marked as completed
       if (newState == true) {
         await ActionItemNotificationHandler.cancelNotification(item.id);
@@ -479,7 +499,7 @@ class ActionItemsProvider extends ChangeNotifier {
       _pushUpdateToAppleReminder(item, completed: newState);
       attempt.complete(ProductOutcome.success);
       if (newState) {
-        unawaited(SiriIntegration.instance.donateUiAction('task', item.id));
+        unawaited(SiriIntegration.current.donateUiAction('task', item.id));
         ProductTelemetry.instance.value(
           ProductValue.taskCompleted,
           surface: ProductSurface.tasks,
@@ -519,6 +539,7 @@ class ActionItemsProvider extends ChangeNotifier {
         _actionItems[index] = updatedItem;
         notifyListeners();
       }
+      unawaited(SiriIntegration.current.upsertTasks([updatedItem]));
       _pushUpdateToAppleReminder(item, title: newDescription);
       return true;
     } catch (e) {
@@ -556,7 +577,7 @@ class ActionItemsProvider extends ChangeNotifier {
     }
 
     try {
-      final updatedItem = await api.updateActionItem(item.id, dueAt: dueDate, clearDueAt: dueDate == null);
+      final updatedItem = await _updateDueDateRequest(item.id, dueAt: dueDate, clearDueAt: dueDate == null);
 
       if (updatedItem != null) {
         final idx = _actionItems.indexWhere((i) => i.id == item.id);
@@ -564,6 +585,7 @@ class ActionItemsProvider extends ChangeNotifier {
           _actionItems[idx] = updatedItem;
           notifyListeners();
         }
+        unawaited(SiriIntegration.current.upsertTasks([updatedItem]));
         _pushUpdateToAppleReminder(item, dueDate: dueDate);
         return true;
       } else {
@@ -618,13 +640,14 @@ class ActionItemsProvider extends ChangeNotifier {
     int successCount = 0;
     for (final item in itemsToClear) {
       try {
-        final updatedItem = await api.updateActionItem(item.id, clearDueAt: true);
+        final updatedItem = await _updateDueDateRequest(item.id, clearDueAt: true);
 
         final index = _actionItems.indexWhere((i) => i.id == item.id);
         if (updatedItem != null) {
           if (index != -1) {
             _actionItems[index] = updatedItem;
           }
+          unawaited(SiriIntegration.current.upsertTasks([updatedItem]));
           successCount++;
         } else if (index != -1) {
           final originalItem = originalItemsById[item.id];
@@ -659,7 +682,6 @@ class ActionItemsProvider extends ChangeNotifier {
     // Remove immediately to prevent dismissed Dismissible from being rebuilt
     final index = _actionItems.indexWhere((actionItem) => actionItem.id == item.id);
     _actionItems.removeWhere((actionItem) => actionItem.id == item.id);
-    unawaited(SiriIntegration.instance.delete("task", item.id));
     notifyListeners();
 
     try {
@@ -670,6 +692,8 @@ class ActionItemsProvider extends ChangeNotifier {
         // On failure, remove from pending set so a future reload can re-fetch it
         _pendingDeletionIds.remove(item.id);
         _restoreDeletedItem(item, index);
+      } else {
+        unawaited(SiriIntegration.current.delete('task', item.id));
       }
       // On success, the tombstone is intentionally retained: a refresh that
       // started before the server processed the deletion may still return the
@@ -735,6 +759,8 @@ class ActionItemsProvider extends ChangeNotifier {
         _homeDayItems.insert(staged.homeIndex.clamp(0, _homeDayItems.length), staged.item);
         notifyListeners();
       }
+    } else {
+      unawaited(SiriIntegration.current.delete('task', id));
     }
     return success;
   }
@@ -768,7 +794,7 @@ class ActionItemsProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final newItem = await api.createActionItem(
+      final newItem = await _createActionItemRequest(
         description: description,
         dueAt: dueAt,
         conversationId: conversationId,
@@ -783,6 +809,7 @@ class ActionItemsProvider extends ChangeNotifier {
         }
         // Direct sync to Apple Reminders — no FCM roundtrip needed
         _syncToAppleRemindersIfNeeded(newItem);
+        unawaited(SiriIntegration.current.upsertTasks([newItem]));
         return newItem;
       } else {
         _actionItems.removeWhere((item) => item.id == optimisticItem.id);
@@ -1095,7 +1122,7 @@ class ActionItemsProvider extends ChangeNotifier {
       _deleteAppleReminderIfLinked(item);
     }
 
-    final deleted = await api.bulkDeleteActionItems(ids);
+    final deleted = await _bulkDeleteActionItemsRequest(ids);
     if (deleted == null) {
       Logger.debug('bulkDeleteActionItems returned null — rolling back local list');
       // Clear tombstones on rollback so future refreshes don't filter the
@@ -1115,6 +1142,19 @@ class ActionItemsProvider extends ChangeNotifier {
         OmiFeedback.error(context, context.l10n.bulkDeleteFailed);
       }
       return false;
+    }
+    final deletedIDs = deleted.toSet();
+    for (final id in deletedIDs) {
+      unawaited(SiriIntegration.current.delete('task', id));
+    }
+    if (deletedIDs.length != ids.length) {
+      _pendingDeletionIds.removeWhere((id) => !deletedIDs.contains(id));
+      final entries = snapshot.entries.where((entry) => !deletedIDs.contains(entry.value.id)).toList()
+        ..sort((a, b) => a.key.compareTo(b.key));
+      for (final entry in entries) {
+        _actionItems.insert(entry.key.clamp(0, _actionItems.length), entry.value);
+      }
+      notifyListeners();
     }
     return deleted.length == ids.length;
   }

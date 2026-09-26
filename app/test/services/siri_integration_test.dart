@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/memory.dart';
@@ -40,8 +43,71 @@ class RecordingSiriHost extends SiriIndexApi {
   }
 }
 
+class _RaceToken implements IdTokenResult {
+  @override
+  String? get token => 'fake-token';
+  @override
+  DateTime? get expirationTime => DateTime.now().add(const Duration(minutes: 5));
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _RaceUser implements User {
+  @override
+  String get uid => 'owner-race';
+  @override
+  Future<IdTokenResult> getIdTokenResult([bool forceRefresh = false]) async => _RaceToken();
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _RaceHost extends SiriIndexApi {
+  final publishStarted = Completer<void>();
+  final releasePublish = Completer<void>();
+  String? owner;
+  int generation = 0;
+
+  @override
+  Future<void> publishSessionConfig(SiriSessionConfig config) async {
+    publishStarted.complete();
+    await releasePublish.future;
+    owner = config.uid;
+  }
+
+  @override
+  Future<int> wipe() async {
+    owner = null;
+    return ++generation;
+  }
+
+  @override
+  Future<List<SiriTelemetryRecord>> takeTelemetry() async => [];
+}
+
 void main() {
   final now = DateTime.now();
+
+  test('sign-out ordered after an in-flight native session publication', () async {
+    final host = _RaceHost();
+    final siri = SiriIntegration.forTest(host, 'owner-race',
+        sessionConfig: (user, token, generation) => SiriSessionConfig(
+              uid: user.uid,
+              generation: generation,
+              baseUrl: 'http://127.0.0.1:8977',
+              profile: 'local_dev',
+              appVersion: 'test',
+              appBuild: '0',
+              deviceIdHash: 'test',
+              token: token.token,
+              tokenExpiresAtMs: token.expirationTime?.millisecondsSinceEpoch,
+            ));
+    final signingIn = siri.accountChanged(_RaceUser());
+    await host.publishStarted.future.timeout(const Duration(seconds: 5));
+    final signingOut = siri.accountChanged(null);
+    host.releasePublish.complete();
+    await Future.wait([signingIn, signingOut]);
+    expect(host.owner, isNull);
+  });
 
   test('conversation projection sorts newest and excludes old or unfinished rows', () async {
     final host = RecordingSiriHost();

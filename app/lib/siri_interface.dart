@@ -39,6 +39,7 @@ class SiriTask {
 
 class SiriSessionConfig {
   String uid;
+  int generation;
   String baseUrl;
   String profile;
   String appVersion;
@@ -46,8 +47,8 @@ class SiriSessionConfig {
   String deviceIdHash;
   String? token;
   int? tokenExpiresAtMs;
-  SiriSessionConfig(this.uid, this.baseUrl, this.profile, this.appVersion, this.appBuild, this.deviceIdHash, this.token,
-      this.tokenExpiresAtMs);
+  SiriSessionConfig(this.uid, this.generation, this.baseUrl, this.profile, this.appVersion, this.appBuild,
+      this.deviceIdHash, this.token, this.tokenExpiresAtMs);
 }
 
 class SiriTelemetryRecord {
@@ -70,7 +71,7 @@ abstract class SiriIndexApi {
   @async
   void deleteEntities(String uid, String type, List<String> ids);
   @async
-  void wipe();
+  int wipe();
   @async
   void setEnabled(bool enabled);
   void setCurrentScreen(String route, String? entityId);

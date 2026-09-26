@@ -910,7 +910,7 @@ class ConversationProvider extends ChangeNotifier {
       searchedConversations = conversations;
     }
     _groupConversationsByDateWithoutNotify();
-    unawaited(SiriIntegration.instance.upsertConversations(conversations));
+    unawaited(SiriIntegration.current.upsertConversations(conversations));
     // Keep pagination blocked until lifecycle reconciliation and the final
     // list assignment are complete. [getMoreConversationsFromServer] uses
     // this loading state as its serialization guard.
@@ -1479,7 +1479,7 @@ class ConversationProvider extends ChangeNotifier {
   /// [undoDeletedConversation] restores it first. The one delete path for list, bulk and detail.
   void deleteConversationLocally(ServerConversation conversation, [DateTime? date]) {
     memoriesToDelete[conversation.id] = conversation;
-    unawaited(SiriIntegration.instance.delete("conversation", conversation.id));
+    unawaited(SiriIntegration.current.delete("conversation", conversation.id));
     _pendingDeleteTimers.remove(conversation.id)?.cancel();
     _pendingDeleteTimers[conversation.id] = Timer(pendingDeleteWindow, () => commitPendingDelete(conversation.id));
     conversations.removeWhere((element) => element.id == conversation.id);
@@ -1569,6 +1569,7 @@ class ConversationProvider extends ChangeNotifier {
       conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     }
     groupConversationsByDate();
+    unawaited(SiriIntegration.current.upsertConversations([conversation]));
   }
 
   @override
@@ -1589,7 +1590,6 @@ class ConversationProvider extends ChangeNotifier {
   Map<ServerConversation, List<ActionItem>> get conversationsWithActiveActionItems {
     final Map<ServerConversation, List<ActionItem>> result = {};
     final List<ServerConversation> sourceList = conversations;
-
     for (final convo in sourceList) {
       if (convo.discarded && !showDiscardedConversations) continue;
 

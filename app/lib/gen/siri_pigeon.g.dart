@@ -290,6 +290,7 @@ class SiriTask {
 class SiriSessionConfig {
   SiriSessionConfig({
     required this.uid,
+    required this.generation,
     required this.baseUrl,
     required this.profile,
     required this.appVersion,
@@ -300,6 +301,8 @@ class SiriSessionConfig {
   });
 
   String uid;
+
+  int generation;
 
   String baseUrl;
 
@@ -318,6 +321,7 @@ class SiriSessionConfig {
   List<Object?> _toList() {
     return <Object?>[
       uid,
+      generation,
       baseUrl,
       profile,
       appVersion,
@@ -335,13 +339,14 @@ class SiriSessionConfig {
     result as List<Object?>;
     return SiriSessionConfig(
       uid: result[0]! as String,
-      baseUrl: result[1]! as String,
-      profile: result[2]! as String,
-      appVersion: result[3]! as String,
-      appBuild: result[4]! as String,
-      deviceIdHash: result[5]! as String,
-      token: result[6] as String?,
-      tokenExpiresAtMs: result[7] as int?,
+      generation: result[1]! as int,
+      baseUrl: result[2]! as String,
+      profile: result[3]! as String,
+      appVersion: result[4]! as String,
+      appBuild: result[5]! as String,
+      deviceIdHash: result[6]! as String,
+      token: result[7] as String?,
+      tokenExpiresAtMs: result[8] as int?,
     );
   }
 
@@ -354,7 +359,7 @@ class SiriSessionConfig {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(uid, other.uid) && _deepEquals(baseUrl, other.baseUrl) && _deepEquals(profile, other.profile) && _deepEquals(appVersion, other.appVersion) && _deepEquals(appBuild, other.appBuild) && _deepEquals(deviceIdHash, other.deviceIdHash) && _deepEquals(token, other.token) && _deepEquals(tokenExpiresAtMs, other.tokenExpiresAtMs);
+    return _deepEquals(uid, other.uid) && _deepEquals(generation, other.generation) && _deepEquals(baseUrl, other.baseUrl) && _deepEquals(profile, other.profile) && _deepEquals(appVersion, other.appVersion) && _deepEquals(appBuild, other.appBuild) && _deepEquals(deviceIdHash, other.deviceIdHash) && _deepEquals(token, other.token) && _deepEquals(tokenExpiresAtMs, other.tokenExpiresAtMs);
   }
 
   @override
@@ -554,7 +559,7 @@ class SiriIndexApi {
     ;
   }
 
-  Future<void> wipe() async {
+  Future<int> wipe() async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.omi_siri.SiriIndexApi.wipe$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
@@ -564,12 +569,13 @@ class SiriIndexApi {
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
-    _extractReplyValueOrThrow(
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
         pigeonVar_replyList,
         pigeonVar_channelName,
-        isNullValid: true,
+        isNullValid: false,
     )
     ;
+    return pigeonVar_replyValue! as int;
   }
 
   Future<void> setEnabled(bool enabled) async {

@@ -8,6 +8,18 @@ final class SiriBridge: SiriIndexApi {
     private var events: SiriEventsApi?
     private var currentActivity: NSUserActivity?
 
+    func retryPendingWipeOnLaunch() {
+        Task {
+            do {
+                if try await SiriSnapshotStore.shared.retryPendingWipe() {
+                    NSLog("[SiriIndex] Pending account wipe retried successfully on launch")
+                }
+            } catch {
+                NSLog("[SiriIndex] Pending account wipe will retry on the next launch: %@", String(describing: error))
+            }
+        }
+    }
+
     func attach(messenger: FlutterBinaryMessenger) {
         events = SiriEventsApi(binaryMessenger: messenger)
         SiriIndexApiSetup.setUp(binaryMessenger: messenger, api: self)
@@ -31,17 +43,17 @@ final class SiriBridge: SiriIndexApi {
     func deleteEntities(uid: String, type: String, ids: [String], completion: @escaping (Result<Void, Error>) -> Void) {
         complete({ try await SiriSnapshotStore.shared.delete(type: type, ids: ids, uid: uid) }, completion: completion)
     }
-    func wipe(completion: @escaping (Result<Void, Error>) -> Void) {
-        complete({ try await SiriSnapshotStore.shared.wipe() }, completion: completion)
+    func wipe(completion: @escaping (Result<Int64, Error>) -> Void) {
+        Task {
+            do { completion(.success(try await SiriSnapshotStore.shared.wipeForAccountTransition())) }
+            catch { completion(.failure(error)) }
+        }
     }
     func setEnabled(enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void) {
         complete({ try await SiriSnapshotStore.shared.setEnabled(enabled) }, completion: completion)
     }
     func publishSessionConfig(config: SiriSessionConfig, completion: @escaping (Result<Void, Error>) -> Void) {
-        complete({
-            try await SiriSnapshotStore.shared.bind(uid: config.uid)
-            try SiriSession.shared.publish(config)
-        }, completion: completion)
+        complete({ try await SiriSnapshotStore.shared.publishSession(config) }, completion: completion)
     }
     func setCurrentScreen(route: String, entityId: String?) throws {
         currentActivity?.resignCurrent()

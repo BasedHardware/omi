@@ -23,7 +23,7 @@ enum SiriDebugProbe {
                 NSLog("[SiriProbe] loopback URL missing; signed-out path only")
                 return
             }
-            let config = SiriSessionConfig(uid: "siri-probe", baseUrl: raw, profile: "local_dev",
+            let config = SiriSessionConfig(uid: "siri-probe", generation: 0, baseUrl: raw, profile: "local_dev",
                 appVersion: "probe", appBuild: "0", deviceIdHash: "probe-device",
                 token: "fake-siri-probe-token",
                 tokenExpiresAtMs: Int64(Date().addingTimeInterval(300).timeIntervalSince1970 * 1000))
@@ -104,11 +104,24 @@ enum SiriDebugProbe {
                     }
                     NSLog("[SiriProbe] deletedMemoryQuery=%d deletedSpotlightCount=%d",
                           SiriSnapshotStore.shared.memories(ids: [row.id]).count, deletedIndexCount)
+                    let disabledRow = SiriMemory(id: "probe-disabled", content: "probe-disabled-index-2026",
+                        createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
+                    try await SiriSnapshotStore.shared.upsert([disabledRow], uid: config.uid)
+                    try await SiriSnapshotStore.shared.setEnabled(false)
+                    do {
+                        try await SiriSnapshotStore.shared.delete(type: "memory", ids: [disabledRow.id], uid: config.uid)
+                        try await SiriSnapshotStore.shared.setEnabled(true)
+                        NSLog("[SiriProbe] disabledDelete=%@",
+                              SiriSnapshotStore.shared.memories(ids: [disabledRow.id]).isEmpty ? "PASS" : "FAIL")
+                    } catch {
+                        NSLog("[SiriProbe] disabledDelete=FAIL error=%@", String(describing: error))
+                        try? await SiriSnapshotStore.shared.setEnabled(true)
+                    }
                     let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")!
                     defaults.removeObject(forKey: "siri.snapshot.owner")
                     NSLog("[SiriProbe] ownerMissingVisible=%d", SiriSnapshotStore.shared.memories(ids: nil).count)
                     try await SiriSnapshotStore.shared.bind(uid: "siri-probe-next")
-                    let next = SiriSessionConfig(uid: "siri-probe-next", baseUrl: raw, profile: "local_dev",
+                    let next = SiriSessionConfig(uid: "siri-probe-next", generation: 0, baseUrl: raw, profile: "local_dev",
                         appVersion: "probe", appBuild: "0", deviceIdHash: "probe-device",
                         token: "fake-siri-probe-token",
                         tokenExpiresAtMs: Int64(Date().addingTimeInterval(300).timeIntervalSince1970 * 1000))
@@ -168,6 +181,26 @@ enum SiriDebugProbe {
                         }
                     }
                     OmiNativeAPI.testSession = nil
+                    SiriSnapshotStore.shared.simulateIndexDeleteFailure = true
+                    do { try await SiriSnapshotStore.shared.wipe() }
+                    catch { NSLog("[SiriProbe] injectedWipeFailure=observed") }
+                    let pending = defaults.stringArray(forKey: "siri.pending.wipe.owners") ?? []
+                    NSLog("[SiriProbe] failedWipeOwnerRecoverable=%@",
+                          pending.contains(next.uid) ? "PASS" : "FAIL")
+                    SiriSnapshotStore.shared.simulateIndexDeleteFailure = false
+                    if ProcessInfo.processInfo.arguments.contains("-omi-siri-probe-leave-pending-wipe") {
+                        NSLog("[SiriProbe] leavingPendingWipeForRelaunch=YES")
+                        return
+                    }
+                    let staleAccepted = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                        SiriBridge.shared.wipe { _ in
+                            SiriBridge.shared.publishSessionConfig(config: next) { result in
+                                if case .success = result { continuation.resume(returning: true) }
+                                else { continuation.resume(returning: false) }
+                            }
+                        }
+                    }
+                    NSLog("[SiriProbe] stalePublishAfterWipe=%@", staleAccepted ? "FAIL" : "PASS")
                 }
             } catch {
                 NSLog("[SiriProbe] request=failed type=%@", String(describing: error))

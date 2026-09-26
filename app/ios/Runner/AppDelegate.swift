@@ -9,7 +9,6 @@ import WidgetKit
 import BackgroundTasks
 
 extension FlutterError: Error {}
-
 // MARK: - Quick Actions Icon Patcher
 
 /// Observes UIApplication.shortcutItems via KVO and replaces template-image icons
@@ -110,6 +109,7 @@ final class QuickActionsIconPatcher: NSObject {
     }
     UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
     let launched = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    SiriBridge.shared.retryPendingWipeOnLaunch()
     BGTaskScheduler.shared.cancel(
       taskRequestWithIdentifier: AppDelegate.unusedForegroundTaskRefreshIdentifier
     )
