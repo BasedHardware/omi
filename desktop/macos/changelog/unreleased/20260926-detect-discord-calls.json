@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Discord calls, and other call apps that use the microphone from a helper process, not being detected as meetings"
+}
