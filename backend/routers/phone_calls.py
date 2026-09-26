@@ -145,10 +145,10 @@ def verify_phone_number(
                     detail="A verification call is already in progress for this number. Please answer the call and enter the code.",
                 )
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to start verification: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to start verification. Please try again.")
     except Exception as e:
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to start verification: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to start verification. Please try again.")
 
 
 @router.post("/v1/phone/numbers/verify/check", response_model=CheckVerificationResponse, tags=['phone-calls'])
@@ -238,8 +238,8 @@ def get_phone_token(uid: str = Depends(auth.get_current_user_uid)):
     try:
         token_data = generate_access_token(uid)
         return TokenResponse(**token_data)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate token: {str(e)}")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to generate phone access token. Please try again.")
 
 
 # ************************************************
