@@ -9,8 +9,8 @@ persists the recording identity and its outbound event sequence.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Literal, TypedDict
+from datetime import datetime, timedelta, timezone
+from typing import Any, Literal, Mapping, TypedDict
 
 from google.cloud import firestore
 
@@ -21,6 +21,7 @@ RECORDING_SESSIONS_COLLECTION = 'recording_sessions'
 CONVERSATIONS_COLLECTION = 'conversations'
 RECORDING_SESSION_SCHEMA_VERSION = 1
 LIFECYCLE_ENVELOPE_VERSION = 1
+RECORDING_SESSION_LEASE_DURATION = timedelta(minutes=5)
 RecordingPhase = Literal['in_progress', 'processing', 'completed', 'failed', 'discarded']
 
 _PHASE_ORDER: dict[str, int] = {
@@ -83,35 +84,71 @@ def _binding(data: dict[str, Any], recording_session_id: str, *, mapping_conflic
 def _create_or_get_recording_session_txn(
     transaction: Any,
     session_ref: Any,
+    conversations_collection: Any,
     uid: str,
     recording_session_id: str,
     proposed_conversation_id: str,
     now: datetime,
-) -> RecordingSessionBinding:
+    include_conversation_snapshot: bool,
+) -> dict[str, Any]:
     snapshot = session_ref.get(transaction=transaction)
-    if getattr(snapshot, 'exists', False):
+    session_exists = bool(getattr(snapshot, 'exists', False))
+    if session_exists:
         current = snapshot.to_dict() or {}
         if current.get('uid') != uid or current.get('recording_session_id') != recording_session_id:
             raise ValueError('recording session identity does not match its document binding')
-        return _binding(
+        binding = _binding(
             current,
             recording_session_id,
             mapping_conflict=current.get('conversation_id') != proposed_conversation_id,
         )
+    else:
+        current = {
+            'schema_version': RECORDING_SESSION_SCHEMA_VERSION,
+            'uid': uid,
+            'recording_session_id': recording_session_id,
+            'conversation_id': proposed_conversation_id,
+            'lifecycle_version': LIFECYCLE_ENVELOPE_VERSION,
+            'lifecycle_phase': 'in_progress',
+            'lifecycle_sequence': 0,
+            'created_at': now,
+            'updated_at': now,
+            'lease_expires_at': now + RECORDING_SESSION_LEASE_DURATION,
+        }
+        binding = _binding(current, recording_session_id, mapping_conflict=False)
 
-    session = {
-        'schema_version': RECORDING_SESSION_SCHEMA_VERSION,
-        'uid': uid,
-        'recording_session_id': recording_session_id,
-        'conversation_id': proposed_conversation_id,
-        'lifecycle_version': LIFECYCLE_ENVELOPE_VERSION,
-        'lifecycle_phase': 'in_progress',
-        'lifecycle_sequence': 0,
-        'created_at': now,
-        'updated_at': now,
-    }
-    transaction.create(session_ref, session)
-    return _binding(session, recording_session_id, mapping_conflict=False)
+    # Recovery admission discovers the live lease through this marker. Read it
+    # before either write, then commit marker + session binding atomically so a
+    # sweep can never observe a durable live session whose conversation is
+    # still unfenced.
+    conversation_ref = conversations_collection.document(binding['conversation_id'])
+    conversation_snapshot = conversation_ref.get(transaction=transaction)
+    conversation = conversation_snapshot.to_dict() or {} if getattr(conversation_snapshot, 'exists', False) else None
+
+    if session_exists:
+        if (
+            current.get('conversation_id') == proposed_conversation_id
+            and str(current.get('lifecycle_phase') or 'in_progress') == 'in_progress'
+        ):
+            transaction.update(
+                session_ref,
+                {'lease_expires_at': now + RECORDING_SESSION_LEASE_DURATION, 'updated_at': now},
+            )
+    else:
+        transaction.create(session_ref, current)
+
+    if conversation is not None:
+        external_data = conversation.get('external_data')
+        marker = dict(external_data) if isinstance(external_data, Mapping) else {}
+        if marker.get('recording_session_id') != recording_session_id:
+            marker['recording_session_id'] = recording_session_id
+            transaction.update(conversation_ref, {'external_data': marker})
+            conversation['external_data'] = marker
+    result: dict[str, Any] = dict(binding)
+    if include_conversation_snapshot:
+        result['conversation_snapshot'] = conversation
+        result['conversation_snapshot_known'] = True
+    return result
 
 
 def create_or_get_recording_session(
@@ -120,7 +157,8 @@ def create_or_get_recording_session(
     proposed_conversation_id: str,
     *,
     firestore_client: Any = None,
-) -> RecordingSessionBinding:
+    include_conversation_snapshot: bool = False,
+) -> dict[str, Any]:
     """Atomically bind a session to exactly one canonical conversation ID."""
     if not uid or not recording_session_id or not proposed_conversation_id:
         raise ValueError('uid, recording_session_id, and proposed_conversation_id are required')
@@ -130,9 +168,60 @@ def create_or_get_recording_session(
     return transactional(
         transaction,
         _session_ref(client, uid, recording_session_id),
+        client.collection('users').document(uid).collection(CONVERSATIONS_COLLECTION),
         uid,
         recording_session_id,
         proposed_conversation_id,
+        _now(),
+        include_conversation_snapshot,
+    )
+
+
+def _renew_recording_session_lease_txn(
+    transaction: Any,
+    session_ref: Any,
+    uid: str,
+    recording_session_id: str,
+    conversation_id: str,
+    now: datetime,
+) -> bool:
+    snapshot = session_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return False
+    current = snapshot.to_dict() or {}
+    if (
+        current.get('uid') != uid
+        or current.get('recording_session_id') != recording_session_id
+        or current.get('conversation_id') != conversation_id
+        or str(current.get('lifecycle_phase') or 'in_progress') != 'in_progress'
+    ):
+        return False
+    transaction.update(
+        session_ref,
+        {'lease_expires_at': now + RECORDING_SESSION_LEASE_DURATION, 'updated_at': now},
+    )
+    return True
+
+
+def renew_recording_session_lease(
+    uid: str,
+    recording_session_id: str,
+    conversation_id: str,
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    """Renew a live session's lease against its identity and phase fence."""
+    if not uid or not recording_session_id or not conversation_id:
+        return False
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_renew_recording_session_lease_txn)
+    return transactional(
+        transaction,
+        _session_ref(client, uid, recording_session_id),
+        uid,
+        recording_session_id,
+        conversation_id,
         _now(),
     )
 
