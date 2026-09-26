@@ -341,7 +341,7 @@ class ListenPusherSession:
                     if prev.start_wall is None or nxt.start_wall is None:
                         return True
                     projected_prev_end = prev.start_wall + len(prev.data) / (effective_rate * 2)
-                    return nxt.start_wall - projected_prev_end <= AUDIO_RUN_GAP_TOLERANCE_SECONDS
+                    return abs(nxt.start_wall - projected_prev_end) <= AUDIO_RUN_GAP_TOLERANCE_SECONDS
 
                 async def send_group(runs: List[AudioRun]) -> None:
                     nonlocal sent_runs
