@@ -2466,12 +2466,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Yksityiskohtaiset diagnostiikkaviestit';
 
   @override
-  String get autoCreateSpeakers => 'Luo puhujat automaattisesti';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Luo automaattisesti kun nimi havaitaan';
-
-  @override
   String get followUpQuestions => 'Jatkokysymykset';
 
   @override
@@ -11137,9 +11131,6 @@ class AppLocalizationsFi extends AppLocalizations {
       'Transkriptiot eivät ole käytettävissä, tallennus jatkuu laitteella ja käsitellään myöhemmin';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transkriptio ei käytettävissä · tallennetaan laitteelle';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Jonossa olevat transkriptiot $pending/$total';
   }
@@ -11192,6 +11183,44 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Riipuksen ääni ei tule perille sovellukseen — korjaa napauttamalla';
+
+  @override
+  String get captureNotTranscribing => 'Ei litterointia';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Ääni tallennettu, litteroidaan myöhemmin';
+
+  @override
+  String get captureStillRecording => 'Tallennus jatkuu';
+
+  @override
+  String get captureMicInUseElsewhere => 'Toinen sovellus käyttää mikrofonia';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Puhelu tai toinen sovellus otti mikrofonin, joten Omi ei kuule juuri nyt. Omi jatkaa itsestään, kun mikrofoni vapautuu. Kaikki tätä ennen tallennettu on tallessa.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Omaa puheentunnistuspalveluasi ei tavoiteta. Omi säilyttää äänen tässä puhelimessa ja lähettää sen, kun palvelu palaa. Mitään ei menetetä.';
+
+  @override
+  String get captureStarting => 'Käynnistetään…';
+
+  @override
+  String get capturePhoneStorageFull => 'Puhelimen tallennustila täynnä';
+
+  @override
+  String get captureStorageAlmostFull => 'Tallennustila melkein täynnä';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name ja muut';
+  }
 
   @override
   String get goodMorning => 'Hyvää huomenta';

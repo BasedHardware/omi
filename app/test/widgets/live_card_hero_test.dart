@@ -32,7 +32,7 @@ void main() {
       );
 
   testWidgets('a wearable card carries the orb hero, and it flies into the Live orb', (tester) async {
-    await tester.pumpWidget(app(const LiveCaptureCard(source: 'omi', stateLabel: 'Listening', paused: false)));
+    await tester.pumpWidget(app(const LiveCaptureCard(source: 'omi', status: 'Listening', paused: false)));
     final cardHero = find.byWidgetPredicate((w) => w is Hero && w.tag == kLiveOrbHeroTag);
     expect(cardHero, findsOneWidget);
     expect(tester.getSize(cardHero), const Size(44, 44));
@@ -50,7 +50,7 @@ void main() {
   });
 
   testWidgets('a phone card has no orb to fly', (tester) async {
-    await tester.pumpWidget(app(const LiveCaptureCard(source: 'phone', stateLabel: 'Listening', paused: false)));
+    await tester.pumpWidget(app(const LiveCaptureCard(source: 'phone', status: 'Listening', paused: false)));
     expect(find.byWidgetPredicate((w) => w is Hero && w.tag == kLiveOrbHeroTag), findsNothing);
   });
 }

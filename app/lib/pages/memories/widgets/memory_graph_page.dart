@@ -226,6 +226,8 @@ class MemoryGraphPage extends StatefulWidget {
   final bool showShareButton;
   final bool trackOpenEvent;
   final double initialZoom;
+  @visibleForTesting
+  final Future<Map<String, dynamic>> Function() loadGraph;
 
   const MemoryGraphPage({
     super.key,
@@ -234,6 +236,7 @@ class MemoryGraphPage extends StatefulWidget {
     this.showShareButton = true,
     this.trackOpenEvent = true,
     this.initialZoom = 1.0,
+    this.loadGraph = KnowledgeGraphApi.getKnowledgeGraph,
   });
 
   @override
@@ -318,7 +321,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
 
     try {
-      final data = await KnowledgeGraphApi.getKnowledgeGraph();
+      final data = await widget.loadGraph();
       if (!mounted) return;
 
       final newNodes = data['nodes'] as List<dynamic>? ?? [];
@@ -583,7 +586,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
 
     if (_error != null) {
-      return SingleChildScrollView(child: OmiErrorState(message: _error!, onRetry: _loadGraph));
+      return SafeArea(
+        child: SingleChildScrollView(child: OmiErrorState(message: _error!, onRetry: _loadGraph)),
+      );
     }
 
     // Check if graph is effectively empty (only has user node or truly empty)
@@ -591,13 +596,21 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         simulation.nodes.isEmpty || (simulation.nodes.length == 1 && simulation.nodes.first.id == 'user-node');
 
     if (isEmpty) {
+      final emptyState = OmiEmptyState(
+        icon: Icons.hub_outlined,
+        title: context.l10n.noKnowledgeGraphYet,
+        message: context.l10n.knowledgeGraphWillBuildAutomatically,
+      );
+      if (!widget.embedded) {
+        return SafeArea(child: emptyState);
+      }
       // Scaled down to fit when embedded in the small Home card.
-      return FittedBox(
-        fit: BoxFit.scaleDown,
-        child: OmiEmptyState(
-          icon: Icons.hub_outlined,
-          title: context.l10n.noKnowledgeGraphYet,
-          message: context.l10n.knowledgeGraphWillBuildAutomatically,
+      return LayoutBuilder(
+        builder: (context, constraints) => Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: SizedBox(width: constraints.maxWidth, child: emptyState),
+          ),
         ),
       );
     }

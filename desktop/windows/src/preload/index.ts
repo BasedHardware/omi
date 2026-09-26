@@ -21,7 +21,6 @@ import type {
   CaptureCommand,
   CaptureEvent,
   ExportMemory,
-  GoogleSource,
   KnowledgeGraph,
   OnboardingGraphNode,
   OnboardingGraphEdge,
@@ -187,13 +186,6 @@ const omi: OmiBridgeApi = {
   kgExecuteSql: (sql) => ipcRenderer.invoke('kg:executeSql', sql),
   readStickyNotes: () => ipcRenderer.invoke('integrations:stickyNotes:read'),
   signInWithProvider: (provider: SignInProvider) => ipcRenderer.invoke('auth:signIn', provider),
-  googleConnect: () => ipcRenderer.invoke('integrations:google:connect'),
-  googleDisconnect: () => ipcRenderer.invoke('integrations:google:disconnect'),
-  googleStatus: () => ipcRenderer.invoke('integrations:google:status'),
-  googleGmailFetchNew: () => ipcRenderer.invoke('integrations:google:gmailFetchNew'),
-  googleCalendarFetchNew: () => ipcRenderer.invoke('integrations:google:calendarFetchNew'),
-  googleMarkProcessed: (source: GoogleSource, ids: string[]) =>
-    ipcRenderer.invoke('integrations:google:markProcessed', source, ids),
   // --- Gmail session connector (Option B): Omi-owned login window + own-session
   // cookie replay. connect opens the login window and resolves once signed in. ---
   gmailSessionConnect: (email?: string) =>

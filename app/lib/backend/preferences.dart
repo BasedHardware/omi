@@ -210,10 +210,7 @@ class SharedPreferencesUtil {
   }
 
   static Future<void> _applyNativeCapturePolicy(CapturePolicy policy) async {
-    await _invokeCapturePolicyBridge('setMuted', <String, Object>{
-      'muted': policy.muted,
-      'revision': policy.revision,
-    });
+    await _invokeCapturePolicyBridge('setMuted', <String, Object>{'muted': policy.muted, 'revision': policy.revision});
   }
 
   static Future<Object?> _invokeCapturePolicyBridge(String method, Map<String, Object> arguments) async {
@@ -252,10 +249,9 @@ class SharedPreferencesUtil {
     // Observe errors immediately even if an older durable write holds the queue.
     // Defer reporting until this intent has also attempted its durable deny.
     final nativeMute = muted
-        ? _applyNativeCapturePolicy(requested).then<(Object, StackTrace)?>(
-            (_) => null,
-            onError: (Object error, StackTrace stack) => (error, stack),
-          )
+        ? _applyNativeCapturePolicy(
+            requested,
+          ).then<(Object, StackTrace)?>((_) => null, onError: (Object error, StackTrace stack) => (error, stack))
         : Future<(Object, StackTrace)?>.value();
 
     final operation = _capturePolicyQueue.then((_) async {
@@ -654,17 +650,9 @@ class SharedPreferencesUtil {
 
   set webhookAudioBytesDelay(String value) => saveString('webhookAudioBytesDelay', value);
 
-  set devModeJoanFollowUpEnabled(bool value) => saveBool('devModeJoanFollowUpEnabled', value);
-
-  bool get devModeJoanFollowUpEnabled => getBool('devModeJoanFollowUpEnabled');
-
   set transcriptionDiagnosticEnabled(bool value) => saveBool('transcriptionDiagnosticEnabled', value);
 
   bool get transcriptionDiagnosticEnabled => getBool('transcriptionDiagnosticEnabled');
-
-  set autoCreateSpeakersEnabled(bool value) => saveBool('autoCreateSpeakersEnabled', value);
-
-  bool get autoCreateSpeakersEnabled => getBool('autoCreateSpeakersEnabled', defaultValue: true);
 
   // Goal tracker widget on homepage - default is true (experimental feature)
   set showGoalTrackerEnabled(bool value) => saveBool('showGoalTrackerEnabled', value);
@@ -1021,9 +1009,10 @@ class SharedPreferencesUtil {
     final ownerUid = uid;
     if (ownerUid.isEmpty) return [];
     _scopeLegacyUserData(ownerUid);
-    return _decodeCachedList(_userScopedKey('pendingMemories', ownerUid), (json) => Memory.fromJson(json))
-        .where((memory) => memory.uid == ownerUid)
-        .toList();
+    return _decodeCachedList(
+      _userScopedKey('pendingMemories', ownerUid),
+      (json) => Memory.fromJson(json),
+    ).where((memory) => memory.uid == ownerUid).toList();
   }
 
   set pendingMemories(List<Memory> value) {

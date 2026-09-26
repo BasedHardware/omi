@@ -605,6 +605,7 @@ export interface AudioDownloadPendingResponse {
 }
 
 export interface AudioFile {
+  chunk_spans?: Array<ChunkSpan> | null;
   chunk_timestamps: Array<number>;
   conversation_id: string;
   duration: number;
@@ -626,6 +627,10 @@ export interface AudioPrecacheResponse {
   audio_file_count?: number | null;
   message?: string | null;
   status: string;
+}
+
+export interface AudioTimelineProvenance {
+  version: number;
 }
 
 export interface AudioUrlsResponse {
@@ -1055,6 +1060,11 @@ export interface CheckVerificationResponse {
   verified: boolean;
 }
 
+export interface ChunkSpan {
+  end: number;
+  start: number;
+}
+
 export interface CleanerMemory {
   archive_default_visible?: boolean | null;
   category: MemoryCategory;
@@ -1141,6 +1151,7 @@ export interface Conversation {
   app_id?: string | null;
   apps_results?: Array<AppResult>;
   audio_files?: Array<AudioFile>;
+  audio_timeline?: AudioTimelineProvenance | null;
   calendar_event?: CalendarEventLink | null;
   call_id?: string | null;
   capture_group?: CaptureGroup | null;
@@ -1172,6 +1183,7 @@ export interface Conversation {
   processing_state?: ConversationProcessingState | null;
   screenshot_sharing_enabled?: boolean;
   source?: ConversationSource | null;
+  speaker_resolution?: ConversationSpeakers | null;
   starred?: boolean;
   started_at: string | null;
   status?: ConversationStatus | null;
@@ -1324,6 +1336,7 @@ export interface ConversationSearchItem {
   app_id?: string | null;
   apps_results?: Array<AppResult>;
   audio_files?: Array<AudioFile>;
+  audio_timeline?: AudioTimelineProvenance | null;
   calendar_event?: CalendarEventLink | null;
   call_id?: string | null;
   capture_group?: CaptureGroup | null;
@@ -1356,6 +1369,7 @@ export interface ConversationSearchItem {
   processing_state?: ConversationProcessingState | null;
   screenshot_sharing_enabled?: boolean;
   source?: ConversationSource | null;
+  speaker_resolution?: ConversationSpeakers | null;
   starred?: boolean;
   started_at: string | null;
   status?: ConversationStatus | null;
@@ -1371,6 +1385,12 @@ export interface ConversationSearchItem {
 }
 
 export type ConversationSource = "friend" | "omi" | "fieldy" | "bee" | "plaud" | "frame" | "friend_com" | "apple_watch" | "phone" | "phone_call" | "desktop" | "openglass" | "screenpipe" | "workflow" | "sdcard" | "external_integration" | "limitless" | "rayban_meta" | "onboarding" | "unknown";
+
+export interface ConversationSpeakers {
+  participant_speaker_ids?: Array<number>;
+  status: "resolved" | "capture" | "unavailable";
+  version?: number;
+}
 
 export type ConversationStatus = "in_progress" | "processing" | "merging" | "completed" | "failed";
 
@@ -5173,6 +5193,7 @@ export interface OmiApiSchemas {
   "AudioFile": AudioFile;
   "AudioFileUrlInfo": AudioFileUrlInfo;
   "AudioPrecacheResponse": AudioPrecacheResponse;
+  "AudioTimelineProvenance": AudioTimelineProvenance;
   "AudioUrlsResponse": AudioUrlsResponse;
   "AuthStep": AuthStep;
   "AvailableLanguage": AvailableLanguage;
@@ -5242,6 +5263,7 @@ export interface OmiApiSchemas {
   "ChatUsageQuota": ChatUsageQuota;
   "CheckVerificationRequest": CheckVerificationRequest;
   "CheckVerificationResponse": CheckVerificationResponse;
+  "ChunkSpan": ChunkSpan;
   "CleanerMemory": CleanerMemory;
   "ClickUpListsResponse": ClickUpListsResponse;
   "ClickUpSpacesResponse": ClickUpSpacesResponse;
@@ -5276,6 +5298,7 @@ export interface OmiApiSchemas {
   "ConversationScreenFrameSet": ConversationScreenFrameSet;
   "ConversationSearchItem": ConversationSearchItem;
   "ConversationSource": ConversationSource;
+  "ConversationSpeakers": ConversationSpeakers;
   "ConversationStatus": ConversationStatus;
   "ConversationStatusResponse": ConversationStatusResponse;
   "ConversationSuggestedAppsResponse": ConversationSuggestedAppsResponse;
