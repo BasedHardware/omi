@@ -459,11 +459,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         final nothingToShow = categorizedItems.values.every((l) => l.isEmpty) &&
             (showCompleted || !provider.actionItems.any((item) => item.completed));
         final apiPhase = provider.apiViewState.phase;
+        // An empty list is the designed empty state below (keyed omi.action_items.empty), not a
+        // status line; the typed status is for what went wrong.
         final showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
             apiPhase == ApiViewPhase.terminal ||
-            apiPhase == ApiViewPhase.authenticationRequired ||
-            apiPhase == ApiViewPhase.empty;
+            apiPhase == ApiViewPhase.authenticationRequired;
 
         return Scaffold(
           body: Stack(
@@ -476,13 +477,17 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     OmiHaptics.medium();
                     return provider.forceRefreshActionItems();
                   },
+                  // Every state keeps the page's title and search: an empty or failed To do is
+                  // still To do, never a blank page (IMG_1158).
                   child: provider.isLoading && provider.actionItems.isEmpty
-                      ? _buildLoadingState()
+                      ? _buildLoadingState(provider)
                       : showTypedStatus
                           ? CustomScrollView(
                               controller: _scrollController,
                               physics: const AlwaysScrollableScrollPhysics(),
                               slivers: [
+                                const SliverPadding(padding: EdgeInsets.only(top: 8)),
+                                SliverToBoxAdapter(child: _buildPageHeader(provider)),
                                 SliverFillRemaining(
                                   hasScrollBody: false,
                                   child: Center(child: ActionItemsApiStatus(provider: provider)),
@@ -490,7 +495,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               ],
                             )
                           : nothingToShow
-                              ? _buildEmptyTasksList()
+                              ? _buildEmptyTasksList(provider)
                               : _buildTasksList(categorizedItems, provider),
                 ),
               ),
@@ -508,12 +513,14 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildLoadingState() {
+  Widget _buildLoadingState(ActionItemsProvider provider) {
     return CustomScrollView(
       controller: _scrollController,
       physics: const NeverScrollableScrollPhysics(),
       slivers: [
-        const SliverPadding(padding: EdgeInsets.only(top: 16)),
+        const SliverPadding(padding: EdgeInsets.only(top: 8)),
+        SliverToBoxAdapter(child: _buildPageHeader(provider)),
+        const SliverPadding(padding: EdgeInsets.only(top: 8)),
         const ActionItemsShimmerList(itemCount: 7),
         // Clears the tab bar and the quick-add capsule above it.
         SliverPadding(
@@ -523,12 +530,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildEmptyTasksList() {
+  Widget _buildEmptyTasksList(ActionItemsProvider provider) {
     return CustomScrollView(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
-        const SliverPadding(padding: EdgeInsets.only(top: 12)),
+        const SliverPadding(padding: EdgeInsets.only(top: 8)),
+        SliverToBoxAdapter(child: _buildPageHeader(provider)),
         SliverToBoxAdapter(child: _buildGoalsRow()),
         const SliverPadding(padding: EdgeInsets.only(top: 8)),
         SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
