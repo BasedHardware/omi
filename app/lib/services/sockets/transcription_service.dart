@@ -147,10 +147,8 @@ class TranscriptSegmentSocketService implements IPureSocketListener {
     // Enable server-side speaker auto-assignment (backward compatibility flag)
     params += '&speaker_auto_assign=enabled';
 
-    // Whether the backend may auto-create a new person when it detects a name.
-    // Mirrors the user's "Auto-create Speakers" setting; a detected name with no
-    // existing match is still surfaced for manual tagging when this is off.
-    params += '&create_speakers=${SharedPreferencesUtil().autoCreateSpeakersEnabled}';
+    // The backend may auto-create a new person when it detects a name.
+    params += '&create_speakers=true';
 
     if (SharedPreferencesUtil().vadGateEnabled) {
       params += '&vad_gate=enabled';
