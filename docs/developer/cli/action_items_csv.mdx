@@ -88,6 +88,6 @@ id,description,completed,due_at,created_at
 
 ## Notes
 
-- **Formula injection:** Values starting with `=`, `+`, `-`, or `@` are prefixed with `'` so spreadsheet applications render them as plain text instead of executing them as formulas.
+- **Formula injection:** Values starting with `=`, `+`, `-`, or `@` are prefixed with `'` so spreadsheet applications render them as plain text instead of executing them as formulas. Note that Python's `csv` module handles CSV structure quoting only; the `sanitize` function is what prevents spreadsheet formula execution.
 - **Excel UTF-8:** The file is written with the UTF-8 BOM (`utf-8-sig`) so Excel opens it correctly without a manual import step.
 - **`completed`** is a boolean (`True`/`False`); filter or reformat it in your spreadsheet as needed.
