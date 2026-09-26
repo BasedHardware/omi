@@ -1,4 +1,4 @@
-import asyncio
+import anyio
 import time
 import pytest
 import httpx
@@ -29,15 +29,10 @@ def client():
 
 
 def test_score_formula():
-    # 50 quality, 125 speed -> 0.65 * 0.5 + 0.35 * (125 / 250) = 0.325 + 0.175 = 0.5
     s = _score(50.0, 125.0)
     assert s == pytest.approx(0.5)
-
-    # Clamping tests
     assert _score(-10.0, -50.0) == pytest.approx(0.0)
     assert _score(150.0, 500.0) == pytest.approx(1.0)
-
-    # Malformed non-numeric values gracefully return None
     assert _score("invalid", 100) is None
     assert _score(100, None) is None
     assert _score({}, []) is None
@@ -139,7 +134,6 @@ def test_auto_model_pick_api_error_sanitization_and_leak_prevention(client, monk
     assert data["provider"] == "geminiFlashLive"
     assert data["detail"]["reason"] == "model scoring fetch failed; default to Gemini"
 
-    # Assert leak prevention: raw exception / secret must never appear in response body
     raw_response = resp.text
     assert LEAK_SECRET not in raw_response
     assert "FATAL" not in raw_response
@@ -232,13 +226,11 @@ def test_auto_model_pick_caching_and_ttl(client, monkeypatch):
 
     monkeypatch.setattr(httpx.AsyncClient, "get", mock_get)
 
-    # First call: cache miss, triggers fetch
     resp1 = client.get("/v1/auto/model-pick")
     assert resp1.status_code == 200
     assert call_count == 1
     t1 = resp1.json()["updated_at"]
 
-    # Second call: cache hit, no fetch
     resp2 = client.get("/v1/auto/model-pick")
     assert resp2.status_code == 200
     assert call_count == 1
@@ -267,13 +259,11 @@ def test_auto_model_pick_cache_refresh_after_ttl(client, monkeypatch):
 
     monkeypatch.setattr(httpx.AsyncClient, "get", mock_get)
 
-    # Call at t=1000
     monkeypatch.setattr(time, "time", lambda: 1000.0)
     resp1 = client.get("/v1/auto/model-pick")
     assert resp1.status_code == 200
     assert call_count == 1
 
-    # Call at t=1000 + 86401 (past 24h TTL) -> triggers refresh
     monkeypatch.setattr(time, "time", lambda: 1000.0 + 86401.0)
     resp2 = client.get("/v1/auto/model-pick")
     assert resp2.status_code == 200
@@ -301,12 +291,10 @@ def test_auto_model_pick_stale_cache_preserved_on_refresh_failure(client, monkey
     monkeypatch.setattr(httpx.AsyncClient, "get", mock_success)
     monkeypatch.setattr(time, "time", lambda: 1000.0)
 
-    # Initial successful populate
     resp1 = client.get("/v1/auto/model-pick")
     assert resp1.status_code == 200
     assert resp1.json()["provider"] == "gptRealtime2"
 
-    # Now simulate TTL expiration with failing API
     async def mock_failing(self, url, **kwargs):
         req = httpx.Request("GET", url)
         raise httpx.RequestError("Network drop", request=req)
@@ -316,7 +304,6 @@ def test_auto_model_pick_stale_cache_preserved_on_refresh_failure(client, monkey
 
     resp2 = client.get("/v1/auto/model-pick")
     assert resp2.status_code == 200
-    # Preserves existing cached pick rather than wiping to fallback
     assert resp2.json()["provider"] == "gptRealtime2"
 
 
@@ -330,8 +317,7 @@ def test_auto_model_pick_unauthorized_empty_uid():
         assert resp.json()["detail"] == "Unauthorized"
 
 
-@pytest.mark.anyio
-async def test_auto_model_pick_concurrent_requests_single_fetch(monkeypatch):
+def test_auto_model_pick_concurrent_requests_single_fetch(monkeypatch):
     monkeypatch.setenv("ARTIFICIALANALYSIS_API_KEY", "test_key")
     call_count = 0
 
@@ -348,7 +334,7 @@ async def test_auto_model_pick_concurrent_requests_single_fetch(monkeypatch):
     async def mock_get(self, url, **kwargs):
         nonlocal call_count
         call_count += 1
-        await asyncio.sleep(0.05)  # simulate network latency
+        await anyio.sleep(0.02)
         req = httpx.Request("GET", url)
         return httpx.Response(200, json={"data": mock_models}, request=req)
 
@@ -356,9 +342,19 @@ async def test_auto_model_pick_concurrent_requests_single_fetch(monkeypatch):
 
     from routers.auto_model import auto_model_pick
 
-    tasks = [auto_model_pick("user_test") for _ in range(5)]
-    results = await asyncio.gather(*tasks)
+    async def run_concurrent():
+        async with anyio.create_task_group() as tg:
+            results = []
 
+            async def worker():
+                res = await auto_model_pick("user_test")
+                results.append(res)
+
+            for _ in range(5):
+                tg.start_soon(worker)
+        return results
+
+    results = anyio.run(run_concurrent, backend="asyncio")
     assert len(results) == 5
     for r in results:
         assert r["provider"] == "geminiFlashLive"
