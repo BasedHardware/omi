@@ -32,7 +32,7 @@ a summary line, e.g. `Written 42 item(s) → action_items.html`.
 | Parse | Reads a JSON array or `{"items": […]}` wrapper from stdin or a file |
 | Deduplicate | Drops items with the same `conversation_id` + `description` pair |
 | Render | Builds an escaped, self-contained HTML table (no external CSS/JS) |
-| Write | Opens the output file with mode `'x'` to prevent silent overwrites |
+| Write | Opens the output file with mode `'xb'` to prevent silent overwrites |
 
 ## Output
 
