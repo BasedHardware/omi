@@ -1,4 +1,4 @@
-﻿# Put memories on your calendar (.ics)
+# Put memories on your calendar (.ics)
 
 Use this recipe to see your Omi memories, learnings, and captured insights
 alongside your meetings and daily schedule. It reads a saved JSON export, makes
@@ -8,14 +8,14 @@ only Python's standard library with zero external dependencies.
 
 You need Python 3.10+ and an authenticated `omi-cli` for the initial export:
 
-Export your memories (up to 500):
+Export your memories (up to 200 per page):
 
 ```sh
-omi --json memory list --limit 500 > memories.json
+omi --json memory list --limit 200 > memories.json
 ```
 
 Check that the command succeeded before converting the file. This is one page;
-to retrieve more, increase `--offset` by 500 and use a different filename.
+to retrieve more, increase `--offset` by 200 and use a different filename.
 
 Save the following as `memories_to_ics.py`:
 
