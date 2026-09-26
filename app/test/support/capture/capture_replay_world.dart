@@ -43,6 +43,8 @@ class FakePhoneMicHostApi extends PhoneMicHostApi {
   final List<String> startStacks = [];
   bool nativeRecording = false;
   Object Function()? nextStartError;
+  Completer<void>? holdNextStart;
+  Completer<void>? nextStartEntered;
 
   @override
   Future<void> start(PhoneMicCaptureMode mode, int sessionId) async {
@@ -51,6 +53,12 @@ class FakePhoneMicHostApi extends PhoneMicHostApi {
     lastStartMode = mode;
     lastStartSessionId = sessionId;
     startSessionIds.add(sessionId);
+    final entered = nextStartEntered;
+    nextStartEntered = null;
+    entered?.complete();
+    final held = holdNextStart;
+    holdNextStart = null;
+    if (held != null) await held.future;
     nativeRecording = true;
     final error = nextStartError;
     nextStartError = null;
@@ -241,6 +249,7 @@ class CaptureReplayWorld {
   final Directory tempDir;
   final VirtualClock clock;
   final ScriptedUploads uploads;
+  final BleAudioCodec pendantCodec;
 
   late ManualScheduler scheduler;
   late FakePhoneMicHostApi hostApi;
@@ -263,6 +272,7 @@ class CaptureReplayWorld {
 
   bool connected = true;
   bool signedIn = true;
+  bool allowMic = true;
   int processCalls = 0;
 
   /// Runs when the controller asks the server to process the in-progress conversation.
@@ -276,7 +286,7 @@ class CaptureReplayWorld {
 
   _ReplayCaptureController? _controller;
 
-  CaptureReplayWorld({required this.tempDir, required this.clock, required this.uploads});
+  CaptureReplayWorld({required this.tempDir, required this.clock, required this.uploads, required this.pendantCodec});
 
   bool _disposed = false;
   bool _controllerDisposed = false;
@@ -288,6 +298,7 @@ class CaptureReplayWorld {
     Map<String, Object> initialPrefs = const {},
     bool initiallyConnected = true,
     bool supportsBatch = true,
+    BleAudioCodec pendantCodec = BleAudioCodec.pcm16,
   }) async {
     TestWidgetsFlutterBinding.ensureInitialized();
     final start = startTime ?? defaultStart;
@@ -295,6 +306,7 @@ class CaptureReplayWorld {
       tempDir: tempDir,
       clock: VirtualClock(start),
       uploads: ScriptedUploads(VirtualClock(start)),
+      pendantCodec: pendantCodec,
     );
     world.connected = initiallyConnected;
     await world._bootGeneration(supportsBatch: supportsBatch, initialPrefs: initialPrefs, firstBoot: true);
@@ -371,8 +383,8 @@ class CaptureReplayWorld {
         onProcessInProgress?.call();
         return null;
       },
-      audioCodecLoader: (deviceId) async => BleAudioCodec.pcm16,
-      microphonePermissionRequester: () async => true,
+      audioCodecLoader: (deviceId) async => pendantCodec,
+      microphonePermissionRequester: () async => allowMic,
       conversationLocationCapture: ConversationLocationCapture(
         isLocationServiceEnabled: () async => false,
         checkPermission: () async => LocationPermission.denied,

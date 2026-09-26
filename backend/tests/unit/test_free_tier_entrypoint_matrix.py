@@ -686,7 +686,6 @@ def _spy_managed_effects(monkeypatch: Any, pc: Any) -> dict[str, Any]:
     monkeypatch.setattr(pc, 'should_defer_desktop_processing', spies['should_defer'])
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(pc, 'is_trial_paywalled', lambda *args, **kwargs: False)
-    monkeypatch.setattr(pc, '_calendar_auto_link_enabled', lambda: False)
     monkeypatch.setattr(pc, 'record_jit_first_open', MagicMock())
     monkeypatch.setattr(pc.folders_db, 'get_folders', MagicMock(return_value=[{'id': 'folder-1'}]))
     monkeypatch.setattr(pc.folders_db, 'resolve_category_folder_id', MagicMock(return_value=None))
