@@ -275,6 +275,23 @@ final class MeetingCallObservationTests: XCTestCase {
       nativeIdentity: { "app:\($0)#2" })
     XCTAssertEqual(identities, ["app:us.zoom.xos#2", "meet:abc-defg-hij"])
   }
+
+  /// A Discord call holds the mic in its Electron renderer helper (probe, 2026-09-26).
+  func testHelperProcessesResolveToTheirAppIdentity() {
+    let snapshot = CallAudioSnapshot(
+      processes: [
+        CallAudioProcessSnapshot(
+          bundleID: "com.hnc.discord.helper.renderer", pid: 6, isRunningInput: true, isRunningOutput: true),
+        CallAudioProcessSnapshot(bundleID: "com.hnc.discord", pid: 7, isRunningInput: true, isRunningOutput: false),
+      ],
+      defaultInputDeviceID: 1,
+      browserWindowTitles: [])
+    XCTAssertTrue(
+      MeetingCallObservation.isDetected(snapshot: snapshot, mode: .onlyMeetings, processInputAPIAvailable: true))
+    let identities = MeetingCallObservation.identities(
+      snapshot: snapshot, processInputAPIAvailable: true, nativeIdentity: { "app:\($0)" })
+    XCTAssertEqual(identities, ["app:com.hnc.discord"])
+  }
 }
 
 @MainActor
@@ -551,6 +568,17 @@ final class CallAppAudioDailyLedgerTests: XCTestCase {
     XCTAssertEqual(summaries.first?.counters.callLikeSessions, 21)
     XCTAssertFalse(summaries.contains { $0.bundleID == "com.example.app01" })
     XCTAssertFalse(summaries.contains { $0.bundleID == "com.example.quiet" })
+  }
+
+  func testOmisOwnCaptureIsNeverReportedAsACallApp() {
+    var own = CallAudioBundleCounters()
+    own.callLikeSessions = 9
+    var zoom = CallAudioBundleCounters()
+    zoom.callLikeSessions = 1
+    let summaries = CallAppAudioSummaryRanking.select(
+      counters: ["com.omi.computer-macos.beta": own, "com.omi.computer-macos": own, "us.zoom.xos": zoom],
+      localDay: "2026-09-26")
+    XCTAssertEqual(summaries.map(\.bundleID), ["us.zoom.xos"])
   }
 
   func testTiedBundlesFlushInBundleIdOrderUpToTheCap() {

@@ -23,15 +23,20 @@ enum CallAppAudioLocalDay {
 }
 
 /// Largest call-like session count first, then bundle id. At most 20 bundles,
-/// and only bundles that had a call-like session that day.
+/// and only bundles that had a call-like session that day. Omi's own processes are excluded.
 enum CallAppAudioSummaryRanking {
   static let dailyBundleCap = 20
+
+  static func isOwnApp(_ bundleID: String) -> Bool {
+    bundleID.lowercased().hasPrefix("com.omi.")
+  }
 
   static func select(
     counters: [String: CallAudioBundleCounters],
     localDay: String
   ) -> [CallAppAudioSummary] {
-    let ranked = counters.filter { $0.value.callLikeSessions >= 1 }.sorted { lhs, rhs in
+    // Omi's own capture holds the mic and speaker for hours; it is not a call app.
+    let ranked = counters.filter { $0.value.callLikeSessions >= 1 && !isOwnApp($0.key) }.sorted { lhs, rhs in
       if lhs.value.callLikeSessions != rhs.value.callLikeSessions {
         return lhs.value.callLikeSessions > rhs.value.callLikeSessions
       }

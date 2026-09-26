@@ -35,9 +35,12 @@ enum MeetingCallObservation {
   ) -> Set<String> {
     var identities = Set<String>()
     if processInputAPIAvailable {
-      for process in snapshot.processes
-      where process.isRunningInput && ConferencingApps.isNativeCallApp(bundleID: process.bundleID) {
-        identities.insert(nativeIdentity(process.bundleID))
+      // Helpers resolve to their app (`com.hnc.discord.helper.renderer` → `com.hnc.discord`), so
+      // an app and its helper never look like two calls.
+      for process in snapshot.processes where process.isRunningInput {
+        if let appID = ConferencingApps.nativeCallAppID(bundleID: process.bundleID) {
+          identities.insert(nativeIdentity(appID))
+        }
       }
     }
     for title in snapshot.browserWindowTitles {
