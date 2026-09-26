@@ -61,6 +61,13 @@ export function createD1Mock(): D1Database {
     )
   );
 
+  db.exec(
+    readFileSync(
+      new URL("../migrations/0011_desktop_auth.sql", import.meta.url),
+      "utf8"
+    )
+  );
+
   const prepareStatement = (
     sql: string,
     bindings: unknown[] = []

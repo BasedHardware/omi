@@ -51,7 +51,7 @@ test('static guard: session probe stays independent of signed-in device controls
     'setOnboardingRequired(!completed && !hasSession)',
   );
   expect(onboarding).toContain(
-    "import {\n  omiAuth,\n  omiBackend,\n  subscribeOmiBackendSessionInvalidated,\n} from '../omiNative';",
+    "import {\n  omiAuth,\n  omiBackend,\n  subscribeOmiAuthDesktopHandoff,\n  subscribeOmiBackendSessionInvalidated,\n} from '../omiNative';",
   );
   expect(onboarding).not.toMatch(/import \{[^}]*\bomiNative\b/);
   expect(onboarding).not.toContain('getSnapshot');

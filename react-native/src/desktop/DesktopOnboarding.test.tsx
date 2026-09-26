@@ -1,6 +1,6 @@
 import React from 'react';
 import Renderer, {act} from 'react-test-renderer';
-import {AppState, Text} from 'react-native';
+import {AppState, Linking, Text} from 'react-native';
 import {DesktopOnboarding} from './DesktopOnboarding';
 import {DesktopWindow} from './DesktopWindow';
 import {Button} from '../ui/Button';
@@ -368,4 +368,62 @@ test('the mark greets on demand and changes gesture with the step, without advan
     motion: 'gather',
     motionKey: 'value:1',
   });
+});
+
+test('desktop handoff shows the confirmation code and reopens the browser page while signing in', async () => {
+  const openURL = jest
+    .spyOn(Linking, 'openURL')
+    .mockResolvedValue(undefined as never);
+  await mount();
+  await press('Get started');
+  await press('Continue');
+  await press('Sign in');
+  expect(signIn).toHaveBeenCalledTimes(1);
+  // Before the native start lands there is no code to show.
+  await act(async () =>
+    renderer.update(
+      <DesktopOnboarding
+        onSignIn={signIn}
+        signingIn
+        onCompleteSetup={complete}
+      />,
+    ),
+  );
+  expect(content()).not.toContain('sign-in code');
+  await act(async () =>
+    renderer.update(
+      <DesktopOnboarding
+        onSignIn={signIn}
+        signingIn
+        onCompleteSetup={complete}
+        desktopHandoff={{
+          code: '418293',
+          expiresAt: Date.now() + 300_000,
+          browserUrl:
+            'https://omi-v5-backend-staging.example.workers.dev/auth/desktop?desktop_auth=abc',
+        }}
+      />,
+    ),
+  );
+  expect(content()).toContain('418293');
+  expect(content()).toContain(
+    'Finish in your browser, then enter this code on the Omi sign-in page.',
+  );
+  await press('Open the sign-in page again');
+  expect(openURL).toHaveBeenCalledWith(
+    'https://omi-v5-backend-staging.example.workers.dev/auth/desktop?desktop_auth=abc',
+  );
+  // Once the attempt ends the code must not linger on the surface.
+  await act(async () =>
+    renderer.update(
+      <DesktopOnboarding
+        onSignIn={signIn}
+        signingIn={false}
+        onCompleteSetup={complete}
+      />,
+    ),
+  );
+  expect(content()).not.toContain('418293');
+  expect(content()).not.toContain('sign-in code');
+  openURL.mockRestore();
 });

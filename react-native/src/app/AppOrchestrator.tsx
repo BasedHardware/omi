@@ -192,6 +192,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     completeFirstRun,
     completeSetup,
     completingSetup,
+    desktopHandoff,
     setupRequired,
     onboardingRequired,
     revalidateSession,
@@ -948,6 +949,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         completeFirstRun().catch(() => undefined);
       }}
       signingIn={signingIn}
+      desktopHandoff={desktopHandoff}
     />
   );
 

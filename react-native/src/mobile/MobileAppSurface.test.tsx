@@ -430,7 +430,10 @@ test('Home shows open task metadata and opens all tasks with the Tasks tab selec
   ];
   const tree = render({...props, tasks});
   const text = renderedText(tree);
-  expect(text).toContain('Due Sep 18 · Sam');
+  // The due label follows the host locale's month/day order (en-US "Sep 18",
+  // en-AU/en-GB "18 Sept"); both orderings prove the same due-date + owner
+  // metadata row.
+  expect(text).toMatch(/Due (Sep 18\b|18 Sept\b) · Sam/);
   expect(text).toContain('Unscheduled idea');
   expect(text).not.toContain('Already finished');
   expect(text).not.toContain('No due date');

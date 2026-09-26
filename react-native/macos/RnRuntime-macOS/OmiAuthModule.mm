@@ -1,4 +1,5 @@
 #import "OmiAuthModule.h"
+#import "OmiBackendModule.h"
 #import "../../apple/OmiRecordingPolicy.h"
 
 #import <TargetConditionals.h>
@@ -124,6 +125,35 @@ static NSString *OmiAuthCodeChallenge(NSString *verifier) {
   uint8_t digest[CC_SHA256_DIGEST_LENGTH];
   CC_SHA256(data.bytes, (CC_LONG)data.length, digest);
   return OmiAuthBase64URL([NSData dataWithBytes:digest length:sizeof(digest)]);
+}
+
+// Desktop handoff session id, mirroring the worker's deriveSessionId:
+// sha256url(challenge + "\0" + confirmationChallenge). Derived — never chosen
+// — so the id cannot drift from the verifier material.
+static NSString *OmiAuthDesktopSessionId(NSString *challenge, NSString *confirmationChallenge) {
+  NSMutableData *joined = [[challenge dataUsingEncoding:NSUTF8StringEncoding] mutableCopy];
+  if (joined == nil) return nil;
+  uint8_t separator = 0;
+  [joined appendBytes:&separator length:1];
+  NSData *confirmation = [confirmationChallenge dataUsingEncoding:NSUTF8StringEncoding];
+  if (confirmation == nil) return nil;
+  [joined appendData:confirmation];
+  uint8_t digest[CC_SHA256_DIGEST_LENGTH];
+  CC_SHA256(joined.bytes, (CC_LONG)joined.length, digest);
+  return OmiAuthBase64URL([NSData dataWithBytes:digest length:sizeof(digest)]);
+}
+
+// Six decimal digits from SecRandom, rejection-sampled so every code is
+// uniformly distributed over 000000-999999.
+static NSString *OmiAuthDesktopConfirmationCode(void) {
+  for (NSUInteger attempt = 0; attempt < 16; attempt++) {
+    uint32_t raw = 0;
+    if (SecRandomCopyBytes(kSecRandomDefault, sizeof(raw), (uint8_t *)&raw) != errSecSuccess) break;
+    if (raw < 4294000000u) {
+      return [NSString stringWithFormat:@"%06u", raw % 1000000u];
+    }
+  }
+  return nil;
 }
 
 static int OmiAuthListenLoopback(uint16_t *portOut) {
@@ -542,6 +572,10 @@ RCT_EXPORT_MODULE(OmiAuth)
   return YES;
 }
 
+- (NSArray<NSString *> *)supportedEvents {
+  return @[ @"omiAuthDesktopHandoff" ];
+}
+
 - (instancetype)init {
   self = [super init];
   if (self) _loopbackListener = -1;
@@ -906,12 +940,156 @@ RCT_REMAP_METHOD(cancelSignIn,
   });
 }
 
+#if TARGET_OS_OSX
+// Desktop-auth handoff against the v5 backend worker (OMI_V5_BACKEND_URL
+// set and validated). The legacy loopback OAuth chain stays for prod
+// api.omi.me; this path replaces it only when the v5 origin is stamped.
+- (void)signInWithDesktopHandoff:(NSURL *)backend
+                         attempt:(NSUInteger)attempt
+                         resolve:(RCTPromiseResolveBlock)resolve
+                          reject:(RCTPromiseRejectBlock)reject {
+  NSString *verifier = OmiAuthRandomValue();
+  NSString *confirmationCode = OmiAuthDesktopConfirmationCode();
+  NSString *challenge = verifier.length > 0 ? OmiAuthCodeChallenge(verifier) : nil;
+  NSString *confirmationChallenge = confirmationCode != nil ? OmiAuthCodeChallenge(confirmationCode) : nil;
+  NSString *sessionId = challenge != nil && confirmationChallenge != nil
+      ? OmiAuthDesktopSessionId(challenge, confirmationChallenge) : nil;
+  if (sessionId.length == 0) {
+    [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_UNCONFIGURED"
+                      message:@"Could not prepare Omi cloud sign in" error:nil
+                      resolve:resolve reject:reject];
+    return;
+  }
+  NSMutableURLRequest *start = [NSMutableURLRequest requestWithURL:
+      [backend URLByAppendingPathComponent:@"v1/auth/desktop/start"]];
+  start.HTTPMethod = @"POST";
+  [start setValue:@"application/json" forHTTPHeaderField:@"content-type"];
+  start.HTTPBody = [NSJSONSerialization dataWithJSONObject:@{
+    @"sessionId" : sessionId,
+    @"challenge" : challenge,
+    @"confirmationChallenge" : confirmationChallenge,
+  } options:0 error:nil];
+  [self performRequest:start completion:^(NSDictionary *startBody, NSError *startError) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (![self isSignInAttemptCurrent:attempt]) return;
+      NSString *browserUrl = [startBody[@"browserUrl"] isKindOfClass:NSString.class]
+          ? startBody[@"browserUrl"] : nil;
+      NSNumber *expiresAt = [startBody[@"expiresAt"] isKindOfClass:NSNumber.class]
+          ? startBody[@"expiresAt"] : nil;
+      if (startError != nil || browserUrl.length == 0 || expiresAt == nil) {
+        [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_TRANSPORT"
+                          message:@"Omi development sign in could not start" error:startError
+                          resolve:resolve reject:reject];
+        return;
+      }
+      // The desktop owns the code; the user retypes it into the browser page,
+      // proving they hold both ends of the handoff.
+      [self sendEventWithName:@"omiAuthDesktopHandoff" body:@{
+        @"code" : confirmationCode,
+        @"expiresAt" : expiresAt,
+        @"browserUrl" : browserUrl,
+      }];
+      if (![NSWorkspace.sharedWorkspace openURL:[NSURL URLWithString:browserUrl]]) {
+        // Not fatal: the event carries browserUrl so the app UI can offer an
+        // explicit link while the poll below keeps running.
+        NSLog(@"OmiAuth: could not open desktop handoff page %@", browserUrl);
+      }
+      [self pollDesktopAuthExchange:backend
+                          sessionId:sessionId
+                           verifier:verifier
+                     expiresAtMillis:[expiresAt doubleValue]
+                            attempt:attempt
+                            resolve:resolve
+                             reject:reject];
+    });
+  }];
+}
+
+- (void)pollDesktopAuthExchange:(NSURL *)backend
+                      sessionId:(NSString *)sessionId
+                       verifier:(NSString *)verifier
+                 expiresAtMillis:(double)expiresAtMillis
+                        attempt:(NSUInteger)attempt
+                        resolve:(RCTPromiseResolveBlock)resolve
+                         reject:(RCTPromiseRejectBlock)reject {
+  if (![self isSignInAttemptCurrent:attempt]) return;
+  if ([NSDate date].timeIntervalSince1970 * 1000.0 >= expiresAtMillis - 500) {
+    [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_UNAUTHORIZED"
+                      message:@"Omi development sign in expired" error:nil
+                      resolve:resolve reject:reject];
+    return;
+  }
+  NSMutableURLRequest *exchange = [NSMutableURLRequest requestWithURL:
+      [backend URLByAppendingPathComponent:@"v1/auth/desktop/exchange"]];
+  exchange.HTTPMethod = @"POST";
+  [exchange setValue:@"application/json" forHTTPHeaderField:@"content-type"];
+  exchange.HTTPBody = [NSJSONSerialization dataWithJSONObject:@{
+    @"sessionId" : sessionId,
+    @"verifier" : verifier,
+  } options:0 error:nil];
+  [self performRequest:exchange completion:^(NSDictionary *body, NSError *error) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      if (![self isSignInAttemptCurrent:attempt]) return;
+      if (error == nil) {
+        NSString *customToken = [body[@"customToken"] isKindOfClass:NSString.class]
+            ? body[@"customToken"] : nil;
+        if (customToken.length == 0) {
+          [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_TRANSPORT"
+                            message:@"Omi development sign in returned an unusable session" error:nil
+                            resolve:resolve reject:reject];
+          return;
+        }
+        @synchronized (self) {
+          if (attempt != self.signInAttempt || self.settled || self.signInCompleting) return;
+          self.signInCompleting = YES;
+        }
+        [self finishWithFirebaseCustomToken:customToken attempt:attempt resolve:resolve reject:reject];
+        return;
+      }
+      NSInteger status = [error.domain isEqualToString:@"OmiAuth"] ? error.code : 0;
+      // 409 pending is the normal "not confirmed yet". Transient transport and
+      // server-side failures retry until the handoff expires; only a terminal
+      // 4xx ends the attempt early.
+      if (status == 409 || status == 429 || status == 0 || status >= 500) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+          [self pollDesktopAuthExchange:backend
+                             sessionId:sessionId
+                              verifier:verifier
+                        expiresAtMillis:expiresAtMillis
+                               attempt:attempt
+                               resolve:resolve
+                                reject:reject];
+        });
+        return;
+      }
+      [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_UNAUTHORIZED"
+                        message:@"Omi development sign in expired" error:error
+                        resolve:resolve reject:reject];
+    });
+  }];
+}
+#endif
+
 RCT_REMAP_METHOD(signIn,
                  signInWithResolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
   dispatch_async(dispatch_get_main_queue(), ^{
     [self cancelPendingSignIn];
     NSUInteger attempt = self.signInAttempt;
+    #if TARGET_OS_OSX
+    // A validated OMI_V5_BACKEND_URL switches sign-in to the desktop-auth
+    // handoff: browser page + confirmation code + polling exchange, then the
+    // same Firebase custom-token finisher as the legacy chain.
+    NSURL *v5Backend = OmiValidatedV5BackendURLFromEnvironment();
+    if (v5Backend != nil) {
+      self.settled = NO;
+      self.signInCompleting = NO;
+      self.pendingSignInReject = [reject copy];
+      [self signInWithDesktopHandoff:v5Backend attempt:attempt resolve:resolve reject:reject];
+      return;
+    }
+    #endif
     NSString *state = OmiAuthRandomValue();
     NSString *verifier = OmiAuthRandomValue();
     uint16_t port = 0;

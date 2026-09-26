@@ -364,3 +364,11 @@ export function subscribeOmiBackendSessionInvalidated(
 ): () => void {
   return () => undefined;
 }
+
+// The browser surface authenticates in-page; the desktop handoff event only
+// exists on the native macOS module, so the web subscription never fires.
+export function subscribeOmiAuthDesktopHandoff(
+  _listener: (event: import('./omiNativeTypes').OmiAuthDesktopHandoff) => void,
+): () => void {
+  return () => undefined;
+}

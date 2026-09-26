@@ -9,6 +9,7 @@ import type {
   BluetoothState,
   NativeSnapshot,
   OmiAuth,
+  OmiAuthDesktopHandoff,
   OmiBackend,
   OmiNative,
   OmiNativeEvent,
@@ -25,6 +26,7 @@ export type {
   NativeSnapshot,
   OmiBackend,
   OmiAuth,
+  OmiAuthDesktopHandoff,
   OmiAuthSignInResult,
   OmiAuthSignOutResult,
   OmiNative,
@@ -192,6 +194,42 @@ export function subscribeOmiBackendSessionInvalidated(
   const subscription = emitter.addListener(
     'omiBackendSessionInvalidated',
     listener,
+  );
+  return () => subscription.remove();
+}
+
+export function subscribeOmiAuthDesktopHandoff(
+  listener: (event: OmiAuthDesktopHandoff) => void,
+): () => void {
+  const nativeModule = NativeModules.OmiAuth;
+  if (nativeModule == null) {
+    return () => undefined;
+  }
+  const emitter = new NativeEventEmitter(nativeModule);
+  const subscription = emitter.addListener(
+    'omiAuthDesktopHandoff',
+    (value: unknown) => {
+      if (value === null || typeof value !== 'object') {
+        return;
+      }
+      const event = value as {
+        code?: unknown;
+        expiresAt?: unknown;
+        browserUrl?: unknown;
+      };
+      if (
+        typeof event.code !== 'string' ||
+        typeof event.expiresAt !== 'number' ||
+        typeof event.browserUrl !== 'string'
+      ) {
+        return;
+      }
+      listener({
+        code: event.code,
+        expiresAt: event.expiresAt,
+        browserUrl: event.browserUrl,
+      });
+    },
   );
   return () => subscription.remove();
 }

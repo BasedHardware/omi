@@ -42,6 +42,7 @@ import {
   VOICE_PRINT_MIN_SECONDS,
 } from '../app/voicePrint';
 import {desktopTokens} from '../desktop/tokens';
+import type {OmiAuthDesktopHandoff} from '../omiNativeTypes';
 import {Button} from './Button';
 import {Field} from './Field';
 import {OmiAvatar} from './OmiAvatar';
@@ -66,6 +67,10 @@ export function Onboarding({
   completingSetup = false,
   onCompleteSetup,
   onSignOut,
+  // Desktop-only: the desktop-auth handoff code surfaced while signing in.
+  // Accepted here so the mobile and desktop surfaces stay prop-compatible;
+  // the phone flow authenticates in-app and never shows a code.
+  desktopHandoff: _desktopHandoff,
 }: {
   error?: string | null;
   onSignIn: () => void;
@@ -75,6 +80,7 @@ export function Onboarding({
   completingSetup?: boolean;
   onCompleteSetup?: (connectDevice: boolean) => void;
   onSignOut?: () => void;
+  desktopHandoff?: OmiAuthDesktopHandoff | null;
 }) {
   const reduceMotion = useReduceMotion();
   const desktop = Platform.OS === 'macos';

@@ -16,6 +16,10 @@ Migration `0008_device_capture_id.sql` adds a nullable capture ID and account-sc
 
 Migration `0009_device_capture_time.sql` adds nullable `captured_at_ms`. Creation accepts optional `capturedAtMs`, a safe integer from 0 through 8,640,000,000,000,000 Unix milliseconds representing native receipt of the first packet. Invalid values, including null, are rejected. Exact replay preserves presence and value; changing either returns 409. Historical values remain unknown and are omitted from session and conversation responses. This display provenance never changes server `startedAt`/`endedAt` (also Unix milliseconds), conversation ordering, audio duration, or billing.
 
+Migration `0010_account_scoped_ids.sql` is a forward-only rebuild of the chat and tasks tables to tenant-scoped primary keys (`(account_id, id)` for chat messages, admissions, generation events, and tasks). Row content is copied unchanged; ids may now duplicate across accounts but must stay unique inside one account. Its header requires the operator migration sequence before applying it to a shared D1 database.
+
+Migration `0011_desktop_auth.sql` adds the `desktop_auth_sessions` table backing the desktop sign-in handoff: `POST /v1/auth/desktop/start`, `POST /v1/auth/desktop/complete`, `POST /v1/auth/desktop/exchange`, and the `GET /auth/desktop` browser confirmation page. The desktop client supplies two PKCE-style challenges; the session id is derived from them (SHA-256 base64url of `challenge` + NUL + `confirmationChallenge`) so it cannot be chosen independently, and only the SHA-256 challenges are stored, so a D1 compromise cannot replay the handoff. Sessions live 5 minutes, `start` is limited to 10 per client IP per 10 minutes, and the 6-digit confirmation code allows 5 attempts before locking. `exchange` is single-use: a correct verifier mints an RS256 Firebase custom token (1-hour lifetime, uid = the account's Firebase localId) and consumes the session; a wrong verifier, an expired, or an already-consumed session returns 410, and an incomplete session returns 409. These routes are mounted before the `/v1/*` authorization middleware by design: the handoff is how a caller earns Firebase credentials. The confirmation page exposes only the dev project's browser API key (public by Firebase design) under a `no-store`, `frame-ancestors 'none'` CSP limited to `identitytoolkit.googleapis.com`.
+
 ## Recording processing and canonical services
 
 Migration `0006_device_transcriptions.sql` atomically queues transcription when a nonempty recording changes from open to complete with all uploads acknowledged. It does not backfill old completed recordings. The scheduled handler claims one due recording per minute, with a 15-minute lease, at most five provider attempts, and exponential retry delays capped at 15 minutes. Expired owners cannot publish results after another claim. Audio stays in R2 on processing failure. This recovers processing work; it does not recover audio lost before upload.
@@ -35,6 +39,9 @@ Optional `CANONICAL_SERVICE` is a Worker service binding exposing the ratified `
 - Worker secrets set out-of-band: `API_TOKEN`, `R2_ACCESS_KEY_ID`, and `R2_SECRET_ACCESS_KEY`. The attachment route fails closed without all three; never place their values in repository files.
 - `OPENAI_API_KEY`: required for GPT Live 1 (`provider: "gpt_live"` on `POST /v1/live/sessions`). Set it with `wrangler secret put OPENAI_API_KEY` for staging. That provider fails closed with `provider_not_configured` (503, retryable) when unset; no key is invented and no client ever receives it. The Live route still requires `API_TOKEN` authentication.
 - `GEMINI_API_KEY`: required for Gemini Live (`provider: "gemini_live"` on `POST /v1/live/sessions`). Set it with `wrangler secret put GEMINI_API_KEY` for staging. The Worker mints an ephemeral auth token from `generativelanguage.googleapis.com/v1alpha/auth_tokens` and returns only the token plus the constrained BidiGenerateContent WebSocket URL (never the project key). That provider fails closed with `provider_not_configured` (503, retryable) when unset.
+- `FIREBASE_API_KEY`: the browser API key of the legacy Firebase project, used by `accounts:lookup` to verify `/v1` bearer tokens. Set it with `wrangler secret put FIREBASE_API_KEY`; `/v1` routes fail closed with 401 when unset.
+- `FIREBASE_DESKTOP_TOKEN_SA_EMAIL`, `FIREBASE_DESKTOP_TOKEN_PRIVATE_KEY`, `FIREBASE_DESKTOP_API_KEY`: required for the desktop sign-in handoff (`0011` above). The SA email is the token-minting service account (staging: `dev-desktop-token-minter@based-hardware-dev.iam.gserviceaccount.com`, a local RS256 signer that needs no IAM role), the private key is its PKCS#8 PEM (`wrangler secret put` preserves the `
+` escapes), and the API key is the dev project's browser key. The handoff routes fail closed with 503 when the signing pair is unset and the confirmation page returns 503 without the browser key. The browser key also backs the staging dual-project bearer fallback: a token the legacy `FIREBASE_API_KEY` lookup rejects is retried once against the dev key, still through `accounts:lookup`. The desktop app reaches this stack by running with `OMI_V5_BACKEND_URL` set to the staging Worker URL (https only, `*.workers.dev`, no port; see `react-native/src/v5BackendOrigin.ts`).
 - `STAGING_WORKER_URL`: the public URL used by `verify:release` after the deploy. Native capture (`/v1/device-sessions`) reads this origin from `OMI_V5_BACKEND_URL` (https only; loopback, `api.omi.me`, or `*.workers.dev`). Shared-provider Cloud Run hostnames stay rejected until an exact verified origin is stamped. The repository does not record a `workers.dev` default. Capture-path `/v1/settings` follows the stamped New origin. Native account/profile/subscription and `/v1/apps` stay on `https://api.omi.me`.
 - `STAGING_OBSERVABILITY_SINK_MODE`: `cloudflare_only` or `better_stack`.
 - `STAGING_BETTER_STACK_EVIDENCE_ID`: an opaque operator evidence identifier required only for `better_stack`.
@@ -56,7 +63,7 @@ The checked-in `account_id` and `R2_ACCOUNT_ID` must identify that same account.
 
    ```json
    {
-     "schema_version": "0009_device_capture_time.sql",
+     "schema_version": "0011_desktop_auth.sql",
      "migrations": [
        {
          "name": "0001_tasks.sql",
@@ -93,6 +100,14 @@ The checked-in `account_id` and `R2_ACCOUNT_ID` must identify that same account.
        {
          "name": "0009_device_capture_time.sql",
          "sha256": "d4aa1e8b83636fb5d9b49807b2a21fa511b729fb669e1bc1a1958adc3cd46fd4"
+       },
+       {
+         "name": "0010_account_scoped_ids.sql",
+         "sha256": "84918da5077cbf242bd40b32a697063ea92f36338acb262735b001d35dd2f92f"
+       },
+       {
+         "name": "0011_desktop_auth.sql",
+         "sha256": "025afdfdeb2e36385cc583908130faad8c91e96a4c8793487fa8b451a0f64510"
        }
      ],
      "evidence_id": "ops-20260818-1"

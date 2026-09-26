@@ -86,6 +86,14 @@ export type OmiAuthSignOutResult = {
   signedOut: boolean;
 };
 
+// Emitted by the native OmiAuth module while a desktop-auth handoff sign-in
+// is waiting for the user to type the code into the browser page.
+export type OmiAuthDesktopHandoff = {
+  code: string;
+  expiresAt: number;
+  browserUrl: string;
+};
+
 export type OmiAuth = {
   signIn(): Promise<OmiAuthSignInResult>;
   cancelSignIn(): Promise<void>;
