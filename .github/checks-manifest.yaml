@@ -1365,6 +1365,11 @@ checks:
     triggers: ["plugins/oauth/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "regression suite for oauth plugin timeouts, exception envelopes, non-JSON error pages, and null-guarded payload building"
+  - id: plugin-oauth-state-signing-tests
+    command: ["python3", "plugins/oauth/test_oauth_state_signing.py"]
+    triggers: ["plugins/oauth/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "oauth notion-crm callback used the raw uid as OAuth state, letting an attacker bind their own Notion grant under a victim uid (login CSRF); state must be HMAC-signed at issuance and verified before the token exchange, mirroring the merged composio fix in #14689"
   - id: hive-update-task-status-tests
     command: ["python3", "plugins/omi-hive-app/test_update_task_status.py"]
     triggers: ["plugins/omi-hive-app/**", ".github/checks-manifest.yaml"]
