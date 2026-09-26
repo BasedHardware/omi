@@ -2073,6 +2073,22 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
         await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)
 
 
+def _coerce_started_at_ts(raw, fallback: float = 0.0) -> float:
+    if hasattr(raw, 'timestamp') and callable(raw.timestamp):
+        try:
+            return float(raw.timestamp())
+        except Exception:
+            pass
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        return float(raw)
+    if isinstance(raw, str):
+        try:
+            return datetime.fromisoformat(raw.replace('Z', '+00:00')).timestamp()
+        except Exception:
+            pass
+    return fallback
+
+
 async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
     """schema_version 2: build the conversation-level dense MP3 + spans and stamp
     the doc (conversation_audio). Upload precedes the stamp so a stamped
@@ -2081,8 +2097,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
     fingerprint-named task exists and this one is acked as superseded.
     """
     try:
-        uid = payload['uid']
-        conversation_id = payload['conversation_id']
+        uid, conversation_id = payload['uid'], payload['conversation_id']
         payload_fingerprint = payload.get('fingerprint')
     except Exception as e:
         logger.error(f'audio_merge handler: invalid v2 payload, dropping task: {e}')
@@ -2111,45 +2126,28 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             if existing:
                 return JSONResponse(status_code=200, content={'status': 'exists'})
 
-        started_at = conversation.get('started_at') or conversation.get('created_at')
-        started_at_ts = started_at.timestamp()
+        fallback_ts = min(
+            (min(af['chunk_timestamps']) for af in audio_files if isinstance(af, dict) and af.get('chunk_timestamps')),
+            default=0.0,
+        )
+        raw_started = conversation.get('started_at') if conversation.get('started_at') is not None else conversation.get('created_at')
+        started_at_ts = _coerce_started_at_ts(raw_started, fallback=float(fallback_ts))
 
         try:
             mp3_data, spans = await run_blocking(
-                sync_executor,
-                sync_playback.build_conversation_playback_artifact,
-                uid,
-                conversation_id,
-                audio_files,
-                started_at_ts,
+                sync_executor, sync_playback.build_conversation_playback_artifact, uid, conversation_id, audio_files, started_at_ts,
             )
         except FileNotFoundError:
             logger.warning(f'audio_merge: conversation chunks missing conv={conversation_id}, dropping')
-            await run_blocking(
-                storage_executor,
-                mark_conversation_playback_unavailable,
-                uid,
-                conversation_id,
-                fingerprint,
-                'chunks_missing',
-            )
+            await run_blocking(storage_executor, mark_conversation_playback_unavailable, uid, conversation_id, fingerprint, 'chunks_missing')
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'chunks_missing'})
         except Exception as e:
             max_attempts = get_sync_tasks_max_attempts()
             if task_retry_count >= max_attempts - 1:
                 logger.error(f'audio_merge_failed_final conversation artifact conv={conversation_id}: {e}')
-                await run_blocking(
-                    storage_executor,
-                    mark_conversation_playback_unavailable,
-                    uid,
-                    conversation_id,
-                    fingerprint,
-                    'merge_failed',
-                )
+                await run_blocking(storage_executor, mark_conversation_playback_unavailable, uid, conversation_id, fingerprint, 'merge_failed')
                 return JSONResponse(status_code=200, content={'status': 'failed_final'})
-            logger.warning(
-                f'audio_merge: conversation attempt {task_retry_count + 1} failed conv={conversation_id}, will retry: {e}'
-            )
+            logger.warning(f'audio_merge: conversation attempt {task_retry_count + 1} failed conv={conversation_id}, will retry: {e}')
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
         await run_blocking(storage_executor, upload_conversation_playback_artifact, uid, conversation_id, mp3_data)
@@ -2159,10 +2157,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         captured_duration = round(sum(s['len'] for s in spans), 3)
         wall_duration = round(spans[-1]['wall_offset'] + spans[-1]['len'], 3)
         await run_blocking(
-            db_executor,
-            conversations_db.update_conversation,
-            uid,
-            conversation_id,
+            db_executor, conversations_db.update_conversation, uid, conversation_id,
             {
                 'conversation_audio': {
                     'audio_files_fingerprint': fingerprint,
@@ -2174,9 +2169,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                 }
             },
         )
-        logger.info(
-            f'audio_merge: built conversation artifact conv={conversation_id} size={mp3_size} spans={len(spans)}'
-        )
+        logger.info(f'audio_merge: built conversation artifact conv={conversation_id} size={mp3_size} spans={len(spans)}')
         return JSONResponse(status_code=200, content={'status': 'done'})
     finally:
         await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)

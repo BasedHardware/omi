@@ -304,5 +304,32 @@ class TestV2HandlerRetrySemantics:
         assert b'invalid_payload' in resp.body
 
 
+class TestCoerceStartedAtTs:
+    def test_datetime_object(self):
+        from datetime import datetime, timezone
+        dt = datetime(2026, 9, 26, 1, 30, 0, tzinfo=timezone.utc)
+        assert routers_sync._coerce_started_at_ts(dt) == dt.timestamp()
+
+    def test_iso_string(self):
+        from datetime import datetime, timezone
+        dt = datetime(2026, 9, 26, 1, 30, 0, tzinfo=timezone.utc)
+        assert routers_sync._coerce_started_at_ts('2026-09-26T01:30:00Z') == dt.timestamp()
+        assert routers_sync._coerce_started_at_ts('2026-09-26T01:30:00+00:00') == dt.timestamp()
+
+    def test_int_and_float(self):
+        assert routers_sync._coerce_started_at_ts(1790386200.0) == 1790386200.0
+        assert routers_sync._coerce_started_at_ts(1790386200) == 1790386200.0
+
+    def test_bool_not_coerced(self):
+        assert routers_sync._coerce_started_at_ts(True, fallback=999.0) == 999.0
+        assert routers_sync._coerce_started_at_ts(False, fallback=999.0) == 999.0
+
+    def test_none_and_invalid_types_fallback(self):
+        assert routers_sync._coerce_started_at_ts(None, fallback=123.45) == 123.45
+        assert routers_sync._coerce_started_at_ts('invalid-iso', fallback=123.45) == 123.45
+        assert routers_sync._coerce_started_at_ts({}, fallback=123.45) == 123.45
+
+
+
 if __name__ == '__main__':
     sys.exit(pytest.main([__file__, '-v']))
