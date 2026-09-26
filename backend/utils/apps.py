@@ -909,6 +909,17 @@ def generate_persona_desc(uid: str, persona_name: str):
     return persona_description
 
 
+def _persona_gate_zone(uid: str):
+    """Resolved lazily: database.notifications reaches for Firestore symbols at import time."""
+    from zoneinfo import ZoneInfo
+    from database.notifications import resolve_user_timezone
+
+    try:
+        return ZoneInfo(resolve_user_timezone(uid))
+    except Exception:
+        return None
+
+
 def update_personas_async(uid: str):
     if not can_update_persona(uid):
         logger.info(f"[PERSONAS] Rate limited - uid={uid} already updated today")
@@ -917,7 +928,7 @@ def update_personas_async(uid: str):
     logger.info(f"[PERSONAS] Starting persona updates in background thread for uid={uid}")
     personas = get_omi_personas_by_uid_db(uid)
     if personas:
-        set_persona_update_timestamp(uid)
+        set_persona_update_timestamp(uid, _persona_gate_zone(uid))
 
         async def _batch():
             await asyncio.gather(*[update_persona_prompt(persona) for persona in personas])
