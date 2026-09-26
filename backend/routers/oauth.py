@@ -184,10 +184,11 @@ async def oauth_token(
             firebase_id_token,
         )
         uid = decoded_token['uid']
-    except firebase_admin.auth.InvalidIdTokenError as e:
-        raise HTTPException(status_code=401, detail=f"Invalid Firebase ID token: {e}")
+    except firebase_admin.auth.InvalidIdTokenError:
+        raise HTTPException(status_code=401, detail="Invalid Firebase ID token.")
     except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Error verifying Firebase ID token: {e}")
+        logger.error(f"Error verifying Firebase ID token: {type(e).__name__}")
+        raise HTTPException(status_code=401, detail="Error verifying Firebase ID token.")
 
     try:
         enforce_jit_qa_uid(uid)
