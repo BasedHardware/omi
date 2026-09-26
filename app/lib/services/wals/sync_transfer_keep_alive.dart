@@ -16,10 +16,18 @@ class SyncTransferKeepAlive {
     bool Function()? isIOS,
     Future<void> Function()? start,
     Future<void> Function()? stop,
+    void Function(Future<dynamic> Function(MethodCall)? handler)? installNativeHandler,
   })  : _isAndroid = isAndroid ?? _defaultIsAndroid,
         _isIOS = isIOS ?? _defaultIsIOS,
         _start = start,
-        _stop = stop;
+        _stop = stop {
+    // Production uses the channel for both directions. Tests that replace the
+    // native start/stop calls need no binary messenger unless they explicitly
+    // inject a handler installer.
+    if (_isIOS() && (installNativeHandler != null || (start == null && stop == null))) {
+      (installNativeHandler ?? channel.setMethodCallHandler)(_handleNativeCall);
+    }
+  }
 
   static final SyncTransferKeepAlive instance = SyncTransferKeepAlive();
 
@@ -39,6 +47,15 @@ class SyncTransferKeepAlive {
   int get refCount => _refs;
 
   bool get isHeld => _refs > 0;
+
+  Future<dynamic> _handleNativeCall(MethodCall call) async {
+    if (call.method != 'expired') return null;
+    _refs = 0;
+    final arguments = call.arguments;
+    final reason = arguments is Map ? arguments['reason'] : null;
+    Logger.debug('SyncTransferKeepAlive: native lease ended (${reason ?? 'expired'})');
+    return null;
+  }
 
   Future<void> acquire() async {
     _refs++;

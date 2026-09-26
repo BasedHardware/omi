@@ -87,6 +87,22 @@ final class QuickActionsIconPatcher: NSObject {
   private var capturePolicyChannel: FlutterMethodChannel?
   private var syncTransferChannel: FlutterMethodChannel?
   private var syncTransferBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+  private lazy var syncTransferLease = SyncTransferBackgroundLease(
+      begin: { [weak self] expirationHandler in
+          guard let self else { return false }
+          self.syncTransferBackgroundTask = UIApplication.shared.beginBackgroundTask(
+              withName: "omi-live-capture-wal-drain",
+              expirationHandler: expirationHandler
+          )
+          return self.syncTransferBackgroundTask != .invalid
+      },
+      end: { [weak self] in
+          self?.endNativeSyncTransferBackgroundTask()
+      },
+      notifyExpired: { [weak self] reason in
+          self?.syncTransferChannel?.invokeMethod("expired", arguments: ["reason": reason])
+      }
+  )
   private var appleRemindersChannel: FlutterMethodChannel?
   private var appleHealthChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
@@ -252,10 +268,10 @@ final class QuickActionsIconPatcher: NSObject {
           }
           switch call.method {
           case "start":
-              self.beginSyncTransferBackgroundTask()
+              self.syncTransferLease.start()
               result(nil)
           case "stop":
-              self.endSyncTransferBackgroundTask()
+              self.syncTransferLease.stop()
               result(nil)
           default:
               result(FlutterMethodNotImplemented)
@@ -380,14 +396,7 @@ final class QuickActionsIconPatcher: NSObject {
     return launched
   }
 
-  private func beginSyncTransferBackgroundTask() {
-    guard syncTransferBackgroundTask == .invalid else { return }
-    syncTransferBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "omi-live-capture-wal-drain") {
-      self.endSyncTransferBackgroundTask()
-    }
-  }
-
-  private func endSyncTransferBackgroundTask() {
+  private func endNativeSyncTransferBackgroundTask() {
     guard syncTransferBackgroundTask != .invalid else { return }
     let task = syncTransferBackgroundTask
     syncTransferBackgroundTask = .invalid
