@@ -234,6 +234,22 @@ def test_finalize_audio_file_group_duration_uses_32000_bytes_per_second():
     assert 'last_chunk_size / 16000.0' not in source
 
 
+def test_finalize_audio_file_group_handles_explicit_none_size():
+    # A legacy chunk dict can carry an explicit `size: None` (not merely a
+    # missing key), which a bare `.get('size', 0)` default does not catch --
+    # `None > 0` then raises TypeError and aborts the whole conversation's
+    # audio finalization. Falls back to the same 5.0s estimate as a missing
+    # or zero size.
+    import database.conversations as conversations_db
+
+    chunk_group = [
+        {'timestamp': 1000.0, 'size': 5000},
+        {'timestamp': 1005.0, 'size': None},
+    ]
+    audio_file = conversations_db._finalize_audio_file_group('uid', 'conversation', chunk_group, [])
+    assert audio_file.duration == 10.0
+
+
 # ---------------------------------------------------------------------------
 # Handler v2 source-structure assertions (routers/sync.py imports the world)
 # ---------------------------------------------------------------------------
