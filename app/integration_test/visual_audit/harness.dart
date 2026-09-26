@@ -161,7 +161,16 @@ Map<String, Object?>? _paragraphFinding(RenderParagraph paragraph) {
     if (last.start <= 0 || last.end > plain.length || plain[last.start - 1] == '\n') return null;
     final lastLine = plain.substring(last.start, last.end).trim();
     if (lastLine.isEmpty || lastLine.contains(RegExp(r'\s'))) return null;
-    return {'kind': 'orphan', 'text': text, 'lastLine': lastLine, 'lines': lines, 'width': paragraph.size.width};
+    // A one- or two-word label that wraps does not fit its line ("Voice / Response"); longer copy
+    // left one word alone ("… to listen all / day.").
+    final words = plain.trim().split(RegExp(r'\s+')).length;
+    return {
+      'kind': words < 3 ? 'cramped' : 'orphan',
+      'text': text,
+      'lastLine': lastLine,
+      'lines': lines,
+      'width': paragraph.size.width,
+    };
   } finally {
     painter.dispose();
   }

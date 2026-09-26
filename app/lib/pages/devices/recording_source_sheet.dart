@@ -47,7 +47,8 @@ class _RecordingSourceBody extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
-          child: Text(l10n.recordingFromSubtitle, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+          child: OmiBalancedText(l10n.recordingFromSubtitle,
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
         ),
         const SizedBox(height: OmiSpacing.md),
         DeviceSourcesGroup(

@@ -1,8 +1,11 @@
+import 'dart:math';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:omi/ui/components/omi_balanced_text.dart';
 import 'package:omi/ui/components/omi_glyph.dart';
 import 'package:omi/ui/components/omi_surface.dart';
 import 'package:omi/ui/omi_tokens.dart';
@@ -61,15 +64,21 @@ class OmiSectionHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          // The trailing control sits beside the title while both fit and drops under it on a
+          // narrow phone or at a large text size, so the title never breaks beside it.
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: OmiSpacing.sm,
+            runSpacing: OmiSpacing.xs,
             children: [
-              Expanded(child: Semantics(header: true, child: Text(title, style: OmiType.title3))),
+              Semantics(header: true, child: OmiBalancedText(title, style: OmiType.title3)),
               if (trailing != null) trailing!,
             ],
           ),
           if (subtitle != null) ...[
             const SizedBox(height: 6),
-            Text(subtitle!, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+            OmiBalancedText(subtitle!, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
           ],
         ],
       ),
@@ -126,7 +135,7 @@ class OmiSettingsGroup extends StatelessWidget {
         if (footer != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, 0),
-            child: Text(footer!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+            child: OmiBalancedText(footer!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
           ),
       ],
     );
@@ -222,6 +231,22 @@ class OmiSettingsRow extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
         child: LayoutBuilder(
           builder: (context, constraints) {
+            // The title keeps its line when it can: a value gives way first and truncates (to 48pt at
+            // the least), as in iOS Settings, so "Voice Response" never wraps beside its value.
+            var valueMax = constraints.maxWidth * 0.6;
+            if (value != null && trailingWidget == null) {
+              final painter = TextPainter(
+                text: TextSpan(text: title, style: OmiType.body),
+                textDirection: Directionality.of(context),
+                textScaler: MediaQuery.textScalerOf(context),
+                maxLines: 1,
+              )..layout();
+              final fixed =
+                  (leading != null ? 30 + OmiSpacing.sm : 0) + OmiSpacing.xs + (chevron ? 14 + OmiSpacing.xxs : 0);
+              final room = constraints.maxWidth - fixed - painter.width - 1;
+              painter.dispose();
+              valueMax = room.clamp(48.0, max(48.0, constraints.maxWidth * 0.6));
+            }
             return Row(
               children: [
                 if (leading != null) ...[
@@ -255,10 +280,11 @@ class OmiSettingsRow extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(title, style: OmiType.body.copyWith(color: titleColor)),
+                      // Wrapped titles and subtitles break evenly, never one word alone.
+                      OmiBalancedText(title, style: OmiType.body.copyWith(color: titleColor)),
                       if (subtitle != null) ...[
                         const SizedBox(height: 2),
-                        Text(subtitle!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                        OmiBalancedText(subtitle!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
                       ],
                     ],
                   ),
@@ -266,7 +292,7 @@ class OmiSettingsRow extends StatelessWidget {
                 if (value != null && trailingWidget == null) ...[
                   const SizedBox(width: OmiSpacing.xs),
                   ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.6),
+                    constraints: BoxConstraints(maxWidth: valueMax),
                     child: Text(
                       value!,
                       maxLines: 1,

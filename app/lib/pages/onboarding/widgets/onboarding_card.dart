@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/components/omi_balanced_text.dart';
 import 'package:omi/ui/omi_tokens.dart';
 
 /// The body of a first-run step (v2): content from the top of the page under the progress bar,
@@ -71,10 +72,10 @@ class OnboardingHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Semantics(header: true, child: Text(title, style: OmiType.display)),
+          Semantics(header: true, child: OmiBalancedText(title, style: OmiType.display)),
           if (subtitle != null) ...[
             const SizedBox(height: OmiSpacing.xs),
-            Text(subtitle!, style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.35)),
+            OmiBalancedText(subtitle!, style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.35)),
           ],
         ],
       ),

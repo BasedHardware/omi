@@ -139,7 +139,9 @@ class _Tip extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(width: 96, child: Text(label, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w700))),
-          Expanded(child: Text(text, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.35))),
+          Expanded(
+              child:
+                  OmiBalancedText(text, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.35))),
         ],
       ),
     );

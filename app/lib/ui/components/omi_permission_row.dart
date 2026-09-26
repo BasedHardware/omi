@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:permission_handler/permission_handler.dart';
 
+import 'package:omi/ui/components/omi_balanced_text.dart';
 import 'package:omi/ui/components/omi_button.dart';
 import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -172,10 +173,10 @@ class OmiPermissionRow extends StatelessWidget {
               children: [
                 Text(title, style: OmiType.headline),
                 const SizedBox(height: 2),
-                Text(reason, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                OmiBalancedText(reason, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
                 if (statusLine != null) ...[
                   const SizedBox(height: OmiSpacing.xxs),
-                  Text(statusLine, style: OmiType.footnote.copyWith(color: OmiColors.warning)),
+                  OmiBalancedText(statusLine, style: OmiType.footnote.copyWith(color: OmiColors.warning)),
                 ],
               ],
             ),

@@ -81,10 +81,10 @@ class LeaveFlowStepScaffold extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Semantics(header: true, child: Text(title, style: OmiType.title2)),
+                    Semantics(header: true, child: OmiBalancedText(title, style: OmiType.title2)),
                     if (subtitle != null) ...[
                       const SizedBox(height: OmiSpacing.xxs),
-                      Text(subtitle!, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                      OmiBalancedText(subtitle!, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
                     ],
                   ],
                 ),
@@ -223,7 +223,8 @@ class LeaveFlowConsequenceRow extends StatelessWidget {
             _IconBadge(icon: icon, color: OmiColors.textSecondary),
             const SizedBox(width: OmiSpacing.sm),
             Expanded(
-              child: Text(text, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.3)),
+              child:
+                  OmiBalancedText(text, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.3)),
             ),
           ],
         ),

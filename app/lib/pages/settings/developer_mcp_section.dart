@@ -49,11 +49,12 @@ class DeveloperMcpSection extends StatelessWidget {
       children: [
         OmiSectionHeader(
           l10n.mcp,
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
+          // The buttons wrap rather than overflow on a narrow phone at a large text size.
+          trailing: Wrap(
+            spacing: OmiSpacing.xs,
+            runSpacing: OmiSpacing.xs,
             children: [
               const DeveloperDocsButton(url: 'https://docs.omi.me/doc/developer/MCP', analyticsLabel: 'MCP'),
-              const SizedBox(width: OmiSpacing.xs),
               OmiButton.secondary(
                 label: l10n.createKey,
                 leading: const FaIcon(FontAwesomeIcons.plus),

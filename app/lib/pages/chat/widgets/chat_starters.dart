@@ -34,10 +34,10 @@ class ChatStarters extends StatelessWidget {
               const SizedBox(height: 18),
               Semantics(
                 header: true,
-                child: Text(l10n.askEmptyTitle, textAlign: TextAlign.center, style: OmiType.serifTitle),
+                child: OmiBalancedText(l10n.askEmptyTitle, textAlign: TextAlign.center, style: OmiType.serifTitle),
               ),
               const SizedBox(height: OmiSpacing.xs),
-              Text(
+              OmiBalancedText(
                 l10n.askEmptySubtitle,
                 textAlign: TextAlign.center,
                 style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),

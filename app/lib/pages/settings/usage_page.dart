@@ -1122,7 +1122,7 @@ class _UsageStatCard extends StatelessWidget {
             const SizedBox(height: 2),
             Text(title, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(height: 2),
-            Text(subtitle, style: OmiType.caption.copyWith(color: OmiColors.textSecondary)),
+            OmiBalancedText(subtitle, style: OmiType.caption.copyWith(color: OmiColors.textSecondary)),
             if (footer != null) ...[const SizedBox(height: OmiSpacing.sm), footer!],
           ],
         ),
