@@ -64,15 +64,7 @@ struct RewindSearchBar: View {
       }
 
       if isTyped {
-        Button(action: onClear) {
-          Image(systemName: "xmark.circle.fill")
-            .font(.system(size: 13, weight: .regular))
-            .foregroundStyle(Ink.secondary)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(Self.clearActionName)
-        .accessibilityLabel(Text(Self.clearActionName))
+        ClearFieldButton(help: Self.clearActionName) { onClear() }
       }
     }
     .frame(height: RewindSearchLayout.barHeight)
@@ -116,7 +108,12 @@ struct RewindSearchBar: View {
           .font(.system(size: RewindSearchMetrics.queryFontSize, weight: .semibold))
           .foregroundStyle(Ink.primary)
           .focused(focus)
+          .straysTypingHere(focus)
           .accessibilityLabel(Text(Self.searchActionName))
+          .onChange(of: focus.wrappedValue) { _, focused in
+            guard focused else { return }
+            SearchAnalytics.barFocused(surface: .rewind)
+          }
       }
       .padding(.leading, isTyped ? RewindSearchMetrics.chipPaddingHorizontal : 0)
     }

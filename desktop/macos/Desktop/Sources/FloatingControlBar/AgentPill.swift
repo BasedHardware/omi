@@ -2113,7 +2113,7 @@ final class AgentPillsManager: ObservableObject {
           return String(trimmed.prefix(110))
         }
       case .thinking, .discoveryCard, .questionCard, .taskCard, .goalLink, .captureLink,
-        .conversationLink, .memoryLink, .citation:
+        .conversationLink, .memoryLink, .citation, .followUp, .memoryReviewCard:
         continue
       }
     }

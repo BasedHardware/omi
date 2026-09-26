@@ -1,10 +1,9 @@
+import 'package:omi/services/app_review_service.dart';
+import 'package:omi/widgets/app_review_prompt.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import 'package:flutter_map/flutter_map.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'package:omi/backend/http/api/conversations.dart' as conversations_api;
@@ -13,18 +12,20 @@ import 'package:omi/backend/http/api/users.dart'
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/daily_summary_journey.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/share_links.dart';
+import 'package:omi/utils/share_sheet.dart';
+import 'package:omi/widgets/components/memory_review_card.dart';
+import 'package:omi/widgets/omi_map_preview.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/other/temp.dart';
 
 class DailySummaryDetailPage extends StatefulWidget {
   final String summaryId;
   final DailySummary? summary; // Can pass directly if already loaded
-  final TileProvider? tileProvider;
 
-  const DailySummaryDetailPage({super.key, required this.summaryId, this.summary, this.tileProvider});
+  const DailySummaryDetailPage({super.key, required this.summaryId, this.summary});
 
   @override
   State<DailySummaryDetailPage> createState() => _DailySummaryDetailPageState();
@@ -90,9 +91,9 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
+      backgroundColor: OmiColors.surface0,
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          ? const OmiLoadingState()
           : _summary == null
               ? _buildNotFound()
               : _buildContent(),
@@ -106,12 +107,14 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     try {
       final shared = await setDailySummaryVisibility(widget.summaryId);
       if (!shared) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to share recap')));
+        if (mounted) OmiFeedback.error(context, context.l10n.failedToShareRecap);
         return;
       }
       PlatformManager.instance.analytics.dailySummaryShared(summaryId: widget.summaryId, date: summary.date);
       final url = recapShareUrl(widget.summaryId);
-      await SharePlus.instance.share(ShareParams(uri: Uri.parse(url), subject: summary.headline));
+      await SharePlus.instance.share(
+        ShareParams(uri: Uri.parse(url), subject: summary.headline, sharePositionOrigin: shareSheetOrigin()),
+      );
     } finally {
       if (mounted) setState(() => _isSharing = false);
     }
@@ -133,7 +136,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+      builder: (context) => const Center(child: OmiSpinner(size: OmiSpinnerSize.large)),
     );
 
     try {
@@ -142,15 +145,12 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       Navigator.pop(context); // Dismiss loading
 
       if (conversation != null) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => ConversationDetailPage(conversation: conversation)),
-        );
+        routeToPage(context, ConversationDetailPage(conversation: conversation));
       }
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context); // Dismiss loading
-      AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
+      OmiFeedback.error(context, context.l10n.somethingWentWrong);
     }
   }
 
@@ -171,7 +171,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         date: summary?.date ?? '',
         source: analyticsSource,
       );
-      AppSnackbar.showSnackbar(context.l10n.recapDeletedSnackbar);
+      OmiFeedback.confirm(context, context.l10n.recapDeletedSnackbar);
       Navigator.pop(context, {'deleted': true, 'summaryId': widget.summaryId});
     } else {
       PlatformManager.instance.analytics.dailySummaryDeleteFailed(
@@ -180,80 +180,38 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         source: analyticsSource,
       );
       setState(() => _isDeleting = false);
-      AppSnackbar.showSnackbarError(context.l10n.recapDeleteFailed);
+      OmiFeedback.error(context, context.l10n.recapDeleteFailed);
     }
   }
 
   /// Bottom sheet menu opened by the SliverAppBar's 3-dot icon.
   Future<void> _showActionsSheet() async {
     if (_summary == null) return;
-
-    if (PlatformService.isApple) {
-      await showCupertinoModalPopup<void>(
-        context: context,
-        builder: (sheetCtx) => CupertinoActionSheet(
-          actions: [
-            CupertinoActionSheetAction(
-              onPressed: () {
-                Navigator.pop(sheetCtx);
-                _regenerateRecap();
-              },
-              child: Text(context.l10n.regenerateRecap),
-            ),
-            CupertinoActionSheetAction(
-              isDestructiveAction: true,
-              onPressed: () {
-                Navigator.pop(sheetCtx);
-                _confirmDelete();
-              },
-              child: Text(context.l10n.deleteRecap),
-            ),
-          ],
-          cancelButton: CupertinoActionSheetAction(
-            onPressed: () => Navigator.pop(sheetCtx),
-            child: Text(context.l10n.cancel),
-          ),
-        ),
-      );
-      return;
-    }
-
-    await showModalBottomSheet<void>(
+    await showOmiSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF1A1A1F),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (sheetCtx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.refresh, color: Colors.white),
-              title: Text(
-                context.l10n.regenerateRecap,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-              ),
-              onTap: () {
-                Navigator.pop(sheetCtx);
-                _regenerateRecap();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline, color: Color(0xFFFF6B6B)),
-              title: Text(
-                context.l10n.deleteRecap,
-                style: const TextStyle(color: Color(0xFFFF6B6B), fontWeight: FontWeight.w600),
-              ),
-              onTap: () {
-                Navigator.pop(sheetCtx);
-                _confirmDelete();
-              },
-            ),
-            ListTile(
-              title: Text(context.l10n.cancel, textAlign: TextAlign.center),
-              onTap: () => Navigator.pop(sheetCtx),
-            ),
-          ],
-        ),
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.md),
+      builder: (sheetCtx) => OmiSettingsGroup(
+        children: [
+          OmiSettingsRow(
+            leading: const Icon(Icons.refresh),
+            title: context.l10n.regenerateRecap,
+            showChevron: false,
+            onTap: () {
+              Navigator.pop(sheetCtx);
+              _regenerateRecap();
+            },
+          ),
+          OmiSettingsRow(
+            leading: const Icon(Icons.delete_outline),
+            title: context.l10n.deleteRecap,
+            isDestructive: true,
+            showChevron: false,
+            onTap: () {
+              Navigator.pop(sheetCtx);
+              _confirmDelete();
+            },
+          ),
+        ],
       ),
     );
   }
@@ -276,7 +234,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+      builder: (_) => const Center(child: OmiSpinner(size: OmiSpinnerSize.large)),
     );
 
     final result = await regenerateDailySummary(widget.summaryId);
@@ -293,7 +251,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         _summary = result.summary;
         _isRegenerating = false;
       });
-      AppSnackbar.showSnackbar(context.l10n.recapRegeneratedSnackbar);
+      OmiFeedback.confirm(context, context.l10n.recapRegeneratedSnackbar);
     } else {
       setState(() => _isRegenerating = false);
       final message = result.statusCode == 429
@@ -301,7 +259,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
           : result.statusCode == 400
               ? (result.errorDetail ?? context.l10n.recapRegenerateNoConversations)
               : context.l10n.recapRegenerateFailed;
-      AppSnackbar.showSnackbarError(message);
+      OmiFeedback.error(context, message);
     }
   }
 
@@ -313,15 +271,22 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   }
 
   Widget _buildNotFound() {
-    return Center(
+    return SafeArea(
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('📭', style: TextStyle(fontSize: 64)),
-          const SizedBox(height: 16),
-          Text(context.l10n.summaryNotFound, style: TextStyle(color: Colors.grey.shade400, fontSize: 18)),
-          const SizedBox(height: 24),
-          TextButton(onPressed: () => Navigator.pop(context), child: Text(context.l10n.goBack)),
+          const OmiBackButton(),
+          Expanded(
+            child: OmiEmptyState(
+              icon: Icons.inbox_outlined,
+              title: context.l10n.summaryNotFound,
+              action: OmiButton.secondary(
+                label: context.l10n.goBack,
+                size: OmiButtonSize.compact,
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -329,37 +294,49 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
 
   Widget _buildContent() {
     final summary = _summary!;
-    return FadeTransition(
-      opacity: _fadeAnimation,
-      child: CustomScrollView(
-        slivers: [
-          _buildHeader(summary),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-            sliver: SliverList(
-              delegate: SliverChildListDelegate([
-                _buildOverviewCard(summary),
-                const SizedBox(height: 24),
-                _buildStatsRow(summary),
-                if (summary.highlights.isNotEmpty) ...[const SizedBox(height: 32), _buildHighlightsSection(summary)],
-                if (summary.actionItems.isNotEmpty) ...[const SizedBox(height: 32), _buildActionItemsSection(summary)],
-                if (summary.unresolvedQuestions.isNotEmpty) ...[
-                  const SizedBox(height: 32),
-                  _buildUnresolvedQuestionsSection(summary),
-                ],
-                if (summary.decisionsMade.isNotEmpty) ...[
-                  const SizedBox(height: 32),
-                  _buildDecisionsMadeSection(summary),
-                ],
-                if (summary.knowledgeNuggets.isNotEmpty) ...[
-                  const SizedBox(height: 32),
-                  _buildKnowledgeNuggetsSection(summary),
-                ],
-                if (summary.locations.isNotEmpty) ...[const SizedBox(height: 32), _buildLocationsMap(summary)],
-              ]),
+    return AppReviewPrompt(
+      contentId: summary.id,
+      moment: AppReviewMoment.dailySummaryRead,
+      enabled: !_isLoading && !_isSharing && !_isDeleting && !_isRegenerating && summary.overview.trim().isNotEmpty,
+      child: FadeTransition(
+        opacity: _fadeAnimation,
+        child: CustomScrollView(
+          slivers: [
+            _buildHeader(summary),
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+              sliver: SliverList(
+                delegate: SliverChildListDelegate([
+                  _buildOverviewCard(summary),
+                  const SizedBox(height: 24),
+                  _buildStatsRow(summary),
+                  if (summary.highlights.isNotEmpty) ...[const SizedBox(height: 32), _buildHighlightsSection(summary)],
+                  if (summary.actionItems.isNotEmpty) ...[
+                    const SizedBox(height: 32),
+                    _buildActionItemsSection(summary)
+                  ],
+                  if (summary.unresolvedQuestions.isNotEmpty) ...[
+                    const SizedBox(height: 32),
+                    _buildUnresolvedQuestionsSection(summary),
+                  ],
+                  if (summary.decisionsMade.isNotEmpty) ...[
+                    const SizedBox(height: 32),
+                    _buildDecisionsMadeSection(summary),
+                  ],
+                  if (summary.memoriesLearned.isNotEmpty) ...[
+                    const SizedBox(height: 32),
+                    _buildMemoriesLearnedSection(summary),
+                  ],
+                  if (summary.knowledgeNuggets.isNotEmpty) ...[
+                    const SizedBox(height: 32),
+                    _buildKnowledgeNuggetsSection(summary),
+                  ],
+                  if (summary.locations.isNotEmpty) ...[const SizedBox(height: 32), _buildLocationsMap(summary)],
+                ]),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -368,50 +345,19 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     return SliverAppBar(
       expandedHeight: 150,
       pinned: true,
-      backgroundColor: Theme.of(context).colorScheme.primary,
-      leading: IconButton(
-        icon: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.3), shape: BoxShape.circle),
-          child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
-        ),
-        onPressed: () => Navigator.pop(context),
-      ),
+      backgroundColor: OmiColors.surface0,
+      leading: Center(child: OmiBackButton.circled(fillColor: Colors.black.withValues(alpha: 0.3))),
       actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: GestureDetector(
-            onTap: _isSharing ? null : _shareSummary,
-            child: Container(
-              width: 36,
-              height: 36,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.3), shape: BoxShape.circle),
-              child: _isSharing
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                      ),
-                    )
-                  : const Icon(Icons.share_outlined, color: Colors.white, size: 20),
-            ),
-          ),
+        OmiIconButton.filled(
+          icon: _isSharing ? const OmiSpinner(size: OmiSpinnerSize.small) : const Icon(Icons.share_outlined),
+          label: context.l10n.share,
+          fillColor: Colors.black.withValues(alpha: 0.3),
+          onPressed: _isSharing ? null : _shareSummary,
         ),
-        IconButton(
-          icon: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.3), shape: BoxShape.circle),
-            child: _isDeleting
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                  )
-                : const Icon(Icons.more_horiz, color: Colors.white, size: 20),
-          ),
+        OmiIconButton.filled(
+          icon: _isDeleting ? const OmiSpinner(size: OmiSpinnerSize.small) : const Icon(Icons.more_horiz),
+          label: context.l10n.moreOptions,
+          fillColor: Colors.black.withValues(alpha: 0.3),
           onPressed: _isDeleting ? null : _showActionsSheet,
         ),
         const SizedBox(width: 8),
@@ -422,10 +368,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [
-                Color(0xFF2D1F5B), // Deep purple at top
-                Color(0xFF000000), // Almost black at bottom
-              ],
+              // Neutral header wash (INV-UI-1: no purple).
+              colors: [OmiColors.surface2, OmiColors.surface0],
             ),
           ),
           child: SafeArea(
@@ -482,33 +426,44 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   }
 
   Widget _buildStatsRow(DailySummary summary) {
-    return Row(
-      children: [
-        _buildStatItem(FontAwesomeIcons.message, '${summary.stats.totalConversations}'),
-        const SizedBox(width: 8),
-        _buildStatItem(FontAwesomeIcons.clock, summary.stats.formattedDuration),
-        const SizedBox(width: 8),
-        _buildStatItem(FontAwesomeIcons.circleCheck, '${summary.stats.actionItemsCount}'),
-      ],
+    final items = <Widget>[
+      _buildStatItem(FontAwesomeIcons.message, '${summary.stats.totalConversations}'),
+      _buildStatItem(FontAwesomeIcons.clock, summary.stats.formattedDuration),
+      _buildStatItem(FontAwesomeIcons.circleCheck, '${summary.stats.actionItemsCount}'),
+    ];
+    if ((summary.stats.watchingMinutes ?? 0) > 0) {
+      items.add(_buildStatItem(FontAwesomeIcons.eye, summary.stats.formattedWatchingDuration!));
+    }
+    if ((summary.stats.proactiveMoments ?? 0) > 0) {
+      items.add(_buildStatItem(FontAwesomeIcons.bell, '${summary.stats.proactiveMoments}'));
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = items.length > 3 ? 3 : items.length;
+        final itemWidth = (constraints.maxWidth - (columns - 1) * 8) / columns;
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [for (final item in items) SizedBox(width: itemWidth, child: item)],
+        );
+      },
     );
   }
 
   Widget _buildStatItem(FaIconData icon, String value) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-        decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            FaIcon(icon, color: Colors.grey.shade400, size: 14),
-            const SizedBox(width: 8),
-            Text(
-              value,
-              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+      decoration: BoxDecoration(color: const Color(0xFF1A1A1F), borderRadius: BorderRadius.circular(16)),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          FaIcon(icon, color: Colors.grey.shade400, size: 14),
+          const SizedBox(width: 8),
+          Text(
+            value,
+            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+          ),
+        ],
       ),
     );
   }
@@ -532,34 +487,6 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   Widget _buildLocationsMap(DailySummary summary) {
     final timelineLocations = buildTimelineLocations(summary.locations, unknownLabel: context.l10n.unknown);
 
-    // Get all coordinates as LatLng
-    final points = summary.locations.map((l) => LatLng(l.latitude, l.longitude)).toList();
-
-    // Calculate bounds to fit all markers
-    final minLat = summary.locations.map((l) => l.latitude).reduce((a, b) => a < b ? a : b);
-    final maxLat = summary.locations.map((l) => l.latitude).reduce((a, b) => a > b ? a : b);
-    final minLng = summary.locations.map((l) => l.longitude).reduce((a, b) => a < b ? a : b);
-    final maxLng = summary.locations.map((l) => l.longitude).reduce((a, b) => a > b ? a : b);
-
-    // Add padding to bounds (in degrees) to ensure pins aren't at the edge
-    const padding = 0.01; // ~1km padding
-    final bounds = LatLngBounds(LatLng(minLat - padding, minLng - padding), LatLng(maxLat + padding, maxLng + padding));
-
-    // For single location, use center + zoom; for multiple, use bounds
-    final bool singleLocation = summary.locations.length == 1;
-    final centerLat = (minLat + maxLat) / 2;
-    final centerLng = (minLng + maxLng) / 2;
-
-    // Build markers for FlutterMap
-    final markers = summary.locations.map((loc) {
-      return Marker(
-        point: LatLng(loc.latitude, loc.longitude),
-        width: 32,
-        height: 32,
-        child: const FaIcon(FontAwesomeIcons.locationDot, color: Colors.deepPurple, size: 28),
-      );
-    }).toList();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -570,33 +497,21 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
           child: GestureDetector(
             onTap: () {
               if (summary.locations.isNotEmpty) {
+                // Apple Maps cannot take waypoints via map_launcher, so the
+                // preview opens the day's first stop; each timeline row below
+                // opens its own stop.
                 MapsUtil.launchMap(summary.locations.first.latitude, summary.locations.first.longitude);
               }
             },
             child: SizedBox(
               width: double.infinity,
               height: 200,
-              child: IgnorePointer(
-                child: FlutterMap(
-                  options: MapOptions(
-                    initialCenter: singleLocation ? points.first : LatLng(centerLat, centerLng),
-                    initialZoom: singleLocation ? 14 : 12,
-                    // Use bounds fitting for multiple locations
-                    initialCameraFit:
-                        singleLocation ? null : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
-                    interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-                      subdomains: const ['a', 'b', 'c', 'd'],
-                      userAgentPackageName: 'me.omi.app',
-                      retinaMode: true,
-                      tileProvider: widget.tileProvider,
-                    ),
-                    MarkerLayer(markers: markers),
-                  ],
-                ),
+              child: OmiMapPreview(
+                key: const ValueKey('daily_summary_journey_preview'),
+                pins: [
+                  for (final location in summary.locations)
+                    OmiMapPin(latitude: location.latitude, longitude: location.longitude),
+                ],
               ),
             ),
           ),
@@ -785,6 +700,17 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     );
   }
 
+  /// The same review rows the day-summary chat card shows, so a verdict cast
+  /// in either place lands on the same memory. Placed before the LLM-prose
+  /// learnings, which stay exactly as they were.
+  Widget _buildMemoriesLearnedSection(DailySummary summary) {
+    return MemoryReviewCard(
+      items: summary.memoriesLearned,
+      source: MemoryReviewSource.dailySummaryDetail,
+      impressionKey: summary.id.isNotEmpty ? summary.id : widget.summaryId,
+    );
+  }
+
   Widget _buildKnowledgeNuggetsSection(DailySummary summary) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -887,38 +813,14 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
 /// user taps the destructive action. Lifted to a free function so the list
 /// page's swipe handler can fire the same dialog without instantiating the
 /// detail page state.
+/// Confirms deleting a daily recap. A recap cannot be restored, so this always asks.
 Future<bool?> showDeleteRecapConfirmDialog(BuildContext context) {
   final l10n = context.l10n;
-  if (PlatformService.isApple) {
-    return showCupertinoDialog<bool>(
-      context: context,
-      builder: (dialogCtx) => CupertinoAlertDialog(
-        title: Text(l10n.deleteRecapConfirmTitle),
-        content: Padding(padding: const EdgeInsets.only(top: 8), child: Text(l10n.deleteRecapConfirmBody)),
-        actions: [
-          CupertinoDialogAction(onPressed: () => Navigator.pop(dialogCtx, false), child: Text(l10n.cancel)),
-          CupertinoDialogAction(
-            isDestructiveAction: true,
-            onPressed: () => Navigator.pop(dialogCtx, true),
-            child: Text(l10n.deleteRecapAction),
-          ),
-        ],
-      ),
-    );
-  }
-  return showDialog<bool>(
-    context: context,
-    builder: (dialogCtx) => AlertDialog(
-      title: Text(l10n.deleteRecapConfirmTitle),
-      content: Text(l10n.deleteRecapConfirmBody),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(dialogCtx, false), child: Text(l10n.cancel)),
-        TextButton(
-          onPressed: () => Navigator.pop(dialogCtx, true),
-          style: TextButton.styleFrom(foregroundColor: const Color(0xFFFF6B6B)),
-          child: Text(l10n.deleteRecapAction),
-        ),
-      ],
-    ),
+  return showOmiConfirm(
+    context,
+    title: l10n.deleteRecapConfirmTitle,
+    message: l10n.deleteRecapConfirmBody,
+    confirmLabel: l10n.deleteRecapAction,
+    destructive: true,
   );
 }

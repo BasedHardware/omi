@@ -17,7 +17,7 @@ Portable **device BLE protocol** helpers for languages that do not yet have a fu
 | TypeScript | [`typescript/`](typescript/) | UUIDs, header strip, transport interface |
 | Go | [`go/`](go/) | UUIDs + `StripPacketHeader` + optional BLE (`-tags ble`, tinygo bluetooth) |
 | Rust | [`rust/`](rust/) | UUIDs + `strip_packet_header` |
-| C++ | [`cpp/`](cpp/) | UUIDs + `StripPacketHeader` |
+| C++ | [`cpp/`](cpp/) | UUIDs + `StripPacketHeader` + injectable `BleBackend` |
 | Dart | [`dart/`](dart/) | UUIDs + `stripPacketHeader` |
 
 Protocol source of truth: [`PROTOCOL.md`](PROTOCOL.md).
@@ -49,4 +49,4 @@ All languages expose the same engine names: `deepgram`, `whisper`, `parakeet`.
 | Go | tinygo.org/x/bluetooth | `-tags ble` |
 | Rust | btleplug | feature `ble` |
 | Dart | flutter_blue_plus (app UUID map) | Flutter package |
-| C++ | SimpleBLE | `-DOMI_DEVICE_BLE=ON` |
+| C++ | your own (`BleBackend`) | `SetBleBackend()` |

@@ -460,11 +460,11 @@ def create_action_item_tool(
         except ValueError as e:
             return f"Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_at} - {str(e)}"
     else:
-        # Set default due date to 24 hours from now in UTC
-        now = datetime.now(datetime.now().astimezone().tzinfo)
-        default_due = now + timedelta(hours=24)
-        action_item_data['due_at'] = default_due
-        logger.info(f"📅 No due date provided, setting default to 24h from now: {default_due}")
+        # A task the user never dated has no due date. Inventing now+24h put it in
+        # neither the overdue nor the due-today bucket any reader uses, so
+        # "remind me to X" followed by "what's on my list" deterministically
+        # returned nothing. `due_at` is Optional everywhere; leave it unset.
+        logger.info("📅 No due date provided, leaving due_at unset")
 
     # Create the action item
     try:

@@ -207,6 +207,17 @@ sys.modules["utils.notifications"].send_notification_async = AsyncMock()
 sys.modules["utils.conversations.factory"].deserialize_conversations = MagicMock(return_value=[])
 sys.modules["utils.conversations.render"].conversations_to_string = MagicMock(return_value="")
 sys.modules["utils.conversations.render"].conversation_to_dict = MagicMock(return_value={})
+
+
+def _stub_redact_conversation_for_integration(conv):
+    redacted = dict(conv)
+    redacted.pop("geolocation", None)
+    return redacted
+
+
+sys.modules["utils.conversations.render"].redact_conversation_for_integration = (
+    _stub_redact_conversation_for_integration
+)
 sys.modules["utils.conversations.render"].populate_speaker_names = MagicMock()
 sys.modules["utils.conversations.render"].populate_folder_names = MagicMock()
 sys.modules["utils.conversations.render"].serialize_datetimes = MagicMock(side_effect=lambda value: value)

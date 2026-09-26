@@ -94,10 +94,10 @@ final class GlassPanelHitRegionTests: XCTestCase {
       "the band above the panel is air and must not swallow a click aimed at another app")
   }
 
-  /// Legacy Home hosts both its primary navigation and Settings menu beside `PageGlassLane`. The
-  /// slot must give either menu the real shared glass and its matching hit region, while the modern
-  /// panel-hosted Settings menu must inherit the page panel instead of adding a second material.
-  func testLegacySidebarSlotOwnsGlassAndHitsForBothMenus() throws {
+  /// The panel-hosted Settings menu inherits the page panel rather than adding a second material,
+  /// so it owns no standalone glass surface and claims no hit region of its own. (The legacy
+  /// sidebar shell this used to compare against is gone.)
+  func testPanelHostedSettingsMenuAddsNoSecondSurface() throws {
     defer { teardownWindow() }
 
     for host in SidebarHost.allCases {
@@ -166,13 +166,9 @@ final class GlassPanelHitRegionTests: XCTestCase {
 
   private enum SidebarHost: CaseIterable {
     case panelSettings
-    case legacySettings
-    case legacyNavigation
 
-    var expectsSurface: Bool { self != .panelSettings }
-    var width: CGFloat {
-      self == .legacyNavigation ? 64 : SettingsSidebarMetrics.expandedWidth
-    }
+    var expectsSurface: Bool { false }
+    var width: CGFloat { SettingsSidebarMetrics.expandedWidth }
   }
 
   private func mountSidebar(_ host: SidebarHost) -> NSRect {
@@ -190,18 +186,6 @@ final class GlassPanelHitRegionTests: XCTestCase {
     switch host {
     case .panelSettings:
       sidebar = AnyView(settingsSidebar)
-    case .legacySettings:
-      sidebar = AnyView(LegacySidebarSurface(reduceTransparency: false) { settingsSidebar })
-    case .legacyNavigation:
-      sidebar = AnyView(
-        LegacySidebarSurface(reduceTransparency: false) {
-          SidebarView(
-            selectedIndex: .constant(SidebarNavItem.dashboard.rawValue),
-            isCollapsed: .constant(true),
-            memoryDestinationRawValue: .constant(MemoryHubDestination.memories.rawValue),
-            appState: AppState()
-          )
-        })
     }
 
     let root = HStack(spacing: 0) {

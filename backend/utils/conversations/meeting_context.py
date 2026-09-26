@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Iterable, Optional
 
+import database.calendar_meetings as calendar_db
+import database.redis_db as redis_db
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
-from models.conversation import CalendarEventLink
+from models.conversation import CalendarEventLink, Conversation, CreateConversation
+
+logger = logging.getLogger(__name__)
 
 MAX_SCREEN_CONTEXT_ROWS = 80
 MAX_SCREEN_CONTEXT_CHARACTERS = 12_000
@@ -23,6 +28,27 @@ MEETING_SEARCH_TOLERANCE_MINUTES = 30
 
 _CONFERENCING_MARKERS = ('zoom', 'microsoft teams', 'webex', 'facetime', 'google meet', 'meet.google')
 _CONFERENCING_URL_MARKERS = ('meet.google.com/', 'zoom.us/j/', 'teams.microsoft.com/l/meetup', 'webex.com/meet')
+# Native messaging-call apps already in the desktop ConferencingApps catalog.
+# Matched on appName only — a Chrome tab titled "Discord" is not a call.
+_MESSAGING_CALL_APPS = ('telegram', 'discord', 'slack', 'whatsapp')
+_CALL_CONTROL_MARKERS = (
+    'mute',
+    'unmute',
+    'end call',
+    'hang up',
+    'leave call',
+    'stop video',
+    'start video',
+    'screen share',
+    'screenshare',
+    'in call',
+    'in-call',
+    'camera off',
+    'camera on',
+)
+_CALL_CONTROL_PATTERN = re.compile(
+    r'(?<!\w)(?:' + '|'.join(re.escape(marker) for marker in _CALL_CONTROL_MARKERS) + r')(?!\w)'
+)
 # A Google Meet tab is titled with the bare meeting code ("Meet - amc-iajq-asx").
 # Once the call is joined the omnibox URL is often scrolled out of the capture, so
 # the title is the only marker left. The code shape keeps this precise.
@@ -46,7 +72,19 @@ _OCR_UI_WORDS = {
 }
 
 
-def _is_conferencing_row(row: dict[str, Any]) -> bool:
+def _is_messaging_call_app(app_name: str) -> bool:
+    hay = (app_name or '').casefold()
+    return any(marker in hay for marker in _MESSAGING_CALL_APPS)
+
+
+def _has_call_control(row: dict[str, Any]) -> bool:
+    hay = f'{row.get("windowTitle") or ""} {row.get("ocrText") or ""}'.casefold()
+    return _CALL_CONTROL_PATTERN.search(hay) is not None
+
+
+def is_conferencing_row(row: dict[str, Any]) -> bool:
+    if _is_messaging_call_app(str(row.get('appName') or '')):
+        return True
     haystack = f'{row.get("appName", "")} {row.get("windowTitle", "")}'.casefold()
     if any(marker in haystack for marker in _CONFERENCING_MARKERS):
         return True
@@ -139,7 +177,8 @@ def _split_roster(people: str) -> Iterable[str]:
 def _roster_names(text: str) -> Iterable[str]:
     for raw_line in text.splitlines():
         line = _clean_line(raw_line)
-        if not line:
+        # Roster sentences are short UI chrome, never a 4k-character OCR smear.
+        if not line or len(line) > 200:
             continue
         for pattern in _ROSTER_PATTERNS:
             match = pattern.match(line)
@@ -149,6 +188,8 @@ def _roster_names(text: str) -> Iterable[str]:
 
 
 def _emails(text: str) -> Iterable[str]:
+    if '@' not in text:
+        return
     for match in _EMAIL_PATTERN.finditer(text):
         yield match.group(0).strip('.').casefold()
 
@@ -168,20 +209,22 @@ def _decorated_name_lines(text: str) -> Iterable[str]:
             yield line
 
 
-def _row_identity_signal(text: str) -> int:
+def _row_identity_signal(text: str, row: Optional[dict[str, Any]] = None) -> int:
     """Rank rows by how much identity they carry, so the bounded budget is spent
     on the pre-join/roster frames rather than on whichever frames happen to be
     chronologically first."""
     score = 0
     if any(True for _ in _roster_names(text)):
         score += 2
-    if _EMAIL_PATTERN.search(text):
+    if '@' in text and _EMAIL_PATTERN.search(text):
         score += 1
+    if row is not None and _is_messaging_call_app(str(row.get('appName') or '')) and _has_call_control(row):
+        score += 2
     return score
 
 
 def _select_conferencing_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    conferencing = [row for row in rows if _is_conferencing_row(row)]
+    conferencing = [row for row in rows if is_conferencing_row(row)]
     if not conferencing:
         return []
     combined = [
@@ -190,7 +233,7 @@ def _select_conferencing_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]
     ]
     # Highest identity signal first; chronological order breaks ties so the budget
     # stays deterministic.
-    combined.sort(key=lambda item: (-_row_identity_signal(item[2]), item[0]))
+    combined.sort(key=lambda item: (-_row_identity_signal(item[2], item[1]), item[0]))
 
     selected: list[dict[str, Any]] = []
     used_characters = 0
@@ -270,6 +313,51 @@ def participants_from_ocr(texts: Iterable[str]) -> list[MeetingParticipant]:
     return participants[:12]
 
 
+def _dominating_call_windows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        title = _clean_line(str(row.get('windowTitle') or ''))
+        if not title:
+            continue
+        counts[title] = counts.get(title, 0) + 1
+    titled_count = sum(counts.values())
+    if not titled_count:
+        return []
+    top_title, top_count = max(counts.items(), key=lambda item: item[1])
+    if not _looks_like_person_name(top_title):
+        return []
+    runner_up = max((count for title, count in counts.items() if title != top_title), default=0)
+    if top_count * 2 <= titled_count or top_count <= runner_up:
+        return []
+    return [row for row in rows if _clean_line(str(row.get('windowTitle') or '')) == top_title]
+
+
+def _messaging_call_participants(rows: list[dict[str, Any]]) -> list[MeetingParticipant]:
+    """Name-shaped native-call window titles, only with call chrome or a dominant window.
+
+    Telegram/Discord/Slack/WhatsApp do not print Meet-style roster sentences. The
+    call window's title *is* the other party, but only when in-call chrome (mute /
+    end call / video) corroborates a live call, or one title dominates the interval.
+    Browsing many chats in the same window must not invent a roster.
+    """
+    messaging = [row for row in rows if _is_messaging_call_app(str(row.get('appName') or ''))]
+    if not messaging:
+        return []
+    source = [row for row in messaging if _has_call_control(row)] or _dominating_call_windows(messaging)
+    names: list[str] = []
+    for row in source:
+        title = _clean_line(str(row.get('windowTitle') or ''))
+        if not _looks_like_person_name(title):
+            continue
+        if title.casefold() in _OCR_UI_WORDS:
+            continue
+        if title.casefold() == str(row.get('appName') or '').casefold():
+            continue
+        if title not in names:
+            names.append(title)
+    return [MeetingParticipant(name=name) for name in names[:12]]
+
+
 def context_from_screen_activity(
     rows: list[dict[str, Any]],
     *,
@@ -288,6 +376,8 @@ def context_from_screen_activity(
         return None
 
     participants = participants_from_ocr(str(row.get('ocrText') or '') for row in selected)
+    if not participants:
+        participants = _messaging_call_participants(rows)
     if not participants:
         return None
 
@@ -475,3 +565,72 @@ def resolve_meeting_context(
     context = merge_meeting_contexts(context, stored_screen)
     context = merge_meeting_contexts(context, direct_screen)
     return merge_meeting_contexts(context, _call('screen', screen))
+
+
+def stored_meeting_context(conversation: Any) -> Optional[CalendarMeetingContext]:
+    direct = getattr(conversation, 'calendar_meeting_context', None)
+    if isinstance(direct, CalendarMeetingContext):
+        return direct
+    if isinstance(direct, dict) and direct:
+        return CalendarMeetingContext(**direct)
+    raw_external_data = getattr(conversation, 'external_data', None)
+    external_data = raw_external_data if isinstance(raw_external_data, dict) else {}
+    raw = external_data.get('calendar_meeting_context')
+    if isinstance(raw, CalendarMeetingContext):
+        return raw
+    if isinstance(raw, dict) and raw:
+        return CalendarMeetingContext(**raw)
+    return None
+
+
+def store_meeting_context(conversation: Any, context: CalendarMeetingContext) -> None:
+    if isinstance(conversation, CreateConversation):
+        conversation.calendar_meeting_context = context
+        return
+    external_data = dict(getattr(conversation, 'external_data', None) or {})
+    external_data['calendar_meeting_context'] = context.model_dump(mode='json')
+    conversation.external_data = external_data
+
+
+def meeting_context_from_redis_mapping(uid: str, conversation: Any) -> Optional[CalendarMeetingContext]:
+    """Exact conversation->meeting association, when one was recorded.
+
+    `redis_db.set_conversation_meeting_id` is written in exactly one place
+    (`routers/listen/conversations.py`, at desktop conversation creation) and only
+    when a stored meeting already overlaps that instant, so this is frequently
+    absent. It is an optimization, never the only path.
+    """
+    conversation_id = getattr(conversation, 'id', None)
+    if not isinstance(conversation, Conversation) or not conversation_id:
+        return None
+    try:
+        meeting_id = redis_db.get_conversation_meeting_id(conversation_id)
+        if not meeting_id:
+            return None
+        meeting_data = calendar_db.get_meeting(uid, meeting_id)
+        if not meeting_data:
+            return None
+        parsed = CalendarMeetingContext.from_records([meeting_data])
+        return parsed[0] if parsed else None
+    except Exception as exc:
+        logger.error('Error retrieving mapped meeting context for conversation %s: %s', conversation_id, exc)
+        return None
+
+
+def meeting_context_from_time_overlap(
+    uid: str, started_at: Optional[datetime], finished_at: Optional[datetime]
+) -> Optional[CalendarMeetingContext]:
+    """Time-overlap lookup against the user's stored meetings.
+
+    Independent of the Redis mapping and of any OAuth grant: it reads the same
+    `users/{uid}/meetings` collection that `POST /v1/calendar/meetings` writes.
+    """
+    if started_at is None or finished_at is None:
+        return None
+    try:
+        tolerance = timedelta(minutes=MEETING_SEARCH_TOLERANCE_MINUTES)
+        records = calendar_db.get_meetings_in_time_range(uid, started_at - tolerance, finished_at + tolerance)
+        return select_overlapping_meeting(records, started_at=started_at, finished_at=finished_at)
+    except Exception as exc:
+        logger.error('Error reading stored meetings by time range for uid %s: %s', uid, exc)
+        return None

@@ -3,10 +3,13 @@
 // is what these tests are about: a reserved slot suppresses EVERY proactive lane,
 // so the reservation must be released on every exit from `handleResult`,
 // including the ones nobody wrote a catch for.
+import { DatabaseSync } from 'node:sqlite'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AssistantResult } from '../assistants/core/coordinator'
 import type { RewindFrame } from '../../shared/types'
-import type { WindowsJitRuntime } from './jitRuntime'
+import type { JitTriggerSnapshot } from '../../shared/jitTriggerRuntime'
+import { WindowsJitRuntime } from './jitRuntime'
+import { initializeJitTriggerMirror, type JitMirrorDb } from './jitTriggerMirror'
 
 const h = vi.hoisted(() => ({
   getAppSettings: vi.fn(() => ({ notificationsEnabled: true, notificationFrequency: 5 })),
@@ -29,7 +32,11 @@ vi.mock('../assistants/core/session', () => ({
   getAbortSignal: vi.fn(() => undefined)
 }))
 
-import { WindowsJitAssistant, setWindowsJitAgentTurnExecutor } from './jitAssistant'
+import {
+  WindowsJitAssistant,
+  setWindowsJitAgentTurnExecutor,
+  setWindowsJitNanoTriageExecutor
+} from './jitAssistant'
 import { notifyProactive, setNotificationSnooze } from '../assistants/core/notify'
 import type { InsightPayload } from '../../shared/types'
 
@@ -113,6 +120,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   setNotificationSnooze(null)
   setWindowsJitAgentTurnExecutor(null)
+  setWindowsJitNanoTriageExecutor(null)
   h.getAppSettings.mockReturnValue({ notificationsEnabled: true, notificationFrequency: 5 })
   h.controlPlaneOwnerId.mockReturnValue('owner-1')
   h.hasKnownControlPlaneOwner.mockReturnValue(true)
@@ -239,5 +247,174 @@ describe('ambient agent-turn prompt', () => {
     expect(prompt).not.toContain('</system>')
     expect(prompt).not.toContain('\u0000')
     expect(prompt.split('\n')).toHaveLength(1)
+  })
+
+  it('does not admit ambient after legacy fallback', async () => {
+    const admitAmbient = vi.fn()
+    const runtime = fakeRuntime({
+      observationForFrame: async (f: RewindFrame) => ({ appName: f.app }),
+      admit: async () => ({ kind: 'legacy_fallback', reason: 'rollout_disabled_or_unknown' }),
+      admitAmbient
+    })
+    const assistant = new WindowsJitAssistant(runtime, () => T0)
+    expect(await assistant.analyze(frame())).toBeNull()
+    expect(admitAmbient).not.toHaveBeenCalled()
+  })
+
+  it('does not admit ambient on a suppression reason it does not own', async () => {
+    // The only planned outcome that reaches ambient is no_eligible_planned_trigger;
+    // an empty complete watchlist now produces exactly that (parity item 5), so
+    // this guards the remaining suppressions rather than a retired reason.
+    const admitAmbient = vi.fn()
+    const runtime = fakeRuntime({
+      observationForFrame: async (f: RewindFrame) => ({ appName: f.app }),
+      admit: async () => ({ kind: 'suppressed', reason: 'planned_runtime_rejected' }),
+      admitAmbient
+    })
+    const assistant = new WindowsJitAssistant(runtime, () => T0)
+    expect(await assistant.analyze(frame())).toBeNull()
+    expect(admitAmbient).not.toHaveBeenCalled()
+  })
+})
+
+// The end-to-end half of parity register item 5. Everything above fakes the
+// runtime, so a routing regression inside `WindowsJitRuntime.admit` would not
+// be caught by any of it. This drives the REAL runtime (only the authority
+// client and sqlite file are supplied) over a complete EMPTY watchlist,
+// through `WindowsJitAssistant.analyze`, and asserts the ambient lane is
+// actually reached — i.e. that an account with no standing trigger buys the
+// bounded nano reservation instead of going silent.
+const emptyCompleteSnapshot = (): JitTriggerSnapshot => ({
+  ownerId: 'owner-1',
+  accountGeneration: 1,
+  headCommitId: 'head',
+  commitSequence: 1,
+  snapshotRevision: 'rev-1',
+  complete: true,
+  rows: [],
+  policy: {
+    schemaVersion: 'jit_trigger_policy.v1',
+    plannedNotificationsPerTriggerPerDay: 1,
+    totalProactiveNotificationsPerDay: 3,
+    ambiguousNanoTriagesPerDay: 8,
+    fullAgentTurnsPerCandidate: 1,
+    maxCalendarEvents: 32,
+    embedding: {
+      enabled: false,
+      matchSimilarity: 0.82,
+      triageSimilarity: 0.74,
+      modelId: null,
+      modelVersion: null,
+      language: null
+    }
+  }
+})
+
+function realRuntime(snapshotFor: () => JitTriggerSnapshot): {
+  runtime: WindowsJitRuntime
+  reservations: Array<{ operation: string }>
+} {
+  const db = new DatabaseSync(':memory:')
+  initializeJitTriggerMirror(db as unknown as JitMirrorDb)
+  const reservations: Array<{ operation: string }> = []
+  const runtime = new WindowsJitRuntime({
+    db: db as unknown as JitMirrorDb,
+    ownerId: () => 'owner-1',
+    accountGeneration: () => null,
+    authorizationCurrent: () => true,
+    now: () => T0,
+    frameExists: () => false,
+    client: {
+      rolloutDecision: async () => ({
+        rollout: 'enabled' as const,
+        killSwitch: 'disabled' as const,
+        effective: 'enabled' as const,
+        reason: 'test',
+        errorClass: 'none' as const
+      }),
+      triggerSnapshot: async () => snapshotFor(),
+      ledgerMirrorPage: async () => ({
+        schemaVersion: 'knowledge_ledger_mirror.v1' as const,
+        ownerId: 'owner-1',
+        accountGeneration: 1,
+        sourceGeneration: 1,
+        writerEpoch: 1,
+        headCommitId: 'head',
+        commitSequence: 1,
+        epochId: 'epoch-1',
+        pageRevision: 'page-1',
+        chainRevision: 'chain-1',
+        scannedCount: 0,
+        projectedCount: 0,
+        terminalCount: 0,
+        rows: [],
+        aliases: [],
+        nextCursor: null,
+        finalPage: true,
+        failureReason: null
+      }),
+      reserveProactivity: async (input) => {
+        reservations.push({ operation: input.operation })
+        return {
+          reserved: true,
+          receipt: {
+            schemaVersion: 'jit_proactivity_event.v1' as const,
+            uid: 'owner-1',
+            eventId: input.eventId,
+            candidateId: input.candidateId,
+            operation: input.operation,
+            accountGeneration: input.accountGeneration,
+            triggerMemoryId: input.triggerMemoryId ?? null,
+            triggerRevision: input.triggerRevision ?? null,
+            budgetDay: '2026-08-26',
+            deviceId: input.deviceId,
+            createdAt: '2026-08-26T12:00:00.000Z',
+            requestHash: 'a'.repeat(64),
+            feedbackId: null,
+            parentEventId: input.parentEventId ?? null
+          }
+        }
+      }
+    }
+  } as unknown as ConstructorParameters<typeof WindowsJitRuntime>[0])
+  return { runtime, reservations }
+}
+
+describe('empty complete watchlist, real runtime through analyze', () => {
+  it('reaches the ambient lane and buys exactly the nano reservation', async () => {
+    const triaged: Array<{ semanticFingerprint: string }> = []
+    setWindowsJitNanoTriageExecutor(async (input) => {
+      triaged.push({ semanticFingerprint: input.semanticFingerprint })
+      return 'approved'
+    })
+    const { runtime, reservations } = realRuntime(emptyCompleteSnapshot)
+    const assistant = new WindowsJitAssistant(runtime, () => T0)
+
+    const result = (await assistant.analyze(frame())) as unknown as {
+      kind: string
+      triggerId: string
+      prompt: string
+    } | null
+
+    expect(result).not.toBeNull()
+    expect(result?.kind).toBe('ambient')
+    // The nano triage ran on the opaque handle, and the only server budget
+    // bought before delivery is the single nano reservation.
+    expect(triaged).toHaveLength(1)
+    expect(triaged[0]?.semanticFingerprint).not.toContain('IGNORE PREVIOUS INSTRUCTIONS')
+    expect(reservations.map((r) => r.operation)).toEqual(['nano_triage'])
+  })
+
+  it('still goes nowhere when the snapshot is incomplete', async () => {
+    // The empty case is admitted because the watchlist is COMPLETE and empty.
+    // An incomplete snapshot is unknown authority and must buy nothing.
+    setWindowsJitNanoTriageExecutor(async () => 'approved')
+    const { runtime, reservations } = realRuntime(() => ({
+      ...emptyCompleteSnapshot(),
+      complete: false
+    }))
+    const assistant = new WindowsJitAssistant(runtime, () => T0)
+    expect(await assistant.analyze(frame())).toBeNull()
+    expect(reservations).toHaveLength(0)
   })
 })

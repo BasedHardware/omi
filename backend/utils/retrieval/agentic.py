@@ -57,6 +57,9 @@ from utils.retrieval.tools import (
     read_playbook,
     search_historical_facts,
     search_knowledge,
+    save_playbook,
+    create_standing_trigger,
+    close_fact_tool,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.tools.conversation_jit_gate import (
@@ -66,21 +69,27 @@ from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_res
 from utils.retrieval.chat_scope import build_chat_scope
 from utils.retrieval.safety import (
     AgentSafetyGuard,
+    CollectedContextReady,
     SafetyGuardError,
     fit_within_budget,
     provider_fallback_reason,
     should_retry_provider_error,
     INPUT_TOO_LONG_MESSAGE,
 )
-from utils.retrieval.web_search_gate import SERVER_WEB_SEARCH_NAME, WEB_SEARCH_TOOL, request_tools_after_private_taint
+from utils.retrieval.web_search_gate import WEB_SEARCH_TOOL, request_tools_after_private_taint
 from utils.observability.fallback import record_fallback
 from utils.llm.byok_errors import handle_llm_error_async
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_llm, num_tokens_from_string
 from utils.llm.usage_tracker import reset_usage_context, set_usage_context
-from utils.byok import get_byok_key
 from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
 from utils.executors import run_blocking, db_executor
 from utils.jit_rollout import JITDecisionStage, resolve_jit_rollout
+from utils.chat_followup import (
+    FOLLOWUP_DELIMITER,
+    FOLLOWUP_PROMPT_SECTION,
+    FollowUpTailStreamFilter,
+    split_followup_tail,
+)
 from database.redis_db import get_cached_user_geolocation
 from database.users import get_user_location_context_consent
 from models.geolocation import Geolocation
@@ -218,6 +227,14 @@ AGENT_STREAM_PROVIDER_MAX_ATTEMPTS = _positive_int_from_env('AGENT_STREAM_PROVID
 AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS = _positive_timeout_from_env(
     'AGENT_STREAM_PROVIDER_RETRY_BACKOFF_SECONDS', 1.0
 )
+# Independent tool_use blocks in one model turn run concurrently. Sequential is
+# only required when a later call depends on an earlier result in the same turn
+# (rare; default is parallel). Each call still counts toward the safety cap.
+AGENT_TOOL_TURN_CONCURRENCY = _positive_int_from_env('AGENT_TOOL_TURN_CONCURRENCY', 8)
+_COLLECTED_CONTEXT_TOOL_STUB = (
+    'Relevant conversations are already collected. Answer the user from that context '
+    'without calling this tool again.'
+)
 AGENT_STREAM_PROGRESS_HEARTBEAT = 'Still working…'
 AGENT_STREAM_SETUP_PROGRESS = 'Preparing response…'
 AGENT_STREAM_TIMEOUT_MESSAGE = 'The response took too long. Please try again.'
@@ -270,6 +287,9 @@ CORE_TOOLS = [
     search_knowledge,
     read_playbook,
     search_historical_facts,
+    save_playbook,
+    create_standing_trigger,
+    close_fact_tool,
 ]
 
 # JIT-only tools: schemas must not reach the model for users outside the JIT
@@ -277,7 +297,10 @@ CORE_TOOLS = [
 # only burns tool-call budget on "no entries found" answers and changes chat
 # behavior for the whole fleet. Filtered per request off the same resolved
 # rollout boolean that gates the JIT prompt appendix, keeping the tool block
-# stable per user within a rollout state.
+# stable per user within a rollout state. The three ledger write verbs
+# (save_playbook, create_standing_trigger, close_fact) mutate the same
+# rollout-gated ledger the read tools above expose, so they are gated
+# identically.
 JIT_ONLY_TOOL_NAMES = frozenset(
     tool.name
     for tool in (
@@ -286,6 +309,9 @@ JIT_ONLY_TOOL_NAMES = frozenset(
         search_knowledge,
         read_playbook,
         search_historical_facts,
+        save_playbook,
+        create_standing_trigger,
+        close_fact_tool,
     )
 )
 
@@ -320,6 +346,9 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'search_knowledge': 'Searching current knowledge',
         'read_playbook': 'Reading playbook',
         'search_historical_facts': 'Searching historical facts',
+        'save_playbook': 'Saving playbook',
+        'create_standing_trigger': 'Creating standing trigger',
+        'close_fact': 'Closing fact',
         'get_action_items_tool': 'Checking action items',
         'create_action_item_tool': 'Creating action item',
         'update_action_item_tool': 'Updating action item',
@@ -408,30 +437,50 @@ class AsyncStreamingCallback(BaseCallbackHandler):
 
 
 # ---------------------------------------------------------------------------
-# Tool schema conversion: LangChain @tool -> Anthropic tool format
+# Tool schema conversion: LangChain @tool -> OpenAI chat-completions (live)
+# and Anthropic Messages (leftover specialist tests only).
 # ---------------------------------------------------------------------------
 
 
-def _langchain_tool_to_anthropic(lc_tool, defer_loading: bool = False) -> dict:
-    """Convert a LangChain @tool to Anthropic tool schema format."""
+def _langchain_tool_parameters(lc_tool) -> tuple[str, str, dict]:
+    """Shared name/description/JSON-schema extraction for both wire formats."""
     schema = lc_tool.args_schema.schema()
     properties = {k: v for k, v in schema.get('properties', {}).items() if k != 'config'}
     required = [r for r in schema.get('required', []) if r != 'config']
-
-    # Clean up schema: remove 'title' keys that Pydantic adds (not needed by Anthropic)
     cleaned_properties = {}
-    for k, v in properties.items():
-        cleaned = {pk: pv for pk, pv in v.items() if pk != 'title'}
-        cleaned_properties[k] = cleaned
-
-    tool_def = {
-        "name": lc_tool.name,
-        "description": lc_tool.description,
-        "input_schema": {
-            "type": "object",
-            "properties": cleaned_properties,
-            "required": required,
+    for key, value in properties.items():
+        cleaned_properties[key] = {pk: pv for pk, pv in value.items() if pk != 'title'}
+    return (
+        lc_tool.name,
+        lc_tool.description,
+        {
+            'type': 'object',
+            'properties': cleaned_properties,
+            'required': required,
         },
+    )
+
+
+def _langchain_tool_to_openai(lc_tool) -> dict:
+    """Convert a LangChain @tool to the chat-completions function shape."""
+    name, description, parameters = _langchain_tool_parameters(lc_tool)
+    return {
+        'type': 'function',
+        'function': {
+            'name': name,
+            'description': description,
+            'parameters': parameters,
+        },
+    }
+
+
+def _langchain_tool_to_anthropic(lc_tool, defer_loading: bool = False) -> dict:
+    """Leftover Anthropic Messages schema. Not the live chat-agent path."""
+    name, description, parameters = _langchain_tool_parameters(lc_tool)
+    tool_def = {
+        "name": name,
+        "description": description,
+        "input_schema": parameters,
     }
     if defer_loading:
         tool_def["defer_loading"] = True
@@ -446,37 +495,109 @@ TOOL_SEARCH_TOOL = {
 
 
 def _convert_tools(core_tools: list, app_tools: list = None) -> tuple:
-    """Convert all tools and build name->object registry.
+    """Convert tools to the live OpenAI chat-completions function shape.
 
-    Core tools are always visible to Claude. App tools are marked with
-    defer_loading=True so Claude discovers them on-demand via tool search,
-    keeping the context window small.
-
-    Returns:
-        (tool_schemas, tool_registry) where tool_schemas is a list of Anthropic
-        tool definitions and tool_registry maps tool name -> LangChain tool object.
+    Anthropic server tools (``web_search``, ``tool_search_tool_regex``) are not
+    part of this contract. App tools are exposed directly so the model can call
+    them by name.
     """
-    schemas = []
-
-    # Add built-in server tools
-    schemas.append(WEB_SEARCH_TOOL)
-
-    # Add tool search tool if there are app tools to discover
-    if app_tools:
-        schemas.append(TOOL_SEARCH_TOOL)
-
-    # Core tools — always visible
-    for t in core_tools:
-        schemas.append(_langchain_tool_to_anthropic(t, defer_loading=False))
-
-    # App tools — deferred, discovered on-demand
-    for t in app_tools or []:
-        schemas.append(_langchain_tool_to_anthropic(t, defer_loading=True))
-
-    # Registry includes ALL tools (core + app) for execution
     all_tools = list(core_tools) + list(app_tools or [])
+    schemas = [_langchain_tool_to_openai(t) for t in all_tools]
     registry = {t.name: t for t in all_tools}
     return schemas, registry
+
+
+def _collected_results_from_config(configurable: dict | None) -> Any:
+    if not isinstance(configurable, dict):
+        return None
+    collected = configurable.get('conversations_collected')
+    if collected:
+        return collected
+    evidence = configurable.get('evidence_references')
+    return evidence or None
+
+
+async def _execute_independent_tool_calls(
+    tool_calls: list,
+    *,
+    name_of,
+    input_of,
+    id_of,  # noqa: ARG001 — caller-facing symmetry with name/input
+    tool_registry: dict,
+    configurable: dict,
+    safety_guard: AgentSafetyGuard,
+    callback: 'AsyncStreamingCallback',
+    full_response: list,
+    result_factory,
+) -> list | None:
+    """Validate sequentially, run independent tools concurrently, preserve order.
+
+    Returns the provider-shaped tool results, or ``None`` when a hard safety
+    limit ended the stream. ``CollectedContextReady`` stubs remaining calls so
+    the model can answer from already-collected conversations.
+    """
+    collected = _collected_results_from_config(configurable)
+    validated: list = []
+    stub_after = False
+    for call in tool_calls:
+        try:
+            safety_guard.validate_tool_call(name_of(call), input_of(call), collected_results=collected)
+            warning = safety_guard.should_warn_user()
+            if warning:
+                await callback.put_thought(warning)
+            validated.append(call)
+        except CollectedContextReady:
+            stub_after = True
+            break
+        except SafetyGuardError as error:
+            await _put_outcome_text(callback, full_response, f'\n\n{str(error)}')
+            logger.error('Safety Guard blocked tool call: %s', error)
+            await callback.end()
+            return None
+
+    for call in validated:
+        tool_name = name_of(call)
+        await callback.put_thought(
+            get_tool_display_name(tool_name, tool_registry.get(tool_name)), app_id=_extract_app_id(tool_name)
+        )
+
+    async def _run_one(call):
+        tool_name = name_of(call)
+        try:
+            return await _execute_tool(tool_name, input_of(call), tool_registry, configurable)
+        except Exception as error:
+            logger.error('Tool execution error (%s): %s', tool_name, error)
+            return f'Error executing tool: {str(error)}'
+
+    results_text: list[str] = []
+    if validated:
+        semaphore = asyncio.Semaphore(AGENT_TOOL_TURN_CONCURRENCY)
+
+        async def _bounded(call):
+            async with semaphore:
+                return await _run_one(call)
+
+        results_text = list(await asyncio.gather(*[_bounded(call) for call in validated]))
+
+    tool_results = []
+    for call, result in zip(validated, results_text):
+        tool_name = name_of(call)
+        logger.info('Tool ended: %s', tool_name)
+        await _emit_calendar_status(callback, tool_name, result)
+        try:
+            safety_guard.check_context_size(result)
+        except SafetyGuardError as error:
+            await _put_outcome_text(callback, full_response, f'\n\n{str(error)}')
+            logger.error('Safety Guard blocked due to context size: %s', error)
+            await callback.end()
+            return None
+        tool_results.append(result_factory(call, result))
+
+    if stub_after:
+        for call in tool_calls[len(validated) :]:
+            tool_results.append(result_factory(call, _COLLECTED_CONTEXT_TOOL_STUB))
+
+    return tool_results
 
 
 def _convert_anthropic_tools_to_openai(tool_schemas: list[dict]) -> list[dict]:
@@ -673,6 +794,23 @@ async def _put_answer_text(callback: AsyncStreamingCallback, full_response: list
     await callback.put_data(text)
 
 
+async def _put_outcome_text(callback: AsyncStreamingCallback, full_response: list, text: str) -> None:
+    """Record backend-authored text that ends the turn, voiding any follow-up tail.
+
+    A model can emit its closing-question marker and still leave tool calls to run. If the turn
+    then ends on a safety limit or an error, the parser would split the answer at that marker and
+    drop this message with the rest of the tail — the user would be left with the partial answer
+    and no reason for it. Backend outcome text supersedes the tail: the marker is removed, so this
+    message stays in the persisted answer and the failed turn offers no chip. ``full_response`` is
+    rebuilt when that happens, so no caller may hold an index into it across this call.
+    """
+    joined = ''.join(full_response)
+    marker = joined.find(FOLLOWUP_DELIMITER)
+    if marker >= 0:
+        full_response[:] = [joined[:marker].rstrip()]
+    await _put_answer_text(callback, full_response, text)
+
+
 def _has_answer(full_response: list) -> bool:
     """Whether anything the router would render as an answer has been delivered.
 
@@ -840,7 +978,7 @@ async def _run_anthropic_agent_stream(
                 await handle_llm_error_async(e, 'anthropic', feature='chat_agent', model=ANTHROPIC_AGENT_MODEL)
                 # ``put_data`` alone reaches the live stream but not the persisted answer, so the
                 # router would overwrite this apology with its own canned error.
-                await _put_answer_text(callback, full_response, "\n\nSorry, I encountered an error. Please try again.")
+                await _put_outcome_text(callback, full_response, "\n\nSorry, I encountered an error. Please try again.")
                 await callback.end()
                 return f'provider_{type(e).__name__}'
 
@@ -861,7 +999,7 @@ async def _run_anthropic_agent_stream(
         if response.stop_reason == "refusal":
             logger.warning('Chat agent turn refused by provider category=%s', _refusal_category(response))
             if not _has_answer(full_response):
-                await _put_answer_text(callback, full_response, AGENT_REFUSAL_MESSAGE)
+                await _put_outcome_text(callback, full_response, AGENT_REFUSAL_MESSAGE)
             await callback.end()
             return 'provider_refusal'
 
@@ -869,52 +1007,26 @@ async def _run_anthropic_agent_stream(
         if response.stop_reason != "tool_use":
             break
 
-        # Execute tool calls
+        # Execute independent tool_use blocks concurrently (leftover Anthropic path).
         tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
-        tool_results = []
-        should_stop = False
-
-        for block in tool_use_blocks:
-            # Safety guard: validate before execution
-            try:
-                safety_guard.validate_tool_call(block.name, block.input)
-                warning = safety_guard.should_warn_user()
-                if warning:
-                    await callback.put_thought(warning)
-            except SafetyGuardError as e:
-                await _put_answer_text(callback, full_response, f"\n\n{str(e)}")
-                logger.error(f"Safety Guard blocked tool call: {e}")
-                await callback.end()
-                return None
-
-            # Execute tool
-            try:
-                result = await _execute_tool(block.name, block.input, tool_registry, configurable)
-            except Exception as e:
-                logger.error(f"Tool execution error ({block.name}): {e}")
-                result = f"Error executing tool: {str(e)}"
-
-            logger.info(f"Tool ended: {block.name}")
-
-            # Calendar status messages
-            await _emit_calendar_status(callback, block.name, result)
-
-            # Safety guard: check context size after execution
-            try:
-                safety_guard.check_context_size(result)
-            except SafetyGuardError as e:
-                await _put_answer_text(callback, full_response, f"\n\n{str(e)}")
-                logger.error(f"Safety Guard blocked due to context size: {e}")
-                await callback.end()
-                return None
-
-            tool_results.append(
-                {
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": result,
-                }
-            )
+        tool_results = await _execute_independent_tool_calls(
+            tool_use_blocks,
+            name_of=lambda block: block.name,
+            input_of=lambda block: block.input,
+            id_of=lambda block: block.id,
+            tool_registry=tool_registry,
+            configurable=configurable,
+            safety_guard=safety_guard,
+            callback=callback,
+            full_response=full_response,
+            result_factory=lambda block, result: {
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": result,
+            },
+        )
+        if tool_results is None:
+            return None
 
         # Append assistant message + tool results for next iteration
         # Serialize content blocks for the messages array
@@ -1126,7 +1238,7 @@ async def _run_openai_agent_stream(
                     continue
 
                 await handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
-                await _put_answer_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
+                await _put_outcome_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
                 await callback.end()
                 return f'provider_{type(error).__name__}'
 
@@ -1142,38 +1254,24 @@ async def _run_openai_agent_stream(
         if not tool_calls:
             break
 
-        tool_results = []
-        for tool_call in tool_calls:
-            try:
-                safety_guard.validate_tool_call(tool_call['name'], tool_call['input'])
-                warning = safety_guard.should_warn_user()
-                if warning:
-                    await callback.put_thought(warning)
-            except SafetyGuardError as error:
-                await _put_answer_text(callback, full_response, f'\n\n{str(error)}')
-                logger.error('Safety Guard blocked tool call: %s', error)
-                await callback.end()
-                return None
-
-            tool_name = tool_call['name']
-            tool_obj = tool_registry.get(tool_name)
-            await callback.put_thought(get_tool_display_name(tool_name, tool_obj), app_id=_extract_app_id(tool_name))
-            try:
-                result = await _execute_tool(tool_name, tool_call['input'], tool_registry, configurable)
-            except Exception as error:
-                logger.error('Tool execution error (%s): %s', tool_name, error)
-                result = f'Error executing tool: {str(error)}'
-
-            logger.info('Tool ended: %s', tool_name)
-            await _emit_calendar_status(callback, tool_name, result)
-            try:
-                safety_guard.check_context_size(result)
-            except SafetyGuardError as error:
-                await _put_answer_text(callback, full_response, f'\n\n{str(error)}')
-                logger.error('Safety Guard blocked due to context size: %s', error)
-                await callback.end()
-                return None
-            tool_results.append({'role': 'tool', 'tool_call_id': tool_call['id'], 'content': result})
+        tool_results = await _execute_independent_tool_calls(
+            tool_calls,
+            name_of=lambda tool_call: tool_call['name'],
+            input_of=lambda tool_call: tool_call['input'],
+            id_of=lambda tool_call: tool_call['id'],
+            tool_registry=tool_registry,
+            configurable=configurable,
+            safety_guard=safety_guard,
+            callback=callback,
+            full_response=full_response,
+            result_factory=lambda tool_call, result: {
+                'role': 'tool',
+                'tool_call_id': tool_call['id'],
+                'content': result,
+            },
+        )
+        if tool_results is None:
+            return None
 
         assistant_message = {
             'role': 'assistant',
@@ -1263,7 +1361,7 @@ def _consume_agent_task_exception(task: asyncio.Task) -> None:
         logger.error('Detached agent stream producer failed error_type=%s', type(error).__name__)
 
 
-@_traceable(name="chat.anthropic.stream", run_type="chain")
+@_traceable(name="chat.openai.stream", run_type="chain")
 async def execute_agentic_chat_stream(
     uid: str,
     messages: List[Message],
@@ -1316,8 +1414,11 @@ async def execute_agentic_chat_stream(
         if setup_remaining <= 0:
             raise asyncio.TimeoutError()
         async with asyncio.timeout(setup_remaining):
-            # BYOK Anthropic and CHAT_AGENT_ROUTE=direct stay off the managed OpenAI lane.
-            gateway_feature_mode = should_route_chat_agent_through_gateway() and not bool(get_byok_key('anthropic'))
+            # Omi-managed chat-agent is always the OpenAI/Luna runner. Anthropic BYOK
+            # no longer selects a second Messages path. CHAT_AGENT_ROUTE=direct is
+            # honored inside get_llm() as a kill switch onto direct OpenAI.
+            gateway_feature_mode = should_route_chat_agent_through_gateway()
+            logger.debug('Chat agent live runner=openai gateway_lane=%s', gateway_feature_mode)
             tz = tz or await run_blocking(db_executor, get_user_timezone, uid)
             city = await get_mobile_city(uid, platform) if current_datetime_block is None else None
             jit_conversation_retrieval_enabled = await _resolve_jit_conversation_retrieval(uid)
@@ -1352,12 +1453,12 @@ async def execute_agentic_chat_stream(
             if not jit_conversation_retrieval_enabled:
                 core_tools = [tool for tool in core_tools if tool.name not in JIT_ONLY_TOOL_NAMES]
 
-            # Dynamic app tools — deferred for Anthropic; exposed directly in managed mode
+            # Dynamic app tools — exposed directly on the OpenAI/Luna chat-agent lane
             app_tools = []
             try:
                 app_tools = await run_blocking(db_executor, load_app_tools, uid)
                 if app_tools:
-                    logger.info(f"Loaded {len(app_tools)} app tools (deferred via tool search)")
+                    logger.info(f"Loaded {len(app_tools)} app tools")
             except Exception as error:
                 logger.error('Error loading app tools error_type=%s', type(error).__name__)
     except asyncio.TimeoutError:
@@ -1402,8 +1503,7 @@ async def execute_agentic_chat_stream(
             # Tool names are prefixed with app_id; extract the human-readable app name from description
             app_names.add(t.name)
         app_tool_names = ", ".join(sorted(app_names))
-        if gateway_feature_mode:
-            system_prompt += f"""
+        system_prompt += f"""
 
 <available_app_tools>
 You have access to additional tools from the user's connected apps. Call the relevant tool directly when the user asks about an external service (e.g. GitHub, Twitter, Slack, Google Calendar, Notion, Shopify, WhatsApp, Splitwise, etc.).
@@ -1412,40 +1512,25 @@ Available app tool names: {app_tool_names}
 
 IMPORTANT: Always call a matching integration tool when relevant. Never tell the user you don't have access to an integration if a matching tool exists above.
 </available_app_tools>"""
-        else:
-            system_prompt += f"""
 
-<available_app_tools>
-You have access to additional tools from the user's connected apps. These tools are discoverable via the tool_search_tool_regex tool. When the user asks you to do something related to an external service (e.g. GitHub, Twitter, Slack, Google Calendar, Notion, Shopify, WhatsApp, Splitwise, etc.), search for the relevant tool using tool_search_tool_regex with a keyword like "github", "issue", "tweet", etc.
-
-Available app tool names: {app_tool_names}
-
-IMPORTANT: Always search for and use these tools when relevant. Never tell the user you don't have access to an integration if a matching tool exists above.
-</available_app_tools>"""
-
-    # Instruct Claude to use fetch_url_tool for any direct URL in the conversation.
-    # Without this, Claude's built-in "I can't browse links" behavior takes over.
+    # Instruct the model to use fetch_url_tool for any direct URL in the conversation.
     system_prompt += """
 
 <url_fetching_instructions>
 You have fetch_url_tool available. When the user shares any URL (starting with http:// or https://), you MUST call fetch_url_tool to read its content before responding. Never say you cannot browse, visit, or read a URL. Always attempt to fetch it first.
 </url_fetching_instructions>"""
 
-    # Build the canonical tool schemas once. Direct mode keeps Anthropic's shape;
-    # managed mode converts function tools to the OpenAI-compatible shape below.
+    # The typed lanes almost never end an answer with a question, so a turn that
+    # had an obvious next hop still ends the session. The tail is stripped from
+    # the visible text below and delivered as one structured chip instead.
+    system_prompt += FOLLOWUP_PROMPT_SECTION
+
+    # Live chat-agent tools are OpenAI chat-completions functions. Perplexity
+    # covers web search; Anthropic server tools are not on this lane.
     tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
-    if gateway_feature_mode:
-        # Anthropic's native web_search server tool is not understood by the
-        # OpenAI-compatible gateway. Expose the existing Perplexity-backed
-        # function tool in the managed lane and register the same object for
-        # execution; direct Anthropic mode keeps the native server tool above.
-        tool_registry = dict(tool_registry)
-        tool_registry[perplexity_web_search_tool.name] = perplexity_web_search_tool
-        tool_schemas = [
-            *tool_schemas,
-            _langchain_tool_to_anthropic(perplexity_web_search_tool, defer_loading=False),
-        ]
-        tool_schemas = _convert_anthropic_tools_to_openai(tool_schemas)
+    tool_registry = dict(tool_registry)
+    tool_registry[perplexity_web_search_tool.name] = perplexity_web_search_tool
+    tool_schemas = [*tool_schemas, _langchain_tool_to_openai(perplexity_web_search_tool)]
 
     # Build the provider-neutral role/content message shape. The current datetime is injected
     # into the user turn (not the system prompt) so the direct Anthropic cache prefix stays stable.
@@ -1491,6 +1576,9 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
 
     full_response = []
     tool_usage_count = 0
+    # The follow-up tail is model output like any other token. Hold it back from
+    # what the user watches stream in so the chip's text never appears twice.
+    followup_filter = FollowUpTailStreamFilter()
 
     def attach_evidence_to_callback() -> None:
         """Expose only the bounded references collected by successful JIT tools."""
@@ -1500,10 +1588,8 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
                 'references': evidence_references[:24],
             }
 
-    # Start the provider-specific agent task. Direct mode retains the native Anthropic
-    # Messages contract for BYOK/specialist callers; managed feature mode uses the gateway's
-    # OpenAI-compatible chat-completions contract.
-    agent_runner = _run_openai_agent_stream if gateway_feature_mode else _run_anthropic_agent_stream
+    # Live path is always the OpenAI-compatible runner (gateway Luna or direct OpenAI).
+    agent_runner = _run_openai_agent_stream
     task = asyncio.create_task(
         agent_runner(
             system_prompt,
@@ -1526,10 +1612,12 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         """
         if callback_data is None:
             return False
-        streamed = ''.join(full_response)
+        streamed, _ = split_followup_tail(''.join(full_response))
         if not streamed:
             return False
         callback_data['answer'] = streamed
+        # A turn that stopped early is a failed turn; it never invites a next question.
+        callback_data.pop('followup', None)
         callback_data['memories_found'] = conversations_collected if conversations_collected else []
         callback_data['ask_for_nps'] = tool_usage_count > 0
         attach_evidence_to_callback()
@@ -1574,13 +1662,26 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
             if chunk.startswith("think: ") and chunk != f'think: {AGENT_STREAM_PROGRESS_HEARTBEAT}':
                 tool_usage_count += 1
 
+            if chunk.startswith("data: "):
+                visible = followup_filter.push(chunk[len("data: ") :])
+                if not visible:
+                    continue
+                chunk = f'data: {visible}'
+
             yield chunk
 
         producer_failure = await task
 
+        held_back = followup_filter.flush()
+        if held_back:
+            yield f'data: {held_back}'
+
         # Store results in callback_data
         if callback_data is not None:
-            callback_data['answer'] = ''.join(full_response)
+            answer_text, followup_question = split_followup_tail(''.join(full_response))
+            callback_data['answer'] = answer_text
+            if followup_question and not producer_failure:
+                callback_data['followup'] = followup_question
             # Reported even though the stream ended cleanly, so the router can tell a failed
             # turn from one the model ended empty on its own.
             if producer_failure:

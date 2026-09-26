@@ -14,6 +14,33 @@ enum JITProactivityLane: String, Equatable, Sendable {
   case ambient
 }
 
+/// Whether the current owner's proactivity is routed through the JIT lanes.
+///
+/// Set by `JITProactivityCoordinator` from the backend rollout verdict on every
+/// context visit. Legacy per-frame producers that the JIT lanes replace (the
+/// focus-nudge assistant) read it so the two never run side by side for one
+/// owner. It is derived state, never authority: the backend flag and kill
+/// switch remain the only enrolment path.
+@MainActor
+enum JITProactivityLaneState {
+  private static var activeOwnerID: String?
+
+  /// True only for the owner the backend last admitted. A different or absent
+  /// owner reads false, so sign-out and account transitions need no reset.
+  static func isActive(ownerID: String?) -> Bool {
+    guard let ownerID, !ownerID.isEmpty else { return false }
+    return activeOwnerID == ownerID
+  }
+
+  static func update(ownerID: String, active: Bool) {
+    if active {
+      activeOwnerID = ownerID
+    } else if activeOwnerID == ownerID {
+      activeOwnerID = nil
+    }
+  }
+}
+
 enum JITAmbientNanoTriage: Equatable, Sendable {
   case approved
   case rejected
@@ -23,10 +50,41 @@ enum JITAmbientNanoTriage: Equatable, Sendable {
 struct JITProactivityFlags: Equatable, Sendable {
   let rollout: JITProactivityRolloutState
   let killSwitch: JITProactivityRolloutState
+  /// The backend's own admission verdict from `/v1/jit/rollout-decision`.
+  /// Servers that predate the field leave it absent; the rollout +
+  /// kill-switch pair remains the fallback derivation.
+  let effective: JITProactivityRolloutState
+  /// Whether the decision response carried `kill_switch` at all. An absent
+  /// field is wire compatibility, not an unknown-off veto; a present
+  /// `unknown` still fails closed.
+  let killSwitchPresent: Bool
+  /// Optional server capability for the qualification-only full-turn budget.
+  /// Older servers omit it; omission keeps the released JIT route unchanged.
+  let budgetContractVersion: String?
 
-  /// Only a complete, known-good pair activates the additive lane.
+  init(
+    rollout: JITProactivityRolloutState,
+    killSwitch: JITProactivityRolloutState,
+    effective: JITProactivityRolloutState = .unknown,
+    killSwitchPresent: Bool = true,
+    budgetContractVersion: String? = nil
+  ) {
+    self.rollout = rollout
+    self.killSwitch = killSwitch
+    self.effective = effective
+    self.killSwitchPresent = killSwitchPresent
+    self.budgetContractVersion = budgetContractVersion
+  }
+
+  /// The server-computed `effective` verdict owns admission: the client must
+  /// not re-derive a stricter verdict from the raw flags. The complete,
+  /// known-good rollout + kill-switch pair remains the fallback for servers
+  /// that predate `effective`, and unknown still fails closed.
   var permitsNewLane: Bool {
-    rollout == .enabled && killSwitch == .disabled
+    if effective == .enabled { return true }
+    if effective == .disabled { return false }
+    guard rollout == .enabled else { return false }
+    return killSwitch == .disabled || !killSwitchPresent
   }
 }
 
@@ -86,10 +144,14 @@ enum JITProactivityPolicy {
   ) -> JITProactivityDecision {
     guard flags.permitsNewLane else {
       let reason: String
-      switch (flags.rollout, flags.killSwitch) {
-      case (_, .enabled): reason = "kill_switch"
-      case (.unknown, _), (_, .unknown): reason = "rollout_unknown"
-      default: reason = "rollout_disabled"
+      if flags.killSwitch == .enabled {
+        reason = "kill_switch"
+      } else if flags.rollout == .unknown || (flags.killSwitch == .unknown && flags.killSwitchPresent) {
+        // Only a `kill_switch` the server actually sent can report as
+        // unknown; an absent field is compatibility, not an unknown state.
+        reason = "rollout_unknown"
+      } else {
+        reason = "rollout_disabled"
       }
       return .legacyContextBucketFallback(reason: reason)
     }

@@ -9,30 +9,13 @@ RUN python -m venv /opt/venv
 RUN python3 -m pip install --no-cache-dir "uv==${UV_VERSION}"
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install build dependencies for liblc3
+# Build locked source distributions such as webrtcvad.
 RUN apt-get update && apt-get install -y \
     git \
     gcc \
     g++ \
-    meson \
-    ninja-build \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
-
-# Build liblc3 and create wheel
-WORKDIR /tmp
-RUN git clone https://github.com/google/liblc3.git && \
-    cd liblc3 && \
-    meson setup build && \
-    cd build && \
-    meson install && \
-    ldconfig && \
-    # Stage shared libs to a fixed path (meson install path varies by arch)
-    mkdir -p /opt/liblc3 && \
-    cp /usr/local/lib/*/liblc3.so* /opt/liblc3/ 2>/dev/null || \
-    cp /usr/local/lib/liblc3.so* /opt/liblc3/ && \
-    cd /tmp/liblc3 && \
-    python3 -m pip wheel --no-cache-dir --wheel-dir /tmp/wheels .
 
 # Install Python requirements from the checked-in runtime lock.
 WORKDIR /opt/venv
@@ -43,7 +26,6 @@ FROM ${PYTHON_BASE_IMAGE}
 
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
-ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 
 # Patch OS packages in this layer before installing runtime deps (#7136).
 RUN apt-get update && apt-get -y dist-upgrade \
@@ -54,15 +36,6 @@ RUN apt-get update && apt-get -y dist-upgrade \
 # under high-churn bytearray allocations from WebSocket audio streams (#6938)
 # Use soname-only form so ld.so resolves via standard search paths (arch-portable)
 ENV LD_PRELOAD=libjemalloc.so.2
-
-# Copy compiled liblc3 library from builder staging dir
-COPY --from=builder /opt/liblc3/ /usr/local/lib/
-COPY --from=builder /tmp/wheels /tmp/wheels
-
-# Install liblc3 Python package and set library path
-RUN ldconfig && \
-    pip install --no-cache-dir /tmp/wheels/*.whl && \
-    rm -rf /tmp/wheels
 
 COPY --from=builder /opt/venv /opt/venv
 COPY .github/scripts/desktop_release_manifest.py /app/desktop_release_manifest_contract.py

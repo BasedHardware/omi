@@ -5,6 +5,18 @@ import Foundation
 /// loop reads — everything downstream of each seam is the production path.
 extension DesktopAutomationActionRegistry {
   func registerRealtimeHubActions() {
+    // Onboarding screen-demo step: open the three-doors page (same path as the
+    // "Open the doors" button), so agents can exercise the demo without the cursor.
+    register(
+      name: "onboarding_open_doors",
+      summary: "Onboarding screen-demo step: open the three-doors page (same path as the Open the doors button)"
+    ) { _ in
+      await MainActor.run {
+        NotificationCenter.default.post(name: .onboardingOpenDoorsRequested, object: nil)
+      }
+      return ["status": "requested"]
+    }
+
     // Drives the REAL provider failover the quota/auth close handlers call
     // (failoverToAlternateProvider), then re-warms, so the cross-provider path
     // can be exercised without waiting for the shared key to actually throttle.
@@ -51,5 +63,6 @@ extension DesktopAutomationActionRegistry {
       ]
     }
 
+    registerResponseContextActions()
   }
 }

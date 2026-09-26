@@ -9,10 +9,11 @@ from datetime import datetime, timezone
 import hashlib
 import json
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from google.cloud.firestore_v1 import FieldFilter
 
-from database._client import get_firestore_client
+from database._client import get_data_plane_firestore_client
 from database.memory_collections import MemoryCollections
 from models.jit_proactivity import is_jit_trigger_paid_authority
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryKind
@@ -23,7 +24,11 @@ from utils.memory.jit_trigger_contract import (
     TriggerRuntimePolicy,
     compile_memory_item_trigger,
 )
-from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
+from utils.memory.v3.account_generation_source import (
+    V3AccountGenerationFailureReason,
+    V3TrustedAccountGenerationReadError,
+    read_memory_v3_trusted_account_generation,
+)
 
 MAX_AUTHORITATIVE_TRIGGERS = 500
 
@@ -50,6 +55,11 @@ class AuthoritativeTriggerSnapshot:
     rows: tuple[AuthoritativeTriggerRow, ...]
     failure_reason: str | None = None
     policy: TriggerRuntimePolicy = DEFAULT_TRIGGER_RUNTIME_POLICY
+    # The reservation store owns the budget window using the profile's IANA
+    # timezone.  Returning the same authority lets clients pace their local
+    # mirror under that window instead of silently using the host timezone.
+    budget_day: str | None = None
+    budget_timezone: str | None = None
 
 
 @dataclass(frozen=True)
@@ -160,6 +170,36 @@ def _revision(
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _empty_watchlist_revision(uid: str, account_generation: int) -> str:
+    """Deterministic revision for a watchlist proven empty by head absence."""
+    encoded = f'empty-watchlist:{uid}:{account_generation}'.encode('utf-8')
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _budget_authority(uid: str, at: datetime, client: Any) -> tuple[str, str] | None:
+    """Read the content-free profile timezone used by JIT reservations.
+
+    Some old or synthetic users have no timezone yet.  Keep the snapshot
+    readable for compatibility; the client will use its legacy fallback and
+    the paid reservation remains the final authority.  A malformed timezone is
+    never projected as a plausible value.
+    """
+
+    try:
+        snapshot = client.document(f'users/{uid}').get()
+        payload = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+        timezone_name = payload.get('time_zone') if isinstance(payload, dict) else None
+        if not isinstance(timezone_name, str):
+            return None
+        timezone_name = timezone_name.strip()
+        if not timezone_name:
+            return None
+        zone = ZoneInfo(timezone_name)
+        return at.astimezone(zone).date().isoformat(), timezone_name
+    except Exception:
+        return None
+
+
 def read_authoritative_trigger_snapshot(
     uid: str,
     *,
@@ -170,12 +210,38 @@ def read_authoritative_trigger_snapshot(
     Absence is authoritative only after the query is exhausted.  Any malformed,
     mixed-generation, oversized, or actionless active row makes the whole
     snapshot incomplete so ambient work cannot outrank an unseen planned action.
+    A state head proven absent (the owner has no memory-v3 generation at all)
+    yields a complete, empty watchlist with a deterministic revision; unproven
+    absence (read failure, malformed head) stays incomplete.
     """
 
-    client = firestore_client or get_firestore_client()
+    client = firestore_client or get_data_plane_firestore_client()
     head = read_memory_v3_trusted_account_generation(uid=uid, db_client=client)
     try:
         account_generation = head.require_account_generation()
+    except V3TrustedAccountGenerationReadError as exc:
+        if exc.reason is not V3AccountGenerationFailureReason.MISSING_STATE_HEAD:
+            return AuthoritativeTriggerSnapshot(uid, 0, '', 0, '', False, (), 'generation_unavailable')
+        # A proven-absent state head means the owner never initialized memory
+        # v3, so the exhaustive watchlist is provably empty.  Fence the absence
+        # exactly like a row scan: certify complete only if the head is still
+        # absent on a trailing re-read, so a head created mid-flight cannot be
+        # certified away as an empty generation.
+        trailing = read_memory_v3_trusted_account_generation(uid=uid, db_client=client)
+        if trailing.read_error_reason is not V3AccountGenerationFailureReason.MISSING_STATE_HEAD:
+            return AuthoritativeTriggerSnapshot(uid, 0, '', 0, '', False, (), 'generation_unavailable')
+        budget_authority = _budget_authority(uid, datetime.now(timezone.utc), client)
+        return AuthoritativeTriggerSnapshot(
+            owner_id=uid,
+            account_generation=0,
+            head_commit_id='',
+            commit_sequence=0,
+            snapshot_revision=_empty_watchlist_revision(uid, 0),
+            complete=True,
+            rows=(),
+            budget_day=budget_authority[0] if budget_authority else None,
+            budget_timezone=budget_authority[1] if budget_authority else None,
+        )
     except Exception:
         return AuthoritativeTriggerSnapshot(uid, 0, '', 0, '', False, (), 'generation_unavailable')
     head_commit_id = head.head_commit_id or ''
@@ -250,6 +316,9 @@ def read_authoritative_trigger_snapshot(
 
     revision = _revision(uid, account_generation, head_commit_id, commit_sequence, items, rows)
     rows.sort(key=lambda row: row.memory_id)
+    # Keep the projected day tied to the same instant as the fenced snapshot.
+    # A second clock read here could straddle a profile-local midnight.
+    budget_authority = _budget_authority(uid, authority_time, client)
     return AuthoritativeTriggerSnapshot(
         owner_id=uid,
         account_generation=account_generation,
@@ -258,6 +327,8 @@ def read_authoritative_trigger_snapshot(
         snapshot_revision=revision,
         complete=True,
         rows=tuple(rows),
+        budget_day=budget_authority[0] if budget_authority else None,
+        budget_timezone=budget_authority[1] if budget_authority else None,
     )
 
 

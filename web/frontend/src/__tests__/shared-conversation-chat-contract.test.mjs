@@ -78,14 +78,21 @@ describe('public shared conversation chat frontend safety contract', () => {
 
   it('owns the Cloud Run ingress, identity, and frontend-only HMAC deployment contract', () => {
     const frontend = publicBuildContract.targets.frontend;
-    assert.ok(
-      frontend.deployment.flags.includes('--ingress=internal-and-cloud-load-balancing'),
+    const flags = frontend.deployment.flags;
+    const prodFlags = Array.isArray(flags) ? flags : (flags.prod || []);
+    const developmentFlags = Array.isArray(flags) ? flags : (flags.development || []);
+    assert.ok(prodFlags.includes('--ingress=internal-and-cloud-load-balancing'));
+    assert.equal(
+      developmentFlags.includes('--ingress=internal-and-cloud-load-balancing'),
+      false,
     );
     assert.equal(
       frontend.deployment.runtime_secrets.PUBLIC_SHARED_CONVERSATION_CHAT_IP_HMAC_KEY,
       'PUBLIC_SHARED_CONVERSATION_CHAT_IP_HMAC_KEY:latest',
     );
     assert.equal(frontend.deployment.runtime_secrets.OPENAI_API_KEY, undefined);
+    assert.ok(frontend.deployment.remove_runtime_env_vars.includes('OPENAI_API_KEY'));
+    assert.equal(frontend.deployment.runtime_secrets.DD_API_KEY, 'DD_API_KEY:latest');
     assert.match(deployActionSource, /service_account/);
     assert.match(deployActionSource, /runtime_env_vars/);
     assert.match(
@@ -96,6 +103,11 @@ describe('public shared conversation chat frontend safety contract', () => {
       frontendWorkflowSource,
       /PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE/,
     );
+    assert.doesNotMatch(
+      frontendWorkflowSource,
+      /test -n "\$PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA"/,
+    );
+    assert.match(frontendWorkflowSource, /iam\\.gserviceaccount\\.com/);
   });
 
   it('passes only conversation id, bounded history, and the current question to the action', () => {

@@ -191,7 +191,7 @@ function deliverOversizedFixture(adapterId: string): void {
     const delivered = JSON.parse(frames[0]!);
     assertToolResultEnvelope(delivered.toolResultEnvelope);
     expect(delivered.toolResultEnvelope).toMatchObject({
-      status: "failed",
+      status: "succeeded",
       truncated: true,
       fullOutputRef: `artifact:artifact-${adapterId}-oversized`,
       provenance: {
@@ -201,6 +201,7 @@ function deliverOversizedFixture(adapterId: string): void {
         toolName: identity.toolName,
       },
     });
+    expect(delivered.ok).toBe(true);
   } finally {
     rmSync(artifactRoot, { recursive: true, force: true });
   }

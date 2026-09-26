@@ -36,8 +36,7 @@ struct ChatFirstGoalsPage: View {
           unavailableState(message)
         case .inactive, .loading:
           if goalsStore.activeGoals.isEmpty {
-            ProgressView("Loading goals")
-              .frame(maxWidth: .infinity, maxHeight: .infinity)
+            GlassLoadingState(label: "Loading goals…")
           } else {
             goalContent
           }
@@ -64,30 +63,27 @@ struct ChatFirstGoalsPage: View {
     .accessibilityIdentifier("chat-first-goals-page")
   }
 
+  /// Goals has no top-bar pill, so it is a drill-in: Back to the page that opened it, then the
+  /// shared page title (docs/ux-contract.md §11). Esc takes the same path (`closeGoals`).
   private var header: some View {
-    HStack(alignment: .firstTextBaseline) {
-      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-        Text("Goals")
-          .scaledFont(size: OmiType.title, weight: .bold)
-          .foregroundStyle(Ink.primary)
-        Text("Keep the work that matters in view.")
-          .scaledFont(size: OmiType.body)
-          .foregroundStyle(Ink.secondary)
+    HStack(alignment: .center, spacing: OmiSpacing.md) {
+      BackChip((navigation.goalsOrigin ?? .chat).title, accessibilityIdentifier: "chat-first-goals-back") {
+        navigation.closeGoals()
       }
-      Spacer()
-      Button {
-        Task { await refreshProjectionAndDetail() }
-      } label: {
-        Image(systemName: "arrow.clockwise")
-          .scaledFont(size: OmiType.body, weight: .medium)
+      GlassPageHeader(title: "Goals", subtitle: "Keep the work that matters in view") {
+        refreshButton
       }
-      .buttonStyle(.plain)
-      .disabled(goalsStore.isLoading)
-      .accessibilityLabel("Refresh goals")
-      .accessibilityIdentifier("chat-first-goals-refresh")
     }
-    .padding(.horizontal, OmiSpacing.xxl)
-    .padding(.vertical, OmiSpacing.xl)
+    .padding(.horizontal, OmiSpacing.lg)
+    .padding(.vertical, OmiSpacing.sm + 2)
+  }
+
+  private var refreshButton: some View {
+    OmiIconButton("arrow.clockwise", help: "Refresh goals") {
+      Task { await refreshProjectionAndDetail() }
+    }
+    .disabled(goalsStore.isLoading)
+    .accessibilityIdentifier("chat-first-goals-refresh")
   }
 
   private var goalContent: some View {
@@ -106,8 +102,7 @@ struct ChatFirstGoalsPage: View {
           )
           .id(detail.goal.goalId)
         } else if goalsStore.primaryFocusedGoal != nil || pendingGoalID != nil {
-          ProgressView("Loading goal")
-            .frame(maxWidth: .infinity)
+          GlassLoadingState(label: "Loading goal…", placement: .scrolling)
         }
 
         if !goalsStore.otherActiveGoals.isEmpty {
@@ -140,31 +135,26 @@ struct ChatFirstGoalsPage: View {
   }
 
   private var emptyState: some View {
-    ContentUnavailableView {
-      Label("No active goals", systemImage: "target")
-    } description: {
-      Text("Omi can help you turn what matters into a clear goal.")
-    } actions: {
-      Button("Talk to Omi about a goal") {
+    GlassEmptyState(
+      systemImage: "target",
+      title: "No Active Goals",
+      message: "Omi can help you turn what matters into a clear goal."
+    ) {
+      Button("Talk to Omi About a Goal") {
         navigation.discuss(.goals, using: chatProvider)
       }
+      .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       .accessibilityIdentifier("chat-first-goals-empty-discuss")
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
   private func unavailableState(_ message: String) -> some View {
-    ContentUnavailableView {
-      Label("Goals are unavailable", systemImage: "exclamationmark.triangle")
-    } description: {
-      Text(message)
-    } actions: {
-      Button("Refresh") {
-        Task { await refreshProjectionAndDetail() }
-      }
-      .accessibilityIdentifier("chat-first-goals-unavailable-refresh")
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    GlassErrorState(
+      title: "Goals Are Unavailable",
+      message: message,
+      retryAccessibilityIdentifier: "chat-first-goals-unavailable-refresh",
+      retry: { Task { await refreshProjectionAndDetail() } }
+    )
   }
 
   private func refreshProjectionAndDetail() async {
@@ -307,7 +297,7 @@ private struct ChatFirstFocusedGoalSection: View {
       .scaledFont(size: OmiType.caption, weight: .semibold)
     }
     .padding(OmiSpacing.xl)
-    .frame(maxWidth: 680, alignment: .leading)
+    .frame(maxWidth: .infinity, alignment: .leading)
     // The focused goal is the emphasised card on the page; no drop shadow, because
     // the panel already carries the one ambient shadow in this system.
     .glassCard(emphasized: true)
@@ -368,10 +358,16 @@ private struct ChatFirstGoalRow: View {
         Text(goal.title)
           .scaledFont(size: OmiType.body, weight: .semibold)
           .foregroundStyle(Ink.primary)
-        Text(goal.desiredOutcome)
-          .scaledFont(size: OmiType.caption)
-          .foregroundStyle(Ink.secondary)
-          .lineLimit(2)
+        // Goals created without an outcome carry the title in `desiredOutcome`;
+        // echoing it under the title reads as a rendering bug.
+        if goal.desiredOutcome.trimmingCharacters(in: .whitespacesAndNewlines)
+          .compare(goal.title, options: .caseInsensitive) != .orderedSame
+        {
+          Text(goal.desiredOutcome)
+            .scaledFont(size: OmiType.caption)
+            .foregroundStyle(Ink.secondary)
+            .lineLimit(2)
+        }
         Text(ChatFirstGoalProgressPolicy.summary(for: goal))
           .scaledFont(size: OmiType.caption, weight: .medium)
           .foregroundStyle(Ink.secondary)
@@ -398,7 +394,7 @@ private struct ChatFirstGoalRow: View {
       .scaledFont(size: OmiType.caption, weight: .medium)
     }
     .padding(OmiSpacing.md)
-    .frame(maxWidth: 680, alignment: .leading)
+    .frame(maxWidth: .infinity, alignment: .leading)
     .glassCard(cornerRadius: PageGlass.rowRadius)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("chat-first-goal-row-\(goal.goalId)")
@@ -411,6 +407,14 @@ private struct ChatFirstGoalRow: View {
 enum ChatFirstGoalProgressPolicy {
   static func summary(for goal: OmiAPI.GoalResponse) -> String {
     let unit = goal.unit.map { " \($0)" } ?? ""
+    // A goal created without an explicit target keeps the creation default
+    // (1.0) while progress updates push `currentValue` past it — "20 of 1"
+    // reads as impossible because the target was never meaningfully set. When
+    // the current value has overshot that unconfigured default, the target
+    // carries no information; report the value alone.
+    if goal.unit == nil, goal.targetValue <= 1, goal.currentValue > goal.targetValue {
+      return "Progress: \(formatted(goal.currentValue))"
+    }
     return "Progress: \(formatted(goal.currentValue)) of \(formatted(goal.targetValue))\(unit)"
   }
 

@@ -19,6 +19,8 @@ from typing import TextIO
 
 POLL_SECONDS = 0.2
 STATUS_INTERVAL_SECONDS = 5.0
+WINDOWS_ATOMIC_REPLACE_RETRY_SECONDS = 0.01
+WINDOWS_ATOMIC_REPLACE_TIMEOUT_SECONDS = 2.0
 MAX_PR_BODY_FINGERPRINT_BYTES = 1024 * 1024
 FORWARDED_SIGNAL_NAMES = ("SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK")
 FINGERPRINT_ENV_NAMES = (
@@ -30,8 +32,10 @@ FINGERPRINT_ENV_NAMES = (
 )
 IS_WINDOWS = os.name == "nt"
 HAS_PROCESS_GROUPS = os.name != "nt" and hasattr(os, "killpg")
-WINDOWS_STILL_ACTIVE = 259
 WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+WINDOWS_SYNCHRONIZE = 0x00100000
+WINDOWS_WAIT_OBJECT_0 = 0x00000000
+WINDOWS_WAIT_TIMEOUT = 0x00000102
 WINDOWS_PROCESS_SET_QUOTA = 0x0100
 WINDOWS_PROCESS_TERMINATE = 0x0001
 WINDOWS_ERROR_ACCESS_DENIED = 5
@@ -239,7 +243,27 @@ def signal_child(
 def atomic_json(path: Path, value: dict) -> None:
     temporary = path.with_suffix(path.suffix + f".{os.getpid()}.tmp")
     temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(temporary, path)
+    deadline = time.monotonic() + WINDOWS_ATOMIC_REPLACE_TIMEOUT_SECONDS
+    while True:
+        try:
+            os.replace(temporary, path)
+            return
+        except PermissionError:
+            if not IS_WINDOWS or time.monotonic() >= deadline:
+                raise
+            time.sleep(WINDOWS_ATOMIC_REPLACE_RETRY_SECONDS)
+
+
+def configure_output_streams() -> None:
+    """Keep captured runner output UTF-8 and non-fatal on Windows."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if not callable(reconfigure):
+            continue
+        options = {"errors": "backslashreplace"}
+        if IS_WINDOWS:
+            options["encoding"] = "utf-8"
+        reconfigure(**options)
 
 
 def read_json(path: Path) -> dict:
@@ -258,9 +282,9 @@ def windows_process_status(pid: int) -> tuple[bool, int | None]:
     open_process = kernel32.OpenProcess
     open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
     open_process.restype = wintypes.HANDLE
-    get_exit_code = kernel32.GetExitCodeProcess
-    get_exit_code.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
-    get_exit_code.restype = wintypes.BOOL
+    wait_for_single_object = kernel32.WaitForSingleObject
+    wait_for_single_object.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    wait_for_single_object.restype = wintypes.DWORD
     get_process_times = kernel32.GetProcessTimes
     get_process_times.argtypes = [
         wintypes.HANDLE,
@@ -274,15 +298,19 @@ def windows_process_status(pid: int) -> tuple[bool, int | None]:
     close_handle.argtypes = [wintypes.HANDLE]
     close_handle.restype = wintypes.BOOL
 
-    handle = open_process(WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    handle = open_process(
+        WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION | WINDOWS_SYNCHRONIZE,
+        False,
+        pid,
+    )
     if not handle:
         return ctypes.get_last_error() == WINDOWS_ERROR_ACCESS_DENIED, None
     try:
-        exit_code = wintypes.DWORD()
-        if not get_exit_code(handle, ctypes.byref(exit_code)):
-            return True, None
-        if exit_code.value != WINDOWS_STILL_ACTIVE:
+        wait_result = wait_for_single_object(handle, 0)
+        if wait_result == WINDOWS_WAIT_OBJECT_0:
             return False, None
+        if wait_result != WINDOWS_WAIT_TIMEOUT:
+            return True, None
 
         creation = wintypes.FILETIME()
         exit_time = wintypes.FILETIME()
@@ -503,9 +531,12 @@ def run_owned(
         log_path.write_text("", encoding="utf-8")
         os.chmod(log_path, 0o600)
         write_status()
+        child_env = os.environ.copy()
+        child_env["PYTHONIOENCODING"] = "utf-8:backslashreplace"
         child = subprocess.Popen(
             child_launch_command(command),
             cwd=root,
+            env=child_env,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
@@ -607,6 +638,7 @@ def resolve_repo_root() -> Path:
 
 
 def main() -> int:
+    configure_output_streams()
     if sys.argv[1:2] == [WINDOWS_CHILD_BOOTSTRAP_FLAG]:
         return run_windows_child_bootstrap(sys.argv[2:])
 

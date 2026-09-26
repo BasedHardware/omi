@@ -121,6 +121,10 @@ const NOT_READY_POLL_INTERVAL_MS = 300
 export type UseChat = {
   history: ChatMsg[]
   sending: boolean
+  /** Monotonic signal emitted after a hosted chat request settles. Consumers can
+   *  use it for post-send work without inferring completion from the shared busy
+   *  flag, which is also used by local automation and coding-agent paths. */
+  quotaCheckSeq: number
   /** True while a spoken (TTS) reply for a `fromVoice` message is playing —
    *  distinct from `sending` (which is the streaming phase). The bar orb uses it
    *  to show the "speaking" state after a voice exchange. */
@@ -190,6 +194,7 @@ export function useChat(): UseChat {
 
   const [history, setHistory] = useState<ChatMsg[]>([])
   const [sending, setSending] = useState(false)
+  const [quotaCheckSeq, setQuotaCheckSeq] = useState(0)
   // Spoken-reply (TTS) playback state. A ref counter keeps `speaking` correct if
   // a later reply's TTS starts before an earlier one drains.
   const [speaking, setSpeaking] = useState(false)
@@ -699,6 +704,7 @@ export function useChat(): UseChat {
     const assistantId = crypto.randomUUID()
     let assistantText = ''
     let assistantEvidence: ChatEvidenceReferenceEnvelope | undefined
+    let hostedRequestStarted = false
     // The latest running tool surfaces as a transient italic line in the bubble,
     // mirroring the coding-agent door (:457-468 `_${name}…_`) so main + bar read the
     // same. DISPLAY-ONLY: it is composed into the live bubble but never folded into
@@ -779,6 +785,8 @@ export function useChat(): UseChat {
         if (event.type === 'accepted') {
           attemptRunId = event.runId
           activeKernelRunRef.current = event.runId
+        } else if (event.type === 'hosted_request_started') {
+          hostedRequestStarted = true
         } else if (event.type === 'text_delta') {
           assistantText += event.text
           // Real reply text supersedes the transient tool line (clear on text_delta OR
@@ -850,6 +858,9 @@ export function useChat(): UseChat {
       // unlatch the spinner + attempt a best-effort server cancel…
       writeAssistant(CHAT_STREAM_TIMEOUT_COPY)
       setBusy(false)
+      // The generation is invalidated below, so terminal handling cannot emit
+      // this later. Record an already-started hosted dispatch exactly once here.
+      if (hostedRequestStarted) setQuotaCheckSeq((seq) => seq + 1)
       void window.omi.mainChatCancel(activeKernelRunRef.current ?? '').catch(() => {})
       // …then invalidate: bump the gen so the abandoned send's late deltas AND its
       // terminal finally (all gated on the pre-bump `myGen`) are dropped — no double
@@ -1018,6 +1029,7 @@ export function useChat(): UseChat {
         }
         if (!errored && hasRealText) maybeSpeak(assistantText, fromVoice)
         setBusy(false)
+        if (hostedRequestStarted) setQuotaCheckSeq((seq) => seq + 1)
       }
     }
   }
@@ -1178,6 +1190,7 @@ export function useChat(): UseChat {
 
     let assistantText = ''
     let finalMsg: ChatMsg = assistantMsg('')
+    let hostedRequestStarted = false
     // AbortController so reset()/dismiss tears the fetch + reader down promptly
     // rather than leaving it draining in the background.
     const ac = new AbortController()
@@ -1239,8 +1252,8 @@ export function useChat(): UseChat {
       const messagesUrl = sendAppId
         ? `${OMI_BASE}/v2/messages?app_id=${encodeURIComponent(sendAppId)}`
         : `${OMI_BASE}/v2/messages`
-      const doFetch = (): Promise<Response> =>
-        fetch(messagesUrl, {
+      const doFetch = (): Promise<Response> => {
+        const request = fetch(messagesUrl, {
           method: 'POST',
           // BYOK: attach X-BYOK-* (all-or-none) when active so managed chat runs on
           // the user's own keys. This lane is a raw fetch, so it can't ride the
@@ -1260,6 +1273,11 @@ export function useChat(): UseChat {
           ),
           signal: ac.signal
         })
+        // Mark the hosted boundary only after fetch() accepted the request. A
+        // synchronous setup error must remain a pre-dispatch failure.
+        hostedRequestStarted = true
+        return request
+      }
       let res = await doFetch()
       // Transient rate-limit recovery (same policy as the pi_mono door): a 429 here
       // is a transient backend rate limit — not the user sending too fast — so back
@@ -1417,6 +1435,7 @@ export function useChat(): UseChat {
       // interleaving/zombie bug.
       if (isCurrent()) {
         setBusy(false)
+        if (hostedRequestStarted) setQuotaCheckSeq((seq) => seq + 1)
         await persistChat(buildThread(finalMsg), isCurrent)
       }
     }
@@ -1754,6 +1773,7 @@ export function useChat(): UseChat {
   return {
     history,
     sending,
+    quotaCheckSeq,
     speaking,
     agentActive,
     send,

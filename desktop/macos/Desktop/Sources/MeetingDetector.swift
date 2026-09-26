@@ -19,6 +19,9 @@ private final class WeakMeetingDetector: @unchecked Sendable {
 /// Transitions **on** as soon as a call is detected, but transitions **off** only after a grace
 /// period of sustained "no meeting" (hysteresis) to avoid flapping when a call window briefly
 /// disappears (focus changes, screen-share popups, etc.).
+///
+/// Polls every 1s while a native call app or browser holds the microphone, and every 4s
+/// otherwise. The off grace stays a fixed 8s, so the faster poll does not shorten it.
 @MainActor
 final class MeetingDetector {
 
@@ -27,13 +30,26 @@ final class MeetingDetector {
   /// True after at least one async probe has reported. Until then, `isMeetingActive == false`
   /// means "unknown", not "no meeting".
   private(set) var hasObservedState: Bool = false
+  /// Set when a different call replaced the one in progress without an off edge. The owner
+  /// clears it when it starts rotating and restores it if the rotation could not run. Reset
+  /// whenever the meeting ends.
+  private(set) var hasPendingCallChange = false
+  /// Idle interval until a call surface holds the mic, then the 1s interval.
+  private(set) var pollInterval: TimeInterval
 
-  private let pollInterval: TimeInterval
+  private let idlePollInterval: TimeInterval
+  private let activePollInterval: TimeInterval
   private let offGracePeriod: TimeInterval
-  private let isMeetingNow: @Sendable () -> Bool
+  private let mode: AssistantSettings.AudioRecordingMode
+  private let processInputAPIAvailable: Bool
+  private let snapshot: @Sendable () -> CallAudioSnapshot
+  private var callTracker: MeetingCallIdentityTracker
+  private var audioLedger: CallAppAudioDailyLedger
   private let now: () -> Date
   private let onInitialStateObserved: () -> Void
+  private let onCallChanged: () -> Void
   private let onChange: (Bool) -> Void
+  private let onAudioSummaries: ([CallAppAudioSummary]) -> Void
 
   private var timer: Timer?
   private var workspaceObservers: [NSObjectProtocol] = []
@@ -45,30 +61,62 @@ final class MeetingDetector {
   private var probeTask: Task<Void, Never>?
 
   /// - Parameters:
-  ///   - pollInterval: how often to re-probe (browser tab-title changes only surface via the poll).
+  ///   - pollInterval: how often to re-probe while no call surface holds the mic.
+  ///   - activePollInterval: how often to re-probe while a native call app or browser holds the mic.
   ///   - offGracePeriod: sustained "no meeting" time required before flipping off.
-  ///   - isMeetingNow: conferencing-call probe (injectable for tests). Default: a native or browser
-  ///     app using the mic (macOS 14.4+), or a browser call window (window-title fallback).
+  ///   - mode: recording mode whose detection semantics this detector must match.
+  ///   - processInputAPIAvailable: macOS 14.4+ per-process input API. Tests pin it; production
+  ///     follows the running OS.
+  ///   - snapshot: one off-main audio snapshot per tick (injectable for tests).
+  ///   - callConfirmationPeriod: how long a new call must stay visible before it counts.
   ///   - now: clock (injectable for tests).
   ///   - onInitialStateObserved: called on the main actor once the first async probe completes.
+  ///   - onCallChanged: called on the main actor when a different call replaces the current one.
   ///   - onChange: called on the main actor whenever `isMeetingActive` flips.
+  ///   - onAudioSummaries: daily call-audio aggregates to emit. Default sends them through PostHog.
   init(
     pollInterval: TimeInterval = 4.0,
+    activePollInterval: TimeInterval = 1.0,
     offGracePeriod: TimeInterval = 8.0,
-    isMeetingNow: @escaping @Sendable () -> Bool = {
-      if #available(macOS 14.4, *), ConferencingApps.callAppIsUsingMicrophone() { return true }
-      return ConferencingApps.browserCallWindowPresent()
-    },
+    mode: AssistantSettings.AudioRecordingMode = .onlyMeetings,
+    processInputAPIAvailable: Bool? = nil,
+    snapshot: (@Sendable () -> CallAudioSnapshot)? = nil,
+    callConfirmationPeriod: TimeInterval = 8.0,
     now: @escaping () -> Date = { Date() },
+    audioLedgerDefaults: UserDefaults = .standard,
+    calendar: Calendar = .current,
     onInitialStateObserved: @escaping () -> Void = {},
-    onChange: @escaping (Bool) -> Void
+    onCallChanged: @escaping () -> Void = {},
+    onChange: @escaping (Bool) -> Void,
+    onAudioSummaries: @escaping ([CallAppAudioSummary]) -> Void = { summaries in
+      for summary in summaries {
+        PostHogManager.shared.callAppAudioSummary(summary)
+      }
+    }
   ) {
+    let apiAvailable: Bool
+    if let processInputAPIAvailable {
+      apiAvailable = processInputAPIAvailable
+    } else if #available(macOS 14.4, *) {
+      apiAvailable = true
+    } else {
+      apiAvailable = false
+    }
+    let titles = CallAudioBrowserTitlePolicy.capture(mode: mode, processInputAPIAvailable: apiAvailable)
+    self.idlePollInterval = pollInterval
+    self.activePollInterval = activePollInterval
     self.pollInterval = pollInterval
     self.offGracePeriod = offGracePeriod
-    self.isMeetingNow = isMeetingNow
+    self.mode = mode
+    self.processInputAPIAvailable = apiAvailable
+    self.snapshot = snapshot ?? { ConferencingApps.captureCallAudioSnapshot(browserTitles: titles) }
+    self.callTracker = MeetingCallIdentityTracker(confirmationPeriod: callConfirmationPeriod)
+    self.audioLedger = CallAppAudioDailyLedger(defaults: audioLedgerDefaults, calendar: calendar)
     self.now = now
     self.onInitialStateObserved = onInitialStateObserved
+    self.onCallChanged = onCallChanged
     self.onChange = onChange
+    self.onAudioSummaries = onAudioSummaries
   }
 
   /// Begin observing app launch/terminate/activation and polling. Emits the initial state
@@ -91,10 +139,8 @@ final class MeetingDetector {
       workspaceObservers.append(observer)
     }
 
-    timer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) {
-      [weak self] _ in
-      Task { @MainActor in self?.tick() }
-    }
+    scheduleTimer()
+    emitAudioSummaries(audioLedger.begin(at: now()))
 
     // Establish the initial state. The probe runs off the main actor and is applied
     // asynchronously (and surfaced via onChange), so the caller's gate converges shortly after.
@@ -122,29 +168,64 @@ final class MeetingDetector {
     log("MeetingDetector: stopped")
   }
 
-  /// Probe for an active call off the main actor — the CoreAudio process scan / CGWindowList query
-  /// can block (notably right after wake) — then apply the result back on the main actor.
+  /// One snapshot off the main actor — the CoreAudio process scan / CGWindowList query can
+  /// block (notably right after wake) — then derive detection and identities on the main actor.
   private func tick() {
-    let probe = isMeetingNow
+    let probe = snapshot
     probeGeneration &+= 1
     let generation = probeGeneration
     let weakSelf = WeakMeetingDetector(self)
     probeTask?.cancel()
     probeTask = Task.detached(priority: .utility) {
-      let detected = probe()
+      let shot = probe()
       await MainActor.run {
         guard let detector = weakSelf.value,
           detector.started,
           detector.probeGeneration == generation
         else { return }
-        detector.applyDetected(detected)
+        detector.applySnapshot(shot)
       }
     }
   }
 
+  private func scheduleTimer() {
+    timer?.invalidate()
+    timer = Timer.scheduledTimer(withTimeInterval: pollInterval, repeats: true) { [weak self] _ in
+      Task { @MainActor in self?.tick() }
+    }
+  }
+
+  private func emitAudioSummaries(_ summaries: [CallAppAudioSummary]) {
+    guard !summaries.isEmpty else { return }
+    onAudioSummaries(summaries)
+  }
+
+  /// Apply one probe. Updates the mic-session ledger and the poll cadence, then the meeting
+  /// state. Exposed for tests; the timer and workspace notifications drive it via `tick()`.
+  func applySnapshot(_ snapshot: CallAudioSnapshot) {
+    let timestamp = now()
+    emitAudioSummaries(audioLedger.ingest(snapshot, at: timestamp))
+    let desired = MeetingCallObservation.pollInterval(
+      snapshot: snapshot, idle: idlePollInterval, active: activePollInterval)
+    if desired != pollInterval {
+      pollInterval = desired
+      if started { scheduleTimer() }
+    }
+    let detected = MeetingCallObservation.isDetected(
+      snapshot: snapshot, mode: mode, processInputAPIAvailable: processInputAPIAvailable)
+    let callIDs =
+      detected
+      ? MeetingCallObservation.identities(
+        snapshot: snapshot,
+        processInputAPIAvailable: processInputAPIAvailable,
+        nativeIdentity: { self.audioLedger.nativeCallIdentity(bundleID: $0) })
+      : []
+    applyDetected(detected, callIDs: callIDs)
+  }
+
   /// Apply a boolean detection result, honoring the off-hysteresis. Exposed for tests; normally
   /// driven by the poll timer and workspace notifications via `tick()`.
-  func applyDetected(_ detected: Bool) {
+  func applyDetected(_ detected: Bool, callIDs: Set<String> = []) {
     let hadObservedState = hasObservedState
     hasObservedState = true
 
@@ -152,8 +233,14 @@ final class MeetingDetector {
       // Meeting present: cancel any pending-off and ensure we're active.
       pendingOffDeadline = nil
       setActive(true)
+      if callTracker.observe(callIDs, at: now()) {
+        log("MeetingDetector: call CHANGED (now \(callIDs.sorted().joined(separator: ",")))")
+        hasPendingCallChange = true
+        onCallChanged()
+      }
     } else if isMeetingActive {
       // Meeting undetected while active: arm or honor the off grace period.
+      callTracker.noteMicrophoneGap(at: now())
       if let deadline = pendingOffDeadline {
         if now() >= deadline {
           pendingOffDeadline = nil
@@ -175,9 +262,16 @@ final class MeetingDetector {
   private func setActive(_ active: Bool) {
     guard active != isMeetingActive else { return }
     isMeetingActive = active
+    if !active {
+      callTracker.reset()
+      hasPendingCallChange = false
+    }
     log("MeetingDetector: meeting \(active ? "STARTED" : "ENDED")")
     onChange(active)
   }
+
+  func clearPendingCallChange() { hasPendingCallChange = false }
+  func restorePendingCallChange() { hasPendingCallChange = true }
 
   #if DEBUG
     var currentProbeTaskForTesting: Task<Void, Never>? {
@@ -190,4 +284,75 @@ final class MeetingDetector {
       return probeTask
     }
   #endif
+}
+
+/// Tells one call from the next while the detector stays "in a meeting".
+///
+/// Leaving one Google Meet and joining another within the off grace period (the next Meet's
+/// green room takes the microphone within seconds) never produces an off edge, so both calls
+/// used to land in one conversation. Identities from one `CallAudioSnapshot` separate them:
+/// `meet:<code>` for a Google Meet window, `app:<bundle>` for a native call app, and
+/// `app:<bundle>#<n>` when `CallAppReleasePolicy` says a mic release ends that app's call.
+/// A call counts as new when an identity not seen earlier in this meeting stays
+/// visible for `confirmationPeriod` **and replaces** the call in progress: that call's
+/// identities are gone, or the microphone dropped shortly before the new identity appeared
+/// (leaving A with its tab still open). A new identity merely appearing alongside the current
+/// call (the next meeting's green room opened early, a huddle started mid-Meet) does not rotate.
+/// Identities seen before never count again within the meeting, so switching tabs away from a
+/// Meet and back does not rotate. No identities at all (no Screen Recording permission, a web
+/// call that is not Meet) degrades to the old behaviour: one conversation until the off edge.
+struct MeetingCallIdentityTracker {
+  let confirmationPeriod: TimeInterval
+  /// A microphone gap this long before a new identity first appears still counts as the
+  /// previous call ending.
+  let gapLeadWindow: TimeInterval = 30
+  private var seen: Set<String> = []
+  /// Identities of the call in progress.
+  private var current: Set<String> = []
+  private var candidate: (id: String, since: Date)?
+  private var lastGapAt: Date?
+
+  init(confirmationPeriod: TimeInterval) {
+    self.confirmationPeriod = confirmationPeriod
+  }
+
+  mutating func reset() {
+    seen = []
+    current = []
+    candidate = nil
+    lastGapAt = nil
+  }
+
+  /// The detector saw no call on a probe while the meeting stayed active (inside the off grace).
+  mutating func noteMicrophoneGap(at now: Date) {
+    lastGapAt = now
+  }
+
+  /// Record one probe's identities; true when a new call has just been confirmed.
+  mutating func observe(_ identities: Set<String>, at now: Date) -> Bool {
+    guard !seen.isEmpty else {
+      // The meeting's first identities name the call in progress, not a new one.
+      seen = identities
+      current = identities
+      return false
+    }
+    let unseen = identities.subtracting(seen)
+    guard let next = unseen.min() else {
+      candidate = nil
+      return false
+    }
+    if candidate?.id != next {
+      candidate = (next, now)
+    }
+    guard let since = candidate?.since, now.timeIntervalSince(since) >= confirmationPeriod else { return false }
+    let currentGone = current.isDisjoint(with: identities)
+    let gapAroundAppearance = lastGapAt.map { $0 >= since.addingTimeInterval(-gapLeadWindow) } ?? false
+    // Keep the candidate: the current call may still end (its window closes, its mic drops).
+    guard currentGone || gapAroundAppearance else { return false }
+    seen.formUnion(identities)
+    current = unseen
+    candidate = nil
+    lastGapAt = nil
+    return true
+  }
 }

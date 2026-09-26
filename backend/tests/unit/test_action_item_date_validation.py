@@ -119,6 +119,7 @@ _SYS_MODULE_NAMES = [
     "utils.llm.conversation_folder",
     "utils.llm.conversation_prompt_prefix",
     "utils.llm.conversation_processing",
+    "utils.llm.model_config",
     "utils.retrieval",
     "utils.retrieval.tools",
     "utils.retrieval.tools.action_item_tools",
@@ -127,6 +128,15 @@ _SYS_MODULE_NAMES = [
     "utils.conversations",
     "utils.conversations.render",
     "utils.conversations.wake_word",
+    "utils.conversations.summary_selection",
+    "utils.conversations.meeting_participants",
+    "utils.llm.meeting_notes_rich_prompts",
+    "utils.llm.meeting_notes_validation",
+    "models.structured",
+    "models.calendar_context",
+    "models.conversation_enums",
+    "omi_plugin_sdk",
+    "omi_plugin_sdk.models",
     "langchain_core",
     "langchain_core.tools",
     "langchain_core.runnables",
@@ -340,15 +350,48 @@ _load_module_from_file("utils.llm.discard_parser", BACKEND_DIR / "utils" / "llm"
 # unresolvable.
 _load_module_from_file("utils.llm.prompt_cache", BACKEND_DIR / "utils" / "llm" / "prompt_cache.py")
 
+# model_config pulls in gateway_client; stub the one constant conversation_processing
+# imports so the isolated load does not need the real module tree.
+model_config_stub = _stub_module("utils.llm.model_config")
+model_config_stub.FOREGROUND_REQUEST_TIMEOUT_SECONDS = 60.0
+
 prompt_prefix_stub = _stub_module("utils.llm.conversation_prompt_prefix")
 prompt_prefix_stub.ConversationPromptPrefix = MagicMock
 prompt_prefix_stub.shared_conversation_cache_supported = MagicMock(return_value=False)
+prompt_prefix_stub.SHARED_CONVERSATION_PREAMBLE = 'You are analyzing one Omi conversation for the account owner.'
 
 # wake_word is stdlib-only; load the real trust-boundary helper before the
 # isolated conversation-processing module imports it.
 _load_module_from_file(
     "utils.conversations.wake_word",
     BACKEND_DIR / "utils" / "conversations" / "wake_word.py",
+)
+_load_module_from_file(
+    "utils.conversations.summary_selection",
+    BACKEND_DIR / "utils" / "conversations" / "summary_selection.py",
+)
+# relevance_rules is stdlib-only; load the real module so conversation_processing's
+# module-scope `from utils.conversations.relevance_rules import KEEP_WORD_COUNT`
+# resolves against production's threshold, not a stub package.
+_load_module_from_file(
+    "utils.conversations.relevance_rules",
+    BACKEND_DIR / "utils" / "conversations" / "relevance_rules.py",
+)
+
+# Pure helpers imported by conversation_processing; load the real modules so
+# the isolated import chain exercises production code. meeting_participants and
+# meeting_notes_validation resolve models/* through the real models.__path__.
+_load_module_from_file(
+    "utils.conversations.meeting_participants",
+    BACKEND_DIR / "utils" / "conversations" / "meeting_participants.py",
+)
+_load_module_from_file(
+    "utils.llm.meeting_notes_rich_prompts",
+    BACKEND_DIR / "utils" / "llm" / "meeting_notes_rich_prompts.py",
+)
+_load_module_from_file(
+    "utils.llm.meeting_notes_validation",
+    BACKEND_DIR / "utils" / "llm" / "meeting_notes_validation.py",
 )
 
 conversation_processing = _load_module_from_file(
@@ -445,14 +488,23 @@ class TestCreateActionItemDateValidation:
         assert "Error" in result
         assert "Invalid due_at format" in result
 
-    def test_no_due_date_defaults_to_24h(self):
-        """No due date should default to 24h from now."""
+    def test_no_due_date_stays_undated(self):
+        """A task the user never dated must be written with no due date.
+
+        Inventing ``now + 24h`` put it in neither the overdue nor the due-today
+        bucket any reader uses, so "remind me to X" followed by "what's on my
+        list" deterministically answered that there was nothing.
+        """
+        action_items_db.create_action_item.reset_mock()
         result = create_action_item_tool(
             description="No due date task",
             due_at=None,
             config=_make_config(),
         )
         assert "in the past" not in result
+        action_items_db.create_action_item.assert_called_once()
+        written = action_items_db.create_action_item.call_args.args[1]
+        assert written.get("due_at") is None, f"expected no invented due date, got {written.get('due_at')!r}"
 
     def test_boundary_23h_ago_accepted(self):
         """Due date 23h ago should be accepted (within 1-day grace)."""

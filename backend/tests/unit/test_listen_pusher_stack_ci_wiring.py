@@ -59,10 +59,19 @@ def test_listen_pusher_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -> N
     listener_entrypoint = (_REPO_ROOT / 'backend' / 'testing' / 'listen_pusher_stack' / 'listener_app.py').read_text(
         encoding='utf-8'
     )
+    finalizer_leaves = (_REPO_ROOT / 'backend' / 'testing' / 'listen_pusher_stack' / 'finalizer_leaves.py').read_text(
+        encoding='utf-8'
+    )
     assert '_rest_finalization_survives_listener_restart' in runner
     assert "state_dir / 'cloud-rest-restart'" in runner
     assert '_stale_processing_orphan_reconciled' in runner
     assert "state_dir / 'cloud-stale-orphan'" in runner
+    assert '_memory_fence_blocks_durable_finalization' in runner
+    assert "state_dir / 'cloud-memory-fence'" in runner
+    assert 'finalization_worker_memory_enabled=None' in runner
+    assert 'finalizer.process_conversation =' not in finalizer_leaves
+    assert 'finalizer.extract_memories =' not in finalizer_leaves
+    assert 'processing._extract_memories_canonical = _offline_extract_memories_canonical' in finalizer_leaves
     assert '_stale_processing_orphan_reconciled_inline' in runner
     assert "state_dir / 'inline-stale-orphan'" in runner
     assert "'task_already_exists'" in task_seam
@@ -106,8 +115,26 @@ def test_backend_hermetic_gate_is_always_reported_and_fails_closed() -> None:
     assert 'github.event.pull_request.base.sha' not in scope
     assert 'PR_BASE_REF: origin/${{ github.base_ref }}' in scope
     assert 'github.event.merge_group.base_sha' in scope
+    assert 'timeout-minutes: 10' in scope
+    assert 'fetch-depth: 0' in scope
+    assert 'filter: blob:none' in scope
     assert 'git diff --name-only "$base_sha"...HEAD' in scope
     assert "^(backend/|package\\.json$|package-lock\\.json$|\\.github/workflows/backend-hermetic-e2e\\.yml$)" in scope
+
+    # #10945: fail closed on unresolvable scope base or a failed (partial-clone)
+    # history fetch. The scope job must FAIL rather than silently emit
+    # applies=false, which would skip the hermetic backend gate entirely.
+    run_block = scope.split('run: |', 1)[1]
+    assert 'set -euo pipefail' in run_block
+    assert 'if [[ -z "$base_sha" ]] || ! git cat-file -e "${base_sha}^{commit}"; then' in run_block
+    assert 'Cannot resolve hermetic backend scope base' in run_block
+    assert 'exit 1' in run_block
+    assert 'a failed diff must never yield empty -> applies=false' in run_block
+    # applies=false must be reachable only AFTER a successful diff, never as a fallback.
+    diff_index = run_block.index('changed_files="$(git diff')
+    applies_false_index = run_block.index('echo "applies=false" >> "$GITHUB_OUTPUT"')
+    assert diff_index < applies_false_index
+    # The two exit-1 guards precede the diff; a failed scope never reaches applies=false.
 
     for job_name in ('hermetic-e2e', 'listen-pusher-stack-gauntlet', 'sync-cloud-tasks-stack-gauntlet'):
         job = workflow.split(f'  {job_name}:\n', 1)[1]

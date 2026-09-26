@@ -1,8 +1,9 @@
-"""A dead-lettered finalization has to name the exception class behind it.
+"""A dead-lettered finalization emits a bounded, privacy-safe reason.
 
 The handler in ``utils/conversations/finalizer.py`` deliberately keeps provider and validation
-messages out of the log because they can quote the transcript. The class name is the one part
-that carries no transcript and is what makes ``processing_failed`` actionable.
+messages out of the log because they can quote the transcript. Stable reason
+codes distinguish operational classes without turning arbitrary exception
+types or messages into labels.
 """
 
 import logging
@@ -45,8 +46,10 @@ def finalizer_that_fails_on_geolocation(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_dead_letter_log_names_the_exception_class(finalizer_that_fails_on_geolocation, caplog):
-    with caplog.at_level(logging.ERROR, logger=finalizer.logger.name):
+async def test_dead_letter_log_names_the_bounded_reason(finalizer_that_fails_on_geolocation, caplog, monkeypatch):
+    recorded = []
+    monkeypatch.setattr(finalizer, 'record_finalization_failure', recorded.append)
+    with caplog.at_level(logging.WARNING, logger=finalizer.logger.name):
         with pytest.raises(ConversationFinalizationError) as raised:
             await finalizer.finalize_persisted_conversation(
                 "user-1",
@@ -57,15 +60,19 @@ async def test_dead_letter_log_names_the_exception_class(finalizer_that_fails_on
             )
 
     assert str(raised.value) == "processing_failed"
-    failures = [record.getMessage() for record in caplog.records if "failure=processing_failed" in record.getMessage()]
+    failures = [record for record in caplog.records if "failure=processing_failed" in record.getMessage()]
     assert len(failures) == 1
-    assert "error=LookupError" in failures[0]
+    assert "reason=processing" in failures[0].getMessage()
+    # Per-attempt failure is retryable in-flight work: WARNING, not ERROR.
+    # Terminality is decided and escalated by the pusher-side handler.
+    assert failures[0].levelno == logging.WARNING
+    assert recorded == [finalizer.classify_finalization_failure(LookupError())]
 
 
 @pytest.mark.asyncio
 async def test_dead_letter_log_still_withholds_the_exception_message(finalizer_that_fails_on_geolocation, caplog):
     """The class name is safe to log; the message can quote the transcript and must not appear."""
-    with caplog.at_level(logging.ERROR, logger=finalizer.logger.name):
+    with caplog.at_level(logging.WARNING, logger=finalizer.logger.name):
         with pytest.raises(ConversationFinalizationError):
             await finalizer.finalize_persisted_conversation(
                 "user-1",
@@ -76,3 +83,5 @@ async def test_dead_letter_log_still_withholds_the_exception_message(finalizer_t
             )
 
     assert TRANSCRIPT_EXCERPT not in "\n".join(record.getMessage() for record in caplog.records)
+    assert 'user-1' not in "\n".join(record.getMessage() for record in caplog.records)
+    assert 'conversation-1' not in "\n".join(record.getMessage() for record in caplog.records)

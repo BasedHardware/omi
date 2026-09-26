@@ -114,12 +114,14 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     let assistantId: String
     let context: FloatingBarNotificationContext?
     let jitFeedbackContext: JITTriggerFeedbackContext?
+    let jitAmbientFeedbackContext: JITAmbientFeedbackContext?
     let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   }
 
   /// The only payload kept on a system banner for a JIT notice. These are
   /// owner-scoped identifiers, never trigger text, OCR, or evidence.
   private static let jitFeedbackUserInfoKey = "omi.jit.feedback.v1"
+  private static let jitAmbientFeedbackUserInfoKey = "omi.jit.ambient-feedback.v1"
 
   /// Interaction provenance is bound to the exact authorization generation
   /// that delivered the banner, not only to a reusable user ID.
@@ -299,7 +301,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         switch Self.openAction(
           assistantId: assistantId,
           title: title,
-          jitFeedbackContext: metadata.jitFeedbackContext
+          jitFeedbackContext: metadata.jitFeedbackContext,
+          jitAmbientFeedbackContext: metadata.jitAmbientFeedbackContext
         ) {
         case .openJITDetail:
           self.presentJITDetailCard(metadata)
@@ -380,9 +383,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   static func openAction(
     assistantId: String,
     title: String,
-    jitFeedbackContext: JITTriggerFeedbackContext? = nil
+    jitFeedbackContext: JITTriggerFeedbackContext? = nil,
+    jitAmbientFeedbackContext: JITAmbientFeedbackContext? = nil
   ) -> OpenAction {
-    if jitFeedbackContext != nil { return .openJITDetail }
+    if jitFeedbackContext != nil || jitAmbientFeedbackContext != nil { return .openJITDetail }
     if title == screenCaptureResetTitle { return .resetScreenCapture }
     if title == screenCaptureConsentTitle { return .resumeScreenCapture }
     if assistantId == MeetingActionItemBannerPolicy.assistantID { return .openMainChat }
@@ -394,12 +398,17 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
   /// owner before the card can be shown; an old account's banner is inert.
   @discardableResult
   private func presentJITDetailCard(_ metadata: NotificationMetadata) -> Bool {
-    guard let feedbackContext = metadata.jitFeedbackContext,
-      feedbackContext.ownerID == metadata.authorizationSnapshot.ownerID,
-      RuntimeOwnerIdentity.isAuthorizationCurrent(metadata.authorizationSnapshot)
+    guard let ownerID = metadata.jitFeedbackContext?.ownerID ?? metadata.jitAmbientFeedbackContext?.ownerID,
+      ownerID == metadata.authorizationSnapshot.ownerID,
+      RuntimeOwnerIdentity.isAuthorizationCurrent(metadata.authorizationSnapshot),
+      Self.jitFeedbackAuthorizationGenerationMatches(
+        jitFeedbackContext: metadata.jitFeedbackContext,
+        jitAmbientFeedbackContext: metadata.jitAmbientFeedbackContext,
+        authorizationSnapshot: metadata.authorizationSnapshot),
+      Self.isCurrentJITAccountGeneration(metadata)
     else { return false }
 
-    if let jitDetailPresenter {
+    if let feedbackContext = metadata.jitFeedbackContext, let jitDetailPresenter {
       jitDetailPresenter(
         metadata.authorizationSnapshot.ownerID,
         metadata.title,
@@ -417,11 +426,65 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       message: metadata.message,
       assistantId: metadata.assistantId,
       sound: .none,
+      // Explicit at the producer edge — the assistant's own declared category.
+      // `FloatingBarNotification` no longer derives one for a caller that omits it.
+      kind: ProactiveNotificationKind.from(assistantId: metadata.assistantId),
       context: metadata.context,
-      jitFeedbackContext: feedbackContext,
+      jitFeedbackContext: metadata.jitFeedbackContext,
+      jitAmbientFeedbackContext: metadata.jitAmbientFeedbackContext,
       isPersistent: true,
       authorizationSnapshot: metadata.authorizationSnapshot)
     return true
+  }
+
+  /// A valid auth snapshot can still outlive a newer server cutover control.
+  /// Refuse to resurrect a banner whose JIT generation belongs to that older
+  /// control, including after a relaunch where only native userInfo remains.
+  private static func isCurrentJITAccountGeneration(_ metadata: NotificationMetadata) -> Bool {
+    jitFeedbackGenerationsMatch(
+      jitFeedbackContext: metadata.jitFeedbackContext,
+      jitAmbientFeedbackContext: metadata.jitAmbientFeedbackContext,
+      currentGeneration: AccountCutoverControlManager.shared.control.accountGeneration)
+  }
+
+  static func jitFeedbackAuthorizationGenerationMatches(
+    jitFeedbackContext: JITTriggerFeedbackContext?,
+    jitAmbientFeedbackContext: JITAmbientFeedbackContext?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) -> Bool {
+    guard let jitAmbientFeedbackContext else { return true }
+    return jitFeedbackContext == nil
+      && jitAmbientFeedbackContext.authorizationGeneration
+        == authorizationSnapshot.authorizationGeneration
+      && jitAmbientFeedbackContext.authorizationNonce == authorizationSnapshot.authorizationNonce
+  }
+
+  /// Testable generation fence shared by relaunch routing and the in-process
+  /// presenter. The server control's generation is authoritative for both
+  /// planned and ambient JIT cards.
+  nonisolated static func jitFeedbackGenerationMatches(
+    _ feedbackGeneration: Int,
+    currentGeneration: Int
+  ) -> Bool {
+    feedbackGeneration >= 0 && feedbackGeneration == currentGeneration
+  }
+
+  /// A notification may carry either planned or ambient JIT provenance. Keep
+  /// the generation check at the presentation seams, where a queued card or
+  /// an async system-banner callback can outlive the generation that admitted
+  /// it. Both fields are accepted for the shared notification type, but if a
+  /// caller accidentally supplies both they must agree with the same control.
+  nonisolated static func jitFeedbackGenerationsMatch(
+    jitFeedbackContext: JITTriggerFeedbackContext?,
+    jitAmbientFeedbackContext: JITAmbientFeedbackContext?,
+    currentGeneration: Int
+  ) -> Bool {
+    [
+      jitFeedbackContext?.accountGeneration,
+      jitAmbientFeedbackContext?.accountGeneration,
+    ]
+    .compactMap { $0 }
+    .allSatisfy { jitFeedbackGenerationMatches($0, currentGeneration: currentGeneration) }
   }
 
   /// Route a system-banner tap through the same owner-fenced persistent-card
@@ -434,9 +497,11 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     message: String,
     userInfo: [AnyHashable: Any]
   ) -> Bool {
-    guard let feedbackContext = Self.jitFeedbackContext(from: userInfo),
+    let feedbackContext = Self.jitFeedbackContext(from: userInfo)
+    let ambientFeedbackContext = Self.jitAmbientFeedbackContext(from: userInfo)
+    guard let ownerID = feedbackContext?.ownerID ?? ambientFeedbackContext?.ownerID,
       let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-        expectedOwnerID: feedbackContext.ownerID),
+        expectedOwnerID: ownerID),
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
     else { return false }
     return presentJITDetailCard(
@@ -446,13 +511,16 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         assistantId: "context-director",
         context: nil,
         jitFeedbackContext: feedbackContext,
+        jitAmbientFeedbackContext: ambientFeedbackContext,
         authorizationSnapshot: authorizationSnapshot))
   }
 
   private func metadataFromSystemNotification(_ notification: UNNotification) -> NotificationMetadata? {
-    guard let feedbackContext = Self.jitFeedbackContext(from: notification.request.content.userInfo),
+    let feedbackContext = Self.jitFeedbackContext(from: notification.request.content.userInfo)
+    let ambientFeedbackContext = Self.jitAmbientFeedbackContext(from: notification.request.content.userInfo)
+    guard let ownerID = feedbackContext?.ownerID ?? ambientFeedbackContext?.ownerID,
       let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-        expectedOwnerID: feedbackContext.ownerID
+        expectedOwnerID: ownerID
       ),
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
     else { return nil }
@@ -462,6 +530,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       assistantId: "context-director",
       context: nil,
       jitFeedbackContext: feedbackContext,
+      jitAmbientFeedbackContext: ambientFeedbackContext,
       authorizationSnapshot: authorizationSnapshot)
   }
 
@@ -475,6 +544,23 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         "trigger_memory_id": context.triggerMemoryID,
         "account_generation": context.accountGeneration,
         "trigger_revision": context.triggerRevision,
+      ]
+    ]
+  }
+
+  static func jitAmbientFeedbackUserInfo(
+    for context: JITAmbientFeedbackContext
+  ) -> [AnyHashable: Any] {
+    [
+      jitAmbientFeedbackUserInfoKey: [
+        "owner_id": context.ownerID,
+        "event_id": context.eventID,
+        "candidate_id": context.candidateID,
+        "account_generation": context.accountGeneration,
+        "authorization_generation": context.authorizationGeneration,
+        "authorization_nonce": context.authorizationNonce.uuidString,
+        "evaluation_id": context.suggestionIdentity.evaluationID.uuidString,
+        "suggestion_id": context.suggestionIdentity.suggestionID.uuidString,
       ]
     ]
   }
@@ -503,6 +589,39 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       triggerMemoryID: triggerMemoryID,
       accountGeneration: accountGeneration,
       triggerRevision: triggerRevision)
+  }
+
+  /// Decode only the bounded opaque ambient join keys. Ambient feedback has no
+  /// trigger memory or revision, so this parser cannot construct a planned
+  /// trigger context by accident.
+  static func jitAmbientFeedbackContext(
+    from userInfo: [AnyHashable: Any]
+  ) -> JITAmbientFeedbackContext? {
+    guard let payload = userInfo[jitAmbientFeedbackUserInfoKey] as? [String: Any],
+      let ownerID = payload["owner_id"] as? String,
+      let eventID = payload["event_id"] as? String,
+      let candidateID = payload["candidate_id"] as? String,
+      let accountGeneration = payload["account_generation"] as? Int,
+      let authorizationGenerationNumber = payload["authorization_generation"] as? NSNumber,
+      let authorizationNonceRaw = payload["authorization_nonce"] as? String,
+      let evaluationRaw = payload["evaluation_id"] as? String,
+      let suggestionRaw = payload["suggestion_id"] as? String,
+      let evaluationID = UUID(uuidString: evaluationRaw),
+      let suggestionID = UUID(uuidString: suggestionRaw),
+      let authorizationNonce = UUID(uuidString: authorizationNonceRaw),
+      authorizationGenerationNumber.int64Value >= 0,
+      let authorizationGeneration = UInt64(exactly: authorizationGenerationNumber.int64Value)
+    else { return nil }
+    let context = JITAmbientFeedbackContext(
+      ownerID: ownerID,
+      eventID: eventID,
+      candidateID: candidateID,
+      accountGeneration: accountGeneration,
+      authorizationGeneration: authorizationGeneration,
+      authorizationNonce: authorizationNonce,
+      suggestionIdentity: SuggestionAssistantTelemetry.NotificationIdentity(
+        evaluationID: evaluationID, suggestionID: suggestionID))
+    return context.isValid ? context : nil
   }
 
   /// Handle screen capture reset action from notification click or action button
@@ -561,6 +680,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     context: FloatingBarNotificationContext? = nil,
     action: FloatingBarNotificationAction? = nil,
     jitFeedbackContext: JITTriggerFeedbackContext? = nil,
+    jitAmbientFeedbackContext: JITAmbientFeedbackContext? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     insightDeliveryID: UUID? = nil,
     screenshotData: Data? = nil,
@@ -577,6 +697,19 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
     else {
       log("NotificationService: rejecting notification from stale runtime owner")
+      recordInsightDeliveryOutcome(
+        insightDeliveryID,
+        outcome: .suppressed,
+        reason: .staleOwner
+      )
+      return
+    }
+    guard
+      Self.jitFeedbackGenerationsMatchCurrent(
+        jitFeedbackContext: jitFeedbackContext,
+        jitAmbientFeedbackContext: jitAmbientFeedbackContext)
+    else {
+      log("NotificationService: rejecting notification from stale JIT generation")
       recordInsightDeliveryOutcome(
         insightDeliveryID,
         outcome: .suppressed,
@@ -715,9 +848,12 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         message: message,
         assistantId: assistantId,
         sound: sound,
+        // The same category this delivery was already gated on a few lines up.
+        kind: ProactiveNotificationKind.from(assistantId: assistantId),
         context: context,
         action: action,
         jitFeedbackContext: jitFeedbackContext,
+        jitAmbientFeedbackContext: jitAmbientFeedbackContext,
         suggestionTelemetryIdentity: suggestionTelemetryIdentity,
         insightDeliveryID: insightDeliveryID,
         screenshotData: screenshotData,
@@ -787,8 +923,21 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         )
         return
       }
-      guard authorizationStatus == .authorized else {
+      guard NotificationPermissionPolicy.isGranted(authorizationStatus) else {
         log("Notification skipped (auth=\(authorizationStatus.rawValue)): \(title)")
+
+        // The drop happens *here*, not in `deliverNotification` below, which
+        // this guard never reaches. The other real drop site is
+        // `contextDirectorPresentationPreflight`, whose callers abort on a
+        // non-`.queued` preflight; both go through `reportUnauthorizedDrop`.
+        // The insight-delivery ledger underneath covers only the subset
+        // carrying an `insightDeliveryID`, and only when the floating bar did
+        // not already take the message, which is why authorization needs its
+        // own unconditional event.
+        Self.reportUnauthorizedDrop(
+          status: authorizationStatus,
+          surface: ProactiveNotificationKind.from(assistantId: assistantId)
+        )
 
         if !floatingBarDelivered && !floatingBarHasQueued {
           self?.recordInsightDeliveryOutcome(
@@ -811,6 +960,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         sound: sound,
         context: context,
         jitFeedbackContext: jitFeedbackContext,
+        jitAmbientFeedbackContext: jitAmbientFeedbackContext,
         authorizationSnapshot: authorizationSnapshot,
         insightDeliveryID: floatingBarDelivered ? nil : insightDeliveryID,
         insightFailureDeliveryID: (floatingBarDelivered || floatingBarHasQueued) ? nil : insightDeliveryID,
@@ -856,12 +1006,46 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         continuation.resume(returning: settings)
       }
     }
+    // Authorization is checked separately from alert style, and before it.
+    // Folded together they are one `.suppressed`, and the engines abort on
+    // that (`ContextProactivityEngine`, `JITProactivityDelivery` both bail
+    // unless preflight returns `.queued`) — so this is where a context-director
+    // notification is really dropped for want of permission, and reporting it
+    // anywhere downstream reports nothing. An alert style of `.none` is the
+    // user's own choice and is not a permission problem.
+    guard NotificationPermissionPolicy.isGranted(settings.authorizationStatus) else {
+      // The preflight does not carry the decision type — it runs before the
+      // message exists — so the surface is derived from the same assistant id
+      // `presentContextDirectorNotification` passes to `deliverNotification`.
+      Self.reportUnauthorizedDrop(
+        status: settings.authorizationStatus,
+        surface: ProactiveNotificationKind.from(assistantId: "context-director")
+      )
+      return .suppressed
+    }
     guard
       NotificationPermissionPolicy.hasVisibleAlertSurface(
         status: settings.authorizationStatus,
         alertStyle: settings.alertStyle)
     else { return .suppressed }
     return .queued
+  }
+
+  /// Single reporter for "this notification was dropped because the app is not
+  /// authorized to show it".
+  ///
+  /// Exists so the two real drop sites — `sendNotification`'s authorization
+  /// guard and `contextDirectorPresentationPreflight`'s — cannot drift, and so
+  /// `NotificationServiceSkipEventPlacementTests` can pin *where* it is called
+  /// from. Placement is the whole contract: an earlier version of this event
+  /// sat in `deliverNotification`, which an unauthorized notification never
+  /// reaches, so it compiled, passed its tests, and emitted nothing.
+  @MainActor
+  static func reportUnauthorizedDrop(status: UNAuthorizationStatus, surface: ProactiveNotificationKind) {
+    AnalyticsManager.shared.notificationDeliverySkipped(
+      authStatus: NotificationDeliveryTelemetry.AuthStatus(status),
+      surface: surface
+    )
   }
 
   @discardableResult
@@ -872,6 +1056,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     decisionType: String,
     context: FloatingBarNotificationContext,
     jitFeedbackContext: JITTriggerFeedbackContext? = nil,
+    jitAmbientFeedbackContext: JITAmbientFeedbackContext? = nil,
     onPresented: (() -> Void)? = nil,
     onDropped: (() -> Void)? = nil
   ) -> OwnerBoundNotificationPresentationResult {
@@ -881,6 +1066,14 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     else {
       onDropped?()
       return .rejectedOwnerChange
+    }
+    guard
+      Self.jitFeedbackGenerationsMatchCurrent(
+        jitFeedbackContext: jitFeedbackContext,
+        jitAmbientFeedbackContext: jitAmbientFeedbackContext)
+    else {
+      onDropped?()
+      return .suppressed
     }
     guard contextDirectorMayPresent(authorizationSnapshot: authorizationSnapshot, now: Date()) else {
       onDropped?()
@@ -931,7 +1124,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         kind: ProactiveNotificationKind.from(decisionType: decisionType),
         context: context,
         jitFeedbackContext: jitFeedbackContext,
-        isPersistent: jitFeedbackContext != nil,
+        jitAmbientFeedbackContext: jitAmbientFeedbackContext,
+        isPersistent: jitFeedbackContext != nil || jitAmbientFeedbackContext != nil,
         authorizationSnapshot: authorizationSnapshot,
         onPresented: recordPresented,
         onDropped: onDropped)
@@ -943,8 +1137,25 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     }
 
     UserNotificationCallbackBridge.notificationSettings { [weak self] settings in
+      // Reachable only when `present` is called without a preflight; the
+      // engines preflight first and never get here unauthorized. Kept so the
+      // direct-call path is covered too — `reportUnauthorizedDrop` is the same
+      // reporter the preflight uses, and the two cannot both fire for one
+      // notification because a preflight that reports also returns
+      // `.suppressed`, which stops the caller before `present`.
+      guard NotificationPermissionPolicy.isGranted(settings.authorizationStatus) else {
+        Self.reportUnauthorizedDrop(
+          status: settings.authorizationStatus,
+          surface: ProactiveNotificationKind.from(decisionType: decisionType)
+        )
+        onDropped?()
+        return
+      }
       guard let self,
         RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+        Self.jitFeedbackGenerationsMatchCurrent(
+          jitFeedbackContext: jitFeedbackContext,
+          jitAmbientFeedbackContext: jitAmbientFeedbackContext),
         self.contextDirectorMayPresent(authorizationSnapshot: authorizationSnapshot, now: Date()),
         NotificationPermissionPolicy.hasVisibleAlertSurface(
           status: settings.authorizationStatus,
@@ -960,6 +1171,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         sound: .default,
         context: context,
         jitFeedbackContext: jitFeedbackContext,
+        jitAmbientFeedbackContext: jitAmbientFeedbackContext,
         authorizationSnapshot: authorizationSnapshot,
         onPresented: recordPresented,
         onDropped: onDropped
@@ -990,7 +1202,10 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     case .insight, .resurface, .goal: return insightEnabled
     case .memory: return memoryEnabled
     case .integration: return integrationEnabled
-    case .general: return true
+    // Functional system notices, the never-journaled product cards, and the
+    // recap announcement sit outside the five-category taxonomy and are
+    // ungated by it.
+    case .general, .functional, .trial, .onboarding, .dailyRecap: return true
     }
   }
 
@@ -1115,13 +1330,22 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     sound: NotificationSound,
     context: FloatingBarNotificationContext? = nil,
     jitFeedbackContext: JITTriggerFeedbackContext? = nil,
+    jitAmbientFeedbackContext: JITAmbientFeedbackContext? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     insightDeliveryID: UUID? = nil,
     insightFailureDeliveryID: UUID? = nil,
     onPresented: (() -> Void)? = nil,
     onDropped: (() -> Void)? = nil
   ) {
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
+    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot),
+      Self.jitFeedbackAuthorizationGenerationMatches(
+        jitFeedbackContext: jitFeedbackContext,
+        jitAmbientFeedbackContext: jitAmbientFeedbackContext,
+        authorizationSnapshot: authorizationSnapshot),
+      Self.jitFeedbackGenerationsMatchCurrent(
+        jitFeedbackContext: jitFeedbackContext,
+        jitAmbientFeedbackContext: jitAmbientFeedbackContext)
+    else {
       recordInsightDeliveryOutcome(insightFailureDeliveryID, outcome: .suppressed, reason: .staleOwner)
       onDropped?()
       return
@@ -1132,6 +1356,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     content.sound = sound.unSound
     if let jitFeedbackContext {
       content.userInfo = Self.jitFeedbackUserInfo(for: jitFeedbackContext)
+    } else if let jitAmbientFeedbackContext {
+      content.userInfo = Self.jitAmbientFeedbackUserInfo(for: jitAmbientFeedbackContext)
     }
 
     // Use screen capture reset category for reset notifications (adds "Reset Now" button)
@@ -1157,6 +1383,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       assistantId: assistantId,
       context: context,
       jitFeedbackContext: jitFeedbackContext,
+      jitAmbientFeedbackContext: jitAmbientFeedbackContext,
       authorizationSnapshot: authorizationSnapshot
     )
 
@@ -1197,6 +1424,16 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         onPresented?()
       }
     }
+  }
+
+  private static func jitFeedbackGenerationsMatchCurrent(
+    jitFeedbackContext: JITTriggerFeedbackContext?,
+    jitAmbientFeedbackContext: JITAmbientFeedbackContext?
+  ) -> Bool {
+    jitFeedbackGenerationsMatch(
+      jitFeedbackContext: jitFeedbackContext,
+      jitAmbientFeedbackContext: jitAmbientFeedbackContext,
+      currentGeneration: AccountCutoverControlManager.shared.control.accountGeneration)
   }
 
   private func recordInsightDeliveryOutcome(
@@ -1358,6 +1595,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     assistantId: String,
     context: FloatingBarNotificationContext? = nil,
     jitFeedbackContext: JITTriggerFeedbackContext? = nil,
+    jitAmbientFeedbackContext: JITAmbientFeedbackContext? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
@@ -1367,6 +1605,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       assistantId: assistantId,
       context: context,
       jitFeedbackContext: jitFeedbackContext,
+      jitAmbientFeedbackContext: jitAmbientFeedbackContext,
       authorizationSnapshot: authorizationSnapshot
     )
     notificationMetadataOrder.append(id)

@@ -131,7 +131,49 @@ def test_kill_flip_during_folder_effect_blocks_commit_and_suffix(monkeypatch) ->
     assert completed == []
 
 
-def test_first_open_never_initializes_folder_documents(monkeypatch) -> None:
+def test_first_open_initializes_empty_folders_then_assigns(monkeypatch) -> None:
+    conversation = _conversation()
+    conversation.structured = SimpleNamespace(
+        title="Standup", overview="Weekly sync", category=SimpleNamespace(value="work")
+    )
+    completed: list[str] = []
+    initialized: list[str] = []
+    assigned: list[str] = []
+    _install_common(monkeypatch, conversation, completed)
+    monkeypatch.setattr(processing.folders_db, "get_folders", lambda _uid: [])
+    monkeypatch.setattr(
+        processing.folders_db,
+        "initialize_system_folders",
+        lambda uid: initialized.append(uid) or [{"id": "work", "name": "Work"}],
+    )
+    monkeypatch.setattr(processing.folders_db, "resolve_category_folder_id", lambda *_args: "work")
+
+    class _Usage:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(processing, "track_usage", lambda *_args, **_kwargs: _Usage())
+    monkeypatch.setattr(
+        processing,
+        "assign_conversation_to_folder",
+        lambda **_kwargs: assigned.append("work") or ("work", 1.0, "category"),
+    )
+    monkeypatch.setattr(
+        processing.conversations_db, "commit_first_open_conversation_patch", lambda *_args, **_kwargs: True
+    )
+
+    processing.run_first_open_derived_work("owner", {"id": "conversation", "jit_first_open": {"effects": {}}}, "lease")
+
+    assert initialized == ["owner"]
+    assert assigned == ["work"]
+    assert conversation.folder_id == "work"
+    assert completed == ["folder_assignment", "app_fanout"]
+
+
+def test_first_open_does_not_complete_folder_assignment_on_skip(monkeypatch) -> None:
     conversation = _conversation()
     completed: list[str] = []
     _install_common(monkeypatch, conversation, completed)
@@ -139,12 +181,12 @@ def test_first_open_never_initializes_folder_documents(monkeypatch) -> None:
     monkeypatch.setattr(
         processing.folders_db,
         "initialize_system_folders",
-        lambda _uid: (_ for _ in ()).throw(AssertionError("first-open must not create folder documents")),
+        lambda _uid: [],
     )
 
     processing.run_first_open_derived_work("owner", {"id": "conversation", "jit_first_open": {"effects": {}}}, "lease")
 
-    assert completed == ["folder_assignment", "app_fanout"]
+    assert completed == ["app_fanout"]
 
 
 def test_worker_never_runs_goal_progress(monkeypatch) -> None:

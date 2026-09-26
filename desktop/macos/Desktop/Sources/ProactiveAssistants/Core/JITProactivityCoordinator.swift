@@ -17,13 +17,7 @@ actor JITProactivityCoordinator {
     // pay for (or prompt for) calendar access to reach a decision that ignores the observation.
     let decision = await JITProactivityRuntime.shared.admission(
       authorizationSnapshot: authorizationSnapshot,
-      ambient: JITAmbientRuntimeContext(
-        id: snapshot.bucketID,
-        semanticFingerprint: JITAmbientRuntimeContext.semanticFingerprint(
-          contextID: snapshot.bucketID, validatedFacts: snapshot.validatedFacts),
-        locallyRelevant: snapshot.notifyWorthiness > 0,
-        boundedEvidence: snapshot.validatedFacts.prefix(20).map { String($0.prefix(400)) }
-          .joined(separator: "\n")),
+      ambient: JITAmbientRuntimeContext.fromSnapshot(snapshot),
       observationProvider: {
         let calendarEvents = await SystemCalendarMeetingContextService.shared
           .authorizedTriggerEvents(around: frame.captureTime)
@@ -37,12 +31,21 @@ actor JITProactivityCoordinator {
       })
     switch decision {
     case .legacyContextBucketFallback(let reason):
+      await MainActor.run {
+        JITProactivityLaneState.update(ownerID: authorizationSnapshot.ownerID, active: false)
+      }
       await ContextProactivityTelemetry.recordJITAdmission(outcome: "legacy_fallback", reason: reason)
       return false
     case .suppressed(let reason):
+      await MainActor.run {
+        JITProactivityLaneState.update(ownerID: authorizationSnapshot.ownerID, active: true)
+      }
       await ContextProactivityTelemetry.recordJITAdmission(outcome: "suppressed", reason: reason)
       return true
     case .deliver(_, _, let continuityKey):
+      await MainActor.run {
+        JITProactivityLaneState.update(ownerID: authorizationSnapshot.ownerID, active: true)
+      }
       guard
         let execution = await JITProactivityRuntime.shared.takeExecution(continuityKey: continuityKey)
       else {

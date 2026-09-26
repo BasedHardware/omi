@@ -22,6 +22,7 @@ def _run(coro):
 
 def test_get_migration_lock_reuses_same_key(monkeypatch):
     monkeypatch.setattr(migration, "_migration_locks", {}, raising=False)
+    monkeypatch.setattr(migration, "_migration_lock_holders", {}, raising=False)
 
     lock1 = _run(migration._get_migration_lock("uid-1", "person-1"))
     lock2 = _run(migration._get_migration_lock("uid-1", "person-1"))
@@ -29,6 +30,13 @@ def test_get_migration_lock_reuses_same_key(monkeypatch):
 
     assert lock1 is lock2
     assert lock1 is not lock3
+
+    _run(migration._release_migration_lock("uid-1", "person-1", lock1))
+    _run(migration._release_migration_lock("uid-1", "person-1", lock2))
+    _run(migration._release_migration_lock("uid-1", "person-2", lock3))
+
+    assert migration._migration_locks == {}
+    assert migration._migration_lock_holders == {}
 
 
 def test_migrate_returns_early_for_version_two(monkeypatch):

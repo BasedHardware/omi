@@ -14,13 +14,14 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
 import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/widgets/rayban_meta_setup_sheet.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/device.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/apple_watch_setup_bottom_sheet.dart';
-import 'package:omi/widgets/confirmation_dialog.dart';
 
 @visibleForTesting
 Future<void> retryOfflineSavedDevice(Future<void> Function() connect) => connect();
@@ -29,7 +30,10 @@ class FoundDevices extends StatefulWidget {
   final bool isFromOnboarding;
   final VoidCallback goNext;
 
-  const FoundDevices({super.key, required this.goNext, required this.isFromOnboarding});
+  const FoundDevices({super.key, required this.goNext, required this.isFromOnboarding, this.onRescan});
+
+  /// Scans again; offered on an offline saved device's "Try Again".
+  final Future<void> Function()? onRescan;
 
   @override
   State<FoundDevices> createState() => _FoundDevicesState();
@@ -83,9 +87,7 @@ class _FoundDevicesState extends State<FoundDevices> {
     } catch (e) {
       Logger.debug('Error handling Ray-Ban Meta onboarding: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.errorConnectingRayBanMeta(e.toString())), backgroundColor: Colors.red),
-      );
+      OmiFeedback.error(context, context.l10n.errorConnectingRayBanMeta(readableError(e)));
     }
   }
 
@@ -123,9 +125,7 @@ class _FoundDevicesState extends State<FoundDevices> {
     } catch (e) {
       Logger.debug('Error handling Apple Watch onboarding: $e');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.errorConnectingAppleWatch(e.toString())), backgroundColor: Colors.red),
-      );
+      OmiFeedback.error(context, context.l10n.errorConnectingAppleWatch(readableError(e)));
     }
   }
 
@@ -159,11 +159,9 @@ class _FoundDevicesState extends State<FoundDevices> {
       return;
     }
 
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => AppleWatchSetupBottomSheet(
+    await AppleWatchSetupBottomSheet.show(
+      context,
+      sheet: AppleWatchSetupBottomSheet(
         deviceId: deviceId,
         onConnected: () async {
           await _handleAppleWatchOnboarding(device, provider);
@@ -181,7 +179,7 @@ class _FoundDevicesState extends State<FoundDevices> {
     }
 
     await Navigator.of(context).push(
-      MaterialPageRoute(
+      omiPageRoute(
         builder: (context) => AppleWatchPermissionPage(
           connection: connection,
           onPermissionGranted: () async {
@@ -238,35 +236,58 @@ class _FoundDevicesState extends State<FoundDevices> {
       }
     }
 
-    bool dontShowAgain = false;
-
     if (!mounted) return;
 
-    await showDialog(
-      context: context,
-      barrierDismissible: false, // Must click button
-      builder: (dialogContext) => ConfirmationDialog(
+    // Acknowledge-only: one "I Understand". A critical warning cannot be silenced; a compatibility
+    // note offers "Don't show again".
+    if (isCritical) {
+      await showOmiAlert(
+        context,
         title: device.getFirmwareWarningTitle(),
-        description: warningMessage,
-        checkboxText: isCritical ? null : context.l10n.dontShowAgain,
-        checkboxValue: dontShowAgain,
-        onCheckboxChanged: isCritical
-            ? null
-            : (value) {
-                dontShowAgain = value;
+        message: warningMessage,
+        okLabel: context.l10n.iUnderstand,
+        barrierDismissible: false,
+      );
+      return;
+    }
+
+    var dontShowAgain = false;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => OmiAlertDialog(
+          title: device.getFirmwareWarningTitle(),
+          message: warningMessage,
+          content: OmiCheckboxRow(
+            label: dialogContext.l10n.dontShowAgain,
+            value: dontShowAgain,
+            onChanged: (value) => setDialogState(() => dontShowAgain = value),
+          ),
+          actions: [
+            OmiDialogAction(
+              label: dialogContext.l10n.iUnderstand,
+              isDefault: true,
+              onPressed: () {
+                if (dontShowAgain) {
+                  final prefKey = 'firmware_warning_acknowledged_${device.type.toString()}';
+                  SharedPreferencesUtil().saveBool(prefKey, true);
+                }
+                Navigator.pop(dialogContext);
               },
-        confirmText: context.l10n.iUnderstand,
-        onConfirm: () {
-          if (!isCritical && dontShowAgain) {
-            final prefKey = 'firmware_warning_acknowledged_${device.type.toString()}';
-            SharedPreferencesUtil().saveBool(prefKey, true);
-          }
-          Navigator.pop(dialogContext);
-        },
-        onCancel: () {
-          // Not used, but required by ConfirmationDialog
-        },
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  void _showOffline(BtDevice device) {
+    OmiFeedback.error(
+      context,
+      context.l10n.deviceOfflineWakeHint(device.name),
+      actionLabel: context.l10n.tryAgain,
+      onAction: widget.onRescan == null ? null : () => unawaited(widget.onRescan!()),
     );
   }
 
@@ -276,9 +297,7 @@ class _FoundDevicesState extends State<FoundDevices> {
       builder: (context, provider, child) {
         final visibleDevices = provider.visibleDeviceList;
         return MessageListener<OnboardingProvider>(
-          showError: (error) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: Colors.red));
-          },
+          showError: (error) => OmiFeedback.error(context, error),
           showInfo: (info) {
             if (info == "DEVICE_CONNECTED") {
               // Navigator.of(context).pushAndRemoveUntil(
@@ -289,7 +308,7 @@ class _FoundDevicesState extends State<FoundDevices> {
               // );
               if (mounted) Navigator.pop(context);
             } else {
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(info), backgroundColor: Colors.green));
+              OmiFeedback.info(context, info);
             }
           },
           child: Column(
@@ -301,11 +320,11 @@ class _FoundDevicesState extends State<FoundDevices> {
                       provider.nearbyDeviceCount == 0
                           ? context.l10n.searchingForDevices
                           : context.l10n.devicesFoundNearby(provider.nearbyDeviceCount),
-                      style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 14, color: Color(0x66FFFFFF)),
+                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
                     )
                   : Text(
                       context.l10n.pairingSuccessful,
-                      style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 12, color: Color(0x66FFFFFF)),
+                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
                     ),
               if (visibleDevices.isNotEmpty) const SizedBox(height: 16),
               if (!provider.isConnected) ..._devicesList(provider),
@@ -318,22 +337,26 @@ class _FoundDevicesState extends State<FoundDevices> {
                         : provider.deviceName;
                   }(),
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 18, color: Color(0xCCFFFFFF)),
+                  style: OmiType.body.copyWith(fontWeight: FontWeight.w500),
                 ),
               if (provider.isConnected && provider.batteryPercentage > 0)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: Text(
-                    '🔋 ${provider.batteryPercentage}%',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 18,
-                      color: provider.batteryPercentage <= 25
-                          ? Colors.red
-                          : provider.batteryPercentage <= 50
-                              ? Colors.orange
-                              : Colors.green,
+                  child: Semantics(
+                    label: context.l10n.batteryLevelSemantics(provider.batteryPercentage),
+                    excludeSemantics: true,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          provider.batteryPercentage <= 25 ? Icons.battery_alert : Icons.battery_std,
+                          size: 20,
+                          color: provider.batteryPercentage <= 25 ? OmiColors.danger : OmiColors.textSecondary,
+                        ),
+                        const SizedBox(width: OmiSpacing.xxs),
+                        Text('${provider.batteryPercentage}%',
+                            style: OmiType.body.copyWith(fontWeight: FontWeight.w500)),
+                      ],
                     ),
                   ),
                 ),
@@ -349,92 +372,110 @@ class _FoundDevicesState extends State<FoundDevices> {
       bool isConnecting = provider.connectingToDeviceId == device.id;
       final isOfflineSavedDevice = provider.isSavedDevice(device) && !provider.isDeviceOnline(device);
 
-      return GestureDetector(
-        onTap: !provider.isClicked
-            ? () async {
-                if (isOfflineSavedDevice) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(context.l10n.offline),
-                      action: SnackBarAction(
-                        label: context.l10n.retry,
-                        onPressed: () {
-                          unawaited(retryOfflineSavedDevice(() => _connectFoundDevice(device, provider)));
-                        },
+      final label = () {
+        final sameNameCount = provider.visibleDeviceList.where((d) => d.name == device.name).length;
+        return sameNameCount > 1 ? '${device.name} (${device.getShortId()})' : device.name;
+      }();
+      final onTap = !provider.isClicked
+          ? () async {
+              OmiHaptics.selection();
+              if (isOfflineSavedDevice) {
+                _showOffline(device);
+                return;
+              }
+              if (device.type == DeviceType.appleWatch) {
+                await _handleAppleWatchOnboarding(device, provider);
+              } else if (device.type == DeviceType.raybanMeta) {
+                await _handleRayBanMetaOnboarding(device, provider);
+              } else {
+                // Handle other devices
+                await provider.handleTap(
+                  device: device,
+                  isFromOnboarding: widget.isFromOnboarding,
+                  goNext: widget.goNext,
+                );
+
+                if (!mounted) return;
+
+                // Show firmware warning after successful connection
+                if (provider.isConnected) {
+                  final connectedDevice = provider.deviceProvider?.connectedDevice ?? device;
+                  await _showFirmwareWarningIfNeeded(connectedDevice);
+                }
+              }
+            }
+          : null;
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl, vertical: OmiSpacing.xs),
+        child: Semantics(
+          button: true,
+          enabled: onTap != null,
+          label: isOfflineSavedDevice ? '$label, ${context.l10n.offline}' : label,
+          excludeSemantics: true,
+          child: Material(
+            color: OmiColors.accent,
+            shape: const RoundedRectangleBorder(borderRadius: OmiRadius.lgAll),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onTap,
+              child: Row(
+                children: [
+                  // Device icon
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Image.asset(
+                      DeviceUtils.getDeviceImagePath(
+                        deviceType: device.type,
+                        modelNumber: device.modelNumber,
+                        deviceName: device.name,
+                      ),
+                      width: 32,
+                      height: 32,
+                    ),
+                  ),
+                  // Device name and info
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 16.0),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              label,
+                              textAlign: TextAlign.left,
+                              overflow: TextOverflow.ellipsis,
+                              style: OmiType.body.copyWith(fontWeight: FontWeight.w500, color: OmiColors.onAccent),
+                            ),
+                          ),
+                          if (provider.isSavedDevice(device))
+                            Container(
+                              margin: const EdgeInsets.only(left: 8, right: 12),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: OmiColors.onAccent.withValues(alpha: 0.08),
+                                borderRadius: OmiRadius.smAll,
+                              ),
+                              child: Text(
+                                isOfflineSavedDevice ? context.l10n.offline : context.l10n.saved,
+                                style: OmiType.footnote.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: OmiColors.onAccent.withValues(alpha: 0.6),
+                                ),
+                              ),
+                            ),
+                          Padding(
+                            padding: const EdgeInsets.only(right: 16.0),
+                            child: isConnecting
+                                ? const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.onAccent)
+                                : const SizedBox.shrink(),
+                          ),
+                        ],
                       ),
                     ),
-                  );
-                  return;
-                }
-                await _connectFoundDevice(device, provider);
-              }
-            : null,
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
-          child: Row(
-            children: [
-              // Device icon
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Image.asset(
-                  DeviceUtils.getDeviceImagePath(
-                    deviceType: device.type,
-                    modelNumber: device.modelNumber,
-                    deviceName: device.name,
                   ),
-                  width: 32,
-                  height: 32,
-                ),
+                ],
               ),
-              // Device name and info
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 16.0),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          () {
-                            final sameNameCount = provider.visibleDeviceList.where((d) => d.name == device.name).length;
-                            return sameNameCount > 1 ? '${device.name} (${device.getShortId()})' : device.name;
-                          }(),
-                          textAlign: TextAlign.left,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 18, color: Colors.black),
-                        ),
-                      ),
-                      if (provider.isSavedDevice(device))
-                        Container(
-                          margin: const EdgeInsets.only(left: 8, right: 12),
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEFEFEF),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            isOfflineSavedDevice ? context.l10n.offline : context.l10n.saved,
-                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.black54),
-                          ),
-                        ),
-                      Padding(
-                        padding: const EdgeInsets.only(right: 16.0),
-                        child: isConnecting
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       );

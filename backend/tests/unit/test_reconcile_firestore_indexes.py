@@ -180,6 +180,19 @@ def test_check_only_does_not_propose_duplicate_creation_for_nonready_index(tmp_p
     assert proposal['blocking_indexes'][0]['state'] == 'CREATING'
 
 
+def test_missing_real_multifield_index_remains_blocking_after_document_id_exception():
+    manifest = firebase_index_manifest()
+    multi_field = next(index for index in manifest['indexes'] if len(index['fields']) > 1)
+    signature = reconcile_firestore_indexes._index_signature(multi_field)
+
+    assert reconcile_firestore_indexes.expected_index_states(
+        expected={signature},
+        live_indexes=[],
+        project='dev-project',
+        database='(default)',
+    ) == {signature: 'MISSING'}
+
+
 def test_schema_proposal_input_hash_is_stable_across_generation_times(tmp_path):
     manifest = firebase_index_manifest()
     states = {signature: 'MISSING' for signature in reconcile_firestore_indexes.expected_index_signatures(manifest)}

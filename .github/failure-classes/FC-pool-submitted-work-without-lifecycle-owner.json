@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-pool-submitted-work-without-lifecycle-owner",
+  "violated_contract": "Work handed to a thread pool must have an owner that outlives it. A coordinator may not submit into the pool it is itself running on, and no submitted unit of work may be the responsibility of a process that exits without joining that pool. A scheduled job whose per-item budget is enforced by asyncio.wait_for owns only the call it wraps; anything that call spawns and does not await is outside every budget and dies with the container.",
+  "canonical_prevention": "Run the spawned work inline in the caller, inside the same per-item budget that governs the rest of that item, and contain its faults explicitly so containment stays a decision rather than a side effect of the discarded Future. Pin the negative half of the wiring - that the work is not submitted to any pool - with a source check, since a behavioral test can only observe the path that does run.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_daily_summary_generation.py",
+    "backend/tests/unit/test_async_http_infrastructure.py"
+  ],
+  "evidence_prs": [
+    12742
+  ],
+  "scope_hints": [
+    "backend/utils/other/notifications.py",
+    "backend/utils/executors.py"
+  ],
+  "status": "open"
+}

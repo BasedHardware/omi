@@ -11,6 +11,7 @@ from pydantic import Field, ValidationError, field_validator
 from llm_gateway.gateway.metrics import observe_auth_rejection, report_observation_failure
 from llm_gateway.gateway.request_context import request_id_for
 from llm_gateway.gateway.schemas import StrictBaseModel
+from utils.jit_qa_admission import JITQAAdmissionError, enforce_jit_qa_uid
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +111,14 @@ def require_service_auth(request: Request) -> ServiceCaller:
     if caller.name not in allowed_service_callers():
         _record_auth_rejection(request, 'caller_not_allowed')
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='service caller is not allowed')
+    try:
+        enforce_jit_qa_uid(caller.user_uid or '')
+    except JITQAAdmissionError:
+        _record_auth_rejection(request, 'qa_uid_not_allowed')
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail='user is not admitted to the isolated QA plane',
+        )
 
     return caller
 

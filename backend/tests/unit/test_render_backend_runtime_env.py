@@ -1,7 +1,14 @@
 """Renderer for backend Cloud Run runtime env."""
 
 import json
+import os
+import shutil
+import subprocess
+import sys
+
+import yaml
 import runpy
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -174,6 +181,7 @@ def test_render_dev_emits_memory_maintenance_job_outputs():
     assert 'OPENAI_API_KEY=OPENAI_API_KEY:latest' in memory_secrets
     assert 'PINECONE_API_KEY=PINECONE_API_KEY:latest' in memory_secrets
     assert 'TYPESENSE_API_KEY=TYPESENSE_API_KEY:latest' in memory_secrets
+    assert 'POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest' in memory_secrets
 
 
 @pytest.mark.parametrize('env', ['dev', 'prod'])
@@ -193,10 +201,14 @@ def test_memory_maintenance_runtime_has_no_daily_sweep_or_posthog_bindings(env):
         'MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG',
         'MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS',
         'MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED',
+        'MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS',
         'POSTHOG_HOST',
     }
     assert daily_names.isdisjoint(maintenance.get('env', {}))
-    assert 'POSTHOG_PROJECT_API_KEY' not in maintenance.get('secrets', {})
+    assert maintenance.get('secrets', {}).get('POSTHOG_PROJECT_API_KEY') == {
+        'secret': 'POSTHOG_PROJECT_API_KEY',
+        'version': 'latest',
+    }
     assert {
         'MEMORY_DAILY_MEMORY_SWEEP_ENABLED',
         'MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED',
@@ -213,7 +225,12 @@ def test_memory_maintenance_entrypoint_does_not_invoke_daily_sweep_job():
 
 
 def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admission():
-    serialized = json.dumps(_MANIFEST['environments']['dev'], sort_keys=True)
+    dev = deepcopy(_MANIFEST['environments']['dev'])
+    # The dev-only ledger drain has an explicit operational fence for the two
+    # owner test accounts. Product/runtime surfaces must still contain no
+    # first-user or capture admission lists.
+    dev['cloud_run']['jobs'].pop('knowledge-ledger-drain-job', None)
+    serialized = json.dumps(dev, sort_keys=True)
     assert 'vi7SA9ckQCe4ccobWNxlbdcNdC23' not in serialized
 
     cloud_run = _MANIFEST['environments']['dev']['cloud_run']
@@ -242,13 +259,15 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
     assert notifications_env['PINECONE_INDEX_NAME']['value'] == 'memories-backend-dev'
     assert notifications_env['OMI_BACKGROUND_FLEX_CAPABLE']['value'] == 'true'
     assert notifications_env['OMI_LLM_GATEWAY_URL']['env_var'] == 'OMI_LLM_GATEWAY_URL'
+    assert notifications_env['OMI_CUSTOMER_DATA_PROJECT']['value'] == 'based-hardware'
     assert set(notifications_job['secrets']) == {
-        'SERVICE_ACCOUNT_JSON',
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
         'PINECONE_API_KEY',
         'OMI_LLM_GATEWAY_SERVICE_TOKEN',
     }
+    assert notifications_job['flags']['--memory'] == '2Gi'
+    assert notifications_job['flags']['--task-timeout'] == '3600s'
 
 
 def test_notifications_deploy_uses_verified_gateway_endpoint_and_vpc_flags():
@@ -354,6 +373,7 @@ def test_notifications_job_workflow_passes_vpc_vars_and_checkout_sha():
     assert 'git rev-parse --short=7 HEAD' in text
     assert 'short_sha=${GITHUB_SHA::7}' not in text
     assert 'render_backend_runtime_env.py --env ${{ vars.ENV }} --job notifications-job' in text
+    assert '${{ steps.runtime-env.outputs.notifications_job_flags }}' in text
     assert 'env_vars_update_strategy: overwrite' not in text
     assert 'secrets_update_strategy: overwrite' not in text
     assert (
@@ -379,7 +399,11 @@ def test_memory_maintenance_job_workflow_passes_vpc_vars_and_checkout_sha():
         'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
         '${{ steps.runtime-env.outputs.memory_maintenance_job_flags }}'
     ) in text
-    assert "id-token: 'write'" not in text
+    # Prod deploys through GitHub WIF (credential-hygiene WS-C), which needs the
+    # OIDC token; development keeps its JSON lane.
+    assert "id-token: 'write'" in text
+    assert 'omi-gha-deploy-prod/providers/github' in text
+    assert "if: github.event.inputs.environment == 'prod'" in text
     assert 'git rev-parse --short=7 HEAD' in text
     assert 'short_sha=${GITHUB_SHA::7}' not in text
     assert 'render_backend_runtime_env.py --env ${{ vars.ENV }} --job memory-maintenance-job' in text
@@ -442,6 +466,37 @@ def test_backend_service_deploys_remove_retired_canonical_memory_env_vars():
         job = manifest[env]['cloud_run']['jobs']['memory-maintenance-job']
         job_flags = _MODULE['_render_flags'](job['flags'])
         assert f'--remove-env-vars={retired}' in job_flags, f'memory-maintenance-job for {env} must strip {retired}'
+
+
+def _deploy_backend_stack_step_flags(step_id: str) -> str:
+    action = Path(__file__).resolve().parents[3] / '.github/actions/deploy-backend-stack/action.yml'
+    text = action.read_text(encoding='utf-8')
+    marker = f'id: {step_id}\n'
+    start = text.index(marker)
+    flags_key = text.index('flags: >-', start)
+    env_key = text.index('env_vars:', flags_key)
+    return text[flags_key:env_key]
+
+
+def test_backend_integration_deploy_pins_mcp_serving_capacity():
+    # Live prod backend-integration was maxScale=25, minScale=1, concurrency=300
+    # on 1 CPU. ChatGPT openai-mcp POSTs then 503 with "no available instance"
+    # because I/O-bound MCP work does not trip CPU scale-out. Pin scale-out
+    # here only; do not copy onto backend / backend-sync.
+    integration_flags = _deploy_backend_stack_step_flags('deploy-backend-integration')
+    backend_flags = _deploy_backend_stack_step_flags('deploy-backend')
+    sync_flags = _deploy_backend_stack_step_flags('deploy-backend-sync')
+    for flag in (
+        '--cpu=2',
+        '--memory=2Gi',
+        '--concurrency=40',
+        '--min-instances=3',
+        '--max-instances=50',
+        '--no-cpu-throttling',
+    ):
+        assert flag in integration_flags, flag
+        assert flag not in backend_flags, flag
+        assert flag not in sync_flags, flag
 
 
 VERTEX_PT_CONTRACT = 'Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~2027-05-28'
@@ -570,3 +625,87 @@ def test_desktop_manifest_env_matches_what_the_workflow_deploys(env_name):
             assert f'{name}=${{{{ vars.GCP_PROJECT_ID }}}}' in workflow, name
             continue
         assert f'{name}={value}' in workflow, f'{env_name}: {name}={value} is not what the workflow deploys'
+
+
+@pytest.mark.parametrize('cohort', [None, '', 'uid:fixture-a,uid:fixture-b'])
+def test_free_tier_cohort_renders_empty_or_escaped_on_every_cloud_run_host(monkeypatch, cohort):
+    key = 'FREE_TIER_LOCAL_PROCESSING_COHORT'
+    if cohort is None:
+        monkeypatch.delenv(key, raising=False)
+    else:
+        monkeypatch.setenv(key, cohort)
+    for environment in ('dev', 'prod'):
+        config = _MANIFEST['environments'][environment]
+        hosts = [config['desktop_backend'], *config['cloud_run']['services'].values()]
+        expected = (cohort or '') if environment == 'dev' else ''
+        for host in hosts:
+            binding = {key: host['env'][key]}
+            assert _MODULE['_render_env_entries'](binding) == [{'name': key, 'value': expected}]
+            assert _MODULE['_render_env_vars'](binding) == f'{key}=' + expected.replace(',', r'\,')
+
+
+def test_free_tier_malformed_cohort_fails_before_desktop_output(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv('FREE_TIER_LOCAL_PROCESSING_COHORT', 'uid:')
+    state = tmp_path / 'state.json'
+    monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state)])
+    with pytest.raises(ValueError, match='uid:<non-empty>'):
+        _MODULE['main']()
+    assert not state.exists()
+    assert capsys.readouterr().out == ''
+
+
+def test_desktop_cohort_output_reuses_escaped_state_value(monkeypatch, tmp_path, capsys):
+    cohort = 'uid:fixture-a,uid:fixture-b'
+    monkeypatch.setenv('FREE_TIER_LOCAL_PROCESSING_COHORT', cohort)
+    state = tmp_path / 'state.json'
+    monkeypatch.setattr('sys.argv', [str(_SCRIPT), '--env', 'dev', '--desktop-state-output', str(state)])
+    assert _MODULE['main']() == 0
+    assert capsys.readouterr().out == 'free_tier_local_processing_cohort=uid:fixture-a\\,uid:fixture-b\n'
+    entries = json.loads(state.read_text())['services']['desktop-backend']['env']
+    assert {'name': 'FREE_TIER_LOCAL_PROCESSING_COHORT', 'value': cohort} in entries
+
+
+def test_staged_desktop_production_controls_render_without_runtime_checkout(tmp_path):
+    """Exercise the workflow's actual local staging commands and import closure."""
+    repo = _SCRIPT.parents[2]
+    workflow = yaml.safe_load((repo / '.github/workflows/desktop_backend_prod.yml').read_text())
+    staging = next(
+        step
+        for job in workflow['jobs'].values()
+        for step in job.get('steps', [])
+        if step.get('name') == 'Stage immutable desktop backend controls'
+    )
+    source = tmp_path / '.workflow-source'
+    # Copy only the paths that the staging commands name. Never copy credentials
+    # or the working checkout; the shell operates solely inside this temp tree.
+    for line in staging['run'].splitlines():
+        if line.strip().startswith('cp .workflow-source/'):
+            relative = line.strip().split()[1].removeprefix('.workflow-source/')
+            target = source / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(repo / relative, target)
+    runner_temp = tmp_path / 'runner'
+    runner_temp.mkdir()
+    environment = {**os.environ, 'RUNNER_TEMP': str(runner_temp), 'GITHUB_ENV': str(tmp_path / 'github-env')}
+    subprocess.run(['bash', '-c', staging['run']], cwd=tmp_path, env=environment, check=True)
+    controls = runner_temp / 'desktop-backend-deploy-controls'
+    state = tmp_path / 'state.json'
+    result = subprocess.run(
+        [
+            sys.executable,
+            '-I',
+            str(controls / 'backend/scripts/render_backend_runtime_env.py'),
+            '--env',
+            'prod',
+            '--desktop-state-output',
+            str(state),
+        ],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert result.stdout == 'free_tier_local_processing_cohort=\n'
+    entries = json.loads(state.read_text())['services']['desktop-backend']['env']
+    assert {'name': 'FREE_TIER_LOCAL_PROCESSING', 'value': 'false'} in entries
+    assert {'name': 'FREE_TIER_LOCAL_PROCESSING_COHORT', 'value': ''} in entries

@@ -6,12 +6,17 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
  * date key must be computed in the same timezone the upstream bucketed in.
  */
 
-vi.mock("@/lib/auth", () => ({ verifyAdmin: vi.fn(async () => ({ uid: "t" })) }));
+vi.mock("@/lib/auth", () => ({
+  verifyAdmin: vi.fn(async () => ({ uid: "t" })),
+}));
 
 const fetchMock = vi.fn();
+const posthogResultsMock = vi.hoisted(() =>
+  vi.fn(async (): Promise<any[]> => [])
+);
 vi.mock("@/lib/posthog", () => ({
   cachedPosthogFetch: (...args: unknown[]) => fetchMock(...args),
-  posthogResults: vi.fn(async () => []),
+  posthogResults: posthogResultsMock,
   POSTHOG_SERVED_MAX_ROWS: 50_000,
 }));
 
@@ -81,6 +86,40 @@ describe("withFreshness", () => {
 });
 
 describe("crash-rate date keys", () => {
+  it("keeps today's bucket when successive clock reads advance", () => {
+    const RealDate = Date;
+    const instant = RealDate.parse("2026-09-05T23:22:00.000Z");
+    let reads = 0;
+    class AdvancingDate extends RealDate {
+      constructor(value?: string | number | Date) {
+        super(
+          value === undefined
+            ? instant + reads++
+            : value instanceof RealDate
+            ? value.getTime()
+            : value
+        );
+      }
+    }
+    vi.stubGlobal("Date", AdvancingDate);
+    try {
+      const series = buildDateSeries(
+        3,
+        { "2026-09-05": 5 },
+        { "2026-09-05": 100 }
+      );
+      expect(series).toHaveLength(4);
+      expect(series.at(-1)).toEqual({
+        date: "2026-09-05",
+        crashes: 5,
+        users: 100,
+        crashFreeRate: 95,
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("builds UTC date keys so they join with PostHog's toDate() buckets", () => {
     const series = buildDateSeries(2, {}, {});
     const expected = new Date().toISOString().slice(0, 10);
@@ -102,35 +141,31 @@ describe("crash-rate date keys", () => {
 });
 
 describe("message-ratings ratio", () => {
-  beforeEach(() => {
-    fetchMock.mockReset();
-    process.env.POSTHOG_PERSONAL_API_KEY = "k";
-    process.env.POSTHOG_PROJECT_ID = "1";
-  });
+  it("distinguishes a real all-downvote 0 from an unmeasurable day", async () => {
+    const { aggregateRatedMessages } = await import(
+      "@/app/api/omi/stats/message-ratings/route"
+    );
+    const { data, daily } = aggregateRatedMessages([
+      {
+        createdAt: "2026-08-02T12:00:00.000Z",
+        rating: -1,
+        messageSource: "desktop_chat",
+        continuityKey: null,
+      },
+      {
+        createdAt: "2026-08-03T12:00:00.000Z",
+        rating: 1,
+        messageSource: "desktop_chat",
+        continuityKey: null,
+      },
+    ]);
 
-  it("reports null, not 0, on a day with no ratings at all", async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        results: [
-          ["2026-08-01", 0, 0],
-          ["2026-08-02", 0, 4],
-          ["2026-08-03", 3, 1],
-        ],
-      }),
-    });
-
-    const { GET } = await import("@/app/api/omi/stats/message-ratings/route");
-    const url = "https://admin.omi.me/api/omi/stats/message-ratings?days=7";
-    const res = await GET({
-      url,
-      nextUrl: new URL(url),
-    } as never);
-    const body = await res.json();
-
-    // No ratings -> unmeasurable. All-downvotes -> a real 0. These must differ.
-    expect(body.data[0].ratio).toBeNull();
-    expect(body.data[1].ratio).toBe(0);
-    expect(body.data[2].ratio).toBe(75);
+    // All-downvotes -> a real 0. A day with no ratings at all produces no
+    // point (absence), never a fake 0. These must differ.
+    expect(data.find((p) => p.date === "2026-08-02")!.ratio).toBe(0);
+    expect(data.find((p) => p.date === "2026-08-03")!.ratio).toBe(100);
+    expect(daily.find((p) => p.date === "2026-08-01")).toBeUndefined();
+    // Lanes with no observations stay null, not 0.
+    expect(daily.find((p) => p.date === "2026-08-03")!.voice).toBeNull();
   });
 });

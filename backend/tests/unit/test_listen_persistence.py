@@ -2,9 +2,20 @@
 
 import pytest
 
+from models.users import PlanType
 from routers.listen.contracts import ListenLimits, ListenSessionState
 from routers.listen.persistence import ListenPersistence
 from routers.listen import runtime as listen_runtime
+
+
+def test_should_emit_plus_meter_warning_is_plus_only():
+    from types import SimpleNamespace
+
+    assert listen_runtime.should_emit_plus_meter_warning(None) is False
+    assert listen_runtime.should_emit_plus_meter_warning(SimpleNamespace(plan=PlanType.basic)) is False
+    assert listen_runtime.should_emit_plus_meter_warning(SimpleNamespace(plan=PlanType.unlimited)) is False
+    assert listen_runtime.should_emit_plus_meter_warning(SimpleNamespace()) is False
+    assert listen_runtime.should_emit_plus_meter_warning(SimpleNamespace(plan=PlanType.plus)) is True
 
 
 @pytest.fixture
@@ -68,7 +79,7 @@ async def test_credit_refresh_decrements_cached_credits_and_preserves_source(mon
 
 
 @pytest.mark.anyio
-async def test_credit_refresh_fetches_with_source_and_emits_threshold_event(monkeypatch):
+async def test_credit_refresh_fetches_with_source_and_skips_threshold_for_basic(monkeypatch):
     from types import SimpleNamespace
 
     runtime = object.__new__(listen_runtime.ListenSessionRuntime)
@@ -87,6 +98,44 @@ async def test_credit_refresh_fetches_with_source_and_emits_threshold_event(monk
             return 120
         if function is listen_runtime.user_db.get_user_valid_subscription:
             return None
+        raise AssertionError(f'unexpected persistence call: {function}')
+
+    async def asend_event(event):
+        events.append(event)
+
+    runtime.persistence = SimpleNamespace(call=call)
+    runtime.asend_event = asend_event
+    monkeypatch.setattr(listen_runtime, 'send_credit_limit_notification', lambda _uid: _completed())
+
+    await runtime._refresh_credits()
+
+    assert runtime.state.freemium_threshold_sent is False
+    assert events == []
+    assert (listen_runtime.get_remaining_transcription_seconds, ('user-1',), {'source': 'desktop'}) in calls
+
+
+@pytest.mark.anyio
+async def test_credit_refresh_emits_threshold_event_for_plus(monkeypatch):
+    from types import SimpleNamespace
+
+    from models.users import PlanType
+
+    runtime = object.__new__(listen_runtime.ListenSessionRuntime)
+    runtime.request = SimpleNamespace(uid='user-1', source='desktop')
+    runtime.limits = ListenLimits(credits_refresh_seconds=900)
+    runtime.state = ListenSessionState()
+    runtime.user_has_credits = True
+    events = []
+    calls = []
+
+    async def call(function, *args, **kwargs):
+        calls.append((function, args, kwargs))
+        if function is listen_runtime.check_credits_invalidation:
+            return False
+        if function is listen_runtime.get_remaining_transcription_seconds:
+            return 120
+        if function is listen_runtime.user_db.get_user_valid_subscription:
+            return SimpleNamespace(plan=PlanType.plus)
         raise AssertionError(f'unexpected persistence call: {function}')
 
     async def asend_event(event):

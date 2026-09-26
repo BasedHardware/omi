@@ -28,14 +28,15 @@ def _make_receiver(audio_bytes_send):
             request=SimpleNamespace(codec='pcm', sample_rate=TARGET_SAMPLE_RATE, websocket=None),
             use_custom_stt=True,
             audio_bytes_send=audio_bytes_send,
-            state=SimpleNamespace(last_audio_received_time=0.0),
+            state=SimpleNamespace(last_audio_received_time=0.0, first_audio_byte_timestamp=1.0),
         ),
         channel_id_to_index={0: 0, 1: 1},
         multi_opus_decoders=[None, None],
         stt_sockets_multi=[None, None],
         channel_mix_buffers=[bytearray(), bytearray()],
     )
-    # Bind the real _capture so the mock exercises actual capture delegation.
+    # Bind the real _mark_first_audio so first-audio gating runs in this fake too.
+    recv._mark_first_audio = MethodType(receiver.ListenReceiver._mark_first_audio, recv)
     recv._capture = MethodType(receiver.ListenReceiver._capture, recv)
     return recv
 
@@ -100,9 +101,10 @@ async def _process_photo(recv, image_b64: str = 'ZmFrZS1pbWFnZQ=='):
     await receiver.ListenReceiver._process_photo(recv, image_b64, 'temp-1')
 
 
-def test_custom_stt_photo_skips_omi_description_without_llm_byok_key(monkeypatch):
-    """#7690: a custom-STT session without an LLM BYOK key must not pay for
-    describe_image; the photo is still stored with a placeholder description."""
+def test_custom_stt_photo_runs_description_without_llm_byok_key(monkeypatch):
+    """Regression for #7690's revert: custom-STT sessions were storing photos
+    with a "Custom STT: photo description skipped" placeholder instead of a real
+    description. Descriptions must run regardless of BYOK state."""
     recv = _make_photo_receiver(use_custom_stt=True)
     described = []
 
@@ -111,110 +113,28 @@ def test_custom_stt_photo_skips_omi_description_without_llm_byok_key(monkeypatch
         return 'a description'
 
     monkeypatch.setattr(receiver, 'describe_image', _describe)
-    monkeypatch.setattr(receiver, 'request_has_llm_byok_key', lambda: False)
-    monkeypatch.setattr(receiver.users_db, 'is_byok_active', lambda _uid: False)
 
     asyncio.run(_process_photo(recv))
 
-    assert described == [], 'describe_image ran for a custom-STT session without an LLM BYOK key'
+    assert described, 'describe_image was skipped for a custom-STT session'
     assert len(recv.host.transcripts.photo_buffer) == 1
     photo = recv.host.transcripts.photo_buffer[0]
     assert photo.discarded is False
-    assert 'Custom STT' in photo.description
+    assert photo.description == 'a description'
 
 
-def test_custom_stt_photo_uses_placeholder_when_byok_enrollment_lookup_fails(monkeypatch):
-    """A failed enrollment read must fail closed without dropping the photo."""
+def test_photo_description_failure_stores_a_discarded_placeholder(monkeypatch):
+    """describe_image failures must not drop the photo."""
     recv = _make_photo_receiver(use_custom_stt=True)
-    described = []
 
     async def _describe(_uid, _img):
-        described.append(1)
-        return 'a description'
+        raise RuntimeError('vision unavailable')
 
     monkeypatch.setattr(receiver, 'describe_image', _describe)
-    monkeypatch.setattr(receiver, 'request_has_llm_byok_key', lambda: True)
-
-    def _enrollment_failure(_uid):
-        raise RuntimeError('firestore unavailable')
-
-    monkeypatch.setattr(receiver.users_db, 'is_byok_active', _enrollment_failure)
 
     asyncio.run(_process_photo(recv))
 
-    assert described == []
     assert len(recv.host.transcripts.photo_buffer) == 1
-    assert 'Custom STT' in recv.host.transcripts.photo_buffer[0].description
-
-
-def test_custom_stt_photo_runs_description_with_llm_byok_key(monkeypatch):
-    """A custom-STT user with active BYOK enrollment and an OpenAI/Anthropic
-    request key pays their own bill, so photo descriptions must still run."""
-    recv = _make_photo_receiver(use_custom_stt=True)
-    described = []
-
-    async def _describe(_uid, _img):
-        described.append(1)
-        return 'a description'
-
-    monkeypatch.setattr(receiver, 'describe_image', _describe)
-    monkeypatch.setattr(receiver, 'request_has_llm_byok_key', lambda: True)
-    monkeypatch.setattr(receiver.users_db, 'is_byok_active', lambda _uid: True)
-
-    asyncio.run(_process_photo(recv))
-
-    assert described, 'describe_image was skipped despite an LLM BYOK key'
-    assert recv.host.transcripts.photo_buffer[0].description == 'a description'
-
-
-def test_custom_stt_photo_skips_description_when_byok_header_present_but_inactive(monkeypatch):
-    """WebSocket X-BYOK-* headers are copied into context without enrollment
-    validation. A raw LLM header with inactive BYOK must not escape the gate."""
-    recv = _make_photo_receiver(use_custom_stt=True)
-    described = []
-    active_checks = []
-
-    async def _describe(_uid, _img):
-        described.append(1)
-        return 'a description'
-
-    monkeypatch.setattr(receiver, 'describe_image', _describe)
-    monkeypatch.setattr(receiver, 'request_has_llm_byok_key', lambda: True)
-    monkeypatch.setattr(
-        receiver.users_db,
-        'is_byok_active',
-        lambda uid: active_checks.append(uid) or False,
-    )
-
-    asyncio.run(_process_photo(recv))
-
-    assert active_checks == ['test-uid']
-    assert described == [], 'describe_image ran for inactive BYOK despite a raw LLM header'
-    assert 'Custom STT' in recv.host.transcripts.photo_buffer[0].description
-
-
-def test_omi_stt_photo_always_runs_description(monkeypatch):
-    """Omi-STT sessions are unaffected: descriptions always run, and the BYOK
-    enrollment/key lookups are deferred so the hot path never pays for them."""
-    recv = _make_photo_receiver(use_custom_stt=False)
-    described = []
-    byok_calls = []
-    active_calls = []
-
-    async def _describe(_uid, _img):
-        described.append(1)
-        return 'a description'
-
-    monkeypatch.setattr(receiver, 'describe_image', _describe)
-    monkeypatch.setattr(receiver, 'request_has_llm_byok_key', lambda: byok_calls.append('llm') or True)
-    monkeypatch.setattr(
-        receiver.users_db,
-        'is_byok_active',
-        lambda uid: active_calls.append(uid) or True,
-    )
-
-    asyncio.run(_process_photo(recv))
-
-    assert described, 'describe_image was skipped for an Omi-STT session'
-    assert byok_calls == [], f'BYOK key lookup fired on the Omi-STT photo path: {byok_calls}'
-    assert active_calls == [], f'is_byok_active fired on the Omi-STT photo path: {active_calls}'
+    photo = recv.host.transcripts.photo_buffer[0]
+    assert photo.discarded is True
+    assert photo.description == 'Could not generate description.'

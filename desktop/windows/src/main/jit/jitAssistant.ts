@@ -349,7 +349,13 @@ export class WindowsJitAssistant implements ProactiveAssistant {
           receipt: planned.receipt
         }
     }
-    if (admission.kind !== 'suppressed' && admission.kind !== 'legacy_fallback') return null
+    // Ambient is the miss path of a complete watchlist, including a complete
+    // EMPTY one (an account with no standing trigger must not go silent;
+    // parity register item 5). legacy_fallback keeps the Insight rollback;
+    // incomplete snapshots consume the visit and must not buy nano spend via
+    // Boolean(frame.app).
+    if (admission.kind !== 'suppressed' || admission.reason !== 'no_eligible_planned_trigger')
+      return null
     const ambient = await this.runtime.admitAmbient({
       contextId,
       semanticFingerprint,

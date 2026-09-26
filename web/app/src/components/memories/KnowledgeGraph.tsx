@@ -4,7 +4,6 @@ import { useRef, useCallback, useEffect, useState } from 'react';
 import dynamic from '@tschk/moonshine-next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  RefreshCw,
   Loader2,
   Network,
   X,
@@ -52,16 +51,8 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Set<string>>(new Set());
 
-  const {
-    graphData,
-    loading,
-    error,
-    rebuilding,
-    selectedNode,
-    rebuild,
-    selectNode,
-    getConnectedNodes,
-  } = useKnowledgeGraph();
+  const { graphData, loading, error, selectedNode, selectNode, getConnectedNodes } =
+    useKnowledgeGraph();
 
   // Update dimensions on resize
   useEffect(() => {
@@ -324,23 +315,6 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
         <p className="text-sm text-text-tertiary max-w-sm mb-4">
           Add more memories to build your personal knowledge network.
         </p>
-        <button
-          onClick={rebuild}
-          disabled={rebuilding}
-          className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-lg',
-            'bg-white text-black text-sm font-medium',
-            'hover:bg-white/90 transition-colors',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-          )}
-        >
-          {rebuilding ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <RefreshCw className="w-4 h-4" />
-          )}
-          {rebuilding ? 'Rebuilding...' : 'Rebuild Graph'}
-        </button>
       </div>
     );
   }
@@ -444,26 +418,6 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
           <span className="text-sm">Reset</span>
         </button>
 
-        {/* Rebuild */}
-        <button
-          onClick={rebuild}
-          disabled={rebuilding}
-          className={cn(
-            'flex items-center gap-2 px-3 py-2 rounded-lg',
-            'bg-bg-tertiary/80 backdrop-blur-sm border border-bg-quaternary',
-            'text-text-secondary hover:text-text-primary',
-            'transition-colors',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-          )}
-          title="Rebuild knowledge graph"
-        >
-          {rebuilding ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <RefreshCw className="w-4 h-4" />
-          )}
-          <span className="text-sm">Rebuild</span>
-        </button>
       </div>
 
       {/* Zoom controls - right side */}

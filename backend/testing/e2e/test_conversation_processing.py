@@ -13,7 +13,7 @@ def _patch_process_conversation_boundaries(monkeypatch):
 
     # Universal canonical intake is deployment-fenced; this hermetic lifecycle
     # test explicitly opts its local process into the enabled read/write mode.
-    monkeypatch.setenv("MEMORY_MODE", "read")
+    monkeypatch.setenv("MEMORY_ENABLED", "on")
 
     def run_selected_postprocess(_executor, fn, *args, **kwargs):
         if fn.__name__ in {"_extract_memories", "_save_action_items"}:
@@ -43,7 +43,6 @@ def _patch_process_conversation_boundaries(monkeypatch):
     monkeypatch.setattr(process_module, "send_action_item_data_message", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "conversation_created_webhook", _async_noop)
     monkeypatch.setattr(process_module, "get_overlapping_calendar_event", _async_none)
-    monkeypatch.setattr(process_module, "write_conversation_link_to_calendar_event", _async_noop)
     monkeypatch.setattr(process_module, "precache_conversation_audio", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "trigger_conversation_apps", lambda *args, **kwargs: None)
     monkeypatch.setattr(process_module, "update_goal_progress", lambda *args, **kwargs: None)
@@ -143,10 +142,11 @@ def test_conversation_create_process_finalize_lifecycle(client, auth_headers, mo
     assert body["structured"]["title"] == "Hermetic Conversation Lifecycle"
     assert body["transcript_segments"][0]["text"] == "We should ship deterministic conversation lifecycle coverage."
 
-    # INVARIANT I1: extraction proposes only. The summary still lists the item,
-    # but the user's action_items collection must stay empty — a task appears
-    # there only through an explicit user gesture.
-    assert read_action_items("123") == []
+    # INV-TASK-2: an omi conversation has no Suggested surface to review a
+    # proposal on, so what the extractor admits lands in the task list.
+    written = read_action_items("123")
+    assert [item["description"] for item in written] == ["Ship deterministic conversation lifecycle coverage"]
+    assert {item["conversation_id"] for item in written} == {processed.id}
     memories_response = client.get("/v3/memories", headers=auth_headers)
     assert memories_response.status_code == 200, memories_response.text
     memories = memories_response.json()

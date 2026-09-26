@@ -1,0 +1,10 @@
+# The workflow supplies a reviewed docker.io/typesense/typesense@sha256 image.
+# Keeping this wrapper tiny makes the deployed digest cover both the upstream
+# server and the secret-safe Cloud Run entrypoint.
+ARG TYPESENSE_BASE_IMAGE
+FROM ${TYPESENSE_BASE_IMAGE}
+
+COPY backend/scripts/jit_qa_typesense_entrypoint.sh /usr/local/bin/jit-qa-typesense-entrypoint
+RUN chmod 0555 /usr/local/bin/jit-qa-typesense-entrypoint
+
+ENTRYPOINT ["/usr/local/bin/jit-qa-typesense-entrypoint"]

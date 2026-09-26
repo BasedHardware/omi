@@ -155,10 +155,26 @@ actor MemoryAssistant: ProactiveAssistant {
 
   func analyze(frame: CapturedFrame) async -> AssistantResult? {
     // Skip apps excluded from memory extraction (built-in + user's custom list)
-    let excluded = await MainActor.run { MemoryAssistantSettings.shared.isAppExcluded(frame.appName) }
-    if excluded {
+    let exclusion = await MainActor.run {
+      let settings = MemoryAssistantSettings.shared
+      return (
+        settings.isAppExcluded(frame.appName),
+        settings.excludedHosts,
+        NegativeFeedbackRemediationFeature.isEnabled
+      )
+    }
+    if exclusion.0 {
       log("Memory: Skipping excluded app '\(frame.appName)'")
       return nil
+    }
+    if exclusion.2 {
+      let snapshot = WorkHistoryHandleExtractor.liveSnapshot(
+        appName: frame.appName, windowTitle: frame.windowTitle)
+      let urlString = snapshot.browserURL?.absoluteString ?? snapshot.documentURL?.absoluteString
+      if MemoryHostExclusion.isExcluded(urlString: urlString, excludedHosts: exclusion.1) {
+        log("Memory: Skipping excluded host '\(urlString ?? "")'")
+        return nil
+      }
     }
 
     // Store the latest frame - we'll process it when the interval has passed
@@ -180,6 +196,7 @@ actor MemoryAssistant: ProactiveAssistant {
       memoryResult,
       ownerID: ownerID,
       screenshotId: nil,
+      captureTime: nil,
       sendEvent: sendEvent
     )
   }
@@ -189,6 +206,7 @@ actor MemoryAssistant: ProactiveAssistant {
     _ memoryResult: MemoryExtractionResult,
     ownerID: String,
     screenshotId: Int64?,
+    captureTime: Date? = nil,
     windowTitle: String? = nil,
     sendEvent: @escaping (String, [String: Any]) -> Void
   ) async {
@@ -215,6 +233,13 @@ actor MemoryAssistant: ProactiveAssistant {
       return
     }
 
+    let subjectGateEnabled = await MainActor.run { NegativeFeedbackRemediationFeature.isEnabled }
+    if subjectGateEnabled, !MemoryAdmissionGate.admits(memory) {
+      log("Memory: subject-admission refused: \"\(memory.content)\"")
+      await recordAnalysisOutcome(.filteredSubjectAdmission, confidence: memory.confidence, ownerID: ownerID)
+      return
+    }
+
     log("Memory: [\(confidencePercent)% conf.] [\(memory.category.rawValue)] \"\(memory.content)\"")
 
     // Add to previous memories (keep last 20 for deduplication context)
@@ -227,6 +252,7 @@ actor MemoryAssistant: ProactiveAssistant {
       MemoryAssistantDurabilityRequest(
         memory: memory,
         screenshotId: screenshotId,
+        captureTime: captureTime,
         contextSummary: memoryResult.contextSummary,
         windowTitle: windowTitle,
         ownerID: ownerID
@@ -289,8 +315,10 @@ actor MemoryAssistant: ProactiveAssistant {
   ) async {
     // One category, one name: every memory notification presents as "Memory" — the
     // "Wisdom Captured" variant read as an unclassifiable notification type.
+    // The category lives on the badge / system-banner title; the body is the
+    // memory itself. Prefixing "New memory:" stacked a third copy of the same word.
     let title = "Memory Saved"
-    let message = "New memory: \(memory.content)"
+    let message = memory.content
     let context = FloatingBarNotificationContext(
       sourceTitle: title,
       assistantId: identifier,
@@ -364,6 +392,7 @@ actor MemoryAssistant: ProactiveAssistant {
         result,
         ownerID: ownerID,
         screenshotId: frame.screenshotId,
+        captureTime: frame.captureTime,
         windowTitle: frame.windowTitle
       ) { type, data in
         let payload = EventPayloadBox(value: data)
@@ -395,19 +424,40 @@ actor MemoryAssistant: ProactiveAssistant {
       }
       prompt += "\nLook for NEW memories that are NOT already in the list above."
     } else {
-      prompt += "Look for memories to extract (system facts about the user, or interesting wisdom from others)."
+      prompt += "Look for memories to extract (system facts about the user)."
     }
 
     // Get current system prompt from settings
     let currentSystemPrompt = await systemPrompt
 
     // Build response schema for memory extraction
-    let memoryProperties: [String: GeminiRequest.GenerationConfig.ResponseSchema.Property] = [
+    let subjectGateEnabled = await MainActor.run { NegativeFeedbackRemediationFeature.isEnabled }
+    var memoryProperties: [String: GeminiRequest.GenerationConfig.ResponseSchema.Property] = [
       "content": .init(type: "string", description: "The memory content (max 15 words)"),
-      "category": .init(type: "string", enum: ["system", "interesting"], description: "Memory category"),
+      "category": .init(
+        type: "string",
+        enum: subjectGateEnabled ? ["system"] : ["system", "interesting"],
+        description: "Memory category"),
       "source_app": .init(type: "string", description: "App where memory was found"),
       "confidence": .init(type: "number", description: "Confidence score 0.0-1.0"),
     ]
+    var requiredFields = ["content", "category", "source_app", "confidence"]
+    if subjectGateEnabled {
+      memoryProperties["subject_scope"] = .init(
+        type: "string",
+        enum: ["primary_user", "third_party", "artifact"],
+        description: "Who the memory is about")
+      memoryProperties["subject_evidence"] = .init(
+        type: "string",
+        enum: ["user_authored", "addressed_to_user", "rendered_content", "ui_chrome"],
+        description: "How the subject was established")
+      memoryProperties["contains_credential_or_identifier"] = .init(
+        type: "boolean",
+        description: "True if the memory contains a password, API key, or account identifier")
+      requiredFields.append(contentsOf: [
+        "subject_scope", "subject_evidence", "contains_credential_or_identifier",
+      ])
+    }
 
     let responseSchema = GeminiRequest.GenerationConfig.ResponseSchema(
       type: "object",
@@ -419,7 +469,7 @@ actor MemoryAssistant: ProactiveAssistant {
           items: .init(
             type: "object",
             properties: memoryProperties,
-            required: ["content", "category", "source_app", "confidence"]
+            required: requiredFields
           )
         ),
         "context_summary": .init(type: "string", description: "Brief summary of what user is looking at"),

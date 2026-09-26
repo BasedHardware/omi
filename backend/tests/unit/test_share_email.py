@@ -55,6 +55,15 @@ def test_google_calendar_event_attendee_emails_are_recipients():
     assert recipients == [{'name': 'Jordan Lee', 'email': 'jordan@acme.com'}]
 
 
+NOTES_V2_OVERVIEW = """## Key points
+
+- Ship the notes render
+- Keep **action items**
+
+1. Follow up with Jordan
+"""
+
+
 def test_build_summary_email_escapes_and_links():
     content = build_summary_email(
         sender_name='Nik <admin>',
@@ -65,8 +74,70 @@ def test_build_summary_email_escapes_and_links():
     assert content['subject'] == 'Meeting notes: Roadmap & hiring'
     assert 'Nik &lt;admin&gt;' in content['html']
     assert 'Roadmap &amp; hiring' in content['html']
-    assert 'Line one<br>Line two' in content['html']
+    assert 'Line one' in content['html']
+    assert 'Line two' in content['html']
+    assert '<br' in content['html']
     assert 'https://h.omi.me/conversations/conv-1' in content['html']
+
+
+def test_build_summary_email_renders_notes_v2_markdown():
+    content = build_summary_email(
+        sender_name='Ada',
+        conversation_title='Weekly sync',
+        overview=NOTES_V2_OVERVIEW,
+        share_url='https://h.omi.me/conversations/conv-1',
+    )
+    html = content['html']
+    assert '<h2>' in html
+    assert 'Key points' in html
+    assert '## Key points' not in html
+    assert '<ul>' in html
+    assert '<li>' in html
+    assert '<ol>' in html
+    assert '<strong>' in html
+    assert 'action items' in html
+    assert '- Ship the notes render' not in html
+
+
+def test_build_summary_email_escapes_injected_html():
+    content = build_summary_email(
+        sender_name='Ada',
+        conversation_title='Weekly sync',
+        overview='Hello <script>alert(1)</script> world',
+        share_url='https://h.omi.me/conversations/conv-1',
+    )
+    html = content['html']
+    assert '<script>' not in html
+    assert '&lt;script&gt;' in html
+    assert 'alert(1)' in html
+
+
+def test_build_summary_email_plain_text_keeps_line_breaks():
+    content = build_summary_email(
+        sender_name='Ada',
+        conversation_title='Weekly sync',
+        overview='Line one\nLine two',
+        share_url='https://h.omi.me/conversations/conv-1',
+    )
+    html = content['html']
+    assert 'Line one' in html
+    assert 'Line two' in html
+    one_at = html.index('Line one')
+    two_at = html.index('Line two')
+    assert '<br' in html[one_at:two_at]
+
+
+def test_build_summary_email_allows_https_links_only():
+    content = build_summary_email(
+        sender_name='Ada',
+        conversation_title='Weekly sync',
+        overview='See [docs](https://omi.me) and [bad](javascript:alert(1)).',
+        share_url='https://h.omi.me/conversations/conv-1',
+    )
+    html = content['html']
+    assert 'href="https://omi.me"' in html
+    assert 'href="javascript:' not in html
+    assert '[bad](javascript:alert(1))' in html
 
 
 def test_publish_then_send_rolls_back_on_failure():

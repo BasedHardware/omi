@@ -62,7 +62,7 @@ parity audit re-pass to date.
 
 | Feature | Mac location(s) | Windows status (2026-08-22) | Value (H/M/L) |
 |---|---|---|---|
-| ACP JSON-RPC coding-agent client (spawn Claude Code/Codex/Hermes/OpenClaw over stdio) | `agent/src/adapters/acp.ts`, `acp-bridge/` | **Present** — `src/main/codingAgent/acp.ts` (1128 lines) + `hermes.ts`/`openclaw.ts`/`codex.ts` + `claude-acp-entry.mjs`, landed 2026-07-11→07-20 | H |
+| ACP JSON-RPC coding-agent client (spawn Claude Code/Codex/Hermes/OpenClaw over stdio) | `agent/src/adapters/acp.ts` | **Present** — `src/main/codingAgent/acp.ts` (1128 lines) + `hermes.ts`/`openclaw.ts`/`codex.ts` + `claude-acp-entry.mjs`, landed 2026-07-11→07-20 | H |
 | Adapter registry / selection | `agent/src/runtime/adapter-registry.ts`, `adapter-selection.ts` | **Present** — `codingAgent/adapterRegistry.ts` + `agentKernel/adapterRegistry.ts` (contract-checked), 2026-07-14 | H |
 | Kernel: sessions/runs/attempts/turns/artifacts in SQLite | `agent/src/runtime/kernel*.ts`, `sqlite-store.ts` | **Present** — `agentKernel/store.ts` (2841 lines, 25 tables), `kernelCore.ts` (2252 lines), `kernelRuns.ts`, `kernelSessions.ts`, `kernelArtifacts.ts`, `kernelTypes.ts` | H |
 | Agent control-plane tools (18, name-for-name match) | `Chat/AgentControlService.swift`, `agent/src/runtime/control-tools.ts` | **Present** — `agentKernel/controlTools.ts` (1423 lines), wired via `main/ipc/agentControl.ts` | H |
@@ -88,7 +88,7 @@ parity audit re-pass to date.
   Claude Code, OpenClaw, Hermes, or Codex — running as a local subprocess, streaming its progress
   back into Omi's chat. ACP = **Agent Client Protocol**, JSON-RPC 2.0 over stdio.
 - **Where (Mac):** `desktop/macos/agent/src/adapters/acp.ts` (808 lines), `adapters/hermes.ts` /
-  `adapters/openclaw.ts`, `agent/src/patched-acp-entry.mjs`, `acp-bridge/dist/index.js`.
+  `adapters/openclaw.ts`, `agent/src/patched-acp-entry.mjs`.
 - **Where (Windows, current):** `src/main/codingAgent/acp.ts` (1128 lines), `hermes.ts` (20
   lines, thin subclass), `openclaw.ts` (19 lines, thin subclass), `codex.ts` (34 lines — a fourth
   external adapter Windows added that the old audit's Mac-side feature list did not carry;

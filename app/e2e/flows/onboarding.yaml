@@ -15,7 +15,6 @@ covers:
   - app/lib/pages/onboarding/primary_language/primary_language_widget.dart
   - app/lib/pages/onboarding/found_omi/found_omi_widget.dart
   - app/lib/pages/onboarding/permissions/permissions_widget.dart
-  - app/lib/pages/onboarding/user_review_page.dart
   - app/lib/pages/onboarding/speech_profile_widget.dart
   - app/lib/pages/onboarding/knowledge_graph_step.dart
   - app/lib/pages/onboarding/complete_screen.dart

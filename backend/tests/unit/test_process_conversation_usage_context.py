@@ -228,6 +228,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         "assign_conversation_to_folder",
         "extract_action_items",
         "get_conversation_notes",
+        "validate_structured_source_segment_ids",
     ]:
         setattr(conv_proc, attr, MagicMock())
     add("utils.llm.conversation_processing", conv_proc)
@@ -269,6 +270,7 @@ def _build_fakes() -> dict[str, ModuleType]:
     subscription = add("utils.subscription", AutoMockModule("utils.subscription"))
     subscription.is_trial_paywalled = MagicMock(return_value=False)
     subscription.should_defer_desktop_processing = MagicMock(return_value=False)
+    subscription.should_skip_omi_paid_postprocessing = MagicMock(return_value=False)
 
     executors = add("utils.executors", AutoMockModule("utils.executors"))
     executors.db_executor = MagicMock()
@@ -544,7 +546,7 @@ def _run_explicit_selection_flow(monkeypatch, trigger_apps, update_calls):
         "uid",
         "en",
         input_conversation,
-        is_reprocess=True,
+        trigger=process_conversation.ProcessingTrigger.USER_REPROCESS,
         app_id="selected-app",
         explicit_app=SimpleNamespace(id="selected-app"),
     )
@@ -617,7 +619,23 @@ def test_fresh_creation_uses_the_explicit_completed_lifecycle_owner(monkeypatch)
     result = process_conversation.process_conversation('uid', 'en', new_request)
 
     assert result is completed_conversation
-    created.assert_called_once_with('uid', completed_conversation.dict(), idempotent=True)
+    # Imported here, not at module scope: sibling suites stub utils.conversations.
+    from utils.conversations.projection_payload import (
+        omit_null_processing_state,
+        strip_client_processing,
+    )
+
+    # The create path strips the untrusted client projection before persisting:
+    # a projection is display, so it must not reach a stored conversation payload.
+    # A null modeled processing_state is omitted too (flip-review F-1): persist is
+    # merge=True, so a dumped None is a real Firestore key.
+    created.assert_called_once_with(
+        'uid',
+        omit_null_processing_state(strip_client_processing(completed_conversation.dict())),
+        idempotent=True,
+    )
+    assert 'client_processing' not in created.call_args.args[1]
+    assert 'processing_state' not in created.call_args.args[1]
     persisted.assert_not_called()
 
 
@@ -646,6 +664,38 @@ def test_deferred_fresh_creation_uses_the_explicit_processing_lifecycle_owner(mo
     persisted.assert_not_called()
 
 
+def test_deferred_desktop_filler_is_discarded_by_the_free_rules(monkeypatch):
+    """Free-tier desktop never reaches the model, but the rules still run."""
+    from models.transcript_segment import TranscriptSegment
+
+    new_request = CreateConversation(
+        started_at=datetime(2026, 7, 14, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 14, 0, 1, tzinfo=timezone.utc),
+        transcript_segments=[TranscriptSegment(text='Mm-hmm.', speaker='SPEAKER_00', is_user=False, start=0, end=1)],
+        source=ConversationSource.desktop,
+    )
+    deferred_conversation = MagicMock()
+    deferred_conversation.id = 'deferred-filler'
+    deferred_conversation.dict.return_value = {'id': 'deferred-filler', 'status': 'processing'}
+    created = MagicMock(return_value=True)
+    monkeypatch.setattr(process_conversation, '_build_deferred_structured', lambda *args: MagicMock())
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *args, **kwargs: deferred_conversation)
+    monkeypatch.setattr(process_conversation, '_calendar_overlap_retains_conversation', lambda *args: False)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_processing_conversation', created)
+
+    process_conversation._store_deferred_conversation('uid', new_request)
+
+    payload = created.call_args.args[1]
+    assert payload['discarded'] is True
+    assert deferred_conversation.discarded is True
+    assert payload[process_conversation.RELEVANCE_DECISION_FIELD]['reason'] == 'filler_only'
+
+
+def _segments_saying(text):
+    """Segments for a mocked conversation: the relevance rules read segment text."""
+    return [MagicMock(text=text, start=0.0, end=5.0)]
+
+
 def test_discard_call_uses_discard_feature_tracking():
     """Verify should_discard_conversation is called within CONVERSATION_DISCARD context."""
     import sys
@@ -660,6 +710,7 @@ def test_discard_call_uses_discard_feature_tracking():
     conversation = MagicMock()
     conversation.source = "phone"
     conversation.get_transcript.return_value = "short transcript"
+    conversation.transcript_segments = _segments_saying("short transcript")
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None  # Prevent CalendarMeetingContext parsing
@@ -706,7 +757,7 @@ def test_wake_word_marker_reaches_discard_adjudication_without_bypassing_it(monk
     )
     captured: dict[str, object] = {}
 
-    def fake_discard(transcript, photos, duration_seconds, *, trusted_wake_word_markers=False):
+    def fake_discard(transcript, photos, duration_seconds, *, trusted_wake_word_markers=False, **_kwargs: object):
         captured.update(
             transcript=transcript,
             photos=photos,
@@ -720,8 +771,8 @@ def test_wake_word_marker_reaches_discard_adjudication_without_bypassing_it(monk
         'conversation_transcripts_for_llm',
         lambda *_args, **_kwargs: (
             "Test User: Hey Omi, don't forget to send the budget.",
-            '[segment:wake-segment 0.000-5.000] '
-            "<omi-wake-word-invocation/> Test User: Hey Omi, don't forget to send the budget.",
+            "[wake-segment 0] <omi-wake-word-invocation/> Hey Omi, don't forget to send the budget.",
+            {0: 'Test User'},
         ),
     )
     monkeypatch.setattr(process_conversation, 'should_discard_conversation', fake_discard)
@@ -761,7 +812,8 @@ def test_primary_user_name_reaches_action_item_extraction(monkeypatch):
         'conversation_transcripts_for_llm',
         lambda *_args, **_kwargs: (
             'David: Send the budget.',
-            '[segment:user-request 0.000-5.000] David: Send the budget.',
+            '[user-request 0] Send the budget.',
+            {0: 'David'},
         ),
     )
     monkeypatch.setattr(process_conversation, 'should_discard_conversation', lambda *_args, **_kwargs: False)
@@ -805,6 +857,7 @@ def test_byok_rate_limit_reaches_conversation_composition_as_safe_actionable_429
     conversation = MagicMock()
     conversation.source = ConversationSource.phone
     conversation.get_transcript.return_value = 'a conversation transcript'
+    conversation.transcript_segments = _segments_saying('a conversation transcript')
     conversation.photos = []
     conversation.external_data = None
     conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
@@ -840,6 +893,7 @@ def test_unwrapped_openai_byok_rate_limit_reaches_conversation_composition(monke
     conversation = MagicMock()
     conversation.source = ConversationSource.phone
     conversation.get_transcript.return_value = 'a conversation transcript'
+    conversation.transcript_segments = _segments_saying('a conversation transcript')
     conversation.photos = []
     conversation.external_data = None
     conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
@@ -880,6 +934,7 @@ def test_non_byok_rate_limit_failures_keep_generic_processing_error(monkeypatch,
     conversation = MagicMock()
     conversation.source = ConversationSource.phone
     conversation.get_transcript.return_value = 'a conversation transcript'
+    conversation.transcript_segments = _segments_saying('a conversation transcript')
     conversation.photos = []
     conversation.external_data = None
     conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
@@ -907,6 +962,7 @@ def test_byok_rate_limit_in_action_item_extraction_reaches_composition_boundary(
     conversation = MagicMock()
     conversation.source = ConversationSource.phone
     conversation.get_transcript.return_value = 'a conversation transcript'
+    conversation.transcript_segments = _segments_saying('a conversation transcript')
     conversation.photos = []
     conversation.external_data = None
     conversation.started_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
@@ -957,6 +1013,7 @@ def test_no_umbrella_conversation_processing_tracking():
     conversation = MagicMock()
     conversation.source = "phone"
     conversation.get_transcript.return_value = "short transcript"
+    conversation.transcript_segments = _segments_saying("short transcript")
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
@@ -1004,6 +1061,7 @@ def test_action_items_tracked_separately_from_structure():
     conversation = MagicMock()
     conversation.source = "phone"
     conversation.get_transcript.return_value = "short transcript"
+    conversation.transcript_segments = _segments_saying("short transcript")
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
@@ -1050,6 +1108,7 @@ def test_structure_and_apps_tracked_at_runtime():
     conversation = MagicMock()
     conversation.source = "phone"
     conversation.get_transcript.return_value = "a transcript with enough words to not be discarded easily"
+    conversation.transcript_segments = _segments_saying("a transcript with enough words to not be discarded easily")
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
@@ -1106,6 +1165,7 @@ def test_action_items_skipped_on_discard():
     conversation = MagicMock()
     conversation.source = "phone"
     conversation.get_transcript.return_value = "short"
+    conversation.transcript_segments = _segments_saying("short")
     conversation.photos = []
     conversation.get_person_ids.return_value = []
     conversation.external_data = None
@@ -1131,13 +1191,12 @@ def test_action_items_skipped_on_discard():
 
 
 def test_conversation_action_items_never_fall_back_to_a_task_writer(monkeypatch):
-    """I1: conversation extraction proposes Candidates and writes nothing else.
+    """A proposing surface stays proposing when its capture path is unavailable.
 
-    The old contract (legacy batch writer on postprocess_executor) died with the
-    writer. The contract that replaces it: even when the canonical capture path
-    reports itself unavailable (``process_conversation_before_legacy`` -> False,
-    e.g. rollout control unreadable), `_save_action_items` must NOT fall back to
-    writing action items — the previous bugs were all in exactly this fallback.
+    Desktop conversations propose Candidates. Even when the canonical capture
+    path reports itself unavailable (``process_conversation_before_legacy`` ->
+    False, e.g. rollout control unreadable), `_save_action_items` must NOT fall
+    back to writing action items — the previous bugs were all in that fallback.
     """
     action_item = MagicMock()
     action_item.description = 'Send the forecast'
@@ -1150,6 +1209,7 @@ def test_conversation_action_items_never_fall_back_to_a_task_writer(monkeypatch)
     conversation = MagicMock()
     conversation.id = 'conversation-1'
     conversation.is_locked = False
+    conversation.source = ConversationSource.desktop
     conversation.transcript_segments = []
     conversation.structured.action_items = [action_item]
 
@@ -1712,6 +1772,61 @@ def test_app_summary_results_reach_the_database(monkeypatch):
     assert written.get('suggested_summarization_apps') == ['app-1']
 
 
+def test_running_now_still_defers_folders_and_apps_when_jit_admits(monkeypatch):
+    completed_conversation = Conversation(
+        id='conversation-jit',
+        created_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        started_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
+        finished_at=datetime(2026, 7, 21, 0, 1, tzinfo=timezone.utc),
+        source=ConversationSource.omi,
+        structured=Structured(title='Title', overview='Overview'),
+        transcript_segments=[],
+        status=ConversationStatus.completed,
+        discarded=False,
+    )
+
+    claims: list[str] = []
+    input_conversation = MagicMock()
+    input_conversation.source = 'omi'
+    input_conversation.get_person_ids.return_value = []
+
+    monkeypatch.setattr(process_conversation, '_get_structured', lambda *a, **k: (MagicMock(), False))
+    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'persist_processed_conversation', lambda *a, **k: True)
+    monkeypatch.setattr(process_conversation.lifecycle_service, 'create_completed_conversation', lambda *a, **k: True)
+    monkeypatch.setattr(
+        process_conversation,
+        'resolve_authorized_first_open_plan',
+        lambda **_kwargs: SimpleNamespace(defer_derived_work=True),
+    )
+    monkeypatch.setattr(
+        process_conversation.conversations_db,
+        'initialize_first_open_work',
+        lambda uid, conversation_id, **_kwargs: claims.append(f'{uid}:{conversation_id}') or True,
+    )
+    monkeypatch.setattr(
+        process_conversation.folders_db,
+        'get_folders',
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError('folders must defer under JIT')),
+    )
+    monkeypatch.setattr(
+        process_conversation,
+        'trigger_conversation_apps',
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError('apps must defer under JIT')),
+    )
+    monkeypatch.setattr(process_conversation, 'submit_with_context', MagicMock())
+    monkeypatch.setattr(process_conversation.conversations_db, 'update_conversation', MagicMock())
+    monkeypatch.setattr(
+        process_conversation.conversations_db, 'create_audio_files_from_chunks', MagicMock(return_value=[])
+    )
+
+    process_conversation.process_conversation(
+        'uid', 'en', input_conversation, trigger=process_conversation.ProcessingTrigger.CLIENT_FINALIZE
+    )
+
+    assert claims == ['uid:conversation-jit']
+
+
 def test_finalization_survives_an_extraction_run_with_no_grounded_candidates(monkeypatch):
     """Regression: when every L1 candidate failed grounding, canonical extraction
     raised and took the rest of finalization with it — action items, goal
@@ -1842,9 +1957,11 @@ def test_finalization_survives_an_unavailable_memory_extractor(monkeypatch):
     assert '_save_action_items' in {getattr(call.args[1], '__name__', '') for call in submitted.call_args_list}
 
 
-def test_custom_stt_conversation_without_llm_byok_key_skips_llm_work(monkeypatch):
-    """Regression for #7690: a custom-STT conversation with no LLM BYOK key must
-    not run any Omi-paid LLM post-processing (structure, summaries, memories)."""
+def test_custom_stt_conversation_without_llm_byok_key_runs_llm_work(monkeypatch):
+    """Regression for #7690's revert: custom-STT users transcribe on their own
+    provider, but their conversations must still get Omi summaries. The gate
+    that skipped all LLM post-processing for a custom-STT conversation with no
+    LLM BYOK key left those users with no title, overview, or memories."""
     completed_conversation = Conversation(
         id='conversation-custom-stt',
         created_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
@@ -1864,32 +1981,20 @@ def test_custom_stt_conversation_without_llm_byok_key_skips_llm_work(monkeypatch
     )
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
     monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', lambda *a, **k: None)
-    # No LLM BYOK key on this request, so Omi would pay — the gate must fire.
+    monkeypatch.setattr(process_conversation, 'submit_with_context', MagicMock())
+    # No LLM BYOK key: enrichment must run anyway, on Omi's bill.
     monkeypatch.setattr(process_conversation.users_db, 'is_byok_active', lambda _uid: False)
-    monkeypatch.setattr(process_conversation, 'request_has_llm_byok_key', lambda: False)
-    # The completed status must be durably persisted, not left in `processing`.
-    persisted = {}
-    monkeypatch.setattr(
-        process_conversation.lifecycle_service,
-        'persist_processed_conversation',
-        lambda uid, data: persisted.update(uid=uid, status=data.get('status')) or True,
-    )
 
-    result = process_conversation.process_conversation('uid', 'en', completed_conversation)
+    process_conversation.process_conversation('uid', 'en', completed_conversation)
 
-    # The gate returns the conversation with no LLM work, but the completed
-    # status is durably persisted so the record is not stuck in `processing`.
-    assert result is completed_conversation
-    assert structured_calls == [], 'LLM structuring ran for a custom-STT conversation without an LLM key'
-    assert completed_conversation.status == ConversationStatus.completed
-    assert (
-        persisted.get('status') == ConversationStatus.completed
-    ), f'custom-STT skip path did not durably persist the completed status: {persisted}'
+    assert structured_calls, 'LLM structuring was skipped for a custom-STT conversation'
+    process_conversation.should_skip_omi_paid_postprocessing.assert_called()
+    _, kwargs = process_conversation.should_skip_omi_paid_postprocessing.call_args
+    assert kwargs.get('uses_custom_stt') is True
 
 
 def test_custom_stt_conversation_with_llm_byok_key_runs_llm_work(monkeypatch):
-    """A custom-STT user who brings their own LLM key pays their own bill, so
-    Omi-paid enrichment must still run (BYOK escape hatch)."""
+    """A custom-STT user who brings their own LLM key keeps full enrichment."""
     completed_conversation = Conversation(
         id='conversation-custom-stt-byok',
         created_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
@@ -1915,51 +2020,40 @@ def test_custom_stt_conversation_with_llm_byok_key_runs_llm_work(monkeypatch):
     monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
     monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', lambda *a, **k: None)
     monkeypatch.setattr(process_conversation, 'submit_with_context', MagicMock())
-    # The user carries an OpenAI key — enrichment runs on their bill.
     monkeypatch.setattr(process_conversation.users_db, 'is_byok_active', lambda _uid: True)
-    monkeypatch.setattr(process_conversation, 'request_has_llm_byok_key', lambda: True)
 
     process_conversation.process_conversation('uid', 'en', input_conversation)
 
     assert structured_calls, 'LLM structuring was skipped despite an LLM BYOK key'
 
 
-def test_omi_stt_conversation_never_reads_byok_state(monkeypatch):
-    """Regression for #7690: the deferred BYOK lookup must not fire a Firestore
-    read on the ordinary Omi-STT hot path. users_db.is_byok_active is an
-    uncached users/... document read; it must only run for custom-STT
-    conversations, whose gate decision actually depends on it."""
+def test_custom_stt_exhausted_processing_budget_skips_llm_work(monkeypatch):
+    """#7690 residual: custom-STT still hits the LLM processing gate. When that
+    budget is exhausted, Omi-paid structuring must not run — without the
+    #10962 blanket skip that removed summaries for every custom-STT user."""
     completed_conversation = Conversation(
-        id='conversation-omi-stt',
+        id='conversation-custom-stt-exhausted',
         created_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
         started_at=datetime(2026, 7, 21, tzinfo=timezone.utc),
         finished_at=datetime(2026, 7, 21, 0, 1, tzinfo=timezone.utc),
         source=ConversationSource.omi,
         structured=Structured(title='Title', overview='Overview'),
         transcript_segments=[],
-        status=ConversationStatus.completed,
+        status=ConversationStatus.processing,
         discarded=False,
-        uses_custom_stt=False,
+        uses_custom_stt=True,
     )
 
     structured_calls = []
     monkeypatch.setattr(
         process_conversation, '_get_structured', lambda *a, **k: structured_calls.append(1) or (MagicMock(), False)
     )
-    monkeypatch.setattr(process_conversation, '_get_conversation_obj', lambda *a, **k: completed_conversation)
-    monkeypatch.setattr(process_conversation, 'trigger_conversation_apps', lambda *a, **k: None)
-    byok_calls = []
-    monkeypatch.setattr(
-        process_conversation.users_db,
-        'is_byok_active',
-        lambda _uid: byok_calls.append(_uid) or True,
-    )
-    monkeypatch.setattr(process_conversation, 'request_has_llm_byok_key', lambda: byok_calls.append('llm') or True)
+    monkeypatch.setattr(process_conversation, 'should_skip_omi_paid_postprocessing', lambda *a, **k: True)
 
-    process_conversation.process_conversation('uid', 'en', completed_conversation)
+    result = process_conversation.process_conversation('uid', 'en', completed_conversation)
 
-    assert structured_calls, 'Omi-STT conversation should still run LLM enrichment'
-    assert byok_calls == [], f'BYOK Firestore read fired on the Omi-STT hot path: {byok_calls}'
+    assert not structured_calls, 'LLM structuring ran after the processing budget was exhausted'
+    assert result.status == ConversationStatus.completed
 
 
 def test_dedup_candidates_exclude_own_and_merge_source_items():
@@ -2058,10 +2152,55 @@ def test_ledger_writer_mode_skips_eager_extraction(monkeypatch):
     )
     inner = MagicMock(side_effect=AssertionError('extraction must not run under ledger writer mode'))
     monkeypatch.setattr(process_conversation, '_extract_memories_inner', inner)
+    admitted = []
+
+    class _MemoryService:
+        def __init__(self, *, db_client):
+            pass
+
+        def ensure_canonical_mutation_ready(self, uid):
+            admitted.append(uid)
+
+    monkeypatch.setattr(process_conversation, 'MemoryService', _MemoryService)
 
     process_conversation.extract_memories('uid-ledger', _ledger_gate_conversation('conv-ledger'))
 
+    assert admitted == ['uid-ledger']
     inner.assert_not_called()
+
+
+def test_canonical_provider_degradation_emits_bounded_finalization_reason(monkeypatch):
+    recorded = []
+    monkeypatch.setattr(process_conversation, 'record_finalization_failure', recorded.append)
+    monkeypatch.setattr(process_conversation, 'record_fallback', lambda **_fields: None)
+
+    result = process_conversation._canonical_extraction_unavailable(
+        SimpleNamespace(id='conversation-1'),
+        process_conversation.PATH_CANONICAL,
+        RuntimeError('private provider response'),
+    )
+
+    assert result.count == 0
+    assert recorded == [process_conversation.FinalizationFailureReason.provider]
+
+
+def test_memory_capability_fence_precedes_sweep_owned_writer_short_circuit(monkeypatch):
+    sweep_mode = MagicMock(side_effect=AssertionError('writer mode must not bypass static capability admission'))
+    monkeypatch.setattr(process_conversation, '_sweep_owned_writer_mode', sweep_mode)
+
+    class _MemoryService:
+        def __init__(self, *, db_client):
+            pass
+
+        def ensure_canonical_mutation_ready(self, uid):
+            raise RuntimeError('static memory admission failed')
+
+    monkeypatch.setattr(process_conversation, 'MemoryService', _MemoryService)
+
+    with pytest.raises(RuntimeError, match='static memory admission failed'):
+        process_conversation.extract_memories('uid-ledger', _ledger_gate_conversation('conv-ledger'))
+
+    sweep_mode.assert_not_called()
 
 
 def test_compatibility_writer_mode_still_runs_eager_extraction(monkeypatch):

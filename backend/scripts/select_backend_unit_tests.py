@@ -68,14 +68,18 @@ FULL_RUN_GLOBS = (
     'backend/utils/encryption.py',
 )
 
-# These paths participate in the location-context contract below. They are
-# intentionally narrow exceptions to the generic model/database full-suite
-# fallback so local pre-push feedback remains focused; CI still owns --all.
-NARROW_LOCATION_CONTEXT_PATHS = frozenset(
+# Intentionally narrow exceptions to the generic model/database full-suite
+# fallback so local pre-push feedback stays focused; CI still owns --all.
+# Every entry must be mapped to a narrow area in AREA_TESTS below, so the
+# exception still selects that area's contracts instead of nothing.
+NARROW_FULL_RUN_EXCEPTIONS = frozenset(
     {
+        # location-context consent area
         'backend/database/users.py',
         'backend/models/geolocation.py',
         'backend/models/users.py',
+        # in-app CSAT surface
+        'backend/database/csat.py',
     }
 )
 
@@ -103,6 +107,7 @@ MONITORING_CONTRACT_SOURCES = (
     'backend/charts/monitoring/kube-prometheus-stack/',
     'backend/charts/monitoring/alerts/',
     'backend/charts/monitoring/alert-rules.json',
+    'backend/charts/monitoring/live-alert-gate.json',
     'backend/charts/monitoring/prometheus-stackdriver-exporter/',
     'backend/charts/parakeet/templates/servicemonitor.yaml',
 )
@@ -150,6 +155,14 @@ AREA_TESTS = (
         ('tests/unit/test_location_context_consent.py', 'tests/unit/test_chat_async_offload.py'),
     ),
     (
+        (
+            'backend/database/csat.py',
+            'backend/routers/csat.py',
+        ),
+        (),
+        ('tests/unit/test_csat.py', 'tests/unit/test_desktop_rest_inventory.py'),
+    ),
+    (
         ('backend/llm_gateway/',),
         (),
         ('tests/unit/test_llm_gateway_*.py',),
@@ -189,11 +202,17 @@ AREA_TESTS = (
         ('tests/unit/test_parakeet_*.py',),
     ),
     (
+        ('backend/scripts/verify_pusher_live_alert_route.py',),
+        (),
+        ('tests/unit/test_verify_pusher_live_alert_route.py',),
+    ),
+    (
         MONITORING_CONTRACT_SOURCES,
         (),
         (
             'tests/unit/test_monitoring_*.py',
             'tests/unit/test_journey_observability.py',
+            'tests/unit/test_verify_pusher_live_alert_route.py',
         ),
     ),
     (
@@ -245,6 +264,11 @@ AREA_TESTS = (
         ('backend/routers/apps', 'backend/services/apps/', 'backend/utils/apps'),
         (),
         ('tests/unit/test_apps_*.py', 'tests/unit/test_app_*.py', 'tests/unit/test_create_persona_user_none.py'),
+    ),
+    (
+        ('backend/utils/social.py',),
+        (),
+        ('tests/unit/test_social_*.py',),
     ),
     (
         ('backend/routers/folders', 'backend/services/folders/', 'backend/utils/folders'),
@@ -326,7 +350,7 @@ def normalize_changed_path(path: str) -> str:
 
 
 def is_full_run_path(path: str) -> bool:
-    if path in NARROW_LOCATION_CONTEXT_PATHS:
+    if path in NARROW_FULL_RUN_EXCEPTIONS:
         return False
     if path in FULL_RUN_PATHS:
         return True

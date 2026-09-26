@@ -5,8 +5,10 @@ import XCTest
 /// Controller-level behavior of the presence-gated warm deferral: passive
 /// lifecycle callers of `ensureWarm()` (mint completions, owner-change
 /// recovery, barge-in cleanup) must NOT clear an away deferral — background
-/// churn would silently defeat the quota gate — while user-intent paths
-/// (PTT, launch, the presence poll's input-return) always clear it.
+/// churn would silently defeat the quota gate — while PTT (`userInitiated:
+/// true`) and the presence poll's input-return always clear it. Launch is not
+/// a key press (`prepareAutomaticWarm` clears the deferral, then warms
+/// passively so the plan gate still applies).
 @MainActor
 final class RealtimeHubPresenceGateTests: XCTestCase {
   private func deferredController(idleSeconds: TimeInterval) -> RealtimeHubController {

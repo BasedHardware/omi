@@ -72,6 +72,7 @@ from utils.memory.canonical_required_processing import (
     list_pending_required_processing_items,
 )
 from utils.memory.decision_path_telemetry import emit_memory_promotion_decision, emit_memory_promotion_failure
+from utils.memory.belief_model import HALF_LIFE_DAYS_BY_CLASS, belief_model_enabled
 from utils.memory.rejected_memory_feedback import (
     RejectedMemoryFeedback,
     get_recent_rejected_memory_feedback,
@@ -1048,6 +1049,11 @@ def build_consolidation_llm_messages(context: ConsolidationContext) -> list[Any]
         format_instructions=parser.get_format_instructions(),
         restricted_sensitivity_labels=", ".join(sorted(RESTRICTED_SENSITIVITY_LABELS)),
     )
+    if belief_model_enabled():
+        prefix += (
+            "\n- Do not archive or supersede a row because of age or elapsed time alone. "
+            "Only a restatement, contradiction, or resolution is evidence.\n"
+        )
     suffix = f"Batch JSON:\n{format_consolidation_llm_context(context)}"
     block: Dict[str, Any] = {"type": "text", "text": prefix}
     if has_cacheable_prefix(prefix):
@@ -1291,7 +1297,9 @@ def _ordered_route_evidence_ids(
 
 
 def _route_result_status(decision: ConsolidationAgentDecision) -> LifecycleState:
-    return LifecycleState.hidden if decision.route == "reject" else LifecycleState.active
+    if decision.route == "reject" and not belief_model_enabled():
+        return LifecycleState.hidden
+    return LifecycleState.active
 
 
 def _route_target_tier(decision: ConsolidationAgentDecision, *, quarantine: bool) -> MemoryLayer:
@@ -1517,6 +1525,9 @@ def apply_consolidation_decision(
             quarantine=quarantine,
         ),
     }
+    if belief_model_enabled() and decision.route == "reject":
+        carried = getattr(decision, "belief_class", None)
+        patch_payload["belief_class"] = carried if carried in HALF_LIFE_DAYS_BY_CLASS else "meta_residue"
     mutation_identity = build_patch_mutation_identity(patch_payload)
     patch_payload["mutation_metadata"] = mutation_identity
     logical_payload["mutation_metadata"] = mutation_identity
@@ -2103,8 +2114,7 @@ def run_canonical_consolidation(
                 now=current_time,
                 db_client=client,
             )
-            offset += effective_batch_cap
-            continue
+            raise
         batches_run += 1
         pending_by_id = {item.memory_id: item for item in llm_pending_batch}
 
@@ -2166,8 +2176,7 @@ def run_canonical_consolidation(
                     now=current_time,
                     db_client=client,
                 )
-                offset += effective_batch_cap
-                continue
+                raise
 
         for signal in agent_batch.recurrence_signals:
             recurrence_signals_by_id[signal.stable_loop_key] = signal

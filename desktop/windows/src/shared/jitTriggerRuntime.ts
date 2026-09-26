@@ -802,5 +802,9 @@ export function evaluateJitWatchlist(
     return { status: 'evaluated', nextLane: 'planned_trigger', matches, ambiguous }
   if (ambiguous.length)
     return { status: 'evaluated', nextLane: 'bounded_planned_triage', matches, ambiguous }
+  // A complete empty watchlist is an account with no standing trigger, not a
+  // reason to go silent: it hands off to the bounded ambient lane exactly like
+  // a non-empty watchlist with no match (owner decision 2026-09-01; macOS
+  // KnowledgeLedgerTriggerWatchlistRuntime; parity register item 5).
   return { status: 'evaluated', nextLane: 'ambient_fallback', matches, ambiguous }
 }

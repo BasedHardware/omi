@@ -15,6 +15,7 @@ import {
   minIntervalMs,
   notificationsActive,
   notifyProactive,
+  setJitLegacyAmbientGate,
   setNotificationSnooze,
   type ThrottleInput
 } from './notify'
@@ -195,6 +196,7 @@ describe('notifyProactive (delivery)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     setNotificationSnooze(null)
+    setJitLegacyAmbientGate(null)
     h.getAppSettings.mockReturnValue({ notificationsEnabled: true, notificationFrequency: 5 })
     vi.spyOn(console, 'log').mockImplementation(() => {})
   })
@@ -221,6 +223,7 @@ describe('notifyProactive (delivery)', () => {
 describe('notificationsActive (would-a-toast-appear predicate)', () => {
   beforeEach(() => {
     setNotificationSnooze(null)
+    setJitLegacyAmbientGate(null)
     h.getAppSettings.mockReturnValue({ notificationsEnabled: true, notificationFrequency: 3 })
   })
 
@@ -255,5 +258,13 @@ describe('notificationsActive (would-a-toast-appear predicate)', () => {
     // only snooze/master/frequency, never the rate clocks.
     expect(notificationsActive('insight', T0)).toBe(true)
     expect(notificationsActive('insight', T0 + 1)).toBe(true)
+  })
+
+  it('stops the Insight pipeline while JIT rollout is effective, not only the toast', () => {
+    setJitLegacyAmbientGate(() => true)
+    expect(notificationsActive('insight', T0)).toBe(false)
+    expect(notificationsActive('focus', T0)).toBe(true)
+    expect(notifyProactive('insight', payload, { now: T0 })).toBe(false)
+    expect(h.deliverInsight).not.toHaveBeenCalled()
   })
 })

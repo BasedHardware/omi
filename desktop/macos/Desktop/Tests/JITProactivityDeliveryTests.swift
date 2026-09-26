@@ -62,6 +62,35 @@ final class JITProactivityDeliveryTests: XCTestCase {
     XCTAssertEqual(invoked.checkCount, 0)
   }
 
+  func testQAWithoutBudgetCannotSubmitAnAgentTurn() async throws {
+    let probe = AuthorizationProbe()
+    do {
+      _ = try await JITProactivityAgentAuthority.run(
+        request(),
+        runner: { request in
+          _ = probe.current(request.authorizationSnapshot)
+          return JITProactivityAgentResult(text: "{}", runID: "run", inputTokens: 1, outputTokens: 1)
+        },
+        requiresBoundedBudget: true,
+        authorizationCurrent: { _ in true })
+      XCTFail("QA must not silently use the ordinary unbounded route")
+    } catch {
+      XCTAssertEqual(error as? JITProactivityAgentAuthorityError, .qualificationBudgetRequired)
+    }
+    XCTAssertEqual(probe.checkCount, 0)
+    XCTAssertTrue(JITProactivityAgentAuthority.requiresQualificationBudget(bundleIdentifier: "com.omi.omi-jit-qa"))
+    XCTAssertFalse(JITProactivityAgentAuthority.requiresQualificationBudget(bundleIdentifier: "com.omi.computer"))
+  }
+
+  func testExistingNonQualificationRouteRemainsAvailableWithoutBudget() async throws {
+    let result = try await JITProactivityAgentAuthority.run(
+      request(),
+      runner: { _ in JITProactivityAgentResult(text: "existing", runID: "run", inputTokens: 1, outputTokens: 1) },
+      requiresBoundedBudget: false,
+      authorizationCurrent: { _ in true })
+    XCTAssertEqual(result.text, "existing")
+  }
+
   func testAgentAuthorityRejectsOwnerTransitionAcrossFullAwait() async throws {
     let probe = AuthorizationProbe()
     do {
@@ -88,6 +117,16 @@ final class JITProactivityDeliveryTests: XCTestCase {
     XCTAssertThrowsError(
       try JITProactivityOutputPolicy.decode(
         task.replacingOccurrences(of: "[\"fact:1\"]", with: "[]"), lane: .ambient))
+  }
+
+  func testFocusNudgeIsAnAmbientOnlyDecisionUnderTheFocusBadge() throws {
+    let nudge = """
+      {"decision":"focus_nudge","title":"Focus","message":"Reply to Sam before standup",\
+      "reasoning":"fact","bucket_entry_refs":[],"fact_ids":["fact:1"]}
+      """
+    XCTAssertEqual(try JITProactivityOutputPolicy.decode(nudge, lane: .ambient).decision, "focus_nudge")
+    XCTAssertThrowsError(try JITProactivityOutputPolicy.decode(nudge, lane: .planned))
+    XCTAssertEqual(ProactiveNotificationKind.from(decisionType: "focus_nudge"), .suggestion)
   }
 
   func testReservationIdentifiersAreContentFreeAndOnlyAdmissionCanResume() {
@@ -330,7 +369,13 @@ final class JITProactivityDeliveryTests: XCTestCase {
         return true
       }, authorizationCurrent: { _ in true }, authorizationSnapshotProvider: { authorization })
     await recovered.installLifecycleRetry()
-    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+    // On the main thread, as `performEffectiveOwnerTransition` posts it. Posting
+    // from this async test body instead delivered it straight onto a cooperative
+    // thread, where the first `@MainActor` observer to have been constructed by
+    // an earlier suite trapped on entry and took the whole test host with it.
+    await MainActor.run {
+      NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+    }
     for _ in 0..<20 {
       if await recovered.pendingCount(ownerID: "owner") == 0 { break }
       // omi-test-quality: wall-clock-wait -- lifecycle observer scheduling has no injectable clock

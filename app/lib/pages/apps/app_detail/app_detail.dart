@@ -1,44 +1,45 @@
 import 'dart:async';
 
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:skeletonizer/skeletonizer.dart';
-import 'package:timeago/timeago.dart' as timeago;
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/utils/share_links.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
-import 'package:omi/pages/apps/app_detail/widgets/review_avatar.dart';
+import 'package:omi/pages/apps/app_detail/reviews_section.dart';
+import 'package:omi/pages/apps/app_detail/app_summary.dart';
 import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
-import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/widgets/animated_loading_button.dart';
-import 'package:omi/widgets/confirmation_dialog.dart';
-import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/http/api/payment.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/pages/apps/app_detail/app_detail_config.dart';
 import 'package:omi/pages/apps/widgets/show_app_options_sheet.dart';
 import 'widgets/capabilities_card.dart';
 import 'widgets/info_card_widget.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/apps/app_detail/widgets/app_permissions_card.dart';
+import 'package:omi/pages/apps/app_detail/widgets/app_preview_gallery.dart';
+import 'package:omi/pages/apps/app_detail/widgets/app_setup_steps.dart';
+import 'package:omi/pages/apps/widgets/app_actions.dart';
+import 'package:omi/ui/ui.dart';
 
 class AppDetailPage extends StatefulWidget {
   final App app;
@@ -61,6 +62,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
   bool _isCancelingSubscription = false;
   Timer? _paymentCheckTimer;
   Timer? _setupCheckTimer;
+  int _setupCheckGeneration = 0;
+  int _markdownLoadGeneration = 0;
   late App app;
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _reviewsSectionKey = GlobalKey();
@@ -86,7 +89,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       } catch (e) {
         Logger.warning('Failed to launch URL with external browser: $e');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.couldNotOpenUrl)));
+          OmiFeedback.error(context, context.l10n.couldNotOpenUrl);
         }
         return false;
       }
@@ -94,16 +97,44 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   checkSetupCompleted({bool autoInstallIfCompleted = false}) {
-    if (app.externalIntegration == null) return;
+    if (app.externalIntegration == null) {
+      _setupCheckGeneration++;
+      return;
+    }
     // TODO: move check to backend
-    isAppSetupCompleted(app.externalIntegration!.setupCompletedUrl).then((value) {
-      if (mounted) {
-        setState(() => setupCompleted = value);
+    final generation = ++_setupCheckGeneration;
+    final requestedUrl = app.externalIntegration!.setupCompletedUrl;
+    isAppSetupCompleted(requestedUrl).then((value) {
+      if (!mounted) return;
+      if (generation != _setupCheckGeneration) return;
+      if (app.externalIntegration?.setupCompletedUrl != requestedUrl) return;
 
-        if (autoInstallIfCompleted && value && !app.enabled) {
-          _tryAutoInstallAfterSetup();
-        }
+      setState(() => setupCompleted = value);
+
+      if (autoInstallIfCompleted && value && !app.enabled) {
+        _tryAutoInstallAfterSetup();
       }
+    });
+  }
+
+  void _loadSetupInstructionsMarkdown() {
+    final generation = ++_markdownLoadGeneration;
+    final path = app.externalIntegration?.setupInstructionsFilePath;
+    if (path == null || path.isEmpty || !path.contains('raw.githubusercontent.com')) {
+      return;
+    }
+
+    final appId = app.id;
+    getAppMarkdown(path).then((value) {
+      if (!mounted) return;
+      if (generation != _markdownLoadGeneration) return;
+      if (app.externalIntegration?.setupInstructionsFilePath != path) return;
+
+      value = value.replaceAll(
+        '](assets/',
+        '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/$appId/assets/',
+      );
+      setState(() => instructionsMarkdown = value);
     });
   }
 
@@ -129,7 +160,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
         Future.delayed(const Duration(seconds: 1), () {
           if (mounted) {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => AppHomeWebPage(app: app)));
+            routeToPage(context, AppHomeWebPage(app: app));
           }
         });
       }
@@ -169,24 +200,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
         await _loadSubscriptionData();
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.l10n.subscriptionCancelledSuccessfully), backgroundColor: Colors.green),
-          );
-        }
+        if (mounted) OmiFeedback.confirm(context, context.l10n.subscriptionCancelledSuccessfully);
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(context.l10n.failedToCancelSubscription), backgroundColor: Colors.red));
-        }
+        if (mounted) OmiFeedback.error(context, context.l10n.failedToCancelSubscription);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.errorWithMessage(e.toString())), backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) OmiFeedback.error(context, context.l10n.errorWithMessage(readableError(e)));
     } finally {
       if (mounted) {
         setState(() => _isCancelingSubscription = false);
@@ -219,24 +238,14 @@ class _AppDetailPageState extends State<AppDetailPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // Automatically open app home page if conditions are met
       if (!widget.preventAutoOpenHomePage && app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
-        Navigator.push(context, MaterialPageRoute(builder: (context) => AppHomeWebPage(app: app)));
+        routeToPage(context, AppHomeWebPage(app: app));
       }
       // Load details
       await _refreshAppDetails();
     });
     if (app.worksExternally()) {
       checkSetupCompleted();
-      if (app.externalIntegration!.setupInstructionsFilePath?.isNotEmpty == true) {
-        if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
-          getAppMarkdown(app.externalIntegration!.setupInstructionsFilePath ?? '').then((value) {
-            value = value.replaceAll(
-              '](assets/',
-              '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
-            );
-            if (mounted) setState(() => instructionsMarkdown = value);
-          });
-        }
-      }
+      _loadSetupInstructionsMarkdown();
     }
 
     super.initState();
@@ -263,6 +272,23 @@ class _AppDetailPageState extends State<AppDetailPage> {
     }
   }
 
+  void _onExternalIntegrationUpdated() {
+    if (!app.worksExternally()) {
+      _setupCheckGeneration++;
+      _markdownLoadGeneration++;
+      return;
+    }
+    checkSetupCompleted();
+    _loadSetupInstructionsMarkdown();
+  }
+
+  void _applyProviderAppUpdate(App updatedApp) {
+    setState(() {
+      app = updatedApp;
+    });
+    _onExternalIntegrationUpdated();
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -272,16 +298,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
       // Check if app has been updated in the provider
       final appProvider = context.read<AppProvider>();
       final updatedApp = appProvider.apps.firstWhereOrNull((a) => a.id == app.id);
-      if (updatedApp != null) {
-        // Compare critical fields to detect if app was updated
-        final appHomeUrlChanged = updatedApp.externalIntegration?.appHomeUrl != app.externalIntegration?.appHomeUrl;
-        final nameChanged = updatedApp.name != app.name;
-        final descriptionChanged = updatedApp.description != app.description;
-
-        if (appHomeUrlChanged || nameChanged || descriptionChanged) {
-          // App was updated, refresh the details
-          await _refreshAppDetails();
-        }
+      if (updatedApp != null && hasAppDetailConfigChanged(app, updatedApp)) {
+        // App was updated, refresh the details
+        await _refreshAppDetails();
+        _onExternalIntegrationUpdated();
       }
     });
   }
@@ -331,209 +351,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
     });
   }
 
-  Widget _buildPermissionsCard(App app) {
-    if (!app.worksExternally()) {
-      return const SizedBox.shrink();
-    }
-
-    final actions = app.externalIntegration?.actions ?? [];
-    final trigger = app.externalIntegration?.getTriggerOnString();
-
-    final List<_PermissionItem> permissionItems = [];
-
-    // Read permissions
-    if (actions.any((a) => a.action == 'read_conversations')) {
-      permissionItems.add(
-        _PermissionItem(
-          title: context.l10n.permissionReadConversations,
-          type: context.l10n.permissionTypeAccess,
-          description: context.l10n.permissionDescReadConversations,
-        ),
-      );
-    }
-    if (actions.any((a) => a.action == 'read_memories')) {
-      permissionItems.add(
-        _PermissionItem(
-          title: context.l10n.permissionReadMemories,
-          type: context.l10n.permissionTypeAccess,
-          description: context.l10n.permissionDescReadMemories,
-        ),
-      );
-    }
-    if (actions.any((a) => a.action == 'read_tasks')) {
-      permissionItems.add(
-        _PermissionItem(
-          title: context.l10n.permissionReadTasks,
-          type: context.l10n.permissionTypeAccess,
-          description: context.l10n.permissionDescReadTasks,
-        ),
-      );
-    }
-
-    // Create permissions
-    if (actions.any((a) => a.action == 'create_conversation')) {
-      permissionItems.add(
-        _PermissionItem(
-          title: context.l10n.permissionCreateConversations,
-          type: context.l10n.permissionTypeCreate,
-          description: context.l10n.permissionDescCreateConversations,
-        ),
-      );
-    }
-    if (actions.any((a) => a.action == 'create_facts')) {
-      permissionItems.add(
-        _PermissionItem(
-          title: context.l10n.permissionCreateMemories,
-          type: context.l10n.permissionTypeCreate,
-          description: context.l10n.permissionDescCreateMemories,
-        ),
-      );
-    }
-
-    // Trigger
-    if (trigger != null && trigger != 'Unknown') {
-      final displayTrigger = trigger == 'Transcript Segment Processed' ? context.l10n.realtimeListening : trigger;
-      permissionItems.add(
-        _PermissionItem(
-          title: displayTrigger,
-          type: context.l10n.permissionTypeTrigger,
-          description: 'This app runs automatically when: $displayTrigger',
-        ),
-      );
-    }
-
-    if (permissionItems.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16.0),
-      margin: EdgeInsets.only(
-        left: MediaQuery.of(context).size.width * 0.05,
-        right: MediaQuery.of(context).size.width * 0.05,
-        top: 12,
-        bottom: 6,
-      ),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(16.0),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            context.l10n.permissionsAndTriggers,
-            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 18),
-          ...permissionItems.asMap().entries.map((entry) {
-            final permission = entry.value;
-            final isLast = entry.key == permissionItems.length - 1;
-            return _buildPermissionItem(permission, isLast);
-          }).toList(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPermissionItem(_PermissionItem permission, bool isLast) {
-    return Container(
-      margin: EdgeInsets.only(bottom: isLast ? 0 : 8),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: _getPermissionTypeColor(permission.type).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              permission.type,
-              style: TextStyle(
-                color: _getPermissionTypeColor(permission.type).withValues(alpha: 0.8),
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              permission.title,
-              style: const TextStyle(color: Colors.grey, fontSize: 14, fontWeight: FontWeight.w500),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Color _getPermissionTypeColor(String type) {
-    switch (type.toLowerCase()) {
-      case 'access':
-        return Colors.green;
-      case 'create':
-        return Colors.orange;
-      case 'trigger':
-        return Colors.blue;
-      default:
-        return Colors.blue;
-    }
-  }
-
-  /// Converts snake_case to Title Case (e.g., "send_slack_message" -> "Send Slack Message")
-  String _formatToolName(String name) {
-    return name
-        .split('_')
-        .map((word) => word.isNotEmpty ? '${word[0].toUpperCase()}${word.substring(1).toLowerCase()}' : '')
-        .join(' ');
-  }
-
-  Widget _buildChatToolsCard(App app) {
-    if (app.chatTools == null || app.chatTools!.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16.0),
-      margin: EdgeInsets.only(
-        left: MediaQuery.of(context).size.width * 0.05,
-        right: MediaQuery.of(context).size.width * 0.05,
-        top: 12,
-        bottom: 6,
-      ),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
-        borderRadius: BorderRadius.circular(16.0),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            context.l10n.chatFeatures,
-            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 16),
-          Wrap(spacing: 12, runSpacing: 12, children: app.chatTools!.map((tool) => _buildChatToolChip(tool)).toList()),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildChatToolChip(ChatTool tool) {
-    const color = Colors.grey;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
-      child: Text(
-        _formatToolName(tool.name),
-        style: const TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     // Watch for changes to the app in AppProvider and update local state
@@ -541,198 +358,57 @@ class _AppDetailPageState extends State<AppDetailPage> {
       builder: (context, appProvider, child) {
         // Check if app has been updated in the provider
         final updatedApp = appProvider.apps.firstWhereOrNull((a) => a.id == app.id);
-        if (updatedApp != null) {
-          // Compare critical fields to detect if app was actually updated
-          final appHomeUrlChanged = updatedApp.externalIntegration?.appHomeUrl != app.externalIntegration?.appHomeUrl;
-          final nameChanged = updatedApp.name != app.name;
-          final descriptionChanged = updatedApp.description != app.description;
-
-          if (appHomeUrlChanged || nameChanged || descriptionChanged) {
-            // Update local app state when provider's app changes
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                setState(() {
-                  app = updatedApp;
-                });
-              }
-            });
-          }
+        if (updatedApp != null && hasAppDetailConfigChanged(app, updatedApp)) {
+          // Update local app state when provider's app changes
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _applyProviderAppUpdate(updatedApp);
+            }
+          });
         }
 
+        final l10n = context.l10n;
         bool isIntegration = app.worksExternally();
         bool hasSetupInstructions =
             isIntegration && app.externalIntegration?.setupInstructionsFilePath?.isNotEmpty == true;
         bool hasAuthSteps = isIntegration && app.externalIntegration?.authSteps.isNotEmpty == true;
         return Scaffold(
           appBar: AppBar(
-            backgroundColor: Theme.of(context).colorScheme.primary,
             elevation: 0,
             automaticallyImplyLeading: false,
-            leading: Container(
-              width: 36,
-              height: 36,
-              margin: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-              child: IconButton(
-                padding: EdgeInsets.zero,
-                onPressed: () {
-                  HapticFeedback.mediumImpact();
-                  Navigator.pop(context);
-                },
-                icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
-              ),
-            ),
+            leading: const Center(child: OmiBackButton.circled()),
             actions: [
-              if (app.enabled && app.worksWithChat()) ...[
-                Container(
-                  width: 36,
-                  height: 36,
-                  margin: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-                  child: IconButton(
-                    padding: EdgeInsets.zero,
-                    onPressed: chatButtonLoading
-                        ? null
-                        : () async {
-                            HapticFeedback.mediumImpact();
-
-                            // Prevent multiple clicks
-                            if (chatButtonLoading) return;
-
-                            setState(() => chatButtonLoading = true);
-
-                            try {
-                              // Navigate directly to chat page with this app selected
-                              var appId = app.id;
-                              var appProvider = Provider.of<AppProvider>(context, listen: false);
-                              var messageProvider = Provider.of<MessageProvider>(context, listen: false);
-
-                              // Set the selected app
-                              appProvider.setSelectedChatAppId(appId);
-
-                              // Refresh messages and get the selected app
-                              await messageProvider.refreshMessages();
-                              App? selectedApp = await appProvider.getAppFromId(appId);
-
-                              // Send initial message if chat is empty
-                              if (messageProvider.messages.isEmpty) {
-                                messageProvider.sendInitialAppMessage(selectedApp);
-                              }
-
-                              // Track chat button clicked
-                              PlatformManager.instance.analytics.appDetailChatClicked(appId: app.id, appName: app.name);
-
-                              // Navigate directly to chat page
-                              if (context.mounted) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)),
-                                );
-                              }
-                            } finally {
-                              if (mounted) {
-                                setState(() => chatButtonLoading = false);
-                              }
-                            }
-                          },
-                    icon: chatButtonLoading
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 1.5,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : const FaIcon(FontAwesomeIcons.solidComments, size: 16.0, color: Colors.white),
+              if (app.enabled && app.worksWithChat())
+                OmiIconButton.filled(
+                  icon: chatButtonLoading
+                      ? const OmiSpinner(size: OmiSpinnerSize.small)
+                      : const FaIcon(FontAwesomeIcons.solidComments, size: 16),
+                  label: l10n.chatWithApp(app.name.decodeString),
+                  onPressed: chatButtonLoading ? null : _openChatWithApp,
+                ),
+              if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true)
+                OmiIconButton.filled(
+                  icon: const FaIcon(FontAwesomeIcons.gear, size: 16),
+                  label: l10n.appSettingsLabel(app.name.decodeString),
+                  onPressed: () => routeToPage(context, AppHomeWebPage(app: app)),
+                ),
+              if (!isLoading && !app.private)
+                Builder(
+                  builder: (context) => OmiIconButton.filled(
+                    icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16),
+                    label: l10n.share,
+                    onPressed: () => _shareApp(context),
                   ),
                 ),
-              ],
-              if (app.enabled && app.externalIntegration?.appHomeUrl?.isNotEmpty == true) ...[
-                Container(
-                  width: 36,
-                  height: 36,
-                  margin: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-                  child: IconButton(
-                    padding: EdgeInsets.zero,
-                    icon: const FaIcon(FontAwesomeIcons.gear, size: 16.0, color: Colors.white),
-                    onPressed: () {
-                      HapticFeedback.mediumImpact();
-                      Navigator.push(context, MaterialPageRoute(builder: (context) => AppHomeWebPage(app: app)));
-                    },
-                  ),
+              if (appProvider.isAppOwner && !isLoading)
+                OmiIconButton.filled(
+                  icon: const FaIcon(FontAwesomeIcons.penToSquare, size: 16),
+                  label: l10n.appOptions,
+                  onPressed: () => showAppOptionsSheet(context, app),
                 ),
-              ],
-              isLoading || app.private
-                  ? const SizedBox.shrink()
-                  : Builder(
-                      builder: (BuildContext context) {
-                        return Container(
-                          width: 36,
-                          height: 36,
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
-                            onPressed: () async {
-                              HapticFeedback.mediumImpact();
-                              PlatformManager.instance.analytics.track('App Shared', properties: {'appId': app.id});
-
-                              // Track share button clicked
-                              PlatformManager.instance.analytics.appDetailShared(appId: app.id, appName: app.name);
-
-                              // Get the position of the share button for iOS
-                              final RenderBox? box = context.findRenderObject() as RenderBox?;
-                              final Rect? sharePositionOrigin =
-                                  box != null ? box.localToGlobal(Offset.zero) & box.size : null;
-
-                              await Share.share(
-                                appShareUrl(app.id),
-                                subject: app.name,
-                                sharePositionOrigin: sharePositionOrigin,
-                              );
-                            },
-                          ),
-                        );
-                      },
-                    ),
-              appProvider.isAppOwner
-                  ? (isLoading
-                      ? const SizedBox.shrink()
-                      : Container(
-                          width: 36,
-                          height: 36,
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.withValues(alpha: 0.3),
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
-                            onPressed: () async {
-                              HapticFeedback.mediumImpact();
-                              await showModalBottomSheet(
-                                context: context,
-                                shape: const RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.only(
-                                    topLeft: Radius.circular(16),
-                                    topRight: Radius.circular(16),
-                                  ),
-                                ),
-                                builder: (context) {
-                                  return ShowAppOptionsSheet(app: app);
-                                },
-                              );
-                            },
-                          ),
-                        ))
-                  : const SizedBox(width: 8),
+              const SizedBox(width: OmiSpacing.xxs),
             ],
           ),
-          backgroundColor: Theme.of(context).colorScheme.primary,
           body: SingleChildScrollView(
             controller: _scrollController,
             child: Skeletonizer(
@@ -753,539 +429,105 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           height: 108,
                           decoration: BoxDecoration(
                             shape: BoxShape.rectangle,
-                            borderRadius: BorderRadius.circular(24),
+                            borderRadius: OmiRadius.xlAll,
                             image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                           ),
                         ),
-                        placeholder: (context, url) => const CircularProgressIndicator(),
+                        placeholder: (context, url) => const SizedBox.square(
+                          dimension: 108,
+                          child: Center(child: OmiSpinner()),
+                        ),
                         errorWidget: (context, url, error) => const FaIcon(FontAwesomeIcons.circleExclamation),
                       ),
                       const SizedBox(width: 20),
                       Expanded(
-                        child: SizedBox(
-                          height: 108,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    app.name.decodeString,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          app.author.decodeString,
-                                          style: const TextStyle(color: Colors.grey, fontSize: 16),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      if (app.official) ...[
-                                        const SizedBox(width: 4),
-                                        const FaIcon(FontAwesomeIcons.solidCircleCheck, size: 14, color: Colors.white),
-                                      ],
-                                    ],
-                                  ),
-                                  // Rating + installs inline
-                                  const SizedBox(height: 6),
-                                  GestureDetector(
-                                    onTap: () {
-                                      if (app.ratingCount > 0 && _reviewsSectionKey.currentContext != null) {
-                                        Scrollable.ensureVisible(
-                                          _reviewsSectionKey.currentContext!,
-                                          duration: const Duration(milliseconds: 300),
-                                          curve: Curves.easeInOut,
-                                        );
-                                      }
-                                    },
-                                    child: Row(
-                                      children: [
-                                        if (app.ratingCount > 0) ...[
-                                          const FaIcon(FontAwesomeIcons.solidStar, size: 11, color: Colors.white),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            '${app.getRatingAvg()} (${app.ratingCount})',
-                                            style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
-                                          ),
-                                          if (app.installs > 0) ...[
-                                            Text('  ·  ', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-                                          ],
-                                        ],
-                                        if (app.installs > 0)
-                                          Text(
-                                            '${(app.installs / 10).round() * 10}+ users',
-                                            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-                                          ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              isLoading
-                                  ? AnimatedLoadingButton(
-                                      text: '',
-                                      width: 32,
-                                      height: 32,
-                                      onPressed: () async {},
-                                      color: const Color(0xFF35343B),
-                                    )
-                                  : app.enabled
-                                      ? AnimatedLoadingButton(
-                                          text: 'Disable',
-                                          width: 90,
-                                          height: 32,
-                                          onPressed: () => _toggleApp(app.id, false),
-                                          color: Colors.grey.shade700,
-                                        )
-                                      : (app.isPaid && !app.isUserPaid
-                                          ? AnimatedLoadingButton(
-                                              width: 100,
-                                              height: 32,
-                                              text: "Subscribe",
-                                              onPressed: () async {
-                                                // Track subscribe button clicked
-                                                PlatformManager.instance.analytics.appDetailSubscribeClicked(
-                                                  appId: app.id,
-                                                  appName: app.name,
-                                                );
-
-                                                if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
-                                                  final uri = Uri.tryParse(app.paymentLink!);
-                                                  if (uri == null) {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(content: Text(context.l10n.invalidPaymentUrl)),
-                                                    );
-                                                    return;
-                                                  }
-                                                  _checkPaymentStatus(app.id);
-                                                  await _launchUrlSafely(uri);
-                                                } else {
-                                                  await _toggleApp(app.id, true);
-                                                }
-                                              },
-                                              color: Colors.white,
-                                              // AnimatedLoadingButton defaults both to white; on a
-                                              // white surface the label and spinner vanish.
-                                              textStyle: const TextStyle(fontSize: 16, color: Colors.black),
-                                              loaderColor: Colors.black,
-                                            )
-                                          : AnimatedLoadingButton(
-                                              width: 75,
-                                              height: 32,
-                                              text: 'Enable',
-                                              onPressed: () async {
-                                                if (app.worksExternally()) {
-                                                  showDialog(
-                                                    context: context,
-                                                    builder: (ctx) {
-                                                      return StatefulBuilder(
-                                                        builder: (ctx, setState) {
-                                                          return ConfirmationDialog(
-                                                            title: context.l10n.dataAccessNotice,
-                                                            description: context.l10n.dataAccessNoticeDescription,
-                                                            onConfirm: () {
-                                                              _toggleApp(app.id, true);
-                                                              Navigator.pop(context);
-                                                            },
-                                                            onCancel: () {
-                                                              Navigator.pop(context);
-                                                            },
-                                                          );
-                                                        },
-                                                      );
-                                                    },
-                                                  );
-                                                } else {
-                                                  _toggleApp(app.id, true);
-                                                }
-                                              },
-                                              color: Colors.white,
-                                              // AnimatedLoadingButton defaults both to white; on a
-                                              // white surface the label and spinner vanish.
-                                              textStyle: const TextStyle(fontSize: 16, color: Colors.black),
-                                              loaderColor: Colors.black,
-                                            )),
-                            ],
-                          ),
+                        child: AppDetailSummary(
+                          name: app.name.decodeString,
+                          author: app.author.decodeString,
+                          official: app.official,
+                          ratingCount: app.ratingCount,
+                          rating: app.getRatingAvg(),
+                          installs: app.installs,
+                          onRatingTap: () {
+                            if (app.ratingCount > 0 && _reviewsSectionKey.currentContext != null) {
+                              Scrollable.ensureVisible(
+                                _reviewsSectionKey.currentContext!,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                              );
+                            }
+                          },
+                          action: _buildPrimaryAction(l10n),
                         ),
                       ),
                       const SizedBox(width: 20),
                     ],
                   ),
                   const SizedBox(height: 16),
-
-                  // Cancel Subscription
-                  !isLoading && !app.private && app.isPaid && _hasActiveSubscription() && !appProvider.isAppOwner
-                      ? Padding(
-                          padding: const EdgeInsets.only(top: 16),
-                          child: InkWell(
-                            onTap: _isCancelingSubscription
-                                ? null
-                                : () {
-                                    showDialog(
-                                      context: context,
-                                      builder: (c) => getDialog(
-                                        context,
-                                        () => Navigator.pop(context),
-                                        () async {
-                                          Navigator.pop(context);
-                                          await _cancelSubscription();
-                                        },
-                                        'Cancel Subscription?',
-                                        'Are you sure you want to cancel your subscription? You will continue to have access until the end of your current billing period.',
-                                        okButtonText: 'Cancel Subscription',
-                                      ),
-                                    );
-                                  },
-                            borderRadius: BorderRadius.circular(4),
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.only(top: 12),
-                              child: _isCancelingSubscription
-                                  ? const Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        SizedBox(
-                                          width: 16,
-                                          height: 16,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
-                                          ),
-                                        ),
-                                        SizedBox(width: 8),
-                                        Text(
-                                          'Cancelling...',
-                                          style: TextStyle(
-                                            color: Colors.red,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : const Text(
-                                      'Cancel Subscription',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(color: Colors.red, fontSize: 16, fontWeight: FontWeight.w500),
-                                    ),
-                            ),
-                          ),
-                        )
-                      : const SizedBox.shrink(),
-
-                  (app.isUnderReview() || app.private) && !app.isOwner(SharedPreferencesUtil().uid)
-                      ? Column(
-                          children: [
-                            const SizedBox(height: 10),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const FaIcon(FontAwesomeIcons.circleInfo, color: Colors.grey, size: 18),
-                                const SizedBox(width: 10),
-                                SizedBox(
-                                  width: MediaQuery.of(context).size.width * 0.78,
-                                  child: const Text(
-                                    'You are a beta tester for this app. It is not public yet. It will be public once approved.',
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        )
-                      : const SizedBox.shrink(),
-                  app.isUnderReview() && !app.private && app.isOwner(SharedPreferencesUtil().uid)
-                      ? Column(
-                          children: [
-                            const SizedBox(height: 10),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const FaIcon(FontAwesomeIcons.circleInfo, color: Colors.grey, size: 18),
-                                const SizedBox(width: 10),
-                                SizedBox(
-                                  width: MediaQuery.of(context).size.width * 0.78,
-                                  child: const Text(
-                                    'Your app is under review and visible only to you. It will be public once approved.',
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        )
-                      : const SizedBox.shrink(),
-                  app.isRejected()
-                      ? Column(
-                          children: [
-                            const SizedBox(height: 10),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.grey, size: 18),
-                                const SizedBox(width: 10),
-                                SizedBox(
-                                  width: MediaQuery.of(context).size.width * 0.78,
-                                  child: const Text(
-                                    'Your app has been rejected. Please update the app details and resubmit for review.',
-                                    style: TextStyle(color: Colors.grey),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        )
-                      : const SizedBox.shrink(),
-                  app.isDisabled() ? _buildDisabledNotice() : const SizedBox.shrink(),
-                  const SizedBox(height: 24),
-                  ...(hasAuthSteps
-                      ? app.externalIntegration!.authSteps.mapIndexed<Widget>((i, step) {
-                          return Container(
-                            margin: EdgeInsets.only(
-                              left: MediaQuery.of(context).size.width * 0.05,
-                              right: MediaQuery.of(context).size.width * 0.05,
-                              bottom: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
-                              borderRadius: BorderRadius.circular(16.0),
-                              border: Border.all(
-                                color: setupCompleted ? Colors.green.withValues(alpha: 0.3) : Colors.transparent,
-                                width: 1,
-                              ),
-                            ),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(16.0),
-                                onTap: () async {
-                                  final rawUrl = "${step.url}?uid=${SharedPreferencesUtil().uid}";
-                                  final uri = Uri.tryParse(rawUrl);
-                                  if (uri == null) {
-                                    ScaffoldMessenger.of(
-                                      context,
-                                    ).showSnackBar(SnackBar(content: Text(context.l10n.invalidIntegrationUrl)));
-                                    return;
-                                  }
-                                  await _launchUrlSafely(uri);
-                                  checkSetupCompleted(autoInstallIfCompleted: true);
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsets.all(16.0),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 32,
-                                        height: 32,
-                                        decoration: BoxDecoration(
-                                          color: setupCompleted
-                                              ? Colors.green.withValues(alpha: 0.2)
-                                              : Colors.grey.withValues(alpha: 0.2),
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: Center(
-                                          child: setupCompleted
-                                              ? const FaIcon(FontAwesomeIcons.check, size: 14, color: Colors.green)
-                                              : Text(
-                                                  '${i + 1}',
-                                                  style: TextStyle(
-                                                    color: Colors.grey.shade400,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              step.name,
-                                              style: const TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.w600,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              setupCompleted ? context.l10n.setupCompleted : context.l10n.tapToComplete,
-                                              style: TextStyle(
-                                                fontSize: 13,
-                                                color: setupCompleted ? Colors.green : Colors.grey.shade500,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      FaIcon(
-                                        FontAwesomeIcons.arrowUpRightFromSquare,
-                                        size: 16,
-                                        color: Colors.grey.shade500,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList()
-                      : <Widget>[const SizedBox.shrink()]),
-                  !hasAuthSteps && hasSetupInstructions
-                      ? ListTile(
-                          onTap: () async {
-                            if (app.externalIntegration != null) {
-                              if (app.externalIntegration!.setupInstructionsFilePath?.contains(
-                                    'raw.githubusercontent.com',
-                                  ) ==
-                                  true) {
-                                await routeToPage(
-                                  context,
-                                  MarkdownViewer(
-                                    title: context.l10n.setupInstructions,
-                                    markdown: instructionsMarkdown ?? '',
-                                  ),
-                                );
-                              } else {
-                                if (app.externalIntegration!.isInstructionsUrl == true) {
-                                  final uri = Uri.tryParse(app.externalIntegration!.setupInstructionsFilePath ?? '');
-                                  if (uri == null) {
-                                    ScaffoldMessenger.of(
-                                      context,
-                                    ).showSnackBar(SnackBar(content: Text(context.l10n.invalidSetupInstructionsUrl)));
-                                    return;
-                                  }
-                                  await _launchUrlSafely(uri);
-                                } else {
-                                  var m = app.externalIntegration!.setupInstructionsFilePath;
-                                  routeToPage(
-                                    context,
-                                    MarkdownViewer(title: context.l10n.setupInstructions, markdown: m ?? ''),
-                                  );
-                                }
-                              }
-                            }
-                            checkSetupCompleted();
-                          },
-                          trailing: const Padding(
-                            padding: EdgeInsets.only(right: 12.0),
-                            child: FaIcon(FontAwesomeIcons.chevronRight, size: 20, color: Colors.grey),
-                          ),
-                          title: const Text(
-                            'Integration Instructions',
-                            style: TextStyle(fontWeight: FontWeight.w500, fontSize: 18),
-                          ),
-                        )
-                      : const SizedBox.shrink(),
-                  if (app.thumbnailUrls.isNotEmpty) ...[
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 16),
-                      child: Text('Preview', style: TextStyle(color: Colors.white, fontSize: 18)),
-                    ),
-                    SizedBox(
-                      height: 250,
-                      child: ListView.builder(
-                        padding: EdgeInsets.zero,
-                        scrollDirection: Axis.horizontal,
-                        itemCount: app.thumbnailUrls.length,
-                        itemBuilder: (context, index) {
-                          return GestureDetector(
-                            onTap: () {
-                              // Track preview image viewed
-                              PlatformManager.instance.analytics.appDetailPreviewImageViewed(
-                                appId: app.id,
-                                imageIndex: index,
-                              );
-
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => MediaViewerPage(
-                                    items: app.thumbnailUrls
-                                        .map((url) => MediaViewerItem(
-                                              imageUrl: url,
-                                            ))
-                                        .toList(),
-                                    initialIndex: index,
-                                    maxScaleMultiplier: 2,
-                                    showCloseButton: true,
-                                    wrapBodyInSafeArea: false,
-                                  ),
-                                ),
-                              );
-                            },
-                            child: Container(
-                              margin: EdgeInsets.only(
-                                left: index == 0 ? 16 : 8,
-                                right: index == app.thumbnailUrls.length - 1 ? 16 : 8,
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    border: Border.all(color: const Color(0xFF424242), width: 1),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(11),
-                                    child: CachedNetworkImage(
-                                      imageUrl: app.thumbnailUrls[index],
-                                      fit: BoxFit.contain,
-                                      placeholder: (context, url) => SizedBox(
-                                        width: 150,
-                                        child: ShimmerWithTimeout(
-                                          baseColor: Colors.grey[900]!,
-                                          highlightColor: Colors.grey[800]!,
-                                          child: Container(
-                                            decoration: BoxDecoration(
-                                              color: Colors.black,
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      errorWidget: (context, url, error) => Container(
-                                        width: 150,
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey[900],
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: const FaIcon(FontAwesomeIcons.circleExclamation),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
+                  if (!isLoading && !app.private && app.isPaid && _hasActiveSubscription() && !appProvider.isAppOwner)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.md, OmiSpacing.lg, 0),
+                      child: OmiButton.destructive(
+                        label: l10n.cancelSubscriptionButton,
+                        isLoading: _isCancelingSubscription,
+                        expand: true,
+                        onPressed: () {
+                          _confirmCancelSubscription();
                         },
                       ),
                     ),
-                    const SizedBox(height: 16),
-                  ],
+                  if ((app.isUnderReview() || app.private) && !app.isOwner(SharedPreferencesUtil().uid))
+                    AppDetailNotice(icon: FontAwesomeIcons.circleInfo, text: l10n.betaTesterMessage),
+                  if (app.isUnderReview() && !app.private && app.isOwner(SharedPreferencesUtil().uid))
+                    AppDetailNotice(icon: FontAwesomeIcons.circleInfo, text: l10n.appUnderReviewMessage),
+                  if (app.isRejected())
+                    AppDetailNotice(icon: FontAwesomeIcons.circleExclamation, text: l10n.appRejectedMessage),
+                  if (app.isDisabled()) _buildDisabledNotice(),
+                  const SizedBox(height: OmiSpacing.xl),
+                  if (hasAuthSteps)
+                    AppSetupSteps(
+                      steps: app.externalIntegration!.authSteps,
+                      completed: setupCompleted,
+                      onStepTap: (step) async {
+                        final uri = Uri.tryParse(appSetupUrlWithUid(step.url, SharedPreferencesUtil().uid));
+                        if (uri == null) {
+                          OmiFeedback.error(context, l10n.invalidIntegrationUrl);
+                          return;
+                        }
+                        await _launchUrlSafely(uri);
+                        checkSetupCompleted(autoInstallIfCompleted: true);
+                      },
+                    ),
+                  if (!hasAuthSteps && hasSetupInstructions)
+                    ListTile(
+                      onTap: () async {
+                        await _openSetupInstructions();
+                        checkSetupCompleted();
+                      },
+                      trailing: const Padding(
+                        padding: EdgeInsets.only(right: OmiSpacing.sm),
+                        child: FaIcon(FontAwesomeIcons.chevronRight, size: 20, color: OmiColors.textTertiary),
+                      ),
+                      title: Text(l10n.integrationInstructions, style: OmiType.headline),
+                    ),
+                  if (app.thumbnailUrls.isNotEmpty)
+                    AppPreviewGallery(
+                      imageUrls: app.thumbnailUrls,
+                      onImageOpened: (index) => PlatformManager.instance.analytics.appDetailPreviewImageViewed(
+                        appId: app.id,
+                        imageIndex: index,
+                      ),
+                    ),
                   InfoCardWidget(
                     onTap: () {
                       if (app.description.decodeString.characters.length > 200) {
                         routeToPage(
                           context,
-                          MarkdownViewer(title: 'Description', markdown: app.description.decodeString),
+                          MarkdownViewer(title: l10n.descriptionLabel, markdown: app.description.decodeString),
                         );
                       }
                     },
-                    title: 'Description',
+                    title: l10n.descriptionLabel,
                     description: app.description,
                     showChips: false,
                   ),
@@ -1320,9 +562,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       return CapabilitiesCard(capabilities: capabilitiesList);
                     },
                   ),
-                  app.chatTools != null && app.chatTools!.isNotEmpty
-                      ? _buildChatToolsCard(app)
-                      : const SizedBox.shrink(),
+                  AppChatToolsCard(app: app),
                   app.conversationPrompt != null
                       ? InfoCardWidget(
                           onTap: () {
@@ -1340,7 +580,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           maxLines: 3,
                         )
                       : const SizedBox.shrink(),
-
                   app.chatPrompt != null
                       ? InfoCardWidget(
                           onTap: () {
@@ -1358,72 +597,44 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           maxLines: 3,
                         )
                       : const SizedBox.shrink(),
-                  _buildPermissionsCard(app),
+                  AppPermissionsCard(app: app),
                   Builder(
                     builder: (context) {
                       final canAddReview = !app.isOwner(SharedPreferencesUtil().uid) && app.enabled;
                       return (app.ratingCount > 0 || app.reviews.isNotEmpty || canAddReview)
                           ? GestureDetector(
+                              key: _reviewsSectionKey,
                               onTap: () {
                                 if (app.reviews.isNotEmpty) {
-                                  // Track reviews page opened
                                   PlatformManager.instance.analytics.appDetailReviewsOpened(
                                     appId: app.id,
                                     reviewCount: app.reviews.length,
                                   );
-
                                   routeToPage(context, ReviewsListPage(app: app));
                                 }
                               },
-                              child: Container(
-                                key: _reviewsSectionKey,
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(16.0),
-                                margin: EdgeInsets.only(
-                                  left: MediaQuery.of(context).size.width * 0.05,
-                                  right: MediaQuery.of(context).size.width * 0.05,
-                                  top: 12,
-                                  bottom: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
-                                  borderRadius: BorderRadius.circular(16.0),
-                                ),
+                              child: AppDetailSectionCard(
+                                title: l10n.ratingsAndReviews,
+                                trailing: app.reviews.isNotEmpty
+                                    ? const ExcludeSemantics(child: Icon(Icons.arrow_forward, size: 20))
+                                    : null,
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Row(
-                                      children: [
-                                        const Text(
-                                          'Reviews',
-                                          style: TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const Spacer(),
-                                        app.reviews.isNotEmpty
-                                            ? const Icon(Icons.arrow_forward, size: 20)
-                                            : const SizedBox.shrink(),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 20),
+                                    const SizedBox(height: OmiSpacing.xxs),
                                     RatingDistributionWidget(
                                       ratingAvg: app.ratingAvg ?? 0,
                                       ratingCount: app.ratingCount,
                                       reviews: app.reviews,
                                     ),
-                                    const SizedBox(height: 16),
+                                    const SizedBox(height: OmiSpacing.md),
                                     RecentReviewsSection(
                                       reviews:
                                           app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
                                       userReview: app.userReview,
                                       app: app,
-                                      onReviewUpdated: () {
-                                        setState(() {});
-                                      },
+                                      onReviewUpdated: () => setState(() {}),
                                     ),
                                   ],
                                 ),
@@ -1432,12 +643,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           : const SizedBox.shrink();
                     },
                   ),
-                  // isIntegration ? const SizedBox(height: 16) : const SizedBox.shrink(),
-                  // widget.plugin.worksExternally() ? const SizedBox(height: 16) : const SizedBox.shrink(),
-                  // app.private
-                  //     ? const SizedBox.shrink()
-                  //     : AppAnalyticsWidget(
-                  //         installs: app.installs, moneyMade: app.isPaid ? ((app.price ?? 0) * app.installs) : 0),
                   const SizedBox(height: 60),
                 ],
               ),
@@ -1466,41 +671,25 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
     return Column(
       children: [
-        const SizedBox(height: 10),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const FaIcon(FontAwesomeIcons.triangleExclamation, color: Colors.grey, size: 18),
-            const SizedBox(width: 10),
-            SizedBox(
-              width: MediaQuery.of(context).size.width * 0.78,
-              child: Text(
-                '${context.l10n.appDisabledTitle} $reason$when$lastError',
-                style: const TextStyle(color: Colors.grey),
-              ),
-            ),
-          ],
+        AppDetailNotice(
+          icon: FontAwesomeIcons.triangleExclamation,
+          text: '${context.l10n.appDisabledTitle} $reason$when$lastError',
         ),
         if (isOwner) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: OmiSpacing.sm),
           SizedBox(
-            width: MediaQuery.of(context).size.width * 0.78,
+            width: MediaQuery.sizeOf(context).width * 0.78,
             child: Text(
               context.l10n.appDisabledOwnerHint,
-              style: const TextStyle(color: Colors.grey, fontSize: 13),
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
             ),
           ),
           const SizedBox(height: 10),
-          TextButton(
+          OmiButton.secondary(
+            label: context.l10n.appReEnable,
+            size: OmiButtonSize.compact,
+            isLoading: _reEnabling,
             onPressed: _reEnabling ? null : _reEnableApp,
-            style: TextButton.styleFrom(
-              backgroundColor: Colors.grey.shade900,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            child: _reEnabling
-                ? const SizedBox(
-                    width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : Text(context.l10n.appReEnable, style: const TextStyle(color: Colors.white)),
           ),
         ],
       ],
@@ -1526,60 +715,46 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
     // The rejection names the URL to fix, so it is shown verbatim rather than
     // replaced with a generic retry prompt.
-    showDialog(
-      context: context,
-      builder: (c) => getDialog(
-        context,
-        () => Navigator.pop(context),
-        () => Navigator.pop(context),
-        context.l10n.appReEnableFailedTitle,
-        detail.isNotEmpty ? detail : context.l10n.appReEnableFailedBody,
-        singleButton: true,
-      ),
+    showOmiAlert(
+      context,
+      title: context.l10n.appReEnableFailedTitle,
+      message: detail.isNotEmpty ? detail : context.l10n.appReEnableFailedBody,
     );
   }
 
   Future<void> _navigateToSetup() async {
-    bool isIntegration = app.worksExternally();
-    bool hasSetupInstructions = isIntegration && app.externalIntegration?.setupInstructionsFilePath?.isNotEmpty == true;
-    bool hasAuthSteps = isIntegration && app.externalIntegration?.authSteps.isNotEmpty == true;
-
-    if (hasAuthSteps && app.externalIntegration!.authSteps.isNotEmpty) {
-      final firstStep = app.externalIntegration!.authSteps.first;
-      final rawUrl = "${firstStep.url}?uid=${SharedPreferencesUtil().uid}";
-      final uri = Uri.tryParse(rawUrl);
+    final authSteps = app.externalIntegration?.authSteps ?? const [];
+    if (app.worksExternally() && authSteps.isNotEmpty) {
+      final uri = Uri.tryParse(appSetupUrlWithUid(authSteps.first.url, SharedPreferencesUtil().uid));
       if (uri == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.invalidIntegrationUrl)));
-        }
+        if (mounted) OmiFeedback.error(context, context.l10n.invalidIntegrationUrl);
         return;
       }
       await _launchUrlSafely(uri);
-    } else if (hasSetupInstructions) {
-      if (app.externalIntegration!.setupInstructionsFilePath?.contains('raw.githubusercontent.com') == true) {
-        await routeToPage(
-          context,
-          MarkdownViewer(title: context.l10n.setupInstructions, markdown: instructionsMarkdown ?? ''),
-        );
-      } else {
-        if (app.externalIntegration!.isInstructionsUrl == true) {
-          final uri = Uri.tryParse(app.externalIntegration!.setupInstructionsFilePath ?? '');
-          if (uri == null) {
-            if (mounted) {
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text(context.l10n.invalidSetupInstructionsUrl)));
-            }
-            return;
-          }
-          await _launchUrlSafely(uri);
-        } else {
-          var m = app.externalIntegration!.setupInstructionsFilePath;
-          routeToPage(context, MarkdownViewer(title: context.l10n.setupInstructions, markdown: m ?? ''));
-        }
-      }
+    } else {
+      await _openSetupInstructions();
     }
     _startSetupCompletionCheck();
+  }
+
+  /// Opens an integration's setup instructions: rendered markdown, an external link, or inline text.
+  Future<void> _openSetupInstructions() async {
+    final integration = app.externalIntegration;
+    final path = integration?.setupInstructionsFilePath;
+    if (integration == null || path == null || path.isEmpty) return;
+    final title = context.l10n.setupInstructions;
+    if (path.contains('raw.githubusercontent.com')) {
+      await routeToPage(context, MarkdownViewer(title: title, markdown: instructionsMarkdown ?? ''));
+    } else if (integration.isInstructionsUrl == true) {
+      final uri = Uri.tryParse(path);
+      if (uri == null) {
+        OmiFeedback.error(context, context.l10n.invalidSetupInstructionsUrl);
+        return;
+      }
+      await _launchUrlSafely(uri);
+    } else {
+      await routeToPage(context, MarkdownViewer(title: title, markdown: path));
+    }
   }
 
   void _startSetupCompletionCheck() {
@@ -1606,482 +781,162 @@ class _AppDetailPageState extends State<AppDetailPage> {
     });
   }
 
-  Future<void> _toggleApp(String appId, bool isEnabled) async {
+  Future<void> _enableApp(String appId) async {
     var prefs = SharedPreferencesUtil();
     setState(() => appLoading = true);
 
-    if (isEnabled) {
-      var (enabled, detail) = await enableAppServer(appId);
+    var (enabled, detail) = await enableAppServer(appId);
 
-      if (!mounted) return;
+    if (!mounted) return;
 
-      if (!enabled) {
-        // Setup is only the right guess when the backend gave no reason. A
-        // disabled app used to land here and get sent to setup instructions,
-        // so the developer re-ran a setup that was never the problem.
-        if (app.worksExternally() && detail.isEmpty) {
-          setState(() => appLoading = false);
-          await _navigateToSetup();
-          return;
-        } else {
-          showDialog(
-            context: context,
-            builder: (c) => getDialog(
-              context,
-              () => Navigator.pop(context),
-              () => Navigator.pop(context),
-              context.l10n.errorActivatingApp,
-              detail.isNotEmpty ? detail : context.l10n.issueActivatingApp,
-              singleButton: true,
-            ),
-          );
-          setState(() => appLoading = false);
-          return;
+    if (!enabled) {
+      // Setup is only the right guess when the backend gave no reason. A
+      // disabled app used to land here and get sent to setup instructions,
+      // so the developer re-ran a setup that was never the problem.
+      if (app.worksExternally() && detail.isEmpty) {
+        setState(() => appLoading = false);
+        await _navigateToSetup();
+        return;
+      } else {
+        showOmiAlert(
+          context,
+          title: context.l10n.errorActivatingApp,
+          message: detail.isNotEmpty ? detail : context.l10n.issueActivatingApp,
+        );
+        setState(() => appLoading = false);
+        return;
+      }
+    }
+
+    prefs.enableApp(appId);
+    PlatformManager.instance.analytics.appEnabled(appId);
+    context.read<AppProvider>().filterApps();
+
+    setState(() {
+      app.enabled = true;
+      appLoading = false;
+    });
+    if (app.worksExternally()) {
+      checkSetupCompleted();
+    }
+
+    // Automatically open app home page after installation if available
+    if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
+      Future.delayed(const Duration(seconds: 1), () {
+        if (mounted) {
+          routeToPage(context, AppHomeWebPage(app: app));
         }
-      }
-
-      prefs.enableApp(appId);
-      PlatformManager.instance.analytics.appEnabled(appId);
-      context.read<AppProvider>().filterApps();
-
-      setState(() {
-        app.enabled = true;
-        appLoading = false;
-      });
-      if (app.worksExternally()) {
-        checkSetupCompleted();
-      }
-
-      // Automatically open app home page after installation if available
-      if (app.externalIntegration?.appHomeUrl?.isNotEmpty == true) {
-        Future.delayed(const Duration(seconds: 1), () {
-          if (mounted) {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => AppHomeWebPage(app: app)));
-          }
-        });
-      }
-    } else {
-      prefs.disableApp(appId);
-      var res = await disableAppServer(appId);
-      print(res);
-      PlatformManager.instance.analytics.appDisabled(appId);
-
-      if (!mounted) return;
-
-      context.read<AppProvider>().filterApps();
-      setState(() {
-        app.enabled = false;
-        appLoading = false;
       });
     }
   }
-}
 
-class _PermissionItem {
-  final String title;
-  final String type;
-  final String description;
-
-  _PermissionItem({required this.title, required this.type, required this.description});
-}
-
-class RatingDistributionWidget extends StatelessWidget {
-  final double ratingAvg;
-  final int ratingCount;
-  final List<AppReview> reviews;
-
-  const RatingDistributionWidget({
-    super.key,
-    required this.ratingAvg,
-    required this.ratingCount,
-    required this.reviews,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          ratingAvg.toStringAsFixed(1),
-          style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.grey.shade400, height: 1),
-        ),
-        const SizedBox(width: 16),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: List.generate(5, (index) {
-                return Padding(
-                  padding: EdgeInsets.only(right: index < 4 ? 4 : 0),
-                  child: FaIcon(
-                    FontAwesomeIcons.solidStar,
-                    size: 14,
-                    color: index < ratingAvg.round() ? Colors.white : Colors.grey.shade700,
-                  ),
-                );
-              }),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              ratingCount == 1 ? '1 rating' : '$ratingCount ratings',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-            ),
-          ],
-        ),
-      ],
+  /// Disable is immediate with a 5 s Undo (docs/ux-contract.md §4); re-enabling needs no setup.
+  Future<void> _disableApp() async {
+    await disableAppWithUndo(
+      context,
+      app,
+      onHidden: () => setState(() => app.enabled = false),
+      onRestored: () {
+        if (mounted) setState(() => app.enabled = true);
+      },
     );
   }
-}
 
-class RecentReviewsSection extends StatefulWidget {
-  final List<AppReview> reviews;
-  final AppReview? userReview;
-  final App app;
-  final VoidCallback? onReviewUpdated;
-
-  const RecentReviewsSection({
-    super.key,
-    required this.reviews,
-    required this.app,
-    this.userReview,
-    this.onReviewUpdated,
-  });
-
-  @override
-  State<RecentReviewsSection> createState() => _RecentReviewsSectionState();
-}
-
-class _RecentReviewsSectionState extends State<RecentReviewsSection> {
-  bool isEditing = false;
-  double editRating = 0;
-  late TextEditingController reviewController;
-  bool isSubmitting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    reviewController = TextEditingController(text: widget.userReview?.review ?? '');
-    editRating = widget.userReview?.score ?? 0;
+  /// Enable (after the data-access question for external apps), Subscribe, or Disable.
+  Widget _buildPrimaryAction(AppLocalizations l10n) {
+    if (isLoading) {
+      return OmiButton(label: l10n.enable, size: OmiButtonSize.compact, isLoading: true, onPressed: null);
+    }
+    // Handlers return nothing to the button on purpose: it spins for [appLoading] (the server
+    // call), not while a question or an Undo toast is up.
+    if (app.enabled) {
+      return OmiButton.secondary(
+        label: l10n.disable,
+        size: OmiButtonSize.compact,
+        onPressed: () {
+          _disableApp();
+        },
+      );
+    }
+    if (app.isPaid && !app.isUserPaid) {
+      return OmiButton(
+        label: l10n.subscribe,
+        size: OmiButtonSize.compact,
+        isLoading: appLoading,
+        onPressed: () {
+          _subscribe();
+        },
+      );
+    }
+    return OmiButton(
+      label: l10n.enable,
+      size: OmiButtonSize.compact,
+      isLoading: appLoading,
+      onPressed: () {
+        _enableWithConsent();
+      },
+    );
   }
 
-  @override
-  void dispose() {
-    reviewController.dispose();
-    super.dispose();
+  Future<void> _enableWithConsent() async {
+    if (!await confirmAppDataAccess(context, app)) return;
+    if (mounted) await _enableApp(app.id);
   }
 
-  Future<void> _submitReview() async {
-    if (editRating == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.pleaseSelectRating)));
+  Future<void> _subscribe() async {
+    PlatformManager.instance.analytics.appDetailSubscribeClicked(appId: app.id, appName: app.name);
+    final link = app.paymentLink;
+    if (link == null || link.isEmpty) {
+      await _enableApp(app.id);
       return;
     }
+    final uri = Uri.tryParse(link);
+    if (uri == null) {
+      OmiFeedback.error(context, context.l10n.invalidPaymentUrl);
+      return;
+    }
+    _checkPaymentStatus(app.id);
+    await _launchUrlSafely(uri);
+  }
 
-    setState(() => isSubmitting = true);
+  Future<void> _confirmCancelSubscription() async {
+    final l10n = context.l10n;
+    final confirmed = await showOmiConfirm(
+      context,
+      title: l10n.cancelSubscriptionQuestion,
+      message: l10n.cancelSubscriptionKeepAccessMessage,
+      confirmLabel: l10n.cancelSubscriptionButton,
+      cancelLabel: l10n.keepSubscription,
+      destructive: true,
+    );
+    if (confirmed) await _cancelSubscription();
+  }
 
+  Future<void> _openChatWithApp() async {
+    setState(() => chatButtonLoading = true);
     try {
-      final prefs = SharedPreferencesUtil();
-      final userName = widget.userReview?.username.isNotEmpty == true
-          ? widget.userReview!.username
-          : prefs.fullName.isNotEmpty
-              ? prefs.fullName
-              : prefs.givenName;
-
-      final rev = AppReview(
-        uid: prefs.uid,
-        review: reviewController.text,
-        score: editRating,
-        ratedAt: widget.userReview?.ratedAt ?? DateTime.now(),
-        response: widget.userReview?.response ?? '',
-        username: userName,
-      );
-
-      bool isSuccessful;
-      if (widget.userReview == null) {
-        isSuccessful = await reviewApp(widget.app.id, rev);
-        if (isSuccessful) {
-          widget.app.ratingCount += 1;
-        }
-      } else {
-        isSuccessful = await updateAppReview(widget.app.id, rev);
+      final appProvider = context.read<AppProvider>();
+      final messageProvider = context.read<MessageProvider>();
+      appProvider.setSelectedChatAppId(app.id);
+      await messageProvider.refreshMessages();
+      final selectedApp = await appProvider.getAppFromId(app.id);
+      if (messageProvider.messages.isEmpty) {
+        messageProvider.sendInitialAppMessage(selectedApp);
       }
-
-      if (isSuccessful) {
-        widget.app.userReview = AppReview(
-          uid: prefs.uid,
-          ratedAt: DateTime.now(),
-          review: reviewController.text,
-          score: editRating,
-          username: userName,
-          response: widget.userReview?.response ?? '',
-        );
-
-        var appsList = SharedPreferencesUtil().appsList;
-        var index = appsList.indexWhere((element) => element.id == widget.app.id);
-        if (index != -1) {
-          appsList[index] = widget.app;
-          SharedPreferencesUtil().appsList = appsList;
-        }
-
-        PlatformManager.instance.analytics.appRated(widget.app.id, editRating);
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                widget.userReview == null
-                    ? context.l10n.reviewAddedSuccessfully
-                    : context.l10n.reviewUpdatedSuccessfully,
-              ),
-            ),
-          );
-          setState(() => isEditing = false);
-          widget.onReviewUpdated?.call();
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.failedToSubmitReview)));
-        }
-      }
+      PlatformManager.instance.analytics.appDetailChatClicked(appId: app.id, appName: app.name);
+      if (mounted) await routeToPage(context, const ChatPage(isPivotBottom: false));
     } finally {
-      if (mounted) {
-        setState(() => isSubmitting = false);
-      }
+      if (mounted) setState(() => chatButtonLoading = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    // Filter out user's review from the list if it exists
-    final filteredReviews = widget.userReview != null
-        ? widget.reviews.where((r) => r.uid != widget.userReview!.uid).take(3).toList()
-        : widget.reviews.take(3).toList();
-
-    final showUserReviewSection =
-        widget.userReview != null || (!widget.app.isOwner(SharedPreferencesUtil().uid) && widget.app.enabled);
-
-    if (filteredReviews.isEmpty && !showUserReviewSection) {
-      return const SizedBox.shrink();
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Recent reviews from others
-        ...filteredReviews.map((review) => _buildReviewItem(context, review)),
-        // User's review section (editable)
-        if (showUserReviewSection) ...[
-          if (filteredReviews.isNotEmpty) const SizedBox(height: 8),
-          _buildUserReviewSection(),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildUserReviewSection() {
-    final userReview = widget.userReview;
-
-    if (isEditing || userReview == null) {
-      // Edit mode or no review yet
-      return _buildEditableReview();
-    } else {
-      // Display mode with tap to edit
-      return GestureDetector(
-        onTap: () {
-          setState(() {
-            isEditing = true;
-            reviewController.text = userReview.review;
-            editRating = userReview.score;
-          });
-        },
-        child: _buildReviewItem(context, userReview, isUserReview: true),
-      );
-    }
-  }
-
-  Widget _buildEditableReview() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                widget.userReview == null ? 'Add Your Review' : 'Edit Your Review',
-                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
-              ),
-              const Spacer(),
-              if (widget.userReview != null)
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      isEditing = false;
-                      reviewController.text = widget.userReview?.review ?? '';
-                      editRating = widget.userReview?.score ?? 0;
-                    });
-                  },
-                  child: Text('Cancel', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          // Star rating
-          Row(
-            children: List.generate(5, (index) {
-              return GestureDetector(
-                onTap: () {
-                  setState(() => editRating = index + 1.0);
-                },
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: FaIcon(
-                    FontAwesomeIcons.solidStar,
-                    size: 24,
-                    color: index < editRating ? Colors.white : Colors.grey.shade600,
-                  ),
-                ),
-              );
-            }),
-          ),
-          const SizedBox(height: 12),
-          // Review text field
-          TextField(
-            controller: reviewController,
-            maxLines: 3,
-            maxLength: 250,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
-            decoration: InputDecoration(
-              hintText: context.l10n.writeReviewOptional,
-              hintStyle: TextStyle(color: Colors.grey.shade500),
-              filled: true,
-              fillColor: Colors.black.withValues(alpha: 0.3),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.all(12),
-              counterStyle: TextStyle(color: Colors.grey.shade500),
-            ),
-          ),
-          const SizedBox(height: 12),
-          // Submit button
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              key: const ValueKey('app_detail_submit_review_button'),
-              onPressed: isSubmitting ? null : _submitReview,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: isSubmitting
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        // The button surface is now white, so a white spinner would be invisible.
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                      ),
-                    )
-                  : Text(
-                      widget.userReview == null
-                          ? AppLocalizations.of(context).submitReview
-                          : AppLocalizations.of(context).updateReview,
-                    ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildReviewItem(BuildContext context, AppReview review, {bool isUserReview = false}) {
-    final l10n = AppLocalizations.of(context);
-    final displayName =
-        isUserReview ? l10n.yourReview : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
-    final avatarSeed = review.uid.isNotEmpty ? review.uid : review.username;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Avatar
-              ReviewAvatar(
-                seed: avatarSeed,
-                username: review.username,
-                size: 36,
-                backgroundColor: isUserReview ? Colors.white.withValues(alpha: 0.2) : null,
-                foregroundColor: isUserReview ? Colors.white : null,
-              ),
-              const SizedBox(width: 12),
-              // Name, date, and stars
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          displayName,
-                          style: TextStyle(
-                            color: isUserReview ? Colors.white : Colors.grey,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          timeago.format(review.ratedAt),
-                          style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
-                        ),
-                        if (isUserReview) ...[const Spacer(), Icon(Icons.edit, size: 14, color: Colors.grey.shade500)],
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    // Star rating
-                    Row(
-                      children: List.generate(5, (index) {
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 4),
-                          child: FaIcon(
-                            FontAwesomeIcons.solidStar,
-                            size: 14,
-                            color: index < review.score.round() ? Colors.white : Colors.grey.shade700,
-                          ),
-                        );
-                      }),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          // Review text - limited to 2 lines
-          if (review.review.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.only(left: 48),
-              child: Text(
-                review.review.decodeString,
-                style: const TextStyle(color: Colors.grey, fontSize: 14, height: 1.4),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
+  Future<void> _shareApp(BuildContext buttonContext) async {
+    PlatformManager.instance.analytics.track('App Shared', properties: {'appId': app.id});
+    PlatformManager.instance.analytics.appDetailShared(appId: app.id, appName: app.name);
+    // iPad needs the share button's position for the popover.
+    final box = buttonContext.findRenderObject() as RenderBox?;
+    final origin = box != null ? box.localToGlobal(Offset.zero) & box.size : null;
+    await SharePlus.instance
+        .share(ShareParams(text: appShareUrl(app.id), subject: app.name, sharePositionOrigin: origin));
   }
 }

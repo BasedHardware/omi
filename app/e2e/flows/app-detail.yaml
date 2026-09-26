@@ -6,6 +6,7 @@ name: app-detail
 description: Apps → App Detail — view app info, reviews, capabilities, install/enable toggle
 covers:
   - app/lib/pages/apps/app_detail/app_detail.dart
+  - app/lib/pages/apps/app_detail/reviews_section.dart
   - app/lib/pages/apps/app_detail/reviews_list_page.dart
   - app/lib/pages/apps/page.dart
 prerequisites:

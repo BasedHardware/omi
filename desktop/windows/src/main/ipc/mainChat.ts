@@ -158,6 +158,11 @@ export function projectKernelEvent(
     case 'run.starting':
     case 'run.running':
       return { type: 'status', requestId, runId, message: event.type }
+    case 'hosted.request_started':
+      // Emitted by the managed-cloud adapter only after its provider command was
+      // written successfully. Local owner, binding, session, and concurrency
+      // failures never cross this boundary.
+      return { type: 'hosted_request_started', requestId, runId }
     case 'message.delta':
       return { type: 'text_delta', requestId, runId, text: String(payload.text ?? '') }
     case 'progress.updated':

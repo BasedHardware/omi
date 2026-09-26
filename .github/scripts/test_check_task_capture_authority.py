@@ -43,38 +43,9 @@ class ForbiddenOutcomeTests(unittest.TestCase):
         self.assertIsNone(guard.FORBIDDEN_SWIFT_OUTCOME.search("    return .pendingCandidate"))
 
 
-class AcceptAndWriteTests(unittest.TestCase):
+class AcceptTests(unittest.TestCase):
     def test_rejects_extraction_accepting_a_candidate(self):
         self.assertTrue(guard.ACCEPT_CALL.search("candidate_service.accept_candidate(uid, cid)"))
-
-    def test_rejects_both_action_item_writers(self):
-        for call in ("action_items_db.create_action_item(uid, data)", "action_items_db.create_action_items_batch(uid, rows)"):
-            with self.subTest(call=call):
-                self.assertTrue(guard.WRITER_CALL.search(call))
-
-    def test_reading_action_items_is_not_a_write(self):
-        self.assertIsNone(guard.WRITER_CALL.search("action_items_db.get_action_items_by_conversation(uid, cid)"))
-
-
-class BodyExtractionTests(unittest.TestCase):
-    def test_only_scans_the_save_function(self):
-        text = (
-            "def _save_action_items(uid, conversation):\n"
-            "    conversation_capture.process_conversation_before_legacy(uid, conversation)\n"
-            "\n\n"
-            "def unrelated(uid):\n"
-            "    action_items_db.create_action_item(uid, {})\n"
-        )
-        body = guard._save_action_items_body(text)
-        self.assertIn("process_conversation_before_legacy", body)
-        self.assertIsNone(guard.WRITER_CALL.search(body))
-
-    def test_catches_a_writer_inside_the_save_function(self):
-        text = "def _save_action_items(uid, conversation):\n    action_items_db.create_action_items_batch(uid, rows)\n"
-        self.assertTrue(guard.WRITER_CALL.search(guard._save_action_items_body(text)))
-
-    def test_missing_function_yields_empty_body(self):
-        self.assertEqual(guard._save_action_items_body("def other(): pass\n"), "")
 
 
 class ClientProtocolTests(unittest.TestCase):

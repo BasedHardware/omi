@@ -3,6 +3,7 @@ import base64
 import io
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -43,7 +44,7 @@ def test_mint_probe_token_uses_fixed_uid_short_lived_custom_claims_and_discards_
         if stage == 'secret_access':
             return 'firebase-api-key-that-must-not-leak'
         if stage == 'service_account':
-            return 'deployer@omi-prod.iam.gserviceaccount.com'
+            return 'deployer@based-hardware.iam.gserviceaccount.com'
         return 'gcp-access-token-that-must-not-leak'
 
     def fake_request(url, *, body, access_token, stage):
@@ -167,7 +168,7 @@ def test_write_token_uses_owner_only_permissions(tmp_path):
 def test_mint_probe_token_rejects_a_token_for_a_different_firebase_auth_project(monkeypatch):
     module = _load_module()
     monkeypatch.setattr(module, '_access_secret', lambda _project: 'api-key-that-must-not-leak')
-    monkeypatch.setattr(module, '_active_service_account', lambda: 'deployer@omi-prod.iam.gserviceaccount.com')
+    monkeypatch.setattr(module, '_active_service_account', lambda: 'deployer@based-hardware.iam.gserviceaccount.com')
     monkeypatch.setattr(module, '_access_token', lambda: 'access-token-that-must-not-leak')
     monkeypatch.setattr(module, '_signed_custom_token', lambda _account, _token: 'custom-token-that-must-not-leak')
     monkeypatch.setattr(module, '_exchange_custom_token', lambda _custom, _key: _id_token(aud='wrong-project'))
@@ -178,6 +179,26 @@ def test_mint_probe_token_rejects_a_token_for_a_different_firebase_auth_project(
         assert error.stage == 'firebase_token_claims'
     else:
         raise AssertionError('expected Firebase auth-project mismatch')
+
+
+def test_remote_signer_rejects_a_cross_project_service_account_before_iam_signing(monkeypatch):
+    module = _load_module()
+    monkeypatch.setattr(module, '_access_secret', lambda _project: 'api-key-that-must-not-leak')
+    monkeypatch.setattr(
+        module,
+        '_request_json',
+        lambda *_args, **_kwargs: pytest.fail('cross-project signer must be rejected before IAM signing'),
+    )
+
+    with pytest.raises(module.ProbeTokenError) as caught:
+        module.mint_probe_token(
+            'based-hardware-dev',
+            'based-hardware',
+            signer_service_account='firebase-adminsdk@based-hardware-dev.iam.gserviceaccount.com',
+        )
+
+    assert caught.value.stage == 'signer_service_account'
+    assert caught.value.error_class == 'project_mismatch'
 
 
 @pytest.mark.skipif(
@@ -305,6 +326,67 @@ def test_remote_signing_permission_denial_has_bounded_classification(monkeypatch
         raise AssertionError('expected permission denial')
 
 
+def test_remote_signing_permission_denial_names_the_exact_iam_grant_on_stderr(monkeypatch, tmp_path, capsys):
+    """Every development Pusher run from the named-signer cutover (2026-09-13)
+    to the secret re-rotation (2026-09-20) failed at
+    custom_token_signing/permission_denied -- the TokenCreator grant existed
+    all along, but the GCP_CREDENTIALS key had been rotated to another service
+    account. The remediation goes to stderr so the stdout JSON report stays
+    machine-parsable; it must name the resolved caller identity, present a
+    rotated credential as a cause equal to a missing grant, and never echo the
+    upstream body or the access token."""
+    module = _load_module()
+    upstream_body = io.BytesIO(b'credential and request details that must not be read or printed')
+    monkeypatch.setattr(
+        module.urllib.request,
+        'urlopen',
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            urllib.error.HTTPError('https://iamcredentials.googleapis.com', 403, 'forbidden', {}, upstream_body)
+        ),
+    )
+    monkeypatch.setattr(module, '_access_secret', lambda _project: 'firebase-api-key')
+    monkeypatch.setattr(module, '_access_token', lambda: 'deploy-identity-access-token')
+    monkeypatch.setattr(
+        module,
+        '_active_service_account',
+        lambda: 'deploy-identity@based-hardware-dev.iam.gserviceaccount.com',
+    )
+    output = tmp_path / 'probe-token'
+    signer = 'firebase-adminsdk-4z2mm@based-hardware.iam.gserviceaccount.com'
+
+    exit_code = module.main(
+        [
+            '--secret-project',
+            'based-hardware-dev',
+            '--firebase-project',
+            'based-hardware',
+            '--signer-service-account',
+            signer,
+            '--token-output',
+            str(output),
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert json.loads(captured.out) == {
+        'suite': 'omi_firebase_release_probe_token',
+        'stage': 'custom_token_signing',
+        'error_class': 'permission_denied',
+        'status': 'FAIL',
+    }
+    assert not output.exists()
+    assert '(active identity: deploy-identity@based-hardware-dev.iam.gserviceaccount.com)' in captured.err
+    assert 'rotated' in captured.err
+    assert 'roles/iam.serviceAccountTokenCreator' in captured.err
+    assert (
+        "gcloud iam service-accounts add-iam-policy-binding "
+        f"{signer} --member='serviceAccount:deploy-identity@based-hardware-dev.iam.gserviceaccount.com' "
+        "--role='roles/iam.serviceAccountTokenCreator' --project=based-hardware"
+    ) in captured.err
+    assert 'must not be read' not in captured.err
+
+
 def test_mint_probe_token_prefers_explicit_local_signer(monkeypatch, tmp_path):
     module = _load_module()
     signer = tmp_path / 'signer.json'
@@ -354,7 +436,7 @@ def test_explicit_signer_service_account_signs_as_the_firebase_projects_account(
         return 'gcp-access-token-that-must-not-leak'
 
     def fake_request(url, *, body, access_token, stage):
-        requests.append((url, stage))
+        requests.append((url, body, stage))
         if stage == 'custom_token_signing':
             return {'signedJwt': 'custom-token-that-must-not-leak'}
         return {'idToken': _id_token(), 'refreshToken': 'refresh-token-that-must-not-leak'}
@@ -365,8 +447,14 @@ def test_explicit_signer_service_account_signs_as_the_firebase_projects_account(
 
     signer = 'firebase-adminsdk-4z2mm@based-hardware.iam.gserviceaccount.com'
     assert module.mint_probe_token('based-hardware-dev', 'based-hardware', signer_service_account=signer) == _id_token()
-    signing_url = requests[0][0]
+    signing_url, signing_body, signing_stage = requests[0]
+    assert signing_stage == 'custom_token_signing'
     assert 'firebase-adminsdk-4z2mm%40based-hardware.iam.gserviceaccount.com' in signing_url
+    claims = json.loads(signing_body['payload'])
+    assert claims['iss'] == signer
+    assert claims['sub'] == signer
+    assert claims['aud'] == module.CUSTOM_TOKEN_AUDIENCE
+    assert claims['uid'] == module.PROBE_UID
 
 
 def test_signer_service_account_must_look_like_a_service_account(monkeypatch):
@@ -381,10 +469,31 @@ def test_signer_service_account_must_look_like_a_service_account(monkeypatch):
         assert caught.value.stage == 'signer_service_account'
 
 
+def test_explicit_signer_from_a_foreign_project_fails_closed_before_signing(monkeypatch):
+    """The named-signer path must keep the credentials-file path's fail-closed
+    pairing: a signer from a project other than --firebase-project can never
+    mint a token Identity Toolkit accepts, so reject before any IAM call."""
+    module = _load_module()
+
+    monkeypatch.setattr(module, '_run_gcloud', lambda args, *, stage: 'firebase-api-key')
+    monkeypatch.setattr(module, '_request_json', lambda *a, **k: pytest.fail('must reject before any signing call'))
+
+    with pytest.raises(module.ProbeTokenError) as caught:
+        module.mint_probe_token(
+            'based-hardware-dev',
+            'based-hardware',
+            signer_service_account='firebase-adminsdk@based-hardware-dev.iam.gserviceaccount.com',
+        )
+
+    assert caught.value.stage == 'signer_service_account'
+    assert caught.value.error_class == 'project_mismatch'
+
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PROBE_ACTION = REPOSITORY_ROOT / '.github/actions/transcription-release-candidate-probe/action.yml'
 DEPLOY_BACKEND_STACK_ACTION = REPOSITORY_ROOT / '.github/actions/deploy-backend-stack/action.yml'
 GCP_BACKEND_WORKFLOW = REPOSITORY_ROOT / '.github/workflows/gcp_backend.yml'
+SYNC_LEDGER_WORKFLOW = REPOSITORY_ROOT / '.github/workflows/sync_ledger_fence_cutover.yml'
 
 
 def test_development_backend_deploy_supplies_a_firebase_project_signer():
@@ -392,14 +501,31 @@ def test_development_backend_deploy_supplies_a_firebase_project_signer():
 
     A development deploy identity cannot sign for that project, so the lane
     failed at custom_token_signing until it named its own signer. Losing this
-    wiring silently re-blocks every development backend deploy.
+    wiring silently re-blocks every development backend deploy. The signer is
+    the named no-role service account reached through IAM signJwt; the lane no
+    longer stages the GCP_SERVICE_ACCOUNT key, which was a production Owner
+    key (credential incident 2026-09-23).
     """
     workflow = GCP_BACKEND_WORKFLOW.read_text(encoding='utf-8')
-    assert 'firebase_probe_signer_credentials:' in workflow
-    assert 'secrets.GCP_SERVICE_ACCOUNT' in workflow
+    assert 'firebase_probe_signer_service_account: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}' in workflow
+    assert 'firebase_probe_signer_credentials:' not in workflow
+    assert 'secrets.GCP_SERVICE_ACCOUNT' not in workflow
 
     stack = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
-    assert 'firebase_signer_credentials: ${{ inputs.firebase_probe_signer_credentials }}' in stack
+    assert (
+        "firebase_signer_service_account: ${{ inputs.firebase_probe_signer_credentials == '' "
+        "&& inputs.firebase_probe_signer_service_account || '' }}"
+    ) in stack
+
+
+def test_sync_ledger_cutover_signs_the_development_probe_without_a_key():
+    workflow = SYNC_LEDGER_WORKFLOW.read_text(encoding='utf-8')
+    assert (
+        "firebase_signer_service_account: ${{ github.event.inputs.environment == 'prod' && '' "
+        "|| vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}"
+    ) in workflow
+    assert 'firebase_signer_credentials:' not in workflow
+    assert 'secrets.GCP_SERVICE_ACCOUNT' not in workflow
 
 
 def test_probe_action_stages_the_signer_key_as_transient_owner_only_material():
@@ -409,3 +535,78 @@ def test_probe_action_stages_the_signer_key_as_transient_owner_only_material():
     # The key must not outlive the probe.
     assert 'rm -f "$token_file" ${signer_file:+"$signer_file"}' in action
     assert 'rm -f "$signer_file"' in action
+
+
+WORKFLOWS_DIR = REPOSITORY_ROOT / '.github' / 'workflows'
+SIGNER_ARGUMENT_PATTERN = re.compile(r'--signer-service-account[ =]"\$([A-Za-z_][A-Za-z0-9_]*)"')
+STEP_BOUNDARY = re.compile(r'(?m)^(?=\s*- name: )')
+
+
+def _signer_argument_violations(text: str, source: str) -> list[str]:
+    """A named probe signer must be the documented variable's value.
+
+    The env name consumed by --signer-service-account must resolve, inside the
+    same step, to vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT -- the one variable
+    documented to hold the Firebase project's signer. Anything else (an
+    unrelated secret whose name merely looks signer-ish, the lane's own deploy
+    identity, a literal) is rejected, so a workflow cannot pass this guard by
+    referencing a coincidental secret name.
+    """
+    violations: list[str] = []
+    for step in STEP_BOUNDARY.split(text):
+        for match in SIGNER_ARGUMENT_PATTERN.finditer(step):
+            env_name = match.group(1)
+            mapping = f'{env_name}: ${{{{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}}}'
+            if mapping not in step:
+                violations.append(
+                    f'{source}: --signer-service-account "${env_name}" must be fed from '
+                    'vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT in the same step; a signer '
+                    'named from any other source is not tied to the --firebase-project it '
+                    'must sign for.'
+                )
+    return violations
+
+
+def test_every_workflow_probe_signer_argument_is_the_documented_variable() -> None:
+    """Guards the wiring that unblocked the development Pusher lane.
+
+    7883c816db fed the pusher probe's signer from secrets.GCP_CREDENTIALS --
+    the lane's based-hardware-dev deploy identity -- while minting for
+    --firebase-project based-hardware, so the minter failed closed on every
+    run and froze production Pusher promotion from 2026-08-31. #13445's guard
+    accepted any non-GCP_CREDENTIALS source, so an unrelated
+    secrets.GCP_SERVICE_ACCOUNT reference made it pass; this one accepts only
+    the documented variable.
+    """
+    violations: list[str] = []
+    for pattern in ('*.yml', '*.yaml'):
+        for workflow in sorted(WORKFLOWS_DIR.glob(pattern)):
+            violations.extend(_signer_argument_violations(workflow.read_text(encoding='utf-8'), workflow.name))
+    assert violations == []
+
+
+def test_signer_guard_rejects_the_deploy_identity_and_coincidental_secret_names() -> None:
+    def synthetic_probe_step(source: str) -> str:
+        return f'''  deploy:
+    steps:
+      - name: Probe
+        env:
+          FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{{{ {source} }}}}
+        run: |
+          python3 backend/scripts/firebase_release_probe_token.py \\
+            --firebase-project based-hardware \\
+            --signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT"
+'''
+
+    for source in (
+        'secrets.GCP_CREDENTIALS',
+        'secrets.GCP_SERVICE_ACCOUNT',
+        'vars.SOME_OTHER_SIGNER',
+    ):
+        violations = _signer_argument_violations(synthetic_probe_step(source), 'probe.yml')
+        assert violations, source
+
+    assert (
+        _signer_argument_violations(synthetic_probe_step('vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT'), 'probe.yml')
+        == []
+    )

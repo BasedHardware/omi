@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -125,6 +126,68 @@ def test_backend_and_pusher_callers_succeed_by_default(monkeypatch):
             'user_uid': 'user-123',
             'tenant_id': 'tenant-abc',
         }
+
+
+@pytest.mark.parametrize('uid', [None, 'other-user'])
+def test_isolated_qa_gateway_rejects_unallowlisted_user(monkeypatch, uid):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.setenv('OMI_JIT_QA_AUTH_ONLY', 'true')
+    monkeypatch.setenv('OMI_JIT_QA_UID_ALLOWLIST', 'qa-user')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'based-hardware-dev')
+    headers = {
+        'authorization': 'Bearer shared-secret',
+        'x-omi-service-caller': 'backend',
+    }
+    if uid is not None:
+        headers['x-omi-user-uid'] = uid
+
+    response = TestClient(_protected_app()).get('/protected', headers=headers)
+
+    assert response.status_code == 403
+
+
+def test_isolated_qa_gateway_accepts_only_allowlisted_user(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.setenv('OMI_JIT_QA_AUTH_ONLY', 'true')
+    monkeypatch.setenv('OMI_JIT_QA_UID_ALLOWLIST', 'qa-user')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'based-hardware-dev')
+
+    response = TestClient(_protected_app()).get(
+        '/protected',
+        headers={
+            'authorization': 'Bearer shared-secret',
+            'x-omi-service-caller': 'backend',
+            'x-omi-user-uid': 'qa-user',
+        },
+    )
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    ('name', 'value'),
+    [('OMI_ENV_STAGE', 'prod'), ('GOOGLE_CLOUD_PROJECT', 'based-hardware')],
+)
+def test_isolated_qa_gateway_rejects_a_copied_fence_outside_dev(monkeypatch, name, value):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.setenv('OMI_JIT_QA_AUTH_ONLY', 'true')
+    monkeypatch.setenv('OMI_JIT_QA_UID_ALLOWLIST', 'qa-user')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'based-hardware-dev')
+    monkeypatch.setenv(name, value)
+
+    response = TestClient(_protected_app()).get(
+        '/protected',
+        headers={
+            'authorization': 'Bearer shared-secret',
+            'x-omi-service-caller': 'backend',
+            'x-omi-user-uid': 'qa-user',
+        },
+    )
+
+    assert response.status_code == 403
 
 
 def test_auth_dependency_returns_service_caller_model():

@@ -18,7 +18,9 @@ if str(BACKEND_DIR) not in sys.path:
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 
 from routers import desktop_proxy
+from utils.managed_compute import Decision
 from utils.observability import journeys
+from config.plan_catalog import PlanType
 
 
 def make_request(
@@ -155,6 +157,376 @@ async def test_gemini_proxy_rejects_paywalled_desktop_user(monkeypatch):
 
     assert error.value.status_code == 402
     assert error.value.detail == "trial_expired"
+
+
+def _decision(*, allowed: bool, reason: str, plan: PlanType | None = PlanType.basic) -> Decision:
+    return Decision(
+        allowed=allowed,
+        reason=reason,
+        feature=desktop_proxy._PLAN_GATED_PROXY_FEATURE,
+        funding_owner="omi",
+        plan=plan,
+        plan_resolved=plan is not None,
+    )
+
+
+async def _passthrough_run_blocking(_, function, *args, **kwargs):
+    return function(*args, **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_gemini_proxy_rejects_basic_generate_with_structured_402(monkeypatch):
+    """Route-level S14 gate: basic + generateContent never reaches the provider.
+
+    red-proof: drop the gemini_proxy await _enforce_managed_plan_gate call and
+    this test still passes if it only drove _proxy.
+    """
+    provider_calls = []
+
+    async def should_not_proxy(*_args, **_kwargs):
+        provider_calls.append(True)
+        raise AssertionError("provider must not run for a plan-gated basic user")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", _passthrough_run_blocking)
+    monkeypatch.setattr(
+        desktop_proxy,
+        "authorize_managed_compute",
+        lambda *_args, **_kwargs: _decision(allowed=False, reason="basic_not_entitled"),
+    )
+    monkeypatch.setattr(desktop_proxy, "_proxy", should_not_proxy)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy.gemini_proxy(
+            make_request(),
+            "models/gemini-2.5-flash:generateContent",
+            "basic-uid",
+        )
+
+    assert error.value.status_code == 402
+    assert error.value.detail == {
+        "error": "plan_gated",
+        "plan_type": "basic",
+        "reason": "basic_not_entitled",
+    }
+    assert provider_calls == []
+
+
+@pytest.mark.asyncio
+async def test_gemini_stream_proxy_rejects_basic_stream_generate(monkeypatch):
+    provider_calls = []
+
+    async def should_not_proxy(*_args, **_kwargs):
+        provider_calls.append(True)
+        raise AssertionError("stream provider must not run for a plan-gated basic user")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", _passthrough_run_blocking)
+    monkeypatch.setattr(
+        desktop_proxy,
+        "authorize_managed_compute",
+        lambda *_args, **_kwargs: _decision(allowed=False, reason="basic_not_entitled"),
+    )
+    monkeypatch.setattr(desktop_proxy, "_proxy", should_not_proxy)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy.gemini_stream_proxy(
+            make_request(),
+            "models/gemini-2.5-flash:streamGenerateContent",
+            "basic-uid",
+        )
+
+    assert error.value.status_code == 402
+    assert error.value.detail["error"] == "plan_gated"
+    assert provider_calls == []
+
+
+@pytest.mark.asyncio
+async def test_gemini_proxy_allows_the_release_probe_uid_through_the_plan_gate(monkeypatch):
+    """Dest candidate probe is Free-plan `omi-release-probe`; do not 402 it.
+
+    red-proof: drop the RELEASE_PROBE_UID early-return and this fails because
+    authorize_managed_compute is stubbed to deny, so the route 402s before
+    `_proxy` — the same class as desktop_backend_auto_dev #34017664510.
+    """
+    from fastapi.responses import Response
+
+    from utils.subscription import RELEASE_PROBE_UID
+
+    auth_calls = []
+    seen = []
+
+    def authorize(*_args, **_kwargs):
+        auth_calls.append(True)
+        return _decision(allowed=False, reason="basic_not_entitled")
+
+    async def fake_proxy(request, path, streaming, uid):
+        seen.append((path, streaming, uid))
+        return Response(b'{"ok":true}', media_type="application/json")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", _passthrough_run_blocking)
+    monkeypatch.setattr(desktop_proxy, "authorize_managed_compute", authorize)
+    monkeypatch.setattr(desktop_proxy, "_proxy", fake_proxy)
+
+    response = await desktop_proxy.gemini_proxy(
+        make_request(),
+        "models/gemini-2.5-flash:generateContent",
+        RELEASE_PROBE_UID,
+    )
+
+    assert response.status_code == 200
+    assert auth_calls == []
+    assert seen == [("models/gemini-2.5-flash:generateContent", False, RELEASE_PROBE_UID)]
+
+
+@pytest.mark.asyncio
+async def test_gemini_proxy_allows_paid_generate_to_reach_the_provider(monkeypatch):
+    from fastapi.responses import Response
+
+    seen = []
+
+    async def fake_proxy(request, path, streaming, uid):
+        seen.append((path, streaming, uid))
+        return Response(b'{"ok":true}', media_type="application/json")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", _passthrough_run_blocking)
+    monkeypatch.setattr(
+        desktop_proxy,
+        "authorize_managed_compute",
+        lambda *_args, **_kwargs: _decision(allowed=True, reason="plan_paid", plan=PlanType.plus),
+    )
+    monkeypatch.setattr(desktop_proxy, "_proxy", fake_proxy)
+
+    response = await desktop_proxy.gemini_proxy(
+        make_request(),
+        "models/gemini-2.5-flash:generateContent",
+        "plus-uid",
+    )
+
+    assert response.status_code == 200
+    assert seen == [("models/gemini-2.5-flash:generateContent", False, "plus-uid")]
+
+
+@pytest.mark.asyncio
+async def test_gemini_proxy_rejects_basic_embed_content(monkeypatch):
+    """TBD-4 closed: company-paid Vertex :predict single embed is plan-gated.
+
+    red-proof: remove embedContent from _PLAN_GATED_PROXY_ACTIONS and this
+    fails because the provider spy runs.
+    """
+    monkeypatch.setenv("BASIC_PLAN_GATE_PROXY_EMBED_ENABLED", "true")
+    provider_calls = []
+
+    async def should_not_proxy(*_args, **_kwargs):
+        provider_calls.append(True)
+        raise AssertionError("provider must not run for a plan-gated basic user")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", _passthrough_run_blocking)
+    monkeypatch.setattr(
+        desktop_proxy,
+        "authorize_managed_compute",
+        lambda *_args, **_kwargs: _decision(allowed=False, reason="basic_not_entitled"),
+    )
+    monkeypatch.setattr(desktop_proxy, "_proxy", should_not_proxy)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy.gemini_proxy(
+            make_request(),
+            "models/gemini-embedding-001:embedContent",
+            "basic-uid",
+        )
+
+    assert error.value.status_code == 402
+    assert error.value.detail == {
+        "error": "plan_gated",
+        "plan_type": "basic",
+        "reason": "basic_not_entitled",
+    }
+    assert provider_calls == []
+
+
+@pytest.mark.asyncio
+async def test_gemini_proxy_rejects_basic_batch_embed_contents(monkeypatch):
+    monkeypatch.setenv("BASIC_PLAN_GATE_PROXY_EMBED_ENABLED", "true")
+    provider_calls = []
+
+    async def should_not_proxy(*_args, **_kwargs):
+        provider_calls.append(True)
+        raise AssertionError("provider must not run for a plan-gated basic user")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", _passthrough_run_blocking)
+    monkeypatch.setattr(
+        desktop_proxy,
+        "authorize_managed_compute",
+        lambda *_args, **_kwargs: _decision(allowed=False, reason="basic_not_entitled"),
+    )
+    monkeypatch.setattr(desktop_proxy, "_proxy", should_not_proxy)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy.gemini_proxy(
+            make_request(),
+            "models/gemini-embedding-001:batchEmbedContents",
+            "basic-uid",
+        )
+
+    assert error.value.status_code == 402
+    assert error.value.detail["error"] == "plan_gated"
+    assert provider_calls == []
+
+
+@pytest.mark.asyncio
+async def test_gemini_proxy_allows_basic_byok_generate(monkeypatch):
+    from fastapi.responses import Response
+
+    funding = []
+
+    def authorize(uid, feature, funding_owner, **_kwargs):
+        funding.append((uid, feature, funding_owner))
+        return Decision(
+            allowed=True,
+            reason="byok",
+            feature=feature,
+            funding_owner=funding_owner,
+            plan=PlanType.basic,
+            plan_resolved=True,
+        )
+
+    async def fake_proxy(*_args, **_kwargs):
+        return Response(b'{"ok":true}', media_type="application/json")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", _passthrough_run_blocking)
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda provider: "gk" if provider == "gemini" else None)
+    monkeypatch.setattr(desktop_proxy, "authorize_managed_compute", authorize)
+    monkeypatch.setattr(desktop_proxy, "_proxy", fake_proxy)
+
+    response = await desktop_proxy.gemini_proxy(
+        make_request(),
+        "models/gemini-2.5-flash:generateContent",
+        "byok-basic",
+    )
+
+    assert response.status_code == 200
+    assert funding == [("byok-basic", "screen_frame_judge", "byok")]
+
+
+@pytest.mark.asyncio
+async def test_gemini_proxy_embed_gate_is_the_deliberate_tbd4_flip(monkeypatch):
+    """TBD-4 / S24 resolved the other way: embed actions inherit the plan gate.
+
+    The prior contract (embedContent exempt, 'TBD-4 / S24') let a basic uid
+    spend on company-paid Vertex :predict / AI Studio embeddings. This test
+    pins the deliberate flip: the same 402 plan_gated deny as generate, and
+    the release-probe exemption does NOT extend to embed traffic.
+    """
+    monkeypatch.setenv("BASIC_PLAN_GATE_PROXY_EMBED_ENABLED", "true")
+    auth_calls = []
+
+    def authorize(*_args, **_kwargs):
+        auth_calls.append(True)
+        return _decision(allowed=False, reason="basic_not_entitled")
+
+    async def should_not_proxy(*_args, **_kwargs):
+        raise AssertionError("provider must not run for a plan-gated basic user")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", _passthrough_run_blocking)
+    monkeypatch.setattr(desktop_proxy, "authorize_managed_compute", authorize)
+    monkeypatch.setattr(desktop_proxy, "_proxy", should_not_proxy)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy.gemini_proxy(
+            make_request(),
+            "models/gemini-embedding-001:embedContent",
+            "basic-uid",
+        )
+
+    assert error.value.status_code == 402
+    assert auth_calls, "embed traffic must consult the managed-compute gate"
+
+
+@pytest.mark.asyncio
+async def test_gemini_proxy_fails_closed_when_authorization_is_unavailable(monkeypatch):
+    provider_calls = []
+
+    async def should_not_proxy(*_args, **_kwargs):
+        provider_calls.append(True)
+        raise AssertionError("unavailable authorization must not fall through to the provider")
+
+    monkeypatch.setattr(desktop_proxy, "run_blocking", _passthrough_run_blocking)
+    monkeypatch.setattr(
+        desktop_proxy,
+        "authorize_managed_compute",
+        lambda *_args, **_kwargs: _decision(allowed=False, reason="authorization_unavailable", plan=None),
+    )
+    monkeypatch.setattr(desktop_proxy, "_proxy", should_not_proxy)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy.gemini_proxy(
+            make_request(),
+            "models/gemini-2.5-flash:generateContent",
+            "basic-uid",
+        )
+
+    assert error.value.status_code == 503
+    assert provider_calls == []
+
+
+@pytest.mark.asyncio
+async def test_gemini_proxy_embed_switch_off_reaches_the_provider_without_authorize(monkeypatch):
+    """Unset embed switch: basic non-BYOK embed is byte-identical to main before #14165."""
+    from fastapi.responses import Response
+
+    auth_calls = []
+    seen = []
+
+    def authorize(*_args, **_kwargs):
+        auth_calls.append(True)
+        return _decision(allowed=False, reason="basic_not_entitled")
+
+    async def fake_proxy(request, path, streaming, uid):
+        seen.append((path, streaming, uid))
+        return Response(b'{"ok":true}', media_type="application/json")
+
+    monkeypatch.delenv("BASIC_PLAN_GATE_PROXY_EMBED_ENABLED", raising=False)
+    monkeypatch.setattr(desktop_proxy, "run_blocking", _passthrough_run_blocking)
+    monkeypatch.setattr(desktop_proxy, "authorize_managed_compute", authorize)
+    monkeypatch.setattr(desktop_proxy, "_proxy", fake_proxy)
+
+    response = await desktop_proxy.gemini_proxy(
+        make_request(),
+        "models/gemini-embedding-001:embedContent",
+        "basic-uid",
+    )
+
+    assert response.status_code == 200
+    assert auth_calls == []
+    assert seen == [("models/gemini-embedding-001:embedContent", False, "basic-uid")]
+
+
+@pytest.mark.asyncio
+async def test_gemini_proxy_generate_stays_gated_when_embed_switch_is_off(monkeypatch):
+    """S14 generate/stream stay live in prod; the embed switch must not disarm them."""
+    provider_calls = []
+
+    async def should_not_proxy(*_args, **_kwargs):
+        provider_calls.append(True)
+        raise AssertionError("provider must not run for a plan-gated basic user")
+
+    monkeypatch.delenv("BASIC_PLAN_GATE_PROXY_EMBED_ENABLED", raising=False)
+    monkeypatch.setattr(desktop_proxy, "run_blocking", _passthrough_run_blocking)
+    monkeypatch.setattr(
+        desktop_proxy,
+        "authorize_managed_compute",
+        lambda *_args, **_kwargs: _decision(allowed=False, reason="basic_not_entitled"),
+    )
+    monkeypatch.setattr(desktop_proxy, "_proxy", should_not_proxy)
+
+    with pytest.raises(HTTPException) as error:
+        await desktop_proxy.gemini_proxy(
+            make_request(),
+            "models/gemini-2.5-flash:generateContent",
+            "basic-uid",
+        )
+
+    assert error.value.status_code == 402
+    assert provider_calls == []
 
 
 @pytest.mark.asyncio
@@ -430,6 +802,25 @@ async def test_batch_embedding_uses_studio_and_rejects_credential_override(monke
             "generateContent",
             {"key": "attacker-key"},
         )
+
+
+@pytest.mark.asyncio
+async def test_batch_embedding_fails_closed_without_ai_studio_key(monkeypatch):
+    """AI Studio batch embeddings must surface missing QA configuration."""
+
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "based-hardware-dev")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    with pytest.raises(desktop_proxy.RoutingFailure) as error:
+        await desktop_proxy._upstream(
+            "models/gemini-embedding-001:batchEmbedContents",
+            "gemini-embedding-001",
+            "batchEmbedContents",
+            {},
+        )
+
+    assert error.value.code == "routing_not_configured"
 
 
 @pytest.mark.asyncio
@@ -987,6 +1378,33 @@ def test_operator_override_pins_the_reservation_back(monkeypatch):
     assert _retarget("models/gemini-2.5-flash:generateContent") == "models/gemini-2.5-flash:generateContent"
 
 
+def test_prohibited_operator_pin_fails_closed_before_dispatch(monkeypatch):
+    """SCA-481: an operator pin naming a Pro/image model must fail the request
+    closed with the routing envelope, never dispatch PayGo."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setenv(desktop_proxy._PT_MODEL_OVERRIDE_ENV, "gemini-3-pro-preview")
+    with pytest.raises(desktop_proxy.RoutingFailure) as excinfo:
+        desktop_proxy._retarget_path(*desktop_proxy._path_parts("models/gemini-2.5-flash:generateContent"))
+    assert excinfo.value.code == "routing_invalid_operator_pin"
+    assert "SCA-481" in excinfo.value.message
+
+
+def test_prohibited_overflow_pin_yields_no_overflow_plan(monkeypatch):
+    """A prohibited overflow pin degrades to no overflow (the request keeps its
+    own error) instead of buying the work on a Pro/image model."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: None)
+    monkeypatch.setenv(desktop_proxy._OVERFLOW_MODEL_OVERRIDE_ENV, "gemini-3.1-flash-image")
+    assert desktop_proxy._overflow_plan("gemini-2.5-flash") == []
+
+
+def test_byok_pro_requests_still_pass_with_a_prohibited_pin_set(monkeypatch):
+    """Containment never reaches BYOK: the user pays for the model they ask
+    for, operator pins are irrelevant to their lane."""
+    monkeypatch.setattr(desktop_proxy, "get_byok_key", lambda _: "user-key")
+    monkeypatch.setenv(desktop_proxy._PT_MODEL_OVERRIDE_ENV, "gemini-3-pro-preview")
+    assert _retarget("models/gemini-2.5-pro:generateContent") == "models/gemini-2.5-pro:generateContent"
+
+
 def test_overflow_never_targets_the_live_reservation(monkeypatch):
     """FC-degraded-fallback-consumes-protected-budget across the migration."""
     monkeypatch.delenv(desktop_proxy._OVERFLOW_MODEL_OVERRIDE_ENV, raising=False)
@@ -1010,6 +1428,51 @@ def test_overflow_plan_probes_the_target_before_paying_on_demand(monkeypatch):
         ("gemini-3.1-flash-lite", "shared"),
         ("gemini-2.5-flash-lite", "shared"),
     ]
+
+
+def _gateway_pt_provider():
+    from llm_gateway.gateway.providers import VertexGeminiProvider
+
+    async def _token() -> str:
+        return "token"
+
+    return VertexGeminiProvider(access_token_supplier=_token)
+
+
+@pytest.mark.asyncio
+async def test_gateway_and_desktop_kill_switch_overflow_agree(monkeypatch):
+    """Both copies of the PT policy apply the same origin ceiling."""
+    monkeypatch.delenv(desktop_proxy._OVERFLOW_MODEL_OVERRIDE_ENV, raising=False)
+    monkeypatch.delenv(desktop_proxy._PT_MODEL_OVERRIDE_ENV, raising=False)
+    monkeypatch.delenv(desktop_proxy._OVERFLOW_ENABLED_ENV, raising=False)
+    provider = _gateway_pt_provider()
+    try:
+        origin = "gemini-2.5-flash-lite"
+        unset_desktop = desktop_proxy._overflow_plan("gemini-2.5-flash")
+        unset_gateway = provider._overflow_plan("gemini-2.5-flash")
+        assert unset_desktop == unset_gateway
+        assert unset_desktop[0] == ("gemini-3.1-flash-lite", "dedicated")
+
+        capped_desktop = desktop_proxy._overflow_plan("gemini-2.5-flash", origin_model=origin)
+        capped_gateway = provider._overflow_plan("gemini-2.5-flash", origin_model=origin)
+        assert capped_desktop == capped_gateway == [("gemini-2.5-flash-lite", "shared")]
+        assert all("gemini-3.1" not in model for model, _capacity in capped_desktop)
+
+        desktop_proxy._record_pt_target_observation(True)
+        provider._pt_target_ready = True
+        promoted_desktop = desktop_proxy._overflow_plan("gemini-3.1-flash-lite", origin_model=origin)
+        promoted_gateway = provider._overflow_plan("gemini-3.1-flash-lite", origin_model=origin)
+        assert promoted_desktop == promoted_gateway == [("gemini-2.5-flash-lite", "shared")]
+        assert all(model != "gemini-3.1-flash-lite" for model, _capacity in promoted_desktop)
+    finally:
+        await provider.aclose()
+
+
+def test_desktop_kill_switch_reads_the_origin_table(monkeypatch):
+    """The ceiling is data on the shared table, not a per-call conditional."""
+    monkeypatch.delenv(desktop_proxy._OVERFLOW_MODEL_OVERRIDE_ENV, raising=False)
+    monkeypatch.setitem(desktop_proxy.ptr.LANE_OVERFLOW_ORIGINS, "gemini-2.5-flash", "gemini-2.5-flash-lite")
+    assert desktop_proxy._overflow_plan("gemini-2.5-flash") == [("gemini-2.5-flash-lite", "shared")]
 
 
 def test_overflow_skips_a_rung_traffic_has_proved_unreachable(monkeypatch):
@@ -1722,7 +2185,7 @@ def _capture_proxy_journeys(monkeypatch):
     monkeypatch.setattr(
         journeys,
         'record_client_journey_terminal',
-        lambda journey, client_kind, outcome, _elapsed, *, issue_class=None: terminal.append(
+        lambda journey, client_kind, outcome, _elapsed, *, issue_class=None, app_build='unknown': terminal.append(
             (journey, client_kind, outcome, issue_class)
         ),
     )

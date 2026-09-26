@@ -812,10 +812,10 @@ export type OmiBridgeApi = {
    *  on any failure. Faithful port of macOS's URLSession isAppSetupCompleted. */
   checkAppSetup: (args: { url: string; uid: string }) => Promise<boolean>
   // Bulk-delete memories from the main process (survives renderer navigation /
-  // reload; paced + backed-off). Renderer supplies the API base, a fresh token,
-  // and the ids; progress streams via onMemoriesDeleteProgress.
+  // reload; paced + backed-off). Renderer supplies a fresh token and the ids;
+  // the API base is main-owned config and progress streams via
+  // onMemoriesDeleteProgress.
   memoriesBulkDelete: (args: {
-    baseURL: string
     token: string
     ids: string[]
   }) => Promise<{ deleted: number; failed: number; firstError?: string }>
@@ -961,15 +961,6 @@ export type OmiBridgeApi = {
   // browser (main owns the loopback callback + token exchange; the renderer
   // finishes with signInWithCustomToken on the returned custom token).
   signInWithProvider: (provider: SignInProvider) => Promise<SignInResult>
-  // Integrations (3d): Google OAuth + Gmail/Calendar. Main owns the OAuth grant
-  // and REST reads; the renderer synthesizes the returned items and writes
-  // /v3/memories + /v1/action-items itself (it holds the Firebase token).
-  googleConnect: () => Promise<GoogleStatus>
-  googleDisconnect: () => Promise<GoogleStatus>
-  googleStatus: () => Promise<GoogleStatus>
-  googleGmailFetchNew: () => Promise<FetchNewResult<GmailItem>>
-  googleCalendarFetchNew: () => Promise<FetchNewResult<CalendarItem>>
-  googleMarkProcessed: (source: GoogleSource, ids: string[]) => Promise<void>
   // Gmail session connector (Option B): an Omi-owned login window + own-session
   // cookie replay against Gmail's web endpoints — no restricted-scope OAuth.
   // `gmailSessionConnect` opens the login window and resolves once signed in;
@@ -1037,6 +1028,8 @@ export type OmiBridgeApi = {
   rewindPrimarySourceId: () => Promise<string | null>
   /** Display source containing the foreground window, with cursor/primary fallbacks. */
   rewindCaptureSourceId: () => Promise<string | null>
+  /** Whether Rewind can actually get a screen source right now, and why not. */
+  rewindCaptureDiagnostics: () => Promise<RewindCaptureDiagnostics>
   rewindSaveFrame: (
     data: Uint8Array,
     sourceId: string
@@ -1649,7 +1642,10 @@ export type MainChatEvent =
   /** The run has been accepted and assigned a runId — the first event of a turn.
    *  Carries the runId so the caller can later cancel it via mainChatCancel. */
   | { type: 'accepted'; requestId: string; runId: string }
-  /** A run-lifecycle marker (queued/starting/running) for a spinner. */
+  /** The managed-cloud adapter wrote the provider command successfully.
+   *  Pre-dispatch owner/binding/session/concurrency failures never emit this. */
+  | { type: 'hosted_request_started'; requestId: string; runId: string }
+  /** A non-dispatch run-lifecycle marker for status UI. */
   | { type: 'status'; requestId: string; runId: string; message: string }
   /** An assistant text chunk; accumulate in order to render the streaming reply. */
   | { type: 'text_delta'; requestId: string; runId: string; text: string }
@@ -1957,45 +1953,6 @@ export type SignInResult =
   | { ok: true; customToken: string; email?: string; givenName?: string; familyName?: string }
   | { ok: false; error: string }
 
-// --- Integrations: Google (Gmail + Calendar) OAuth (parity 3d) ---
-
-export type GoogleSource = 'gmail' | 'calendar'
-
-/** Connection status surfaced to Settings. */
-export type GoogleStatus = {
-  connected: boolean
-  email?: string
-  /** ms epoch of the most recent successful sync (either source); undefined if never. */
-  lastSyncAt?: number
-}
-
-/** One Gmail message, metadata only — never the full body. */
-export type GmailItem = {
-  id: string
-  subject: string
-  from: string
-  snippet: string
-  internalDateMs: number
-}
-
-/** One upcoming Calendar event. */
-export type CalendarItem = {
-  id: string
-  title: string
-  startMs: number
-  endMs: number
-  location?: string
-  description?: string
-  updatedMs: number
-}
-
-/** Result of a fetch-new call. `ok:false` + error:'not_connected' when no grant. */
-export type FetchNewResult<T> = {
-  ok: boolean
-  items: T[]
-  error?: string
-}
-
 // --- Integrations: Gmail via an Omi-owned Electron session (Option B) ---
 // Windows can't harvest system-browser cookies the way macOS does (Chrome 127+
 // App-Bound Encryption), so the user signs into Google once inside an Omi-owned
@@ -2129,6 +2086,19 @@ export type RewindSettings = {
    *  foreground app/process name). Empty = capture everything. */
   excludedApps: string[]
   captureQuality: RewindCaptureQuality
+}
+
+/** Whether Rewind can actually get a screen source, and why not — see
+ *  main/rewind/sourceId.ts's getRewindCaptureDiagnostics. Read once on mount
+ *  (mirrors DbRecoveryStatus's "what happened at startup" shape): the
+ *  underlying fetch is cached for the process lifetime, so this is a stable
+ *  launch-time fact, not something that needs a push channel. */
+export type RewindCaptureDiagnostics = {
+  available: boolean
+  reason: string | null
+  /** Linux-only: the dominant real-world cause is a missing/misconfigured
+   *  Wayland desktop-portal ScreenCast backend for the running compositor. */
+  likelyMissingLinuxPortal: boolean
 }
 
 /** Runtime capture directive pushed main→renderer, derived from OS power/lock state.

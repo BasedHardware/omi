@@ -9,6 +9,21 @@ import 'package:omi/services/account_cutover/account_cutover_control.dart';
 import 'package:omi/services/account_cutover/account_cutover_control_client.dart';
 import 'package:omi/services/account_cutover/account_cutover_gate.dart';
 
+/// Why product traffic is currently fenced.
+///
+/// This is deliberately separate from [AccountCutoverGateDecision]. The gate
+/// decision owns access policy; this reason owns what the client may truthfully
+/// tell the user. A failed or pending control fetch is not evidence that an
+/// account is migrating, even when both conditions must fail closed.
+enum AccountCutoverBlockingReason {
+  none,
+  forceUpgrade,
+  confirmedMigration,
+  checkingStatus,
+  connectionUnavailable,
+  controlUnavailable,
+}
+
 class AccountCutoverRuntime extends ChangeNotifier {
   AccountCutoverRuntime._();
   static final AccountCutoverRuntime instance = AccountCutoverRuntime._();
@@ -25,11 +40,24 @@ class AccountCutoverRuntime extends ChangeNotifier {
   String? _ownerUid;
   int _refreshEpoch = 0;
   bool _resolvedForOwner = true;
+  AccountCutoverBlockingReason _blockingReason = AccountCutoverBlockingReason.none;
 
   AccountCutoverControl get control => _control;
   bool get hasAuthoritativeControl => _hasAuthoritative;
   String? get ownerUid => _ownerUid;
   bool get isResolvedForOwner => _resolvedForOwner;
+  AccountCutoverBlockingReason get blockingReason => _blockingReason;
+
+  AccountCutoverBlockingReason _reasonForAuthoritativeControl(AccountCutoverControl control) {
+    switch (_gate.decide(control)) {
+      case AccountCutoverGateDecision.allowProductTraffic:
+        return AccountCutoverBlockingReason.none;
+      case AccountCutoverGateDecision.forceUpgrade:
+        return AccountCutoverBlockingReason.forceUpgrade;
+      case AccountCutoverGateDecision.migrationMaintenance:
+        return AccountCutoverBlockingReason.confirmedMigration;
+    }
+  }
 
   /// The only projection [skipUnresolvedFence] may return to: the last
   /// AUTHORITATIVE projection for this owner, and only while that projection
@@ -47,8 +75,8 @@ class AccountCutoverRuntime extends ChangeNotifier {
   }
 
   /// True while the fence currently on screen was synthesized by this client
-  /// (503, timeouts, an in-flight owner refresh) after the server had
-  /// authoritatively allowed this owner. Only such a fence is skippable.
+  /// after an unavailable or malformed control response, and the server had
+  /// previously allowed this owner. Only such a fence is skippable.
   ///
   /// This is the distinction the `hasAuthoritativeControl` gate got wrong:
   /// after one successful "legacy/allow" fetch, a single blown refresh
@@ -72,6 +100,11 @@ class AccountCutoverRuntime extends ChangeNotifier {
     _hasAuthoritative = authoritative;
     if (authoritative) {
       _lastAuthoritativeControl = control;
+      _blockingReason = _reasonForAuthoritativeControl(control);
+    } else {
+      _blockingReason = _gate.decide(control) == AccountCutoverGateDecision.allowProductTraffic
+          ? AccountCutoverBlockingReason.none
+          : AccountCutoverBlockingReason.controlUnavailable;
     }
     _resolvedForOwner = true;
     notifyListeners();
@@ -84,6 +117,7 @@ class AccountCutoverRuntime extends ChangeNotifier {
     _ownerUid = null;
     _refreshEpoch = 0;
     _resolvedForOwner = true;
+    _blockingReason = AccountCutoverBlockingReason.none;
     controlClientOverrideForTesting = null;
   }
 
@@ -92,10 +126,7 @@ class AccountCutoverRuntime extends ChangeNotifier {
   /// A null/empty [uid] clears to legacy defaults. Owner changes immediately
   /// clear prior-account state and block product traffic until the in-flight
   /// refresh for that owner completes. Stale in-flight results are discarded.
-  Future<void> bindAuthenticatedOwner(
-    String? uid, {
-    AccountCutoverControlClient? client,
-  }) async {
+  Future<void> bindAuthenticatedOwner(String? uid, {AccountCutoverControlClient? client}) async {
     final epoch = ++_refreshEpoch;
     final normalized = (uid == null || uid.isEmpty) ? null : uid;
 
@@ -105,6 +136,7 @@ class AccountCutoverRuntime extends ChangeNotifier {
       _hasAuthoritative = false;
       _lastAuthoritativeControl = null;
       _resolvedForOwner = true;
+      _blockingReason = AccountCutoverBlockingReason.none;
       notifyListeners();
       return;
     }
@@ -125,6 +157,7 @@ class AccountCutoverRuntime extends ChangeNotifier {
       // form — including as the "last known good" a skip could restore.
       _lastAuthoritativeControl = null;
       _resolvedForOwner = false;
+      _blockingReason = AccountCutoverBlockingReason.checkingStatus;
       if (isGenuineOwnerSwitch) {
         _control = AccountCutoverControl.unavailable();
       }
@@ -157,15 +190,19 @@ class AccountCutoverRuntime extends ChangeNotifier {
         _control = result.control!;
         _hasAuthoritative = true;
         _lastAuthoritativeControl = result.control;
+        _blockingReason = _reasonForAuthoritativeControl(result.control!);
         break;
       case AccountCutoverFetchKind.unavailable:
         // The server explicitly failed closed — respect it and fence. When the
         // last authoritative word was "allow", this fence is the client's own:
         // the blocking screen offers skip and keeps retrying (see
         // canSkipUnresolvedFence).
-        _control = AccountCutoverControl.unavailable(
-          retaining: _hasAuthoritative ? _control : null,
-        );
+        _control = AccountCutoverControl.unavailable(retaining: _hasAuthoritative ? _control : null);
+        final lastAuthoritative = _lastAuthoritativeControl;
+        _blockingReason = lastAuthoritative != null &&
+                _gate.decide(lastAuthoritative) != AccountCutoverGateDecision.allowProductTraffic
+            ? _reasonForAuthoritativeControl(lastAuthoritative)
+            : AccountCutoverBlockingReason.controlUnavailable;
         break;
       case AccountCutoverFetchKind.transportFailure:
         if (lastAuthAllow != null) {
@@ -176,13 +213,18 @@ class AccountCutoverRuntime extends ChangeNotifier {
           // single timed-out refresh on a flaky connection could block the
           // whole app while the server kept answering legacy/none.
           _control = lastAuthAllow;
+          _blockingReason = AccountCutoverBlockingReason.none;
         } else if (_hasAuthoritative) {
           // Last authoritative state was itself a fence (migrating/new/...):
           // keep failing closed across the outage.
           _control = AccountCutoverControl.unavailable(retaining: _control);
+          _blockingReason = _reasonForAuthoritativeControl(_lastAuthoritativeControl!);
         } else if (_gate.decide(_control) == AccountCutoverGateDecision.allowProductTraffic) {
           // No authoritative projection yet (bridge rollout): stay legacy-compatible.
           _control = AccountCutoverControl.legacyDefault();
+          _blockingReason = AccountCutoverBlockingReason.none;
+        } else {
+          _blockingReason = AccountCutoverBlockingReason.connectionUnavailable;
         }
         // If already blocked (e.g. owner-change unavailable), keep that fence.
         break;
@@ -202,6 +244,7 @@ class AccountCutoverRuntime extends ChangeNotifier {
     if (lastGood == null) return false;
     _control = lastGood;
     _resolvedForOwner = true;
+    _blockingReason = AccountCutoverBlockingReason.none;
     notifyListeners();
     return true;
   }

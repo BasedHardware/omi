@@ -107,6 +107,7 @@ _stubs = [
     # (including utils.conversations) are created by _register_module, so the
     # package itself is omitted here. See package_submodule_stubs.
     *sorted(package_submodule_stubs('utils.conversations', include_package=False)),
+    'utils.observability.fallback',
     'utils.executors',
     'utils.product_telemetry',
     'utils.llm.conversation_processing',
@@ -281,6 +282,12 @@ conv.attach_match_snippets_to_conversations = lambda conversations, _query: [
     dict(c) if isinstance(c, dict) else c for c in conversations
 ]
 conv.redact_conversations_for_list = MagicMock()
+# `_get_valid_conversation_by_id` now 404s tombstones via is_soft_deleted. The
+# AutoMock stub is truthy, which would 404 every live fixture. Bind the real
+# predicate so live rows pass and deleted rows still 404.
+from database.conversations import is_soft_deleted as _real_is_soft_deleted  # noqa: E402
+
+conv.conversations_db.is_soft_deleted = _real_is_soft_deleted
 
 
 def _client():
@@ -477,6 +484,59 @@ def test_speaker_filter_is_applied_after_hydration(speaker_id, matching_segments
     assert [item['id'] for item in resp.json()['items']] == ['conv-match']
 
 
+@pytest.mark.parametrize('query', ['', 'hi'])
+def test_speaker_filter_keeps_paging_while_typesense_has_more(query):
+    from utils.conversations.search import conversation_matches_speaker as real_matcher
+
+    ids = [f'conv-{index}' for index in range(10)]
+    hydrated = [
+        _conversation_dict(conversation_id, [_segment(person_id='person-1' if index < 2 else 'someone-else')])
+        for index, conversation_id in enumerate(ids)
+    ]
+    with (
+        patch.object(conv, 'conversation_matches_speaker', real_matcher),
+        patch.object(conv.users_db, 'get_person', return_value={'id': 'person-1'}),
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={
+                'items': [{'id': conversation_id} for conversation_id in ids],
+                'total_pages': 2,
+                'current_page': 1,
+                'per_page': 10,
+            },
+        ),
+        patch.object(conv.conversations_db, 'get_conversations_by_id_without_photos', return_value=hydrated),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': query, 'speaker_id': 'person-1'})
+
+    assert resp.status_code == 200
+    assert [item['id'] for item in resp.json()['items']] == ['conv-0', 'conv-1']
+    assert resp.json()['total_pages'] == 2
+
+
+def test_speaker_filter_stops_paging_on_the_last_typesense_page():
+    from utils.conversations.search import conversation_matches_speaker as real_matcher
+
+    hydrated = [_conversation_dict('conv-0', [_segment(person_id='person-1')])]
+    with (
+        patch.object(conv, 'conversation_matches_speaker', real_matcher),
+        patch.object(conv.users_db, 'get_person', return_value={'id': 'person-1'}),
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={'items': [{'id': 'conv-0'}], 'total_pages': 1, 'current_page': 1, 'per_page': 10},
+        ),
+        patch.object(conv.conversations_db, 'get_conversations_by_id_without_photos', return_value=hydrated),
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': 'hi', 'speaker_id': 'person-1'})
+
+    assert resp.status_code == 200
+    assert resp.json()['total_pages'] == 1
+
+
 def test_search_without_speaker_keeps_every_hydrated_conversation():
     from utils.conversations.search import conversation_matches_speaker as real_matcher
 
@@ -644,10 +704,11 @@ def test_finalize_conversation_persists_durable_work_and_returns_without_process
         'test-uid',
         'conv-1',
         has_byok_keys=False,
-        force_process=True,
+        trigger=conv.ProcessingTrigger.CLIENT_FINALIZE,
         extra_updates=None,
         require_cloud_tasks=True,
         client_kind='mobile_ios',
+        app_build='unknown',
     )
     remove_pointer.assert_called_once_with('test-uid')
     process.assert_not_called()
@@ -799,6 +860,38 @@ def test_legacy_finalize_claim_loser_returns_latest_without_processing_or_integr
     assert response.conversation.status == ConversationStatus.failed
 
 
+def test_synchronous_finalizer_records_degraded_redis_location_fallback():
+    target = _conversation(status=ConversationStatus.in_progress)
+    processed = _conversation(status=ConversationStatus.completed)
+
+    with (
+        patch.object(conv, 'retrieve_in_progress_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', return_value=target),
+        patch.object(conv.lifecycle_service, 'admit_processing', return_value=True),
+        patch.object(
+            conv.redis_db,
+            'get_cached_user_geolocation',
+            return_value={'latitude': 37.7749, 'longitude': -122.4194},
+        ),
+        patch.object(conv, 'record_fallback') as fallback,
+        patch.object(conv, 'resolve_geolocation', side_effect=lambda value: value),
+        patch.object(conv.redis_db, 'get_in_progress_conversation_id', return_value='conv-1'),
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id'),
+        patch.object(conv, 'process_conversation', side_effect=_process_result(processed, persisted=True)),
+        patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])),
+    ):
+        conv.process_in_progress_conversation(uid='test-uid')
+
+    fallback.assert_called_once_with(
+        component='conversation_finalization',
+        from_mode='conversation_snapshot',
+        to_mode='redis_user_cache',
+        reason='other',
+        outcome='degraded',
+        log=conv.logger,
+    )
+
+
 def test_finalize_conversation_returns_queued_outbox_after_uncertain_task_acknowledgement():
     target = _conversation(status=ConversationStatus.in_progress)
 
@@ -860,6 +953,8 @@ def test_finalization_status_endpoint_exposes_retryable_durable_state():
         'attempt_count': 2,
         'task_retry_count': 1,
         'meeting_treatment_eligible': False,
+        'terminal_outcome': 'unknown',
+        'fanout_status': 'unknown',
     }
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
@@ -891,6 +986,24 @@ def test_legacy_finalize_persistence_loser_returns_latest_without_integrations()
 
     integrations.assert_not_called()
     assert response.conversation.status == ConversationStatus.failed
+
+
+def test_finalize_conversation_404s_a_soft_deleted_tombstone():
+    with (
+        patch.object(
+            conv.conversations_db,
+            'get_conversation',
+            return_value={'id': 'conv-1', 'deleted': True, 'sync_merged_into': 'survivor'},
+        ),
+        patch.object(conv.lifecycle_service, 'request_finalization') as request_finalization,
+        patch.object(conv, 'process_conversation') as process,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            conv.finalize_conversation('conv-1', uid='test-uid')
+
+    assert exc_info.value.status_code == 404
+    request_finalization.assert_not_called()
+    process.assert_not_called()
 
 
 def test_finalize_conversation_is_noop_for_completed_conversation():

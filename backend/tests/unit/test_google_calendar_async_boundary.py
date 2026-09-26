@@ -38,6 +38,7 @@ def calendar_route_harness() -> Iterator[SimpleNamespace]:
         return None
 
     calendar_tools = _module("utils.retrieval.tools.calendar_tools", get_google_calendar_events=get_events)
+    calendar_linking = _module("utils.conversations.calendar_linking", select_capture_gaps=MagicMock())
     google_utils = _module("utils.retrieval.tools.google_utils", refresh_google_token=refresh_token)
     calendar_utils = _module(
         "utils.conversations.calendar_utils",
@@ -60,6 +61,7 @@ def calendar_route_harness() -> Iterator[SimpleNamespace]:
         "database.users": users_db,
         "utils.other.endpoints": endpoints,
         "utils.retrieval.tools.calendar_tools": calendar_tools,
+        "utils.conversations.calendar_linking": calendar_linking,
         "utils.retrieval.tools.google_utils": google_utils,
         "utils.conversations.calendar_utils": calendar_utils,
         "utils.integration_telemetry": telemetry,

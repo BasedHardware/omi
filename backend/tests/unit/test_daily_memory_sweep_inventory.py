@@ -263,3 +263,17 @@ def test_independent_overlapping_page_commits_are_generation_fenced(channel, pat
 
     assert db.store[path]["last_uid"] == "uid-a"
     assert db.store[path]["generation"] == 1
+
+
+def test_explicit_jit_qa_inventory_does_not_use_firestore_or_global_cursors():
+    page = independent.explicit_jit_qa_daily_sweep_uid_inventory(("qa-user", "qa-user"))
+    assert page.uids == ("qa-user",)
+    assert page.canonical_uids == ()
+    assert page.onboarding_uids == ()
+    assert page.retry_uids == ()
+
+
+@pytest.mark.parametrize("uids", [(), ("qa/user",), ("",), tuple(f"uid-{n}" for n in range(5))])
+def test_explicit_jit_qa_inventory_rejects_unbounded_or_malformed_allowlist(uids):
+    with pytest.raises(independent.DailySweepInventoryUnavailable):
+        independent.explicit_jit_qa_daily_sweep_uid_inventory(uids)

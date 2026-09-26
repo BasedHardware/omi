@@ -17,7 +17,7 @@ from uuid import uuid4
 
 from google.cloud.firestore_v1 import transactional
 
-from database._client import get_firestore_client
+from database.account_deletion_marker import account_deletion_firestore_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 
 LEGAL_HOLDS_COLLECTION = "legal_holds"
@@ -129,7 +129,7 @@ def assert_account_deletion_permitted(uid: str, *, firestore_client: Any | None 
 
     if not uid:
         raise LegalHoldAuthorityUnavailable("account deletion legal-hold lookup requires a uid")
-    client = firestore_client or get_firestore_client()
+    client = account_deletion_firestore_client(firestore_client=firestore_client)
     try:
         snapshot = _document(client, f"{LEGAL_HOLDS_COLLECTION}/{uid}").get()
         _assert_hold_inactive(snapshot)
@@ -182,7 +182,7 @@ def place_legal_hold(
     current = now or datetime.now(timezone.utc)
     if current.tzinfo is None or current.utcoffset() is None:
         raise LegalHoldAuthorityUnavailable("legal-hold placement timestamp must be timezone-aware")
-    client = firestore_client or get_firestore_client()
+    client = account_deletion_firestore_client(firestore_client=firestore_client)
     _place_legal_hold_transaction(client.transaction(), client, uid, issuer, active, current)
 
 
@@ -242,7 +242,7 @@ def acquire_destructive_operation(
     if not uid or not kind.strip() or not token.strip():
         raise LegalHoldAuthorityUnavailable("destructive operation identity is invalid")
     current = now or datetime.now(timezone.utc)
-    client = firestore_client or get_firestore_client()
+    client = account_deletion_firestore_client(firestore_client=firestore_client)
     _acquire_destructive_operation_transaction(client.transaction(), client, uid, kind, token, current)
 
 
@@ -278,7 +278,7 @@ def finish_destructive_operation(
 ) -> None:
     if outcome not in {"failed", "completed"}:
         raise ValueError("destructive operation outcome must be failed or completed")
-    client = firestore_client or get_firestore_client()
+    client = account_deletion_firestore_client(firestore_client=firestore_client)
     _finish_destructive_operation_transaction(
         client.transaction(), client, uid, kind, token, outcome, now or datetime.now(timezone.utc)
     )
@@ -345,7 +345,7 @@ def destructive_operation_gate(
         yield active_token
         return
     token = uuid4().hex
-    client = firestore_client or get_firestore_client()
+    client = account_deletion_firestore_client(firestore_client=firestore_client)
     acquire_destructive_operation(uid, kind=kind, token=token, firestore_client=client)
     reset = _ACTIVE_GATE.set((uid, kind, token))
     try:
@@ -381,7 +381,7 @@ def external_write_fence(uid: str, *, firestore_client: Any | None = None) -> It
 
     if not uid:
         raise LegalHoldAuthorityUnavailable("external write fence requires a uid")
-    client = firestore_client or get_firestore_client()
+    client = account_deletion_firestore_client(firestore_client=firestore_client)
     account_payload = _snapshot_payload(
         _document(client, f"account_deletions/{uid}").get(), label="account deletion authority"
     )

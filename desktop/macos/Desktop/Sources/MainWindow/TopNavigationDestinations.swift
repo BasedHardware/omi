@@ -99,7 +99,7 @@ enum ShellDestination: Int, CaseIterable, Identifiable {
     case .rewind: return "Rewind"
     case .apps: return "Apps"
     case .permissions: return "Permissions"
-    case .activity: return "Brain"
+    case .activity: return "Memories"
     }
   }
 
@@ -222,8 +222,8 @@ enum TopNavigationRoutes {
     // page's own chip row, which is the mechanism `ShellDestination.reach` records for them.
     // The glyph is deliberately not `clock.arrow.circlepath`: that belongs to Rewind inside Brain.
     TopNavigationItem(
-      index: SidebarNavItem.conversations.rawValue, title: "Brain", icon: "brain",
-      tooltip: "Brain — everything Omi captured, newest first"),
+      index: SidebarNavItem.conversations.rawValue, title: "Memories", icon: "brain",
+      tooltip: "Memories — everything Omi captured, newest first"),
     TopNavigationItem(
       index: SidebarNavItem.tasks.rawValue, title: "Tasks", icon: "checklist",
       tooltip: "Tasks — everything Omi heard you commit to"),

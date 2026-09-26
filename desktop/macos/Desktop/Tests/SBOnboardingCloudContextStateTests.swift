@@ -9,16 +9,23 @@ import XCTest
 /// functional-probe failures retain sanitized, actionable copy.
 final class SBOnboardingCloudContextStateTests: XCTestCase {
   private let resumeStepKey = "sbOnboardingResumeStep"
+  // Literals: setUp/tearDown are nonisolated, the model constants are not.
+  private let resumeSchemaKey = "sbOnboardingResumeStepSchema"
+  private let currentResumeSchemaVersion = 2
 
   override func setUp() {
     super.setUp()
     DesktopDiagnosticsManager.shared.resetForTests()
     UserDefaults.standard.removeObject(forKey: resumeStepKey)
     UserDefaults.standard.removeObject(forKey: DefaultsKey.hasCompletedOnboarding.rawValue)
+    // Seeded resume values below are in the current `Step` numbering; stamp the
+    // schema so `begin()` does not renumber them as version-1 state.
+    UserDefaults.standard.set(currentResumeSchemaVersion, forKey: resumeSchemaKey)
   }
 
   override func tearDown() {
     UserDefaults.standard.removeObject(forKey: resumeStepKey)
+    UserDefaults.standard.removeObject(forKey: resumeSchemaKey)
     UserDefaults.standard.removeObject(forKey: DefaultsKey.hasCompletedOnboarding.rawValue)
     super.tearDown()
   }

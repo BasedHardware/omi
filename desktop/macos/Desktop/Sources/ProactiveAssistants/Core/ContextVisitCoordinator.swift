@@ -204,7 +204,9 @@ actor ContextVisitCoordinator {
     reconciled = false
   }
 
-  func activeFenceForTesting() -> ContextVisitFence? { state.activeFence }
+  func currentFence() -> ContextVisitFence? { state.activeFence }
+
+  func activeFenceForTesting() -> ContextVisitFence? { currentFence() }
 
   func beginForTesting(_ fence: ContextVisitFence) {
     state.begin(fence)

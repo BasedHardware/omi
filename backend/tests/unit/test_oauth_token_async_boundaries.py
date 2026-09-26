@@ -196,3 +196,27 @@ def test_oauth_token_preserves_invalid_token_status() -> None:
 
         assert exc.value.status_code == 401
         assert 'Invalid Firebase ID token' in exc.value.detail
+
+
+def test_oauth_token_rejects_non_qa_uid_before_account_work(monkeypatch: pytest.MonkeyPatch) -> None:
+    with _loaded_oauth_router() as (oauth, firebase_auth, _apps_db):
+        monkeypatch.setenv('OMI_JIT_QA_AUTH_ONLY', 'true')
+        monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+        monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'based-hardware-dev')
+        monkeypatch.setenv('OMI_JIT_QA_UID_ALLOWLIST', 'qa-user')
+        firebase_auth.verify_id_token = lambda _token: {'uid': 'other-user'}
+        oauth.enforce_account_deletion_http_access = lambda _uid: (_ for _ in ()).throw(
+            AssertionError('QA admission must run before account work')
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(
+                oauth.oauth_token(
+                    firebase_id_token='token',
+                    app_id='app-1',
+                    csrf_token='matching-csrf-token',
+                    oauth_csrf_cookie='matching-csrf-token',
+                )
+            )
+
+        assert exc.value.status_code == 403

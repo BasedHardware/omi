@@ -1,0 +1,8 @@
+{
+  "version": "0.12.272",
+  "date": "2026-09-03",
+  "changes": [
+    "Notification cards in the notch no longer shrink to a narrow strip when you hold the push-to-talk shortcut to reply to them.",
+    "Push-to-talk on a second display now plays the start sound and shows the listening animation on the first press instead of the second"
+  ]
+}

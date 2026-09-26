@@ -3,9 +3,10 @@ from enum import Enum
 from typing import Any, Mapping, Optional, Sequence
 
 from models.conversation_enums import ConversationSource
+from utils import conversation_continuity
 
 MAX_CONVERSATION_TIMEOUT_SECONDS = 4 * 60 * 60
-MIN_CONVERSATION_TIMEOUT_SECONDS = 120
+MIN_CONVERSATION_TIMEOUT_SECONDS = conversation_continuity.DEFAULT_GAP_SECONDS
 TARGET_SAMPLE_RATE = 16000
 USER_SELF_PERSON_ID = 'user'
 
@@ -158,18 +159,6 @@ def should_load_speech_profile(*, use_custom_stt: bool, is_multi_channel: bool, 
     return not use_custom_stt and not is_multi_channel and include_speech_profile
 
 
-def should_skip_custom_stt_postprocessing(*, uses_custom_stt: bool, has_llm_byok_key: bool) -> bool:
-    """Whether Omi-paid LLM post-processing must be skipped for a conversation.
-
-    A custom-STT conversation was transcribed on the user's own provider, so no
-    Omi transcription credits were consumed; its LLM enrichment would still run
-    on Omi's infrastructure. Skip it unless the request carries an LLM BYOK key
-    (the user then pays their own LLM bill). Mirrors the BYOK discriminator in
-    enforce_chat_quota.
-    """
-    return uses_custom_stt and not has_llm_byok_key
-
-
 def should_enable_speaker_identification(
     *,
     use_custom_stt: bool,
@@ -182,7 +171,7 @@ def should_enable_speaker_identification(
 def decide_existing_conversation_action(
     *, seconds_since_last_segment: float, conversation_creation_timeout: int
 ) -> ConversationLifecycleAction:
-    if seconds_since_last_segment >= conversation_creation_timeout:
+    if conversation_continuity.gap_splits(seconds_since_last_segment, conversation_creation_timeout):
         return ConversationLifecycleAction.process_and_create_new
     return ConversationLifecycleAction.continue_current
 
@@ -224,7 +213,9 @@ def decide_lifecycle_action(
         return ConversationLifecycleAction.create_new
     if status != in_progress_status:
         return ConversationLifecycleAction.create_new
-    if seconds_since_last_update is not None and seconds_since_last_update >= conversation_creation_timeout:
+    if seconds_since_last_update is not None and conversation_continuity.gap_splits(
+        seconds_since_last_update, conversation_creation_timeout
+    ):
         return ConversationLifecycleAction.process_and_create_new
     return ConversationLifecycleAction.continue_current
 

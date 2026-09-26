@@ -9,7 +9,7 @@ pytestmark = pytest.mark.slow
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / 'backend' / 'scripts' / 'p1_5_tools_fastapi_testclient_readiness.py'
-EVIDENCE_MARKERS_DOC = REPO_ROOT / 'docs' / 'operational' / 'memory_readiness_evidence_markers.md'
+EVIDENCE_MARKERS_DOC = REPO_ROOT / 'backend' / 'docs' / 'operational' / 'memory_readiness_evidence_markers.md'
 TEST_SH = REPO_ROOT / 'backend' / 'test.sh'
 
 

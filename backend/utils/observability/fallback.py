@@ -33,6 +33,9 @@ ALLOWED_REASONS = frozenset(
         'enqueue_failed',
         'config_incomplete',
         'circuit_open',
+        'last_resort',
+        'connection_lost',
+        'modulate_serve_error',
         'capability_mismatch',
         'auth',
         'quota',
@@ -57,6 +60,7 @@ ALLOWED_COMPONENTS = frozenset(
         'sync_dispatch',
         'pusher',
         'stt_selection',
+        'stt_live_session',
         'vad',
         'audio_merge',
         'webhook',
@@ -72,6 +76,8 @@ ALLOWED_COMPONENTS = frozenset(
         'firestore_read',
         'knowledge_graph',
         'agent_tools',
+        'conversation_finalization',
+        'daily_summary',
         'other',
     }
 )

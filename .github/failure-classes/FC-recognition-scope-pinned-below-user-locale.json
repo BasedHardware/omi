@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-recognition-scope-pinned-below-user-locale",
+  "violated_contract": "A capability that reads the user's own content must scope itself from the user's locale, not from a compile-time constant. When the scope is pinned narrower than the user's languages, content outside it is not degraded but absent, and the surface built on top reports success over data it never saw.",
+  "canonical_prevention": "Resolve the recognition language list from Locale.preferredLanguages, keep only tags the framework reports as supported, and retain an English fallback for mixed screen text. Resolve once into the process-lifetime constant Vision's asynchronous enumeration requires, and unit-test the ordering, region-less matching, unsupported-tag dropping and empty-capability fallback without invoking Vision.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/RewindOCRQualityTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/Rewind/Core/RewindOCRService.swift"
+  ],
+  "status": "open"
+}

@@ -164,6 +164,23 @@ def test_rejects_invalid_output_limits(key):
         validate_chat_completion_request(valid_request(**{key: 0}), lane)
 
 
+@pytest.mark.parametrize('effort', ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+def test_forwards_known_reasoning_effort_values(effort):
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+
+    validated = validate_chat_completion_request(valid_request(reasoning_effort=effort), lane)
+
+    assert validated.forwarded_params['reasoning_effort'] == effort
+
+
+@pytest.mark.parametrize('effort', ['instant', '', 3, None])
+def test_rejects_unknown_reasoning_effort_values(effort):
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+
+    with pytest.raises(GatewayInvalidRequestError, match='reasoning_effort'):
+        validate_chat_completion_request(valid_request(reasoning_effort=effort), lane)
+
+
 def test_rejects_streaming():
     lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
     request = valid_request(stream=True)

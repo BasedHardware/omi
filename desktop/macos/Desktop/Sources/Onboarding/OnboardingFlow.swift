@@ -248,9 +248,9 @@ enum OnboardingFlow {
   ///   the `.userDidSignOut` / `.resetOnboardingRequested` handlers in
   ///   DesktopHomeView (plus a belt-and-suspenders removeObject at the reset
   ///   site, which restarts the app anyway).
-  /// - "screenAnalysisEnabled": SettingsSyncManager overwrites it from the
-  ///   server within ~200ms of sign-in; onboarding force-starts monitoring
-  ///   regardless of this setting.
+  /// - "screenAnalysisEnabled": this is the product's standing capture
+  ///   preference, not onboarding-only state; SettingsSyncManager reconciles
+  ///   it with the signed-in account.
   /// - `SBOnboardingIntroGate.playedKey`: install-scoped, not account-scoped,
   ///   and the one key the two clearing sites treat differently. A re-auth is
   ///   involuntary — a session expired, someone signed back in — and owes them
@@ -273,6 +273,7 @@ enum OnboardingFlow {
     "sbOnboardingResumeStep",
     "sbOnboardingShortcutsCompleted",
     "onboardingRole",
+    DefaultsKey.onboardingSystemAudioSkipped.rawValue,
     "onboardingGoalDraft",
     "onboardingJustCompleted",
     completionOwnerKey,

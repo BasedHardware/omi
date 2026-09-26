@@ -8,6 +8,66 @@ import XCTest
 /// even though the finalization sync uploads every segment's person_id anyway.
 final class SpeakerAssignmentTests: XCTestCase {
 
+  @MainActor
+  private func conversationForOptimisticTest() -> ServerConversation {
+    ServerConversation(
+      id: "optimistic-test", createdAt: Date(), startedAt: nil, finishedAt: nil,
+      structured: Structured(title: "Test", overview: "", emoji: "", category: "other", actionItems: [], events: []),
+      transcriptSegments: [
+        TranscriptSegment(
+          id: "local", backendId: "backend", text: "Hello", speaker: "SPEAKER_01",
+          isUser: false, personId: nil, start: 0, end: 1, translations: [])
+      ], transcriptSegmentsIncluded: true, geolocation: nil, photos: [], appsResults: [],
+      source: nil, language: nil, status: .completed, discarded: false, deleted: false,
+      isLocked: false, starred: false, folderId: nil, inputDeviceName: nil)
+  }
+
+  @MainActor
+  func testOptimisticAssignmentAppliesToDetailAndListAndRollsBack() throws {
+    let detail = conversationForOptimisticTest()
+    let list = detail
+    let detailApplied = AppState.assigningSpeaker(detail, targets: ["backend"], personId: "alice", isUser: false)
+    let listApplied = AppState.assigningSpeaker(list, targets: ["backend"], personId: "alice", isUser: false)
+    XCTAssertEqual(detailApplied.transcriptSegments[0].personId, "alice")
+    XCTAssertEqual(listApplied.transcriptSegments[0].personId, "alice")
+    let detailRestored = try XCTUnwrap(
+      SpeakerAssignmentSnapshot.rollback(
+        current: detailApplied, original: detail, targets: ["backend"],
+        assignedPersonId: "alice", assignedIsUser: false, generation: 2, currentGeneration: 2))
+    let listRestored = try XCTUnwrap(
+      SpeakerAssignmentSnapshot.rollback(
+        current: listApplied, original: list, targets: ["backend"],
+        assignedPersonId: "alice", assignedIsUser: false, generation: 2, currentGeneration: 2))
+    XCTAssertNil(detailRestored.transcriptSegments[0].personId)
+    XCTAssertNil(listRestored.transcriptSegments[0].personId)
+  }
+
+  @MainActor
+  func testStaleCompletionCannotRollbackNewEditOrReload() {
+    let original = conversationForOptimisticTest()
+    let newer = AppState.assigningSpeaker(original, targets: ["backend"], personId: "bob", isUser: false)
+    XCTAssertNil(
+      SpeakerAssignmentSnapshot.rollback(
+        current: newer, original: original, targets: ["backend"],
+        assignedPersonId: "alice", assignedIsUser: false, generation: 1, currentGeneration: 2))
+    XCTAssertNil(
+      SpeakerAssignmentSnapshot.rollback(
+        current: newer, original: original, targets: ["backend"],
+        assignedPersonId: "alice", assignedIsUser: false, generation: 2, currentGeneration: 2))
+  }
+
+  @MainActor
+  func testNewPersonReconcilesTemporaryIdentityBeforePersistence() {
+    let original = conversationForOptimisticTest()
+    let temporary = AppState.assigningSpeaker(
+      original, targets: ["#index:0"], personId: "optimistic-person:1", isUser: false)
+    XCTAssertEqual(temporary.transcriptSegments[0].personId, "optimistic-person:1")
+    let reconciled = AppState.assigningSpeaker(
+      temporary, targets: ["#index:0"], personId: "real-person", isUser: false)
+    XCTAssertEqual(reconciled.transcriptSegments[0].personId, "real-person")
+    XCTAssertEqual(reconciled.transcriptSegments[0].text, original.transcriptSegments[0].text)
+  }
+
   /// 404 — the conversation is not on the backend yet — is the ONLY status that
   /// may keep the assignment local and report success.
   @MainActor
@@ -121,6 +181,36 @@ final class SpeakerAssignmentPersistenceTests: XCTestCase {
     XCTAssertNil(segments[0].personId)
     XCTAssertEqual(segments[1].personId, "person-dana", "the assignment must survive a storage reload")
     XCTAssertNil(segments[2].personId)
+  }
+
+  /// Unassign is `personId: nil, isUser: false` through the same write: it must clear both a named
+  /// person and a "You" back to an anonymous speaker, and the clear must survive a reload.
+  func testUnassignClearsPersonAndUserThroughSQLite() async throws {
+    let sessionId = try await TranscriptionStorage.shared.startSession(source: "desktop")
+    for i in 0..<2 {
+      try await TranscriptionStorage.shared.appendSegment(
+        sessionId: sessionId, speaker: i, text: "segment \(i)",
+        startTime: Double(i), endTime: Double(i) + 1)
+    }
+    try await TranscriptionStorage.shared.finishSession(id: sessionId)
+    _ = try await TranscriptionStorage.shared.markSessionCompleted(
+      id: sessionId, backendId: "backend-conv-unassign")
+    _ = try await TranscriptionStorage.shared.updateSpeakerAssignmentByBackendId(
+      "backend-conv-unassign", segmentIds: [], fallbackSegmentOrders: [0], isUser: false, personId: "person-dana")
+    _ = try await TranscriptionStorage.shared.updateSpeakerAssignmentByBackendId(
+      "backend-conv-unassign", segmentIds: [], fallbackSegmentOrders: [1], isUser: true, personId: nil)
+
+    let cleared = try await TranscriptionStorage.shared.updateSpeakerAssignmentByBackendId(
+      "backend-conv-unassign", segmentIds: [], fallbackSegmentOrders: [0, 1], isUser: false, personId: nil)
+    XCTAssertEqual(cleared, 2)
+
+    await RewindDatabase.shared.close()
+    await TranscriptionStorage.shared.invalidateCache()
+    try await RewindDatabase.shared.initialize()
+
+    let segments = try await TranscriptionStorage.shared.getSegments(sessionId: sessionId)
+    XCTAssertEqual(segments.map(\.personId), [nil, nil])
+    XCTAssertEqual(segments.map(\.isUser), [false, false])
   }
 
   func testAssignmentAgainstUnknownConversationReportsNothingPersisted() async throws {

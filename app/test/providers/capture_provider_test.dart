@@ -12,6 +12,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
@@ -22,7 +23,9 @@ import 'package:omi/models/stt_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
+import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/sockets/pure_socket.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/utils/enums.dart';
 
@@ -31,6 +34,17 @@ class MockCaptureExternalActions extends NoopCaptureExternalActions {
   int setPeopleCallCount = 0;
   int fetchSubscriptionCallCount = 0;
   Completer<void>? _setPeopleCompleter;
+  bool assignmentResult = false;
+  Completer<bool>? assignmentCompleter;
+  int assignmentCalls = 0;
+  int? assignedSpeaker;
+  @override
+  Future<bool> assignSpeaker(String conversationId, List<String> ids, String personId, {int? speakerId}) async {
+    assignmentCalls++;
+    assignedSpeaker = speakerId;
+    return assignmentCompleter == null ? assignmentResult : await assignmentCompleter!.future;
+  }
+
   bool? outOfCreditsOverride;
   String? topConversationIdOverride;
 
@@ -91,6 +105,9 @@ BtDevice _device({required String id, required DeviceType type, String name = 'T
 /// start one, and each attempt can be released independently.
 class _GatedSocketCaptureProvider extends CaptureProvider {
   final List<Completer<void>> gates = [];
+  final List<_IdentifiedSocketService> sockets = [];
+  int? lastSubscribedId;
+  bool returnSockets = false;
 
   int get openCalls => gates.length;
 
@@ -101,12 +118,17 @@ class _GatedSocketCaptureProvider extends CaptureProvider {
     required String language,
     required bool force,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
   }) async {
     final gate = Completer<void>();
     gates.add(gate);
     await gate.future;
-    return null;
+    if (!returnSockets) return null;
+    final socket = _IdentifiedSocketService(gates.length - 1, (id) => lastSubscribedId = id);
+    sockets.add(socket);
+    return socket;
   }
 
   void release(int attempt) => gates[attempt].complete();
@@ -126,7 +148,9 @@ class _NullSocketCaptureProvider extends CaptureProvider {
     required String language,
     required bool force,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
   }) async =>
       null;
 }
@@ -143,7 +167,9 @@ class _CountingSocketCaptureProvider extends CaptureProvider {
     required String language,
     required bool force,
     String? source,
+    String? clientConversationId,
     CustomSttConfig? customSttConfig,
+    Geolocation? geolocation,
   }) async {
     openCalls++;
     return null;
@@ -155,26 +181,116 @@ class _CountingConversationLocationCapture extends ConversationLocationCapture {
   final List<bool> promptIfDeniedArgs = [];
 
   @override
-  Future<bool> captureAndUpload({bool promptIfDenied = true}) async {
+  Future<Geolocation?> captureAndUpload({bool promptIfDenied = true}) async {
     calls++;
     promptIfDeniedArgs.add(promptIfDenied);
-    return true;
+    return Geolocation(latitude: 1, longitude: 2, time: DateTime.utc(2026));
   }
 }
 
 class _HangingConversationLocationCapture extends ConversationLocationCapture {
   int calls = 0;
-  final Completer<bool> _done = Completer<bool>();
+  final Completer<Geolocation?> _done = Completer<Geolocation?>();
 
   @override
-  Future<bool> captureAndUpload({bool promptIfDenied = true}) async {
+  Future<Geolocation?> captureAndUpload({bool promptIfDenied = true}) async {
     calls++;
     return _done.future;
   }
 
-  void complete() {
-    if (!_done.isCompleted) _done.complete(true);
+  @override
+  Future<Geolocation?> capture({bool promptIfDenied = true}) async {
+    calls++;
+    return _done.future;
   }
+
+  @override
+  Future<void> uploadCompatibilitySnapshot(Geolocation geolocation) async {}
+
+  void complete() {
+    if (!_done.isCompleted) {
+      _done.complete(Geolocation(latitude: 1, longitude: 2, time: DateTime.utc(2026)));
+    }
+  }
+}
+
+class _FakeBatchMicRecorder implements IMicRecorderService {
+  int startBatchCalls = 0;
+  bool emitRecordingOnStart = false;
+
+  @override
+  Future<void> start({
+    required Function(Uint8List bytes) onByteReceived,
+    Function()? onRecording,
+    Function()? onStop,
+    Function()? onInitializing,
+    Function()? onStalled,
+    Function(bool began)? onInterruption,
+  }) async {
+    if (emitRecordingOnStart) onRecording?.call();
+  }
+
+  @override
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  }) async {
+    startBatchCalls++;
+  }
+
+  @override
+  void stop() {}
+
+  @override
+  void probeStallAfterForeground() {}
+}
+
+class _IdentifiedSocketService extends TranscriptSegmentSocketService {
+  _IdentifiedSocketService(this.id, this.onSubscribed)
+      : super.withSocket(16000, BleAudioCodec.pcm16, 'en', _TrackingSocket());
+
+  final int id;
+  final void Function(int id) onSubscribed;
+
+  @override
+  void subscribe(Object context, ITransctiptSegmentSocketServiceListener listener) {
+    onSubscribed(id);
+    throw StateError('test socket subscribed');
+  }
+}
+
+class _TrackingSocket implements IPureSocket {
+  @override
+  PureSocketStatus get status => PureSocketStatus.connected;
+
+  @override
+  Future<bool> connect() async => true;
+
+  @override
+  Future<void> disconnect() async {}
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  void send(dynamic message) {}
+
+  @override
+  void setListener(IPureSocketListener listener) {}
+
+  @override
+  void onMessage(dynamic message) {}
+
+  @override
+  void onConnected() {}
+
+  @override
+  void onClosed() {}
+
+  @override
+  void onError(Object err, StackTrace trace) {}
 }
 
 /// Minimal EnvFields stub so Env-backed code paths (e.g. native BLE stream
@@ -184,8 +300,6 @@ class _TestEnvFields implements EnvFields {
   String? get posthogApiKey => null;
   @override
   String? get apiBaseUrl => null;
-  @override
-  String? get googleMapsApiKey => null;
   @override
   String? get intercomAppId => null;
   @override
@@ -231,6 +345,105 @@ void main() {
   // Existing tests (preserved verbatim from the original file)          //
   // ------------------------------------------------------------------ //
 
+  test('manual save requires acknowledgment and respects selected scope', () async {
+    final actions = MockCaptureExternalActions();
+    final conversation = ServerConversation.fromJson({
+      'id': 'manual-conversation',
+      'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
+      'structured': {},
+      'status': 'in_progress',
+      'transcript_segments': [_segment('a', 'one').toJson(), _segment('b', 'two').toJson()],
+    });
+    final provider = CaptureProvider(
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
+    provider.applyInProgressConversation(conversation);
+    provider.onSegmentReceived([_segment('a', 'one')]);
+    await Future<void>.delayed(Duration.zero);
+    expect(await provider.assignSpeakerToConversation(0, 'new', 'New', ['a']), isFalse);
+    expect(provider.segments.every((s) => s.personId == null), isTrue);
+    expect(await provider.assignSpeakerToConversation(0, '', 'Creation failed', ['a']), isFalse);
+    expect(actions.assignmentCalls, 1);
+    actions.assignmentResult = true;
+    expect(await provider.assignSpeakerToConversation(0, 'new', 'New', ['a']), isTrue);
+    expect(provider.segments.first.personId, 'new');
+    expect(provider.segments.last.personId, isNull);
+    expect(actions.assignedSpeaker, isNull);
+    expect(await provider.assignSpeakerToConversation(0, 'user', 'Me', ['a', 'b'], applyToSpeaker: true), isTrue);
+    expect(actions.assignedSpeaker, 0);
+    expect(provider.segments.every((s) => s.isUser && s.personId == null), isTrue);
+    provider.onSegmentReceived([_segment('c', 'later')]);
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.segments.last.isUser, isTrue);
+    expect(provider.segments.last.personId, isNull);
+    provider.dispose();
+  });
+
+  test('manual acknowledgment after rollover cannot paint the next conversation', () async {
+    final actions = MockCaptureExternalActions()..assignmentCompleter = Completer<bool>();
+    final conversation = ServerConversation.fromJson({
+      'id': 'old',
+      'created_at': '2026-09-21T00:00:00Z',
+      'started_at': null,
+      'finished_at': null,
+      'structured': {},
+      'transcript_segments': [_segment('a', 'one').toJson()],
+    });
+    final provider = CaptureProvider(
+        externalActions: actions,
+        inProgressConversationLoader: () async {},
+        conversationLocationCapture: _CountingConversationLocationCapture());
+    provider.applyInProgressConversation(conversation);
+    provider.onSegmentReceived([_segment('a', 'one')]);
+    await Future<void>.delayed(Duration.zero);
+    final pending = provider.assignSpeakerToConversation(0, 'new', 'New', ['a']);
+    provider.onMessageEventReceived(ConversationProcessingStartedEvent(memory: conversation));
+    provider.segments = [_segment('next', 'next')];
+    actions.assignmentCompleter!.complete(true);
+    expect(await pending, isTrue);
+    expect(provider.segments.single.personId, isNull);
+    provider.dispose();
+  });
+
+  test('name-only suggestions stay local and malformed or stale suggestions cannot rewrite manual labels', () {
+    final actions = MockCaptureExternalActions();
+    final provider = CaptureProvider(externalActions: actions);
+    provider.segments = [_segment('candidate', 'hello'), _segment('manual', 'hello')..personId = 'saved'];
+    Map<String, dynamic> payload = {
+      'type': 'speaker_label_suggestion',
+      'speaker_id': 0,
+      'person_id': '',
+      'person_name': 'Alex',
+      'segment_id': 'candidate'
+    };
+    provider.onMessageEventReceived(MessageEvent.fromJson(payload));
+    expect(provider.suggestionsBySegmentId['candidate']?.personName, 'Alex');
+    expect(provider.segments.first.personId, isNull);
+    expect(actions.assignmentCalls, 0);
+    for (final invalid in [
+      {...payload, 'speaker_id': '0'},
+      {...payload, 'speaker_id': null},
+      {...payload, 'person_id': 42},
+      {...payload, 'person_name': false},
+      {...payload, 'segment_id': []},
+      {...payload, 'segment_id': 'old-conversation'},
+      {...payload, 'speaker_id': 9}
+    ]) {
+      provider.onMessageEventReceived(MessageEvent.fromJson(invalid));
+    }
+    expect(provider.segments.first.personId, isNull);
+    provider.onMessageEventReceived(MessageEvent.fromJson({...payload, 'person_id': 'inferred'}));
+    expect(provider.segments.first.personId, 'inferred');
+    expect(actions.setPeopleCallCount, 1);
+    expect(provider.segments.last.personId, 'saved');
+    provider.onMessageEventReceived(SegmentsDeletedEvent(segmentIds: ['candidate']));
+    expect(provider.suggestionsBySegmentId, isEmpty);
+    provider.dispose();
+  });
+
   test('removes segments and related state on deletion event', () {
     final provider = CaptureProvider();
     final first = _segment('a', 'one');
@@ -271,9 +484,7 @@ void main() {
 
   test('streamDeviceRecording does not wait for location capture', () async {
     final locationCapture = _HangingConversationLocationCapture();
-    final provider = CaptureProvider(
-      conversationLocationCapture: locationCapture,
-    );
+    final provider = CaptureProvider(conversationLocationCapture: locationCapture);
 
     await provider.streamDeviceRecording().timeout(
           const Duration(seconds: 2),
@@ -284,15 +495,72 @@ void main() {
     provider.dispose();
   });
 
-  test('homepage no-device streamDeviceRecording is check-only', () async {
-    final locationCapture = _CountingConversationLocationCapture();
+  test('phone batch starts native audio before waiting for location metadata', () async {
+    await SharedPreferencesUtil().remove('phoneBatchGeolocation');
+    final locationCapture = _HangingConversationLocationCapture();
+    final micRecorder = _FakeBatchMicRecorder();
     final provider = CaptureProvider(
       conversationLocationCapture: locationCapture,
+      microphonePermissionRequester: () async => true,
+      phoneMicBatchRecorder: micRecorder,
     );
+
+    await provider.startPhoneMicBatchForTesting().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => fail('phone batch start blocked on location capture'),
+        );
+
+    expect(micRecorder.startBatchCalls, 1);
+    expect(provider.recordingState, RecordingState.record);
+    expect(locationCapture.calls, 1);
+    var preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('phoneBatchGeolocation'), isNull);
+
+    locationCapture.complete();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    preferences = await SharedPreferences.getInstance();
+    expect(preferences.getString('phoneBatchGeolocation'), isNotNull);
+    provider.dispose();
+  });
+
+  test('homepage no-device streamDeviceRecording is check-only', () async {
+    final locationCapture = _CountingConversationLocationCapture();
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    final telemetry = RecordingLifecycleTelemetry(
+      emitter: (name, properties) => events.add((name: name, properties: properties)),
+      idFactory: () => 'recording-check-only',
+    );
+    final provider = CaptureProvider(conversationLocationCapture: locationCapture, recordingTelemetry: telemetry);
 
     await provider.streamDeviceRecording();
     expect(locationCapture.calls, 1);
     expect(locationCapture.promptIfDeniedArgs, [false]);
+    expect(events, isEmpty, reason: 'a no-device homepage entry must not emit Recording Start Failed');
+    expect(telemetry.recordingId, isNull);
+    provider.dispose();
+  });
+
+  test('failed device streamDeviceRecording emits capture_unavailable', () async {
+    final events = <({String name, Map<String, dynamic> properties})>[];
+    final telemetry = RecordingLifecycleTelemetry(
+      emitter: (name, properties) => events.add((name: name, properties: properties)),
+      idFactory: () => 'recording-device-fail',
+    );
+    // Batch mode skips the transcription socket, so this stays hermetic: a
+    // device is requested, but no BLE connection exists, so start cannot
+    // reach deviceRecord.
+    SharedPreferencesUtil().batchModeEnabled = true;
+    addTearDown(() => SharedPreferencesUtil().batchModeEnabled = false);
+    final provider = CaptureProvider(recordingTelemetry: telemetry);
+
+    await provider.streamDeviceRecording(
+      device: _device(id: 'omi-1', type: DeviceType.omi),
+    );
+
+    expect(events.single.name, RecordingLifecycleTelemetry.startFailedEvent);
+    expect(events.single.properties['failure_class'], 'capture_unavailable');
+    expect(events.single.properties['recording_id'], 'recording-device-fail');
     provider.dispose();
   });
 
@@ -458,17 +726,16 @@ void main() {
   });
 
   group('SpeakerLabelSuggestionEvent', () {
-    test('ignores event when personId is empty', () {
+    test('retains a name-only suggestion without assigning a person', () {
       final provider = CaptureProvider();
       provider.segments = [_segment('seg1', 'hello')];
 
-      // Empty personId: backend didn't assign, nothing happens
+      // Wire contract: person_id_for_client can withhold assignment while supplying a name.
       final event = SpeakerLabelSuggestionEvent(speakerId: 0, personId: '', personName: 'Alice', segmentId: 'seg1');
 
       provider.onMessageEventReceived(event);
 
-      // Nothing stored, nothing applied
-      expect(provider.suggestionsBySegmentId.containsKey('seg1'), false);
+      expect(provider.suggestionsBySegmentId['seg1']?.personName, 'Alice');
       expect(provider.segments.first.personId, isNull);
     });
 
@@ -866,19 +1133,37 @@ void main() {
       provider.dispose();
     });
 
-    test('onConnected restores record from interrupted', () {
-      final provider = CaptureProvider();
+    test('onConnected restores record from interrupted', () async {
+      final mic = _FakeBatchMicRecorder()..emitRecordingOnStart = true;
+      final provider = CaptureProvider(
+        phoneMicRecorder: mic,
+        microphonePermissionRequester: () async => true,
+        openSocket: ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+          geolocation,
+        }) async =>
+            null,
+      );
+      addTearDown(provider.dispose);
       provider.onConnectionStateChanged(true);
-      provider.updateRecordingState(RecordingState.record);
+      await provider.streamRecording();
+      expect(provider.liveCaptureSource, 'phone');
+      expect(provider.recordingState, RecordingState.record);
 
       provider.onClosed();
+      await provider.pendingSourceSwitch;
       expect(provider.recordingState, RecordingState.interrupted);
 
       provider.onConnected();
-
+      await provider.pendingSourceSwitch;
       expect(provider.recordingState, RecordingState.record);
-      provider.updateRecordingState(RecordingState.stop);
-      provider.dispose();
+      await provider.stopStreamRecording();
     });
 
     test('onConnected does not alter stop state', () {
@@ -1335,12 +1620,12 @@ void main() {
   // doesn't it stay off?", "Cv1 unmutes on disconnect/reconnect").      //
   // ------------------------------------------------------------------ //
   group('device mute persistence', () {
-    setUp(() {
-      SharedPreferencesUtil().deviceMuted = false;
+    setUp(() async {
+      await SharedPreferencesUtil().setCaptureMuted(false);
     });
 
-    test('constructor restores muted state when deviceMuted pref is set', () {
-      SharedPreferencesUtil().deviceMuted = true;
+    test('constructor restores the shared muted capture policy', () async {
+      await SharedPreferencesUtil().setCaptureMuted(true);
 
       final provider = CaptureProvider();
 
@@ -1350,8 +1635,8 @@ void main() {
       provider.dispose();
     });
 
-    test('constructor leaves recording unpaused when deviceMuted pref is unset', () {
-      SharedPreferencesUtil().deviceMuted = false;
+    test('constructor leaves recording unpaused when capture policy permits it', () async {
+      await SharedPreferencesUtil().setCaptureMuted(false);
 
       final provider = CaptureProvider();
 
@@ -1366,7 +1651,7 @@ void main() {
       await provider.pauseDeviceRecording();
 
       expect(provider.isPaused, isTrue);
-      expect(SharedPreferencesUtil().deviceMuted, isTrue);
+      expect(SharedPreferencesUtil().capturePolicy.muted, isTrue);
       provider.dispose();
     });
   });
@@ -1479,6 +1764,31 @@ void main() {
       provider.dispose();
     });
 
+    test('does not install a stale socket after a newer forced attempt', () async {
+      final provider = _GatedSocketCaptureProvider();
+      provider.returnSockets = true;
+
+      final first = startAttempt(provider);
+      await settle();
+      provider.updateRecordingState(RecordingState.record);
+      final forced = provider.onTranscriptionSettingsChanged();
+      await settle();
+      expect(provider.openCalls, 2);
+
+      provider.release(1);
+      try {
+        await forced;
+      } catch (error) {
+        expect(error, isA<StateError>());
+      }
+      expect(provider.lastSubscribedId, 1);
+
+      provider.release(0);
+      await first;
+      expect(provider.lastSubscribedId, 1);
+      provider.dispose();
+    });
+
     test('stays gated while a forced attempt with the same parameters runs', () async {
       final provider = _GatedSocketCaptureProvider();
 
@@ -1533,7 +1843,7 @@ void main() {
     // ever reaching the cap.
     test('a reconnect mid-cycle does not reset the attempt counter', () {
       fakeAsync((async) {
-        final provider = CaptureProvider(inProgressConversationLoader: () async {});
+        final provider = CaptureProvider(inProgressConversationLoader: () async => []);
         provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
         provider.updateRecordingState(RecordingState.deviceRecord);
 
@@ -1560,9 +1870,9 @@ void main() {
     test('the cycle self-terminates at its cap when nothing interrupts it', () {
       fakeAsync((async) {
         var loadCalls = 0;
-        final provider = CaptureProvider(
-          inProgressConversationLoader: () async => loadCalls++,
-        );
+        final provider = CaptureProvider(inProgressConversationLoader: () async {
+          loadCalls++;
+        });
         provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
         provider.updateRecordingState(RecordingState.deviceRecord);
 

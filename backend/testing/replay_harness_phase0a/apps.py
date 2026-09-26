@@ -340,6 +340,9 @@ else:
             is_locked=bool(getattr(conversation, "is_locked", False)),
             client_device_id=getattr(conversation, "client_device_id", None),
             client_platform=getattr(conversation, "client_platform", None),
+            # Preserve the ingest-owned revision the processor read: the fenced
+            # persistence contract requires the payload to echo it.
+            sync_content_revision=getattr(conversation, "sync_content_revision", None),
         )
         persisted = lifecycle_service.persist_processed_conversation(uid, completed.model_dump())
         if persistence_observer is not None:

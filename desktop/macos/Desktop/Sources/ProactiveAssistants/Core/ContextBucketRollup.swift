@@ -143,8 +143,6 @@ enum BucketFactValidator {
 /// prefix.
 enum ContextPromptCacheKey {
   static let director = "director:v1"
-  static let reconcilerTagging = "reconciler:v1"
-  static let reconcilerCandidates = "reconciler-candidates:v1"
 }
 
 enum ContextBucketPromptAssembler {
@@ -446,7 +444,7 @@ enum ContextProactivityPromptBuilder {
   /// and which decision type to use, and never said what the spoken text must
   /// contain, so that answer was fully compliant.
   ///
-  /// Measured against the production reasoning model (gpt-5.6-luna,
+  /// Measured against the production reasoning model (gpt-6-luna,
   /// reasoning_effort low) on the `referent-*` cases of the context-bucket
   /// benchmark, 12 replicates per case. Scored on whether the user-visible text
   /// contains one of the case's declared `referentTokens`:
@@ -497,9 +495,15 @@ enum ContextProactivityPromptBuilder {
   /// This text is the prompt-cache prefix: nothing volatile may be interpolated
   /// into it, and it must stay byte-identical across calls for one bucket. The
   /// naming rule is static, so it invalidates the cached prefix exactly once.
-  static func directorStablePrompt(snapshot: ContextBucketSnapshot, allowLookup: Bool = false) -> String {
+  static func directorStablePrompt(
+    snapshot: ContextBucketSnapshot,
+    allowLookup: Bool = false,
+    includeInterjectCopyBudgets: Bool = false
+  ) -> String {
     let stableBucket = String(data: ContextBucketPromptAssembler.assemble(snapshot), encoding: .utf8) ?? ""
     let lookup = allowLookup ? "\n" + directorLookupInstruction : ""
+    let copyBudgets =
+      includeInterjectCopyBudgets ? "\n" + InterjectCopyBudget.directorPromptSection : ""
     return """
       \(ScreenDerivedContent.untrustedPreamble)
       Decide whether interrupting the user right now adds concrete value. Silence is the
@@ -570,7 +574,7 @@ enum ContextProactivityPromptBuilder {
         handle in task_refs, copied exactly. Leave task_refs empty when it is about none of
         them. Never write a handle that is not listed above.
       Timestamps supplied below are already in the user's local time zone. When a message
-      mentions a date or time, use that local form as written; never convert to or mention UTC.\(lookup)
+      mentions a date or time, use that local form as written; never convert to or mention UTC.\(lookup)\(copyBudgets)
 
       \(stableBucket)
       """

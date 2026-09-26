@@ -51,6 +51,6 @@ OMI_LLM_GATEWAY_FEATURE_MODE=off
 ```
 (optional also set `CHAT_AGENT_ROUTE=direct`)
 
-**Contract:** `should_route_chat_agent_through_gateway()` requires **both** chat-agent route=`gateway` **and** feature mode on. Direct Anthropic BYOK still bypasses the managed lane.
+**Contract:** `should_route_chat_agent_through_gateway()` requires **both** chat-agent route=`gateway` **and** feature mode on. Omi-managed chat-agent traffic is always the OpenAI/Luna runner (`get_llm('chat_agent')`); Anthropic BYOK no longer selects a second Messages path on this lane. `CHAT_AGENT_ROUTE=direct` is the chat-only kill switch onto direct OpenAI.
 
 **Severity:** Ticket — investigate during business hours unless user-facing chat error rates also rise.

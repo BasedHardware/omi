@@ -1,0 +1,7 @@
+{
+  "path": "app/test/spine/c1_adoption_test.dart",
+  "owner": "C1",
+  "before": "8056dec694e9d1dcc81fff67bae39490636426de8abaa815e2965cfcabfea692",
+  "after": "2005408e0e5d7b136d97b82678899dee897ca9283392c3f6600814f06caada59",
+  "reason": "Spine A turn 5 scope audit: importing capture_controller also reaches pre-existing TranscriptionAllowanceCache (four singleton reads) and FreeTierOnDeviceSttFlag (one). They are external policy adapters, not C1 ownership extractions. Follow the prescribed capture_* extraction layout; retain real-provider effect tests as authority rather than silently widening the exemplar migration."
+}

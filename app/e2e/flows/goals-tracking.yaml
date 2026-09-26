@@ -27,7 +27,7 @@ steps:
         min: 4
     evidence:
       - screenshot: step-S1.webp
-    note: "GoalsWidget appears in conversations_page.dart (lines 233-248) between DailyScoreWidget/TodayTasksWidget and the conversation list. Controlled by showGoalTrackerEnabled preference. Hidden when searching, date filtering, or showing daily summaries. GoalsProvider.init() loads goals on app start."
+    note: "GoalsWidget appears in conversations_page.dart after the processing-conversations widget and before the 'Conversations' section header. Controlled by showGoalTrackerEnabled preference. Hidden when searching, date filtering, or showing daily summaries. GoalsProvider.init() loads goals on app start."
 
   - id: S2
     name: Tap + to add first goal
@@ -38,7 +38,7 @@ steps:
         min: 3
     evidence:
       - screenshot: step-S2.webp
-    note: "Add goal button appears when < 3 goals exist (max 3 limit enforced). Also accessible via DailyScoreWidget 'Add Goal' button when no goals exist. Form fields: title (required), current (default 0), target (default 100). Smart emoji assigned based on title keywords (e.g., 'read' → 📚, 'revenue' → 💰, 'workout' → 💪)."
+    note: "Add goal button appears when < 3 goals exist (max 3 limit enforced). When no goals exist, GoalsWidget hides entirely; the Add Goal entry point on the home screen is ActionItemsPage._buildGoalsRow (Action Items tab). Form fields: title (required), current (default 0), target (default 100). Smart emoji assigned based on title keywords (e.g., 'read' → 📚, 'revenue' → 💰, 'workout' → 💪)."
 
   - id: S3
     name: Save goal and verify on home screen

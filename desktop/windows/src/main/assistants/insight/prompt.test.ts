@@ -89,9 +89,10 @@ describe('insight phase-1 date grounding', () => {
 
     const prompt = buildPhase1Prompt(data)
 
-    // The runner's local zone decides the wall clock, but the rendered line always
-    // names the year and the zone — the two anchors the model was missing.
-    expect(prompt).toMatch(/Date\/Time: \w+, August 2[45], 2026 at \d+:\d{2} [AP]M \(.+\)\./)
+    // The runner's local zone decides the wall clock. Pin the exact host-local
+    // rendering so every IANA timezone exercises the same contract.
+    const expectedDateTime = formatDateTime(data.now)
+    expect(prompt).toContain(`Date/Time: ${expectedDateTime}.`)
     expect(prompt).toContain('CURRENT APP: Calendar.')
     expect(prompt).toContain('Window: "October".')
   })

@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from database._client import get_firestore_client
+from database._client import get_data_plane_firestore_client
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -155,7 +155,7 @@ def _build_enabled_snapshot(
 def _build_enabled_snapshot_with_default_client(uid: str) -> LedgerPromptSnapshotEnvelope:
     """Acquire and use the synchronous Firestore client off the event loop."""
 
-    return _build_enabled_snapshot(uid, db_client=get_firestore_client())
+    return _build_enabled_snapshot(uid, db_client=get_data_plane_firestore_client())
 
 
 def _build_enabled_mirror_page_with_default_client(
@@ -167,7 +167,7 @@ def _build_enabled_mirror_page_with_default_client(
         uid,
         cursor=cursor,
         page_size=page_size,
-        firestore_client=get_firestore_client(),
+        firestore_client=get_data_plane_firestore_client(),
     )
 
 

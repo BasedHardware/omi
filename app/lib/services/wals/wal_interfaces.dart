@@ -1,5 +1,6 @@
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -14,7 +15,8 @@ export 'package:omi/backend/http/api/conversations.dart'
         SyncJobFetchOutcome,
         SyncRateLimitedException,
         SyncRateLimitKind,
-        SyncRecoveryWindowExceededException;
+        SyncRecoveryWindowExceededException,
+        isPacedBackfillReasonCode;
 
 abstract class IWalSyncProgressListener {
   void onWalSyncedProgress(
@@ -64,8 +66,16 @@ enum WalServiceStatus { init, ready, stop }
 
 // Forward declarations for sync types
 abstract class LocalWalSync implements IWalSync {
-  Future<void> addExternalWal(Wal wal);
+  /// Session fence observed by device downloads. Capture at download
+  /// admission and pass to [addExternalWal]; do not re-read after an await.
+  int get sessionGeneration;
+
+  Future<void> addExternalWal(Wal wal, {required int admittedGeneration});
   Future<List<Wal>> getAllWals();
+
+  /// Bump the session fence and stop publishing retired-account WALs.
+  /// Durable bytes stay on disk; [getAllWals] returns the current session only.
+  void clearUserData();
   Future<void> deleteAllSyncedWals();
   Future<void> deleteAllPendingWals();
   Future<void> deleteAllCorruptedWals();
@@ -83,6 +93,9 @@ abstract class LocalWalSync implements IWalSync {
 
   /// Set device metadata for WAL file naming.
   void setDeviceInfo(String? deviceId, String? deviceModel);
+
+  /// Set the snapshot inherited by WALs created for the active session.
+  void setSessionGeolocation(Geolocation? geolocation);
 }
 
 abstract class SDCardWalSync implements IWalSync {

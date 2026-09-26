@@ -127,6 +127,7 @@ def load_from_gh(root: Path) -> PullRequestMetadata:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
         )
     except FileNotFoundError as exc:
         raise RuntimeError("gh is not installed; pass --pr-body-file before the first push") from exc

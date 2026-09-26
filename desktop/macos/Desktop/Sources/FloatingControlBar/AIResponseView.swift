@@ -17,10 +17,17 @@ struct AIResponseView: View {
   var onEscape: (() -> Void)?
   /// Typing lives in the main app now — the bar only offers a jump there.
   var onOpenMainApp: (() -> Void)?
-  var onRate: ((String, Int?) -> Void)?
+  var onRate: ((String, Int?, ChatFeedbackReason?) -> Void)?
   var onShareLink: (() async -> String?)?
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)?
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
+  /// Tapping the grounded follow-up chip sends its question as a new user turn
+  /// in this same lane. Nil leaves the chip out entirely rather than rendering
+  /// one that does nothing.
+  var onAskFollowUp: ((String) -> Void)?
+  /// The "or hold ⌥ to ask aloud" hint, named for the shortcut actually bound.
+  /// Nil where push-to-talk is off or unavailable.
+  var followUpVoiceHint: String?
 
   var body: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
@@ -68,7 +75,7 @@ struct AIResponseView: View {
     .padding(.top, 0)
     .padding(.bottom, OmiSpacing.lg)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .omiAnimation(.spring(response: 0.28, dampingFraction: 0.85), value: showShareFeedback)
+    .omiAnimation(FloatingBarMotion.inlineFeedback, value: showShareFeedback)
     .onExitCommand {
       onEscape?()
     }
@@ -118,9 +125,13 @@ struct AIResponseView: View {
         return ["chatFirstConversation", id].joined(separator: "\u{1E}")
       case .memoryLink(let id, _, _):
         return ["chatFirstMemory", id].joined(separator: "\u{1E}")
+      case .memoryReviewCard(let id, _, _, let items):
+        return ["memoryReviewCard", id, String(items.count)].joined(separator: "\u{1E}")
       case .citation(let id, let reference):
         return ["citation", id, String(reference.ordinal), reference.sourceID]
           .joined(separator: "\u{1E}")
+      case .followUp(let id, let text):
+        return ["followUp", id, text].joined(separator: "\u{1E}")
       case .agentSpawn(
         let id, let pillId, let sessionId, let runId, let title, let objective, let provider
       ):
@@ -162,25 +173,25 @@ struct AIResponseView: View {
           .scaledFont(size: OmiType.body)
           .foregroundColor(.secondary)
       } else {
-        Text("omi says")
+        Text("Omi says")
           .scaledFont(size: OmiType.body)
           .foregroundColor(.secondary)
       }
 
       Spacer()
 
-      if canClearVisibleConversation {
-        HStack(spacing: OmiSpacing.xxs) {
-          Text("esc")
-            .scaledFont(size: OmiType.caption)
+      if canClearVisibleConversation, let onClearVisibleConversation {
+        Button(action: onClearVisibleConversation) {
+          Text("Clear")
+            .scaledFont(size: OmiType.caption, weight: .medium)
             .foregroundColor(.secondary)
-            .frame(width: 30, height: 16)
-            .background(NotchGlass.ink(.w1))
-            .cornerRadius(OmiChrome.stripRadius)
-          Text("to clear")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(.secondary)
+            .padding(.horizontal, OmiSpacing.sm)
+            .frame(height: 20)
+            .background(Capsule().fill(NotchGlass.ink(.w1)))
         }
+        .buttonStyle(.plain)
+        .help("Clear this conversation")
+        .accessibilityLabel("Clear conversation")
       }
     }
   }
@@ -196,7 +207,6 @@ struct AIResponseView: View {
         switch group {
         case .text(_, let text):
           OmiMarkdown(text: text, sender: .ai, citations: message.inlineCitationReferences)
-            .textSelection(.enabled)
             .environment(\.colorScheme, .dark)
             .frame(maxWidth: .infinity, alignment: .leading)
         case .commentary(_, let text):
@@ -217,10 +227,33 @@ struct AIResponseView: View {
         case .discoveryCard(_, let title, let summary, let fullText):
           DiscoveryCard(title: title, summary: summary, fullText: fullText)
             .frame(maxWidth: .infinity, alignment: .leading)
-        // The floating/notch surface never opts into rich chat-first controls.
-        // Keep journaled blocks inert if an older runtime projects them here.
+        // The notch projects the same journal as the main window, so it renders
+        // the same interactable cards. Taps route the one shell and summon the
+        // main window (`ChatFirstRichBlockContext.auxiliary`).
         case .questionCard, .taskCard, .goalLink, .captureLink, .conversationLink, .memoryLink:
+          if let context = ChatFirstRichBlockContext.floatingSurface {
+            ChatFirstRichBlockGroupView(
+              group: group,
+              messageID: message.id,
+              context: context
+            )
+            .environment(\.colorScheme, .light)
+            .frame(maxWidth: .infinity, alignment: .leading)
+          }
+        // The review card is three controls and an inline editor over stored memories — the
+        // clearest case of a rich control this passive surface does not own.
+        case .memoryReviewCard:
           EmptyView()
+        case .followUp(_, let question):
+          if let onAskFollowUp {
+            FollowUpChip(
+              question: question,
+              palette: .glass,
+              voiceHint: followUpVoiceHint,
+              action: { onAskFollowUp(question) }
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
+          }
         case .agentSpawn(
           _, let pillId, let sessionId, let runId, let title, let objective, let provider
         ):
@@ -250,7 +283,6 @@ struct AIResponseView: View {
       }
     } else if !message.text.isEmpty {
       OmiMarkdown(text: message.text, sender: .ai, citations: message.inlineCitationReferences)
-        .textSelection(.enabled)
         .environment(\.colorScheme, .dark)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -297,8 +329,8 @@ struct AIResponseView: View {
   private func messageWithHoverActions(message: ChatMessage) -> some View {
     MessageHoverOverlay(
       message: message,
-      onRate: { [id = message.id] rating in
-        onRate?(id, rating)
+      onRate: { [id = message.id] rating, reason in
+        onRate?(id, rating, reason)
       }
     ) {
       contentBlocksView(for: message)
@@ -536,7 +568,10 @@ struct AIResponseView: View {
       }
     }
     shareFeedbackHideWorkItem = workItem
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: workItem)
+    Task { @MainActor in
+      try? await Task.sleep(for: .seconds(FloatingBarNoticePolicy.confirmation))
+      if !workItem.isCancelled { workItem.perform() }
+    }
   }
 
 }
@@ -546,7 +581,7 @@ struct AIResponseView: View {
 /// Overlay that shows action buttons (thumbs up/down, copy, info) on hover over an AI message
 struct MessageHoverOverlay<Content: View>: View {
   let message: ChatMessage
-  let onRate: (Int?) -> Void
+  let onRate: (Int?, ChatFeedbackReason?) -> Void
   @ViewBuilder let content: () -> Content
 
   @State private var isHovered = false
@@ -580,13 +615,13 @@ struct MessageHoverOverlay<Content: View>: View {
         // Show immediately
         hideWorkItem?.cancel()
         hideWorkItem = nil
-        OmiMotion.withGated(.easeInOut(duration: 0.15)) {
+        OmiMotion.withGated(.easeInOut(duration: FloatingBarMotion.hoverFade)) {
           isHovered = true
         }
       } else {
         // Delay hide by 1.5s so user can move cursor to the buttons
         let work = DispatchWorkItem {
-          OmiMotion.withGated(.easeInOut(duration: 0.15)) {
+          OmiMotion.withGated(.easeInOut(duration: FloatingBarMotion.hoverFade)) {
             isHovered = false
           }
         }
@@ -612,7 +647,10 @@ struct MessageHoverOverlay<Content: View>: View {
             let newRating = currentRating == 1 ? nil : 1
             guard newRating != lastSubmittedRating else { return }
             lastSubmittedRating = newRating
-            onRate(newRating)
+            // The floating bar's hover overlay is too narrow for the reason
+            // chips the main chat window shows, so a voice thumbs-down records
+            // with no reason for now (the report calls that "not captured").
+            onRate(newRating, nil)
             if newRating != nil { showRatingFeedbackBriefly() }
           }) {
             Image(systemName: currentRating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
@@ -627,7 +665,10 @@ struct MessageHoverOverlay<Content: View>: View {
             let newRating = currentRating == -1 ? nil : -1
             guard newRating != lastSubmittedRating else { return }
             lastSubmittedRating = newRating
-            onRate(newRating)
+            // The floating bar's hover overlay is too narrow for the reason
+            // chips the main chat window shows, so a voice thumbs-down records
+            // with no reason for now (the report calls that "not captured").
+            onRate(newRating, nil)
             if newRating != nil { showRatingFeedbackBriefly() }
           }) {
             Image(systemName: currentRating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
@@ -679,7 +720,7 @@ struct MessageHoverOverlay<Content: View>: View {
         }
       }
     }
-    .omiAnimation(.easeInOut(duration: 0.2), value: showRatingFeedback)
+    .omiAnimation(.easeInOut(duration: FloatingBarMotion.stateFade), value: showRatingFeedback)
     .frame(maxWidth: .infinity, alignment: .trailing)
     .onHover { hovering in
       isBarHovered = hovering
@@ -693,7 +734,8 @@ struct MessageHoverOverlay<Content: View>: View {
 
   private func showRatingFeedbackBriefly() {
     showRatingFeedback = true
-    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+    Task { @MainActor in
+      try? await Task.sleep(for: .seconds(FloatingBarNoticePolicy.confirmation))
       showRatingFeedback = false
     }
   }
@@ -703,12 +745,11 @@ struct MessageHoverOverlay<Content: View>: View {
   /// clicking Copy on a historical message writes the correct content to the
   /// pasteboard even when SwiftUI has reused the overlay view across renders.
   private func copyText(_ text: String) {
-    guard !text.isEmpty else { return }
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(text, forType: .string)
+    guard OmiClipboard.copy(text) else { return }
     AnalyticsManager.shared.shareAction(category: "floating_bar_response_copy")
     OmiMotion.withGated { showCopied = true }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+    Task { @MainActor in
+      try? await Task.sleep(for: .seconds(FloatingBarNoticePolicy.confirmation))
       OmiMotion.withGated { showCopied = false }
     }
   }
@@ -755,6 +796,12 @@ struct MessageMetadataPopover: View {
           }
         }
 
+        if !metadata.modelsSummary.isEmpty {
+          metadataRow(label: "Model", value: metadata.modelsSummary)
+        }
+        if !metadata.providersSummary.isEmpty {
+          metadataRow(label: "Provider", value: metadata.providersSummary)
+        }
         metadataRow(label: "History", value: metadata.historySummary)
         metadataRow(label: "Offered", value: metadata.offeredToolsSummary)
         if !metadata.pathSummary.isEmpty {

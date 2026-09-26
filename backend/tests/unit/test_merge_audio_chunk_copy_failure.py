@@ -102,9 +102,9 @@ def test_no_chunks_anywhere_returns_empty(monkeypatch):
 
 def test_merge_propagates_custom_stt_marker_from_any_source(monkeypatch):
     """Regression for #7690: a merged conversation must carry `uses_custom_stt=True`
-    when ANY source was custom-STT, so process_conversation keeps the merged row
-    behind the Omi-paid LLM gate. A custom-STT source must not shed the marker by
-    merging with a normal-STT one (default False would bypass the gate)."""
+    when ANY source was custom-STT, so the merged row keeps accurate custom-STT
+    provenance. A custom-STT source must not shed the marker by merging with a
+    normal-STT one (default False would misreport the merged row)."""
     from datetime import datetime, timedelta, timezone
 
     now = datetime.now(timezone.utc)

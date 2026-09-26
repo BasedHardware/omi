@@ -283,6 +283,17 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('completed'), _asc('created_at'), _asc('__name__')),
     ),
+    # GET /v1/action-items?start_date=...&completed=... orders created_at
+    # newest-first (``_apply_action_item_date_filters``). The ascending
+    # composite above serves the ``get_scores`` count but not that ordering;
+    # a database provisioned from this manifest alone (isolated jit-qa,
+    # 2026-09-10) failed the read with FailedPrecondition until this existed.
+    FirestoreIndexRequirement(
+        'action_items_completed_created_newest_first',
+        'action_items',
+        'COLLECTION',
+        (_asc('completed'), _desc('created_at'), _desc('__name__')),
+    ),
     FirestoreIndexRequirement(
         'action_items_conversation_due',
         'action_items',
@@ -871,6 +882,24 @@ STALE_IN_PROGRESS_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     ),
 )
 
+# Duplicate-capture detection (#3244): the other capture clients' conversations
+# whose activity clock runs past this recording's start. Shares the composite
+# above with the stale sweep; the range and order both sit on `finished_at`.
+CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY = FirestoreQuerySpec(
+    identifier='conversations_by_status_finished_after',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('finished_at', '>=', 'finished_after'),
+    ),
+    index_fields=(
+        _asc('status'),
+        _asc('finished_at'),
+        _asc('__name__'),
+    ),
+)
+
 CONVERSATIONS_ACTIVE_ORDERED_QUERY = FirestoreQuerySpec(
     identifier='conversations_discarded_created',
     collection_group='conversations',
@@ -885,6 +914,36 @@ CONVERSATIONS_ACTIVE_ORDERED_QUERY = FirestoreQuerySpec(
     filters=(FirestoreQueryFilter('discarded', '==', 'discarded'),),
     index_fields=(_asc('discarded'), _desc('created_at'), _desc('__name__')),
 )
+
+
+MCP_CONVERSATION_CARD_QUERY_SPECS: dict[tuple[bool, bool, bool], FirestoreQuerySpec] = {}
+for _has_categories in (False, True):
+    for _has_start_date in (False, True):
+        for _has_end_date in (False, True):
+            _suffixes = []
+            _filters = [
+                FirestoreQueryFilter('discarded', '==', 'discarded'),
+                FirestoreQueryFilter('status', '==', 'status'),
+            ]
+            _index_fields = [_asc('discarded'), _asc('status')]
+            if _has_categories:
+                _suffixes.append('category')
+                _filters.append(FirestoreQueryFilter('structured.category', 'in', 'categories'))
+                _index_fields.append(_asc('structured.category'))
+            if _has_start_date:
+                _suffixes.append('start')
+                _filters.append(FirestoreQueryFilter('created_at', '>=', 'start_date'))
+            if _has_end_date:
+                _suffixes.append('end')
+                _filters.append(FirestoreQueryFilter('created_at', '<=', 'end_date'))
+            _variant = '_'.join(_suffixes) or 'all'
+            MCP_CONVERSATION_CARD_QUERY_SPECS[(_has_categories, _has_start_date, _has_end_date)] = FirestoreQuerySpec(
+                identifier=f'mcp_conversation_cards_{_variant}',
+                collection_group='conversations',
+                query_scope='COLLECTION',
+                filters=tuple(_filters),
+                index_fields=tuple((*_index_fields, _desc('created_at'), _desc('__name__'))),
+            )
 
 ENTITY_TIMELINE_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     identifier='conversations_entity_timeline_completed',
@@ -924,12 +983,37 @@ ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY = FirestoreQuerySpec(
     ),
 )
 
+SCREEN_ACTIVITY_KEYWORD_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='screen_activity_keyword_timestamp_range',
+    collection_group='screen_activity',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('timestamp', '>=', 'start'),
+        FirestoreQueryFilter('timestamp', '<=', 'end'),
+    ),
+    index_fields=(
+        _desc('timestamp'),
+        _desc('__name__'),
+    ),
+)
+
 ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY = FirestoreQuerySpec(
     identifier='action_items_completion_id_scan',
     collection_group='action_items',
     query_scope='COLLECTION',
     filters=(FirestoreQueryFilter('completed', '==', 'completed'),),
     index_fields=(_asc('completed'), _asc('__name__')),
+)
+
+ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY = FirestoreQuerySpec(
+    identifier='action_items_canonical_completion_count',
+    collection_group='action_items',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('completed', 'in', 'canonical_values'),),
+    # Firestore's automatic single-field index serves this aggregation; keeping
+    # the query in the registry makes the production shape auditable without
+    # adding a redundant composite manifest entry.
+    index_fields=(_asc('completed'),),
 )
 
 ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY = FirestoreQuerySpec(
@@ -955,6 +1039,28 @@ ACTION_ITEMS_CREATED_RANGE_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('created_at'), _asc('__name__')),
 )
 
+MEMORIES_CREATED_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='memories_created_range',
+    collection_group='memories',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('created_at', '>=', 'start'),
+        FirestoreQueryFilter('created_at', '<=', 'end'),
+    ),
+    index_fields=(_asc('created_at'), _asc('__name__')),
+)
+
+CANONICAL_MEMORIES_CAPTURED_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='canonical_memories_captured_range',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('captured_at', '>=', 'start'),
+        FirestoreQueryFilter('captured_at', '<=', 'end'),
+    ),
+    index_fields=(_asc('captured_at'), _asc('__name__')),
+)
+
 ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY = FirestoreQuerySpec(
     identifier='action_items_completed_created_range',
     collection_group='action_items',
@@ -964,6 +1070,10 @@ ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY = FirestoreQuerySpec(
         FirestoreQueryFilter('created_at', '<', 'end'),
         FirestoreQueryFilter('completed', '==', 'completed'),
     ),
+    # ``build`` is the ``get_scores`` weekly count aggregation (no ordering),
+    # which Firestore serves only from the ascending composite; the
+    # newest-first list read in ``_apply_action_item_date_filters`` is a
+    # different composite, declared as ``action_items_completed_created_newest_first``.
     index_fields=(_asc('completed'), _asc('created_at'), _asc('__name__')),
 )
 
@@ -994,6 +1104,24 @@ CHAT_FIRST_DEFERRALS_SUBJECT_QUERY = FirestoreQuerySpec(
         _asc('state'),
         _asc('subject.kind'),
         _asc('subject.id'),
+        _asc('__name__'),
+    ),
+)
+
+CHAT_FIRST_TRANSIENT_DEAD_LETTER_REPAIR_QUERY = FirestoreQuerySpec(
+    identifier='chat_first_transient_dead_letter_repair',
+    collection_group='chat_first_dead_letters',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('account_generation', '==', 'account_generation'),
+        FirestoreQueryFilter('requeue_count', '==', 'requeue_count'),
+        FirestoreQueryFilter('dead_letter_reason', 'in', 'dead_letter_reasons'),
+    ),
+    index_fields=(
+        _asc('account_generation'),
+        _asc('requeue_count'),
+        _asc('dead_letter_reason'),
+        _asc('last_fetched_at'),
         _asc('__name__'),
     ),
 )
@@ -1029,6 +1157,22 @@ MESSAGES_BY_APP_ORDERED_QUERY = FirestoreQuerySpec(
     query_scope='COLLECTION',
     filters=(FirestoreQueryFilter('plugin_id', '==', 'app_id'),),
     index_fields=(_asc('plugin_id'), _desc('created_at'), _desc('__name__')),
+)
+
+# The daily feedback report scans one UTC day of negative ratings across every
+# surface: value == -1 ordered by created_at. Without this composite the job
+# 400s with FailedPrecondition on its very first run, which on a nightly cron
+# is a failure nobody sees until the report is already missing.
+NEGATIVE_FEEDBACK_EVENTS_QUERY = FirestoreQuerySpec(
+    identifier='feedback_events_negative_by_created_at',
+    collection_group='feedback_events',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('value', '==', 'value'),
+        FirestoreQueryFilter('created_at', '>=', 'start_at'),
+        FirestoreQueryFilter('created_at', '<', 'end_at'),
+    ),
+    index_fields=(_asc('value'), _asc('created_at'), _asc('__name__')),
 )
 
 MEETING_RECEIPTS_DUE_QUERY = FirestoreQuerySpec(
@@ -1144,11 +1288,107 @@ MESSAGES_BY_SESSION_ORDERED_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('chat_session_id'), _desc('created_at'), _desc('__name__')),
 )
 
+# EXP-001's daily cohort selection: every macOS account whose set-once
+# `signup_platform_at` lands in one 24h window 72-96h back. Equality plus a
+# range on a different field is a compound serving query, so automatic
+# single-field indexes do not cover it however the directions line up.
+DAY3_REENGAGEMENT_SIGNUP_COHORT_QUERY = FirestoreQuerySpec(
+    identifier='users_signup_platform_signup_os_signup_at_range',
+    collection_group='users',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('signup_platform', '==', 'signup_platform'),
+        FirestoreQueryFilter('signup_os', 'in', 'signup_os_values'),
+        FirestoreQueryFilter('signup_platform_at', '>=', 'start'),
+        FirestoreQueryFilter('signup_platform_at', '<', 'end'),
+    ),
+    index_fields=(
+        _asc('signup_platform'),
+        _asc('signup_os'),
+        _asc('signup_platform_at'),
+        _asc('__name__'),
+    ),
+)
+
+# EXP-001's day-0 output count: real conversations created inside the 24h after
+# signup.
+#
+# `discarded == False` and `status == 'completed'` are not incidental hygiene,
+# they are the definition of the signal. A raw `created_at` scan counts the
+# `in_progress` stub the desktop listen socket writes on every session start
+# and reconnect, so a Mac that is merely still running — launch-at-login, wakes
+# from sleep, reconnects — manufactures "conversations" indistinguishable from
+# real output. That is the same contamination that made `last_active_at`
+# unusable for this experiment, and re-importing it through the value signal
+# would hollow out the target cohort exactly as badly. It also matches the
+# codebase's own default reader, `get_conversations`, which excludes discarded
+# rows unless asked otherwise.
+DAY3_REENGAGEMENT_DAY_ZERO_CONVERSATIONS_QUERY = FirestoreQuerySpec(
+    identifier='conversations_created_range_day_zero',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('discarded', '==', 'discarded'),
+        FirestoreQueryFilter('status', 'in', 'statuses'),
+        FirestoreQueryFilter('created_at', '>=', 'start'),
+        FirestoreQueryFilter('created_at', '<', 'end'),
+    ),
+    index_fields=(_asc('discarded'), _asc('status'), _asc('created_at'), _asc('__name__')),
+)
+
+# The companion "did they come back after day 0" probe: same definition of a
+# real conversation, one open-ended lower bound, `limit(1)`. Served by the same
+# composite as the day-0 count (equalities then range), declared separately so
+# the coverage checker can match each call site to a spec.
+DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY = FirestoreQuerySpec(
+    identifier='conversations_created_after_day_zero',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('discarded', '==', 'discarded'),
+        FirestoreQueryFilter('status', 'in', 'statuses'),
+        FirestoreQueryFilter('created_at', '>=', 'start'),
+    ),
+    index_fields=(_asc('discarded'), _asc('status'), _asc('created_at'), _asc('__name__')),
+)
+
+# Hourly daily-summary cron: Firestore returns only recipients for (enabled, local
+# hour, timezone chunk) instead of scanning every user with a time_zone and
+# filtering preferences in Python. Equality on the two preference fields is
+# only valid once they are always-present (write-time defaults + backfill).
+DAILY_SUMMARY_RECIPIENTS_QUERY = FirestoreQuerySpec(
+    identifier='daily_summary_recipients_by_hour_and_zone',
+    collection_group='users',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('daily_summary_enabled', '==', 'enabled'),
+        FirestoreQueryFilter('daily_summary_hour_local', '==', 'hour_local'),
+        FirestoreQueryFilter('time_zone', 'in', 'time_zones'),
+    ),
+    index_fields=(_asc('daily_summary_enabled'), _asc('daily_summary_hour_local'), _asc('time_zone'), _asc('__name__')),
+)
+
+
+CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='conversation_photos_name_range_export',
+    collection_group='photos',
+    query_scope='COLLECTION_GROUP',
+    filters=(
+        FirestoreQueryFilter('__name__', '>=', 'start_key'),
+        FirestoreQueryFilter('__name__', '<=', 'end_key'),
+    ),
+    index_fields=(_asc('__name__'),),
+)
+
 QUERY_SPECS = (
+    ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY,
+    CONVERSATION_PHOTOS_NAME_RANGE_QUERY,
     ACTION_ITEMS_COMPLETION_ID_SCAN_QUERY,
     ACTION_ITEMS_COMPLETED_DUE_RANGE_QUERY,
     ACTION_ITEMS_CREATED_RANGE_QUERY,
     ACTION_ITEMS_COMPLETED_CREATED_RANGE_QUERY,
+    MEMORIES_CREATED_RANGE_QUERY,
+    CANONICAL_MEMORIES_CAPTURED_RANGE_QUERY,
     CANDIDATES_COMPATIBILITY_QUERY,
     DUE_MEMORY_OUTBOX_QUERY,
     EXPIRED_MEMORY_OUTBOX_LEASE_QUERY,
@@ -1184,24 +1424,33 @@ QUERY_SPECS = (
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     LEGACY_CONVERSATION_RECOVERY_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+    CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
     ENTITY_TIMELINE_CONVERSATIONS_QUERY,
     ENTITY_TIMELINE_MEETINGS_QUERY,
     ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY,
+    SCREEN_ACTIVITY_KEYWORD_RANGE_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
+    CHAT_FIRST_TRANSIENT_DEAD_LETTER_REPAIR_QUERY,
     CURRENT_CHAT_SESSION_QUERY,
     CURRENT_CHAT_SESSION_ORDERED_QUERY,
     MEETING_RECEIPTS_DUE_QUERY,
+    NEGATIVE_FEEDBACK_EVENTS_QUERY,
     HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY,
     FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY,
     MESSAGES_BY_APP_ORDERED_QUERY,
     MESSAGES_BY_SESSION_ORDERED_QUERY,
     CONVERSATIONS_ACTIVE_ORDERED_QUERY,
+    *MCP_CONVERSATION_CARD_QUERY_SPECS.values(),
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
     CONVERSATION_KEYFRAME_JOBS_DEVICE_STATE_QUERY,
     SCREEN_ACTIVITY_KEYFRAME_QUERY,
     FRAME_VISION_OUTPUT_EXPIRY_QUERY,
     FRAME_REQUEST_METADATA_EXPIRY_QUERY,
+    DAY3_REENGAGEMENT_SIGNUP_COHORT_QUERY,
+    DAY3_REENGAGEMENT_DAY_ZERO_CONVERSATIONS_QUERY,
+    DAY3_REENGAGEMENT_RETURNED_CONVERSATIONS_QUERY,
+    DAILY_SUMMARY_RECIPIENTS_QUERY,
 )
 
 _INDEX_ONLY_REQUIREMENT_SIGNATURES = frozenset(requirement.signature for requirement in INDEX_ONLY_REQUIREMENTS)
@@ -1256,6 +1505,21 @@ def _query_spec_index_requirements() -> tuple[FirestoreIndexRequirement, ...]:
             query_filter.field_path == '__name__' and query_filter.operator not in ('==', 'in')
             for query_filter in spec.filters
         )
+        document_id_only_range = (
+            document_id_range
+            and bool(spec.filters)
+            and all(query_filter.field_path == '__name__' for query_filter in spec.filters)
+            and len(spec.index_fields) == 1
+            and spec.index_fields[0].field_path == '__name__'
+            and spec.index_fields[0].order in {'ASCENDING', 'DESCENDING'}
+        )
+        if document_id_only_range:
+            # Firestore serves collection-group ranges on the document key from
+            # its built-in key index. A one-field __name__ composite is not a
+            # valid Firestore composite definition (composites require at least
+            # two fields); keep the query registered for coverage without
+            # turning it into an impossible provisioning requirement.
+            continue
         if not _index_fields_need_composite_manifest(spec.index_fields) and not document_id_range:
             continue
         signature = spec.index_requirement.signature

@@ -129,12 +129,15 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     // without spawning real agents / network calls inside the test.
     let stub: String
     switch HubTool(rawValue: name) {
-    case .askHigherModel: stub = "Paris is the capital of France."
+    case .thinkDeeper: stub = "Paris is the capital of France."
+    case .webSearch: stub = "According to the live forecast, New York is sunny and 73 degrees."
     case .getTasks: stub = "Due today (1):\n- Example task [id:task_123]"
     case .getMemories: stub = "You live in San Francisco and prefer concise answers."
     case .searchMemories: stub = "Your dog's name is Rex."
     case .searchConversations: stub = "On Monday you discussed the launch timeline."
     case .getConversations: stub = "Most recent: today, 'Standup notes'. Before that: yesterday, 'Design review'."
+    case .readConversationEvidence: stub = "Evidence body: visible text from the captured turn."
+    case .searchConversationEvidence: stub = "Found 1 matching evidence item."
     case .getActionItems: stub = "Open: Buy milk (due tomorrow). Completed: Ship the PR."
     case .checkPermissionStatus: stub = "Screen Recording: not granted."
     case .requestPermission: stub = "Screen Recording permission request opened."
@@ -147,16 +150,20 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .inspectAgentArtifacts:
       stub =
         "Canonical agent artifacts. Use artifactRef values internally for follow-up tool calls; do not say them aloud.\n- artifact_1: role result, state retained"
+    case .readToolOutput: stub = "Bounded saved tool output excerpt."
+    case .searchToolOutput: stub = "Found 1 matching saved-output line."
     case .updateAgentArtifactLifecycle: stub = "Artifact lifecycle is now retained. Changed: true."
     case .getDailyRecap: stub = "Yesterday: 3 hrs in Xcode, 1 hr in Safari; 2 conversations; 1 task created."
     case .searchScreenHistory: stub = "Found it: yesterday afternoon you were reading the launch doc in Safari."
     case .createActionItem: stub = "Created task: Example task."
+    case .createContextReminder: stub = "I'll remind you next time you're in Pricing Engine."
     case .updateActionItem: stub = "Updated the task."
     case .createCalendarEvent: stub = "Created calendar event: Example event."
     case .spawnAgent: stub = "Started a background agent."
     case .setDesktopAttentionOverride: stub = "Attention override applied."
     case .screenshot: stub = "Screen captured."
     case .reportScreenObservation: stub = "Screen observation accepted."
+    case .recordInterjectFeedback: stub = #"{"ok":true}"#
     case .pointClick: stub = "Clicked."
     case .none: stub = "ok"
     }
@@ -192,7 +199,13 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
       // Phase 2: if asked for ephemeral, or no BYOK key exists (managed user),
       // mint a server-side ephemeral token via the backend; else use the BYOK key.
       let wantEphemeral = params["auth"] == "ephemeral"
-      let byok = APIKeyService.selectedRealtimeBYOKKey(for: provider.byokProvider)
+      // Mirrors the session call site exactly (RealtimeHubController+SessionLifecycle):
+      // a provider that is the user's Voice Model gets its own key, one reached any
+      // other way does not. A blanket `true` here would make the harness more permissive
+      // than production and stop it exercising the withholding half of the contract.
+      let byok = APIKeyService.selectedRealtimeBYOKKey(
+        for: provider.byokProvider,
+        chosenForVoice: RealtimeHubSettings.shared.isVoiceModelChoice(provider))
       let auth: HubAuth
       if !wantEphemeral, let key = byok {
         auth = .byokKey(key)

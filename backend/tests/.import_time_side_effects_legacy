@@ -8,7 +8,7 @@
 #
 # Terminal state: this file is deleted (PLAN.md §4, condition #2).
 #
-# Total: 29 entries.
+# Total: 28 entries.
 #
 # The 4 entries marked "surfaced by P2" below were discovered by the alias-
 # resolution hardening of scan_import_time_side_effects.py: the old checker
@@ -31,7 +31,6 @@ backend/scripts/chat/stream_test.py
 backend/scripts/rag/_shared.py
 backend/scripts/rag/memories.py
 backend/scripts/stt/c_generate_models.py
-backend/scripts/stt/d_test_models.py
 backend/scripts/stt/h_brainstorming.py
 backend/scripts/stt/j_apply_vad_to_speech_profiles.py
 backend/scripts/stt/k_compare_transcripts_performance.py

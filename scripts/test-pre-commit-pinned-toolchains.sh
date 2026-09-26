@@ -7,13 +7,15 @@ unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR GIT_INDEX_FILE GIT_OBJECT_DIRECTORY G
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOOK="$ROOT/scripts/pre-commit"
+BACKEND_FORMATTER="$ROOT/scripts/backend-python-format"
 TMPDIR="$(mktemp -d)"
 cleanup() { rm -rf "$TMPDIR"; }
 trap cleanup EXIT
 
 REPO="$TMPDIR/repo"
 STUBS="$TMPDIR/stubs"
-mkdir -p "$REPO/web/frontend/src" "$REPO/app/lib" "$REPO/.github/workflows" "$REPO/.github/scripts" "$STUBS"
+mkdir -p "$REPO/web/frontend/src" "$REPO/app/lib" "$REPO/.github/workflows" "$REPO/.github/scripts" "$REPO/scripts" "$STUBS"
+cp "$BACKEND_FORMATTER" "$REPO/scripts/backend-python-format"
 git -C "$REPO" init -q
 git -C "$REPO" config user.email test@example.com
 git -C "$REPO" config user.name test
@@ -84,6 +86,29 @@ make_prettier_lock() {
     }
   }
 }
+
+LOCK
+}
+
+make_bun_lock() {
+  target_dir="$1"
+  version="$2"
+  cat >"$target_dir/bun.lock" <<LOCK
+{
+  "lockfileVersion": 1,
+  "workspaces": {
+    "": {
+      "devDependencies": {
+        "prettier": "^$version",
+        "prettier-plugin-tailwindcss": "^0.3.0",
+      },
+    },
+  },
+  "packages": {
+    "prettier": ["prettier@$version", "", {}, "sha512-fixture"],
+    "prettier-plugin-tailwindcss": ["prettier-plugin-tailwindcss@0.3.0", "", {}, "sha512-fixture"],
+  },
+}
 LOCK
 }
 
@@ -111,6 +136,22 @@ for f in "$@"; do
 done
 STUB
   chmod +x "$STUBS/flutter" "$STUBS/dart"
+}
+
+make_black_stub() {
+  cat >"$STUBS/black" <<'STUB'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+  echo "black, 26.5.1 (compiled: yes)"
+  exit 0
+fi
+for arg in "$@"; do
+  case "$arg" in
+    *.py) printf 'PYTHON_FORMATTED\n' >"$arg" ;;
+  esac
+done
+STUB
+  chmod +x "$STUBS/black"
 }
 
 run_hook() {
@@ -230,11 +271,21 @@ git -C "$REPO" reset -q --hard
 for webdir in web/app web/admin; do
   mkdir -p "$REPO/$webdir/src"
   printf '{\n  "devDependencies": {\n    "prettier": "^2.8.8",\n    "prettier-plugin-tailwindcss": "^0.3.0"\n  }\n}\n' >"$REPO/$webdir/package.json"
-  make_prettier_lock "$REPO/$webdir" 2.8.8
+  if [ "$webdir" = "web/app" ]; then
+    make_bun_lock "$REPO/$webdir" 2.8.8
+  else
+    make_prettier_lock "$REPO/$webdir" 2.8.8
+  fi
   make_prettier_stub "$REPO/$webdir" 2.8.8
   make_prettier_plugin "$REPO/$webdir" 0.3.0
   printf 'const %s = {b:1}\n' "$(basename "$webdir")" >"$REPO/$webdir/src/a.ts"
   git -C "$REPO" add -A
+  if [ "$webdir" = "web/app" ]; then
+    make_prettier_stub "$REPO/$webdir" 2.0.0
+    expect_refusal "bun lock prettier version mismatch"
+    test "$(cat "$REPO/$webdir/src/a.ts")" = "const app = {b:1}"
+    make_prettier_stub "$REPO/$webdir" 2.8.8
+  fi
   run_hook >/dev/null
   grep -q 'PRETTIER_2.8.8_FORMATTED' "$REPO/$webdir/src/a.ts"
   git -C "$REPO" reset -q --hard
@@ -287,5 +338,16 @@ printf 'const nolock = {b:1}\n' >"$REPO/web/nolock/src/a.ts"
 git -C "$REPO" add web/nolock/src/a.ts web/nolock/package.json
 expect_refusal "missing lockfile with same-major prettier"
 test "$(cat "$REPO/web/nolock/src/a.ts")" = "const nolock = {b:1}"
+
+# --- Backend Python uses the shared pinned formatter and re-stages its output ---
+git -C "$REPO" reset -q --hard
+mkdir -p "$REPO/backend"
+printf 'x=  1\n' >"$REPO/backend/example.py"
+git -C "$REPO" add backend/example.py
+make_black_stub
+run_hook >/dev/null
+test "$(cat "$REPO/backend/example.py")" = "PYTHON_FORMATTED"
+git -C "$REPO" diff --exit-code -- backend/example.py >/dev/null
+git -C "$REPO" diff --cached -- backend/example.py | grep -q 'PYTHON_FORMATTED'
 
 echo "pre-commit pinned-toolchain refusal tests passed"

@@ -5,6 +5,7 @@ description: One-time desktop rating ask — due exactly at the 3rd question, st
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/RatingPrompt.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+CSAT.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge+RatingPrompt.swift
 preconditions:
   - automation_bridge_ready
@@ -79,7 +80,6 @@ steps:
     expect:
       ok: true
       result.detail.visible: "false"
-
   - id: S7
     name: A second submit is refused
     bridge.action:
@@ -89,6 +89,85 @@ steps:
     expect:
       ok: true
       result.detail.submitted: "false"
+
+  - id: S7a
+    name: Reset again for the low-score comment path
+    bridge.action:
+      name: rating_prompt_reset
+    expect:
+      ok: true
+      result.detail.reset: "true"
+
+  - id: S7b
+    name: First question of the second pass
+    bridge.action:
+      name: rating_prompt_record_question
+    expect:
+      ok: true
+      result.detail.question_count: "1"
+      result.detail.visible: "false"
+
+  - id: S7c
+    name: Second question of the second pass
+    bridge.action:
+      name: rating_prompt_record_question
+    expect:
+      ok: true
+      result.detail.question_count: "2"
+      result.detail.visible: "false"
+
+  - id: S7d
+    name: Third question arms the prompt again
+    bridge.action:
+      name: rating_prompt_record_question
+    expect:
+      ok: true
+      result.detail.question_count: "3"
+      result.detail.visible: "true"
+
+  - id: S7e
+    name: A 2-star rating holds the bar for an optional comment
+    bridge.action:
+      name: rating_prompt_submit
+      params:
+        rating: "2"
+    expect:
+      ok: true
+      result.detail.submitted: "false"
+      result.detail.comment_pending: "2"
+
+  - id: S7f
+    name: The bar stays up while the comment is pending
+    bridge.action:
+      name: rating_prompt_state
+    expect:
+      ok: true
+      result.detail.visible: "true"
+      result.detail.comment_pending: "2"
+      result.detail.submitted_rating: "0"
+
+  - id: S7g
+    name: Sending the comment completes the submission
+    bridge.action:
+      name: rating_prompt_submit_comment
+      params:
+        comment: "too slow"
+    expect:
+      ok: true
+      result.detail.submitted: "true"
+      result.detail.rating: "2"
+
+  - id: S7h
+    name: A low score thanks without the refer proposal
+    bridge.action:
+      name: rating_prompt_state
+    expect:
+      ok: true
+      result.detail.thank_you: "2"
+      result.detail.visible: "false"
+      result.detail.submitted_rating: "2"
+
+
 
   - id: S8
     name: Leave no persisted QA state behind

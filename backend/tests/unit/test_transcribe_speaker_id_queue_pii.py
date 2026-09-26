@@ -83,7 +83,7 @@ async def test_speaker_no_match_records_unknown_identity_instead_of_confident_ne
 
     await matcher.match(
         0,
-        {'id': 'unmatched-segment', 'duration': 2.0, 'abs_start': 0.0, 'abs_end': 2.0},
+        {'id': 'unmatched-segment', 'duration': 6.0, 'abs_start': 0.0, 'abs_end': 6.0},
     )
 
     assert matcher.segment_identity_status['unmatched-segment'] == SpeakerIdentityStatus.no_match

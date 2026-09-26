@@ -8,9 +8,14 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-from models.conversation_enums import ConversationStatus
+from models.structured import Structured
 from utils.conversations import finalizer
-from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations import process_conversation as processing
+from utils.conversations.memory_extraction_telemetry import (
+    PATH_CANONICAL,
+    ConversationMemoryExtractionResult,
+    source_for_conversation,
+)
 
 _failure_budget: dict[str, int] = {}
 
@@ -54,37 +59,56 @@ def _consume_failure(stage: str, conversation_id: str, **metadata: Any) -> bool:
     return True
 
 
-def _offline_process_conversation(uid: str, _language: str, conversation: Any, **kwargs: Any) -> Any:
+def _offline_get_structured(_uid: str, _language: str, conversation: Any, *_args: Any, **_kwargs: Any):
+    """Replace only the summary-provider leaf; lifecycle persistence stays real."""
+
     conversation_id = str(conversation.id)
     if _consume_failure('process', conversation_id):
         raise RuntimeError('controlled finalization processing failure')
-    conversation.status = ConversationStatus.completed
-    persisted = lifecycle_service.persist_processed_conversation(uid, conversation.model_dump())
     _record(
         {
             'event': 'provider_leaf',
             'stage': 'process',
             'outcome': 'completed',
             'conversation_id': conversation_id,
-            'persisted': bool(persisted),
-            'force_process': bool(kwargs.get('force_process')),
-            'defer_derived_effects': bool(kwargs.get('defer_derived_effects')),
         }
     )
-    return conversation
+    return Structured(title='Hermetic finalization', overview='Provider leaf completed locally.'), False
 
 
-def _offline_extract_memories(_uid: str, conversation: Any) -> None:
+def _offline_extract_memories_canonical(
+    _uid: str, conversation: Any, *, db_client: Any, parity_capture: Any = None
+) -> ConversationMemoryExtractionResult:
+    """Replace the memory provider/store leaf reached only after the real fence."""
+
+    del db_client, parity_capture
     _record(
-        {'event': 'provider_leaf', 'stage': 'memory', 'outcome': 'skipped', 'conversation_id': str(conversation.id)}
+        {'event': 'provider_leaf', 'stage': 'memory', 'outcome': 'completed', 'conversation_id': str(conversation.id)}
     )
+    return ConversationMemoryExtractionResult(
+        count=0,
+        source=source_for_conversation(conversation),
+        path=PATH_CANONICAL,
+    )
+
+
+def _offline_noop(*_args: Any, **_kwargs: Any) -> None:
+    """Credentialed derived-effect leaf intentionally excluded from this harness."""
+
+
+async def _offline_noop_async(*_args: Any, **_kwargs: Any) -> None:
+    """Async credentialed derived-effect leaf intentionally excluded here."""
+
+
+def _offline_folder_assignment(*_args: Any, **_kwargs: Any) -> tuple[None, float, str]:
+    return None, 0.0, 'offline_provider_leaf'
 
 
 async def _offline_trigger_integrations(_uid: str, conversation: Any, *, idempotency_key: str, **_kwargs: Any) -> None:
     conversation_id = str(conversation.id)
     fanout_key_sha256 = sha256(idempotency_key.encode()).hexdigest()
     if _consume_failure('integration', conversation_id, fanout_key_sha256=fanout_key_sha256):
-        raise RuntimeError('controlled finalization integration failure')
+        raise ConnectionError('controlled finalization integration failure')
     _record(
         {
             'event': 'provider_leaf',
@@ -97,9 +121,17 @@ async def _offline_trigger_integrations(_uid: str, conversation: Any, *, idempot
 
 
 def install_finalizer_leaves() -> None:
-    """Install only controlled provider leaves before the real ASGI app imports."""
+    """Install provider leaves below the real process/fence/finalizer path."""
     global _failure_budget
     _failure_budget = _parse_failure_budget()
-    finalizer.process_conversation = _offline_process_conversation
-    finalizer.extract_memories = _offline_extract_memories
+    processing._get_structured = _offline_get_structured
+    processing._extract_memories_canonical = _offline_extract_memories_canonical
+    processing.trigger_conversation_apps = _offline_noop
+    processing.assign_conversation_to_folder = _offline_folder_assignment
+    processing.save_structured_vector = _offline_noop
+    processing.save_transcript_chunk_vectors = _offline_noop
+    processing._save_action_items = _offline_noop
+    processing.update_goal_progress = _offline_noop
+    processing.conversation_created_webhook = _offline_noop_async
+    processing.conversations_db.create_audio_files_from_chunks = lambda *_args, **_kwargs: []
     finalizer.trigger_external_integrations = _offline_trigger_integrations

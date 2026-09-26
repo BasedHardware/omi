@@ -57,6 +57,31 @@ class LiveNotesMonitor: ObservableObject {
 
   private let noteStorage: LiveNoteStoring
 
+  /// Sync peek used before each generation. BYOK is already folded into
+  /// `cachedDecisionForManagedProactivity()` (allow) so this is the only gate.
+  private let entitlementDecision: () -> SubscriptionEntitlementDecision
+
+  /// Optional cache refresh so a mid-session upgrade/BYOK change can unlatch
+  /// without an app restart. Tests leave this nil.
+  private let refreshEntitlement: (@Sendable () async -> Void)?
+
+  private let logGenerationFailure: (String, Error) -> Void
+
+  /// Server 402 `plan_gated` latch. Survives fail-open cached `.allow` until the
+  /// entitlement decision actually changes, or until `serverDenialLifetime`
+  /// passes: when the cached plan was unknown (fail-open allow) an upgrade leaves
+  /// the decision at allow, so nothing else would ever clear the latch. One
+  /// probe per lifetime is the cost of noticing that upgrade without a restart.
+  private var serverDeniedManagedNotes = false
+  private var serverDeniedAt: Date?
+  static let serverDenialLifetime: TimeInterval = 10 * 60
+
+  private var lastEntitlementDecision: SubscriptionEntitlementDecision?
+
+  private var didLogPlanGateSkip = false
+
+  private var entitlementRefreshInFlight = false
+
   /// Cancellables for subscriptions
   private var cancellables = Set<AnyCancellable>()
 
@@ -75,17 +100,33 @@ class LiveNotesMonitor: ObservableObject {
     self.init(
       noteGeneratorFactory: { try GeminiClient(model: ModelQoS.Gemini.lightweight, workload: .extraction) },
       noteStorage: NoteStorage.shared,
-      subscribeToTranscript: true
+      subscribeToTranscript: true,
+      entitlementDecision: {
+        SubscriptionEntitlementService.shared.cachedDecisionForManagedProactivity()
+      },
+      refreshEntitlement: {
+        _ = await SubscriptionEntitlementService.shared.snapshot()
+      }
     )
   }
 
   init(
     noteGeneratorFactory: @escaping () throws -> LiveNoteGenerating,
     noteStorage: LiveNoteStoring,
-    subscribeToTranscript: Bool = false
+    subscribeToTranscript: Bool = false,
+    entitlementDecision: @escaping () -> SubscriptionEntitlementDecision = {
+      SubscriptionEntitlementService.shared.cachedDecisionForManagedProactivity()
+    },
+    refreshEntitlement: (@Sendable () async -> Void)? = nil,
+    logGenerationFailure: @escaping (String, Error) -> Void = { message, error in
+      logError(message, error: error)
+    }
   ) {
     self.noteGeneratorFactory = noteGeneratorFactory
     self.noteStorage = noteStorage
+    self.entitlementDecision = entitlementDecision
+    self.refreshEntitlement = refreshEntitlement
+    self.logGenerationFailure = logGenerationFailure
 
     if subscribeToTranscript {
       // Subscribe to transcript changes
@@ -240,9 +281,11 @@ class LiveNotesMonitor: ObservableObject {
 
   /// Generate an AI note from recent transcript
   private func generateNote(for request: LiveNotesGenerationRequest) {
+    guard currentSessionId != nil, !isGenerating else { return }
+    if shouldSkipManagedAINotes() { return }
+
     guard let sessionId = currentSessionId,
-      let generator = noteGenerator,
-      !isGenerating
+      let generator = noteGenerator
     else { return }
 
     isGenerating = true
@@ -301,8 +344,15 @@ class LiveNotesMonitor: ObservableObject {
         log("LiveNotesMonitor: Session \(sessionId) deleted during note generation, skipping")
         await MainActor.run { self.finishGeneration(for: sessionId) }
       } catch {
-        logError("LiveNotesMonitor: Failed to generate note", error: error)
-        await MainActor.run { self.finishGeneration(for: sessionId) }
+        if Self.isPlanGatedGenerationError(error) {
+          await MainActor.run {
+            self.latchPlanGateFromServer()
+            self.finishGeneration(for: sessionId)
+          }
+        } else {
+          self.logGenerationFailure("LiveNotesMonitor: Failed to generate note", error)
+          await MainActor.run { self.finishGeneration(for: sessionId) }
+        }
       }
     }
   }
@@ -310,6 +360,70 @@ class LiveNotesMonitor: ObservableObject {
   private func finishGeneration(for sessionId: Int64) {
     guard currentSessionId == sessionId else { return }
     isGenerating = false
+  }
+
+  /// Skip managed AI notes when the cached decision is `.planGated` (BYOK already
+  /// maps to `.allowManagedProactivity`) or after a typed server `plan_gated`.
+  /// A later decision change to allow unlatches so an upgrade resumes notes.
+  private func shouldSkipManagedAINotes() -> Bool {
+    let decision = entitlementDecision()
+    if lastEntitlementDecision != decision {
+      lastEntitlementDecision = decision
+      if decision == .allowManagedProactivity {
+        serverDeniedManagedNotes = false
+        serverDeniedAt = nil
+        didLogPlanGateSkip = false
+      }
+    }
+
+    if serverDeniedManagedNotes, let deniedAt = serverDeniedAt,
+      Date().timeIntervalSince(deniedAt) >= Self.serverDenialLifetime
+    {
+      serverDeniedManagedNotes = false
+      serverDeniedAt = nil
+      didLogPlanGateSkip = false
+    }
+
+    if decision == .planGated || serverDeniedManagedNotes {
+      logPlanGateSkipOnce()
+      requestEntitlementRefresh()
+      return true
+    }
+    return false
+  }
+
+  private func latchPlanGateFromServer() {
+    serverDeniedManagedNotes = true
+    serverDeniedAt = Date()
+    logPlanGateSkipOnce()
+    requestEntitlementRefresh()
+  }
+
+  private func logPlanGateSkipOnce() {
+    guard !didLogPlanGateSkip else { return }
+    didLogPlanGateSkip = true
+    log("LiveNotesMonitor: AI notes unavailable on this plan; skipping generation")
+  }
+
+  private func requestEntitlementRefresh() {
+    guard let refreshEntitlement, !entitlementRefreshInFlight else { return }
+    entitlementRefreshInFlight = true
+    Task { [weak self] in
+      await refreshEntitlement()
+      await MainActor.run {
+        self?.entitlementRefreshInFlight = false
+      }
+    }
+  }
+
+  private static func isPlanGatedGenerationError(_ error: Error) -> Bool {
+    if case GeminiClient.GeminiClientError.planGated = error {
+      return true
+    }
+    if case ProactiveLaneClientError.planGated = error {
+      return true
+    }
+    return false
   }
 
   // MARK: - Computed Properties

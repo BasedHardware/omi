@@ -22,6 +22,14 @@ from database.firestore_index_registry import (
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
     MEETING_RECEIPTS_DUE_QUERY,
 )
+from models.client_processing import PROJECTION_FAMILY_FIELDS
+from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
+from utils.conversations.recovery import (
+    TERMINAL_NO_DERIVED_EFFECTS_FIELD,
+    raw_transcript_bytes,
+    recovery_audio_file_ids,
+    structured_has_protected_content,
+)
 
 CONVERSATIONS_COLLECTION = 'conversations'
 FINALIZATION_JOBS_COLLECTION = 'conversation_finalization_jobs'
@@ -281,6 +289,117 @@ def _conversation_has_finalization_content(
     return next(iter(conversation_ref.collection('photos').limit(1).stream(transaction=transaction)), None) is not None
 
 
+def recovery_admission_refusal(
+    uid: str,
+    conversation: Mapping[str, Any],
+    recovery_cutoff: datetime | None,
+) -> str | None:
+    """Bounded refusal reason for one SERVER_RECOVERY admission, or ``None``.
+
+    Evaluated inside the outbox transaction against its authoritative snapshot,
+    before any write, and again by the sweep for action-log reasons. Every
+    reason is a closed vocabulary safe for structured logs.
+
+    The one-attempt policy is structural: a row carrying any
+    ``finalization_job_id`` (including a dead-lettered one) is refused rather
+    than minting a second finalization revision, because the deterministic
+    ``(uid, conversation_id, revision)`` identity cannot safely re-admit a
+    terminal generation. Those rows page for manual review instead.
+    """
+    if recovery_cutoff is None:
+        return 'no_cutoff'
+    status = getattr(conversation.get('status'), 'value', conversation.get('status'))
+    if status != 'in_progress':
+        return 'status'
+    if conversation.get('deleted') or conversation.get('discarded'):
+        return 'tombstoned'
+    if conversation.get('deferred'):
+        return 'deferred'
+    if conversation.get('is_locked'):
+        return 'locked'
+    processing_state = getattr(conversation.get('processing_state'), 'value', conversation.get('processing_state'))
+    if processing_state == 'local_pending':
+        return 'local_pending'
+    if conversation.get(TERMINAL_NO_DERIVED_EFFECTS_FIELD):
+        return 'terminal_no_derived'
+    source = getattr(conversation.get('source'), 'value', conversation.get('source'))
+    if source != 'omi':
+        return 'source'
+    if structured_has_protected_content(conversation.get('structured'), conversation.get('user_title')):
+        return 'protected_content'
+    if conversation.get('finalization_job_id'):
+        return 'has_job'
+    finished_at = conversation.get('finished_at')
+    if not isinstance(finished_at, datetime):
+        return 'no_finished_at'
+    if finished_at.tzinfo is None and recovery_cutoff.tzinfo is not None:
+        finished_at = finished_at.replace(tzinfo=timezone.utc)
+    if finished_at > recovery_cutoff:
+        return 'not_stale'
+    if not (conversation.get('audio_files') or conversations_db.raw_conversation_has_content(uid, dict(conversation))):
+        return 'no_content'
+    if recovery_audio_file_ids(conversation) is None:
+        return 'oversized_audio_files'
+    return None
+
+
+def _snapshot_bound_projection_updates(
+    uid: str,
+    conversation: Mapping[str, Any],
+    extra_updates: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Bind ``extra_updates`` to this snapshot, then keep projection fields only.
+
+    A later projection that binds here overwrites the display field (1.7c);
+    one that does not is dropped. Binding is the same helper every exit uses
+    — not a second write path per branch.
+    """
+    bound = conversations_db.extra_updates_with_bound_client_processing(uid, conversation, extra_updates)
+    return {field: bound[field] for field in PROJECTION_FAMILY_FIELDS if field in bound}
+
+
+# The only caller metadata this transaction may persist alongside its own
+# lifecycle keys. An allowlist, not a denylist: Firestore reads a dotted key as
+# a nested field path, so ``client_processing.title`` is a write *into* the
+# projection that no exact-name denylist of ``PROJECTION_FAMILY_FIELDS`` would
+# catch. Projection fields are owned by ``_apply_snapshot_bound_projection``,
+# and the bind report is an out-parameter, never a document field.
+_CALLER_LIFECYCLE_METADATA: frozenset[str] = frozenset({'external_data'})
+
+
+def _non_projection_extra_updates(extra_updates: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Allowlisted caller metadata the create path may persist (calendar context)."""
+    return {key: value for key, value in (extra_updates or {}).items() if key in _CALLER_LIFECYCLE_METADATA}
+
+
+def _apply_snapshot_bound_projection(
+    transaction: Any,
+    conversation_ref: Any,
+    uid: str,
+    conversation: Mapping[str, Any] | None,
+    extra_updates: Mapping[str, Any] | None,
+    lifecycle_updates: Mapping[str, Any],
+) -> None:
+    """Write snapshot-bound projection fields, then any exit-owned lifecycle.
+
+    The durable intent transaction's only conversation write. Projection
+    fields come from this helper alone: lifecycle keys in ``lifecycle_updates``
+    (job identity, generation, status, deferred, calendar context) are merged
+    after, and a projection key in that mapping cannot bypass the bind.
+    """
+    if conversation is None:
+        return
+    conversation_updates = _snapshot_bound_projection_updates(uid, conversation, extra_updates)
+    for key, value in lifecycle_updates.items():
+        # A dotted key is a Firestore field path: ``client_processing.title``
+        # writes inside the projection without going through the bind.
+        if key.split('.', 1)[0] in PROJECTION_FAMILY_FIELDS:
+            continue
+        conversation_updates[key] = value
+    if conversation_updates:
+        transaction.update(conversation_ref, conversation_updates)
+
+
 def _create_or_get_finalization_intent_txn(
     transaction: Any,
     conversation_ref: Any,
@@ -292,103 +411,164 @@ def _create_or_get_finalization_intent_txn(
     now: datetime,
     *,
     projection_collection: Any | None = None,
-    force_process: bool = False,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     extra_updates: Mapping[str, Any] | None = None,
+    recovery_cutoff: datetime | None = None,
 ) -> FinalizationIntent:
-    """Persist finalization ownership before any pusher or task handoff."""
-    conversation_snapshot = conversation_ref.get(transaction=transaction)
-    if not getattr(conversation_snapshot, 'exists', False):
-        return _no_finalization_intent('missing')
+    """Persist finalization ownership before any pusher or task handoff.
 
-    conversation = conversation_snapshot.to_dict() or {}
-    if conversation.get('deferred'):
-        return _no_finalization_intent('deferred')
-    if not _conversation_has_finalization_content(uid, conversation, conversation_ref, transaction):
-        return _no_finalization_intent('no_content')
+    Every return runs ``_apply_snapshot_bound_projection`` in ``finally``.
+    A new exit inside the ``try`` is therefore bound automatically; do not
+    add a conversation write, or a return, outside that ``try``.
+    """
+    intent: FinalizationIntent = _no_finalization_intent('missing')
+    lifecycle_updates: dict[str, Any] = {}
+    conversation: dict[str, Any] | None = None
+    raised = False
+    try:
+        conversation_snapshot = conversation_ref.get(transaction=transaction)
+        if not getattr(conversation_snapshot, 'exists', False):
+            return intent
 
-    # The lifecycle service owns this pure decision, but it is evaluated while
-    # Firestore holds the conversation transaction snapshot. A late disconnect
-    # therefore cannot reopen a failed/discarded terminal row after a stale
-    # pre-transaction read.
-    admission = finalization_admission(conversation)
-    if admission['terminal']:
-        return _no_finalization_intent(admission['reason'])
+        loaded: dict[str, Any] = conversation_snapshot.to_dict() or {}
+        conversation = loaded
+        if trigger is ProcessingTrigger.SERVER_RECOVERY:
+            refusal = recovery_admission_refusal(uid, loaded, recovery_cutoff)
+            if refusal is not None:
+                intent = _no_finalization_intent(f'refused_{refusal}')
+                return intent
+        if loaded.get('deferred'):
+            intent = _no_finalization_intent('deferred')
+            return intent
+        if trigger is not ProcessingTrigger.SERVER_RECOVERY and not _conversation_has_finalization_content(
+            uid, loaded, conversation_ref, transaction
+        ):
+            intent = _no_finalization_intent('no_content')
+            return intent
 
-    existing_job_id = conversation.get('finalization_job_id')
-    if isinstance(existing_job_id, str) and existing_job_id:
-        existing_ref = jobs_collection.document(existing_job_id)
-        existing_snapshot = existing_ref.get(transaction=transaction)
-        if getattr(existing_snapshot, 'exists', False):
-            return _intent_from_job(existing_job_id, existing_snapshot.to_dict() or {})
+        # The lifecycle service owns this pure decision, but it is evaluated while
+        # Firestore holds the conversation transaction snapshot. A late disconnect
+        # therefore cannot reopen a failed/discarded terminal row after a stale
+        # pre-transaction read.
+        admission = finalization_admission(loaded)
+        if admission['terminal']:
+            intent = _no_finalization_intent(admission['reason'])
+            return intent
 
-    if not admission['accepted'] or not admission['fanout_key']:
-        return _no_finalization_intent(admission['reason'])
+        existing_job_id = loaded.get('finalization_job_id')
+        if isinstance(existing_job_id, str) and existing_job_id:
+            existing_ref = jobs_collection.document(existing_job_id)
+            existing_snapshot = existing_ref.get(transaction=transaction)
+            if getattr(existing_snapshot, 'exists', False):
+                intent = _intent_from_job(existing_job_id, existing_snapshot.to_dict() or {})
+                return intent
 
-    revision = int(conversation.get('finalization_revision') or 0) + 1
-    job_id = _job_id(uid, conversation_id, revision)
-    job_ref = jobs_collection.document(job_id)
-    job_snapshot = job_ref.get(transaction=transaction)
-    if getattr(job_snapshot, 'exists', False):
-        job = job_snapshot.to_dict() or {}
-        transaction.update(
-            conversation_ref,
+        if not admission['accepted'] or not admission['fanout_key']:
+            intent = _no_finalization_intent(admission['reason'])
+            return intent
+
+        revision = int(loaded.get('finalization_revision') or 0) + 1
+        job_id = _job_id(uid, conversation_id, revision)
+        job_ref = jobs_collection.document(job_id)
+        job_snapshot = job_ref.get(transaction=transaction)
+        if getattr(job_snapshot, 'exists', False):
+            job = job_snapshot.to_dict() or {}
+            # Lifecycle fields stay owned by this attach; extra_updates may only
+            # contribute a snapshot-bound projection, never identity or status.
+            lifecycle_updates.update(
+                {
+                    'status': 'processing',
+                    'finalization_job_id': job_id,
+                    'finalization_revision': revision,
+                    'finalization_status': job.get('status', 'queued'),
+                }
+            )
+            intent = _intent_from_job(job_id, job)
+            return intent
+
+        status: FinalizationJobStatus = 'blocked_byok' if requires_byok else 'queued'
+        job = {
+            'schema_version': 1,
+            'uid': uid,
+            'conversation_id': conversation_id,
+            'finalization_revision': revision,
+            'status': status,
+            'requires_byok': requires_byok,
+            'client_platform': loaded.get('client_platform'),
+            # Persist why this generation is processed with the immutable
+            # finalization generation so a replay cannot change it.
+            'processing_trigger': trigger.value,
+            # Legacy mirror so a worker from before processing_trigger (a
+            # rollback) still runs the same mode; drop after one release.
+            'force_process': PROCESSING_MODES[trigger].run_now,
+            'fanout_key': admission['fanout_key'],
+            'fanout_status': 'pending',
+            'dispatch_generation': 1,
+            'attempt_count': 0,
+            'task_retry_count': 0,
+            'projection_generation': FINALIZATION_PROJECTION_GENERATION,
+            'projection_shard': _projection_shard(job_id),
+            'created_at': now,
+            'updated_at': now,
+            'dispatch_requested_at': now,
+        }
+        if trigger is ProcessingTrigger.SERVER_RECOVERY:
+            job['selfheal_attempt'] = 1
+            job['selfheal_enqueued_at'] = now
+            job['selfheal_transcript_bytes'] = raw_transcript_bytes(loaded)
+            job['selfheal_audio_file_ids'] = recovery_audio_file_ids(loaded) or []
+        if not requires_byok:
+            job['reconcile_after_at'] = now + get_finalization_reconcile_stale_after()
+        transaction.set(job_ref, job)
+        _record_projection_delta(
+            transaction,
+            projection_collection,
+            job,
+            accepted=1,
+            # Written out rather than **-unpacked: an unpacked argument list is
+            # opaque to every scanner in the trust-boundary guardrail at once,
+            # so this function may not use one. A zero delta is skipped by
+            # _record_projection_delta exactly as an absent key is.
+            blocked_byok=1 if requires_byok else 0,
+            queued=0 if requires_byok else 1,
+        )
+        # Lifecycle fields are authoritative to this outbox transaction. Callers
+        # may atomically persist request metadata (for example calendar context),
+        # but cannot override the accepted generation's identity or status.
+        # A T1-validated projection in extra_updates is re-checked against this
+        # snapshot in ``finally`` so a concurrent transcript mutation cannot
+        # resurrect it on T2.
+        lifecycle_updates.update(_non_projection_extra_updates(extra_updates))
+        lifecycle_updates.update(
             {
                 'status': 'processing',
                 'finalization_job_id': job_id,
                 'finalization_revision': revision,
-                'finalization_status': job.get('status', 'queued'),
-            },
+                'finalization_status': status,
+            }
         )
-        return _intent_from_job(job_id, job)
-
-    status: FinalizationJobStatus = 'blocked_byok' if requires_byok else 'queued'
-    job = {
-        'schema_version': 1,
-        'uid': uid,
-        'conversation_id': conversation_id,
-        'finalization_revision': revision,
-        'status': status,
-        'requires_byok': requires_byok,
-        'client_platform': conversation.get('client_platform'),
-        # REST finalization has historically forced enrichment while the listen
-        # pipeline retains its existing default. Persist the choice with the
-        # immutable finalization generation so a replay cannot change it.
-        'force_process': force_process,
-        'fanout_key': admission['fanout_key'],
-        'fanout_status': 'pending',
-        'dispatch_generation': 1,
-        'attempt_count': 0,
-        'task_retry_count': 0,
-        'projection_generation': FINALIZATION_PROJECTION_GENERATION,
-        'projection_shard': _projection_shard(job_id),
-        'created_at': now,
-        'updated_at': now,
-        'dispatch_requested_at': now,
-    }
-    if not requires_byok:
-        job['reconcile_after_at'] = now + get_finalization_reconcile_stale_after()
-    transaction.set(job_ref, job)
-    _record_projection_delta(
-        transaction,
-        projection_collection,
-        job,
-        accepted=1,
-        **({'blocked_byok': 1} if requires_byok else {'queued': 1}),
-    )
-    conversation_updates = dict(extra_updates or {})
-    # Lifecycle fields are authoritative to this outbox transaction. Callers
-    # may atomically persist request metadata (for example calendar context),
-    # but cannot override the accepted generation's identity or status.
-    conversation_updates.update(
-        {
-            'status': 'processing',
-            'finalization_job_id': job_id,
-            'finalization_revision': revision,
-            'finalization_status': status,
-        }
-    )
-    transaction.update(conversation_ref, conversation_updates)
-    return _intent_from_job(job_id, job, created=True)
+        intent = _intent_from_job(job_id, job, created=True)
+        return intent
+    except BaseException:
+        # This frame's own failure. ``sys.exc_info()`` is wrong here: it also
+        # reports an exception being handled by a *caller* frame, so a
+        # finalization invoked from inside an ``except`` block would commit its
+        # job and silently skip the conversation bind.
+        raised = True
+        raise
+    finally:
+        # Only on a normal exit. An exception aborts the transaction, so the
+        # write would never commit; attempting it can only replace the real
+        # traceback with a binding error raised inside ``finally``.
+        if not raised:
+            _apply_snapshot_bound_projection(
+                transaction,
+                conversation_ref,
+                uid,
+                conversation,
+                extra_updates,
+                lifecycle_updates,
+            )
 
 
 def create_or_get_finalization_intent(
@@ -397,8 +577,9 @@ def create_or_get_finalization_intent(
     *,
     requires_byok: bool,
     finalization_admission: Callable[[Mapping[str, Any]], FinalizationAdmission],
-    force_process: bool = False,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     extra_updates: Mapping[str, Any] | None = None,
+    recovery_cutoff: datetime | None = None,
     firestore_client: Any = None,
 ) -> FinalizationIntent:
     client = _client(firestore_client)
@@ -421,8 +602,9 @@ def create_or_get_finalization_intent(
             finalization_admission,
             _now(),
             projection_collection=projection_collection,
-            force_process=force_process,
+            trigger=trigger,
             extra_updates=extra_updates,
+            recovery_cutoff=recovery_cutoff,
         )
 
     return run_with_transaction_contention_retry(
@@ -514,7 +696,10 @@ def _claim_finalization_job_txn(
 
     lease_epoch = int(job.get('lease_epoch') or 0) + 1
     lease_expires_at = now + timedelta(seconds=lease_seconds)
-    attempt_count = int(job.get('attempt_count') or 0) + 1
+    # Failed-processing count only. Reconnect/session handoffs reclaim the
+    # same job; bumping here made the 5th lease (not the 5th processing
+    # failure) dead-letter the conversation. Increment in mark_finalization_retryable.
+    attempt_count = int(job.get('attempt_count') or 0)
 
     transaction.update(
         job_ref,
@@ -527,9 +712,6 @@ def _claim_finalization_job_txn(
             'lease_epoch': lease_epoch,
             'reconcile_after_at': (firestore.DELETE_FIELD if bool(job.get('requires_byok')) else lease_expires_at),
             'updated_at': now,
-            # The claimer owns the attempt budget: an inline (pusher) worker has
-            # no Cloud Tasks retry count to fence its terminal attempt with.
-            'attempt_count': attempt_count,
         },
     )
     if status == 'queued':
@@ -841,12 +1023,14 @@ def _mark_finalization_retryable_txn(
     job = snapshot.to_dict() or {}
     if not _is_current_lease(job, dispatch_generation, lease_epoch):
         return False
+    attempt_count = int(job.get('attempt_count') or 0) + 1
     transaction.update(
         job_ref,
         {
             'status': 'queued',
             'updated_at': now,
             'lease_expires_at': now,
+            'attempt_count': attempt_count,
             'reconcile_after_at': (
                 firestore.DELETE_FIELD
                 if bool(job.get('requires_byok'))
@@ -1051,6 +1235,7 @@ def _record_meeting_receipt_txn(
                 'finalization_revision': revision,
                 'status': 'completed',
                 'requires_byok': False,
+                'processing_trigger': ProcessingTrigger.CAPTURE_END.value,
                 'force_process': False,
                 'fanout_key': f'conversation:{conversation_id}:finalization',
                 'fanout_status': 'completed',
@@ -1455,6 +1640,171 @@ STALE_PROCESSING_SWEEP_STATE_COLLECTION = 'conversation_recovery_state'
 STALE_PROCESSING_SWEEP_STATE_DOC = 'stale_processing_sweep'
 MEETING_RECEIPT_SWEEP_STATE_DOC = 'meeting_receipt_backfill_sweep'
 BYOK_ABANDONMENT_SWEEP_STATE_DOC = 'byok_abandonment_sweep'
+IN_PROGRESS_CONTENT_SWEEP_STATE_DOC = 'in_progress_content_sweep'
+SELFHEAL_MAX_PENDING_VERIFICATIONS = 100
+
+
+def scan_in_progress_conversations(
+    *,
+    page_size: int = 100,
+    max_scan: int = 2000,
+    resume_after_path: str | None = None,
+    firestore_client: Any = None,
+) -> dict[str, Any]:
+    """Return a bounded window of ``status == 'in_progress'`` conversation rows.
+
+    The query shape is fixed: a single-equality ``collection_group`` on
+    ``conversations.status == 'in_progress'``, limited per page, optionally
+    resuming after the persisted cursor snapshot. Every recovery predicate is
+    evaluated Python-side by the caller; no extra Firestore predicate may be
+    added here.
+
+    Returns ``{'rows', 'scanned', 'resume_after_path', 'exhausted'}`` where each
+    row is ``{'uid', 'conversation_id', 'path', 'data'}``.
+    """
+    client = _client(firestore_client)
+    page_size = max(1, min(page_size, 100))
+    rows: list[dict[str, Any]] = []
+    scanned = 0
+    last_path: str | None = None
+    exhausted = False
+
+    cursor_snapshot: Any = None
+    if resume_after_path:
+        fetched = client.document(resume_after_path).get()
+        if getattr(fetched, 'exists', False):
+            cursor_snapshot = fetched
+
+    while scanned < max_scan:
+        query = (
+            client.collection_group(CONVERSATIONS_COLLECTION)
+            .where(filter=firestore.FieldFilter('status', '==', 'in_progress'))
+            .limit(page_size)
+        )
+        if cursor_snapshot is not None:
+            query = query.start_after(cursor_snapshot)
+        page = list(query.stream())
+        if not page:
+            exhausted = True
+            break
+        for snapshot in page:
+            scanned += 1
+            if scanned > max_scan:
+                break
+            last_path = snapshot.reference.path
+            uid = _uid_from_conversation_path(snapshot.reference.path)
+            if uid is None:
+                continue
+            rows.append(
+                {
+                    'uid': uid,
+                    'conversation_id': snapshot.id,
+                    'path': snapshot.reference.path,
+                    'data': snapshot.to_dict() or {},
+                }
+            )
+        if scanned > max_scan:
+            break
+        if len(page) < page_size:
+            exhausted = True
+            break
+        cursor_snapshot = page[-1]
+
+    return {
+        'rows': rows,
+        'scanned': scanned,
+        'resume_after_path': None if exhausted else last_path,
+        'exhausted': exhausted,
+    }
+
+
+def get_in_progress_content_sweep_cursor(*, firestore_client: Any = None) -> dict[str, Any]:
+    """Return the self-heal sweep cursor, its CAS generation, and pending verifications.
+
+    Returns ``{'resume_after_path', 'generation', 'pending_verifications'}``.
+    ``pending_verifications`` is a bounded list of
+    ``{'uid', 'conversation_id', 'job_id'}`` entries the follow-up tick
+    re-checks before the job's own dead-letter workflow would own a failure.
+    """
+    client = _client(firestore_client)
+    snapshot = (
+        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(IN_PROGRESS_CONTENT_SWEEP_STATE_DOC).get()
+    )
+    if not getattr(snapshot, 'exists', False):
+        return {'resume_after_path': None, 'generation': 0, 'pending_verifications': []}
+    data = snapshot.to_dict() or {}
+    path = data.get('resume_after_path')
+    pending = data.get('pending_verifications')
+    if not isinstance(pending, list):
+        pending = []
+    entries: list[dict[str, Any]] = []
+    for entry in pending[:SELFHEAL_MAX_PENDING_VERIFICATIONS]:
+        if not isinstance(entry, Mapping):
+            continue
+        uid = entry.get('uid')
+        conversation_id = entry.get('conversation_id')
+        job_id = entry.get('job_id')
+        if isinstance(uid, str) and isinstance(conversation_id, str) and isinstance(job_id, str):
+            entries.append({'uid': uid, 'conversation_id': conversation_id, 'job_id': job_id})
+    return {
+        'resume_after_path': path if isinstance(path, str) else None,
+        'generation': int(data.get('generation', 0)),
+        'pending_verifications': entries,
+    }
+
+
+def _advance_in_progress_content_sweep_cursor_txn(
+    transaction: Any,
+    doc_ref: Any,
+    expected_generation: int,
+    new_resume_after_path: str | None,
+    pending_verifications: list[dict[str, Any]],
+    now: datetime,
+) -> bool:
+    """CAS-update the self-heal sweep cursor and pending-verification list atomically.
+
+    Same generation fence as ``_advance_stale_processing_sweep_cursor_txn``; a
+    losing writer returns ``False`` and its pending list is not persisted, so
+    the next tick re-admits nothing the winner already claimed (the admission
+    transaction itself is the real fence — this list is verification state).
+    """
+    snapshot = doc_ref.get(transaction=transaction)
+    current_generation = 0
+    if getattr(snapshot, 'exists', False):
+        current_generation = int((snapshot.to_dict() or {}).get('generation', 0))
+    if current_generation != expected_generation:
+        return False
+    transaction.set(
+        doc_ref,
+        {
+            'resume_after_path': new_resume_after_path,
+            'generation': current_generation + 1,
+            'updated_at': now,
+            'pending_verifications': pending_verifications[:SELFHEAL_MAX_PENDING_VERIFICATIONS],
+        },
+    )
+    return True
+
+
+def advance_in_progress_content_sweep_cursor(
+    expected_generation: int,
+    new_resume_after_path: str | None,
+    *,
+    pending_verifications: list[dict[str, Any]] | None = None,
+    firestore_client: Any = None,
+) -> bool:
+    """Atomically advance the self-heal sweep cursor; ``False`` on a CAS loss."""
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_advance_in_progress_content_sweep_cursor_txn)
+    return transactional(
+        transaction,
+        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(IN_PROGRESS_CONTENT_SWEEP_STATE_DOC),
+        expected_generation,
+        new_resume_after_path,
+        pending_verifications or [],
+        _now(),
+    )
 
 
 def get_stale_processing_sweep_cursor(*, firestore_client: Any = None) -> dict[str, Any]:
@@ -1691,29 +2041,60 @@ def renew_processing_lease(uid: str, conversation_id: str, *, firestore_client: 
 
 
 def _reacquire_deferred_processing_txn(transaction: Any, conversation_ref: Any, now: datetime) -> bool:
-    """Atomically clear ``deferred`` and renew the admission lease.
+    """Atomically claim a deferred row and renew its admission lease.
 
-    This eliminates the window between clearing ``deferred`` and the first
-    heartbeat renewal where the orphan sweep could terminalize the row.  If
-    the row is no longer ``processing`` or was discarded, the transition
-    fails closed so a stale processor produces no derived side effects.
+    ``deferred=True`` is the compare-and-swap ownership token: concurrent
+    first opens may both observe it before this transaction, but only one can
+    clear it and launch enrichment. A completed deferred row represents an
+    earlier enrichment failure and is reopened for an explicit retry.
     """
     snapshot = conversation_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
         return False
     data = snapshot.to_dict() or {}
-    if data.get('status') != 'processing' or data.get('discarded'):
+    if (
+        data.get('status') not in {'processing', 'completed'}
+        or data.get('discarded')
+        or data.get('deferred') is not True
+    ):
         return False
-    transaction.update(conversation_ref, {'deferred': False, 'processing_admitted_at': now})
+    transaction.update(
+        conversation_ref,
+        {'status': 'processing', 'deferred': False, 'processing_admitted_at': now},
+    )
     return True
 
 
 def reacquire_deferred_processing(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
-    """Atomically clear deferred and renew the admission lease in one transaction."""
+    """Atomically claim deferred ownership and renew the lease in one transaction."""
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_reacquire_deferred_processing_txn)
     return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now())
+
+
+def _recover_deferred_processing_failure_txn(transaction: Any, conversation_ref: Any) -> bool:
+    """Atomically publish a retryable terminal after deferred enrichment fails."""
+    snapshot = conversation_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return False
+    data = snapshot.to_dict() or {}
+    if (
+        data.get('status') not in {'processing', 'completed'}
+        or data.get('discarded')
+        or data.get('deferred') is not False
+    ):
+        return False
+    transaction.update(conversation_ref, {'status': 'completed', 'deferred': True})
+    return True
+
+
+def recover_deferred_processing_failure(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
+    """Atomically re-arm deferred enrichment without exposing a stuck processing row."""
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_recover_deferred_processing_failure_txn)
+    return transactional(transaction, _conversation_ref(client, uid, conversation_id))
 
 
 def _job_last_activity_at(job: Mapping[str, Any]) -> datetime | None:

@@ -10,6 +10,8 @@ description: >
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Insight/InsightAssistant.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITAmbientPacingPolicy.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITDerivedWatchlist.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ContextDwellRefreshPolicy.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/AsyncFirstResolved.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/ScreenCandidateAdapter.swift

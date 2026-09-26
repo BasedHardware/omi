@@ -133,6 +133,7 @@ final class OnboardingPermissionToolTests: XCTestCase {
       fileScanRunner: { _ in .failed(message: "No readable folders") },
       onComplete: nil)
     model.step = .files
+    model.fdaState = .on
 
     model.answerFiles()
     await model.localFileScanTask?.value
@@ -162,6 +163,7 @@ final class OnboardingPermissionToolTests: XCTestCase {
       },
       onComplete: nil)
     model.step = .files
+    model.fdaState = .on
 
     model.answerFiles()
     await fulfillment(of: [firstScanStarted], timeout: 1)
@@ -173,6 +175,7 @@ final class OnboardingPermissionToolTests: XCTestCase {
     releaseFirstScan.fulfill()
     await model.localFileScanTask?.value
     model.step = .files
+    model.fdaState = .on
     model.answerFiles()
     await model.localFileScanTask?.value
 

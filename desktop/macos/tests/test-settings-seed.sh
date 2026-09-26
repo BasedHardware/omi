@@ -163,15 +163,93 @@ assert_unset "$quiet_then_eager_target" disableSystemAudioCapture
 assert_unset "$quiet_then_eager_target" screenAnalysisAutoStartFixed_v2
 assert_unset "$quiet_then_eager_target" screenAnalysisAutoStartFixed_v3
 
+# --- Settings authority resolution: one domain per run, production first. ---
+# `defaults` state is uid-wide (not home-isolated), so the production role is
+# parameterized onto a throwaway domain instead of the real com.omi.computer-macos,
+# and the real com.omi.desktop-dev is never written — resolution order is
+# asserted through the script's provenance line instead of domain contents.
+prod_domain="com.omi.codex-settings-prodrole-$$"
+res_prod_target="com.omi.codex-settings-res-prod-$$"
+res_dev_target="com.omi.codex-settings-res-dev-$$"
+res_env_target="com.omi.codex-settings-res-env-$$"
+res_fail_target="com.omi.codex-settings-res-fail-$$"
+res_both_target="com.omi.codex-settings-res-both-$$"
+res_both_source="com.omi.codex-settings-res-both-src-$$"
+cleanup_domains+=("$prod_domain" "$res_prod_target" "$res_dev_target" "$res_env_target" "$res_fail_target" "$res_both_target" "$res_both_source")
+
+# Auto-resolution with a production domain present: production IS the
+# authority. Its askOmiKey mirrors, its absent pttKey deletes the target's
+# stale override, and the warning names the missing key.
+defaults write "$prod_domain" shortcut_askOmiKey -data 7b226b6579446973706c6179223a224a222c226b6579436f6465223a33382c226d6f6469666965727352617756616c7565223a313034383537362c226d6f6469666965724f6e6c79223a66616c73652c2272657175697265735269676874436f6d6d616e64223a66616c73657d
+defaults write "$res_prod_target" shortcut_pttKey -data 7374616c652d707474
+OMI_SETTINGS_SEED_PRODUCTION_DOMAIN="$prod_domain" \
+  "$MACOS_DIR/scripts/omi-settings-seed.sh" "$res_prod_target" >"$prefs_home/res-prod.out" 2>"$prefs_home/res-prod.err"
+grep -Fq "from $prod_domain -> $res_prod_target" "$prefs_home/res-prod.out" \
+  || fail "production-role domain must win resolution over com.omi.desktop-dev"
+python3 - "$prod_domain" "$res_prod_target" <<'PY'
+import plistlib
+import subprocess
+import sys
+
+
+def export(domain):
+    proc = subprocess.run(["defaults", "export", domain, "-"], capture_output=True, check=True)
+    return plistlib.loads(proc.stdout)
+
+
+prod, target = map(export, sys.argv[1:])
+if target.get("shortcut_askOmiKey") != prod.get("shortcut_askOmiKey"):
+    raise SystemExit("production askOmiKey must be the mirrored authority payload")
+if "shortcut_pttKey" in target:
+    raise SystemExit("absent production pttKey must delete the stale target override")
+PY
+grep -Fq "shortcut_pttKey" "$prefs_home/res-prod.err" \
+  || fail "missing authority hotkey must warn naming the key"
+
+# Without a production domain, the same call resolves to the dev profile.
+OMI_SETTINGS_SEED_PRODUCTION_DOMAIN="com.omi.codex-settings-no-prod-$$" \
+  "$MACOS_DIR/scripts/omi-settings-seed.sh" "$res_dev_target" >"$prefs_home/res-dev.out" 2>"$prefs_home/res-dev.err"
+grep -Fq "from com.omi.desktop-dev -> $res_dev_target" "$prefs_home/res-dev.out" \
+  || fail "absent production domain must fall back to com.omi.desktop-dev"
+
+# An explicit env source wins over auto-resolution and fails closed when its
+# domain does not exist — without mutating the target.
+defaults write "$res_env_target" fontScale -float 1.25
+defaults write "$res_both_source" fontScale -float 2.0
+OMI_SETTINGS_SEED_SOURCE="$res_both_source" \
+  "$MACOS_DIR/scripts/omi-settings-seed.sh" "$res_env_target" >/dev/null 2>&1
+assert_defaults "$res_env_target" fontScale 2
+
+defaults write "$res_fail_target" fontScale -float 1.75
+if OMI_SETTINGS_SEED_SOURCE="com.omi.missing-authority-$$" \
+  "$MACOS_DIR/scripts/omi-settings-seed.sh" "$res_fail_target" \
+  >"$prefs_home/res-fail.out" 2>"$prefs_home/res-fail.err"; then
+  fail "env-named missing authority must fail closed"
+fi
+assert_defaults "$res_fail_target" fontScale 1.75
+grep -Fq "OMI_SETTINGS_SEED_SOURCE" "$prefs_home/res-fail.err" \
+  || fail "fail-closed error must name the env knob"
+
+# An authority carrying both hotkeys stays quiet — the warning is diagnostic,
+# not ambient noise on healthy machines.
+defaults write "$res_both_source" shortcut_askOmiKey -data 7b226b6579446973706c6179223a224a222c226b6579436f6465223a33382c226d6f6469666965727352617756616c7565223a313034383537362c226d6f6469666965724f6e6c79223a66616c73652c2272657175697265735269676874436f6d6d616e64223a66616c73657d
+defaults write "$res_both_source" shortcut_pttKey -data 7b226b6579446973706c6179223a2255222c226b6579436f6465223a33322c226d6f6469666965727352617756616c7565223a3532343238382c226d6f6469666965724f6e6c79223a66616c73652c2272657175697265735269676874436f6d6d616e64223a66616c73657d
+"$MACOS_DIR/scripts/omi-settings-seed.sh" "$res_both_target" "$res_both_source" >"$prefs_home/res-both.out" 2>"$prefs_home/res-both.err"
+if grep -Fq "Warning:" "$prefs_home/res-both.err"; then
+  fail "authority with both hotkeys must not warn"
+fi
+
 # omi-test-quality: source-inspection -- static contract: named-bundle settings seeding stays on the common prelaunch path shared by fast and full bundle builds.
 python3 - "$MACOS_DIR/run.sh" <<'PY'
 from pathlib import Path
 import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
-seed_call = './scripts/omi-settings-seed.sh "$BUNDLE_ID" com.omi.desktop-dev'
+seed_call = './scripts/omi-settings-seed.sh "$BUNDLE_ID"'
 if source.count(seed_call) != 1:
     raise SystemExit("run.sh must have exactly one named-bundle settings seed call")
+if './scripts/omi-settings-seed.sh "$BUNDLE_ID" com.omi.desktop-dev' in source:
+    raise SystemExit("settings seed must resolve its authority (no hardcoded com.omi.desktop-dev source)")
 fast = source.index('if [ "$FAST_BUNDLE" = "1" ]; then')
 common = source.index("fi # full bundle path", fast)
 seed = source.index(seed_call)

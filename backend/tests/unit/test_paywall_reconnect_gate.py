@@ -337,8 +337,12 @@ class TestIsTrialPaywalledBehavioral:
         self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:openai')
         self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:openrouter')
         self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:anthropic')
+        # The transcription allowance (S16) asks the paywall with required_byok_provider='deepgram',
+        # which writes a sixth key; a stale cached False there would keep a billed socket open.
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:deepgram')
+        self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123:deepgram:strict')
         self._sub.redis_db.delete_generic_cache.assert_any_call('trial_paywall:expired:test-uid-123')
-        assert self._sub.redis_db.delete_generic_cache.call_count == 5
+        assert self._sub.redis_db.delete_generic_cache.call_count == 7
 
 
 class TestByokRequestEscapeHatch:

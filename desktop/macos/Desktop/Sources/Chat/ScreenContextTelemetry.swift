@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 
@@ -12,6 +13,11 @@ enum ScreenContextFailureCode: String, CaseIterable {
   case imageUnavailable = "image_unavailable"
   case policyApprovalRequired = "policy_approval_required"
   case captureFailed = "capture_failed"
+  /// The ask came from Omi's own window and no usable frame of another app
+  /// existed to stand in for the screen (none found, unreadable, or stale).
+  /// Distinct from a capture failure so the explicit-screen funnel can tell
+  /// "Omi was the subject" turns apart from broken ones.
+  case omiFrontmostNoFrame = "omi_frontmost_no_frame"
   case unknown = "unknown"
 }
 
@@ -81,6 +87,14 @@ enum ScreenContextInterestDetector {
     let wordSet = Set(words)
     return contextualVerbs.contains(where: wordSet.contains) && visualReferences.contains(where: wordSet.contains)
   }
+
+  /// The narrow reading used when the message carries attachments: only a message that names the
+  /// screen itself is about the screen. "Look at this page" beside a PDF is about the PDF; the
+  /// deictic cues `isScreenContextRequest` accepts ("this", "look", "page") are exactly the words
+  /// people use to point at the file they just attached.
+  static func namesTheScreen(_ text: String) -> Bool {
+    text.lowercased().contains("screen")
+  }
 }
 
 enum ScreenContextAutoIncludeReason: Equatable {
@@ -93,12 +107,20 @@ enum ScreenContextAutoIncludeReason: Equatable {
 }
 
 enum ScreenContextAutoIncludePolicy {
+  /// `hasAttachments`: the message carries files or conversation references the user chose to
+  /// attach. Those are the message's subject, so no ambient screen context is added alongside
+  /// them and a capture is taken only when the text names the screen outright — otherwise the
+  /// model is handed a desktop to describe next to the file it was asked about.
   static func reason(
     userText: String,
     systemPromptStyle: ChatSystemPromptStyle,
     turnOwner: ChatTurnOwner,
-    onboardingActive: Bool = false
+    onboardingActive: Bool = false,
+    hasAttachments: Bool = false
   ) -> ScreenContextAutoIncludeReason? {
+    if hasAttachments {
+      return ScreenContextInterestDetector.namesTheScreen(userText) ? .explicitScreenRequest : nil
+    }
     if ScreenContextInterestDetector.isScreenContextRequest(userText) {
       return .explicitScreenRequest
     }
@@ -120,9 +142,12 @@ enum ScreenContextAutoIncludePolicy {
   static func shouldInclude(
     userText: String,
     systemPromptStyle: ChatSystemPromptStyle,
-    turnOwner: ChatTurnOwner
+    turnOwner: ChatTurnOwner,
+    hasAttachments: Bool = false
   ) -> Bool {
-    reason(userText: userText, systemPromptStyle: systemPromptStyle, turnOwner: turnOwner) != nil
+    reason(
+      userText: userText, systemPromptStyle: systemPromptStyle, turnOwner: turnOwner,
+      hasAttachments: hasAttachments) != nil
   }
 }
 
@@ -438,6 +463,12 @@ enum ScreenContextWorkContextBuilder {
   static let staleCaptureThresholdSeconds = 60
   static let voiceTurnStaleCaptureThresholdSeconds = 15
 
+  static func isoFormatter(timeZone: TimeZone = .current) -> ISO8601DateFormatter {
+    let formatter = ISO8601DateFormatter()
+    formatter.timeZone = timeZone
+    return formatter
+  }
+
   /// Ambient turns without Screen Recording get this instead of silence, so the
   /// model can explain a blind answer when the question was screen-dependent —
   /// without manufacturing a permission request for generic utterances.
@@ -466,7 +497,7 @@ enum ScreenContextWorkContextBuilder {
     screenRecordingGranted: Bool,
     imageAttached: Bool,
     capturedAt: Date = Date(),
-    formatter: ISO8601DateFormatter = ISO8601DateFormatter()
+    formatter: ISO8601DateFormatter = isoFormatter()
   ) -> [String: Any] {
     guard screenRecordingGranted else {
       return permissionDeniedPayload(windowMinutes: 1)
@@ -502,6 +533,253 @@ enum ScreenContextWorkContextBuilder {
     ]
   }
 
+  /// The explicit current-screen question was asked from Omi's own window, so
+  /// a fresh capture would photograph Omi describing itself. The attached
+  /// image is instead the screen as the user left it — either the summon-
+  /// boundary capture or the most recent store frame of another app. The
+  /// envelope names that provenance positively and forbids the substitution
+  /// in the direction the failure actually happens: describing Omi.
+  static func explicitLastExternalFramePayload(
+    source: String,
+    appName: String,
+    windowTitle: String?,
+    frameAgeSeconds: Int,
+    capturedAt: Date,
+    formatter: ISO8601DateFormatter = isoFormatter()
+  ) -> [String: Any] {
+    let windowPart =
+      (windowTitle.map { $0.trimmingCharacters(in: .whitespaces) }.flatMap { $0.isEmpty ? nil : $0 })
+      .map { ", \"\($0)\"" } ?? ""
+    let originSentence: String
+    switch source {
+    case "summon_boundary_capture":
+      originSentence =
+        "It was captured \(max(0, frameAgeSeconds)) seconds ago, at the moment Omi's window came to the front."
+    default:
+      originSentence =
+        "It was captured \(max(0, frameAgeSeconds)) seconds before Omi came to the front."
+    }
+    return [
+      "ok": true,
+      "name": "get_work_context",
+      "screen_now": [
+        "available": true,
+        "source": source,
+        "app_name": appName,
+        "captured_at": formatter.string(from: capturedAt),
+        "image_delivered_to_model": true,
+        "latest_capture_age_seconds": max(0, frameAgeSeconds),
+      ],
+      "timeline": [],
+      "guidance":
+        "The user asked about their screen from inside Omi's own window, so a capture at send time would show Omi, not what they mean. The attached image shows \(appName)\(windowPart). \(originSentence) Treat it as the screen the user is asking about. Do not describe Omi, its interface, or this conversation. Answer about \(appName) from the attached image only; do not substitute OCR text or stored history.",
+    ]
+  }
+
+  /// The explicit current-screen question was asked from Omi's own window and
+  /// no honest stand-in exists. The self-referential capture is never shipped
+  /// "with a warning" — a payload that names the failure and the way out is
+  /// the file's standing doctrine for unavailable evidence.
+  static func selfFrontmostUnavailablePayload(
+    reason: ScreenContextFallbackUnavailable,
+    lastExternalAppName: String? = nil,
+    lastExternalFrameAgeSeconds: Int? = nil,
+    formatter: ISO8601DateFormatter = isoFormatter()
+  ) -> [String: Any] {
+    var screenNow: [String: Any] = [
+      "available": false,
+      "failure_code": ScreenContextFailureCode.omiFrontmostNoFrame.rawValue,
+      "source": "omi_frontmost_no_external_frame",
+    ]
+    if let lastExternalAppName {
+      screenNow["last_external_app_name"] = lastExternalAppName
+    }
+    if let lastExternalFrameAgeSeconds {
+      screenNow["last_external_frame_age_seconds"] = lastExternalFrameAgeSeconds
+    }
+    let stalenessNote: String
+    switch reason {
+    case .noAttachableFrame:
+      stalenessNote = ""
+    case .frameTooStale(let ageSeconds):
+      stalenessNote =
+        " The most recent frame of another app is \(ageSeconds) seconds old, past the freshness limit."
+    }
+    // The recovery matches the failure. A missing frame usually means the
+    // user has been in Omi for a while, and the honest way out is handing the
+    // model fresh pixels from inside Omi — the picker and ⌘V both exist —
+    // while a too-stale frame means they may simply have taken a while to
+    // send. The switch-apps round trip stays as the fallback in both.
+    let recovery: String
+    switch reason {
+    case .noAttachableFrame:
+      recovery =
+        "START your reply by asking the user to switch to the app they want summarized and ask again from there. You can also mention they can attach a recent screen from the paperclip's menu or paste a screenshot with ⌘V."
+    case .frameTooStale:
+      recovery =
+        "START your reply by telling the user the frame on file is too old to answer from, and offer the ways to hand you fresh pixels without leaving Omi: attach a recent screen from the paperclip's menu, or paste a screenshot with ⌘V. If they would rather switch to the app they want summarized and ask again from there, that works too."
+    }
+    return [
+      "ok": false,
+      "name": "get_work_context",
+      "failure_code": ScreenContextFailureCode.omiFrontmostNoFrame.rawValue,
+      "screen_now": screenNow,
+      "timeline": [],
+      "guidance":
+        "This question was asked from Omi's own window, so a live capture would show Omi itself, and no recent frame of another app is available to stand in for the screen.\(stalenessNote) \(recovery) Do not describe Omi's own window or interface, and do not answer from stored history.",
+    ]
+  }
+
+  /// Pixels + envelope for an explicit current-screen request, resolved
+  /// through `ScreenContextFallbackPolicy`. The policy owns the decision; this
+  /// gathers its inputs and performs the effects (live capture or frame load).
+  /// On the main chat the live-capture branch never fires, because the
+  /// composer is Omi's own window — the policy's one self-referential surface.
+  ///
+  /// Main-actor isolated: the frame loader and the workspace state behind the
+  /// defaults live there. The capture itself is dispatched off-main below.
+  @MainActor
+  static func explicitScreenEvidence(
+    turnOwner: ChatTurnOwner,
+    now: Date = Date(),
+    frontmostBundleIdentifier: String? = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+    omiBundleIdentifier: String? = Bundle.main.bundleIdentifier,
+    loader: RewindFrameLoader = .shared,
+    isScreenRecordingGranted: @Sendable () -> Bool = { CGPreflightScreenCaptureAccess() },
+    captureNow: @Sendable @escaping () -> Data? = { ScreenCaptureManager.captureScreenData() }
+  ) async -> (imageData: Data?, payload: [String: Any]) {
+    // Recorded, not gated: frontmost-at-send is near-tautological for typed
+    // main-chat sends and adds nothing to the decision, but it keeps the
+    // funnel able to distinguish a summon-and-ask from other paths.
+    let isOmiFrontmost =
+      frontmostBundleIdentifier != nil && frontmostBundleIdentifier == omiBundleIdentifier
+    // Without the permission there is no evidence on any surface — no live
+    // capture and no guarantee about what old frames contain — so the
+    // enable-Screen-Recording payload answers, exactly as it did before the
+    // fallback existed.
+    guard isScreenRecordingGranted() else {
+      return (nil, explicitCurrentScreenPayload(screenRecordingGranted: false, imageAttached: false))
+    }
+    // The staleness input needs the newest honest candidate. Two exist for a
+    // main-chat ask: the newest attachable store row and the summon-boundary
+    // capture (the screen as the user left it when Omi took the front) — the
+    // newest wins, because both depict the same referent at different ages.
+    // Non-main-chat surfaces never fall back, so no work is paid there.
+    var fallbackCandidate:
+      (
+        timestamp: Date, source: String, appName: String, windowTitle: String?,
+        provide: @Sendable () async -> Data?
+      )?
+    if turnOwner == .mainChat {
+      if let row = await loader.latestAttachableRow() {
+        fallbackCandidate = (
+          row.timestamp,
+          "last_external_frame",
+          row.appName,
+          row.windowTitle,
+          { await loader.loadData(for: row) }
+        )
+      }
+      if let boundary = loader.currentSummonBoundary(),
+        fallbackCandidate?.timestamp ?? .distantPast < boundary.timestamp
+      {
+        fallbackCandidate = (
+          boundary.timestamp,
+          "summon_boundary_capture",
+          boundary.appName,
+          boundary.windowTitle,
+          { boundary.data }
+        )
+      }
+    }
+    let frameAge = fallbackCandidate.map { max(0, now.timeIntervalSince($0.timestamp)) }
+
+    func stamped(_ payload: [String: Any]) -> [String: Any] {
+      var payload = payload
+      var screenNow = payload["screen_now"] as? [String: Any] ?? [:]
+      screenNow["omi_frontmost_at_send"] = isOmiFrontmost
+      payload["screen_now"] = screenNow
+      return payload
+    }
+
+    switch ScreenContextFallbackPolicy.evidenceSource(
+      turnOwner: turnOwner,
+      lastExternalFrameAgeSeconds: frameAge
+    ) {
+    case .turnScopedLiveCapture:
+      // An explicit current-screen question gets one capture scoped to this
+      // exact turn. Never let a Rewind frame or OCR summary impersonate the
+      // image the model receives.
+      let data = await Task.detached(priority: .userInitiated) {
+        captureNow()
+      }.value
+      return (
+        data,
+        stamped(
+          explicitCurrentScreenPayload(screenRecordingGranted: true, imageAttached: data != nil)
+        )
+      )
+    case .lastExternalFrame:
+      guard let candidate = fallbackCandidate, let frameAge else {
+        return (nil, stamped(selfFrontmostUnavailablePayload(reason: .noAttachableFrame)))
+      }
+      // Candidate first (summon-boundary capture or newest store row). A
+      // transient decode failure on the newest store row must not fail the
+      // turn when an older attachable row is still loadable: fall through
+      // to the loader, which skips unreadable rows under the same freshness
+      // bound the policy just applied.
+      var data = await candidate.provide()
+      var served = candidate
+      if data == nil {
+        if let frame = await loader.loadLatestAttachableFrame(
+          maxAgeSeconds: ScreenContextFallbackPolicy.maxFallbackFrameAgeSeconds,
+          now: now
+        ) {
+          data = frame.data
+          served = (
+            frame.timestamp, "last_external_frame", frame.appName, frame.windowTitle,
+            { nil }
+          )
+        }
+      }
+      guard let data else {
+        return (
+          nil,
+          stamped(
+            selfFrontmostUnavailablePayload(
+              reason: .noAttachableFrame,
+              lastExternalAppName: candidate.appName,
+              lastExternalFrameAgeSeconds: Int(frameAge.rounded())
+            )
+          )
+        )
+      }
+      return (
+        data,
+        stamped(
+          explicitLastExternalFramePayload(
+            source: served.source,
+            appName: served.appName,
+            windowTitle: served.windowTitle,
+            frameAgeSeconds: Int(max(0, now.timeIntervalSince(served.timestamp)).rounded()),
+            capturedAt: served.timestamp
+          )
+        )
+      )
+    case .unavailable(let reason):
+      return (
+        nil,
+        stamped(
+          selfFrontmostUnavailablePayload(
+            reason: reason,
+            lastExternalAppName: fallbackCandidate?.appName,
+            lastExternalFrameAgeSeconds: frameAge.map { Int($0.rounded()) }
+          )
+        )
+      )
+    }
+  }
+
   static func payload(arguments: RuntimeJSONPayloadBox) async -> [String: Any] {
     await payload(arguments: arguments.value)
   }
@@ -519,7 +797,7 @@ enum ScreenContextWorkContextBuilder {
     let includeScreen = parseBool(arguments["include_screen"]) ?? false
     let now = Date()
     let start = now.addingTimeInterval(-Double(minutes) * 60)
-    let formatter = ISO8601DateFormatter()
+    let formatter = isoFormatter()
 
     // Cheap index first. A durable handle (URL / file) already names the document the
     // user means, so answering "where was that pricing doc" must not require Screen
@@ -783,9 +1061,10 @@ enum ScreenContextWorkContextBuilder {
     return latestCaptureAgeSeconds > staleThresholdSeconds
   }
 
-  static func freshScreenCapturePayload(now: Date = Date(), formatter: ISO8601DateFormatter = ISO8601DateFormatter())
-    -> [String: Any]?
-  {
+  static func freshScreenCapturePayload(
+    now: Date = Date(),
+    formatter: ISO8601DateFormatter = isoFormatter()
+  ) -> [String: Any]? {
     guard ScreenCaptureManager.captureScreenData() != nil else { return nil }
     return [
       "available": true,
@@ -870,7 +1149,11 @@ enum ScreenContextWorkContextBuilder {
     )
   }
 
-  private static func loadScreenshotDataEnsuringStorage(for screenshot: Screenshot) async throws -> Data {
+  /// One "read a frame's bytes, rebuilding storage if the read finds it gone"
+  /// path for every frame consumer — the tape loop here and
+  /// `RewindFrameLoader`'s chat surfaces. Duplicating this would let the two
+  /// recovery behaviors drift in the worst place.
+  static func loadScreenshotDataEnsuringStorage(for screenshot: Screenshot) async throws -> Data {
     do {
       return try await RewindStorage.shared.loadScreenshotData(for: screenshot)
     } catch {

@@ -1,4 +1,5 @@
 import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/utils/logger.dart';
 
 class FreemiumThresholdTracker {
@@ -9,6 +10,16 @@ class FreemiumThresholdTracker {
   bool get reached => _reached;
   int get remainingSeconds => _remainingSeconds;
   bool get requiresUserAction => _requiresUserAction;
+
+  /// S18: the listen threshold event is the Plus meter warning only.
+  /// Basic enters on-device through S17; this sheet stays opt-in from Settings.
+  static bool shouldShowPlusMeterPaywall({
+    required bool reached,
+    required bool requiresUserAction,
+    required PlanType? plan,
+  }) {
+    return reached && requiresUserAction && plan == PlanType.plus;
+  }
 
   bool handle(FreemiumThresholdReachedEvent event) {
     if (_reached) return false;

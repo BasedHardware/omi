@@ -83,6 +83,8 @@ def test_backend_listen_helm_template_uses_runtime_project_for_google_cloud_proj
     ).stdout
 
     assert f'name: GOOGLE_CLOUD_PROJECT\n              value: "{expected["runtime_gcp_project_id"]}"' in rendered
+    assert 'name: OMI_FIRESTORE_DATA_PLANE_PROJECT\n              value: "based-hardware"' in rendered
+    assert 'name: POSTHOG_PROJECT_API_KEY' in rendered
     assert f'image: "{expected["image_repository"]}:abc1234"' in rendered
 
 
@@ -160,3 +162,23 @@ def test_rendered_prod_deployment_cannot_restore_parakeet_first_streaming():
     # blanket check would forbid the pre-recorded default as collateral.
     assert f'name: STT_SERVICE_MODELS\n              value: "{SAFE_PRERECORDED_ROUTE}"' not in rendered
     assert f'name: STT_PRERECORDED_MODEL\n              value: "{SAFE_PRERECORDED_ROUTE}"' in rendered
+
+
+def test_windowed_live_rollout_is_dev_only_and_bounded():
+    """July overload: changing order must never silently turn on unbounded TDT."""
+    prod = _load_values(ENV_IDENTITY_DEFAULTS['prod']['values_file'])
+    dev = _load_values(ENV_IDENTITY_DEFAULTS['dev']['values_file'])
+    # Prod connects in configured order since the 2026-09-26 Modulate incident
+    # (#19069) so Soniox backs Modulate; the guard that matters is that the
+    # windowed TDT leg stays at zero allocation there.
+    assert _env_value(prod, 'STT_CONNECT_ORDER_FROM_CONFIG') == 'true'
+    assert _env_value(prod, 'PARAKEET_WINDOW_ALLOCATION_PERCENT') == '0'
+    assert _env_value(dev, 'STT_CONNECT_ORDER_FROM_CONFIG') == 'true'
+    assert _env_value(dev, 'PARAKEET_WINDOW_ALLOCATION_PERCENT') == '100'
+    assert _env_value(dev, 'STT_SERVICE_MODELS') == 'parakeet-window,soniox'
+    for values in (prod, dev):
+        assert _env_value(values, 'PARAKEET_WINDOW_MAX_SESSIONS') == '1'
+        assert _env_value(values, 'PARAKEET_WINDOW_DIARIZATION') == 'false'
+        assert _env_value(values, 'PARAKEET_WINDOW_PACE_SECONDS') == '6'
+        assert _env_value(values, 'PARAKEET_WINDOW_MAX_CONTEXT_SECONDS') == '24'
+        assert _env_value(values, 'STT_CIRCUIT_HALF_OPEN_PROBES') == '1'
