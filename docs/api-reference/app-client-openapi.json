@@ -4143,6 +4143,21 @@
       },
       "AudioFile": {
         "properties": {
+          "chunk_spans": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChunkSpan"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Validated contiguous coverage spans (v2 only)",
+            "title": "Chunk Spans"
+          },
           "chunk_timestamps": {
             "description": "List of chunk timestamps (for on-demand merging)",
             "items": {
@@ -4279,6 +4294,20 @@
           "status"
         ],
         "title": "AudioPrecacheResponse",
+        "type": "object"
+      },
+      "AudioTimelineProvenance": {
+        "description": "Audio-timeline v2 provenance marker on eligible conversation rows.\n\nPresent only on single-channel, server-STT live captures admitted under\nAUDIO_TIMELINE_V2: both transcript segment offsets and audio chunk starts\nare projections of one capture sample cursor anchored at the conversation's\nfirst accepted audio sample (started_at is that origin, pinned once).\nAbsent on legacy, resumed-v1, multi-channel, custom-STT, sync-merged or\nmixed-source rows.",
+        "properties": {
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "AudioTimelineProvenance",
         "type": "object"
       },
       "AudioUrlsResponse": {
@@ -6768,6 +6797,25 @@
         "title": "CheckVerificationResponse",
         "type": "object"
       },
+      "ChunkSpan": {
+        "description": "One contiguous stretch of stored PCM, in wall-epoch seconds.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "number"
+          },
+          "start": {
+            "title": "Start",
+            "type": "number"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "ChunkSpan",
+        "type": "object"
+      },
       "CleanerMemory": {
         "properties": {
           "archive_default_visible": {
@@ -7248,6 +7296,16 @@
             },
             "title": "Audio Files",
             "type": "array"
+          },
+          "audio_timeline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AudioTimelineProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "calendar_event": {
             "anyOf": [
@@ -8389,6 +8447,16 @@
             },
             "title": "Audio Files",
             "type": "array"
+          },
+          "audio_timeline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AudioTimelineProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "calendar_event": {
             "anyOf": [

@@ -52,7 +52,7 @@ class LiveChainSession:
     def to_json_log(self) -> dict[str, Any]:
         return {'event': 'managed_live_vad_metrics', **self.get_metrics()}
 
-    async def connect(self, sample_rate: int) -> STTSocket:
+    async def connect(self, sample_rate: int, epoch: Any = None) -> STTSocket:
         host = self.receiver.host
         language = host.stt_language
         uid = host.request.uid
@@ -145,6 +145,46 @@ class LiveChainSession:
             def callback(segments: list[dict[str, Any]]) -> None:
                 if generation != self.generation:
                     return
+                if epoch is not None and epoch.project_times:
+                    # Audio-timeline v2: the translator maps provider
+                    # times through its accepted send spans onto the capture
+                    # timeline's wall axis. It replaces this leg's own
+                    # offset/last_end clock, so no generation offset is added.
+                    # The translate itself reads unsynchronized timeline state,
+                    # so it runs on the listen loop (Deepgram calls this from
+                    # its SDK thread); the enqueue then follows the receiver's
+                    # pinned persistence mode (v2 owner fencing vs clock-only).
+                    def translate_on_loop(seg_list: list[dict[str, Any]]) -> None:
+                        translated = epoch.translate(seg_list)
+                        if translated:
+                            leg.note_selection_transcript(translated)
+                            self.receiver._enqueue_epoch_segments(translated, provider=service.value)
+
+                    self.receiver._run_on_listen_loop(translate_on_loop, segments)
+                    return
+                if epoch is not None:
+                    # Clock-only capture clock: attach the window from the
+                    # provider's own timestamps, then keep this leg's legacy
+                    # offset/last_end rebase (and gate remap) exactly as the
+                    # pre-timeline managed chain did — flag-off emitted times
+                    # stay monotonic across legs and byte-identical to main.
+                    def attach_then_rebase(seg_list: list[dict[str, Any]]) -> None:
+                        translated = epoch.translate(seg_list)
+                        if not translated:
+                            return
+                        if gate is not None and not passthrough:
+                            gate.remap_segments(translated)
+                        translated.sort(key=lambda item: item['start'])
+                        for segment in translated:
+                            start = max(self.last_end, offset + max(0.0, float(segment['start'])))
+                            end = max(start, offset + max(0.0, float(segment['end'])))
+                            segment['start'], segment['end'] = start, end
+                            self.last_end = end
+                        leg.note_selection_transcript(translated)
+                        self.receiver._enqueue_epoch_segments(translated, provider=service.value)
+
+                    self.receiver._run_on_listen_loop(attach_then_rebase, segments)
+                    return
                 if gate is not None and not passthrough:
                     gate.remap_segments(segments)
                 segments.sort(key=lambda item: item['start'])
@@ -180,7 +220,7 @@ class LiveChainSession:
                     )
                 if raw is None:
                     raise RuntimeError('Provider returned no socket')
-                leg = LiveLegSocket(raw, gate, self, service, sample_rate, is_window, passthrough)
+                leg = LiveLegSocket(raw, gate, self, service, sample_rate, is_window, passthrough, send_tracker=epoch)
                 return leg
             except BaseException:
                 if raw is not None:
@@ -240,9 +280,13 @@ class LiveLegSocket(STTSocket):
         sample_rate: int,
         window: bool,
         passthrough: bool,
+        send_tracker: Any = None,
     ) -> None:
         self.raw, self.gate, self.session = raw, gate, session
         self.service, self.sample_rate, self.window, self.passthrough = service, sample_rate, window, passthrough
+        # Audio-timeline v2: the provider epoch translator that records
+        # accepted sends and maps provider times to the capture timeline.
+        self._send_tracker = send_tracker
         self._dead = False
         self._seconds = 0.0
         self._pending_selection: PendingLiveFailover | None = None
@@ -285,7 +329,7 @@ class LiveLegSocket(STTSocket):
         if isinstance(self.raw, WindowedParakeetSocket):
             self.raw.set_health_callbacks(on_success, on_close)
 
-    def send(self, data: bytes) -> bool:
+    def send(self, data: bytes, start_sample: int | None = None) -> bool:
         if self.is_connection_dead:
             return False
         from utils.stt.parakeet_window import WindowedParakeetSocket
@@ -303,7 +347,7 @@ class LiveLegSocket(STTSocket):
                 # Synthetic wall clock follows received audio. Positive epoch
                 # avoids VAD's zero sentinel. Silero scores the level-corrected
                 # copy; pre-roll and audio_to_send stay original-level.
-                output = self.gate.process_audio(data, 1.0 + self._seconds, score_pcm)
+                output = self.gate.process_audio(data, 1.0 + self._seconds, score_pcm, start_sample=start_sample)
             except Exception:
                 if self.window:
                     self._dead = True
@@ -326,6 +370,12 @@ class LiveLegSocket(STTSocket):
         if self.window and output is not None and output.is_speech:
             if isinstance(self.raw, WindowedParakeetSocket):
                 self.raw.mark_speech()
+        sent_spans: tuple[tuple[int, int], ...] = ()
+        if start_sample is not None and audio:
+            if audio is data:
+                sent_spans = ((start_sample, len(data) // 2),)
+            else:
+                sent_spans = tuple(output.send_spans) if output is not None else ()
         try:
             if audio and self.raw.send(audio) is not True:
                 self.finish()
@@ -337,6 +387,8 @@ class LiveLegSocket(STTSocket):
             self._dead = True
             self.finish()
             return False
+        if sent_spans and self._send_tracker is not None:
+            self._send_tracker.note_accepted_spans(sent_spans)
         duration = len(data) / (self.sample_rate * 2)
         self._seconds += duration
         self.session.audio_seconds += duration

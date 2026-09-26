@@ -101,6 +101,45 @@ OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL = Counter(
     ['outcome'],
 )
 
+# Audio-timeline v2 observability. Labels are bounded and never carry UID,
+# conversation id, or any transcript/audio content. mode=legacy|v2;
+# segments outcome=mapped|rejected|straddled|late_owner_dropped;
+# coverage outcome is the 3.4 vocabulary covered|missing|pending_upload|no_audio|unsupported.
+OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL = Counter(
+    'omi_audio_timeline_segments_total',
+    'Live transcript segments by audio-timeline mapping outcome',
+    ['mode', 'outcome'],
+)
+OMI_AUDIO_TIMELINE_COVERAGE_TOTAL = Counter(
+    'omi_audio_timeline_coverage_total',
+    'Audio-linked coverage checks observed at bounded reconciliation points',
+    ['mode', 'outcome'],
+)
+# Pusher-side v2 replay reconciliation: frames overlapping already-accepted
+# audio whose bytes could not be proven identical (live-buffer compare or
+# flushed-run digest). Bounded counter, no identity labels.
+OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL = Counter(
+    'omi_audio_timeline_replay_conflicts_total',
+    'v2 audio frames dropped because an already-accepted range holds different bytes',
+)
+for _mode in ('legacy', 'v2'):
+    for _outcome in ('mapped', 'rejected', 'straddled', 'late_owner_dropped'):
+        OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode=_mode, outcome=_outcome)
+    for _outcome in ('covered', 'missing', 'pending_upload', 'no_audio', 'unsupported'):
+        OMI_AUDIO_TIMELINE_COVERAGE_TOTAL.labels(mode=_mode, outcome=_outcome)
+
+# Live speaker-ID match exits: every early return before a match decision, by
+# bounded reason (enumerated in routers/listen/speakers.py). The reason is the
+# only label — never uid, session, or conversation identifiers; those travel on
+# the paired log line instead, which is how a single user report is attributed.
+OMI_SPEAKER_ID_MATCH_EXITS_TOTAL = Counter(
+    'omi_speaker_id_match_exits_total',
+    'Live speaker-ID detections that returned before a match decision, by bounded reason',
+    ['reason'],
+)
+for _reason in ('window_outside_buffer', 'too_short', 'no_pcm', 'stale_generation', 'already_mapped'):
+    OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason=_reason)
+
 # Export zero-valued children from a healthy but idle process. This lets
 # Prometheus/Grafana distinguish no user traffic from an absent scrape target.
 for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):
