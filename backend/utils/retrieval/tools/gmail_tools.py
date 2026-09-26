@@ -3,7 +3,6 @@ Tools for accessing Gmail messages.
 """
 
 import base64
-import traceback
 from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional, cast
 
@@ -286,6 +285,5 @@ async def get_gmail_messages_tool(
 
         return result.strip()
     except Exception as e:
-        logger.error(f"❌ Unexpected error in get_gmail_messages_tool: {e}")
-        traceback.print_exc()
-        return f"Unexpected error fetching Gmail messages: {str(e)}"
+        logger.error(f"❌ Unexpected error in get_gmail_messages_tool: {e}", exc_info=True)
+        return "Unexpected error fetching Gmail messages. Please try again."
