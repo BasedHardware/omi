@@ -222,3 +222,35 @@ def test_installed_apps_over_the_in_limit_uses_the_cache_for_the_public_set(env,
     assert sorted(a['id'] for a in response.json()['data']) == ['a1', 'a2']
     # Exactly one stream: the uid-scoped query for the user's own private/unapproved apps.
     assert env.firestore.collection_obj.streams == 1
+
+
+def test_installed_apps_over_the_in_limit_applies_category_and_capability_filters(env, monkeypatch):
+    """>30 enabled ids must not re-insert or leak user_apps that fail category/capability filters."""
+    env.docs.append(
+        _app_doc(
+            'priv1', 'Private Entertainment', category='entertainment', capabilities=['memories'], private=True, uid=UID
+        )
+    )
+    enabled = {'a1', 'a2', 'priv1'} | {f'x{i}' for i in range(30)}
+    monkeypatch.setattr(apps_mod, 'get_enabled_apps', lambda uid: enabled)
+    env.client.get('/v2/apps/search', params={'limit': 100})  # warm the cache
+
+    by_cat = env.client.get(
+        '/v2/apps/search', params={'installed_apps': 'true', 'category': 'entertainment', 'limit': 100}
+    )
+    assert by_cat.status_code == 200
+    assert [a['id'] for a in by_cat.json()['data']] == ['priv1']
+
+    by_cap = env.client.get(
+        '/v2/apps/search', params={'installed_apps': 'true', 'capability': 'memories', 'limit': 100}
+    )
+    assert by_cap.status_code == 200
+    assert [a['id'] for a in by_cap.json()['data']] == ['priv1']
+
+
+def test_my_apps_with_null_capabilities_does_not_crash_on_capability_filter(env):
+    """A user app record with explicit capabilities=None must not raise TypeError when capability filter is active."""
+    env.docs.append(_app_doc('nullcap', 'Draft Null Cap', capabilities=None, uid=UID))
+    response = env.client.get('/v2/apps/search', params={'my_apps': 'true', 'capability': 'chat', 'limit': 100})
+    assert response.status_code == 200
+    assert sorted(a['id'] for a in response.json()['data']) == ['a1', 'a2', 'a3']
