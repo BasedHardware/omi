@@ -3544,6 +3544,7 @@
     "moreWaysToRecord": "Още начини за запис",
     "openCall": "Отвори обаждането",
     "captureRecoveryBanner": "Звукът от висулката не достига до приложението — докоснете, за да поправите",
+    "phoneRecordingBlockedByPendantBatch": "Спрете Transcribe Later на висулката си, преди да записвате с телефона.",
     "captureNotTranscribing": "Без транскрипция",
     "captureAudioSavedTranscribesLater": "Аудиото е запазено, транскрипция по-късно",
     "captureStillRecording": "Записът продължава",

@@ -3544,6 +3544,7 @@
     "moreWaysToRecord": "วิธีบันทึกเพิ่มเติม",
     "openCall": "เปิดการโทร",
     "captureRecoveryBanner": "เสียงจากจี้ไม่ถึงแอป — แตะเพื่อซ่อมแซม",
+    "phoneRecordingBlockedByPendantBatch": "หยุด Transcribe Later บนจี้ของคุณก่อนบันทึกด้วยโทรศัพท์",
     "captureNotTranscribing": "ไม่ได้ถอดความ",
     "captureAudioSavedTranscribesLater": "บันทึกเสียงแล้ว จะถอดความภายหลัง",
     "captureStillRecording": "ยังบันทึกอยู่",

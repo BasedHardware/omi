@@ -11104,6 +11104,7 @@
     "moreWaysToRecord": "Више начина снимања",
     "openCall": "Отвори позив",
     "captureRecoveryBanner": "Звук привеска не стиже до апликације — додирните за поправку",
+    "phoneRecordingBlockedByPendantBatch": "Zaustavite Transcribe Later na privesku pre snimanja telefonom.",
     "captureNotTranscribing": "Нема транскрипције",
     "captureAudioSavedTranscribesLater": "Звук је сачуван, транскрипција касније",
     "captureStillRecording": "Снимање се наставља",

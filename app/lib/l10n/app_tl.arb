@@ -11104,6 +11104,7 @@
     "moreWaysToRecord": "Iba pang paraan ng pag-record",
     "openCall": "Buksan ang tawag",
     "captureRecoveryBanner": "Hindi nakakarating sa app ang audio ng pendant — i-tap para ayusin",
+    "phoneRecordingBlockedByPendantBatch": "Itigil ang Transcribe Later sa iyong pendant bago mag-record gamit ang telepono.",
     "captureNotTranscribing": "Hindi nagta-transcribe",
     "captureAudioSavedTranscribesLater": "Na-save ang audio, ita-transcribe mamaya",
     "captureStillRecording": "Nagre-record pa rin",

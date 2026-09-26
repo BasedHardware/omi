@@ -11236,6 +11236,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get captureRecoveryBanner => 'پینڈنٹ کی آواز ایپ تک نہیں پہنچ رہی — درست کرنے کے لیے ٹیپ کریں';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'فون سے ریکارڈ کرنے سے پہلے اپنے لاکٹ پر Transcribe Later بند کریں۔';
+
+  @override
   String get captureNotTranscribing => 'ٹرانسکرپشن نہیں ہو رہی';
 
   @override

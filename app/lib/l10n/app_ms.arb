@@ -3544,6 +3544,7 @@
     "moreWaysToRecord": "Lebih banyak cara merakam",
     "openCall": "Buka panggilan",
     "captureRecoveryBanner": "Audio loket tidak sampai ke aplikasi — ketik untuk membaiki",
+    "phoneRecordingBlockedByPendantBatch": "Hentikan Transcribe Later pada loket anda sebelum merakam dengan telefon.",
     "captureNotTranscribing": "Tiada transkripsi",
     "captureAudioSavedTranscribesLater": "Audio disimpan, ditranskripsi kemudian",
     "captureStillRecording": "Masih merakam",

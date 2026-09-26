@@ -3544,6 +3544,7 @@
     "moreWaysToRecord": "طرق أخرى للتسجيل",
     "openCall": "فتح المكالمة",
     "captureRecoveryBanner": "صوت القلادة لا يصل إلى التطبيق — انقر للإصلاح",
+    "phoneRecordingBlockedByPendantBatch": "أوقف «النسخ لاحقًا» على قلادتك قبل التسجيل بهاتفك.",
     "captureNotTranscribing": "لا يتم النسخ",
     "captureAudioSavedTranscribesLater": "تم حفظ الصوت، وسيُنسخ لاحقًا",
     "captureStillRecording": "لا يزال التسجيل جاريًا",
