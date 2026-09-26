@@ -55,36 +55,57 @@ def test_normalize_memory_record():
     raw = {
         "id": "mem_abc_123",
         "content": "User prefers dark mode in VSCode and terminal",
-        "category": "Preference",
-        "visibility": "Private",
-        "user_id": "usr_999",
-        "is_starred": True,
-        "is_discarded": False,
+        "category": "work",
+        "visibility": "private",
         "createdAt": "2026-09-25T10:00:00Z",
         "updatedAt": "2026-09-25T10:05:00Z",
         "tags": ["ui", "editor"],
-        "conversation_id": "conv_456",
-        "source": "desktop_sync",
+        "manually_added": True,
+        "reviewed": False,
+        "edited": True,
     }
     rec = normalize_memory_record(raw)
     assert rec["id"] == "mem_abc_123"
     assert rec["content"] == "User prefers dark mode in VSCode and terminal"
-    assert rec["category"] == "preference"
+    assert rec["category"] == "work"
     assert rec["visibility"] == "private"
-    assert rec["user_id"] == "usr_999"
-    assert rec["is_starred"] is True
-    assert rec["is_discarded"] is False
+    assert rec["manually_added"] is True
+    assert rec["reviewed"] is False
+    assert rec["edited"] is True
     assert rec["created_at"] == "2026-09-25T10:00:00Z"
     assert rec["updated_at"] == "2026-09-25T10:05:00Z"
-    assert rec["conversation_id"] == "conv_456"
     assert rec["tags"] == '["ui", "editor"]'
-    assert rec["source"] == "desktop_sync"
     assert rec["char_len"] == len("User prefers dark mode in VSCode and terminal")
     assert rec["word_count"] == 8
 
 
+def test_real_cli_memory_shape():
+    """Verify that a real-shaped payload directly emitted by `omi --json memory list` maps cleanly."""
+    real_cli_record = {
+        "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+        "content": "Loves Earl Grey tea with honey",
+        "category": "lifestyle",
+        "visibility": "private",
+        "tags": ["food", "beverages"],
+        "created_at": "2026-09-26T01:30:00Z",
+        "updated_at": "2026-09-26T01:35:00Z",
+        "manually_added": False,
+        "reviewed": True,
+        "edited": False,
+    }
+    rec = normalize_memory_record(real_cli_record)
+    assert rec["id"] == "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+    assert rec["category"] == "lifestyle"
+    assert rec["visibility"] == "private"
+    assert rec["manually_added"] is False
+    assert rec["reviewed"] is True
+    assert rec["edited"] is False
+    assert rec["tags"] == '["food", "beverages"]'
+    assert rec["char_len"] == 30
+    assert rec["word_count"] == 6
+
+
 def test_parse_omi_memories():
-    # Direct list
     sample_list = [
         {"id": "1", "content": "Memory 1"},
         {"id": "2", "content": "Memory 2"},
@@ -129,9 +150,12 @@ def test_pyarrow_table_and_parquet_roundtrip(tmp_path):
             {
                 "id": f"mem_{i}",
                 "content": f"Memory record #{i} for parquet storage test",
-                "category": "fact",
+                "category": "interesting",
                 "tags": [f"tag_{i}", "test"],
                 "created_at": "2026-09-25T12:00:00Z",
+                "manually_added": False,
+                "reviewed": True,
+                "edited": False,
             }
         )
         for i in range(5)
@@ -139,7 +163,7 @@ def test_pyarrow_table_and_parquet_roundtrip(tmp_path):
 
     table = build_pyarrow_table(records)
     assert table.num_rows == 5
-    assert len(table.schema.names) == 14
+    assert len(table.schema.names) == 12
 
     out_file = tmp_path / "output.parquet"
     count, size, is_fallback = write_parquet_file(records, out_file, compression="snappy")
@@ -151,9 +175,10 @@ def test_pyarrow_table_and_parquet_roundtrip(tmp_path):
     # Inspect file
     info = inspect_parquet_file(out_file)
     assert info["num_rows"] == 5
-    assert info["num_columns"] == 14
+    assert info["num_columns"] == 12
     assert "content" in info["columns"]
-    assert "char_len" in info["columns"]
+    assert "reviewed" in info["columns"]
+    assert "manually_added" in info["columns"]
 
 
 def test_compression_codecs(tmp_path):
@@ -163,7 +188,7 @@ def test_compression_codecs(tmp_path):
             {
                 "id": f"mem_{i}",
                 "content": f"Compressible content text repetition {i}" * 10,
-                "category": "learning",
+                "category": "learnings",
             }
         )
         for i in range(10)
@@ -210,14 +235,13 @@ def test_cli_execution_with_file(tmp_path, capsys):
 
     input_data = [
         {"id": "cli_1", "content": "CLI test memory item 1", "category": "work"},
-        {"id": "cli_2", "content": "CLI test memory item 2", "category": "life"},
+        {"id": "cli_2", "content": "CLI test memory item 2", "category": "lifestyle"},
     ]
     input_file.write_text(json.dumps(input_data), encoding="utf-8")
 
     # Run with limit 1
     ret = main(["-i", str(input_file), "-o", str(output_file), "-n", "1"])
     assert ret == 0
-    # Either binary parquet or fallback json exists
     assert output_file.exists() or Path(f"{output_file}.json").exists()
 
 
@@ -231,6 +255,7 @@ def test_cli_schema_flag(tmp_path, capsys):
     captured = capsys.readouterr()
     assert "Apache Parquet Inferred Schema:" in captured.out
     assert "content" in captured.out
+    assert "(string)" in captured.out
 
 
 def test_cli_missing_input_file(tmp_path):

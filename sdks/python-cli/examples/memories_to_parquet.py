@@ -9,9 +9,9 @@ Parquet is the industry-standard columnar storage format optimized for:
   - Seamless ingestion into modern AI data lakes and cloud warehouses
 
 Usage:
-  omi memories list --json --limit 200 | python memories_to_parquet.py -o memories.parquet
+  omi --json memory list --limit 200 | python memories_to_parquet.py -o memories.parquet
   python memories_to_parquet.py -i export.json -o memories.parquet --compression zstd
-  python memories_to_parquet.py --json '[{...}]' --schema
+  python memories_to_parquet.py --json '[{"id": "mem_1", "content": "Sample"}]' --schema
 """
 
 from __future__ import annotations
@@ -22,6 +22,22 @@ import json
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
+
+
+PARQUET_TYPE_MAP = {
+    "id": "string",
+    "content": "string",
+    "category": "string",
+    "visibility": "string",
+    "created_at": "string",
+    "updated_at": "string",
+    "tags": "string",
+    "manually_added": "bool",
+    "reviewed": "bool",
+    "edited": "bool",
+    "char_len": "int64",
+    "word_count": "int64",
+}
 
 
 def normalize_iso_timestamp(val: Any) -> Optional[str]:
@@ -71,23 +87,21 @@ def extract_tags_json(raw_tags: Any) -> str:
 def normalize_memory_record(raw: Dict[str, Any]) -> Dict[str, Any]:
     """
     Flatten and normalize a raw Omi memory dictionary into a typed Parquet row schema.
+    Strictly aligns with omi_cli.models.Memory attributes.
     """
     record_id = str(raw.get("id") or "").strip()
     content = str(raw.get("content") or raw.get("text") or "").strip()
     category = str(raw.get("category") or "other").strip().lower()
     visibility = str(raw.get("visibility") or "private").strip().lower()
-    user_id = str(raw.get("user_id") or raw.get("uid") or "").strip()
-    conversation_id = raw.get("conversation_id")
-    conv_id_str = str(conversation_id).strip() if conversation_id else None
-
-    is_starred = bool(raw.get("is_starred", raw.get("starred", False)))
-    is_discarded = bool(raw.get("is_discarded", raw.get("discarded", False)))
 
     created_at = normalize_iso_timestamp(raw.get("created_at") or raw.get("createdAt"))
     updated_at = normalize_iso_timestamp(raw.get("updated_at") or raw.get("updatedAt"))
 
     tags_json = extract_tags_json(raw.get("tags") or raw.get("structured_tags"))
-    source = str(raw.get("source") or "omi").strip()
+
+    manually_added = bool(raw.get("manually_added", False))
+    reviewed = bool(raw.get("reviewed", False))
+    edited = bool(raw.get("edited", False))
 
     char_len = len(content)
     word_count = len(content.split()) if content else 0
@@ -97,14 +111,12 @@ def normalize_memory_record(raw: Dict[str, Any]) -> Dict[str, Any]:
         "content": content,
         "category": category,
         "visibility": visibility,
-        "user_id": user_id,
-        "conversation_id": conv_id_str,
-        "is_starred": is_starred,
-        "is_discarded": is_discarded,
         "created_at": created_at,
         "updated_at": updated_at,
         "tags": tags_json,
-        "source": source,
+        "manually_added": manually_added,
+        "reviewed": reviewed,
+        "edited": edited,
         "char_len": char_len,
         "word_count": word_count,
     }
@@ -145,14 +157,12 @@ def records_to_columnar_dict(records: List[Dict[str, Any]]) -> Dict[str, List[An
         "content": [],
         "category": [],
         "visibility": [],
-        "user_id": [],
-        "conversation_id": [],
-        "is_starred": [],
-        "is_discarded": [],
         "created_at": [],
         "updated_at": [],
         "tags": [],
-        "source": [],
+        "manually_added": [],
+        "reviewed": [],
+        "edited": [],
         "char_len": [],
         "word_count": [],
     }
@@ -163,7 +173,7 @@ def records_to_columnar_dict(records: List[Dict[str, Any]]) -> Dict[str, List[An
 
 
 def build_pyarrow_table(records: List[Dict[str, Any]]) -> Any:
-    """Build a strongly-typed pyarrow.Table from normalized records."""
+    """Build a strongly-typed pyarrow.Table from normalized memory records."""
     try:
         import pyarrow as pa
     except ImportError as exc:
@@ -179,14 +189,12 @@ def build_pyarrow_table(records: List[Dict[str, Any]]) -> Any:
             ("content", pa.string()),
             ("category", pa.string()),
             ("visibility", pa.string()),
-            ("user_id", pa.string()),
-            ("conversation_id", pa.string()),
-            ("is_starred", pa.bool_()),
-            ("is_discarded", pa.bool_()),
             ("created_at", pa.string()),
             ("updated_at", pa.string()),
             ("tags", pa.string()),
-            ("source", pa.string()),
+            ("manually_added", pa.bool_()),
+            ("reviewed", pa.bool_()),
+            ("edited", pa.bool_()),
             ("char_len", pa.int64()),
             ("word_count", pa.int64()),
         ]
@@ -228,22 +236,7 @@ def write_parquet_file(
         col_dict = records_to_columnar_dict(records)
         payload = {
             "format": "columnar_parquet_fallback",
-            "schema": {
-                "id": "string",
-                "content": "string",
-                "category": "string",
-                "visibility": "string",
-                "user_id": "string",
-                "conversation_id": "string",
-                "is_starred": "bool",
-                "is_discarded": "bool",
-                "created_at": "string",
-                "updated_at": "string",
-                "tags": "string",
-                "source": "string",
-                "char_len": "int64",
-                "word_count": "int64",
-            },
+            "schema": PARQUET_TYPE_MAP,
             "num_rows": len(records),
             "columns": col_dict,
         }
@@ -335,12 +328,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # 3. Schema mode
     if args.schema:
-        col_dict = records_to_columnar_dict(records)
         print("Apache Parquet Inferred Schema:")
-        for col_name in col_dict:
-            sample_val = col_dict[col_name][0] if col_dict[col_name] else None
-            sample_type = type(sample_val).__name__ if sample_val is not None else "string"
-            print(f"  - {col_name:18s} ({sample_type})")
+        for col_name, col_type in PARQUET_TYPE_MAP.items():
+            print(f"  - {col_name:18s} ({col_type})")
         print(f"\nTotal records: {len(records)}")
         return 0
 
