@@ -39,7 +39,7 @@ from routers.listen.conversations import LiveConversationController
 from routers.listen.receiver import ListenReceiver
 from routers.listen.transcripts import ConversationCache, TranscriptProcessor
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
+from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator, UNPLACED_SEGMENT_OFFSET
 from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 
 RATE = 16000
@@ -385,6 +385,8 @@ def _processor(monkeypatch, store, *, current: Optional[str], photos_sink=None):
     processor.segment_buffer = deque()
     processor.photo_buffer = deque()
     processor._v2_retry_counts = {}
+    processor._v2_legacy_fallback = deque()
+    processor._v2_legacy_fallback_ids = set()
     processor._v2_retry_until = 0.0
     processor._v2_committed_ids = set()
     processor._v2_photos_committed = False
@@ -414,6 +416,57 @@ def _v2_segment(segment_id, start, end, owner, text='hello'):
         'person_id': None,
         '_conversation_id': owner,
     }
+
+
+async def test_exhausted_v2_text_persists_once_after_legacy_store_recovers(monkeypatch):
+    store = StrictFirestore()
+    row = _seed_row(store, 'conv-fallback', started_at=datetime.fromtimestamp(T0, tz=timezone.utc))
+    row['audio_timeline'] = {'version': 2}
+    processor, _sent = _processor(monkeypatch, store, current='conv-fallback')
+    raw = _v2_segment('s-exhausted', T0 + 1, T0 + 2, 'conv-fallback', text='never lose these words')
+
+    # Five bounded v2 retries fail; the sixth failure transfers the original
+    # absolute-time segment to the legacy unplaced queue exactly once.
+    for _ in range(6):
+        processor._queue_v2_retry([dict(raw)])
+        processor.segment_buffer.clear()
+    assert [item['id'] for item in processor._v2_legacy_fallback] == ['s-exhausted']
+    processor._queue_v2_retry([dict(raw)])
+    assert len(processor._v2_legacy_fallback) == 1
+
+    original_call = processor.host.persistence.call
+    unavailable = True
+
+    async def flaky_call(fn, *args, **kwargs):
+        if unavailable and fn is conversations_db.update_conversation_segments:
+            raise RuntimeError('temporary store outage')
+        return await original_call(fn, *args, **kwargs)
+
+    processor.host.persistence.call = flaky_call
+    with pytest.raises(RuntimeError, match='temporary store outage'):
+        await processor._persist_v1_unplaced(processor._v2_legacy_fallback[0])
+    assert len(processor._v2_legacy_fallback) == 1
+    assert row['transcript_segments'] == []
+
+    unavailable = False
+    processor._v2_retry_until = 0
+    processor.host.state.active = False
+    processor.host.wait = lambda seconds: asyncio.sleep(0, result=False)
+    processor.host.speakers.tasks = []
+    processor.host.speakers.drain = _async_noop
+    processor.flush_speaker_assignments = _async_noop
+    await asyncio.wait_for(processor.process_loop(), timeout=1)
+
+    written = conversations_db._decode_transcript_segments_strict(
+        UID, row.get('transcript_segments', []), bool(row.get('transcript_segments_compressed'))
+    )
+    assert len(written) == 1
+    assert written[0]['id'] == 's-exhausted'
+    assert written[0]['text'] == 'never lose these words'
+    assert written[0]['start'] == written[0]['end'] == UNPLACED_SEGMENT_OFFSET
+    assert written[0]['audio_alignment'] == 'unplaced'
+    assert row['audio_timeline'] == {'version': 2}
+    assert not processor._v2_legacy_fallback
 
 
 async def test_resumed_v1_row_is_never_marked_v2(monkeypatch):

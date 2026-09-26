@@ -1017,6 +1017,14 @@ seek by `start` alone. They are excluded from clip and speaker embedding work.
 The v2 persistence drain retries uncommitted text with stable IDs and bounded
 backoff. A successful owner write is excluded from later retries even if a
 different owner or photo write fails in the same drain; photos retry separately.
+After five failed v2 retries, each still-uncommitted segment moves once to
+the legacy segment transaction with its original ID and SEND owner, at
+`start=end=-1` and `audio_alignment=unplaced`. The fallback queue remains in
+the session drain with an eight-second retry delay if that transaction is also
+unavailable. The listen supervisor has a bounded shutdown drain, so this
+in-memory queue cannot survive a process loss during a simultaneous legacy
+store outage; a durable external dead-letter would be needed for that stronger
+guarantee. No v2 marker or speaker clip is created by the fallback.
 Mapped rows retain their accepted capture-run start for live merging; rows
 across a skipped VAD gap stay separate so merging cannot invent a wider window.
 The expected remaining speaker-recognition gap is the fraction of segments

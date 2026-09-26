@@ -109,6 +109,8 @@ class TranscriptProcessor:
         self._flush_failures = 0
         self._flush_backoff_until = 0.0
         self._v2_retry_counts: Dict[str, int] = {}
+        self._v2_legacy_fallback: deque[Dict[str, Any]] = deque()
+        self._v2_legacy_fallback_ids: set[str] = set()
         self._v2_retry_until = 0.0
         self._v2_committed_ids: set[str] = set()
         self._v2_photos_committed = False
@@ -116,20 +118,61 @@ class TranscriptProcessor:
         self._v2_photo_failures = 0
 
     def _queue_v2_retry(self, segments: List[Dict[str, Any]]) -> None:
-        """Retry only uncommitted text, with a finite per-segment budget."""
+        """Retry uncommitted text, then retain it for unplaced v1 persistence."""
         for raw in reversed(segments):
             key = str(raw.get('id') or '')
             if key in self._v2_committed_ids:
+                continue
+            if key in self._v2_legacy_fallback_ids:
                 continue
             attempts = self._v2_retry_counts.get(key, 0) + 1
             if attempts > MAX_V2_PERSIST_ATTEMPTS:
                 self._v2_retry_counts.pop(key, None)
                 OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='persist_retry_exhausted').inc()
-                logger.error('Audio-timeline segment persist exhausted retries')
+                # The v2 batch path has exhausted its bounded budget. Keep a
+                # pristine copy until the ordinary segment transaction can
+                # persist it without claiming any capture placement.
+                self._v2_legacy_fallback.append(dict(raw))
+                self._v2_legacy_fallback_ids.add(key)
+                record_fallback(
+                    component='other',
+                    from_mode='v2_segment_persist',
+                    to_mode='v1_unplaced_persist',
+                    reason='other',
+                    outcome='degraded',
+                )
                 continue
             self._v2_retry_counts[key] = attempts
             self._v2_retry_until = max(self._v2_retry_until, time.monotonic() + min(8.0, 0.5 * 2 ** (attempts - 1)))
             self.segment_buffer.appendleft(raw)
+
+    async def _persist_v1_unplaced(self, raw: Dict[str, Any]) -> None:
+        """Use the legacy segment transaction, keeping the SEND owner and ID."""
+        owner = raw.get('_conversation_id') or self.host.state.current_conversation_id
+        if not owner:
+            raise RuntimeError('No conversation owner for unplaced transcript fallback')
+        is_current = owner == self.host.state.current_conversation_id
+        data = await self.cache.get(owner, force_refresh=True) if is_current else await self._load_conversation(owner)
+        if not data:
+            raise RuntimeError('Conversation unavailable for unplaced transcript fallback')
+        unplaced = dict(raw)
+        unplaced.update(start=UNPLACED_SEGMENT_OFFSET, end=UNPLACED_SEGMENT_OFFSET, audio_alignment='unplaced')
+        unplaced.pop('audio_capture_run', None)
+        segment = TranscriptSegment(**unplaced, speech_profile_processed=True)
+        result = await self._update_live_conversation(
+            deserialize_conversation(data),
+            [segment],
+            [],
+            datetime.now(timezone.utc),
+            None,
+            audio_timeline=None,
+            update_finished_at=False,
+        )
+        if result is None:
+            raise RuntimeError('Legacy unplaced transcript persistence returned no receipt')
+        self.current_session_segments[str(segment.id)] = segment.speech_profile_processed
+        if is_current:
+            await self._deliver_segments([item.model_dump() for item in result[1]])
 
     def _queue_v2_photos(self, photos: List[ConversationPhoto]) -> None:
         if not photos or self._v2_photos_committed or self._v2_photos_requeued:
@@ -439,10 +482,24 @@ class TranscriptProcessor:
 
     async def process_loop(self) -> None:
         diarized_speaker_ids_by_conversation: Dict[str, set[int]] = {}
-        while self.host.state.active or self.segment_buffer or self.photo_buffer:
-            if await self.host.wait(0.6) and not (self.segment_buffer or self.photo_buffer):
+        while self.host.state.active or self.segment_buffer or self.photo_buffer or self._v2_legacy_fallback:
+            if await self.host.wait(0.6) and not (self.segment_buffer or self.photo_buffer or self._v2_legacy_fallback):
                 break
             if getattr(self.host.state, 'capture_timeline_v2', False) and time.monotonic() < self._v2_retry_until:
+                continue
+            if self._v2_legacy_fallback:
+                raw = self._v2_legacy_fallback[0]
+                try:
+                    await self._persist_v1_unplaced(raw)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as error:
+                    self._v2_retry_until = time.monotonic() + 8.0
+                    logger.error('Unplaced transcript fallback persist failed type=%s', type(error).__name__)
+                else:
+                    self._v2_legacy_fallback.popleft()
+                    self._v2_legacy_fallback_ids.discard(str(raw.get('id') or ''))
+                    OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='persist_fallback_recovered').inc()
                 continue
             if not self.segment_buffer and not self.photo_buffer:
                 if self.host.state.speaker_map_dirty and time.monotonic() >= self._flush_backoff_until:

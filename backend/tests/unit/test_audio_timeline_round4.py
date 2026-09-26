@@ -190,6 +190,8 @@ async def test_v2_persist_exception_requeues_pristine_batch():
     processor.segment_buffer = deque([{'id': 's1', 'text': 'kept', 'start': T0, 'end': T0 + 1}])
     processor.photo_buffer = deque()
     processor._v2_retry_counts = {}
+    processor._v2_legacy_fallback = deque()
+    processor._v2_legacy_fallback_ids = set()
     processor._v2_retry_until = 0.0
     processor._v2_committed_ids = set()
     processor._v2_photos_committed = False
@@ -249,6 +251,8 @@ def test_v2_persist_retry_is_bounded_and_backed_off():
     processor = object.__new__(TranscriptProcessor)
     processor.segment_buffer = deque()
     processor._v2_retry_counts = {}
+    processor._v2_legacy_fallback = deque()
+    processor._v2_legacy_fallback_ids = set()
     processor._v2_retry_until = 0.0
     processor._v2_committed_ids = set()
     exhausted = OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='persist_retry_exhausted')
@@ -261,6 +265,7 @@ def test_v2_persist_retry_is_bounded_and_backed_off():
     assert len(processor.segment_buffer) == 5
     assert exhausted._value.get() == before + 1
     assert 'persistent-failure' not in processor._v2_retry_counts
+    assert [item['text'] for item in processor._v2_legacy_fallback] == ['kept until bounded exhaustion']
 
 
 def test_speaker_work_requires_a_proven_capture_window():
