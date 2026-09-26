@@ -1,10 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type Stripe from 'stripe';
 import {
   AllSubscriptionSourcesFailedError,
   MRR_STATUSES,
   PIPELINE_STATUSES,
   annualAmount,
+  countNonUsdSubscriptions,
+  isNonUsdSubscription,
   fetchOmiSubscriptions,
   groupByProduct,
   isAnnual,
@@ -20,6 +22,7 @@ type PriceShape = {
   id?: string;
   unit_amount: number | null;
   product?: string | { id: string };
+  currency?: string;
   recurring?: { interval: string; interval_count?: number } | null;
 };
 
@@ -38,6 +41,7 @@ function sub(
         price: {
           id: price.id ?? `price_${index}`,
           unit_amount: price.unit_amount,
+          currency: price.currency ?? 'usd',
           product: price.product ?? 'prod_default',
           recurring: price.recurring === undefined ? { interval: 'month', interval_count: 1 } : price.recurring,
         },
@@ -87,6 +91,66 @@ describe('monthlyAmount', () => {
 
   it('annualises through the same normalisation', () => {
     expect(annualAmount(sub([{ unit_amount: 12000, recurring: { interval: 'year' } }]))).toBeCloseTo(120);
+  });
+});
+
+describe('monthlyAmount honesty guards', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('warns loudly instead of silently contributing zero for an unknown interval', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const exotic = sub([{ unit_amount: 3000, recurring: { interval: 'fortnight' } }]);
+    expect(monthlyAmount(exotic)).toBe(0);
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain('fortnight');
+  });
+
+  it('excludes non-USD prices rather than blending currencies, and says so', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const euros = sub([{ unit_amount: 1999, currency: 'eur' }]);
+    expect(monthlyAmount(euros)).toBe(0);
+    expect(String(warn.mock.calls[0][0])).toContain('eur');
+
+    // A mixed subscription keeps only the USD leg.
+    const mixed = sub([{ unit_amount: 1000 }, { unit_amount: 5000, currency: 'gbp' }]);
+    expect(monthlyAmount(mixed)).toBeCloseTo(10);
+  });
+
+  it('treats a price with no currency field as the reporting currency', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const noCurrency = sub([{ unit_amount: 1000 }]);
+    noCurrency.items.data[0].price.currency = undefined as unknown as string;
+
+    expect(monthlyAmount(noCurrency)).toBeCloseTo(10);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('counts what it skipped so a route can report it', () => {
+    const subscriptions = [
+      sub([{ unit_amount: 1000 }], { id: 'sub_usd' }),
+      sub([{ unit_amount: 1000, currency: 'eur' }], { id: 'sub_eur' }),
+      sub([{ unit_amount: 1000 }, { unit_amount: 1000, currency: 'gbp' }], { id: 'sub_mixed' }),
+    ];
+
+    expect(subscriptions.map(isNonUsdSubscription)).toEqual([false, true, true]);
+    expect(countNonUsdSubscriptions(subscriptions)).toBe(2);
+  });
+
+  it('keeps non-USD money out of grouped MRR', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const groups = groupByProduct([
+      sub([{ unit_amount: 2000, product: 'prod_a' }]),
+      sub([{ unit_amount: 9900, product: 'prod_a', currency: 'eur' }]),
+    ]);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].subscriptionCount).toBe(2);
+    expect(groups[0].mrr).toBeCloseTo(20);
   });
 });
 

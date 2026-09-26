@@ -139,9 +139,26 @@ describe('canForwardRendererCaptureCommand', () => {
     ).toBe(false)
   })
 
-  it('allows UI controls only from the main window', () => {
-    expect(canForwardRendererCaptureCommand({ type: 'ptt-warm' }, 7, owns, 7)).toBe(true)
-    expect(canForwardRendererCaptureCommand({ type: 'ptt-warm' }, 8, owns, 7)).toBe(false)
+  it('allows main-only UI controls (live-view etc.) only from the main window', () => {
+    expect(canForwardRendererCaptureCommand({ type: 'live-view', active: true }, 7, owns, 7)).toBe(
+      true
+    )
+    expect(canForwardRendererCaptureCommand({ type: 'live-view', active: true }, 8, owns, 7)).toBe(
+      false
+    )
+  })
+
+  it('allows PTT controls from either the main window or the bar (usePushToTalk is bar-only)', () => {
+    expect(canForwardRendererCaptureCommand({ type: 'ptt-warm' }, 7, owns, 7, 42)).toBe(true) // main
+    expect(canForwardRendererCaptureCommand({ type: 'ptt-warm' }, 42, owns, 7, 42)).toBe(true) // bar
+    expect(canForwardRendererCaptureCommand({ type: 'ptt-warm' }, 8, owns, 7, 42)).toBe(false) // neither
+  })
+
+  it('does NOT extend the bar-window allowance to the main-only controls', () => {
+    // The bar is the sole PTT sender, but must not gain live-view/screen-view/etc.
+    expect(
+      canForwardRendererCaptureCommand({ type: 'live-view', active: true }, 42, owns, 7, 42)
+    ).toBe(false)
   })
 
   it('rejects unknown runtime commands instead of forwarding them', () => {

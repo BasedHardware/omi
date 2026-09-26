@@ -7,7 +7,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 LIB="$MACOS_DIR/scripts/automation_token_lib.py"
 PATH_SH="$MACOS_DIR/scripts/automation-token-path.sh"
-QUALIFIER="$MACOS_DIR/scripts/qualify-desktop-beta.sh"
 RUN_SH="$MACOS_DIR/run.sh"
 HARNESS="$MACOS_DIR/scripts/omi-harness"
 
@@ -73,9 +72,6 @@ PY
 
 grep -Fq 'automation_token_missing' "$HARNESS" || fail "omi-harness must fail loud on missing token"
 grep -Fq 'automation_token_lib' "$HARNESS" || fail "omi-harness must use shared automation_token_lib"
-grep -Fq 'authenticated' "$QUALIFIER" || fail "qualify wait_for_bridge must require authenticated readiness"
 grep -Fq 'OMI_AUTOMATION_TOKEN_FILE' "$RUN_SH" || fail "run.sh must forward OMI_AUTOMATION_TOKEN_FILE through open --env when set"
-grep -Fq 'OMI_AUTOMATION_TOKEN_FILE=' "$QUALIFIER" || fail "qualify must pin OMI_AUTOMATION_TOKEN_FILE before desktop-run-local"
-grep -Fq 'omi_automation_token_file' "$QUALIFIER" || fail "qualify must resolve Darwin token path"
 
 echo "automation token path contract tests passed"

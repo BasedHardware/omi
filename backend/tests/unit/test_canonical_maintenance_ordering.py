@@ -32,10 +32,9 @@ def _ready_universal_apply_control(monkeypatch):
     )
 
 
-def test_maintenance_runs_normalization_ttl_and_one_l2_route_in_order():
+def test_maintenance_runs_ttl_and_one_consolidation_route_in_order():
     uid = "uid-canonical"
     order = MagicMock()
-    required = RequiredMemoryProcessingReport(uid=uid)
     lifecycle = CanonicalShortTermLifecycleReport(uid=uid)
     consolidation = ConsolidationReport(
         uid=uid,
@@ -75,7 +74,7 @@ def test_maintenance_runs_normalization_ttl_and_one_l2_route_in_order():
         patch(
             "utils.memory.short_term_promotion.run_required_memory_processing",
             side_effect=lambda *args, **kwargs: (order("required"), required)[1],
-        ),
+        ) as required_tick,
         patch(
             "utils.memory.short_term_promotion.run_canonical_short_term_ttl_lifecycle",
             side_effect=lambda *args, **kwargs: (order("ttl"), lifecycle)[1],
@@ -96,14 +95,15 @@ def test_maintenance_runs_normalization_ttl_and_one_l2_route_in_order():
             run_id="run-order",
         )
 
+    required_tick.assert_not_called()
     assert order.call_args_list == [
         call("outbox"),
-        call("required"),
         call("ttl"),
         call("route"),
         call("outbox"),
     ]
-    assert report.required_processing is required
+    assert report.required_processing is not None
+    assert report.required_processing.attempted_count == 0
     assert report.lifecycle is lifecycle
     assert report.consolidation is consolidation
     assert report.outbox is not None
@@ -140,8 +140,8 @@ def test_pending_delete_runs_before_malformed_short_term_row_aborts_maintenance(
             "actions": [{"event_id": "pending-delete", "action": "vector_delete"}],
         }
 
-    def fail_required(*args, **kwargs):
-        order("required")
+    def fail_ttl(*args, **kwargs):
+        order("ttl")
         raise ValueError("malformed Short-term row")
 
     with (
@@ -156,9 +156,12 @@ def test_pending_delete_runs_before_malformed_short_term_row_aborts_maintenance(
         ),
         patch(
             "utils.memory.short_term_promotion.run_required_memory_processing",
-            side_effect=fail_required,
+            side_effect=AssertionError("job skips standalone L2"),
+        ) as required_tick,
+        patch(
+            "utils.memory.short_term_promotion.run_canonical_short_term_ttl_lifecycle",
+            side_effect=fail_ttl,
         ),
-        patch("utils.memory.short_term_promotion.run_canonical_short_term_ttl_lifecycle") as lifecycle,
         patch("utils.memory.short_term_promotion.run_canonical_consolidation") as consolidation,
     ):
         with pytest.raises(ValueError, match="malformed Short-term row"):
@@ -169,9 +172,9 @@ def test_pending_delete_runs_before_malformed_short_term_row_aborts_maintenance(
                 run_id="run-malformed",
             )
 
-    assert order.call_args_list == [call("outbox"), call("required")]
+    required_tick.assert_not_called()
+    assert order.call_args_list == [call("outbox"), call("ttl")]
     vector_delete.assert_called_once_with(uid, "mem-private")
-    lifecycle.assert_not_called()
     consolidation.assert_not_called()
 
 

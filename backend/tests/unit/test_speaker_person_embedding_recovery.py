@@ -23,6 +23,7 @@ from types import SimpleNamespace  # noqa: E402
 import numpy as np  # noqa: E402
 
 import routers.listen.speakers as speakers_mod  # noqa: E402
+from utils.stt.speaker_match import SPEAKER_MATCH_THRESHOLD  # noqa: E402
 
 
 class _Persistence:
@@ -52,7 +53,7 @@ def test_recovers_a_taught_person_whose_embedding_was_lost(monkeypatch):
 
     persisted: dict[str, list] = {}
 
-    def _persist(uid, person_id, embedding):
+    def _persist(uid, person_id, embedding, *, expected_updated_at):
         persisted[person_id] = embedding
         return True
 
@@ -77,7 +78,7 @@ def test_recovered_embedding_is_usable_for_matching(monkeypatch):
 
     recovered = asyncio.run(_matcher()._recover_person_embedding(_v3_person()))
 
-    assert speakers_mod.compare_embeddings(recovered, vector) < speakers_mod.SPEAKER_MATCH_THRESHOLD
+    assert speakers_mod.compare_embeddings(recovered, vector) < SPEAKER_MATCH_THRESHOLD
 
 
 def test_person_without_samples_is_not_recovered(monkeypatch):

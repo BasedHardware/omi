@@ -95,7 +95,31 @@ enum ChatFirstBlockWire {
       guard let conversationID = block["conversationId"] as? String, let summary = block["summary"] as? String else {
         return nil
       }
-      return ["type": type, "conversation_id": conversationID, "summary": summary]
+      var result: [String: Any] = ["type": type, "conversation_id": conversationID, "summary": summary]
+      if let actionItems = block["recommendedActionItems"] as? [[String: Any]] {
+        result["recommended_action_items"] = actionItems.compactMap { item -> [String: Any]? in
+          guard let description = item["description"] as? String else { return nil }
+          var converted: [String: Any] = ["description": description]
+          if let taskID = item["taskId"] as? String { converted["task_id"] = taskID }
+          return converted
+        }
+      }
+      return result
+    case "memoryReviewCard":
+      guard let items = block["items"] as? [[String: Any]], !items.isEmpty else { return nil }
+      let backendItems = items.compactMap { item -> [String: Any]? in
+        guard let memoryID = item["memoryId"] as? String, let content = item["content"] as? String else {
+          return nil
+        }
+        return ["memory_id": memoryID, "content": content, "category": item["category"] as? String ?? ""]
+      }
+      guard backendItems.count == items.count else { return nil }
+      return [
+        "type": type,
+        "summary_id": block["summaryId"] as? String ?? "",
+        "date": block["date"] as? String ?? "",
+        "items": backendItems,
+      ]
     case "memoryLink":
       guard let memoryID = block["memoryId"] as? String, let summary = block["summary"] as? String else { return nil }
       return ["type": type, "memory_id": memoryID, "summary": summary]
@@ -154,7 +178,32 @@ enum ChatFirstBlockWire {
       guard let conversationID = block["conversation_id"] as? String, let summary = block["summary"] as? String else {
         return nil
       }
-      return ["type": type, "id": id, "conversationId": conversationID, "summary": summary]
+      var result: [String: Any] = ["type": type, "id": id, "conversationId": conversationID, "summary": summary]
+      if let actionItems = block["recommended_action_items"] as? [[String: Any]] {
+        result["recommendedActionItems"] = actionItems.compactMap { item -> [String: Any]? in
+          guard let description = item["description"] as? String else { return nil }
+          var converted: [String: Any] = ["description": description]
+          if let taskID = item["task_id"] as? String { converted["taskId"] = taskID }
+          return converted
+        }
+      }
+      return result
+    case "memoryReviewCard":
+      guard let items = block["items"] as? [[String: Any]], !items.isEmpty else { return nil }
+      let journalItems = items.compactMap { item -> [String: Any]? in
+        guard let memoryID = item["memory_id"] as? String, let content = item["content"] as? String else {
+          return nil
+        }
+        return ["memoryId": memoryID, "content": content, "category": item["category"] as? String ?? ""]
+      }
+      guard journalItems.count == items.count else { return nil }
+      return [
+        "type": type,
+        "id": id,
+        "summaryId": block["summary_id"] as? String ?? "",
+        "date": block["date"] as? String ?? "",
+        "items": journalItems,
+      ]
     case "memoryLink":
       guard let memoryID = block["memory_id"] as? String, let summary = block["summary"] as? String else { return nil }
       return ["type": type, "id": id, "memoryId": memoryID, "summary": summary]

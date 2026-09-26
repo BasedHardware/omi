@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -256,6 +256,10 @@ export class OmiArtifactStorage {
     );
   }
 
+  pruneExpiredToolOutputs(options: PruneToolOutputOptions = {}): ToolOutputPruneResult {
+    return pruneExpiredToolOutputs(this.rootDir, options);
+  }
+
   private writeManifest(directory: string, entry: Record<string, unknown>): void {
     const manifestPath = join(directory, "manifest.json");
     let entries: unknown[] = [];
@@ -272,6 +276,23 @@ export class OmiArtifactStorage {
   }
 }
 
+export const TOOL_OUTPUT_DIRECTORY_NAME = "tool-output";
+/** Oversized control-tool dumps are recoverable for a week, then deleted. */
+export const TOOL_OUTPUT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const TOOL_OUTPUT_PRUNE_INTERVAL_MS = 60 * 60 * 1000;
+
+export interface PruneToolOutputOptions {
+  nowMs?: number;
+  retentionMs?: number;
+}
+
+export interface ToolOutputPruneResult {
+  deletedFiles: number;
+  freedBytes: number;
+}
+
+let lastToolOutputPruneAtMs = 0;
+
 export function defaultArtifactRoot(env: NodeJS.ProcessEnv = process.env): string {
   if (env.OMI_AGENT_ARTIFACTS_DIR) {
     return env.OMI_AGENT_ARTIFACTS_DIR;
@@ -283,6 +304,87 @@ export function defaultArtifactRoot(env: NodeJS.ProcessEnv = process.env): strin
   }
   const bundleId = env.__CFBundleIdentifier || "com.omi.computer-macos";
   return join(homedir(), "Library", "Application Support", "Omi", "Artifacts", bundleId);
+}
+
+/**
+ * Delete `tool-output` JSON dumps older than the retention window. User-facing
+ * run artifacts (owner/session/run/attempt copies) are left alone. Existing
+ * installs are cleaned on the next sweep; new dumps expire after a week.
+ */
+export function pruneExpiredToolOutputs(
+  rootDir: string,
+  options: PruneToolOutputOptions = {},
+): ToolOutputPruneResult {
+  const nowMs = options.nowMs ?? Date.now();
+  const retentionMs = options.retentionMs ?? TOOL_OUTPUT_RETENTION_MS;
+  const toolOutputRoot = join(resolve(rootDir), TOOL_OUTPUT_DIRECTORY_NAME);
+  const result = { deletedFiles: 0, freedBytes: 0 };
+  lastToolOutputPruneAtMs = nowMs;
+
+  if (!existsSync(toolOutputRoot)) return result;
+  try {
+    if (lstatSync(toolOutputRoot).isSymbolicLink()) return result;
+  } catch {
+    return result;
+  }
+
+  const cutoffMs = nowMs - retentionMs;
+  const directories: string[] = [];
+  const stack = [toolOutputRoot];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || !isInside(current, toolOutputRoot)) continue;
+    let entries;
+    try {
+      entries = readdirSync(current, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    if (current !== toolOutputRoot) directories.push(current);
+    for (const entry of entries) {
+      const path = join(current, entry.name);
+      if (!isInside(path, toolOutputRoot) || entry.isSymbolicLink()) continue;
+      if (entry.isDirectory()) {
+        stack.push(path);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      try {
+        const stat = lstatSync(path);
+        if (stat.isSymbolicLink() || !stat.isFile() || stat.mtimeMs >= cutoffMs) continue;
+        const size = stat.size;
+        unlinkSync(path);
+        result.deletedFiles += 1;
+        result.freedBytes += size;
+      } catch {
+        // A file may disappear between listing and unlink. Keep sweeping.
+      }
+    }
+  }
+
+  for (const directory of directories.sort((left, right) => right.length - left.length)) {
+    try {
+      if (readdirSync(directory).length === 0) rmdirSync(directory);
+    } catch {
+      // Directory is not empty or already gone.
+    }
+  }
+  return result;
+}
+
+/** Persist paths call this so a long-lived runtime still expires old dumps. */
+export function maybePruneExpiredToolOutputs(
+  rootDir: string,
+  nowMs = Date.now(),
+): ToolOutputPruneResult {
+  if (lastToolOutputPruneAtMs > 0 && nowMs - lastToolOutputPruneAtMs < TOOL_OUTPUT_PRUNE_INTERVAL_MS) {
+    return { deletedFiles: 0, freedBytes: 0 };
+  }
+  try {
+    return pruneExpiredToolOutputs(rootDir, { nowMs });
+  } catch {
+    return { deletedFiles: 0, freedBytes: 0 };
+  }
 }
 
 function shouldKeepExternalLocation(artifact: AdapterArtifactReference): boolean {

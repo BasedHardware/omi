@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "FC-bounding-layer-converts-success-to-failure",
+  "violated_contract": "A representation budget may degrade the detail of a successful tool result, but it must never rewrite that executor success as a tool failure. Every truncating surface must preserve the succeeded outcome, report omitted totals, and provide a durable handle for drill-in.",
+  "canonical_prevention": "The tool manifest owns per-surface result budgets and section contracts; the kernel's total projector persists full output, emits an artifact-backed bounded success with omission counts, and adapters only transport or assert the canonical envelope.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/agent/tests/relay-tool-result.test.ts",
+    "desktop/macos/agent/tests/tool-result-projector.test.ts",
+    "desktop/macos/agent/tests/runtime-adapter-contract-conformance.test.ts",
+    "desktop/macos/Desktop/Tests/AgentControlServiceTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/agent/src/runtime/relay-tool-result.ts",
+    "desktop/macos/agent/src/runtime/control-tools.ts",
+    "desktop/macos/agent/src/runtime/omi-tool-manifest.ts",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift",
+    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift"
+  ],
+  "status": "open"
+}

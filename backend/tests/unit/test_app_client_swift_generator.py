@@ -21,16 +21,16 @@ SWIFT_PATH = ROOT_DIR / 'desktop' / 'macos' / 'Desktop' / 'Sources' / 'Generated
 
 
 def test_swift_dto_file_is_generated_from_app_client_openapi():
-    spec = json.loads(SPEC_PATH.read_text())
+    spec = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
     generated = generate_swift_openapi_types.generate(spec, 'docs/api-reference/app-client-openapi.json')
 
-    assert SWIFT_PATH.read_text() == generated
+    assert SWIFT_PATH.read_text(encoding='utf-8') == generated
     assert '// GENERATED CODE - DO NOT EDIT.' in generated
     assert 'public enum OmiAPI {' in generated
 
 
 def test_swift_dto_file_covers_desktop_high_traffic_read_schemas():
-    generated = SWIFT_PATH.read_text()
+    generated = SWIFT_PATH.read_text(encoding='utf-8')
 
     # The desktop's highest-traffic read endpoints (conversations, memories,
     # action items, goals) decode these generated DTOs through adapter inits
@@ -43,6 +43,8 @@ def test_swift_dto_file_covers_desktop_high_traffic_read_schemas():
         'struct ActionItemUpdateRequest:',
         'struct ActionItem:',
         'struct MemoryDB:',
+        'struct MemoryEditResponse:',
+        'struct MemoryRevertRequest:',
         'struct GoalResponse:',
         'struct GoalDetailProjection:',
         'struct CandidateRecord:',
@@ -67,6 +69,8 @@ def test_swift_dto_file_covers_desktop_high_traffic_read_schemas():
     assert 'public let desiredOutcome: OmiPatchField<String>' in generated
     assert 'public let nextReviewAt: OmiPatchField<String>' in generated
     assert 'taskChange = .create(try c.decode(TaskCreatePayload.self' in generated
+    assert 'body: MemoryRevertRequest' in generated
+    assert 'async throws -> MemoryEditResponse' in generated
 
 
 def test_swift_generator_handles_refs_optionals_and_enums():

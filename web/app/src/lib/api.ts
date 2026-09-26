@@ -2,6 +2,7 @@ import { getIdToken } from './firebase';
 import { getWebDeviceIdHash } from './clientDevice';
 import {
   invalidateCache,
+  invalidateCacheKey,
   invalidationPatterns,
   fetchWithCache,
   cacheKeys,
@@ -10,12 +11,14 @@ import {
 import type {
   Conversation,
   ConversationSearchResponse,
+  ConversationScreenFrameSet,
   ConversationStatus,
   ActionItem,
   Memory,
   MemoryCategory,
   MemoryVisibility,
   KnowledgeGraph,
+  ScreenFrameSharingUpdateRequest,
   ServerMessage,
   MessageChunk,
   MessageChunkType,
@@ -28,12 +31,20 @@ import type {
   CreateConversationResponse,
   ActionItemsResponse,
   FairUseStatusResponse,
+  StoreRecordingPermissionResponse,
 } from './omiApi.generated';
+import {
+  normalizeKnowledgeLedgerMemories,
+  normalizeKnowledgeLedgerMemory,
+} from './knowledgeLedger';
 export type {
   MergeConversationsResponse,
   CreateConversationResponse,
   ActionItemsResponse,
 };
+import type { Goal, GoalHistoryEntry } from '@/types/goals';
+import type { ChatSession } from '@/types/chatSessions';
+import type { Scores } from '@/types/scores';
 import type {
   App,
   AppCategory,
@@ -55,7 +66,15 @@ const API_BASE_URL = '/api/proxy';
 /**
  * Make an authenticated API request
  */
-async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+interface AuthenticatedResponse<T> {
+  data: T;
+  response: Response;
+}
+
+async function fetchWithAuthResponse<T>(
+  endpoint: string,
+  options: RequestInit = {},
+): Promise<AuthenticatedResponse<T>> {
   let token: string | null = null;
 
   try {
@@ -71,10 +90,13 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
 
   const url = `${API_BASE_URL}${endpoint}`;
   const deviceIdHash = await getWebDeviceIdHash();
-  const headers = new Headers({
-    Authorization: `Bearer ${token}`,
-    'Content-Type': 'application/json',
-  });
+  const headers = new Headers({ Authorization: `Bearer ${token}` });
+  // FormData must set its own Content-Type so fetch can add the multipart
+  // boundary; forcing application/json here produces a body the server cannot
+  // parse.
+  if (!(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
   new Headers(options.headers).forEach((value, name) => headers.set(name, value));
   headers.set('X-App-Platform', 'web');
   if (deviceIdHash) {
@@ -102,10 +124,10 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
 
     // Handle 204 No Content responses (common for DELETE operations)
     if (response.status === 204) {
-      return undefined as T;
+      return { data: undefined as T, response };
     }
 
-    return response.json();
+    return { data: await response.json(), response };
   } catch (fetchError) {
     if (fetchError instanceof TypeError && fetchError.message === 'Failed to fetch') {
       console.error('Network error - possible CORS issue or API unavailable');
@@ -115,6 +137,11 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
     }
     throw fetchError;
   }
+}
+
+async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const { data } = await fetchWithAuthResponse<T>(endpoint, options);
+  return data;
 }
 
 /**
@@ -221,6 +248,78 @@ export async function deleteConversation(id: string): Promise<void> {
     method: 'DELETE',
   });
   invalidateCache(invalidationPatterns.conversations);
+}
+
+// =============================================================================
+// Meeting-note screenshots ("screen frames")
+// =============================================================================
+// Types come from the generated OpenAPI client (`@/types/conversation`
+// re-exports them). Route paths mirror the shared contract
+// (`data/reports/meeting-screenshots/DESIGN-sol.md` §1-2) exactly.
+
+/**
+ * Get the approved screenshot set (banner + strip) for a conversation.
+ * Uses the same fetch-with-cache idiom as `getConversation`; a short TTL
+ * balances against the frame set's signed URLs expiring after 60 minutes.
+ */
+export async function getConversationScreenFrames(
+  conversationId: string,
+): Promise<ConversationScreenFrameSet> {
+  return fetchWithCache<ConversationScreenFrameSet>(
+    cacheKeys.screenFrames(conversationId),
+    () =>
+      fetchWithAuth<ConversationScreenFrameSet>(
+        `/v1/conversations/${conversationId}/screenshots`,
+      ),
+    { ttl: CACHE_TTL.SHORT },
+  );
+}
+
+/**
+ * Delete a single screenshot. The server may promote another already-
+ * approved, already-persisted frame to banner (contract §8); the returned
+ * set is authoritative, so callers should replace their local state with it
+ * rather than trying to predict the promotion.
+ */
+export async function deleteScreenFrame(
+  conversationId: string,
+  frameId: string,
+): Promise<ConversationScreenFrameSet> {
+  const result = await fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshots/${frameId}`,
+    { method: 'DELETE' },
+  );
+  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
+  return result;
+}
+
+/** Delete every screenshot for a conversation (banner + strip). */
+export async function deleteAllScreenFrames(
+  conversationId: string,
+): Promise<ConversationScreenFrameSet> {
+  const result = await fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshots`,
+    { method: 'DELETE' },
+  );
+  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
+  return result;
+}
+
+/**
+ * Toggle whether this conversation's approved frames are visible on its
+ * public share link. Default for a new conversation is `enabled: true`.
+ */
+export async function patchScreenFrameSharing(
+  conversationId: string,
+  enabled: boolean,
+): Promise<ConversationScreenFrameSet> {
+  const body: ScreenFrameSharingUpdateRequest = { enabled };
+  const result = await fetchWithAuth<ConversationScreenFrameSet>(
+    `/v1/conversations/${conversationId}/screenshot-sharing`,
+    { method: 'PATCH', body: JSON.stringify(body) },
+  );
+  invalidateCacheKey(cacheKeys.screenFrames(conversationId));
+  return result;
 }
 
 /**
@@ -343,6 +442,7 @@ export async function createActionItem(
 ): Promise<ActionItem> {
   return fetchWithAuth<ActionItem>('/v1/action-items', {
     method: 'POST',
+    headers: { 'Idempotency-Key': crypto.randomUUID() },
     body: JSON.stringify(params),
   });
 }
@@ -406,21 +506,64 @@ export interface GetMemoriesParams {
   limit?: number;
   offset?: number;
   categories?: MemoryCategory[];
+  cursor?: string;
+  view?: MemoryView;
 }
 
-export async function getMemories(params: GetMemoriesParams = {}): Promise<Memory[]> {
-  const { limit = 100, offset = 0, categories } = params;
+/** Server-selected memory presentation. The server remains authoritative for
+ * ordering and eligibility; the web client only selects the read surface. */
+export type MemoryView = 'useful_now' | 'history' | 'all';
+
+export interface MemoriesPage {
+  memories: Memory[];
+  nextCursor: string | null;
+  truncated: boolean;
+  /** `null` means this server predates the beta capability header. */
+  beliefEnabled: boolean | null;
+}
+
+function headerBoolean(response: Response, name: string): boolean | null {
+  const value = response.headers.get(name)?.trim().toLowerCase();
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return null;
+}
+
+/** Read one server-ordered page and retain pagination/capability receipts. */
+export async function getMemoriesPage(
+  params: GetMemoriesParams = {},
+): Promise<MemoriesPage> {
+  const { limit = 100, offset = 0, cursor, view } = params;
 
   const queryParams = new URLSearchParams({
     limit: limit.toString(),
-    offset: offset.toString(),
+    offset: cursor ? '0' : offset.toString(),
   });
+  if (cursor) queryParams.set('cursor', cursor);
+  if (view) queryParams.set('view', view);
 
-  if (categories && categories.length > 0) {
-    queryParams.set('categories', categories.join(','));
-  }
+  const { data: raw, response } = await fetchWithAuthResponse<unknown>(
+    `/v3/memories?${queryParams}`,
+  );
+  return {
+    memories: normalizeKnowledgeLedgerMemories(raw),
+    nextCursor: response.headers.get('X-Omi-Memory-Next-Cursor'),
+    truncated: response.headers.get('X-Omi-List-Truncated')?.toLowerCase() === 'true',
+    beliefEnabled: headerBoolean(response, 'X-Omi-Memory-Belief-Enabled'),
+  };
+}
 
-  return fetchWithAuth<Memory[]>(`/v3/memories?${queryParams}`);
+/**
+ * Read memories.
+ *
+ * Category selection is deliberately not a parameter: `/v3/memories` accepts
+ * limit, offset, cursor, and device scope only. Sending `categories` looked
+ * like a filter but FastAPI drops the unknown query param, so the server
+ * returned everything. Categories are applied client-side — see
+ * `@/lib/memoryCategory`, which mirrors how the desktop clients do it.
+ */
+export async function getMemories(params: GetMemoriesParams = {}): Promise<Memory[]> {
+  return (await getMemoriesPage(params)).memories;
 }
 
 /**
@@ -433,7 +576,7 @@ export interface CreateMemoryParams {
 }
 
 export async function createMemory(params: CreateMemoryParams): Promise<Memory> {
-  const memory = await fetchWithAuth<Memory>('/v3/memories', {
+  const raw = await fetchWithAuth<unknown>('/v3/memories', {
     method: 'POST',
     body: JSON.stringify({
       content: params.content,
@@ -441,6 +584,8 @@ export async function createMemory(params: CreateMemoryParams): Promise<Memory> 
       category: params.category || 'manual',
     }),
   });
+  const memory = normalizeKnowledgeLedgerMemory(raw);
+  if (!memory) throw new Error('Malformed memory response');
   invalidateCache(invalidationPatterns.memories);
   return memory;
 }
@@ -500,6 +645,21 @@ export async function reviewMemory(id: string, accept: boolean): Promise<void> {
   });
 }
 
+export type MemoryUseAction = 'suppress' | 'allow' | 'useful';
+
+/** Record an owner's use preference without deleting or rewriting the memory. */
+export async function setMemoryUse(
+  id: string,
+  action: MemoryUseAction,
+  feedbackId: string,
+): Promise<void> {
+  await fetchWithAuth(`/v3/memories/${id}/use`, {
+    method: 'POST',
+    body: JSON.stringify({ action, feedback_id: feedbackId }),
+  });
+  invalidateCache(invalidationPatterns.memories);
+}
+
 // ============================================================================
 // Knowledge Graph API
 // ============================================================================
@@ -511,13 +671,232 @@ export async function getKnowledgeGraph(): Promise<KnowledgeGraph> {
   return fetchWithAuth<KnowledgeGraph>('/v1/knowledge-graph');
 }
 
-/**
- * Trigger knowledge graph rebuild
- */
-export async function rebuildKnowledgeGraph(): Promise<void> {
-  await fetchWithAuth('/v1/knowledge-graph/rebuild', {
+// ============================================================================
+// Chat sessions API
+// ============================================================================
+
+interface ChatSessionWire {
+  id: string;
+  title?: string | null;
+  preview?: string | null;
+  created_at: string;
+  updated_at: string;
+  app_id?: string | null;
+  message_count?: number | null;
+  starred?: boolean | null;
+}
+
+function toChatSession(wire: ChatSessionWire): ChatSession {
+  return {
+    id: wire.id,
+    title: wire.title ?? undefined,
+    preview: wire.preview ?? undefined,
+    createdAt: wire.created_at,
+    updatedAt: wire.updated_at,
+    appId: wire.app_id ?? undefined,
+    messageCount: wire.message_count ?? 0,
+    starred: Boolean(wire.starred),
+  };
+}
+
+export async function getChatSessions(appId?: string): Promise<ChatSession[]> {
+  const query = appId ? `?app_id=${encodeURIComponent(appId)}` : '';
+  const sessions = await fetchWithAuth<ChatSessionWire[]>(`/v2/chat-sessions${query}`);
+  return Array.isArray(sessions) ? sessions.map(toChatSession) : [];
+}
+
+export async function createChatSession(
+  params: { title?: string; app_id?: string } = {},
+): Promise<ChatSession> {
+  return toChatSession(
+    await fetchWithAuth<ChatSessionWire>('/v2/chat-sessions', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    }),
+  );
+}
+
+export async function updateChatSession(
+  id: string,
+  updates: { title?: string; starred?: boolean },
+): Promise<ChatSession> {
+  return toChatSession(
+    await fetchWithAuth<ChatSessionWire>(`/v2/chat-sessions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    }),
+  );
+}
+
+export async function deleteChatSession(id: string): Promise<void> {
+  await fetchWithAuth(`/v2/chat-sessions/${id}`, { method: 'DELETE' });
+}
+
+export interface RealtimeSessionToken {
+  provider: 'gemini';
+  token: string;
+  expires_at?: string;
+}
+
+export interface RealtimeUsageReport {
+  input_text_tokens: number;
+  input_audio_tokens: number;
+  input_cached_tokens: number;
+  output_text_tokens: number;
+  output_audio_tokens: number;
+}
+
+interface SavedRealtimeMessage {
+  id: string;
+  created_at: string;
+  session_id?: string | null;
+}
+
+export async function createGeminiLiveSession(): Promise<RealtimeSessionToken> {
+  return fetchWithAuth<RealtimeSessionToken>('/v2/realtime/session', {
     method: 'POST',
+    body: JSON.stringify({ provider: 'gemini' }),
   });
+}
+
+export async function saveRealtimeMessage(params: {
+  text: string;
+  sender: 'human' | 'ai';
+  clientMessageId: string;
+  appId?: string;
+  sessionId?: string | null;
+}): Promise<SavedRealtimeMessage> {
+  return fetchWithAuth<SavedRealtimeMessage>('/v2/desktop/messages', {
+    method: 'POST',
+    body: JSON.stringify({
+      text: params.text,
+      sender: params.sender,
+      app_id: params.appId,
+      session_id: params.sessionId,
+      client_message_id: params.clientMessageId,
+      message_source: 'realtime_voice',
+    }),
+  });
+}
+
+export async function reportGeminiLiveUsage(usage: RealtimeUsageReport): Promise<void> {
+  await fetchWithAuth('/v2/realtime/usage', {
+    method: 'POST',
+    body: JSON.stringify({
+      provider: 'gemini',
+      model: 'gemini-3.1-flash-live-preview',
+      ...usage,
+    }),
+  });
+}
+
+// ============================================================================
+// Goals & Scores API
+// ============================================================================
+
+/**
+ * Get all goals.
+ *
+ * Uses `/v1/goals/all` rather than `/v1/goals/canonical/list` so the page works
+ * for every signed-in user; the canonical route is gated on task-system
+ * enrollment and 403s for everyone else.
+ */
+export async function getGoals(includeEnded = false): Promise<Goal[]> {
+  const goals = await fetchWithAuth<Goal[]>(
+    `/v1/goals/all?include_ended=${includeEnded}`,
+  );
+  return Array.isArray(goals) ? goals : [];
+}
+
+/**
+ * Create body, matching what the desktop apps send
+ * (`desktop/windows/src/renderer/src/pages/Goals.tsx` saveNew): title, a
+ * required positive target, and unit only when the user gave one.
+ *
+ * `target_value` is required — the backend 422s without it — so a title-only
+ * goal defaults to 1, which completes on a single tick.
+ */
+export interface CreateGoalParams {
+  title: string;
+  target_value: number;
+  unit?: string;
+}
+
+export async function createGoal(params: CreateGoalParams): Promise<Goal> {
+  const goal = await fetchWithAuth<Goal>('/v1/goals', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+  invalidateCache(invalidationPatterns.goals);
+  return goal;
+}
+
+/**
+ * Update only a goal's progress value.
+ *
+ * The backend takes `current_value` as a query parameter on this route, not in
+ * the body.
+ */
+export async function updateGoalProgress(
+  id: string,
+  currentValue: number,
+): Promise<Goal> {
+  const goal = await fetchWithAuth<Goal>(
+    `/v1/goals/${id}/progress?current_value=${encodeURIComponent(currentValue)}`,
+    { method: 'PATCH' },
+  );
+  invalidateCache(invalidationPatterns.goals);
+  return goal;
+}
+
+export interface UpdateGoalParams {
+  title?: string;
+  target_value?: number;
+  current_value?: number;
+  unit?: string | null;
+}
+
+export async function updateGoal(id: string, updates: UpdateGoalParams): Promise<Goal> {
+  const goal = await fetchWithAuth<Goal>(`/v1/goals/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
+  });
+  invalidateCache(invalidationPatterns.goals);
+  return goal;
+}
+
+export async function deleteGoal(id: string): Promise<void> {
+  await fetchWithAuth(`/v1/goals/${id}`, { method: 'DELETE' });
+  invalidateCache(invalidationPatterns.goals);
+}
+
+/**
+ * Recorded progress values for a goal, newest window first.
+ *
+ * Uses `/v1/goals/{id}/history`, not `/v1/goals/{id}/detail`. The detail
+ * projection and the progress-events feed both sit behind
+ * `require_canonical_task_user`, which 404s for anyone not enrolled in the
+ * canonical task system — most web users.
+ */
+export async function getGoalHistory(id: string, days = 30): Promise<GoalHistoryEntry[]> {
+  const history = await fetchWithAuth<GoalHistoryEntry[]>(
+    `/v1/goals/${id}/history?days=${days}`,
+  );
+  return Array.isArray(history) ? history : [];
+}
+
+/** AI-generated advice for a goal. Rate limited server-side. */
+export async function getGoalAdvice(id: string): Promise<string> {
+  const response = await fetchWithAuth<{ advice: string }>(`/v1/goals/${id}/advice`);
+  return response.advice;
+}
+
+// ============================================================================
+
+/** Daily, weekly, and overall task-completion scores. */
+export async function getScores(date?: string): Promise<Scores> {
+  const query = date ? `?date=${encodeURIComponent(date)}` : '';
+  return fetchWithAuth<Scores>(`/v1/scores${query}`);
 }
 
 // ============================================================================
@@ -606,10 +985,18 @@ export function parseStreamLine(line: string): MessageChunk | null {
 /**
  * Get message history
  */
-export async function getMessages(appId?: string): Promise<ServerMessage[]> {
+export async function getMessages(
+  appId?: string,
+  chatSessionId?: string | null,
+): Promise<ServerMessage[]> {
   const queryParams = new URLSearchParams();
   if (appId) {
     queryParams.set('app_id', appId);
+  }
+  // Omitted entirely for the default shared thread; naming a session targets
+  // that one specific thread.
+  if (chatSessionId) {
+    queryParams.set('chat_session_id', chatSessionId);
   }
 
   const endpoint = `/v2/messages${queryParams.toString() ? `?${queryParams}` : ''}`;
@@ -624,12 +1011,16 @@ export async function sendMessageStream(
   onChunk: (chunk: MessageChunk) => void,
   options?: {
     appId?: string;
+    /** Target one specific thread; omit for the default shared thread. */
+    chatSessionId?: string | null;
     fileIds?: string[];
     context?: {
       type: string;
       id?: string;
       title?: string;
       summary?: string;
+      start_date?: string;
+      end_date?: string;
     } | null;
   },
 ): Promise<void> {
@@ -650,8 +1041,15 @@ export async function sendMessageStream(
   if (options?.appId) {
     queryParams.set('app_id', options.appId);
   }
+  // Without this the reply is persisted to the default shared thread while the
+  // UI shows it under the selected one.
+  if (options?.chatSessionId) {
+    queryParams.set('chat_session_id', options.chatSessionId);
+  }
 
-  const url = `${API_BASE_URL}/v2/messages${queryParams.toString() ? `?${queryParams}` : ''}`;
+  const url = `${API_BASE_URL}/v2/messages${
+    queryParams.toString() ? `?${queryParams}` : ''
+  }`;
 
   const response = await fetch(url, {
     method: 'POST',
@@ -663,7 +1061,16 @@ export async function sendMessageStream(
     body: JSON.stringify({
       text,
       file_ids: options?.fileIds || [],
-      context: options?.context || null,
+      time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      context: options?.context
+        ? {
+            type: options.context.type === 'general' ? 'recap' : options.context.type,
+            id: options.context.id,
+            title: options.context.title,
+            start_date: options.context.start_date,
+            end_date: options.context.end_date,
+          }
+        : null,
     }),
   });
 
@@ -716,10 +1123,17 @@ export async function sendMessageStream(
 /**
  * Clear message history
  */
-export async function clearMessages(appId?: string): Promise<void> {
+export async function clearMessages(
+  appId?: string,
+  chatSessionId?: string | null,
+): Promise<void> {
   const queryParams = new URLSearchParams();
   if (appId) {
     queryParams.set('app_id', appId);
+  }
+  // Clearing must delete the thread the reader is looking at, not the shared one.
+  if (chatSessionId) {
+    queryParams.set('chat_session_id', chatSessionId);
   }
 
   const endpoint = `/v2/messages${queryParams.toString() ? `?${queryParams}` : ''}`;
@@ -753,7 +1167,9 @@ export async function uploadChatFiles(
     queryParams.set('app_id', appId);
   }
 
-  const url = `${API_BASE_URL}/v2/files${queryParams.toString() ? `?${queryParams}` : ''}`;
+  const url = `${API_BASE_URL}/v2/files${
+    queryParams.toString() ? `?${queryParams}` : ''
+  }`;
 
   const formData = new FormData();
   for (const file of files) {
@@ -1051,6 +1467,38 @@ export async function updateApp(
 }
 
 /**
+ * Re-enable an app that the backend auto-disabled after webhook failures.
+ *
+ * Sends `disabled: false` explicitly — the backend re-enable branch reads an
+ * unset-exclusive payload, so omitting the field is a no-op rather than a
+ * failure. The endpoint re-checks every configured URL and rejects the request
+ * with a specific reason, so that detail is surfaced instead of the status code.
+ */
+export async function reEnableApp(appId: string): Promise<void> {
+  const token = await getIdToken();
+  if (!token) {
+    throw new Error('Not authenticated');
+  }
+
+  const formData = new FormData();
+  formData.append('app_data', JSON.stringify({ id: appId, disabled: false }));
+
+  const response = await fetch(`${API_BASE_URL}/v1/apps/${appId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const detail = await response
+      .json()
+      .then((body) => body?.detail)
+      .catch(() => null);
+    throw new Error(detail || `Failed to re-enable app: ${response.status}`);
+  }
+}
+
+/**
  * Delete an app
  */
 export async function deleteApp(appId: string): Promise<void> {
@@ -1151,16 +1599,13 @@ export async function getNotificationScopes(): Promise<NotificationScope[]> {
     const token = await getIdToken();
     if (!token) return [];
 
-    const response = await fetch(
-      `${API_BASE_URL}/v1/apps/proactive-notification-scopes`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'X-App-Platform': 'web',
-        },
+    const response = await fetch(`${API_BASE_URL}/v1/app/proactive-notification-scopes`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'X-App-Platform': 'web',
       },
-    );
+    });
 
     if (!response.ok) return [];
     return response.json();
@@ -1211,6 +1656,7 @@ import type {
   UserSubscriptionResponse,
   Person,
 } from '@/types/user';
+import { decodePlan, planGrantsPaidCapability } from '@/types/user';
 
 /**
  * Get user's primary language
@@ -1309,7 +1755,10 @@ export async function getTranscriptionPreferences(): Promise<TranscriptionPrefer
 
 // Webhook type enum matching backend API
 type WebhookType =
-  'memory_created' | 'realtime_transcript' | 'audio_bytes' | 'day_summary';
+  | 'memory_created'
+  | 'realtime_transcript'
+  | 'audio_bytes'
+  | 'day_summary';
 
 /**
  * Get developer webhook URL
@@ -1357,7 +1806,10 @@ export async function getDeveloperWebhooksStatus(): Promise<DeveloperWebhooks> {
  * Get store recording permission
  */
 export async function getRecordingPermission(): Promise<RecordingPermission> {
-  return fetchWithAuth<RecordingPermission>('/v1/users/store-recording-permission');
+  const response = await fetchWithAuth<StoreRecordingPermissionResponse>(
+    '/v1/users/store-recording-permission',
+  );
+  return { enabled: response.store_recording_permission };
 }
 
 /**
@@ -1436,15 +1888,16 @@ export async function getUserSubscription(): Promise<UserSubscription | null> {
       '/v1/users/me/subscription',
     );
 
-    // Any paid tier counts as premium for UI gating (Manage vs Choose Plan).
-    // Plus / Unlimited arrive wired as 'unlimited'; Operator / Architect arrive
-    // as their real plan id now that web renders the full new catalog.
-    const paidPlans = ['unlimited', 'plus', 'unlimited_v2', 'operator', 'architect'];
+    const plan = decodePlan(response.subscription?.plan);
     const result: UserSubscription = {
-      plan: response.subscription?.plan || 'basic',
+      plan: plan.raw ?? '',
+      plan_identity: plan,
       status: response.subscription?.status || 'active',
-      is_unlimited: paidPlans.includes(response.subscription?.plan ?? ''),
+      // Unknown plans are deliberately excluded. A future wire value must not
+      // inherit paid capability merely because it is non-empty.
+      is_unlimited: planGrantsPaidCapability(plan),
       current_period_end: response.subscription?.current_period_end,
+      stripe_subscription_id: response.subscription?.stripe_subscription_id,
       cancel_at_period_end: response.subscription?.cancel_at_period_end,
       current_price_id: response.subscription?.current_price_id,
       features: response.subscription?.features || [],
@@ -1570,10 +2023,12 @@ export async function createPerson(name: string): Promise<Person> {
  * Update person name
  */
 export async function updatePersonName(personId: string, name: string): Promise<void> {
-  await fetchWithAuth(`/v1/users/people/${personId}/name`, {
-    method: 'PATCH',
-    body: JSON.stringify({ name }),
-  });
+  await fetchWithAuth(
+    `/v1/users/people/${personId}/name?value=${encodeURIComponent(name)}`,
+    {
+      method: 'PATCH',
+    },
+  );
 }
 
 /**
@@ -1794,7 +2249,11 @@ export async function exportAllData(): Promise<Blob> {
   if (!response.ok) {
     throw new Error(`Export failed: ${response.status} ${response.statusText}`);
   }
-  return response.blob();
+  const blob = await response.blob();
+  if (blob.size === 0) {
+    throw new Error('Export failed: server returned an empty file');
+  }
+  return blob;
 }
 
 /**
@@ -1811,16 +2270,19 @@ export async function deleteKnowledgeGraph(): Promise<void> {
 // ============================================================================
 
 /**
- * Get custom vocabulary words from transcription preferences
+ * Get custom vocabulary words from transcription preferences.
+ *
+ * Returns null when the list could not be fetched, so a failure is not read as
+ * an empty vocabulary. The save path replaces the whole list.
  */
-export async function getCustomVocabulary(): Promise<string[]> {
+export async function getCustomVocabulary(): Promise<string[] | null> {
   try {
     const result = await fetchWithAuth<TranscriptionPreferences>(
       '/v1/users/transcription-preferences',
     );
     return result.vocabulary || [];
   } catch {
-    return [];
+    return null;
   }
 }
 
@@ -1972,7 +2434,9 @@ export async function reprocessConversation(
     queryParams.set('app_id', appId);
   }
 
-  const endpoint = `/v1/conversations/${conversationId}/reprocess${queryParams.toString() ? `?${queryParams}` : ''}`;
+  const endpoint = `/v1/conversations/${conversationId}/reprocess${
+    queryParams.toString() ? `?${queryParams}` : ''
+  }`;
   return fetchWithAuth<Conversation>(endpoint, {
     method: 'POST',
   });

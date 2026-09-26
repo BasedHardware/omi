@@ -3,12 +3,22 @@
 from __future__ import annotations
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 from routers import integrations as integrations_router
+from tests.unit.test_connector_synthesis_helper import byok_rate_limit_error, patch_llm_raising
 from utils.llm.connector_synthesis import ConnectorSynthesis, SynthesizedTask
 
 UID = 'uid-connector-synthesis'
+
+
+def _http_client() -> TestClient:
+    """Drive the real route: mounted router, only the auth edge overridden."""
+    app = FastAPI()
+    app.include_router(integrations_router.router)
+    app.dependency_overrides[integrations_router.auth.get_current_user_uid] = lambda: UID
+    return TestClient(app)
 
 
 @pytest.fixture(autouse=True)
@@ -65,6 +75,38 @@ async def test_synthesize_connector_data_fails_closed_when_synthesis_returns_non
             uid=UID,
         )
     assert exc.value.status_code == 502
+
+
+def test_synthesize_connector_data_surfaces_byok_rate_limit_as_429(monkeypatch):
+    """A rate-limited BYOK key is a typed, retryable class — not a generic 502.
+
+    Only the provider client is stubbed: the request runs through the real route, the
+    real ``synthesize_connector_items`` and the real executor hop, which is where the
+    production 502 was manufactured.
+    """
+    patch_llm_raising(monkeypatch, byok_rate_limit_error())
+
+    response = _http_client().post('/v1/connectors/synthesize', json={'source': 'gmail', 'items': ['From: a']})
+
+    assert response.status_code == 429
+    detail = response.json()['detail']
+    assert detail['code'] == 'byok_rate_limit'
+    assert (
+        detail['message'] == 'The configured provider account is rate limited. Please retry later or check its limits.'
+    )
+    # The provider error body never reaches the client.
+    assert 'gateway.test' not in response.text
+
+
+def test_synthesize_connector_data_keeps_502_for_untyped_failures(monkeypatch):
+    import utils.llm.connector_synthesis as connector_synthesis
+
+    monkeypatch.setattr(connector_synthesis, 'synthesize_connector_items', lambda *a, **k: None)
+
+    response = _http_client().post('/v1/connectors/synthesize', json={'source': 'notes', 'items': ['Bought a piano']})
+
+    assert response.status_code == 502
+    assert response.json()['detail'] == 'connector_synthesis_failed'
 
 
 async def test_synthesize_connector_data_blocks_a_trial_expired_account(monkeypatch):

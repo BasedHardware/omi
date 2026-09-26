@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "id": "FC-automated-disable-without-reachable-recovery",
+  "violated_contract": "A state an automated policy can latch must be clearable by the principal it punishes, through a control that principal can actually reach. Marketplace apps were auto-disabled after 72h of webhook failures and the only branch that cleared the flag required a request field no shipped client ever sent, so the state was terminal in practice: 202 apps latched, 0 ever recovered, while the notification told developers to use a dashboard control that did not exist. The same policy also treated a 3xx as an outage, latching apps whose hosts were answering, and the blocked-install message asserted a live connectivity check that the code never performs.",
+  "canonical_prevention": "For every automatically latched state, ship the clearing control on the same surface as the notification that announces it, and prove the exact payload a real client sends reaches the clearing branch rather than that the branch exists. Classify the responses that may latch it against what the delivery path can actually consume, so a response the host returned is separated from one it never sent. Have the refusal message describe the stored state and its timestamp instead of implying a check the request path does not run.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_app_auto_disable_recovery.py",
+    "web/app/src/components/apps/AppDisabledNotice.tsx"
+  ],
+  "evidence_prs": [
+    11638
+  ],
+  "scope_hints": [
+    "backend/database/webhook_health.py",
+    "backend/utils/app_integrations.py",
+    "backend/routers/apps.py",
+    "web/app/src/components/apps/**"
+  ],
+  "status": "open"
+}

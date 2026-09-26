@@ -2,6 +2,18 @@ import Combine
 import Foundation
 import SwiftUI
 
+enum RewindCitationFocusResolution: Equatable {
+  case found(Screenshot)
+  case unavailable
+  case staleOwner
+}
+
+enum RewindCitationFocusAdmission: Equatable {
+  case focused
+  case unavailable
+  case staleOwner
+}
+
 /// View model for the Rewind page
 @MainActor
 class RewindViewModel: ObservableObject {
@@ -93,10 +105,12 @@ class RewindViewModel: ObservableObject {
   static let timelineSampleTarget = 500
   typealias TimelineScreenshotLoader =
     @Sendable (_ start: Date, _ end: Date, _ targetCount: Int, _ appFilter: String?) async throws -> [Screenshot]
+  typealias CitationScreenshotLoader = @Sendable (_ screenshotID: Int64) async throws -> Screenshot?
 
   private var visibleTimelineRange: ClosedRange<Double>?
   private var timelineLoadID = UUID()
   private let timelineScreenshotLoader: TimelineScreenshotLoader
+  private let citationScreenshotLoader: CitationScreenshotLoader
 
   /// Set by RewindPage when the transcript/notes panel is expanded.
   /// Auto-refresh skips when true so the view tree stays stable and @State is preserved.
@@ -112,9 +126,13 @@ class RewindViewModel: ObservableObject {
     timelineScreenshotLoader: @escaping TimelineScreenshotLoader = { start, end, targetCount, appFilter in
       try RewindDatabase.shared.getScreenshotsSampled(
         from: start, to: end, targetCount: targetCount, appFilter: appFilter)
+    },
+    citationScreenshotLoader: @escaping CitationScreenshotLoader = { screenshotID in
+      try RewindDatabase.shared.getScreenshot(id: screenshotID)
     }
   ) {
     self.timelineScreenshotLoader = timelineScreenshotLoader
+    self.citationScreenshotLoader = citationScreenshotLoader
     // Debounce search queries
     $searchQuery
       .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
@@ -151,10 +169,7 @@ class RewindViewModel: ObservableObject {
   private func resetForOwnerChange() {
     searchTask?.cancel()
     ownerReloadTask?.cancel()
-    timelineLoadID = UUID()
-    isCitationFocusInProgress = false
-    pinnedCitationScreenshot = nil
-    suppressNextEmptySearch = false
+    invalidateCitationFocus()
     screenshots = []
     selectedScreenshot = nil
     searchQuery = ""
@@ -189,6 +204,17 @@ class RewindViewModel: ObservableObject {
     }
   }
 
+  /// Cancel any in-flight citation admission immediately when the owner changes. The exact owner
+  /// lease is still checked at every async boundary, but this also stops a pending timeline read
+  /// from re-admitting a row after the page has reset for the next owner.
+  func invalidateCitationFocus() {
+    searchTask?.cancel()
+    timelineLoadID = UUID()
+    isCitationFocusInProgress = false
+    pinnedCitationScreenshot = nil
+    suppressNextEmptySearch = false
+  }
+
   /// Refresh timeline only if viewing today and not actively searching.
   /// Uses a silent path that never sets isLoading and only updates screenshots
   /// when the data actually changed, preventing view-tree destruction.
@@ -204,8 +230,15 @@ class RewindViewModel: ObservableObject {
     guard !isTranscriptExpanded else { return }
 
     // A today label can remain selected while the continuous viewport is panned into older history.
-    // Only append live frames when the actual visible window contains now.
-    guard RewindTrackWindow.shouldRefreshLiveFrames(visibleRange: visibleTimelineRange, now: Date()) else { return }
+    // Only append live frames when the visible window contains now or is parked at the live edge.
+    guard
+      RewindTrackWindow.shouldRefreshLiveFrames(
+        visibleRange: visibleTimelineRange,
+        newestLoadedTimestamp: screenshots.last?.timestamp.timeIntervalSince1970,
+        now: Date(),
+        isPlayerParkedOnNewestFrame: selectedScreenshot?.id != nil
+          && selectedScreenshot?.id == screenshots.last?.id)
+    else { return }
 
     // Silent refresh: append newly finalized frames without rescanning the retained history.
     await silentlyRefreshNewestFrames()
@@ -254,11 +287,6 @@ class RewindViewModel: ObservableObject {
       await loadScreenshotsForDate(selectedDate)
       guard ownerSnapshot.isCurrent() else { return }
 
-      // Load available apps for filtering
-      let loadedApps = try await RewindDatabase.shared.getUniqueAppNames()
-      guard ownerSnapshot.isCurrent() else { return }
-      availableApps = loadedApps
-
       // Mark as initialized after successful load
       isInitialized = true
 
@@ -283,12 +311,28 @@ class RewindViewModel: ObservableObject {
     // windows only as zoom or pan reaches them.
     Task { await self.surveyCapturedHistory(ownerSnapshot: ownerSnapshot) }
 
+    // The app-filter list is a full-table DISTINCT scan over every captured
+    // frame. The overlay's first paint and rewindPageDidLoad must not wait
+    // on it, so it loads after the page reports ready.
+    Task { await self.loadAvailableApps(ownerSnapshot: ownerSnapshot) }
+
     // Load stats asynchronously (includes storage size calculation which can be slow)
     Task {
       if let indexerStats = await RewindIndexer.shared.getStats() {
         guard ownerSnapshot.isCurrent() else { return }
         stats = indexerStats
       }
+    }
+  }
+
+  /// Populate the app filter list without gating the overlay's open path.
+  private func loadAvailableApps(ownerSnapshot: RewindCaptureOwnerSnapshot) async {
+    do {
+      let loadedApps = try await RewindDatabase.shared.getUniqueAppNames()
+      guard ownerSnapshot.isCurrent() else { return }
+      availableApps = loadedApps
+    } catch {
+      logError("RewindViewModel: Failed to load app filter list: \(error)")
     }
   }
 
@@ -386,9 +430,6 @@ class RewindViewModel: ObservableObject {
     isSearching = true
     activeSearchQuery = trimmedQuery
 
-    // Track rewind search
-    AnalyticsManager.shared.rewindSearchPerformed(queryLength: trimmedQuery.count)
-
     // **Searching Rewind searches all of Rewind.** This used to clamp both queries to the day the
     // timeline happened to be showing, which made the one control that could reach the whole
     // history the one control that could not: a phrase you read last week returned nothing, and
@@ -433,10 +474,12 @@ class RewindViewModel: ObservableObject {
           }
           guard ownerSnapshot.isCurrent() else { return }
           screenshots = merged
+          emitRewindSearchAnalytics(query: trimmedQuery, resultsCount: merged.count)
         }
       } catch {
         if !Task.isCancelled {
           logError("RewindViewModel: Search failed: \(error)")
+          emitRewindSearchAnalytics(query: trimmedQuery, resultsCount: 0)
         }
       }
 
@@ -447,6 +490,11 @@ class RewindViewModel: ObservableObject {
   }
 
   // MARK: - Filtering
+
+  private func emitRewindSearchAnalytics(query: String, resultsCount: Int) {
+    SearchAnalytics.queryEntered(surface: .rewind, query: query, resultsCount: resultsCount)
+    AnalyticsManager.shared.rewindSearchPerformed(queryLength: query.count)
+  }
 
   func filterByApp(_ app: String?) async {
     guard !isCitationFocusInProgress else { return }
@@ -561,18 +609,19 @@ class RewindViewModel: ObservableObject {
     visibleTimelineRange = startOfDay.timeIntervalSince1970...endOfDay.timeIntervalSince1970
 
     do {
-      var results = try await RewindDatabase.shared.getScreenshotsSampled(
-        from: startOfDay,
-        to: endOfDay,
-        targetCount: Self.timelineSampleTarget
+      var results = try await timelineScreenshotLoader(
+        startOfDay,
+        endOfDay,
+        Self.timelineSampleTarget,
+        selectedApp
       )
       guard ownerSnapshot.isCurrent() else { return }
 
-      // Filter out frames from the active (unfinalized) video chunk — they can't be displayed yet
+      // Frames from the active (unfinalized) video chunk are only displayable via their live JPEG
       let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
       guard ownerSnapshot.isCurrent() else { return }
       if let activeChunk = activeChunk {
-        results = results.filter { $0.videoChunkPath != activeChunk }
+        results = results.filter { $0.videoChunkPath != activeChunk || !($0.imagePath ?? "").isEmpty }
       }
 
       // Apply app filter if set
@@ -617,8 +666,22 @@ class RewindViewModel: ObservableObject {
       }
       guard !additions.isEmpty else { return }
       guard ownerSnapshot.isCurrent() else { return }
+      // Follow the live edge: only when the user is parked on the newest frame does the
+      // selection advance with new captures; a scrubbed-back position stays put.
+      let wasParkedOnNewestFrame = selectedScreenshot?.id != nil && selectedScreenshot?.id == newest.id
       screenshots.append(contentsOf: additions)
       historyRange = RewindTrackWindow.extending(historyRange, toInclude: additions[additions.count - 1].timestamp)
+      if wasParkedOnNewestFrame {
+        // Not selectScreenshot(_:) — that emits a per-frame analytics view event; this is
+        // passive following, not a user navigation.
+        selectedScreenshot = additions[additions.count - 1]
+      }
+      // A viewport parked at the live edge follows the frames it accepts; otherwise the newest
+      // loaded frame moves past the viewport's end and the next refresh tick gates itself off.
+      if let visible = visibleTimelineRange, visible.upperBound >= newest.timestamp.timeIntervalSince1970 {
+        visibleTimelineRange = RewindTrackWindow.extending(
+          visible, toInclude: additions[additions.count - 1].timestamp)
+      }
 
       let today = calendar.startOfDay(for: additions[additions.count - 1].timestamp)
       if !capturedDays.contains(where: { calendar.isDate($0, inSameDayAs: today) }) {
@@ -633,7 +696,7 @@ class RewindViewModel: ObservableObject {
   where S.Element == Screenshot {
     var results = Array(source)
     if let activeChunk = await VideoChunkEncoder.shared.currentChunkPath {
-      results.removeAll { $0.videoChunkPath == activeChunk }
+      results.removeAll { $0.videoChunkPath == activeChunk && ($0.imagePath ?? "").isEmpty }
     }
     if let app = selectedApp {
       results.removeAll { $0.appName != app }
@@ -647,16 +710,51 @@ class RewindViewModel: ObservableObject {
     selectedScreenshot = screenshot
     alignSelectedDay(to: screenshot.timestamp)
     AnalyticsManager.shared.rewindScreenshotViewed(timestamp: screenshot.timestamp)
+    SearchAnalytics.resultOpened(
+      surface: .rewind,
+      resultIndex: screenshots.firstIndex(where: { $0.id == screenshot.id }),
+      searchIsActive: activeSearchQuery != nil
+    )
   }
 
   /// Admit an exact citation target into the active timeline even when the day loader returned an
   /// evenly sampled subset. Returning `false` is intentional: the page must not claim focus while a
   /// stale, deleted, or owner-invalid row is still selected.
   @discardableResult
-  func focusCitationScreenshot(_ screenshot: Screenshot) async -> Bool {
+  func focusCitationScreenshot(
+    _ screenshot: Screenshot,
+    ownerLease: RewindCaptureOwnerSnapshot? = nil
+  ) async -> Bool {
+    await focusCitationScreenshotResult(screenshot, ownerLease: ownerLease) == .focused
+  }
+
+  /// Resolve the destination row under the exact owner lease captured by the citation handoff.
+  /// The second local lookup in `focusCitationScreenshotResult` closes the deletion race between
+  /// click-time validation and timeline insertion.
+  func resolveCitationRequest(
+    _ request: RewindCitationFocusState.Request
+  ) async -> RewindCitationFocusResolution {
+    guard RewindCitationFocusState.isCurrent(owner: request.owner) else { return .staleOwner }
+
+    do {
+      guard let screenshot = try await citationScreenshotLoader(request.screenshotID) else {
+        return RewindCitationFocusState.isCurrent(owner: request.owner) ? .unavailable : .staleOwner
+      }
+      guard RewindCitationFocusState.isCurrent(owner: request.owner) else { return .staleOwner }
+      return .found(screenshot)
+    } catch {
+      return RewindCitationFocusState.isCurrent(owner: request.owner) ? .unavailable : .staleOwner
+    }
+  }
+
+  func focusCitationScreenshotResult(
+    _ screenshot: Screenshot,
+    ownerLease suppliedOwnerLease: RewindCaptureOwnerSnapshot? = nil
+  ) async -> RewindCitationFocusAdmission {
     guard let screenshotID = screenshot.id,
-      let ownerSnapshot = RewindCaptureOwnerSnapshot.capture()
-    else { return false }
+      let ownerSnapshot = suppliedOwnerLease ?? RewindCaptureOwnerSnapshot.capture(),
+      RewindCitationFocusState.isCurrent(owner: ownerSnapshot)
+    else { return .staleOwner }
 
     isCitationFocusInProgress = true
     pinnedCitationScreenshot = screenshot
@@ -671,26 +769,49 @@ class RewindViewModel: ObservableObject {
 
     defer {
       isCitationFocusInProgress = false
-      if !ownerSnapshot.isCurrent() { pinnedCitationScreenshot = nil }
+      if !RewindCitationFocusState.isCurrent(owner: ownerSnapshot) { pinnedCitationScreenshot = nil }
     }
 
     await loadScreenshotsForDate(selectedDate, ownerSnapshot: ownerSnapshot)
-    guard ownerSnapshot.isCurrent() else { return false }
+    guard RewindCitationFocusState.isCurrent(owner: ownerSnapshot) else { return .staleOwner }
 
     // Active chunks are deliberately not displayable until finalized. Do not append one merely to
     // make the row appear focused; that would produce a timeline marker for an unreadable frame.
-    if await VideoChunkEncoder.shared.currentChunkPath == screenshot.videoChunkPath {
-      return false
+    let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
+    guard RewindCitationFocusState.isCurrent(owner: ownerSnapshot) else { return .staleOwner }
+    if let activeChunk, activeChunk == screenshot.videoChunkPath {
+      return .unavailable
     }
 
-    if !screenshots.contains(where: { $0.id == screenshotID }) {
-      screenshots = Self.insertingCitationTarget(screenshot, into: screenshots)
+    // The click-time row may have been pruned while the sampled day query was in flight. Re-read
+    // the canonical local row under the same owner lease immediately before any insertion, and
+    // use that read as the authoritative metadata for the focus.
+    let validatedScreenshot: Screenshot?
+    do {
+      validatedScreenshot = try await citationScreenshotLoader(screenshotID)
+    } catch {
+      return RewindCitationFocusState.isCurrent(owner: ownerSnapshot) ? .unavailable : .staleOwner
     }
-    guard let focused = screenshots.first(where: { $0.id == screenshotID }) else { return false }
+    guard let validatedScreenshot else {
+      return RewindCitationFocusState.isCurrent(owner: ownerSnapshot) ? .unavailable : .staleOwner
+    }
+    guard RewindCitationFocusState.isCurrent(owner: ownerSnapshot) else { return .staleOwner }
+    guard validatedScreenshot.id == screenshotID else { return .unavailable }
+
+    if !screenshots.contains(where: { $0.id == screenshotID }) {
+      // This is the last owner check before old-owner pixels/paths can enter the new timeline.
+      guard RewindCitationFocusState.isCurrent(owner: ownerSnapshot) else { return .staleOwner }
+      pinnedCitationScreenshot = validatedScreenshot
+      screenshots = Self.insertingCitationTarget(validatedScreenshot, into: screenshots)
+    }
+    guard RewindCitationFocusState.isCurrent(owner: ownerSnapshot) else { return .staleOwner }
+    guard let focused = screenshots.first(where: { $0.id == screenshotID }) else {
+      return .unavailable
+    }
     selectScreenshot(focused)
     // Keep the exact row pinned through the viewport reveal that RewindPage performs next. That
     // debounced sample owns clearing the pin after it has reinserted the target if necessary.
-    return true
+    return .focused
   }
 
   /// Preserve one exact row alongside an otherwise sampled list. The helper is deterministic and

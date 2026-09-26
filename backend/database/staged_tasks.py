@@ -6,13 +6,14 @@ Collection: users/{uid}/staged_tasks
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from ._client import db, get_firestore_client
+from .action_items_cache import bump_action_items_list_version
 from .firestore_index_registry import LEGACY_CONVERSATION_RECOVERY_QUERY
 import database.action_items as action_items_db
 
@@ -93,10 +94,10 @@ def get_staged_tasks(uid: str, limit: int = 100, offset: int = 0) -> List[dict]:
     return items
 
 
-def get_all_staged_tasks_for_migration(uid: str) -> List[dict]:
+def get_all_staged_tasks_for_migration(uid: str) -> List[dict[str, Any]]:
     """Read active and terminal staged rows for idempotent Candidate reconciliation."""
 
-    items: List[dict] = []
+    items: List[dict[str, Any]] = []
     for snapshot in _user_col(uid, 'staged_tasks').stream():
         data = snapshot.to_dict() or {}
         data['id'] = snapshot.id
@@ -472,6 +473,11 @@ def restore_legacy_conversation_items(
             else:
                 restored += 1
                 break
+
+    if restored:
+        # Recovery creates action items directly (not through
+        # database.action_items), so the list cache is invalidated here too.
+        bump_action_items_list_version(uid)
 
     return {
         'restored': restored,

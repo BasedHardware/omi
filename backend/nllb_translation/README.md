@@ -41,14 +41,27 @@ Response:
 - `source_language_code` is optional — omit for auto-detect (no source token prefix)
 - `contents` max batch size controlled by `NLLB_MAX_BATCH_SIZE` (default 64)
 - Language codes: BCP-47 (en, es, zh-CN, etc.) or NLLB native (eng_Latn, spa_Latn, etc.)
-
+- Admission control: at most `NLLB_MAX_IN_FLIGHT` requests run concurrently. Requests beyond
+  the cap are rejected immediately with HTTP 503 `{"detail": "admission_full"}` — they are
+  never queued on the inference executor. Callers treat 503 like any 5xx (listen falls back
+  to Gemini).
 ### `GET /health` — Health Check
 
-Returns model config and load status. Used by startup probe.
+Returns model config and load status. Used by startup probe. Always 200 once the server is
+up, regardless of saturation — the startup probe must not die while translations are slow.
 
 ### `GET /ready` — Readiness
 
-Returns 200 when model is loaded and ready for inference, 503 otherwise. Used by readiness probe.
+Returns 200 only when the model is loaded **and** in-flight requests are below the admission
+cap. 503 (pod dropped from Endpoints) when the model is not loaded or the service is
+saturated, so callers fail fast instead of timing out against a saturated replica. Used by
+readiness probe.
+
+### `GET /live` — Liveness
+
+Returns 200 while the service is healthy — including short bursts at the admission cap. If
+in-flight has been at or above the cap continuously for `NLLB_SATURATED_LIVE_SECONDS`
+ (default 180s), returns 503 so kubelet restarts the stuck pod. Used by liveness probe.
 
 ### `GET /metrics` — Prometheus Metrics
 
@@ -104,6 +117,8 @@ Unsupported language codes return HTTP 400.
 | `NLLB_MAX_BATCH_SIZE` | `64` | Max sentences per request |
 | `NLLB_BEAM_SIZE` | `1` | Beam search width (1 = greedy, fastest) |
 | `NLLB_INFERENCE_WORKERS` | `2` | Thread pool size for GPU inference |
+| `NLLB_MAX_IN_FLIGHT` | `INFERENCE_WORKERS * 2` | Admission cap: max concurrent accepted requests. Beyond it → immediate 503 `admission_full` (never queued). Clamped to ≥ `NLLB_INFERENCE_WORKERS` |
+| `NLLB_SATURATED_LIVE_SECONDS` | `180` | How long in-flight may stay at/above the cap before `/live` fails 503 and kubelet restarts the pod |
 | `PORT` | `8080` | Server port |
 
 ## Performance
@@ -126,17 +141,17 @@ See `TUNING_RESULTS.md` for the full tuning sweep across beam sizes, compute typ
 The backend uses NLLB via the `TranslationProvider` enum in `utils/translation.py`. Provider is controlled exclusively by `TRANSLATION_SERVICE_MODELS` — the URL alone never changes provider.
 
 ```bash
-# 1. Gemini only (default — no config needed)
+# 1. NLLB only (default — no config needed)
 # TRANSLATION_SERVICE_MODELS is unset
 
-# 2. NLLB primary with Gemini fallback
+# 2. NLLB primary with Gemini fallback for capacity/outage only (prod/dev listen)
 TRANSLATION_SERVICE_MODELS=nllb,gemini
 
 # 3. NLLB only (errors stay retryable; no implicit Gemini fallback)
 TRANSLATION_SERVICE_MODELS=nllb
 ```
 
-The comma-separated list is the exact provider order: fallbacks are used only when they are named. `HOSTED_TRANSLATION_API_URL` must also be set for `nllb` to activate. If the list is empty or contains no usable provider, the backend defaults to Gemini. The legacy `google` configuration token is accepted during migration but resolves and emits as `gemini`.
+The comma-separated list is the exact provider order: fallbacks are used only when they are named. `HOSTED_TRANSLATION_API_URL` must also be set for `nllb` to activate. If the list is empty or contains no usable provider, the backend defaults to NLLB. Gemini is tried only for NLLB timeout, 429, 5xx, or transport unavailability — not for unsupported languages or invalid responses. The legacy `google` configuration token is accepted during migration but resolves and emits as `gemini`.
 
 ## Deploy
 

@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 MAIN_REF = "refs/heads/main"
 SHA_RE = re.compile(r"[0-9a-f]{40}\Z")
+CI_EVIDENCE_REF_RE = re.compile(r"refs/heads/ci-evidence/([0-9a-f]{40})\Z")
 ZERO_SHA = "0" * 40
 
 
@@ -38,7 +39,13 @@ def validate(identity: ReleaseIdentity) -> None:
     """Reject refs and identities that cannot prove one immutable main commit."""
 
     if identity.ref != MAIN_REF:
-        raise ReleaseEligibilityError(f"release eligibility requires ref {MAIN_REF}, got {identity.ref!r}")
+        evidence = CI_EVIDENCE_REF_RE.fullmatch(identity.ref)
+        if evidence is None:
+            raise ReleaseEligibilityError(
+                f"release eligibility requires ref {MAIN_REF} or refs/heads/ci-evidence/<sha>, got {identity.ref!r}"
+            )
+        if evidence.group(1) != identity.sha:
+            raise ReleaseEligibilityError("ci-evidence ref SHA must equal the release SHA")
 
     require_full_sha("release SHA", identity.sha)
     require_full_sha("release base SHA", identity.before)

@@ -21,14 +21,13 @@ enum UpdateChannel: String, CaseIterable {
     }
   }
 
-  /// App display name based on update channel: "omi" for stable, "Omi Beta" for beta.
+  /// App display name from bundle identity: "Omi Beta" only for the sidecar app.
   /// Local hot-swap builds (self-beta.sh) stamp `OMISelfBuild=true` into Info.plist, so
-  /// they show "Omi Beta (dev)" — a clear signal you're on a locally-rebuilt bundle, not a
+  /// they show a "(dev)" suffix — a clear signal you're on a locally-rebuilt bundle, not a
   /// Codemagic-distributed one. A real Codemagic build never sets the key, and when it later
   /// replaces the hot-swap bundle via Sparkle the suffix disappears.
   static var appDisplayName: String {
-    let channel = UserDefaults.standard.string(forKey: "update_channel") ?? "stable"
-    let base = (channel == "beta" || channel == "staging") ? "Omi Beta" : "omi"
+    let base = AppBuild.isBetaProductionBundle ? "Omi Beta" : "omi"
     let isSelfBuild = (Bundle.main.object(forInfoDictionaryKey: "OMISelfBuild") as? Bool) ?? false
     return isSelfBuild ? "\(base) (dev)" : base
   }
@@ -350,6 +349,10 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
   /// Back-reference to the view model (set after init)
   weak var viewModel: UpdaterViewModel?
   private var deferredInstall: DeferredUpdateInstall?
+  /// When the current run of deferrals began. A superseding version replaces
+  /// `deferredInstall` (the release train ships hourly), so the cap is measured from the
+  /// first deferral since the last install, not per version, or it would never elapse.
+  private var deferralStart: Date?
   private let checkAttemptTracker = UpdateCheckAttemptTracker()
 
   // NOTE: All delegate methods use logSync() to write synchronously to disk.
@@ -520,6 +523,12 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
       terminal?.result == .networkUnavailable
       || (terminal == nil
         && checkAttemptTracker.lastCompletedWasExpectedAutomaticOffline(for: diagnostics))
+    // Sparkle delivers `didAbortWithError` more than once per check. The
+    // authoritative terminal is deduplicated by consuming the attempt identity;
+    // the legacy event has no identity, so it needs the same guard or one failed
+    // check is reported once per callback.
+    let isDuplicateFailureCallback =
+      terminal == nil && checkAttemptTracker.isDuplicateOfLastTerminal(diagnostics)
     // Always drop a quiet-moment wait on abort so the deferred install cannot
     // fire after we clear progress flags (stale "Update waiting…" / surprise relaunch).
     discardDeferredInstall()
@@ -556,11 +565,18 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         logSync("Sparkle: Installation failed (error 4005), will retry on next check")
       }
 
+      if isDuplicateFailureCallback {
+        logSync("Sparkle: Ignoring duplicate update check failure callback for analytics")
+      }
+
       // Keep the legacy diagnostic event for existing dashboards. The new
       // `Update Check Completed` event is the authoritative denominator and is
-      // emitted at most once by the tracker above.
+      // emitted at most once by the tracker above; the legacy event now honours
+      // the same one-terminal-per-check contract.
       Task { @MainActor in
-        AnalyticsManager.shared.updateCheckFailed(diagnostics: diagnostics)
+        if !isDuplicateFailureCallback {
+          AnalyticsManager.shared.updateCheckFailed(diagnostics: diagnostics)
+        }
         self.viewModel?.lastUpdateFailure = diagnostics
         self.viewModel?.updateRestartImminent = false
         self.viewModel?.updateDeferredForActiveRecording = false
@@ -670,14 +686,16 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
       return false
     }
 
-    if let lastSpeech = VADGateService.lastSpeechAt {
-      let secondsSinceSpeech = Date().timeIntervalSince(lastSpeech)
-      if secondsSinceSpeech < UpdaterDelegate.activeCallSilenceWindow {
+    if let lastActivity = UpdateInstallActivity.lastActivityAt() {
+      let secondsSinceActivity = Date().timeIntervalSince(lastActivity)
+      if secondsSinceActivity < UpdaterDelegate.activeCallSilenceWindow {
         logSync(
-          "Sparkle: Deferring update v\(version) — speech detected \(Int(secondsSinceSpeech))s ago (active recording)"
+          "Sparkle: Deferring update v\(version) — capture active \(Int(secondsSinceActivity))s ago (meeting or speech)"
         )
         // Replace any prior quiet-moment wait so only one deferred install owns the flags.
         discardDeferredInstall()
+        let since = deferralStart ?? Date()
+        deferralStart = since
         Task { @MainActor in
           self.viewModel?.availableVersion = version
           self.viewModel?.updateAvailable = true
@@ -687,9 +705,12 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         deferredInstall = DeferredUpdateInstall(
           version: version,
           silenceWindow: UpdaterDelegate.activeCallSilenceWindow,
-          lastSpeechProvider: { VADGateService.lastSpeechAt },
+          maximumDeferral: UpdaterDelegate.maximumActiveCaptureDeferral,
+          deferredSince: since,
+          lastActivityProvider: { UpdateInstallActivity.lastActivityAt() },
           install: { [weak self] in
             self?.deferredInstall = nil
+            self?.deferralStart = nil
             Task { @MainActor in
               self?.viewModel?.updateDeferredForActiveRecording = false
               self?.viewModel?.updateRestartImminent = true
@@ -704,6 +725,7 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
 
     logSync("Sparkle: Triggering immediate installation for v\(version)")
     discardDeferredInstall()
+    deferralStart = nil
     Task { @MainActor in
       self.viewModel?.availableVersion = version
       self.viewModel?.updateAvailable = true
@@ -714,9 +736,12 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     return true
   }
 
-  /// Minimum seconds of VAD silence required before an auto-install is allowed.
+  /// Minimum seconds without capture activity before an auto-install is allowed.
   /// Matches the typical pause threshold at which a real conversation has wound down.
   fileprivate static let activeCallSilenceWindow: TimeInterval = 120
+
+  /// Upper bound on one deferral, so a meeting detector stuck "on" cannot block updates forever.
+  fileprivate static let maximumActiveCaptureDeferral: TimeInterval = 3 * 60 * 60
 
   /// Drop any quiet-moment wait so a later abort / superseding update / install
   /// cannot leave `updateDeferredForActiveRecording` stuck or fire after cancel.
@@ -731,20 +756,26 @@ final class DeferredUpdateInstall {
 
   private let version: String
   private let silenceWindow: TimeInterval
-  private let lastSpeechProvider: () -> Date?
+  private let maximumDeferral: TimeInterval?
+  private let lastActivityProvider: () -> Date?
   private let install: () -> Void
   private var pendingWorkItem: DispatchWorkItem?
+  private var deferredSince: Date?
   private var didInstall = false
 
   init(
     version: String,
     silenceWindow: TimeInterval,
-    lastSpeechProvider: @escaping () -> Date?,
+    maximumDeferral: TimeInterval? = nil,
+    deferredSince: Date? = nil,
+    lastActivityProvider: @escaping () -> Date?,
     install: @escaping () -> Void
   ) {
     self.version = version
     self.silenceWindow = silenceWindow
-    self.lastSpeechProvider = lastSpeechProvider
+    self.maximumDeferral = maximumDeferral
+    self.deferredSince = deferredSince
+    self.lastActivityProvider = lastActivityProvider
     self.install = install
   }
 
@@ -754,6 +785,7 @@ final class DeferredUpdateInstall {
 
   func start(now: Date = Date()) {
     pendingWorkItem?.cancel()
+    deferredSince = deferredSince ?? now
     scheduleNextCheck(now: now)
   }
 
@@ -769,9 +801,11 @@ final class DeferredUpdateInstall {
 
     if let delay = Self.nextDelay(
       now: now,
-      lastSpeechAt: lastSpeechProvider(),
+      lastActivityAt: lastActivityProvider(),
       silenceWindow: silenceWindow,
-      minimumRetryDelay: Self.minimumRetryDelay
+      minimumRetryDelay: Self.minimumRetryDelay,
+      deferredSince: deferredSince,
+      maximumDeferral: maximumDeferral
     ) {
       logSync(
         "Sparkle: Deferred install for v\(version) will retry after \(Int(ceil(delay)))s of remaining silence"
@@ -786,22 +820,27 @@ final class DeferredUpdateInstall {
 
     didInstall = true
     pendingWorkItem = nil
-    logSync("Sparkle: Silence window satisfied, installing deferred update v\(version)")
+    logSync("Sparkle: Capture quiet or deferral cap reached, installing deferred update v\(version)")
     install()
   }
 
   static func nextDelay(
     now: Date,
-    lastSpeechAt: Date?,
+    lastActivityAt: Date?,
     silenceWindow: TimeInterval,
-    minimumRetryDelay: TimeInterval = minimumRetryDelay
+    minimumRetryDelay: TimeInterval = minimumRetryDelay,
+    deferredSince: Date? = nil,
+    maximumDeferral: TimeInterval? = nil
   ) -> TimeInterval? {
-    guard let lastSpeechAt else { return nil }
+    guard let lastActivityAt else { return nil }
+    if let deferredSince, let maximumDeferral, now.timeIntervalSince(deferredSince) >= maximumDeferral {
+      return nil
+    }
 
-    let secondsSinceSpeech = now.timeIntervalSince(lastSpeechAt)
-    guard secondsSinceSpeech < silenceWindow else { return nil }
+    let secondsSinceActivity = now.timeIntervalSince(lastActivityAt)
+    guard secondsSinceActivity < silenceWindow else { return nil }
 
-    return max(minimumRetryDelay, silenceWindow - secondsSinceSpeech)
+    return max(minimumRetryDelay, silenceWindow - secondsSinceActivity)
   }
 }
 
@@ -914,15 +953,6 @@ final class UpdaterViewModel: ObservableObject {
   }
 
   private init() {
-    if AppBuild.allowsSparkleUpdates {
-      // Restore beta for users whose preference was overwritten by the March 27 bug
-      AppBuild.migrateBetaChannelOverwrite()
-
-      if UserDefaults.standard.string(forKey: kUpdateChannelKey) == nil {
-        AppBuild.syncUpdateChannelOnFirstLaunch()
-      }
-    }
-
     // Preview builds must not use the shared update feed. Do not start Sparkle for those
     // artifacts; its manual and background entry points are guarded below as well.
     updaterController = SPUStandardUpdaterController(
@@ -935,11 +965,9 @@ final class UpdaterViewModel: ObservableObject {
     automaticallyChecksForUpdates = updaterController.updater.automaticallyChecksForUpdates
     automaticallyDownloadsUpdates = updaterController.updater.automaticallyDownloadsUpdates
 
-    // Initialize update channel from UserDefaults
-    // Normalize legacy "staging" → "beta" and "better" → "beta"
-    var storedChannel = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-    if storedChannel == "staging" || storedChannel == "better" { storedChannel = "beta" }
-    updateChannel = UpdateChannel(rawValue: storedChannel) ?? .stable
+    // Identity pins the Sparkle channel. Leftover UserDefaults from the retired
+    // Stable channel picker must not opt Stable.app into beta-channel zips.
+    updateChannel = AppBuild.isBetaProductionBundle ? .beta : .stable
 
     // Wire up delegate back-reference
     updaterDelegate.viewModel = self
@@ -1031,18 +1059,5 @@ final class UpdaterViewModel: ObservableObject {
   }
 
   /// The active channel label
-  @Published var activeChannelLabel: String = {
-    let raw = UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
-    return (raw == "beta" || raw == "staging") ? "Beta" : ""
-  }()
-
-  /// Returns true if switching to stable would be a downgrade (current build > latest stable build)
-  var isDowngradeToStable: Bool {
-    guard let currentBuild = Int(buildNumber),
-      let stableBuild = latestStableBuildNumber
-    else {
-      return false
-    }
-    return currentBuild > stableBuild
-  }
+  @Published var activeChannelLabel: String = AppBuild.isBetaProductionBundle ? "Beta" : ""
 }

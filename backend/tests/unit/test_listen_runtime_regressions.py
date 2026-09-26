@@ -7,7 +7,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from models.transcript_segment import CombineSegmentsResult
 from routers.listen.contracts import ListenRequest
+from routers.listen.conversations import resolve_onboarding_provenance_marker
 from routers.listen.runtime import ListenSessionRuntime
 from routers.listen.transcripts import TranscriptProcessor
 from utils.async_tasks import WebSocketTaskSupervisor
@@ -218,6 +220,8 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
         return 'test-stt', 'es', 'test-model'
 
     monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
+    monkeypatch.setattr(runtime_module.user_db, 'ensure_backend_onboarding_admission', lambda _uid: True, raising=False)
+    monkeypatch.setattr(runtime_module.user_db, 'get_backend_onboarding_admission', lambda _uid: 'a' * 32)
     monkeypatch.setattr(runtime_module, 'get_stt_service_for_language', select_stt)
     monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
     monkeypatch.setattr(runtime_module, 'should_load_speech_profile', lambda **_kwargs: False)
@@ -227,7 +231,9 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
         return None
 
     monkeypatch.setattr(
-        runtime_module, 'OnboardingHandler', lambda *_args: SimpleNamespace(send_current_question=_noop_question)
+        runtime_module,
+        'OnboardingHandler',
+        lambda *_args, **_kwargs: SimpleNamespace(send_current_question=_noop_question),
     )
 
     assert await runtime._bootstrap() is True
@@ -278,6 +284,8 @@ async def test_bootstrap_sends_first_onboarding_question_before_any_audio(monkey
         fair_use_dg_budget_exhausted=False,
     )
     monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
+    monkeypatch.setattr(runtime_module.user_db, 'ensure_backend_onboarding_admission', lambda _uid: True, raising=False)
+    monkeypatch.setattr(runtime_module.user_db, 'get_backend_onboarding_admission', lambda _uid: 'a' * 32)
     monkeypatch.setattr(
         runtime_module, 'get_stt_service_for_language', lambda language, **_kwargs: ('test-stt', 'en', 'test-model')
     )
@@ -294,6 +302,248 @@ async def test_bootstrap_sends_first_onboarding_question_before_any_audio(monkey
     assert first_question['question_index'] == 0
     assert first_question['total_questions'] == len(ONBOARDING_QUESTIONS)
     assert enqueued_segments and enqueued_segments[0]['speaker_id'] == OnboardingHandler.OMI_SPEAKER_ID
+    # Real onboarding must still be tagged: the conversation-tagging seam
+    # reads the runtime's own admission id, which here is a real one.
+    assert resolve_onboarding_provenance_marker(runtime) == 'a' * 32
+
+
+@pytest.mark.anyio
+async def test_bootstrap_admits_speech_profile_redo_despite_completed_onboarding(monkeypatch):
+    """Re-recording an existing speech profile from Settings must always work,
+    even though the account has already completed onboarding — that account
+    state is exactly what the strict onboarding-provenance admission check
+    (ensure_backend_onboarding_admission) exists to reject. The client's
+    speech_profile_redo flag is only a hint: the runtime must confirm the redo
+    from persisted state (an actual stored speech profile) before taking the
+    bypass."""
+    import routers.listen.runtime as runtime_module
+
+    sent_events = []
+
+    async def send_json(event):
+        sent_events.append(event)
+
+    request = ListenRequest(
+        websocket=SimpleNamespace(client_state=WebSocketState.CONNECTED, send_json=send_json),
+        uid='redo-user',
+        language='en',
+        onboarding_mode=True,
+        speech_profile_redo=True,
+    )
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = request
+    runtime.use_custom_stt = False
+    runtime.state = SimpleNamespace(speaker_id_enabled=False, audio_ring_buffer=None, active=True)
+    runtime.task_supervisor = WebSocketTaskSupervisor(uid=request.uid, label='listen')
+
+    async def bootstrap_persistence_call(function, *_args, **_kwargs):
+        # This user has a persisted speech profile, which is what proves the
+        # redo; every other storage read reports its (empty) result.
+        return function is runtime_module.get_user_has_speech_profile
+
+    runtime.persistence = SimpleNamespace(call=bootstrap_persistence_call)
+    runtime.is_multi_channel = False
+    runtime.has_speech_profile = False
+    enqueued_segments = []
+    runtime.transcripts = SimpleNamespace(enqueue=enqueued_segments.extend)
+    runtime._build_components = lambda: None
+
+    base = ListenConnectBase(
+        user_exists=True,
+        user_has_credits=True,
+        transcription_prefs={'single_language_mode': False, 'uses_custom_stt': False},
+        fair_use_init_stage=None,
+        fair_use_track_dg_usage=False,
+        fair_use_dg_budget_exhausted=False,
+    )
+    monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
+
+    # The account has already completed onboarding: the strict admission path
+    # would refuse it (mirrors ensure_backend_onboarding_admission's real
+    # "completed" check). Fail the test if speech_profile_redo's bypass ever
+    # calls into it instead of skipping it outright.
+    def refuse_onboarding_provenance(_uid):
+        raise AssertionError('speech_profile_redo must not go through the onboarding-provenance admission path')
+
+    monkeypatch.setattr(runtime_module.user_db, 'ensure_backend_onboarding_admission', refuse_onboarding_provenance)
+    monkeypatch.setattr(runtime_module.user_db, 'get_backend_onboarding_admission', refuse_onboarding_provenance)
+    monkeypatch.setattr(
+        runtime_module, 'get_stt_service_for_language', lambda language, **_kwargs: ('test-stt', 'en', 'test-model')
+    )
+    monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
+    monkeypatch.setattr(runtime_module, 'should_load_speech_profile', lambda **_kwargs: False)
+    monkeypatch.setattr(runtime_module, 'should_enable_speaker_identification', lambda **_kwargs: False)
+
+    assert await runtime._bootstrap() is True
+    await runtime.task_supervisor.drain_all(timeout=2.0, cancel=False)
+
+    assert runtime.onboarding_admitted is True
+    assert runtime.onboarding_session_id is None
+    # OnboardingHandler still mints its own internal session id when none is
+    # supplied (it needs one for its own question/answer bookkeeping) — this
+    # asserts that fact so the next line's tagging check can't pass vacuously.
+    assert isinstance(runtime.onboarding_handler.session_id, str)
+    assert len(runtime.onboarding_handler.session_id) >= 16
+    # The conversation-tagging seam must read the runtime's own admission
+    # decision, not the handler's minted id, or every redo conversation would
+    # be re-tagged as onboarding provenance (see routers/listen/conversations.py).
+    assert resolve_onboarding_provenance_marker(runtime) is None
+    assert [event['type'] for event in sent_events] == ['onboarding_question']
+    assert enqueued_segments and enqueued_segments[0]['speaker_id'] == OnboardingHandler.OMI_SPEAKER_ID
+
+
+@pytest.mark.anyio
+async def test_bootstrap_redo_without_persisted_profile_goes_through_provenance_gate(monkeypatch):
+    """A speech_profile_redo claim backed by no persisted speech profile is
+    not a redo: the client must not evade the onboarding-provenance admission
+    gate with a query parameter, so a completed account is refused exactly as
+    if it had never sent the flag."""
+    import routers.listen.runtime as runtime_module
+
+    sent_events = []
+
+    async def send_json(event):
+        sent_events.append(event)
+
+    request = ListenRequest(
+        websocket=SimpleNamespace(client_state=WebSocketState.CONNECTED, send_json=send_json),
+        uid='redo-claim-user',
+        language='en',
+        onboarding_mode=True,
+        speech_profile_redo=True,
+    )
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = request
+    runtime.use_custom_stt = False
+    runtime.state = SimpleNamespace(speaker_id_enabled=False, audio_ring_buffer=None, active=True)
+    runtime.task_supervisor = WebSocketTaskSupervisor(uid=request.uid, label='listen')
+
+    async def bootstrap_persistence_call(*_args, **_kwargs):
+        # No speech profile persisted for this user: the redo claim cannot be
+        # proven from durable state.
+        return False
+
+    runtime.persistence = SimpleNamespace(call=bootstrap_persistence_call)
+    runtime.is_multi_channel = False
+    runtime.has_speech_profile = False
+    enqueued_segments = []
+    runtime.transcripts = SimpleNamespace(enqueue=enqueued_segments.extend)
+    runtime._build_components = lambda: None
+
+    base = ListenConnectBase(
+        user_exists=True,
+        user_has_credits=True,
+        transcription_prefs={'single_language_mode': False, 'uses_custom_stt': False},
+        fair_use_init_stage=None,
+        fair_use_track_dg_usage=False,
+        fair_use_dg_budget_exhausted=False,
+    )
+    monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
+
+    provenance_gate_calls = []
+
+    def track_provenance_gate(_uid):
+        provenance_gate_calls.append(_uid)
+        # Simulates the real behavior for a completed account: refused.
+        return False
+
+    monkeypatch.setattr(runtime_module.user_db, 'ensure_backend_onboarding_admission', track_provenance_gate)
+    monkeypatch.setattr(runtime_module.user_db, 'get_backend_onboarding_admission', lambda _uid: None)
+    monkeypatch.setattr(
+        runtime_module, 'get_stt_service_for_language', lambda language, **_kwargs: ('test-stt', 'en', 'test-model')
+    )
+    monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
+    monkeypatch.setattr(runtime_module, 'should_load_speech_profile', lambda **_kwargs: False)
+    monkeypatch.setattr(runtime_module, 'should_enable_speaker_identification', lambda **_kwargs: False)
+
+    assert await runtime._bootstrap() is True
+    await runtime.task_supervisor.drain_all(timeout=2.0, cancel=False)
+
+    # The unprovable redo claim was judged by the provenance gate, not the
+    # bypass, and the completed account stayed refused with no question flow.
+    assert provenance_gate_calls == ['redo-claim-user']
+    assert runtime.onboarding_admitted is False
+    # object.__new__ skips __init__, so the handler only exists if the
+    # admitted branch built one.
+    assert getattr(runtime, 'onboarding_handler', None) is None
+    assert sent_events == []
+    assert enqueued_segments == []
+
+
+@pytest.mark.anyio
+async def test_bootstrap_still_rejects_completed_account_without_speech_profile_redo(monkeypatch):
+    """Regression guard for the actual onboarding-provenance security property:
+    without speech_profile_redo, a completed account is still refused
+    admission and receives no question at all."""
+    import routers.listen.runtime as runtime_module
+
+    sent_events = []
+
+    async def send_json(event):
+        sent_events.append(event)
+
+    request = ListenRequest(
+        websocket=SimpleNamespace(client_state=WebSocketState.CONNECTED, send_json=send_json),
+        uid='completed-user',
+        language='en',
+        onboarding_mode=True,
+        speech_profile_redo=False,
+    )
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = request
+    runtime.use_custom_stt = False
+    runtime.state = SimpleNamespace(speaker_id_enabled=False, audio_ring_buffer=None, active=True)
+    runtime.task_supervisor = WebSocketTaskSupervisor(uid=request.uid, label='listen')
+
+    async def bootstrap_persistence_call(*_args, **_kwargs):
+        return False
+
+    runtime.persistence = SimpleNamespace(call=bootstrap_persistence_call)
+    runtime.is_multi_channel = False
+    runtime.has_speech_profile = False
+    enqueued_segments = []
+    runtime.transcripts = SimpleNamespace(enqueue=enqueued_segments.extend)
+    runtime._build_components = lambda: None
+
+    base = ListenConnectBase(
+        user_exists=True,
+        user_has_credits=True,
+        transcription_prefs={'single_language_mode': False, 'uses_custom_stt': False},
+        fair_use_init_stage=None,
+        fair_use_track_dg_usage=False,
+        fair_use_dg_budget_exhausted=False,
+    )
+    monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
+    # Simulates the real ensure_backend_onboarding_admission behavior for an
+    # account with onboarding.completed=True: admission refused.
+    monkeypatch.setattr(
+        runtime_module.user_db, 'ensure_backend_onboarding_admission', lambda _uid: False, raising=False
+    )
+    monkeypatch.setattr(runtime_module.user_db, 'get_backend_onboarding_admission', lambda _uid: None)
+    monkeypatch.setattr(
+        runtime_module, 'get_stt_service_for_language', lambda language, **_kwargs: ('test-stt', 'en', 'test-model')
+    )
+    monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', False)
+    monkeypatch.setattr(runtime_module, 'should_load_speech_profile', lambda **_kwargs: False)
+    monkeypatch.setattr(runtime_module, 'should_enable_speaker_identification', lambda **_kwargs: False)
+
+    assert await runtime._bootstrap() is True
+    await runtime.task_supervisor.drain_all(timeout=2.0, cancel=False)
+
+    assert runtime.onboarding_admitted is False
+    assert sent_events == []
+    assert enqueued_segments == []
+
+
+def test_allocator_sentinel_matches_the_onboarding_handler_reservation():
+    # The allocator reserves OMI_SPEAKER_ID_SENTINEL so a long session with
+    # many provider transitions can never allocate 99 to a real speaker. That
+    # reservation is only meaningful while it equals the value onboarding
+    # actually stamps its question segments with, so pin the two together.
+    # (This file already owns the heavy utils.onboarding import chain.)
+    from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
+
+    assert OMI_SPEAKER_ID_SENTINEL == OnboardingHandler.OMI_SPEAKER_ID
 
 
 @pytest.mark.anyio
@@ -347,25 +597,46 @@ async def test_bootstrap_passes_explicit_parakeet_through_capability_aware_selec
     )
 
 
-def test_runtime_emits_speaker_suggestion_event():
+def test_runtime_emits_speaker_suggestion_event(monkeypatch):
+    import routers.listen.runtime as runtime_module
+
     runtime = object.__new__(ListenSessionRuntime)
-    runtime.request = SimpleNamespace(speaker_auto_assign_enabled=True)
+    runtime.request = SimpleNamespace(uid='user-1', speaker_auto_assign_enabled=True)
+    runtime.recording_session_id = 'recording-1'
+    runtime.state = SimpleNamespace(current_conversation_id='conversation-1')
     emitted_events = []
+    product_events = []
     runtime.send_event = emitted_events.append
+    monkeypatch.setattr(runtime_module, 'emit_product_event', lambda **event: product_events.append(event))
 
     runtime.emit_speaker_suggestion(4, 'person-123', 'Avery', 'segment-123')
 
     assert emitted_events[0].event_type == 'speaker_label_suggestion'
     assert emitted_events[0].speaker_id == 4
     assert emitted_events[0].person_name == 'Avery'
+    assert product_events == [
+        {
+            'uid': 'user-1',
+            'event': 'Speaker Identity Proposed',
+            'properties': {
+                'recording_id': 'recording-1',
+                'conversation_id': 'conversation-1',
+                'speaker_id': 4,
+                'matched_existing_person': True,
+                'auto_assign_enabled': True,
+                'proposal_source': 'live_speaker_identification',
+            },
+        }
+    ]
 
 
 class _LiveSTTAttempt:
     instances = []
 
-    def __init__(self, *, provider, platform):
+    def __init__(self, *, provider, platform, **context):
         self.provider = provider
         self.platform = platform
+        self.context = context
         self.finished = False
         self.terminals = []
         self.__class__.instances.append(self)
@@ -385,9 +656,16 @@ def _live_transcription_runtime(*, close_code=1001, stt_terminal_failure=False, 
         stt_terminal_failure=stt_terminal_failure,
         live_transcription_failed=live_transcription_failed,
         live_transcription_attempt=None,
+        client_live_transcription_attempt=None,
     )
     runtime.stt_service = STTService.deepgram
+    runtime.stt_model = 'nova-3'
+    runtime.stt_language = 'en'
+    runtime.recording_session_id = 'recording-123'
+    runtime.request = SimpleNamespace(uid='user-123', source='phone')
+    runtime.state.current_conversation_id = 'conversation-123'
     runtime.client_device_context = SimpleNamespace(platform='ios')
+    runtime.client_kind = 'mobile_ios'
     return runtime
 
 
@@ -395,7 +673,13 @@ def test_live_transcription_journey_starts_once_and_success_wins_over_teardown(m
     import routers.listen.runtime as runtime_module
 
     _LiveSTTAttempt.instances = []
+    client_attempt = MagicMock(finished=False)
+    client_attempt.succeed.side_effect = lambda: setattr(client_attempt, 'finished', True)
+    client_attempt.fail.side_effect = lambda _issue: setattr(client_attempt, 'finished', True)
+    client_attempt.cancel.side_effect = lambda: setattr(client_attempt, 'finished', True)
     monkeypatch.setattr(runtime_module, 'LiveSTTAttempt', _LiveSTTAttempt)
+    client_attempt_factory = MagicMock(return_value=client_attempt)
+    monkeypatch.setattr(runtime_module, 'ClientJourneyAttempt', client_attempt_factory)
     runtime = _live_transcription_runtime(close_code=1011, stt_terminal_failure=True)
 
     runtime.start_live_transcription()
@@ -406,7 +690,18 @@ def test_live_transcription_journey_starts_once_and_success_wins_over_teardown(m
     assert len(_LiveSTTAttempt.instances) == 1
     assert _LiveSTTAttempt.instances[0].provider == 'deepgram'
     assert _LiveSTTAttempt.instances[0].platform == 'ios'
+    assert _LiveSTTAttempt.instances[0].context == {
+        'uid': 'user-123',
+        'recording_id': 'recording-123',
+        'conversation_id': 'conversation-123',
+        'source': 'phone',
+        'model': 'nova-3',
+        'language': 'en',
+    }
     assert _LiveSTTAttempt.instances[0].terminals == [('success', 'transcript_delivery')]
+    client_attempt_factory.assert_called_once_with('live_transcription', 'mobile_ios')
+    client_attempt.succeed.assert_called_once_with()
+    client_attempt.fail.assert_not_called()
 
 
 def test_custom_stt_does_not_create_a_backend_provider_attempt(monkeypatch):
@@ -439,7 +734,12 @@ def test_live_transcription_teardown_classifies_unsent_attempts_once(
     import routers.listen.runtime as runtime_module
 
     _LiveSTTAttempt.instances = []
+    client_attempt = MagicMock(finished=False)
+    client_attempt.succeed.side_effect = lambda: setattr(client_attempt, 'finished', True)
+    client_attempt.fail.side_effect = lambda _issue: setattr(client_attempt, 'finished', True)
+    client_attempt.cancel.side_effect = lambda: setattr(client_attempt, 'finished', True)
     monkeypatch.setattr(runtime_module, 'LiveSTTAttempt', _LiveSTTAttempt)
+    monkeypatch.setattr(runtime_module, 'ClientJourneyAttempt', MagicMock(return_value=client_attempt))
     runtime = _live_transcription_runtime(
         close_code=close_code,
         stt_terminal_failure=stt_terminal_failure,
@@ -451,6 +751,12 @@ def test_live_transcription_teardown_classifies_unsent_attempts_once(
     runtime._finish_live_transcription()
 
     assert _LiveSTTAttempt.instances[0].terminals == [(expected, 'teardown')]
+    if expected == 'failure':
+        client_attempt.fail.assert_called_once_with('provider_error')
+        client_attempt.cancel.assert_not_called()
+    else:
+        client_attempt.cancel.assert_called_once_with()
+        client_attempt.fail.assert_not_called()
 
 
 @pytest.mark.anyio
@@ -487,13 +793,14 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
             self.end = data['end']
             self.speech_profile_processed = data['speech_profile_processed']
             self.is_user = False
+            self.speaker_id = data.get('speaker_id')
 
         def model_dump(self):
             return {'id': self.id, 'text': self.text}
 
         @staticmethod
         def combine_segments(_existing, new_segments):
-            return new_segments, [], []
+            return CombineSegmentsResult(segments=new_segments, joined=[], removed_ids=[], absorbed_into={})
 
     state = SimpleNamespace(
         active=True,
@@ -532,7 +839,7 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
         pusher_enabled=True,
         onboarding_handler=None,
         send_event=lambda _event: None,
-        speakers=SimpleNamespace(drain=no_op),
+        speakers=SimpleNamespace(drain=no_op, tasks=set()),
         complete_live_transcription=lambda: delivered.append(True),
     )
     processor = object.__new__(TranscriptProcessor)
@@ -541,15 +848,48 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
     processor.photo_buffer = deque()
     processor.cache = SimpleNamespace(get=cache_get)
     processor.current_session_segments = {}
+    processor.speaker_id_allocator = SimpleNamespace(hydrate=lambda _segments: None, assign=lambda _segment: None)
     processor._update_live_conversation = update
     processor._translate = no_op
     processor._speaker_detection = no_op
     processor.flush_speaker_assignments = flush_speaker_assignments
+    processor._flush_failures = 0
+    processor._flush_backoff_until = 0.0
 
     monkeypatch.setattr(transcripts_module, 'TranscriptSegment', Segment)
     monkeypatch.setattr(transcripts_module, 'deserialize_conversation', lambda _data: SimpleNamespace())
 
     return processor, delivered, flushed
+
+
+@pytest.mark.anyio
+async def test_teardown_with_empty_profiles_and_no_tasks_does_not_wait_on_speaker_id_done():
+    host = SimpleNamespace(
+        limits=SimpleNamespace(max_segment_buffer_size=8, max_photo_buffer_size=8),
+        translation_language=None,
+        state=SimpleNamespace(
+            active=False,
+            speaker_id_done=asyncio.Event(),
+            current_conversation_id='c',
+            speaker_map_dirty=False,
+        ),
+        speakers=SimpleNamespace(tasks=set(), drain=AsyncMock(), person_embeddings={}),
+        request=SimpleNamespace(uid='u'),
+    )
+    processor = TranscriptProcessor(host)
+    processor.flush_speaker_assignments = AsyncMock()
+    await asyncio.wait_for(processor.process_loop(), timeout=1.0)
+    host.speakers.drain.assert_awaited()
+    processor.flush_speaker_assignments.assert_awaited()
+    assert not host.state.speaker_id_done.is_set()
+
+
+class _ProductTelemetryClient:
+    def __init__(self):
+        self.events = []
+
+    def capture(self, **event):
+        self.events.append(event)
 
 
 @pytest.mark.anyio
@@ -563,6 +903,31 @@ async def test_transcript_delivery_marks_live_transcription_success_only_after_a
 
     websocket = WebSocket()
     processor, delivered, flushed = _transcript_processor_for_delivery(monkeypatch, websocket)
+
+    await processor.process_loop()
+
+    assert websocket.sent == [[{'id': 'segment-1', 'text': 'Hello'}]]
+    assert delivered == [True]
+    assert flushed == ['conversation-1']
+
+
+@pytest.mark.anyio
+async def test_transcript_delivery_survives_a_non_string_started_at_on_a_resumed_conversation(monkeypatch):
+    """A resumed row with a float/None `started_at` must not crash process_loop with an AttributeError."""
+
+    class WebSocket:
+        def __init__(self):
+            self.sent = []
+
+        async def send_json(self, payload):
+            self.sent.append(payload)
+
+    async def cache_get(_conversation_id):
+        return {'transcript_segments': ['existing'], 'started_at': 100.0}
+
+    websocket = WebSocket()
+    processor, delivered, flushed = _transcript_processor_for_delivery(monkeypatch, websocket)
+    processor.cache = SimpleNamespace(get=cache_get)
 
     await processor.process_loop()
 
@@ -603,6 +968,68 @@ async def test_transcript_loop_still_flushes_speaker_assignments_when_the_client
     assert processor.host.state.active is False
 
 
+@pytest.mark.anyio
+async def test_transcript_loop_emits_diarization_completion_after_terminal_flush(monkeypatch):
+    from utils.product_telemetry import set_product_telemetry_client_for_tests
+
+    websocket = SimpleNamespace(send_json=lambda _payload: _async_result(None))
+    processor, _delivered, flushed = _transcript_processor_for_delivery(monkeypatch, websocket)
+    processor.segment_buffer[0]['speaker_id'] = 2
+    processor.host.recording_session_id = 'recording-1'
+    telemetry = _ProductTelemetryClient()
+    set_product_telemetry_client_for_tests(telemetry)
+
+    await processor.process_loop()
+
+    assert flushed == ['conversation-1']
+    assert telemetry.events[0]['event'] == 'Diarization Completed'
+    assert telemetry.events[0]['properties']['speaker_count'] == 1
+    assert telemetry.events[0]['properties']['recording_id'] == 'recording-1'
+    assert telemetry.events[0]['properties']['conversation_id'] == 'conversation-1'
+
+
+@pytest.mark.anyio
+async def test_transcript_loop_attributes_diarization_completion_to_each_conversation(monkeypatch):
+    from utils.product_telemetry import set_product_telemetry_client_for_tests
+
+    websocket = SimpleNamespace(send_json=lambda _payload: _async_result(None))
+    processor, _delivered, _flushed = _transcript_processor_for_delivery(monkeypatch, websocket)
+    processor.host.recording_session_id = 'recording-1'
+    telemetry = _ProductTelemetryClient()
+    set_product_telemetry_client_for_tests(telemetry)
+    processor.segment_buffer[0]['speaker_id'] = 2
+    waits = 0
+    updates = 0
+
+    async def wait(_seconds):
+        nonlocal waits
+        waits += 1
+        if waits == 2:
+            processor.host.state.active = False
+        return False
+
+    async def update(_conversation, segments, _photos, _finished_at, _started_at):
+        nonlocal updates
+        updates += 1
+        if updates == 1:
+            processor.host.state.current_conversation_id = 'conversation-2'
+            processor.segment_buffer.append(
+                {'id': 'segment-2', 'text': 'World', 'start': 1.0, 'end': 1.5, 'speaker_id': 3}
+            )
+        return SimpleNamespace(id=f'conversation-{updates}'), segments, []
+
+    processor.host.wait = wait
+    processor._update_live_conversation = update
+
+    await processor.process_loop()
+
+    assert [event['properties']['conversation_id'] for event in telemetry.events] == [
+        'conversation-1',
+        'conversation-2',
+    ]
+    assert [event['properties']['speaker_count'] for event in telemetry.events] == [1, 1]
+
+
 async def _async_result(value):
     return value
 
@@ -610,18 +1037,23 @@ async def _async_result(value):
 @pytest.mark.anyio
 async def test_custom_stt_flush_meters_speech_in_isolated_lane(monkeypatch):
     """#7690: a custom-STT session's speech reaches the fair-use meter under
-    the custom_stt lane — and nothing else: no transcription usage recording,
-    no realtime-lane write that live enforcement would read."""
+    the custom_stt lane and speech_seconds accounting — never transcription
+    billing, and never a realtime-lane write that live enforcement would read."""
     import routers.listen.runtime as runtime_module
 
     recorded = []
+    usage_calls = []
     monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', True)
     monkeypatch.setattr(
         runtime_module, 'record_speech_ms', lambda uid, ms, source='realtime': recorded.append((uid, ms, source))
     )
-    monkeypatch.setattr(
-        runtime_module, 'record_usage', lambda *a, **k: (_ for _ in ()).throw(AssertionError('billed custom STT'))
-    )
+
+    def _record_usage(uid, **kwargs):
+        if kwargs.get('transcription_seconds', 0):
+            raise AssertionError('billed custom STT')
+        usage_calls.append((uid, kwargs))
+
+    monkeypatch.setattr(runtime_module, 'record_usage', _record_usage)
 
     runtime = object.__new__(ListenSessionRuntime)
     runtime.request = SimpleNamespace(uid='custom-stt-user')
@@ -638,11 +1070,60 @@ async def test_custom_stt_flush_meters_speech_in_isolated_lane(monkeypatch):
 
     assert await runtime._flush_usage(final=False) == 0
     assert recorded == [('custom-stt-user', 4200, 'custom_stt')]
+    assert usage_calls == [('custom-stt-user', {'speech_seconds': 4})]
 
     # No speech delta → no meter write either.
     runtime.receiver = SimpleNamespace(vad_gate=SimpleNamespace(consume_speech_ms_delta=lambda: 0))
     assert await runtime._flush_usage(final=True) == 0
     assert recorded == [('custom-stt-user', 4200, 'custom_stt')]
+    assert usage_calls == [('custom-stt-user', {'speech_seconds': 4})]
+
+
+@pytest.mark.anyio
+async def test_flush_usage_meters_live_speech_seconds_exactly_once(monkeypatch):
+    """Live provider audio minutes come from the VAD speech delta consumed in
+    _flush_usage: each flushed millimeter of speech reaches the counter once,
+    and a zero delta (the periodic loop's next tick) emits nothing extra."""
+    import routers.listen.runtime as runtime_module
+
+    metered = []
+    speech_recorded = []
+    monkeypatch.setattr(
+        runtime_module,
+        'record_live_stt_audio_seconds',
+        lambda **kwargs: metered.append(kwargs),
+    )
+    monkeypatch.setattr(runtime_module, 'FAIR_USE_ENABLED', True)
+    monkeypatch.setattr(
+        runtime_module, 'record_speech_ms', lambda uid, ms, source='realtime': speech_recorded.append((uid, ms))
+    )
+    monkeypatch.setattr(runtime_module, 'record_usage', lambda *a, **k: None)
+
+    runtime = object.__new__(ListenSessionRuntime)
+    runtime.request = SimpleNamespace(uid='listen-user')
+    runtime.use_custom_stt = False
+    runtime.persistence = _Persistence()
+    runtime.stt_service = STTService.soniox
+    runtime.client_device_context = SimpleNamespace(platform='android')
+    runtime.state = SimpleNamespace(
+        fair_use_track_dg_usage=False,
+        dg_usage_ms_pending=0,
+        last_usage_record_timestamp=123.0,
+        words_transcribed_since_last_record=0,
+        last_audio_received_time=124.0,
+    )
+    deltas = iter([4200, 0])
+    runtime.receiver = SimpleNamespace(vad_gate=SimpleNamespace(consume_speech_ms_delta=lambda: next(deltas)))
+
+    await runtime._flush_usage(final=False)
+    await runtime._flush_usage(final=True)
+
+    assert metered == [
+        {'provider': 'soniox', 'platform': 'android', 'seconds': 4.2},
+    ]
+    # Same single flush feeds the fair-use meter; the zero-delta final flush
+    # writes neither metric nor fair-use speech.
+    assert speech_recorded == [('listen-user', 4200)]
 
 
 def _heartbeat_runtime(send_text):

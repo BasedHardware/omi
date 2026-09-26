@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-durable-record-gated-on-delivery-reachability",
+  "violated_contract": "A durable record that clients read back over their own API must be produced independently of whether any push channel can reach the user. When generation is only a side effect of a notification fan-out, the delivery gate becomes an undeclared precondition on the data itself: the daily recap was written only inside the FCM push job, whose user selection skipped anyone with no token (`if not tokens: continue`), and the macOS app registers no token at all, so a desktop-only owner stopped getting recaps on every surface, silently and permanently. The failure is invisible from both ends — the producer logs nothing because the user was never selected, and the reader sees a well-formed older record rather than an error — so it presents as a feature quietly going stale rather than as an outage.",
+  "canonical_prevention": "Separate the record's producer from its delivery. Selection admits the user on the product condition alone (timezone, hour, feature enabled); the transport check moves down to the send call, which is skipped when there is no reachable channel while the record is still written. A scheduled producer that derives its target from the wall clock at tick time also needs a bounded catch-up pass, because a missed tick otherwise loses that period forever with no retry. Regression tests assert a tokenless user still gets a record and no push, and pin the exact number of generations a catch-up pass may spend.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_daily_summary_generation.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/other/notifications.py",
+    "backend/database/notifications.py"
+  ],
+  "status": "open"
+}

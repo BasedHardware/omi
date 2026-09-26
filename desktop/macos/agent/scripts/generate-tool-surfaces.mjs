@@ -198,6 +198,8 @@ function realtimeTools() {
     "get_agent_run",
     "cancel_agent_run",
     "inspect_agent_artifacts",
+    "read_tool_output",
+    "search_tool_output",
     "update_agent_artifact_lifecycle",
     "spawn_agent",
     "set_desktop_attention_override",
@@ -239,6 +241,17 @@ function realtimeTools() {
       if (!aliasSurfaces.includes("realtime_voice")) continue;
       if (!shouldExpose(tool)) continue;
       push(alias, tool);
+    }
+  }
+
+  const truncatableRealtimeTools = omiToolManifest.filter(
+    (tool) => shouldExpose(tool) && tool.resultContract?.budgets?.realtime_voice,
+  );
+  if (truncatableRealtimeTools.length > 0) {
+    for (const drillIn of ["read_tool_output", "search_tool_output"]) {
+      if (!entries.some((entry) => entry.exposedName === drillIn)) {
+        throw new Error(`Realtime exposes truncatable tools but is missing ${drillIn}`);
+      }
     }
   }
   return entries;

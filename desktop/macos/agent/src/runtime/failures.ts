@@ -40,7 +40,10 @@ export interface RuntimeFailure {
   retryable?: boolean;
   recoveryAction?: "worker_recycled";
   recoveryOutcome?: "recovered" | "stop_failed" | "binding_stale_failed";
-  retryDisposition?: "next_send";
+  retryDisposition?: "next_send" | "same_turn";
+  /** Qualification-only gateway attribution; null is explicit unknown. */
+  jitCostStatus?: "estimated" | "unknown";
+  jitEstimatedCostUsd?: number | null;
 }
 
 export class AdapterRuntimeError extends Error {
@@ -95,6 +98,41 @@ export function applyProviderBillingClassification(failure: RuntimeFailure): Run
     failureCode: "quota_exceeded",
     retryable: false,
   };
+}
+
+/** Recycle succeeded only when the worker stopped and the binding was invalidated. */
+export function workerRecycleRecovered(outcome: {
+  stopSucceeded: boolean;
+  bindingInvalidationSucceeded: boolean;
+}): boolean {
+  return outcome.stopSucceeded && outcome.bindingInvalidationSucceeded;
+}
+
+/** 402 / quota / authentication are not healed by a fresh worker in the same turn. */
+export function blocksSameTurnRetryAfterWorkerRecycle(error: unknown): boolean {
+  const failure = failureFromError(error, {
+    code: "adapter_execution_failed",
+    retryable: true,
+  });
+  if (failure.retryable === false) return true;
+  if (failure.code === "provider_auth_required") return true;
+  return failure.failureCode === "quota_exceeded" || failure.failureCode === "authentication";
+}
+
+export function workerRecycleDisposition(input: {
+  stopSucceeded: boolean;
+  bindingInvalidationSucceeded: boolean;
+  canRetry: boolean;
+  originalError: unknown;
+}): NonNullable<RuntimeFailure["retryDisposition"]> {
+  if (
+    input.canRetry
+    && workerRecycleRecovered(input)
+    && !blocksSameTurnRetryAfterWorkerRecycle(input.originalError)
+  ) {
+    return "same_turn";
+  }
+  return "next_send";
 }
 
 /** Recycle metadata stays on every pi-mono execution throw so the next send

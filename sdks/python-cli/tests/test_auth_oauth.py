@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import time
 
 import httpx
@@ -13,6 +14,7 @@ from omi_cli import config as cfg
 from omi_cli.auth import oauth
 from omi_cli.auth.store import store_oauth_tokens
 from omi_cli.errors import AuthError, UsageError
+from omi_cli.main import app
 
 # ---- needs_refresh ---------------------------------------------------------
 
@@ -118,6 +120,36 @@ def test_refresh_persists_rotated_refresh_token(config_path, monkeypatch) -> Non
     assert reloaded.refresh_token == "refr_new_rotated"
 
 
+def test_refresh_emits_json_payload(config_path, cli_runner, monkeypatch) -> None:
+    """Regression: `omi --json auth refresh` must write the refreshed profile
+    to stdout, like `auth login`/`logout`/`status` already do. Previously it
+    wrote nothing, so scripts relying on the CLI's JSON contract got an empty
+    string and crashed on json.loads()."""
+    store_oauth_tokens(
+        "default",
+        id_token="old_id",
+        refresh_token="refr_1",
+        expires_at=time.time() - 10,
+        api_base="https://api.test.omi.local",
+    )
+
+    def fake_post(self, url, **kwargs):  # noqa: ANN001
+        return httpx.Response(
+            200,
+            json={"id_token": "new_id", "refresh_token": "refr_1", "expires_in": "3600"},
+        )
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+
+    result = cli_runner.invoke(app, ["--json", "auth", "refresh"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["profile"] == "default"
+    assert payload["auth_method"] == "oauth"
+    assert abs(payload["id_token_expires_at"] - (time.time() + 3540)) < 5
+
+
 def test_refresh_surfaces_firebase_error(config_path, monkeypatch) -> None:
     store_oauth_tokens(
         "default",
@@ -147,6 +179,32 @@ def test_login_with_browser_rejects_unknown_provider(config_path) -> None:
             provider="microsoft",  # unsupported
             open_browser=False,
         )
+
+
+def test_browser_login_status_goes_to_stderr_not_stdout(monkeypatch, capsys) -> None:
+    """Human status messages during browser login must not pollute stdout.
+
+    In --json mode stdout carries only the JSON payload, so the
+    "Opening browser…" / fallback-URL messages belong on stderr.
+    """
+    monkeypatch.setattr(oauth.webbrowser, "open", lambda *a, **k: True)
+    # Make the OAuth wait time out quickly (right after the status prints)
+    # instead of the real 300s, without patching Event.wait globally (that
+    # would also affect the server's internal shutdown event).
+    monkeypatch.setattr(oauth, "_BROWSER_TIMEOUT_SECONDS", 0.2)
+
+    with pytest.raises(oauth.AuthError):
+        oauth.login_with_browser(
+            "default",
+            api_base="https://api.test.omi.local",
+            provider="google",
+            open_browser=True,
+        )
+
+    captured = capsys.readouterr()
+    assert captured.out == "", f"stdout should stay clean, got: {captured.out!r}"
+    assert "Opening browser for google sign-in..." in captured.err
+    assert "api.test.omi.local" in captured.err
 
 
 # ---- code-exchange wiring -------------------------------------------------

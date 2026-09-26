@@ -123,6 +123,7 @@ def get_import_jobs(
                     total_files=job.get('total_files'),
                     processed_files=job.get('processed_files'),
                     conversations_created=job.get('conversations_created'),
+                    conversations_skipped=job.get('conversations_skipped'),
                     created_at=job.get('created_at'),
                     error=job.get('error'),
                 )
@@ -172,6 +173,7 @@ def get_import_job_status(
         total_files=job.get('total_files'),
         processed_files=job.get('processed_files'),
         conversations_created=job.get('conversations_created'),
+        conversations_skipped=job.get('conversations_skipped'),
         created_at=job.get('created_at'),
         error=job.get('error'),
     )
@@ -195,6 +197,7 @@ def cancel_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)
         total_files=job.get('total_files'),
         processed_files=job.get('processed_files'),
         conversations_created=job.get('conversations_created'),
+        conversations_skipped=job.get('conversations_skipped'),
         created_at=job.get('created_at'),
         error='Cancelled by user',
     )
@@ -234,10 +237,9 @@ def delete_limitless_conversations(
     Returns:
         Number of deleted conversations
     """
-    # TODO: This deletes all the other conversations as well (which were created in omi using the pendant)
-    # TODO: Add a flag to the conversation to indicate that it was imported
-    # deleted_count = conversations_db.delete_conversations_by_source(uid, 'limitless')
-
-    # return {'deleted_count': deleted_count, 'message': f'Successfully deleted {deleted_count} Limitless conversations'}
+    # Selective delete is not implemented here yet. Conversations created by the
+    # Limitless ZIP import path are stamped with imported=True (see Conversation
+    # and persist_imported_conversation). Do not delete by source=limitless alone —
+    # that also matches pendant/sync uploads.
 
     return {'deleted_count': 0, 'message': 'Successfully deleted 0 Limitless conversations'}

@@ -137,7 +137,7 @@ def _hit(item, *, score, projection_commit_id=None, vector_id=None, **overrides)
     return SearchVectorHit(**data)
 
 
-def test_default_memory_vector_search_hydrates_authoritative_items_and_filters_stale_short_term_and_archive():
+def test_default_memory_vector_search_keeps_expired_unadjudicated_short_term_and_filters_archive():
     now = datetime.now(timezone.utc)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
@@ -185,9 +185,17 @@ def test_default_memory_vector_search_hydrates_authoritative_items_and_filters_s
         'users/u1/memory_items/long-term',
         'users/u1/memory_items/fresh-short-term',
     }
-    assert [item['memory_id'] for item in response['items']] == ['long-term', 'fresh-short-term']
-    assert response['scores_by_memory_id'] == {'long-term': 0.9, 'fresh-short-term': 0.8}
-    assert response['decisions']['stale-short-term'] == 'access_denied'
+    assert [item['memory_id'] for item in response['items']] == [
+        'stale-short-term',
+        'long-term',
+        'fresh-short-term',
+    ]
+    assert response['scores_by_memory_id'] == {
+        'stale-short-term': 0.99,
+        'long-term': 0.9,
+        'fresh-short-term': 0.8,
+    }
+    assert response['decisions']['stale-short-term'] == 'allowed'
     assert response['decisions']['archive'] == 'access_denied'
     assert response['vector_rejected_count'] == 2
     assert response['archive_default_visible'] is False
@@ -553,7 +561,7 @@ def test_default_memory_vector_search_overfetches_and_refills_when_early_candida
     )
 
     assert vector_limits == [3, 6]
-    assert [item['memory_id'] for item in response['items']] == ['valid-one', 'valid-two', 'valid-three']
+    assert [item['memory_id'] for item in response['items']] == ['stale-short-term', 'valid-one', 'valid-two']
     assert response['limit'] == 3
     assert response['candidate_request_limit'] == 6
     assert response['candidate_budget'] == 6
@@ -561,7 +569,7 @@ def test_default_memory_vector_search_overfetches_and_refills_when_early_candida
     assert response['queried_candidate_count'] == 6
     assert response['hydrated_candidate_count'] == 5
     assert response['hydration_rejected_missing_count'] == 1
-    assert response['hydration_rejected_access_denied_count'] == 2
+    assert response['hydration_rejected_access_denied_count'] == 1
     assert response['returned_count'] == 3
     assert set(db_client.document_paths) == {
         'users/u1/memory_items/stale-short-term',
@@ -617,9 +625,9 @@ def test_default_memory_vector_search_stops_at_candidate_budget_without_unbounde
     )
 
     assert vector_limits == [3, 4]
-    assert [item['memory_id'] for item in response['items']] == ['valid-one', 'valid-two']
-    assert response['returned_count'] == 2
-    assert response['candidate_budget_exhausted'] is True
+    assert [item['memory_id'] for item in response['items']] == ['stale-short-term', 'valid-one', 'valid-two']
+    assert response['returned_count'] == 3
+    assert response['candidate_budget_exhausted'] is False
     assert response['candidate_budget'] == 4
     assert response['candidate_request_limit'] == 4
     assert response['queried_candidate_count'] == 4
@@ -725,9 +733,11 @@ def test_default_memory_vector_search_telemetry_failure_is_recorded_without_mask
 def test_default_memory_vector_search_stops_refill_at_vector_query_budget_and_returns_validated_results():
     now = datetime.now(timezone.utc)
     stale_short_term = _memory_item('stale-short-term', now=now, captured_at=now - timedelta(days=45))
+    archive = _memory_item('archive', tier=MemoryTier.archive, now=now)
     valid_one = _memory_item('valid-one', tier=MemoryTier.long_term, now=now)
     valid_two = _memory_item('valid-two', tier=MemoryTier.long_term, now=now)
     ranked_hits = [
+        _hit(archive, score=1.0, vector_id='memvec:archive'),
         _hit(stale_short_term, score=0.99, vector_id='memvec:stale-short-term'),
         _hit(valid_one, score=0.98, vector_id='memvec:valid-one'),
         _hit(valid_two, score=0.97, vector_id='memvec:valid-two'),
@@ -735,7 +745,7 @@ def test_default_memory_vector_search_stops_refill_at_vector_query_budget_and_re
     db_client = _FirestoreFake(
         {
             f'users/u1/memory_items/{item.memory_id}': _stored_item(item)
-            for item in [stale_short_term, valid_one, valid_two]
+            for item in [archive, stale_short_term, valid_one, valid_two]
         }
     )
     vector_limits = []
@@ -759,7 +769,7 @@ def test_default_memory_vector_search_stops_refill_at_vector_query_budget_and_re
     )
 
     assert vector_limits == [2]
-    assert [item['memory_id'] for item in response['items']] == ['valid-one']
+    assert [item['memory_id'] for item in response['items']] == ['stale-short-term']
     assert response['returned_count'] == 1
     assert response['vector_query_count'] == 1
     assert response['max_vector_queries'] == 1

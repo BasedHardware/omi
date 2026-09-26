@@ -152,6 +152,117 @@ final class KernelContractWireTests: XCTestCase {
     }
   }
 
+  func testQueryWireOmitsJitKnowledgeToolsFlagByDefaultAndCarriesItOnlyWhenTrue() {
+    let disabled = AgentRuntimeProcess.queryWireMessage(
+      clientId: "client",
+      requestId: "request",
+      ownerId: nil,
+      sessionId: "session",
+      surfaceKind: "main_chat",
+      prompt: "hello",
+      mode: nil,
+      imageData: nil,
+      attachments: [],
+      producingTurnId: nil,
+      expectedContext: nil
+    )
+    XCTAssertNil(disabled["jitKnowledgeToolsEnabled"])
+
+    let explicitlyFalse = AgentRuntimeProcess.queryWireMessage(
+      clientId: "client",
+      requestId: "request",
+      ownerId: nil,
+      sessionId: "session",
+      surfaceKind: "main_chat",
+      prompt: "hello",
+      mode: nil,
+      imageData: nil,
+      attachments: [],
+      producingTurnId: nil,
+      expectedContext: nil,
+      jitKnowledgeToolsEnabled: false
+    )
+    XCTAssertNil(explicitlyFalse["jitKnowledgeToolsEnabled"])
+
+    let enabled = AgentRuntimeProcess.queryWireMessage(
+      clientId: "client",
+      requestId: "request",
+      ownerId: nil,
+      sessionId: "session",
+      surfaceKind: "main_chat",
+      prompt: "hello",
+      mode: nil,
+      imageData: nil,
+      attachments: [],
+      producingTurnId: nil,
+      expectedContext: nil,
+      jitKnowledgeToolsEnabled: true
+    )
+    XCTAssertEqual(enabled["jitKnowledgeToolsEnabled"] as? Bool, true)
+  }
+
+  func testQueryWireCarriesTheQAOnlySourceProjectionBesideTheJITBudget() throws {
+    let projection = JITProactivitySourceProjection(
+      executionID: "execution-1",
+      producerLane: .planned,
+      evaluationTime: "2026-09-05T10:00:00-04:00",
+      timezone: "America/New_York",
+      contextID: "bucket-1",
+      legacyPrompt: "legacy prompt",
+      legacyUncachedPrompt: "legacy uncached prompt",
+      nanoPrompt: "nano prompt",
+      fullPrompt: "full prompt")
+    let budget = JITProactivityAgentBudget(
+      contractVersion: JITProactivityAgentBudget.cloudQAContractVersion,
+      executionID: "execution-1")
+    let message = AgentRuntimeProcess.queryWireMessage(
+      clientId: "client",
+      requestId: "request",
+      ownerId: JITProactivitySourceProjection.qaOwnerID,
+      sessionId: "session",
+      surfaceKind: "service",
+      prompt: "full prompt",
+      mode: "ask",
+      imageData: nil,
+      attachments: [],
+      producingTurnId: nil,
+      expectedContext: nil,
+      jitBudget: budget,
+      jitCostEvidenceProjection: RuntimeJSONPayloadBox(projection.wireDictionary))
+
+    let encoded = try XCTUnwrap(message["jitCostEvidenceProjection"] as? [String: Any])
+    XCTAssertEqual(encoded["schema_version"] as? String, JITProactivitySourceProjection.schemaVersion)
+    XCTAssertEqual(encoded["producer_lane"] as? String, "planned")
+    XCTAssertEqual((encoded["matched_input"] as? [String: Any])?["context_id"] as? String, "bucket-1")
+    XCTAssertEqual((encoded["legacy"] as? [String: Any])?["prompt"] as? String, "legacy prompt")
+    XCTAssertEqual((encoded["nano"] as? [String: Any])?["prompt"] as? String, "nano prompt")
+    XCTAssertEqual((encoded["full"] as? [String: Any])?["prompt"] as? String, "full prompt")
+  }
+
+  func testJitKnowledgeToolsGateAdmitsOnlyTheServersEnabledVerdictAndFailsClosedOtherwise() {
+    XCTAssertTrue(
+      AgentRuntimeProcess.jitKnowledgeToolsEnabled(
+        from: JITProactivityFlags(rollout: .unknown, killSwitch: .unknown, effective: .enabled)),
+      "The server's own effective=enabled verdict must admit the tools regardless of raw rollout/kill-switch state."
+    )
+    XCTAssertFalse(
+      AgentRuntimeProcess.jitKnowledgeToolsEnabled(
+        from: JITProactivityFlags(rollout: .enabled, killSwitch: .disabled, effective: .disabled)),
+      "An explicit effective=disabled verdict must hide the tools even with a permissive raw pair."
+    )
+    XCTAssertFalse(
+      AgentRuntimeProcess.jitKnowledgeToolsEnabled(
+        from: JITProactivityFlags(rollout: .unknown, killSwitch: .unknown, effective: .unknown)),
+      "An unknown verdict — the fail-closed result of any transport/decode/auth-race error — must hide the tools."
+    )
+    XCTAssertFalse(
+      AgentRuntimeProcess.jitKnowledgeToolsEnabled(
+        from: JITProactivityFlags(rollout: .enabled, killSwitch: .disabled)),
+      "Omitting `effective` (older-server compatibility default) must hide the tools; the client must not "
+        + "re-derive a looser verdict from the raw rollout/kill-switch pair."
+    )
+  }
+
   func testQueryFreshnessFenceIsAbsentOrComplete() {
     let unfenced = AgentRuntimeProcess.queryWireMessage(
       clientId: "client",

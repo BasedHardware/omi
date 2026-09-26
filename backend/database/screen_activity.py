@@ -1,18 +1,38 @@
-from datetime import datetime
-from typing import List, Dict, Any, Optional, Union, cast
+from datetime import datetime, timezone
+from typing import List, Dict, Any, Optional, Tuple, Union, cast
 
 from google.cloud import firestore
 
-from ._client import db
+from models.screen_activity import ScreenActivityCoverage
+
+from ._client import data_plane_db as db
 import logging
 
 logger = logging.getLogger(__name__)
 
 SCREEN_ACTIVITY_COLLECTION = 'screen_activity'
 USERS_COLLECTION = 'users'
+SCREEN_ACTIVITY_SUMMARY_ROW_LIMIT = 5000
 
 # Date inputs may arrive as datetime or as pre-formatted 'YYYY-MM-DD HH:MM:SS.mmm' strings.
 DateInput = Union[datetime, str]
+
+
+def normalize_screen_activity_timestamp(value: DateInput, *, end_of_second: bool = False) -> str:
+    """Return the one lexicographically sortable timestamp representation stored in Firestore."""
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        raw = str(value).strip()
+        try:
+            parsed = datetime.fromisoformat(raw.replace('Z', '+00:00'))
+        except ValueError as exc:
+            raise ValueError('screen activity timestamp must be ISO-8601 compatible') from exc
+
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    milliseconds = 999 if end_of_second and parsed.microsecond == 0 else parsed.microsecond // 1000
+    return f"{parsed.strftime('%Y-%m-%d %H:%M:%S')}.{milliseconds:03d}"
 
 
 def get_screen_activity_ids(uid: str) -> List[str]:
@@ -42,11 +62,22 @@ def upsert_screen_activity(uid: str, rows: List[Dict[str, Any]]) -> int:
                 'appName': row.get('appName', ''),
                 'windowTitle': row.get('windowTitle', ''),
                 'ocrText': (row.get('ocrText') or '')[:1000],
+                # The Firestore/vector ID is device-qualified, while the desktop
+                # frame database is addressed by this original numeric ID.
+                'localScreenshotId': str(row['id']),
+                # The desktop only creates sync rows from captures admitted by
+                # Rewind's local exclusion policy; persist that attestation so
+                # automatic selection remains fail closed.
+                'captureEligible': row.get('captureEligible') is True,
             }
             if row.get('deviceName'):
                 doc_data['deviceName'] = row['deviceName']
             if row.get('clientDeviceId'):
                 doc_data['clientDeviceId'] = row['clientDeviceId']
+            doc_data['accountGeneration'] = max(0, int(row.get('accountGeneration') or 0))
+            retention = row.get('deviceRetentionSeconds')
+            if isinstance(retention, int) and retention > 0:
+                doc_data['deviceRetentionSeconds'] = retention
             batch.set(collection_ref.document(doc_id), doc_data)
         batch.commit()
         written += len(chunk)
@@ -67,11 +98,10 @@ def get_screen_activity(
     query = collection_ref.order_by('timestamp', direction=firestore.Query.ASCENDING)
 
     if start_date:
-        # Timestamps stored as 'YYYY-MM-DD HH:MM:SS.mmm' strings — must match format for comparison
-        ts = start_date.strftime('%Y-%m-%d %H:%M:%S.000') if isinstance(start_date, datetime) else str(start_date)
+        ts = normalize_screen_activity_timestamp(start_date)
         query = query.where(filter=firestore.FieldFilter('timestamp', '>=', ts))
     if end_date:
-        ts = end_date.strftime('%Y-%m-%d %H:%M:%S.999') if isinstance(end_date, datetime) else str(end_date)
+        ts = normalize_screen_activity_timestamp(end_date, end_of_second=True)
         query = query.where(filter=firestore.FieldFilter('timestamp', '<=', ts))
     if app_filter:
         query = query.where(filter=firestore.FieldFilter('appName', '==', app_filter))
@@ -88,16 +118,79 @@ def get_screen_activity(
     return results
 
 
+def get_screen_activity_page(
+    uid: str,
+    *,
+    start_date: Optional[DateInput] = None,
+    end_date: Optional[DateInput] = None,
+    app_filter: Optional[str] = None,
+    limit: int = 500,
+    after: Optional[Tuple[str, str]] = None,
+) -> Tuple[List[Dict[str, Any]], bool]:
+    """Keyset-paginated screen activity ordered by (timestamp, doc id) ascending.
+
+    ``after`` is the ``(timestamp, doc_id)`` pair of the last row from the
+    prior page; ordering by ``__name__`` makes resume positions stable even
+    when many rows share one timestamp. The app-filtered shape is served by
+    the existing ``screen_activity_app_timestamp`` composite index, and the
+    unfiltered shape by the automatic single-field timestamp index — both
+    index families store ``__name__`` as their final key.
+
+    Fetches ``limit + 1`` rows and returns ``(rows[:limit], has_more)`` so the
+    caller can emit a next_cursor only when another row actually exists.
+    """
+    collection_ref = db.collection(USERS_COLLECTION).document(uid).collection(SCREEN_ACTIVITY_COLLECTION)
+
+    query = collection_ref.order_by('timestamp', direction=firestore.Query.ASCENDING).order_by('__name__')
+
+    if start_date:
+        ts = normalize_screen_activity_timestamp(start_date)
+        query = query.where(filter=firestore.FieldFilter('timestamp', '>=', ts))
+    if end_date:
+        ts = normalize_screen_activity_timestamp(end_date, end_of_second=True)
+        query = query.where(filter=firestore.FieldFilter('timestamp', '<=', ts))
+    if app_filter:
+        query = query.where(filter=firestore.FieldFilter('appName', '==', app_filter))
+    if after is not None:
+        timestamp, doc_id = after
+        if not doc_id.strip() or '/' in doc_id:
+            raise ValueError('screen activity cursor doc id is invalid')
+        query = query.start_after({'timestamp': timestamp, '__name__': collection_ref.document(doc_id)})
+
+    query = query.limit(limit + 1)
+
+    results: List[Dict[str, Any]] = []
+    for doc in query.stream():
+        raw: object = doc.to_dict()
+        data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+        data['id'] = doc.id
+        results.append(data)
+
+    return results[:limit], len(results) > limit
+
+
 def get_screen_activity_summary(
     uid: str,
     start_date: Optional[DateInput] = None,
     end_date: Optional[DateInput] = None,
 ) -> Dict[str, Any]:
-    """Get aggregated app usage summary — groups by appName, counts screenshots, estimates time."""
-    rows = get_screen_activity(uid, start_date=start_date, end_date=end_date, limit=5000)
+    """Summarize the earliest synced observations, with explicit query coverage.
 
-    if not rows:
-        return {'apps': {}, 'total_screenshots': 0}
+    OCR gating, deduplication and sync compaction make counts unsuitable for
+    estimating elapsed usage. One lookahead row detects a truncated query;
+    it never contributes to the aggregate or its observation bounds.
+    """
+    rows = get_screen_activity(
+        uid, start_date=start_date, end_date=end_date, limit=SCREEN_ACTIVITY_SUMMARY_ROW_LIMIT + 1
+    )
+    truncated = len(rows) > SCREEN_ACTIVITY_SUMMARY_ROW_LIMIT
+    rows = rows[:SCREEN_ACTIVITY_SUMMARY_ROW_LIMIT]
+    coverage = ScreenActivityCoverage(
+        row_limit=SCREEN_ACTIVITY_SUMMARY_ROW_LIMIT,
+        truncated=truncated,
+        first_observed_at=rows[0].get('timestamp') if rows else None,
+        last_observed_at=rows[-1].get('timestamp') if rows else None,
+    )
 
     apps: Dict[str, Dict[str, Any]] = {}
     for row in rows:
@@ -124,4 +217,5 @@ def get_screen_activity_summary(
     return {
         'apps': apps,
         'total_screenshots': len(rows),
+        'coverage': coverage.model_dump(),
     }

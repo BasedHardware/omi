@@ -14,7 +14,12 @@ import pytest
 from fastapi import HTTPException
 
 from testing.import_isolation import stub_modules
-from utils.rate_limit_config import RATE_LIMIT_BOOST, RATE_POLICIES, get_effective_limit
+from utils.rate_limit_config import (
+    BOOST_EXEMPT_POLICIES,
+    RATE_LIMIT_BOOST,
+    RATE_POLICIES,
+    get_effective_limit,
+)
 
 
 class _RedisError(Exception):
@@ -130,6 +135,11 @@ class TestRatePolicies(unittest.TestCase):
             max_req, _ = RATE_POLICIES[name]
             self.assertGreaterEqual(max_req, 100, f"{name} should allow bursts")
 
+    def test_action_items_list_caps_tight_loops(self):
+        """First-party listing must be below a Windows poll storm and above hydrate."""
+        max_req, window = RATE_POLICIES["action_items:list"]
+        self.assertEqual((max_req, window), (12, 60))
+
 
 class TestBoostFactor(unittest.TestCase):
     """Test boost factor applies correctly."""
@@ -155,6 +165,92 @@ class TestBoostFactor(unittest.TestCase):
         _, window = get_effective_limit("chat:send_message", boost=5.0)
         _, base_window = RATE_POLICIES["chat:send_message"]
         self.assertEqual(window, base_window)
+
+
+class TestBoostExemption(unittest.TestCase):
+    """A boost-exempt policy serves its base limit; everything else still boosts.
+
+    Prod ran RATE_LIMIT_BOOST=100, which turned the 12/60s action_items:list cap
+    into 1,200/60s — so the cap never fired while ~82 stale Windows clients
+    hot-looped GET /v1/action-items at ~97 req/min (48.8% of all billable
+    Firestore reads). The exemption is what makes that cap real, and lowering the
+    global boost instead would silently retune ~40 unrelated policies.
+    """
+
+    def test_action_items_list_is_exempt_by_default(self):
+        self.assertIn("action_items:list", BOOST_EXEMPT_POLICIES)
+
+    def test_dev_abuse_ceilings_are_exempt_by_default(self):
+        """GH #13505: the /v1/dev/* abuse ceilings are decisions, not defaults.
+
+        RATE_LIMIT_BOOST exists to widen limits for events; at the documented
+        production value 100 it would turn the 30/min memories burst ceiling
+        into 3,000/min and the 30/hour from-segments budget into 3,000/hour —
+        exactly the scripted-abuse shape these policies exist to stop. The
+        shared hourly ceilings (dev:memories, dev:conversations) ride the same
+        exemption so the dedicated budgets always compose with real caps.
+        """
+        for policy in (
+            "dev:memories",
+            "dev:memories_write_burst",
+            "dev:conversations",
+            "dev:conversations_from_segments",
+        ):
+            self.assertIn(policy, BOOST_EXEMPT_POLICIES)
+            base = RATE_POLICIES[policy]
+            for boost in (2.0, 100.0, 1000.0):
+                self.assertEqual(get_effective_limit(policy, boost=boost), base)
+
+    def test_exempt_policy_ignores_the_boost(self):
+        """(b) The exempt policy enforces its base limit under any boost."""
+        base = RATE_POLICIES["action_items:list"]
+        for boost in (2.0, 100.0, 1000.0):
+            self.assertEqual(get_effective_limit("action_items:list", boost=boost), base)
+
+    def test_exempt_policy_still_honours_a_tightening_boost_is_not_required(self):
+        """The exemption is absolute in both directions — base limit, always."""
+        base = RATE_POLICIES["action_items:list"]
+        self.assertEqual(get_effective_limit("action_items:list", boost=0.1), base)
+
+    def test_non_exempt_policies_still_boost(self):
+        """(a) Every other policy keeps the existing boost behaviour."""
+        for name in RATE_POLICIES:
+            if name in BOOST_EXEMPT_POLICIES:
+                continue
+            base, window = RATE_POLICIES[name]
+            max_req, eff_window = get_effective_limit(name, boost=100.0)
+            self.assertEqual(max_req, max(1, int(base * 100.0)), f"{name} must still boost")
+            self.assertEqual(eff_window, window)
+
+    def test_exempt_set_is_env_overridable(self):
+        """Operator escape hatch: the exemption list is env-driven, no code change."""
+        import utils.rate_limit_config as rlc
+
+        with patch.dict(os.environ, {"RATE_LIMIT_BOOST_EXEMPT": ""}):
+            importlib.reload(rlc)
+            self.assertEqual(rlc.BOOST_EXEMPT_POLICIES, frozenset())
+            base, _ = rlc.RATE_POLICIES["action_items:list"]
+            self.assertEqual(rlc.get_effective_limit("action_items:list", boost=100.0)[0], base * 100)
+
+        with patch.dict(os.environ, {"RATE_LIMIT_BOOST_EXEMPT": "action_items:list, chat:send_message"}):
+            importlib.reload(rlc)
+            self.assertEqual(rlc.BOOST_EXEMPT_POLICIES, frozenset({"action_items:list", "chat:send_message"}))
+
+        importlib.reload(rlc)
+
+    def test_unknown_exempt_names_are_dropped_not_enforced(self):
+        """A typo in the env var must not take the process down or exempt nothing real."""
+        import utils.rate_limit_config as rlc
+
+        with patch.dict(os.environ, {"RATE_LIMIT_BOOST_EXEMPT": "action_items:lst,action_items:list"}):
+            importlib.reload(rlc)
+            self.assertEqual(rlc.BOOST_EXEMPT_POLICIES, frozenset({"action_items:list"}))
+        importlib.reload(rlc)
+
+    def test_default_boost_leaves_every_limit_unchanged(self):
+        """With the default boost of 1.0 the exemption is a no-op for everyone."""
+        for name, (base, window) in RATE_POLICIES.items():
+            self.assertEqual(get_effective_limit(name, boost=1.0), (base, window))
 
 
 class TestShadowMode(unittest.TestCase):
@@ -270,6 +366,53 @@ class TestEnforceRateLimit(unittest.TestCase):
     def test_fail_open_on_redis_error(self, mock_check):
         # Should not raise — fail open
         self.ep._enforce_rate_limit("uid123", "chat:send_message")
+
+    @patch('utils.rate_limit_config.RATE_LIMIT_BOOST', 100.0)
+    @patch('utils.other.endpoints.check_rate_limit')
+    @patch('utils.other.endpoints.RATE_LIMIT_SHADOW', False)
+    def test_action_items_list_checks_base_limit_under_a_boost(self, mock_check):
+        """The Redis check for the exempt policy uses 12/60s even at boost=100."""
+        mock_check.return_value = (True, 11, 0)
+        self.ep._enforce_rate_limit("uid123", "action_items:list")
+        _key, policy, max_requests, window = mock_check.call_args[0]
+        self.assertEqual(policy, "action_items:list")
+        self.assertEqual((max_requests, window), RATE_POLICIES["action_items:list"])
+
+    @patch('utils.rate_limit_config.RATE_LIMIT_BOOST', 100.0)
+    @patch('utils.other.endpoints.check_rate_limit', return_value=(False, 0, 37))
+    @patch('utils.other.endpoints.RATE_LIMIT_SHADOW', False)
+    def test_action_items_list_429_carries_the_degraded_mode_contract(self, mock_check):
+        """(c) The 429 the Windows client's degraded-mode handling keys on.
+
+        ``53d5b9e54a`` (desktop/windows/src/main/observability/) classifies a
+        response purely by status: ``classifyForRateLimit(429) == 'hit'``. A storm
+        (banner) additionally needs >= 5 hits across >= 2 distinct request paths
+        within 60s, so a client looping GET /v1/action-items alone gets 429s and a
+        stalled sync but NOT the banner — that rule lives in the client and is
+        covered by ``backendDegraded.test.ts``. What the server owes it is a real
+        429 with an honest Retry-After and a limit header that reports the cap
+        actually enforced (12), not the boosted one (1200).
+        """
+        with self.assertRaises(HTTPException) as ctx:
+            self.ep._enforce_rate_limit("uid123", "action_items:list")
+
+        exc = ctx.exception
+        self.assertEqual(exc.status_code, 429)
+        self.assertEqual(exc.headers["Retry-After"], "37")
+        self.assertEqual(exc.headers["X-RateLimit-Remaining"], "0")
+        base_max, _ = RATE_POLICIES["action_items:list"]
+        self.assertEqual(exc.headers["X-RateLimit-Limit"], str(base_max))
+
+    @patch('utils.rate_limit_config.RATE_LIMIT_BOOST', 100.0)
+    @patch('utils.other.endpoints.check_rate_limit')
+    @patch('utils.other.endpoints.RATE_LIMIT_SHADOW', False)
+    def test_boosted_policies_still_check_the_boosted_limit(self, mock_check):
+        """The exemption is scoped to one policy; the boost still relaxes the rest."""
+        mock_check.return_value = (True, 1, 0)
+        self.ep._enforce_rate_limit("uid123", "chat:send_message")
+        _key, _policy, max_requests, _window = mock_check.call_args[0]
+        base_max, _ = RATE_POLICIES["chat:send_message"]
+        self.assertEqual(max_requests, base_max * 100)
 
 
 class TestCheckRateLimitBoundary(unittest.TestCase):
@@ -390,6 +533,16 @@ class TestWithRateLimitWrapper(unittest.TestCase):
             asyncio.run(dep_func(uid="user123"))
         self.assertEqual(ctx.exception.status_code, 429)
 
+    def test_with_rate_limit_dependency_maps_executor_saturation_to_503(self):
+        dep_func = self.ep.with_rate_limit(lambda: "uid", "chat:send_message")
+
+        with patch.object(self.ep, 'run_blocking', side_effect=self.ep.ExecutorSaturatedError('saturated')):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(dep_func(uid="user123"))
+
+        self.assertEqual(ctx.exception.status_code, 503)
+        self.assertEqual(ctx.exception.headers, {'Retry-After': '1'})
+
     @patch('utils.other.endpoints._enforce_rate_limit')
     def test_with_rate_limit_context_uses_app_key_identity(self, mock_enforce):
         dep_func = self.ep.with_rate_limit_context(lambda: "unused", "dev:conversations_read")
@@ -489,6 +642,7 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "goals:advice",
             "goals:extract",
             "dev:conversations",
+            "dev:conversation_reads_total",
             "dev:conversations_read",
             "dev:conversation_detail_read",
             "dev:conversation_transcript_read",
@@ -511,6 +665,7 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "integration:memories",
             "test:prompt",
             "apps:generate_prompts",
+            "apps:twitter_initial_message",
         ]
         for policy in used_policies:
             self.assertIn(policy, RATE_POLICIES, f"Policy '{policy}' used in router but missing from config")
@@ -561,6 +716,7 @@ class TestRouterWiring(unittest.TestCase):
         for policy in [
             "dev:memories_read",
             "dev:action_items_read",
+            "dev:conversation_reads_total",
             "dev:conversations_read",
             "dev:conversation_detail_read",
             "dev:conversation_transcript_read",
@@ -591,6 +747,62 @@ class TestRouterWiring(unittest.TestCase):
         self.assertNotIn('request.headers.get("Authorization"', developer_source)
         self.assertNotIn("request.headers.get('Authorization'", dependencies_source)
         self.assertNotIn('request.headers.get("Authorization"', dependencies_source)
+
+    def test_conversation_reads_share_an_aggregate_ceiling(self):
+        """Per-route read policies must not raise the total reads a key can make.
+
+        Before list and detail were split into separate policies they shared one
+        60/hr bucket. Giving detail its own 60/hr policy without a shared ceiling
+        would let one key make 120 conversation reads an hour -- a loosening of the
+        exact limit #8713 asked to tighten. The shared ceiling is what prevents that,
+        so this drives both routes and asserts the aggregate, not the per-route, cap
+        is what stops the caller.
+        """
+        dependencies = importlib.import_module("dependencies")
+
+        auth = dependencies.ApiKeyAuth(
+            uid="uid1",
+            scopes=["conversations:read"],
+            app_id="test-app",
+            key_id="test-key",
+        )
+
+        counters: dict[str, int] = {}
+
+        def counting_limiter(*, prefix, uid, app_id, key_id, policy_name):
+            max_requests, _window = RATE_POLICIES[policy_name]
+            counters[policy_name] = counters.get(policy_name, 0) + 1
+            if counters[policy_name] > max_requests:
+                raise HTTPException(status_code=429, detail="Rate limit exceeded")
+
+        async def drive() -> int:
+            served = 0
+            # Alternate routes so neither per-route bucket can be what stops us.
+            for i in range(500):
+                dep = (
+                    dependencies.get_auth_with_conversations_read
+                    if i % 2 == 0
+                    else dependencies.get_auth_with_conversation_detail_read
+                )
+                try:
+                    await dep(auth)
+                except HTTPException as exc:
+                    self.assertEqual(exc.status_code, 429)
+                    break
+                served += 1
+            return served
+
+        with patch.object(dependencies, "check_api_key_rate_limit", counting_limiter):
+            served = asyncio.run(drive())
+
+        umbrella_max, _window = RATE_POLICIES["dev:conversation_reads_total"]
+        split_total = RATE_POLICIES["dev:conversations_read"][0] + RATE_POLICIES["dev:conversation_detail_read"][0]
+
+        self.assertEqual(served, umbrella_max)
+        self.assertLess(served, split_total, "per-route budgets must not sum into a higher effective ceiling")
+        # The shared ceiling, not a per-route budget, is what rejected the caller.
+        self.assertLessEqual(counters["dev:conversations_read"], RATE_POLICIES["dev:conversations_read"][0])
+        self.assertLessEqual(counters["dev:conversation_detail_read"], RATE_POLICIES["dev:conversation_detail_read"][0])
 
     def test_developer_rate_limit_failures_log_without_request(self):
         dependencies = importlib.import_module("dependencies")
@@ -624,8 +836,8 @@ class TestRouterWiring(unittest.TestCase):
         self.assertEqual(len(matches), 4, f"goals.py expected 4 rate limits, got {len(matches)}")
 
     def test_mcp_sse_router_has_rate_limit(self):
-        matches = self._grep_file("routers/mcp_sse.py", r"check_rate_limit_inline.*mcp:")
-        self.assertGreaterEqual(len(matches), 1, "mcp_sse.py missing rate limit wiring")
+        matches = self._grep_file("utils/mcp_server/transport.py", r"check_rate_limit_inline.*mcp:")
+        self.assertGreaterEqual(len(matches), 1, "mcp transport missing rate limit wiring")
 
     def test_mcp_router_has_rate_limit(self):
         source = open("dependencies.py", encoding='utf-8').read()
@@ -646,7 +858,14 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_apps_router_has_rate_limit(self):
         matches = self._grep_file("routers/apps.py", r"with_rate_limit.*apps:")
-        self.assertGreaterEqual(len(matches), 1, "apps.py missing rate limit wiring")
+        self.assertGreaterEqual(len(matches), 2, "apps.py missing rate limit wiring")
+
+    def test_twitter_initial_message_endpoint_rate_limited(self):
+        """GET /v1/personas/twitter/initial-message runs a billable LLM call
+        (Features.PERSONA) and, unlike every other billable route in this
+        router, had neither a quota gate nor a rate limit (#12781)."""
+        matches = self._grep_file("routers/apps.py", r"with_rate_limit.*apps:twitter_initial_message")
+        self.assertEqual(len(matches), 1, "GET /v1/personas/twitter/initial-message must have a rate limit")
 
     def test_knowledge_graph_router_has_rate_limit(self):
         matches = self._grep_file("routers/knowledge_graph.py", r"with_rate_limit.*knowledge_graph:")
@@ -666,8 +885,9 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_memories_router_has_rate_limits(self):
         matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:")
-        # extract, create, batch, 3 review (list/get/resolve), delete, delete_all, delete_batch, 5 modify = 14
-        self.assertEqual(len(matches), 14, f"memories.py expected 14 rate limits, got {len(matches)}")
+        # extract, create, batch, 3 review (list/get/resolve), delete, delete_all, delete_batch,
+        # 6 modify (review/edit/visibility/baseline/read/revert) = 15
+        self.assertEqual(len(matches), 15, f"memories.py expected 15 rate limits, got {len(matches)}")
 
     def test_memories_create_endpoint_rate_limited(self):
         matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:create")
@@ -778,7 +998,7 @@ class TestRealCheckRateLimit(unittest.TestCase):
         self.real_module._RATE_LIMIT_RESERVE_LUA = MagicMock(return_value=[1, 3, 3600])
         allowed, remaining, retry = self.real_module.reserve_rate_limit("uid1", "desktop_reasoning", 10, 3600)
         self.assertTrue(allowed)
-        self.assertEqual((remaining, retry), (7, 0))
+        self.assertEqual((remaining, retry), (7, 3600))
         self.real_module._RATE_LIMIT_RESERVE_LUA.assert_called_once_with(
             keys=["rl:desktop_reasoning:uid1"], args=[3600, 10]
         )
@@ -792,6 +1012,45 @@ class TestRealCheckRateLimit(unittest.TestCase):
         self.real_module._RATE_LIMIT_RELEASE_LUA = MagicMock(return_value=2)
         self.real_module.release_rate_limit("uid1", "desktop_reasoning")
         self.real_module._RATE_LIMIT_RELEASE_LUA.assert_called_once_with(keys=["rl:desktop_reasoning:uid1"], args=[])
+
+    def _release_lua_source(self) -> str:
+        source = None
+        for lua_source in self.lua_sources:
+            if "DECR" in lua_source and "DEL" in lua_source and "INCR" not in lua_source:
+                source = lua_source
+                break
+        self.assertIsNotNone(source, "release Lua script was not registered")
+        return source
+
+    def test_release_lua_clamps_at_zero_after_delete(self):
+        # The guarded unit runner stubs the redis package, so the script cannot
+        # be executed here. Pin the clamp semantics structurally: a release on a
+        # missing/zeroed counter must DEL and return 0 instead of DECR-ing the
+        # key negative (an operator quota reset deletes keys mid-flight).
+        source = self._release_lua_source()
+        self.assertIn("or '0'", source)
+        self.assertIn("current <= 1", source)
+        self.assertIn("remaining <= 0", source)
+        self.assertEqual(source.count("redis.call('DEL', key)"), 2)
+        for clause in ("current <= 1", "remaining <= 0"):
+            branch = source.split(clause, 1)[1]
+            self.assertIn("return 0", branch.split("end", 1)[0])
+
+    def test_release_lua_clamps_at_zero_after_delete_executes(self):
+        # Full execution against fakeredis, for environments where the real
+        # redis package (and lupa) are importable — bare pytest locally.
+        try:
+            import fakeredis
+
+            client = fakeredis.FakeRedis()
+            script = client.register_script(self._release_lua_source())
+        except Exception:
+            self.skipTest("fakeredis with Lua support unavailable under the guarded runner")
+        key = "rl:desktop_reasoning:uid1"
+        remaining = script(keys=[key], args=[])
+        self.assertEqual(int(remaining), 0)
+        stored = client.get(key)
+        self.assertTrue(stored is None or int(stored) >= 0)
 
 
 if __name__ == '__main__':

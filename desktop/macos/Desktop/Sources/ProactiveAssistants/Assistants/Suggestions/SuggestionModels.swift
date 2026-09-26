@@ -22,14 +22,16 @@ enum SuggestionCategory: String, Codable {
 /// moment it is relevant, so a source that is slow or empty simply contributes nothing.
 struct SuggestionGrounding: Sendable {
   var memories: [String] = []
-  var openCommitments: [String] = []
+  var commitmentRecords: [SuggestionCommitment] = []
   var relatedScreens: [String] = []
   /// What the user is actually trying to achieve. Without this the assistant can only say
   /// "you have a task"; with it, it can say why the current screen is not that.
   var goals: [String] = []
 
+  var openCommitments: [String] { commitmentRecords.map(\.text) }
+
   var isEmpty: Bool {
-    memories.isEmpty && openCommitments.isEmpty && relatedScreens.isEmpty && goals.isEmpty
+    memories.isEmpty && commitmentRecords.isEmpty && relatedScreens.isEmpty && goals.isEmpty
   }
 
   /// Preamble for the grounding block.
@@ -454,23 +456,35 @@ enum SuggestionCommitmentGuard {
     openCommitments: [String]
   ) -> Bool {
     guard category == .commitment else { return true }
+    return groundedTaskId(
+      suggestion: suggestion,
+      category: category,
+      commitments: openCommitments.map { SuggestionCommitment(id: $0, text: $0) }
+    ) != nil
+  }
+
+  static func groundedTaskId(
+    suggestion: String,
+    category: SuggestionCategory,
+    commitments: [SuggestionCommitment]
+  ) -> String? {
+    guard category == .commitment else { return nil }
 
     let suggestionTokens = contentTokens(suggestion)
-    guard !suggestionTokens.isEmpty else { return false }
+    guard !suggestionTokens.isEmpty else { return nil }
 
-    return openCommitments.contains { commitment in
-      let commitmentTokens = contentTokens(commitment)
-      guard !commitmentTokens.isEmpty else { return false }
+    for commitment in commitments {
+      let commitmentTokens = contentTokens(commitment.text)
+      guard !commitmentTokens.isEmpty else { continue }
       let shared = commitmentTokens.intersection(suggestionTokens)
-      guard shared.count >= minimumSharedTokens else { return false }
+      guard shared.count >= minimumSharedTokens else { continue }
 
-      // Naming something only that commitment contains is a reference, however short the
-      // nudge and however long the task. Otherwise fall back to proportional coverage,
-      // which is what stops "send the update" from matching every commitment that happens
-      // to contain both words.
-      if !shared.subtracting(genericTaskWords).isEmpty { return true }
-      return Double(shared.count) / Double(commitmentTokens.count) >= requiredCoverage
+      if !shared.subtracting(genericTaskWords).isEmpty { return commitment.id }
+      if Double(shared.count) / Double(commitmentTokens.count) >= requiredCoverage {
+        return commitment.id
+      }
     }
+    return nil
   }
 }
 
@@ -481,6 +495,39 @@ enum SuggestionCommitmentGuard {
 enum SuggestionDeduplication {
   /// Jaccard overlap at or above this is treated as the same suggestion.
   static let similarityThreshold = 0.6
+
+  /// A delivered suggestion, remembered with its category so trimming can retain task
+  /// nudges at levels whose screen-nudge window is deliberately empty.
+  struct Remembered: Equatable, Sendable {
+    let text: String
+    let category: SuggestionCategory
+  }
+
+  /// The dedup window after remembering a delivery, trimmed per category.
+  ///
+  /// Trimming the whole window to one level-wide depth is how beta 0.12.172 delivered the
+  /// same due-today task three times in quick succession: at Maximum that depth is 0 by
+  /// design (staying on a feed is meant to keep producing fresh screen nudges), so the
+  /// just-delivered task nudge was forgotten before the next evaluation and `isDuplicate`
+  /// had nothing to compare against. Each category keeps its own depth instead, so the
+  /// empty screen-nudge window can never evict a remembered task.
+  static func remembering(
+    _ delivered: Remembered,
+    in window: [Remembered],
+    frequencyLevel: Int
+  ) -> [Remembered] {
+    var kept: [Remembered] = []
+    var counts: [SuggestionCategory: Int] = [:]
+    for entry in (window + [delivered]).reversed() {
+      let depth = SuggestionPacing.dedupMemory(
+        frequencyLevel: frequencyLevel, category: entry.category)
+      if counts[entry.category, default: 0] < depth {
+        kept.append(entry)
+        counts[entry.category, default: 0] += 1
+      }
+    }
+    return kept.reversed()
+  }
 
   static func normalize(_ text: String) -> Set<String> {
     let lowered = text.lowercased()
@@ -546,12 +593,16 @@ enum SuggestionPacing {
     frequencyLevel >= maximumLevel ? min(base, 0.65) : base
   }
 
-  /// How many recent suggestions the dedup window remembers. Maximum keeps none: the
-  /// user asked to be nagged about the same commitment for as long as they stay on the
-  /// feed, so repeat-suppression would defeat the level's entire point. Calm levels keep
-  /// the 10-deep window that stops nagging.
-  static func dedupMemory(frequencyLevel: Int) -> Int {
-    frequencyLevel >= maximumLevel ? 0 : 10
+  /// How many recent suggestions the dedup window remembers, per category. Maximum keeps
+  /// none for screen nudges: the user asked to be nagged off the feed for as long as they
+  /// stay on it, so repeat-suppression there would defeat the level's entire point. But a
+  /// commitment nudge is about a task, not the screen, and re-firing the identical task
+  /// every cooldown is a broken record, not the promised cadence — 0.12.172 shipped one
+  /// due-today task three times in a row this way. Commitment nudges therefore keep the
+  /// calm 10-deep window at every level; calm levels keep 10 for everything.
+  static func dedupMemory(frequencyLevel: Int, category: SuggestionCategory) -> Int {
+    if category == .commitment { return 10 }
+    return frequencyLevel >= maximumLevel ? 0 : 10
   }
 
   /// Whether an eligible evaluation leaves the context armed. Calm levels evaluate once

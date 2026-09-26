@@ -323,7 +323,7 @@ class TaskAssistantSettings {
     set {
       let isCustom = newValue != TaskAssistantSettings.defaultAnalysisPrompt
       UserDefaults.standard.set(newValue, forKey: analysisPromptKey)
-      SettingsSyncManager.recordLocalPromptOwner("task")
+      SettingsSyncManager.recordLocalPromptOwner("task", isShippedDefault: !isCustom)
       let previewLength = min(newValue.count, 50)
       let preview = String(newValue.prefix(previewLength)) + (newValue.count > 50 ? "..." : "")
       log("Task analysis prompt updated (\(newValue.count) chars, custom: \(isCustom)): \(preview)")

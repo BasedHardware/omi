@@ -40,6 +40,17 @@ struct ContextTransitionQueue: Sendable {
   }
 }
 
+/// A frame candidate for grounding a director evaluation, paired with the
+/// moment it entered the tracker. On the switch tick the next context's frame
+/// is *captured* before the departing visit's `endedAt` is written, but only
+/// *stored* here after the transition persisted the departure — so
+/// `storedAt <= endedAt` holds exactly for frames belonging to the departed
+/// visit's own context.
+struct TrackedDirectorFrame: Sendable {
+  let frame: CapturedFrame
+  let storedAt: Date
+}
+
 /// Coordinates all proactive assistants, distributing frames and managing lifecycle
 @MainActor
 class AssistantCoordinator {
@@ -55,6 +66,7 @@ class AssistantCoordinator {
   private var lastTrackedApp: String?
   private var lastTrackedWindowTitle: String?
   private var lastTrackedFrame: CapturedFrame?
+  private var lastTrackedFrameStoredAt: Date?
   private var contextTransitionQueue = ContextTransitionQueue()
 
   /// Backpressure: track which assistants are currently analyzing a frame.
@@ -225,6 +237,52 @@ class AssistantCoordinator {
     return true
   }
 
+  /// Content-refresh transition for a long dwell whose on-screen content
+  /// changed (see `ContextDwellRefreshPolicy`): closes and reopens the ACTIVE
+  /// context through the ordinary visit machinery, so the departing frame —
+  /// which now contains what the user typed — gets extraction, departure
+  /// evaluation, and the fresh visit gets its normal entry evaluation. Every
+  /// quota, cooldown, dedup, and budget gate applies unchanged.
+  /// Returns the arriving visit's fence so the caller can capture a
+  /// post-entry frame BEFORE engaging the director: the entry evaluation only
+  /// grounds on frames captured at or after the visit began, and the
+  /// preview-skip path may not produce another full frame for a static screen.
+  func refreshActiveContextForDwell(
+    expectedApp: String, expectedWindowTitle: String?
+  ) async -> ContextVisitFence? {
+    guard ContextBucketsFeature.isEnabled else { return nil }
+    guard let app = lastTrackedApp, let frame = lastTrackedFrame else { return nil }
+    // The dwell task is detached from its tick: if the user switched contexts
+    // while it awaited, refreshing would close the just-opened visit and
+    // extract the OLD context's frame into the NEW context's bucket.
+    guard app == expectedApp,
+      ContextDetection.normalizeWindowTitle(lastTrackedWindowTitle)
+        == ContextDetection.normalizeWindowTitle(expectedWindowTitle)
+    else { return nil }
+    guard !RewindSettings.shared.isAppExcluded(app) else { return nil }
+    // A refused same-context refresh must be DROPPED, not queued: begin()
+    // stores a refused request as pending, and finishContextTransition would
+    // replay it as a phantom switch back to this context after the in-flight
+    // real transition completes.
+    guard contextTransitionQueue.inFlight == nil else { return nil }
+    let request = ContextTransitionRequest(app: app, windowTitle: lastTrackedWindowTitle)
+    guard contextTransitionQueue.begin(request) else { return nil }
+    defer { finishContextTransition(request) }
+    do {
+      let transition = try await ContextVisitCoordinator.shared.transition(
+        toApp: app,
+        windowTitle: lastTrackedWindowTitle,
+        departingFrame: frame)
+      if transition.departingQualified, let departingFence = transition.departingFence {
+        Task { await ContextBucketRollupWriter.shared.extract(frame: frame, fence: departingFence) }
+      }
+      return transition.arrivingFence
+    } catch {
+      logError("Context buckets: content-refresh transition failed", error: error)
+      return nil
+    }
+  }
+
   /// Releases a completed transition and schedules the latest context observed
   /// during its persistence await. The follow-up runs on the main actor, so it
   /// cannot race the coordinator's tracked state or start a second write in
@@ -243,6 +301,10 @@ class AssistantCoordinator {
     newApp: String,
     newWindowTitle: String?
   ) async {
+    // Capture the arriving context before any assistant's awaited work so the
+    // reminder observation below cannot pair a pre-await title with a
+    // post-await frontmost app when the user switches windows mid-loop.
+    let arrivingContext = ContextReminderCoordinator.frontmostSnapshotContext()
     for (_, assistant) in assistants {
       await assistant.onContextSwitch(
         departingFrame: departingFrame,
@@ -250,6 +312,8 @@ class AssistantCoordinator {
         newWindowTitle: newWindowTitle
       )
     }
+    await ContextReminderCoordinator.shared.observeFrontmostChange(
+      arriving: arrivingContext, appName: newApp, windowTitle: newWindowTitle)
   }
 
   private func finishContextTransition(_ request: ContextTransitionRequest) {
@@ -262,14 +326,62 @@ class AssistantCoordinator {
 
   // MARK: - Frame Tracking & Distribution
 
+  /// The app of the context currently tracked for switches; the dwell task
+  /// uses it to drop stale captures after an app switch.
+  var currentTrackedApp: String? { lastTrackedApp }
+
+  /// Whether the tracker still points at this exact context. The dwell task
+  /// guards every capture with it: an app-only check let a same-app tab/title
+  /// switch during the async capture overwrite the tracked frame with the
+  /// departed window's pixels, contaminating the active bucket.
+  func isTracking(app: String, windowTitle: String?) -> Bool {
+    lastTrackedApp == app
+      && ContextDetection.normalizeWindowTitle(lastTrackedWindowTitle)
+        == ContextDetection.normalizeWindowTitle(windowTitle)
+  }
+
   /// Keep the latest frame reference fresh (call on every capture, even during delay).
   func trackFrame(_ frame: CapturedFrame) {
     lastTrackedFrame = frame
+    lastTrackedFrameStoredAt = Date()
   }
 
-  func trackedFrameForDirector(startedAt: Date) -> CapturedFrame? {
-    guard let frame = lastTrackedFrame, frame.captureTime >= startedAt else { return nil }
-    return frame
+  /// The latest tracked frame as a director grounding candidate. Only frames
+  /// captured at or after the visit began qualify here; the departed-visit
+  /// bound is applied by the caller with `frameMayGroundDirector` AFTER
+  /// re-reading visit freshness, because a bound computed from a pre-lookup
+  /// freshness read races the context switch — the switch can land between
+  /// that read and this lookup, leaving the lookup unbounded exactly when it
+  /// must not be.
+  func trackedFrameForDirector(startedAt: Date) -> TrackedDirectorFrame? {
+    guard
+      let frame = lastTrackedFrame,
+      let storedAt = lastTrackedFrameStoredAt,
+      frame.captureTime >= startedAt
+    else { return nil }
+    return TrackedDirectorFrame(frame: frame, storedAt: storedAt)
+  }
+
+  /// Whether a sampled frame may ground a director evaluation for a visit
+  /// whose freshness was read AFTER the frame was sampled.
+  ///
+  /// Active visit (`endedAt == nil`): any frame captured at or after
+  /// `startedAt`, today's behavior. Departed visit: the frame must also have
+  /// entered the tracker no later than the departure (`storedAt <= endedAt`).
+  /// Capture time alone cannot exclude the next context's screen on the switch
+  /// tick — that frame is *captured* before the transition writes `endedAt` —
+  /// but it is only *stored* after `checkContextSwitch` (which persists the
+  /// departure) returns, so the stored-at bound separates the two exactly. The
+  /// capture-time epsilon additionally keeps the frame near the visit's own
+  /// window under clock skew.
+  nonisolated static func frameMayGroundDirector(
+    captureTime: Date, storedAt: Date, startedAt: Date, endedAt: Date?
+  ) -> Bool {
+    guard captureTime >= startedAt else { return false }
+    guard let endedAt else { return true }
+    return storedAt <= endedAt
+      && captureTime
+        <= endedAt.addingTimeInterval(ContextDeliveryBudget.departedFrameCaptureEpsilonSeconds)
   }
 
   /// Distribute a captured frame to all enabled assistants

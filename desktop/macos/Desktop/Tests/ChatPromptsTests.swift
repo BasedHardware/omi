@@ -3,6 +3,61 @@ import XCTest
 @testable import Omi_Computer
 
 final class ChatPromptsTests: XCTestCase {
+  func testCurrentDatetimeStringIncludesIANAZoneAndConvertsUTCInstant() throws {
+    let date = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-08-27T19:59:51Z"))
+    let timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
+
+    let rendered = ChatPromptBuilder.currentDatetimeString(date, timeZone: timeZone)
+    XCTAssertTrue(
+      rendered.contains("3:59:51 PM") || rendered.contains("15:59:51"),
+      "expected local 3:59:51 PM, got \(rendered)")
+    XCTAssertTrue(
+      rendered.contains("America/New_York") || rendered.contains("EDT"),
+      "expected a zone token, got \(rendered)")
+    XCTAssertFalse(rendered.contains("7:59:51 PM"), "must not present UTC-as-local \(rendered)")
+  }
+
+  func testDesktopChatPromptDoesNotBakeALiveClockIntoTheCachedPrefix() {
+    XCTAssertFalse(ChatPrompts.desktopChat.contains("{current_datetime_str}"))
+    XCTAssertTrue(ChatPrompts.desktopChat.contains("# Current Time"))
+    XCTAssertTrue(ChatPrompts.desktopChat.contains("{tz}"))
+  }
+
+  func testDesktopChatSQLFiltersCompareUTCColumnsToUTCBounds() {
+    let prompt = ChatPrompts.desktopChat
+    XCTAssertTrue(prompt.contains("MIN(timestamp) AS firstSeenAt, MAX(timestamp) AS lastSeenAt"))
+    XCTAssertTrue(prompt.contains("Select raw timestamp and camelCase *At columns"))
+    XCTAssertTrue(prompt.contains("execute_sql converts those result cells once"))
+    XCTAssertFalse(prompt.contains("MIN(time(timestamp, 'localtime'))"))
+    XCTAssertTrue(prompt.contains("datetime('now', 'localtime', 'start of day', '-1 day', 'utc')"))
+    XCTAssertTrue(prompt.contains("datetime('now', 'localtime', 'start of day', 'utc')"))
+    XCTAssertFalse(
+      prompt.contains("timestamp >= datetime('now', 'start of day', '-1 day', 'localtime')"))
+    XCTAssertFalse(prompt.contains("timestamp >= datetime('now', '-1 day', 'localtime')"))
+    XCTAssertFalse(prompt.contains("startedAt >= datetime('now', 'start of day', '-1 day', 'localtime')"))
+    XCTAssertFalse(prompt.contains("createdAt >= datetime('now', 'start of day', '-1 day', 'localtime')"))
+    XCTAssertFalse(prompt.contains("which SQLite handles automatically"))
+  }
+
+  func testSQLDayBoundsStayUTCVersusUTC() {
+    XCTAssertEqual(
+      DesktopChatTimestampFormat.SQLDayBounds.startAsUTC(daysAgo: 1),
+      "datetime('now', 'localtime', 'start of day', '-1 day', 'utc')")
+    XCTAssertEqual(
+      DesktopChatTimestampFormat.SQLDayBounds.exclusiveEndAsUTC(daysAgo: 1),
+      "datetime('now', 'localtime', 'start of day', 'utc')")
+    XCTAssertEqual(
+      DesktopChatTimestampFormat.SQLDayBounds.exclusiveEndAsUTC(daysAgo: 0),
+      "datetime('now')")
+    XCTAssertTrue(DesktopChatTimestampFormat.SQLDayBounds.startAsUTC(daysAgo: 0).hasSuffix("'utc')"))
+    XCTAssertEqual(
+      DesktopChatTimestampFormat.SQLDayBounds.startAsUTC(daysAgo: -1),
+      DesktopChatTimestampFormat.SQLDayBounds.startAsUTC(daysAgo: 0))
+    XCTAssertEqual(
+      DesktopChatTimestampFormat.SQLDayBounds.exclusiveEndAsUTC(daysAgo: -1),
+      DesktopChatTimestampFormat.SQLDayBounds.exclusiveEndAsUTC(daysAgo: 0))
+  }
+
   func testCurrentTimePromptUsesOneExplicitInstantAndTimeZone() throws {
     let date = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-07-31T02:30:45Z"))
     let timeZone = try XCTUnwrap(TimeZone(identifier: "America/New_York"))
@@ -31,6 +86,17 @@ final class ChatPromptsTests: XCTestCase {
         "next-turn request such as \"request it\""
       )
     )
+  }
+
+  func testScreenReadRecallRoutesToScreenHistoryNotConversations() {
+    // Regression: a voice turn asking about a riddle the user had only *read* on screen
+    // called search_conversations, found nothing, and answered "no riddles mentioned".
+    let voice = DesktopCapabilityRegistry.realtimeSelfModelPrompt
+    XCTAssertTrue(voice.contains("lives in screen history, not conversations: use search_screen_history"))
+    XCTAssertTrue(voice.contains("search screen history before saying it was never mentioned"))
+
+    let desktopPrompt = ChatPromptBuilder.buildDesktopChat(userName: "Taylor")
+    XCTAssertTrue(desktopPrompt.contains("-> semantic_search over screen history, not conversation tools"))
   }
 
   func testOnboardingDefersWebResearchUntilAfterFileScanAndEmailAttempt() throws {

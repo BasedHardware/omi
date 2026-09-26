@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import copy
 import importlib.util
+import json
 import re
+import runpy
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,8 +12,15 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
+from config.jev_decisions import (
+    CONVERSATION_RELEVANCE_JEV_ENABLED_ENV,
+    MEMORY_OWNER_JEV_FLIP_ENABLED_ENV,
+)
+from scripts.verify_pusher_cohost_env_diff import parse_env_entries
+
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/validate-backend-runtime-env.py'
+RENDERER_SCRIPT = ROOT / 'scripts/render_backend_runtime_env.py'
 READINESS_PROPOSAL_ARGS = (
     ' --proposal-output "$FIRESTORE_PROPOSAL_PATH"'
     ' --source-commit "$FIRESTORE_SOURCE_COMMIT"'
@@ -33,12 +42,29 @@ def write_yaml(path: Path, payload: dict) -> None:
         yaml.safe_dump(payload, handle, sort_keys=False)
 
 
+def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
+    cloud_run = env_config.get('cloud_run') or {}
+    for raw_entry in (cloud_run.get('network') or {}).get('flags', {}).values():
+        if isinstance(raw_entry, dict) and isinstance(raw_entry.get('env_var'), str):
+            monkeypatch.setenv(raw_entry['env_var'], str(raw_entry.get('default', 'rendered-flag')))
+    for service in (cloud_run.get('services') or {}).values():
+        for raw_entry in (service.get('env') or {}).values():
+            if isinstance(raw_entry, dict) and isinstance(raw_entry.get('env_var'), str):
+                monkeypatch.setenv(raw_entry['env_var'], str(raw_entry.get('default', 'rendered-value')))
+    renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='runtime_env_state_test_renderer')
+    return renderer['_render_cloud_run_state'](env_config)
+
+
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
+        {"name": "FREE_TIER_LOCAL_PROCESSING", "value": "true"},
+        {"name": "FREE_TIER_LOCAL_PROCESSING_COHORT", "value": ""},
+        {"name": "FREE_TIER_EMERGENCY_STOP", "value": "false"},
         {"name": "DESKTOP_UPDATE_POINTERS_MODE", "value": "primary"},
         {"name": "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE", "value": "0.01"},
         {"name": "OMI_ENV_STAGE", "value": "dev"},
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
+        {"name": "HOSTED_SPEAKER_EMBEDDING_API_URL", "value": "http://diarizer.omiapi.com:80"},
         {"name": "OMI_LLM_GATEWAY_FEATURE_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "off"},
@@ -54,8 +80,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "GOOGLE_CLIENT_ID", "value": "fake-public-client-id"},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
-        {"name": "MEMORY_MODE", "value": "off"},
-        {"name": "MEMORY_V3_GET_ENABLED", "value": "false"},
+        {"name": "MEMORY_ENABLED", "value": "on"},
         {"name": "MEMORY_V3_CURSOR_SECRET_VERSION", "value": "dev-v1"},
         {"name": "MEMORY_CANONICAL_MAINTENANCE_ENABLED", "value": "false"},
 '''
@@ -63,7 +88,11 @@ def with_memory_env(payload: str) -> str:
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
         '        {"name": "GCP_LOCATION", "value": "us-central1"},\n'
-        '        {"name": "USE_VERTEX_AI", "value": "true"},\n' + memory_env,
+        '        {"name": "USE_VERTEX_AI", "value": "true"},\n'
+        # Direct-provider surfaces (desktop_proxy, omni_relay) write their attempts to the
+        # gateway ledger under this switch; the manifest declares it on the Cloud Run
+        # `backend` service, so the deployed state must carry it too.
+        '        {"name": "LLM_GATEWAY_ACCOUNTING_ENABLED", "value": "true"},\n' + memory_env,
     )
 
 
@@ -71,6 +100,90 @@ def with_backend_pusher_env(payload: str) -> str:
     return re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
         r'\1\n        {"name": "HOSTED_PUSHER_API_URL", "value": "http://pusher.omiapi.com"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
+def with_conversation_notes_v2_env(payload: str) -> str:
+    """The summary rollout flags are declared on every Cloud Run process_conversation host.
+
+    `backend` runs reprocess inline; `backend-sync` is the Cloud Tasks
+    conversation-finalization writer. A deploy that carries the flags on
+    backend-listen alone (or on backend but not backend-sync) is the drift
+    this catches.
+    """
+    flags = (
+        r'\1\n        {"name": "CONVERSATION_NOTES_V2_ENABLED", "value": "true"},'
+        r'\n        {"name": "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED", "value": "true"},'
+        r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},'
+        r'\n        {"name": "MEETING_NOTES_RICH_CONTEXT_ENABLED", "value": "true"},'
+        r'\n        {"name": "MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED", "value": "true"},'
+        r'\n        {"name": "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED", "value": "true"},'
+    )
+    payload = re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        flags + r'\n        {"name": "BASIC_PLAN_GATE_PROXY_EMBED_ENABLED", "value": "true"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+    return re.sub(
+        r'("backend-sync":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        flags,
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
+def with_meeting_receipt_reconciler_env(payload: str) -> str:
+    """The meeting-receipt reconciler flag is declared on the Cloud Run `backend` service too.
+
+    Only that service is asserted: `process_conversation` runs inline there for reprocess,
+    so a deploy that carries the flag on backend-listen alone is the drift this catches.
+    """
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "MEETING_RECEIPT_RECONCILER_ENABLED", "value": "false"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
+def with_wake_word_adjudication_env(payload: str) -> str:
+    """The wake-word adjudicator kill switch is declared on Cloud Run `backend` too.
+
+    Live finalization runs in backend-listen; reprocess runs process_conversation
+    inline here. A deploy that carries the flag on only one host cannot turn the
+    adjudicator off for both paths.
+    """
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "WAKE_WORD_ADJUDICATION_ENABLED", "value": "true"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
+def with_jev_flags_env(payload: str) -> str:
+    flags = (
+        r'\1\n        {"name": "CONVERSATION_RELEVANCE_JEV_ENABLED", "value": "true"},'
+        r'\n        {"name": "MEMORY_OWNER_JEV_FLIP_ENABLED", "value": "true"},'
+    )
+    payload = re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        flags,
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+    return re.sub(
+        r'("backend-sync":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        flags,
         payload,
         count=1,
         flags=re.DOTALL,
@@ -132,25 +245,93 @@ def with_parity_pack_env(payload: str) -> str:
 GOOGLE_OAUTH_SECRETS = '''\
         {"name": "MEMORY_V3_CURSOR_SECRET", "valueFrom": {"secretKeyRef": {"name": "MEMORY_V3_CURSOR_SECRET", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
-        {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},'''
+        {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
+        {"name": "GOOGLE_MAPS_API_KEY", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_MAPS_API_KEY", "key": "latest"}}},'''
+
+# POSTHOG_EVENTS_API_KEY is only declared for backend-integration in
+# deploy/runtime_env; deployed-state fixtures must scope it the same way.
+INTEGRATION_EVENTS_SECRET = (
+    '        {"name": "POSTHOG_EVENTS_API_KEY", "valueFrom": {"secretKeyRef": '
+    '{"name": "POSTHOG_EVENTS_API_KEY", "key": "latest"}}}'
+)
+
+
+def with_backend_integration_events_secret(payload: str) -> str:
+    marker = '"backend-integration": {'
+    head, sep, tail = payload.partition(marker)
+    assert sep, "fixture payload is missing a backend-integration block"
+    needle = (
+        '{"name": "GOOGLE_MAPS_API_KEY", "valueFrom": {"secretKeyRef": '
+        '{"name": "GOOGLE_MAPS_API_KEY", "key": "latest"}}}'
+    )
+    assert needle in tail, "backend-integration block is missing the shared secrets tail"
+    tail = tail.replace(needle, needle + ",\n" + INTEGRATION_EVENTS_SECRET, 1)
+    return head + sep + tail
+
+
+def with_belief_model_env(payload: str) -> str:
+    """Belief processing and its deployment-wide pause are declared together.
+
+    The belief model gates writes in process_conversation (backend-listen, pusher, and
+    the Cloud Run backend for reprocess), API memory create (backend-integration), and
+    the maintenance/sweep jobs. The dev overlay carries it on each of those hosts, so
+    the deployed-state fixture must carry it wherever MEMORY_ENABLED appears.
+    """
+    return payload.replace(
+        '{"name": "MEMORY_ENABLED", "value": "on"},',
+        '{"name": "MEMORY_ENABLED", "value": "on"},\n'
+        '        {"name": "MEMORY_BELIEF_MODEL_ENABLED", "value": "true"},\n'
+        '        {"name": "MEMORY_BELIEF_AUTOMATION_PAUSED", "value": "false"},',
+    )
+
+
+def with_screen_frame_egress_env(payload: str) -> str:
+    """Meeting-note screenshot egress is provisioned on the dev Cloud Run `backend` only.
+
+    The adjudication and read routes run there; the gate in
+    utils/screen_frames/availability.py needs the flag, the bucket, and the signer.
+    """
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "SCREEN_FRAME_EGRESS_ENABLED", "value": "true"},'
+        r'\n        {"name": "BUCKET_SCREEN_FRAMES", "value": "based-hardware-dev-screen-frames"},'
+        r'\n        {"name": "SCREEN_FRAME_SIGNING_SECRET", "valueFrom": {"secretKeyRef": {"name": "SCREEN_FRAME_SIGNING_SECRET", "key": "latest"}}},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
 
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
-        with_backend_pusher_env(
-            with_parity_pack_env(
-                with_listen_finalization_orphan_env(
-                    with_memory_env(with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload)))
+        with_wake_word_adjudication_env(
+            with_meeting_receipt_reconciler_env(
+                with_jev_flags_env(
+                    with_conversation_notes_v2_env(
+                        with_backend_pusher_env(
+                            with_parity_pack_env(
+                                with_listen_finalization_orphan_env(
+                                    with_belief_model_env(
+                                        with_memory_env(
+                                            with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload))
+                                        )
+                                    )
+                                )
+                            )
+                        )
+                    )
                 )
             )
         )
     )
-    return re.sub(
+    payload = with_screen_frame_egress_env(payload)
+    payload = re.sub(
         r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
         r'\1,\n' + GOOGLE_OAUTH_SECRETS.rstrip(','),
         payload,
         flags=re.MULTILINE,
     )
+    return with_backend_integration_events_secret(payload)
 
 
 def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Path, workflow_root: Path | None = None):
@@ -186,10 +367,14 @@ def memory_maintenance_job_block(*, mode: str = 'off', cron: str = 'false') -> d
             'OMI_LLM_GATEWAY_FEATURE_MODE': {'value': 'gateway', 'category': 'rollout'},
             'OMI_LLM_CHAT_AGENT_ROUTE': {'value': 'gateway', 'category': 'rollout'},
             'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION': {'value': 'false', 'category': 'rollout'},
-            'MEMORY_MODE': {'value': mode, 'category': 'memory_rollout'},
-            'MEMORY_V3_GET_ENABLED': {'value': 'false' if mode == 'off' else 'true', 'category': 'memory_rollout'},
+            'MEMORY_ENABLED': {'value': 'off' if mode == 'off' else 'on', 'category': 'memory_rollout'},
             'MEMORY_CANONICAL_MAINTENANCE_ENABLED': {'value': cron, 'category': 'memory_rollout'},
+            'MEMORY_CANONICAL_MAINTENANCE_FLEX': {
+                'value': 'true' if cron == 'true' else 'false',
+                'category': 'memory_rollout',
+            },
             'MEMORY_CANONICAL_CONSOLIDATION_ENABLED': {'value': 'true', 'category': 'memory_rollout'},
+            'OMI_BACKGROUND_FLEX_CAPABLE': {'value': 'false', 'category': 'memory_rollout'},
         },
         'secrets': {
             'SERVICE_ACCOUNT_JSON': {'secret': 'SERVICE_ACCOUNT_JSON', 'version': 'latest'},
@@ -217,6 +402,189 @@ def test_repo_prod_gke_values_match_manifest():
     errors = validator.validate_runtime_env(env='prod')
 
     assert errors == []
+
+
+def test_conversation_finalization_capability_inventory_explicitly_covers_pusher_in_every_environment():
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+
+    for env in ('dev', 'prod'):
+        pusher = manifest['environments'][env]['gke']['pusher']
+        assert set(pusher['capabilities']) == {
+            'conversation.finalize.persisted',
+            'memory.canonical.mutate',
+        }
+        assert pusher['env']['MEMORY_ENABLED']['value'] == 'on'
+        assert validator.validate_conversation_finalization_capabilities(env, manifest['environments'][env]) == []
+
+
+@pytest.fixture(scope='module')
+def cap_env():
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    return lambda env: (validator, copy.deepcopy(manifest['environments'][env]))
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_conversation_finalization_capability_contract_rejects_omitted_pusher(env, cap_env):
+    validator, env_config = cap_env(env)
+    del env_config['gke']['pusher']
+
+    errors = validator.validate_conversation_finalization_capabilities(env, env_config)
+
+    assert (
+        validator.ValidationError(
+            f'{env}/gke/pusher',
+            'required conversation-finalization deployable is omitted from runtime_env',
+        )
+        in errors
+    )
+
+
+def test_conversation_finalization_capability_contract_rejects_missing_declared_capability(cap_env):
+    validator, env_config = cap_env('prod')
+    env_config['gke']['pusher']['capabilities'].remove('memory.canonical.mutate')
+
+    errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
+
+    assert (
+        validator.ValidationError(
+            'prod/gke/pusher',
+            "missing required runtime capability 'memory.canonical.mutate'",
+        )
+        in errors
+    )
+
+
+@pytest.mark.parametrize('memory_enabled', [None, 'off', 'invalid'])
+def test_conversation_finalization_capability_contract_rejects_non_writable_memory_fence(memory_enabled, cap_env):
+    validator, env_config = cap_env('prod')
+    pusher_env = env_config['gke']['pusher']['env']
+    if memory_enabled is None:
+        del pusher_env['MEMORY_ENABLED']
+    else:
+        pusher_env['MEMORY_ENABLED']['value'] = memory_enabled
+
+    errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
+
+    assert any(
+        error.scope == 'prod/gke/pusher'
+        and error.message.startswith(
+            'capability memory.canonical.mutate requires the runtime memory fence to permit writes'
+        )
+        for error in errors
+    )
+
+
+def test_conversation_finalization_capability_contract_rejects_missing_summary_pipeline_flag_on_backend_sync(
+    cap_env,
+):
+    validator, env_config = cap_env('prod')
+    del env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']
+
+    errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
+
+    assert (
+        validator.ValidationError(
+            'prod/cloud_run/backend-sync',
+            'summary-pipeline flag CONVERSATION_NOTES_V2_ENABLED must be a literal on every conversation-finalization host',
+        )
+        in errors
+    )
+
+
+def test_conversation_finalization_capability_contract_rejects_summary_pipeline_flag_disagreement(cap_env):
+    validator, env_config = cap_env('prod')
+    env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = 'false'
+
+    errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
+
+    assert any(
+        error.scope == 'prod/conversation-finalization'
+        and 'CONVERSATION_NOTES_V2_ENABLED disagrees' in error.message
+        and 'prod/cloud_run/backend-sync' in error.message
+        for error in errors
+    )
+
+
+def test_conversation_finalization_capability_contract_rejects_normalized_but_not_identical_flag_literals(cap_env):
+    validator, env_config = cap_env('prod')
+    # ' TRUE ' resolves to the same runtime boolean as 'true', but the pusher
+    # co-host gate compares raw literals; admission must not be weaker than it.
+    env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ' TRUE '
+
+    errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
+
+    assert any(
+        error.scope == 'prod/conversation-finalization'
+        and 'CONVERSATION_NOTES_V2_ENABLED disagrees' in error.message
+        and "' TRUE '" in error.message
+        and "'true'" in error.message
+        for error in errors
+    )
+
+
+@pytest.mark.parametrize('literal', ['on', '1', 'yes', ' true ', 'True', ''])
+def test_basic_plan_gate_switch_admits_only_the_spellings_its_reader_accepts(literal, cap_env):
+    validator, env_config = cap_env('dev')
+    # utils.free_tier_basic_gates lights a gate only on an untrimmed,
+    # case-insensitive 'true'. A uniform 'on' would pass co-host agreement and
+    # the loose summary-flag literal set while every host ran ungated.
+    flag = 'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED'
+    env_config['gke']['backend-listen']['env'][flag]['value'] = literal
+    env_config['gke']['pusher']['env'][flag]['value'] = literal
+    env_config['cloud_run']['services']['backend']['env'][flag]['value'] = literal
+    env_config['cloud_run']['services']['backend-sync']['env'][flag]['value'] = literal
+
+    errors = validator.validate_conversation_finalization_capabilities('dev', env_config)
+
+    assert any(f"{flag} must be exactly 'true' or 'false'" in error.message for error in errors)
+
+
+def test_conversation_finalization_capability_contract_rejects_empty_summary_pipeline_flag_literal(cap_env):
+    validator, env_config = cap_env('prod')
+    # '' parses as literal-present so it dodges the omission check, and an
+    # all-empty fleet would also dodge disagreement — yet runtime treats it as
+    # False, the exact silent-off case this contract exists to reject.
+    env_config['gke']['backend-listen']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ''
+    env_config['gke']['pusher']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ''
+    env_config['cloud_run']['services']['backend']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ''
+    env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ''
+
+    errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
+
+    assert any(
+        error.scope == 'prod/cloud_run/backend-sync'
+        and 'CONVERSATION_NOTES_V2_ENABLED must be an explicit boolean literal' in error.message
+        for error in errors
+    )
+    assert not any('disagrees' in error.message for error in errors)
+
+
+def test_conversation_finalization_capability_contract_rejects_unknown_and_uncovered_declarations(cap_env):
+    validator, env_config = cap_env('dev')
+    env_config['gke']['pusher']['capabilities'].append('conversation.finalize.unknown')
+    env_config['gke']['uncovered-finalizer'] = {
+        'capabilities': ['conversation.finalize.persisted'],
+        'env': {'MEMORY_ENABLED': {'value': 'on'}},
+    }
+
+    errors = validator.validate_conversation_finalization_capabilities('dev', env_config)
+
+    assert (
+        validator.ValidationError(
+            'dev/gke/pusher',
+            "unknown runtime capability 'conversation.finalize.unknown'",
+        )
+        in errors
+    )
+    assert (
+        validator.ValidationError(
+            'dev/gke/uncovered-finalizer',
+            'declares conversation-finalization capability but is not covered by the explicit deployable roster',
+        )
+        in errors
+    )
 
 
 def test_prod_account_deletion_dispatch_contract_rejects_missing_or_inline_profile():
@@ -274,6 +642,25 @@ def test_prod_listen_finalization_contract_requires_the_dedicated_worker_binding
         ) in validator._validate_listen_finalization_dispatch_contract('prod', prod)
     finally:
         backend_env['LISTEN_FINALIZATION_TASKS_HANDLER_URL'] = missing_entry
+
+
+def test_listen_finalization_contract_requires_maps_key_on_backend_sync():
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+
+    for env in ('dev', 'prod'):
+        env_config = manifest['environments'][env]
+        secrets = env_config['cloud_run']['services']['backend-sync']['secrets']
+        assert secrets['GOOGLE_MAPS_API_KEY'] == {'secret': 'GOOGLE_MAPS_API_KEY', 'version': 'latest'}
+
+        missing = secrets.pop('GOOGLE_MAPS_API_KEY')
+        try:
+            assert validator.ValidationError(
+                f'{env}/cloud_run/backend-sync',
+                'missing required listen-finalization secret GOOGLE_MAPS_API_KEY',
+            ) in validator._validate_listen_finalization_dispatch_contract(env, env_config)
+        finally:
+            secrets['GOOGLE_MAPS_API_KEY'] = missing
 
 
 def test_gke_config_map_contract_rejects_missing_config_map(tmp_path):
@@ -678,22 +1065,22 @@ def test_firestore_readiness_contract_rejects_backend_deployment_credentials(wor
     assert any('must not receive backend deployment credentials' in error.message for error in errors)
 
 
-def test_repo_prod_rendered_cloud_run_state_matches_manifest():
+def test_repo_prod_rendered_cloud_run_state_matches_manifest(monkeypatch):
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
     env_config = validator._get_env_config(manifest, 'prod')
-    rendered_state = validator._build_rendered_cloud_run_state(env_config)
+    rendered_state = render_cloud_run_state(env_config, monkeypatch)
 
     errors = validator._validate_cloud_run(env_config, rendered_state, strict_provisional=False)
 
     assert errors == []
 
 
-def test_dev_cloud_run_pusher_contract_rejects_legacy_and_non_listener_bindings():
+def test_dev_cloud_run_pusher_contract_rejects_legacy_and_non_listener_bindings(monkeypatch):
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
     env_config = validator._get_env_config(manifest, 'dev')
-    rendered_state = validator._build_rendered_cloud_run_state(env_config)
+    rendered_state = render_cloud_run_state(env_config, monkeypatch)
 
     backend_env = rendered_state['services']['backend']['env']
     next(entry for entry in backend_env if entry['name'] == 'HOSTED_PUSHER_API_URL')[
@@ -724,15 +1111,25 @@ def test_dev_cloud_run_pusher_contract_rejects_legacy_and_non_listener_bindings(
     ]
 
 
-def test_dev_cloud_run_pusher_contract_rejects_job_binding():
+def test_dev_cloud_run_pusher_contract_rejects_job_binding(monkeypatch):
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
     env_config = validator._get_env_config(manifest, 'dev')
-    rendered_state = validator._build_rendered_cloud_run_state(env_config)
+    rendered_state = render_cloud_run_state(env_config, monkeypatch)
+    rendered_state['jobs'] = {
+        'notifications-job': {
+            'env': [
+                {
+                    'name': 'HOSTED_PUSHER_API_URL',
+                    'value': 'http://internal-alb.pusher-ep-dev.il7.us-central1.lb.based-hardware-dev.internal',
+                }
+            ]
+        }
+    }
     rendered_state['jobs']['notifications-job']['env'].append(
         {
-            'name': 'HOSTED_PUSHER_API_URL',
-            'value': 'http://internal-alb.pusher-ep-dev.il7.us-central1.lb.based-hardware-dev.internal',
+            'name': 'OMI_BACKGROUND_FLEX_CAPABLE',
+            'value': 'true',
         }
     )
 
@@ -940,7 +1337,7 @@ def test_deployment_stt_models_must_match_the_central_serving_policy():
         ),
         validator.ValidationError(
             'prod/gke/backend-listen',
-            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'dg-nova-3,modulate-velma-2,parakeet', got 'modulate-velma-2'",
+            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'modulate-velma-2,soniox,dg-nova-3,parakeet', got 'modulate-velma-2'",
         ),
     ]
 
@@ -959,6 +1356,10 @@ def test_repo_prod_manifest_rejects_noncanonical_model_order_for_every_surface(t
                     entry['value'] = (
                         'parakeet,modulate-velma-2' if key == 'STT_SERVICE_MODELS' else 'modulate-velma-2,parakeet'
                     )
+                    connect_order = (service.get('env') or {}).get('STT_CONNECT_ORDER_FROM_CONFIG') or {}
+                    # A service that connects in configured order owns its live order.
+                    if key == 'STT_SERVICE_MODELS' and connect_order.get('value') == 'true':
+                        continue
                     changed_scopes.append((f'prod/{platform}/{service_name}', key))
 
     path = tmp_path / 'runtime_env.yaml'
@@ -1115,19 +1516,25 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
+        {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
-        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}}
+        {"name": "METRICS_SECRET", "valueFrom": {"secretKeyRef": {"name": "METRICS_SECRET"}}},
+        {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET", "valueFrom": {"secretKeyRef": {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET"}}},
+        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}},
       ]
     },
     "backend-sync": {
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
@@ -1142,6 +1549,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
@@ -1351,9 +1759,15 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                                     'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omiapi.com'},
                                     'STT_PRERECORDED_MODEL': {'value': 'parakeet,modulate-velma-2'},
                                     'CUSTOM_MANIFEST_ONLY_MARKER': {'value': 'present'},
+                                    'PROMETHEUS_SIDECAR_PORT': {'value': '9090'},
                                 },
                                 'secrets': {
                                     **STANDARD_CLOUD_RUN_SECRETS,
+                                    'METRICS_SECRET': {'secret': 'METRICS_SECRET', 'version': 'latest'},
+                                    'LIFECYCLE_EMAIL_SIGNING_SECRET': {
+                                        'secret': 'LIFECYCLE_EMAIL_SIGNING_SECRET',
+                                        'version': 'latest',
+                                    },
                                 },
                             }
                         },
@@ -1381,6 +1795,9 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
+        {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
@@ -1388,13 +1805,16 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET"}}},
-        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}}
+        {"name": "METRICS_SECRET", "valueFrom": {"secretKeyRef": {"name": "METRICS_SECRET"}}},
+        {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET", "valueFrom": {"secretKeyRef": {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET"}}},
+        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}},
       ]
     },
     "backend-sync": {
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
@@ -1409,6 +1829,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
@@ -1443,26 +1864,32 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
+        {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
+        {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
-        {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON", "key": "1"}}},
+        {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "1"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET", "key": "latest"}}},
-        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "key": "latest"}}}
+        {"name": "METRICS_SECRET", "valueFrom": {"secretKeyRef": {"name": "METRICS_SECRET"}}},
+        {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET", "valueFrom": {"secretKeyRef": {"name": "LIFECYCLE_EMAIL_SIGNING_SECRET"}}},
+        {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "key": "latest"}}},
       ]
     },
     "backend-sync": {
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
-        {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON", "key": "latest"}}},
+        {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET", "key": "latest"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "key": "latest"}}}
       ]
@@ -1471,12 +1898,13 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
+        {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
         {"name": "MEMORY_TYPESENSE_COLLECTION", "value": "canonical_memory_atoms"},
-        {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON", "key": "latest"}}},
+        {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
         {"name": "ENCRYPTION_SECRET", "valueFrom": {"secretKeyRef": {"name": "ENCRYPTION_SECRET", "key": "latest"}}},
         {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "key": "latest"}}}
       ]
@@ -1493,8 +1921,8 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
     assert len(errors) == 1
     assert errors[0].scope == 'cloud_run/backend'
     assert errors[0].message == (
-        "secret binding SERVICE_ACCOUNT_JSON mismatch: "
-        "expected {'secret': 'SERVICE_ACCOUNT_JSON', 'version': 'latest'}"
+        "secret binding POSTHOG_PROJECT_API_KEY mismatch: "
+        "expected {'secret': 'POSTHOG_PROJECT_API_KEY', 'version': 'latest'}"
     )
 
 
@@ -1659,11 +2087,16 @@ def test_backend_listen_chart_only_workflow_preserves_runtime_project():
     assert workflow_text.count('--set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }}') == 2
 
 
-def test_repo_rendered_cloud_run_matches_manifest():
+def test_repo_rendered_cloud_run_artifact_matches_manifest(tmp_path, monkeypatch):
     validator = load_validator()
-
-    assert validator.validate_runtime_env(env='dev', check_rendered_cloud_run=True) == []
-    assert validator.validate_runtime_env(env='prod', check_rendered_cloud_run=True) == []
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    for env in ('dev', 'prod'):
+        state_path = tmp_path / f'{env}-cloud-run-state.json'
+        state_path.write_text(
+            json.dumps(render_cloud_run_state(validator._get_env_config(manifest, env), monkeypatch)),
+            encoding='utf-8',
+        )
+        assert validator.validate_runtime_env(env=env, cloud_run_state_path=state_path) == []
 
 
 # Every service that deploys the backend image (`uvicorn main:app`) runs the
@@ -1713,7 +2146,7 @@ def test_scheduler_runtime_surfaces_declare_orphan_stale_setting(env):
         ), f'{env}/{section}/{service} must classify the recovery setting as reliability'
 
 
-def test_parakeet_selected_without_endpoint_is_rejected_for_all_cloud_run_validation_modes(tmp_path):
+def test_parakeet_selected_without_endpoint_is_rejected_for_rendered_cloud_run_state(tmp_path, monkeypatch):
     validator = load_validator()
     manifest = copy.deepcopy(validator._load_yaml(ROOT / 'deploy/runtime_env.yaml'))
     services = manifest['environments']['dev']['cloud_run']['services']
@@ -1732,8 +2165,17 @@ def test_parakeet_selected_without_endpoint_is_rejected_for_all_cloud_run_valida
 
     manifest_path = tmp_path / 'runtime_env.yaml'
     write_yaml(manifest_path, manifest)
+    state_path = tmp_path / 'cloud-run-state.json'
+    state_path.write_text(
+        json.dumps(render_cloud_run_state(manifest['environments']['dev'], monkeypatch)),
+        encoding='utf-8',
+    )
 
-    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path, check_rendered_cloud_run=True)
+    errors = validator.validate_runtime_env(
+        env='dev',
+        manifest_path=manifest_path,
+        cloud_run_state_path=state_path,
+    )
 
     missing_endpoint_messages = {
         'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL',
@@ -1767,6 +2209,93 @@ def test_memory_maintenance_job_contract_passes_for_repo_manifest():
     validator = load_validator()
     assert validator.validate_runtime_env(env='dev') == []
     assert validator.validate_runtime_env(env='prod') == []
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_memory_maintenance_job_contract_rejects_daily_sweep_host_and_requires_posthog(env, tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    job = manifest['environments'][env]['cloud_run']['jobs']['memory-maintenance-job']
+    job['env']['MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED'] = {'value': 'true'}
+    job['env']['POSTHOG_HOST'] = {'value': 'https://app.posthog.com'}
+    del job['secrets']['POSTHOG_PROJECT_API_KEY']
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+
+    errors = validator.validate_runtime_env(env=env, manifest_path=path)
+    messages = {error.message for error in errors}
+    assert 'env MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED belongs only on daily-memory-sweep-job' in messages
+    assert 'env POSTHOG_HOST belongs only on daily-memory-sweep-job' in messages
+    assert 'missing secret POSTHOG_PROJECT_API_KEY; ledger drain evaluates jit-processing-v1' in messages
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_jit_admission_surfaces_require_posthog_and_listen_data_plane(env):
+    validator = load_validator()
+    assert validator.validate_runtime_env(env=env) == []
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    environment = manifest['environments'][env]
+    listen_env = environment['gke']['backend-listen']['env']
+    expected_data_plane = 'based-hardware'
+    assert listen_env['OMI_FIRESTORE_DATA_PLANE_PROJECT']['value'] == expected_data_plane
+    assert listen_env['POSTHOG_PROJECT_API_KEY']['secret']['key'] == 'POSTHOG_PROJECT_API_KEY'
+    maintenance_secrets = environment['cloud_run']['jobs']['memory-maintenance-job']['secrets']
+    assert maintenance_secrets['POSTHOG_PROJECT_API_KEY'] == {
+        'secret': 'POSTHOG_PROJECT_API_KEY',
+        'version': 'latest',
+    }
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_jit_admission_surface_omission_fails_compose(env, tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    listen_env = manifest['environments'][env]['gke']['backend-listen']['env']
+    del listen_env['POSTHOG_PROJECT_API_KEY']
+    del listen_env['OMI_FIRESTORE_DATA_PLANE_PROJECT']
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+
+    errors = validator.validate_runtime_env(env=env, manifest_path=path)
+    messages = {error.message for error in errors}
+    assert 'missing secret POSTHOG_PROJECT_API_KEY; live finalization evaluates jit-processing-v1' in messages
+    assert "OMI_FIRESTORE_DATA_PLANE_PROJECT must be 'based-hardware'" in messages
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_desktop_backend_compose_requires_vertex_pt_env(env):
+    validator = load_validator()
+    errors = validator.validate_runtime_env(env=env)
+    assert errors == []
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    desktop_env = manifest['environments'][env]['desktop_backend']['env']
+    expected_project = 'based-hardware' if env == 'prod' else 'based-hardware-dev'
+    assert desktop_env['USE_VERTEX_AI']['value'] == 'true'
+    assert desktop_env['GOOGLE_CLOUD_PROJECT']['value'] == expected_project
+    assert desktop_env['GCP_LOCATION']['value'] == 'us-central1'
+    assert desktop_env['PROMETHEUS_SIDECAR_PORT']['value'] == '9090'
+    desktop_secrets = manifest['environments'][env]['desktop_backend']['secrets']
+    assert desktop_secrets['METRICS_SECRET'] == {'secret': 'METRICS_SECRET', 'version': 'latest'}
+    assert desktop_secrets['POSTHOG_PROJECT_API_KEY'] == {
+        'secret': 'POSTHOG_PROJECT_API_KEY',
+        'version': 'latest',
+    }
+    backend = manifest['environments'][env]['cloud_run']['services']['backend']
+    assert backend['env']['PROMETHEUS_SIDECAR_PORT']['value'] == '9090'
+    assert backend['secrets']['METRICS_SECRET'] == {'secret': 'METRICS_SECRET', 'version': 'latest'}
+
+
+def test_desktop_backend_vertex_pt_omission_fails_loud(tmp_path):
+    validator = load_validator()
+    manifest = copy.deepcopy(validator._load_yaml(ROOT / 'deploy/runtime_env.yaml'))
+    del manifest['environments']['prod']['desktop_backend']
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+
+    errors = validator.validate_runtime_env(env='prod', manifest_path=path)
+    messages = [error.message for error in errors if error.scope == 'prod/desktop_backend']
+    assert messages
+    assert any('Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~2027-05-28' in message for message in messages)
 
 
 def test_memory_maintenance_contract_rejects_retired_promotion_envs_when_new_contract_is_present():
@@ -1876,9 +2405,11 @@ def test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_c
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
     notifications_job = manifest['environments']['dev']['cloud_run']['jobs']['notifications-job']
     forbidden_env = {
+        'MEMORY_ENABLED',
         'MEMORY_MODE',
         'MEMORY_V3_GET_ENABLED',
         'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
+        'MEMORY_CANONICAL_MAINTENANCE_FLEX',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
         'MEMORY_TYPESENSE_COLLECTION',
         'TYPESENSE_HOST',
@@ -1907,16 +2438,12 @@ def test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_c
     assert expected <= actual
 
 
-def test_memory_maintenance_job_contract_rejects_read_mode_without_job_cron(tmp_path):
+def test_memory_maintenance_job_contract_rejects_enabled_surface_without_enabled_job(tmp_path):
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
     job = manifest['environments']['prod']['cloud_run']['jobs']['memory-maintenance-job']
-    # Simulate forgetting to enable the job while flipping a request-path surface to read.
-    manifest['environments']['prod']['cloud_run']['services']['backend']['env']['MEMORY_MODE'] = {
-        'value': 'read',
-        'category': 'memory_rollout',
-    }
-    job['env']['MEMORY_MODE'] = {'value': 'off', 'category': 'memory_rollout'}
+    # A request-path surface stays on while the maintenance job is off.
+    job['env']['MEMORY_ENABLED'] = {'value': 'off', 'category': 'memory_rollout'}
     job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'false', 'category': 'memory_rollout'}
 
     path = tmp_path / 'runtime_env.yaml'
@@ -1924,6 +2451,16 @@ def test_memory_maintenance_job_contract_rejects_read_mode_without_job_cron(tmp_
     errors = validator.validate_runtime_env(env='prod', manifest_path=path)
     messages = [error.message for error in errors]
     assert any('requires memory-maintenance-job' in message for message in messages)
+
+
+def test_memory_maintenance_job_contract_allows_write_without_job_cron():
+    validator = load_validator()
+    env_config = copy.deepcopy(validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')['environments']['prod'])
+    job = env_config['cloud_run']['jobs']['memory-maintenance-job']
+    job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'false', 'category': 'memory_rollout'}
+    job['env']['MEMORY_CANONICAL_MAINTENANCE_FLEX'] = {'value': 'false', 'category': 'memory_rollout'}
+    errors = validator._validate_memory_maintenance_job_contract('prod', env_config)
+    assert errors == []
 
 
 def test_memory_maintenance_job_contract_rejects_missing_job(tmp_path):
@@ -2004,6 +2541,28 @@ def test_memory_maintenance_job_contract_rejects_pinned_gateway_endpoint_when_en
     )
 
 
+def test_memory_maintenance_job_contract_allows_prod_on_with_job_cron():
+    validator = load_validator()
+    env_config = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')['environments']['prod']
+    errors = validator._validate_memory_maintenance_job_contract('prod', env_config)
+    assert errors == []
+    job = env_config['cloud_run']['jobs']['memory-maintenance-job']
+    assert job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED']['value'] == 'true'
+    assert job['env']['MEMORY_CANONICAL_MAINTENANCE_FLEX']['value'] == 'true'
+
+
+def test_memory_maintenance_job_contract_requires_flex_when_cron_enabled():
+    validator = load_validator()
+    env_config = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')['environments']['dev']
+    job = env_config['cloud_run']['jobs']['memory-maintenance-job']
+    job['env']['MEMORY_CANONICAL_MAINTENANCE_FLEX'] = {'value': 'false', 'category': 'memory_rollout'}
+    errors = validator._validate_memory_maintenance_job_contract('dev', env_config)
+    assert any(
+        'MEMORY_CANONICAL_MAINTENANCE_FLEX must be true while canonical maintenance is enabled' in error.message
+        for error in errors
+    )
+
+
 def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
     workflow = ROOT.parent / '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
     text = workflow.read_text(encoding='utf-8')
@@ -2011,7 +2570,10 @@ def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
     assert 'branches: [ "main" ]' in text
     assert "backend/**" in text
     assert 'Dockerfile.memory_maintenance_job' in text
-    assert "id-token: 'write'" not in text
+    # Development-only lane: GitHub WIF as the dev deployer, never a JSON key.
+    assert "id-token: 'write'" in text
+    assert 'omi-gha-deploy-dev/providers/github' in text
+    assert 'secrets.GCP_CREDENTIALS' not in text
     assert 'id: gateway-serving' in text
     assert '--lane omi:auto:memory-l2' in text
     assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in text
@@ -2117,7 +2679,7 @@ def test_sync_backfill_co_deploy_is_required_per_workflow(tmp_path):
     )
 
 
-_ILB_ENV_VARS = ['HOSTED_PARAKEET_API_URL', 'HOSTED_TRANSLATION_API_URL']
+_ILB_ENV_VARS = ['HOSTED_PARAKEET_API_URL', 'HOSTED_TRANSLATION_API_URL', 'HOSTED_SPEAKER_EMBEDDING_API_URL']
 
 
 @pytest.mark.parametrize('env_name', ['dev', 'prod'])
@@ -2151,6 +2713,72 @@ def test_repo_ilb_endpoints_use_http_scheme(env_name):
             _check_service('gke', svc_name, svc_cfg)
 
     assert violations == [], f'ILB endpoints must use http:// (no TLS): {violations}'
+
+
+def test_speaker_embedding_missing_on_sync_host_fails_admission():
+    validator = load_validator()
+    env_config = {
+        'gke': {
+            'backend-listen': {
+                'env': {
+                    'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omiapi.com'},
+                    'HOSTED_SPEAKER_EMBEDDING_API_URL': {'value': 'http://diarizer.omiapi.com:80'},
+                },
+            }
+        },
+        'cloud_run': {
+            'services': {
+                'backend-sync': {
+                    'env': {'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omiapi.com'}},
+                },
+            }
+        },
+    }
+
+    errors = validator.validate_speaker_embedding_hosts('dev', env_config)
+
+    assert errors == [
+        validator.ValidationError(
+            'dev/cloud_run/backend-sync',
+            'HOSTED_SPEAKER_EMBEDDING_API_URL must be a non-empty literal on every speaker-ID host',
+        )
+    ]
+
+
+def test_speaker_embedding_cluster_local_url_rejected_on_cloud_run():
+    validator = load_validator()
+    env_config = {
+        'gke': {
+            'backend-listen': {
+                'env': {'HOSTED_SPEAKER_EMBEDDING_API_URL': {'value': 'http://diarizer.omiapi.com:80'}},
+            }
+        },
+        'cloud_run': {
+            'services': {
+                'backend-sync': {
+                    'env': {
+                        'HOSTED_SPEAKER_EMBEDDING_API_URL': {
+                            'value': 'http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080',
+                        }
+                    }
+                },
+            }
+        },
+    }
+
+    errors = validator.validate_speaker_embedding_hosts('prod', env_config)
+    messages = [error.message for error in errors]
+    assert any('not cluster-local DNS' in message for message in messages)
+    assert any('must match gke/backend-listen' in message for message in messages)
+
+
+@pytest.mark.parametrize('env_name', ['dev', 'prod'])
+def test_composed_manifest_declares_speaker_embedding_on_sync_hosts(env_name):
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    env_config = validator._get_env_config(manifest, env_name)
+
+    assert validator.validate_speaker_embedding_hosts(env_name, env_config) == []
 
 
 # --- live Cloud Run check validates services only (this pipeline deploys no Cloud Run jobs) ---
@@ -2188,3 +2816,135 @@ def test_fetch_live_cloud_run_state_validates_services_only(monkeypatch):
     assert 'jobs' not in state  # no live job state → consumer skips job env checks
     assert 'backend' in state['services']  # services are still fetched + validated
     assert any('services' in cmd for cmd in described)
+
+
+def test_live_chain_ramp_accepts_policy_tokens_only_when_explicitly_enabled():
+    from scripts.runtime_env_validation.manifest import _validate_stt_serving_model_policy
+
+    env_map = {
+        'STT_SERVICE_MODELS': {'value': 'parakeet-window,soniox'},
+        'STT_CONNECT_ORDER_FROM_CONFIG': {'value': 'true'},
+    }
+    config = {'gke': {'backend-listen': {'env': env_map}}}
+    assert _validate_stt_serving_model_policy('prod', config) == []
+    env_map['STT_CONNECT_ORDER_FROM_CONFIG']['value'] = 'false'
+    assert _validate_stt_serving_model_policy('prod', config)
+    env_map['STT_CONNECT_ORDER_FROM_CONFIG']['value'] = 'true'
+    env_map['STT_SERVICE_MODELS']['value'] = 'unapproved-provider,soniox'
+    assert _validate_stt_serving_model_policy('prod', config)
+
+
+@pytest.mark.parametrize('binding', [{'env_var': 'COHORT', 'default': ''}, {'env_var': 'COHORT'}])
+@pytest.mark.parametrize('actual', [{}, {'value': ''}, {'valueFrom': {'secretKeyRef': {'name': 'COHORT'}}}])
+def test_only_explicit_optional_empty_defaults_admit_empty_values(binding, actual):
+    validator = load_validator()
+    errors = validator._validate_env_entries(
+        scope='fixture',
+        expected={'COHORT': binding},
+        actual={'COHORT': actual},
+        strict_provisional=True,
+    )
+    assert (errors == []) is (binding.get('default') == '' and actual == {'value': ''})
+
+
+@pytest.mark.parametrize('cohort', ['uid:', 'pct:100', 'uid:fixture-a,'])
+def test_rendered_cloud_run_state_rejects_invalid_free_tier_cohort(monkeypatch, cohort):
+    validator = load_validator()
+    config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['dev'])
+    state = render_cloud_run_state(config, monkeypatch)
+    for entry in state['services']['backend-sync-backfill']['env']:
+        if entry['name'] == 'FREE_TIER_LOCAL_PROCESSING_COHORT':
+            entry['value'] = cohort
+    errors = validator._validate_cloud_run(config, state, strict_provisional=False)
+    assert len(errors) == 1
+    assert errors[0].scope == 'cloud_run/backend-sync-backfill'
+    assert 'FREE_TIER_LOCAL_PROCESSING_COHORT' in errors[0].message
+
+
+_JEV_PROCESS_CONVERSATION_HOSTS = {
+    'gke/backend-listen',
+    'gke/pusher',
+    'cloud_run/backend',
+    'cloud_run/backend-sync',
+}
+
+
+def _manifest_env_blocks(env_config: dict) -> list[tuple[str, dict]]:
+    blocks: list[tuple[str, dict]] = []
+    for name, service in (env_config.get('gke') or {}).items():
+        if name == 'config_map':
+            continue
+        blocks.append((f'gke/{name}', (service or {}).get('env') or {}))
+    cloud_run = env_config.get('cloud_run') or {}
+    for name, service in (cloud_run.get('services') or {}).items():
+        blocks.append((f'cloud_run/{name}', (service or {}).get('env') or {}))
+    for name, job in (cloud_run.get('jobs') or {}).items():
+        blocks.append((f'cloud_run/jobs/{name}', (job or {}).get('env') or {}))
+    blocks.append(('desktop_backend', (env_config.get('desktop_backend') or {}).get('env') or {}))
+    return blocks
+
+
+def test_jev_rollout_flags_cover_only_process_conversation_hosts(monkeypatch):
+    jev_flags = (CONVERSATION_RELEVANCE_JEV_ENABLED_ENV, MEMORY_OWNER_JEV_FLIP_ENABLED_ENV)
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+
+    for env_name in ('dev', 'prod'):
+        env_config = validator._get_env_config(manifest, env_name)
+        for scope, env_block in _manifest_env_blocks(env_config):
+            for flag in jev_flags:
+                entry = env_block.get(flag)
+                if env_name == 'dev' and scope in _JEV_PROCESS_CONVERSATION_HOSTS:
+                    assert entry == {'value': 'true', 'category': 'rollout'}, (
+                        f'{env_name}/{scope} runs process_conversation; {flag} must be '
+                        f"an explicit 'true' rollout flag, got {entry!r}"
+                    )
+                else:
+                    assert entry is None, (
+                        f'{env_name}/{scope} must not carry {flag} '
+                        '(Jev flags belong only to the four dev process_conversation hosts)'
+                    )
+
+    for chart_path in (
+        ROOT / 'charts/backend-listen/dev_omi_backend_listen_values.yaml',
+        ROOT / 'charts/pusher/dev_omi_pusher_values.yaml',
+    ):
+        text = chart_path.read_text(encoding='utf-8')
+        entries = parse_env_entries(text)
+        for flag in jev_flags:
+            assert text.count(f'- name: {flag}\n') == 1, f'{chart_path.name} must declare {flag} exactly once'
+            assert entries[flag].value == 'true', f'{chart_path.name} {flag} must be the literal true'
+        gateway_entry = entries.get('OMI_LLM_GATEWAY_URL')
+        assert (
+            gateway_entry is not None and gateway_entry.value
+        ), f'{chart_path.name} must pin a non-empty dev gateway URL for the Jev client'
+    for chart_path in (
+        ROOT / 'charts/backend-listen/prod_omi_backend_listen_values.yaml',
+        ROOT / 'charts/pusher/prod_omi_pusher_values.yaml',
+    ):
+        entries = parse_env_entries(chart_path.read_text(encoding='utf-8'))
+        for flag in jev_flags:
+            assert flag not in entries, f'{chart_path.name} must not carry {flag}'
+
+    dev_config = validator._get_env_config(manifest, 'dev')
+    for service_name in ('backend-listen', 'pusher'):
+        gateway_entry = (dev_config['gke'][service_name].get('env') or {}).get('OMI_LLM_GATEWAY_URL') or {}
+        assert gateway_entry.get('value'), f'dev/gke/{service_name} must declare a non-empty OMI_LLM_GATEWAY_URL'
+    for service_name in ('backend', 'backend-sync'):
+        gateway_entry = (dev_config['cloud_run']['services'][service_name].get('env') or {}).get(
+            'OMI_LLM_GATEWAY_URL'
+        ) or {}
+        assert (
+            gateway_entry.get('env_var') == 'OMI_LLM_GATEWAY_URL'
+        ), f'dev/cloud_run/{service_name} must source OMI_LLM_GATEWAY_URL from the auto-dev env injection'
+        assert 'value' not in gateway_entry
+
+    render_cloud_run_state(dev_config, monkeypatch)
+    monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://jev-gateway-render.invalid:8080')
+    renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='runtime_env_state_test_renderer')
+    rendered = renderer['_render_cloud_run_state'](dev_config)
+    for service_name in ('backend', 'backend-sync'):
+        rendered_env = {entry['name']: entry.get('value') for entry in rendered['services'][service_name]['env']}
+        assert rendered_env['OMI_LLM_GATEWAY_URL'] == 'http://jev-gateway-render.invalid:8080'
+        for flag in jev_flags:
+            assert rendered_env[flag] == 'true'

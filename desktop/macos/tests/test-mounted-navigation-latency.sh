@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# discovery-skip: needs a running app's automation token — run it directly against a live app
 set -euo pipefail
 
 PORT="${1:-${OMI_AUTOMATION_PORT:-47777}}"

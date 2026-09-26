@@ -6,9 +6,23 @@ export interface StreamingTranscriber {
 }
 
 export function parakeetWsUrl(apiUrl: string, sampleRate = 16000): string {
-  let base = apiUrl.trim().replace(/\/+$/, '');
-  base = base.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
-  return `${base}/v3/stream?sample_rate=${sampleRate}`;
+  const trimmed = apiUrl.trim();
+  const rawUrl = /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(trimmed)
+    ? trimmed
+    : `https://${trimmed}`;
+  const parsed = new URL(rawUrl);
+  if (parsed.protocol === 'http:' || parsed.protocol === 'ws:') {
+    parsed.protocol = 'ws:';
+  } else if (parsed.protocol === 'https:' || parsed.protocol === 'wss:') {
+    parsed.protocol = 'wss:';
+  } else {
+    throw new TypeError(`Unsupported Parakeet API URL protocol: ${parsed.protocol}`);
+  }
+  const cleanPath = parsed.pathname.replace(/\/+$/, '');
+  parsed.pathname = `${cleanPath}/v3/stream`.replace(/^\/+/, '/');
+  parsed.searchParams.set('sample_rate', sampleRate.toString());
+  parsed.hash = '';
+  return parsed.toString();
 }
 
 export function deepgramWsUrl(sampleRate = 16000): string {
@@ -24,6 +38,8 @@ export function createDeepgramTranscriber(opts: {
   /** Header-capable authenticated WebSocket factory (or an authenticated proxy).
    *  The factory owns Deepgram authentication so credentials never enter the URL. */
   createWebSocket: (url: string) => WebSocket;
+  /** How long Stop waits for Deepgram to close after CloseStream. Default 5s. */
+  drainTimeoutMs?: number;
 }): StreamingTranscriber {
   if (!opts.createWebSocket) throw new Error('Deepgram requires createWebSocket');
   const url = deepgramWsUrl(opts.sampleRate ?? 16000);
@@ -41,7 +57,39 @@ export function createDeepgramTranscriber(opts: {
       if (ws.readyState === 1) ws.send(chunk as any);
     },
     stop() {
-      try { ws.close(); } catch { /* ignore */ }
+      let sentClose = false;
+      try {
+        if (ws.readyState === 1) {
+          ws.send(JSON.stringify({ type: 'CloseStream' }));
+          sentClose = true;
+        }
+      } catch {
+        // CloseStream is best-effort; still tear down the socket.
+      }
+
+      let finished = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        if (timer !== undefined) clearTimeout(timer);
+        try {
+          ws.close();
+        } catch { /* ignore */ }
+      };
+
+      if (!sentClose) {
+        finish();
+        return;
+      }
+
+      const drainTimeoutMs = opts.drainTimeoutMs ?? 5000;
+      timer = setTimeout(finish, drainTimeoutMs);
+      const prevClose = ws.onclose;
+      ws.onclose = (ev) => {
+        finish();
+        if (typeof prevClose === 'function') prevClose.call(ws, ev);
+      };
     },
   };
 }
@@ -51,12 +99,18 @@ export function createParakeetTranscriber(opts: {
   sampleRate?: number;
   onTranscript: TranscriptHandler;
   WebSocketImpl?: typeof WebSocket;
+  /** How long Stop waits after finalize before closing. Default 5s. */
+  drainTimeoutMs?: number;
 }): StreamingTranscriber {
   const WS = opts.WebSocketImpl ?? WebSocket;
   const url = parakeetWsUrl(opts.apiUrl, opts.sampleRate ?? 16000);
   const ws = new WS(url);
   ws.binaryType = 'arraybuffer';
   let ready = false;
+  let stopped = false;
+  let sentFinalize = false;
+  let finished = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   ws.onmessage = (event: MessageEvent) => {
     if (typeof event.data !== 'string') return;
     try {
@@ -71,15 +125,44 @@ export function createParakeetTranscriber(opts: {
       if (text) opts.onTranscript(text);
     } catch { /* ignore */ }
   };
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    if (timer !== undefined) clearTimeout(timer);
+    try {
+      ws.close();
+    } catch { /* ignore */ }
+  };
   return {
     appendPcm(chunk) {
-      if (ready && ws.readyState === WS.OPEN) ws.send(chunk as any);
+      if (stopped) return;
+      if (ready && ws.readyState === 1) ws.send(chunk as any);
     },
     stop() {
+      if (stopped) return;
+      stopped = true;
+      ready = false;
       try {
-        if (ws.readyState === WS.OPEN) ws.send('finalize');
-        ws.close();
-      } catch { /* ignore */ }
+        if (ws.readyState === 1) {
+          ws.send('finalize');
+          sentFinalize = true;
+        }
+      } catch {
+        // finalize is best-effort; still tear down the socket.
+      }
+
+      if (!sentFinalize) {
+        finish();
+        return;
+      }
+
+      const drainTimeoutMs = opts.drainTimeoutMs ?? 5000;
+      timer = setTimeout(finish, drainTimeoutMs);
+      const prevClose = ws.onclose;
+      ws.onclose = (ev) => {
+        finish();
+        if (typeof prevClose === 'function') prevClose.call(ws, ev);
+      };
     },
   };
 }

@@ -89,9 +89,26 @@ def test_llm_gateway_is_a_bounded_fallback_component():
     assert fallback_mod.bucket_component('llm_gateway') == 'llm_gateway'
 
 
+def test_stt_live_session_is_a_bounded_fallback_component():
+    """Mid-session hops used component=stt_live_session; without the allowlist
+    they bucketed to other, so omi-stt-fallback-leg-dead (keyed on stt_selection)
+    could not see a 100% dead Soniox failover leg.
+    """
+    assert fallback_mod.bucket_component('stt_live_session') == 'stt_live_session'
+
+
 def test_firestore_malformed_document_labels_are_bounded():
     assert fallback_mod.bucket_component('firestore_read') == 'firestore_read'
     assert fallback_mod.bucket_reason('malformed_doc') == 'malformed_doc'
+
+
+def test_web_search_security_reasons_keep_their_exact_labels():
+    # The Anthropic web-search gate records these reasons; if they are not
+    # allowlisted they all collapse to ``other`` and the security withhold
+    # paths become indistinguishable in metrics.
+    assert fallback_mod.bucket_reason('private_tool_output_in_context') == 'private_tool_output_in_context'
+    assert fallback_mod.bucket_reason('not_authorized') == 'not_authorized'
+    assert fallback_mod.bucket_reason('authorization_unavailable') == 'authorization_unavailable'
 
 
 def test_record_fallback_never_raises_on_metric_or_log_failure(monkeypatch):

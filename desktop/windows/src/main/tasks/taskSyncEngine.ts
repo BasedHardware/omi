@@ -19,11 +19,21 @@
 //
 // OPTIMISTIC WRITE-THROUGH (Mac behavior, ported verbatim):
 //   - create : insert local (unsynced) → POST → markSynced on success; on failure
-//              stays unsynced (retried at next hydrate). NEVER reverted.
+//              stays unsynced (retried at next sync). NEVER reverted.
 //   - toggle : flip local → PATCH; on success absorb the server echo; on failure
 //              REVERT the local completion.
 //   - update : edit local → PATCH; on failure keep-local (next sync reconciles).
 //   - delete : HARD-delete local → DELETE; on failure keep-local-deleted.
+//
+// SYNC MODEL (the Firestore-read fix): local reads NEVER trigger a backend
+// listing. A single throttled background sync (≤1 per 5 min + in-flight dedup)
+// reconciles via the cheap ID census (`GET /v1/action-items/ids?completed=`),
+// fetching per-id documents only for ids that are new or moved buckets — a
+// steady state with no remote changes costs two census requests and ZERO
+// document transfers. Full paged listings are reserved for the one-time
+// per-account populate (versioned flag) and the explicit user reconcile
+// the every-read `?limit=500` listing storm is gone. Remaining full listings
+// (populate / explicit reconcile) page at 100, not 500.
 //
 // FIX (ii) — embedding eviction via DEPENDENCY INJECTION (no hard import of the
 // embedding service): `setTaskDeletionListener` wires a callback that every
@@ -35,6 +45,7 @@ import {
   getAppMeta,
   getFilteredActionItems,
   getLocalActionItems,
+  getSyncedActionItemIds,
   getUnsyncedActionItems,
   hardDeleteAbsentTasks,
   hardDeleteAbsentCompletedTasks,
@@ -70,16 +81,30 @@ import { promoteIfNeeded } from '../assistants/tasks/create'
 // reconcile), but a thin/partial list must never drive a delete-by-absence.
 import { isBackendDegraded } from '../observability/backendDegraded'
 
-// --- Tunables ---------------------------------------------------------------
 const REQUEST_TIMEOUT_MS = 15_000
+// Background sync cadence: ONE census-based reconcile per 5 minutes max, however
+// many local reads / focus events ask for one. This single number is what kills
+// the every-read listing storm (billing RCA 2026-08: ~61-73 RPS of
+// `GET /v1/action-items?limit=500` from omi-windows). Mac's TasksStore uses the
+// same 5-minute reconcile bound. Populate/reconcile listings now page at 100.
+const SYNC_THROTTLE_MS = 5 * 60_000
+// A FAILED background sync retries at most this often (not the full 5-min window)
+// so an offline-then-online user isn't locked out of freshness, while a 429 storm
+// still only sees ≤2 sync attempts per minute instead of the old per-read storm.
+const SYNC_RETRY_MS = 30_000
 // Reconcile (hard-delete tasks absent from the backend) at most once per 5 min —
 // Mac's `lastReconcileAt` throttle. Prevents an every-keystroke reconcile sweep.
 const RECONCILE_THROTTLE_MS = 5 * 60_000
-// Page size for full listings (the backend caps `limit` at 500).
-const PAGE_LIMIT = 500
+// Page size for full listings. Match macOS TasksStore (pageSize = 100). The
+// backend accepts up to 500, but a 500-doc full-document page on a heavy
+// account exceeds the Windows 15s client timeout and the backend 30s GET timeout.
+const PAGE_LIMIT = 100
 // Hard ceiling on paging so a runaway `has_more` can never loop forever.
 const MAX_PAGES = 200
-
+// Per-id document lookups one background sync may issue (new / bucket-moved ids).
+// Bounds the repair burst after a mass remote change; the remainder stays
+// "missing" in the next tick's census diff and converges on later ticks.
+const MAX_CENSUS_LOOKUPS = 200
 // --- FIX (ii): the embedding-eviction DI seam --------------------------------
 
 /** One locally hard-deleted task, handed to the deletion listener so the caller
@@ -110,8 +135,18 @@ function emitDeletions(ids: number[]): void {
 let lastReconcileAt = 0
 let lastCompletedReconcileAt = 0
 let retrying = false
-let hydrateIncompleteInFlight: Promise<void> | null = null
-let hydrateCompletedInFlight: Promise<void> | null = null
+// The throttled background sync (census-based). `lastSyncAt` stamps at sync START
+// (after the session check) so a run in flight can't be double-scheduled; a
+// FAILED run relaxes the stamp by SYNC_RETRY_MS so freshness retries are bounded
+// but frequent enough to heal an offline→online transition.
+let lastSyncAt = 0
+let backgroundSyncInFlight: Promise<void> | null = null
+let reconcileInFlight: Promise<void> | null = null
+let syncTimer: NodeJS.Timeout | null = null
+// True once the CURRENT round served any listing/census response — those reads
+// are already billed, so the failure-retry floor must not buy another round at
+// 30s (that would re-bill full scans every 30s on a partially-failing backend).
+let roundServedBackendRead = false
 
 // --- Pending-delete tombstones ----------------------------------------------
 // A user delete is a HARD local delete + a fire-and-forget backend DELETE. Without
@@ -145,12 +180,18 @@ function isTombstoned(backendId: string): boolean {
   return true
 }
 
-/** Drop all pending-delete tombstones. Called on sign-out so one account's in-flight
- *  deletes never gate another account's hydrate (cross-account hygiene). */
+/** Drop all per-session sync state: pending-delete tombstones plus the sync /
+ *  reconcile throttle stamps. Called on sign-out (core/session reset listener) so
+ *  one account's in-flight deletes or throttle windows never gate the next
+ *  account — a fresh sign-in syncs immediately and reconciles against its own
+ *  baseline (cross-account hygiene). */
 export function resetPendingDeletes(): void {
   pendingDeletes.clear()
+  lockedItemSkips.clear()
+  lastSyncAt = 0
+  lastReconcileAt = 0
+  lastCompletedReconcileAt = 0
 }
-/** Test-only alias. */
 export function __resetTombstonesForTest(): void {
   resetPendingDeletes()
 }
@@ -183,8 +224,9 @@ function toEpochMs(iso: string | null | undefined): number | null {
 }
 
 /** Map a backend action item → the storage `SyncActionItem` for syncTaskActionItems.
- *  `now` fills a missing created_at so the required `createdAt` is always present. */
-function mapBackendItem(item: BackendActionItem, now: number): SyncActionItem {
+ *  `now` fills a missing created_at so the required `createdAt` is always present.
+ *  Exported for the contracts/parity wire-decode conformance test. */
+export function mapBackendItem(item: BackendActionItem, now: number): SyncActionItem {
   const createdAt = toEpochMs(item.created_at) ?? now
   const updatedAt = toEpochMs(item.updated_at) ?? createdAt
   return {
@@ -275,9 +317,11 @@ async function apiFetch(
 
 /** Stable request key for the 429-storm tracker's distinct-path rule: method +
  *  path with the query dropped and any trailing action-item id collapsed to :id,
- *  so all deletes/patches share one key while list vs create vs by-id stay distinct. */
+ *  so all deletes/patches share one key while list vs census vs create vs by-id
+ *  stay distinct. The static `ids` segment must NOT collapse (it is the census
+ *  endpoint, not an action-item id). */
 function rateLimitKey(method: string, path: string): string {
-  const pathname = path.split('?')[0].replace(/(\/v1\/action-items)\/[^/]+$/, '$1/:id')
+  const pathname = path.split('?')[0].replace(/(\/v1\/action-items)\/(?!ids$)[^/]+$/, '$1/:id')
   return `${method} ${pathname}`
 }
 
@@ -290,6 +334,10 @@ async function fetchPage(
 ): Promise<{ items: BackendActionItem[]; hasMore: boolean }> {
   const q = new URLSearchParams({ limit: String(PAGE_LIMIT), offset: String(offset) })
   if (completed !== undefined) q.set('completed', String(completed))
+  // Stamp BEFORE the round-trip: aborting at REQUEST_TIMEOUT_MS leaves the
+  // Cloud Run worker running until HTTP_GET_TIMEOUT (30s). Treating that as
+  // "already billed" prevents a 30s retry of the same dual-bucket populate.
+  roundServedBackendRead = true
   const res = await apiFetch('GET', `/v1/action-items?${q.toString()}`, undefined, external)
   if (!res.ok) throw new HttpError(res.status)
   const json = (await res.json()) as { action_items?: BackendActionItem[]; has_more?: boolean }
@@ -300,7 +348,11 @@ async function fetchPage(
 }
 
 /** Page an entire listing (until has_more is false). Bails if the session epoch
- *  moved mid-paging. */
+ *  moved mid-paging. NOT used on any hot path — only the one-time versioned full
+ *  sync and the explicit user reconcile. NOTE: the backend hard-caps a listing at
+ *  2000 docs and reports has_more=false AT the cap, so a "complete" fetchAll can
+ *  silently be truncated on large accounts — which is exactly why runFullSync's
+ *  delete sweeps take their keep-set from the (uncapped) census, not the listing. */
 async function fetchAll(
   completed: boolean | undefined,
   epoch: number,
@@ -313,9 +365,62 @@ async function fetchAll(
     const { items, hasMore } = await fetchPage(completed, offset, external)
     out.push(...items)
     if (!hasMore || items.length === 0) break
-    offset += PAGE_LIMIT
+    offset += items.length
   }
   return out
+}
+
+/** One bucket of the ID census: `GET /v1/action-items/ids?completed=<bucket>`.
+ *  Returns the NON-deleted ids in that completion bucket (backend
+ *  `get_visible_action_item_ids` — an un-paged, uncapped select-projection
+ *  stream: no document bodies cross the wire, and a single response can't be
+ *  "thin", which is what makes census-driven delete-by-absence safe. COST: the
+ *  scan is billed 1 Firestore Read Op per collection doc per call (projection
+ *  trims payload, not Read Ops), so a round = 2 collection scans — see the
+ *  SYNC_MODEL note above. Throws on !ok so a failed census aborts the whole
+ *  sync (fail closed — never reconcile off a partial). */
+async function fetchIdCensus(completed: boolean, external?: AbortSignal): Promise<string[]> {
+  const res = await apiFetch(
+    'GET',
+    `/v1/action-items/ids?completed=${completed}`,
+    undefined,
+    external
+  )
+  roundServedBackendRead = true // a response arrived — its reads are billed
+  if (!res.ok) throw new HttpError(res.status)
+  const json = (await res.json()) as { ids?: unknown }
+  return Array.isArray(json.ids) ? (json.ids as string[]) : []
+}
+
+// Ids whose per-id GET returned 402 (backend: locked behind a paid plan — the
+// document is listed truncated but never readable by id). Re-fetching such an id
+// every round is a permanent zombie that also starves MAX_CENSUS_LOOKUPS, so
+// skip it for a TTL; a plan change re-enables it, and a sign-out clears the
+// cache entirely.
+const LOCKED_SKIP_TTL_MS = 60 * 60_000
+const lockedItemSkips = new Map<string, number>()
+
+/** Fetch one action item by id (authoritative doc for a census-new or
+ *  bucket-moved id). Returns null on 404 (gone — the reconciles handle absence)
+ *  and on 402 (locked: negative-cached so the round stops paying for it).
+ *  Rethrows other failures so the caller can skip that id without aborting. */
+async function fetchItemById(
+  backendId: string,
+  external?: AbortSignal
+): Promise<BackendActionItem | null> {
+  const res = await apiFetch(
+    'GET',
+    `/v1/action-items/${encodeURIComponent(backendId)}`,
+    undefined,
+    external
+  )
+  if (res.status === 404) return null
+  if (res.status === 402) {
+    lockedItemSkips.set(backendId, Date.now() + LOCKED_SKIP_TTL_MS)
+    return null
+  }
+  if (!res.ok) throw new HttpError(res.status)
+  return (await res.json()) as BackendActionItem
 }
 
 // --- Renderer notification ---------------------------------------------------
@@ -423,141 +528,196 @@ function uidFromToken(token: string): string | null {
   }
 }
 
-/** Once per (user, schema version): page EVERYTHING (incomplete + completed) so the
- *  local store starts fully populated, then reconcile once. The flag lives in
- *  app_meta (survives sign-out, keyed per uid) so it runs exactly once per install
- *  per account. */
+/** Page EVERYTHING (incomplete + completed) for CONTENT, sync it, then force
+ *  both reconciles against the CENSUS keep-set. Shared by the one-time versioned
+ *  populate and the explicit user reconcile — the only two paths that still move
+ *  full documents. Returns the changed-row count for the caller's broadcast
+ *  decision. Epoch-guarded: fetchAll re-checks per page, and the post-fetch
+ *  checks drop the whole result on a session change (never write one account's
+ *  data into the next account's DB).
+ *
+ *  Why the sweeps census even though we just listed everything: the backend
+ *  hard-caps a listing at 2000 docs and reports has_more=false AT the cap, so
+ *  listing ids can never drive delete-by-absence for a large account (the
+ *  forced sweep would hard-delete every local row past the cap, then the
+ *  background census would re-add them — a mass-delete/re-add flap on every
+ *  explicit refresh). The census is uncapped, so its union is the authoritative
+ *  keep-set; listing-truncated tail rows simply stay "new" in the next
+ *  background diff and backfill via per-id fetches. */
+async function runFullSync(epoch: number, external?: AbortSignal): Promise<number> {
+  const incomplete = await fetchAll(false, epoch, external)
+  const completed = await fetchAll(true, epoch, external)
+  if (getSessionEpoch() !== epoch) return 0
+  const now = Date.now()
+  const res = syncTaskActionItems(
+    [...incomplete, ...completed].map((i) => mapBackendItem(i, now)),
+    { now, isTombstoned }
+  )
+  const censusKeep = await fetchCensusKeep(external)
+  if (getSessionEpoch() !== epoch) return 0
+  // Force both reconciles regardless of the 5-min throttle: this caller holds
+  // authoritative data, so the sweeps are safe and also clear completed
+  // phantoms the throttled path leaves for later.
+  maybeReconcile(censusKeep, now, true)
+  maybeReconcileCompleted(censusKeep, now, true)
+  return res.inserted + res.updated + res.adopted
+}
+
+/** Both census buckets, deduped — the authoritative "live remotely" keep-set. */
+async function fetchCensusKeep(external?: AbortSignal): Promise<string[]> {
+  const incompleteIds = await fetchIdCensus(false, external)
+  const completedIds = await fetchIdCensus(true, external)
+  return [...new Set([...incompleteIds, ...completedIds])]
+}
+
+/** Once per (user, schema version): full-populate the local store, then reconcile.
+ *  The flag lives in app_meta (survives sign-out, keyed per uid) so it runs exactly
+ *  once per install per account. Returns true when the populate ran (the caller
+ *  skips the census that round — the full sync is itself the authoritative
+ *  reconcile). v2: the sync model changed from every-read full listings to the ID
+ *  census, and census buckets cannot see in-place content edits — so every
+ *  existing install re-populates ONCE after updating (repairing drift accumulated
+ *  under v1); content afterwards flows through mutations, the census, and the
+ *  explicit reconcile. */
 async function maybeFullSync(
   session: BackendSession,
   epoch: number,
   external?: AbortSignal
-): Promise<void> {
+): Promise<boolean> {
   const uid = uidFromToken(session.token)
-  if (!uid) return
-  const key = `tasksFullSyncCompleted_v1_${uid}`
-  if (getAppMeta(key)) return
-  const incomplete = await fetchAll(false, epoch, external)
-  const completed = await fetchAll(true, epoch, external)
-  if (getSessionEpoch() !== epoch) return
-  const now = Date.now()
-  syncTaskActionItems(
-    [...incomplete, ...completed].map((i) => mapBackendItem(i, now)),
-    {
-      now,
-      isTombstoned
-    }
-  )
-  // The one-time full sync forces a reconcile regardless of the 5-min throttle —
-  // both the incomplete (active) and completed sweeps, so the initial populate also
-  // clears any completed phantom left by a prior install's dropped write.
-  maybeReconcile(
-    incomplete.map((i) => i.id),
-    now,
-    true
-  )
-  maybeReconcileCompleted(
-    completed.map((i) => i.id),
-    now,
-    true
-  )
+  if (!uid) return false
+  const key = `tasksFullSyncCompleted_v2_${uid}`
+  if (getAppMeta(key)) return false
+  const changed = await runFullSync(epoch, external)
+  if (getSessionEpoch() !== epoch) return false
   setAppMeta(key, '1')
-  broadcastTasksChanged()
+  if (changed > 0) broadcastTasksChanged()
+  return true
 }
 
-// --- Hydration (local-first) -------------------------------------------------
+// --- Background sync (throttled, census-based) --------------------------------
 
-/** Sync the incomplete list from the backend, then reconcile. Deduped: concurrent
- *  callers share the one in-flight run. On the first run per account it also drains
- *  unsynced creates and does the one-time full sync. Errors are swallowed (logged
- *  name-only) — hydration is best-effort over the always-available local read. */
-export function hydrateIncomplete(): Promise<void> {
-  if (hydrateIncompleteInFlight) return hydrateIncompleteInFlight
-  hydrateIncompleteInFlight = doHydrateIncomplete().finally(() => {
-    hydrateIncompleteInFlight = null
+/** The ONE background sync entry point. Throttled to SYNC_THROTTLE_MS and deduped
+ *  (concurrent callers share the in-flight run), so local reads, the periodic
+ *  timer, and window focus all funnel here without any of them being able to
+ *  restore the old every-read full-listing storm. Errors are swallowed (logged
+ *  name-only) — the sync is best-effort over the always-available local read. */
+export function scheduleBackgroundSync(): Promise<void> {
+  if (backgroundSyncInFlight) return backgroundSyncInFlight
+  if (Date.now() - lastSyncAt < SYNC_THROTTLE_MS) return Promise.resolve()
+  backgroundSyncInFlight = doBackgroundSync().finally(() => {
+    backgroundSyncInFlight = null
   })
-  return hydrateIncompleteInFlight
+  return backgroundSyncInFlight
 }
 
-async function doHydrateIncomplete(): Promise<void> {
+async function doBackgroundSync(): Promise<void> {
   const session = getBackendSession()
   if (!session) return // local-only until a session is relayed
+  lastSyncAt = Date.now() // stamp at START: this run's requests are committed
+  roundServedBackendRead = false
   const epoch = getSessionEpoch()
   const external = getAbortSignal()
   try {
     await retryUnsynced()
-    await maybeFullSync(session, epoch, external)
     if (getSessionEpoch() !== epoch) return
-    const items = await fetchAll(false, epoch, external)
+    // First run per (user, version) pages everything once. Its sweeps already
+    // run against the census keep-set (see runFullSync), and its content pages
+    // cover everything the per-id path would fetch — no separate diff needed.
+    if (await maybeFullSync(session, epoch, external)) return
     if (getSessionEpoch() !== epoch) return
+    // ID census, one request per completion bucket. A failure throws and aborts
+    // the whole round (fail closed): with no complete census there is no safe
+    // delete-by-absence. The census is a single un-paged response, so it can
+    // never be "thin" the way a truncated page run can.
+    const incompleteIds = await fetchIdCensus(false, external)
+    const completedIds = await fetchIdCensus(true, external)
+    if (getSessionEpoch() !== epoch) return
+    // Diff the census against the local synced rows: fetch documents ONLY for
+    // ids that are new locally or moved buckets (a remote toggle). Unchanged
+    // ids cost nothing beyond the census itself — that is the steady-state cut.
+    const local = new Map(getSyncedActionItemIds().map((r) => [r.backendId, r.completed]))
+    const toFetch: string[] = []
+    for (const id of incompleteIds) if (local.get(id) !== false) toFetch.push(id)
+    for (const id of completedIds) if (local.get(id) !== true) toFetch.push(id)
+    const items: BackendActionItem[] = []
+    // Slice AFTER dropping TTL-active locked skips, so a locked id can never
+    // occupy one of the MAX_CENSUS_LOOKUPS slots and starve genuine new ids.
+    const now0 = Date.now()
+    const lookupQueue = toFetch.filter((id) => {
+      const skipUntil = lockedItemSkips.get(id)
+      if (skipUntil === undefined) return true
+      if (skipUntil > now0) return false
+      lockedItemSkips.delete(id)
+      return true
+    })
+    for (const id of lookupQueue.slice(0, MAX_CENSUS_LOOKUPS)) {
+      try {
+        const item = await fetchItemById(id, external)
+        if (item) items.push(item)
+      } catch (e) {
+        // One unreadable document must not abort the round (Mac's stale-row
+        // resolution behaves the same); the id stays "changed" in the next
+        // tick's diff and is retried then.
+        console.warn('[tasks] census item fetch failed (will retry next sync):', errName(e))
+      }
+      if (getSessionEpoch() !== epoch) return
+    }
+    let changed = false
+    if (items.length > 0) {
+      const now = Date.now()
+      const res = syncTaskActionItems(
+        items.map((i) => mapBackendItem(i, now)),
+        { now, isTombstoned }
+      )
+      changed = res.inserted + res.updated + res.adopted > 0
+    }
+    // Census-driven delete-by-absence, AFTER the per-id syncs. The keep-set for
+    // BOTH sweeps is the UNION of the two census buckets: an id present in
+    // EITHER bucket is proven live remotely, so a bucket-moved row whose per-id
+    // GET failed (or was cut by MAX_CENSUS_LOOKUPS) is KEPT and retried next
+    // tick — only an id absent from both buckets is genuinely deleted remotely.
+    // Per-bucket keep-sets would delete a mover from its old bucket the moment
+    // its flip didn't land, destroying local-only fields (score/tags/priority)
+    // on the later re-insert. Empty censuses no-op inside storage (never wipe
+    // on an empty or failed census). maybeReconcile* broadcast on their own iff
+    // they delete something.
     const now = Date.now()
-    const res = syncTaskActionItems(
-      items.map((i) => mapBackendItem(i, now)),
-      { now, isTombstoned }
-    )
-    // maybeReconcile broadcasts on its own iff it hard-deletes something. Here we
-    // broadcast only when the sync actually changed a row — a no-op hydrate MUST
-    // stay silent, else the renderer (which re-reads on `tasks:changed`, and every
-    // read kicks another hydrate) spins in an unbounded backend-polling loop.
-    maybeReconcile(
-      items.map((i) => i.id),
-      now
-    )
-    if (res.inserted + res.updated + res.adopted > 0) broadcastTasksChanged()
+    const censusKeep = [...new Set([...incompleteIds, ...completedIds])]
+    maybeReconcile(censusKeep, now)
+    maybeReconcileCompleted(censusKeep, now)
+    // A no-op sync MUST stay silent: the renderer re-reads on `tasks:changed`,
+    // and before this throttle every read kicked another sync — an unconditional
+    // broadcast recreates that polling loop even with the throttle in place.
+    if (changed) broadcastTasksChanged()
   } catch (e) {
-    console.warn('[tasks] hydrateIncomplete failed:', errName(e))
+    console.warn('[tasks] background sync failed:', errName(e))
+    // Failure retry floor: allow another attempt after SYNC_RETRY_MS, not the
+    // full window, so a fully-offline round heals quickly — while a 429 storm
+    // still only sees ≤2 attempts/min instead of the old per-read storm. Two
+    // guards: never re-stamp after a sign-out (the session reset already zeroed
+    // the stamp for the next account), and never re-stamp once this round
+    // SERVED a listing/census response — those reads are already billed, and a
+    // 30s re-buy would re-bill the full scans on a partially-failing backend.
+    if (getSessionEpoch() === epoch && !roundServedBackendRead) {
+      lastSyncAt = Date.now() - SYNC_THROTTLE_MS + SYNC_RETRY_MS
+    }
   }
 }
 
-/** Sync the completed list (no reconcile — hardDeleteAbsentTasks only ever touches
- *  active rows, so a completed listing must never drive it). Deduped. */
-export function hydrateCompleted(): Promise<void> {
-  if (hydrateCompletedInFlight) return hydrateCompletedInFlight
-  hydrateCompletedInFlight = doHydrateCompleted().finally(() => {
-    hydrateCompletedInFlight = null
-  })
-  return hydrateCompletedInFlight
-}
+// --- Reads (local-first: SQLite only; freshness is the throttled sync's job) ---
 
-async function doHydrateCompleted(): Promise<void> {
-  const session = getBackendSession()
-  if (!session) return
-  const epoch = getSessionEpoch()
-  const external = getAbortSignal()
-  try {
-    const items = await fetchAll(true, epoch, external)
-    if (getSessionEpoch() !== epoch) return
-    const now = Date.now()
-    const res = syncTaskActionItems(
-      items.map((i) => mapBackendItem(i, now)),
-      { now, isTombstoned }
-    )
-    // Reconcile completed phantoms: a locally-completed row absent from the backend's
-    // full completed listing was deleted server-side and must be dropped locally.
-    // maybeReconcileCompleted broadcasts on its own iff it deletes something.
-    maybeReconcileCompleted(
-      items.map((i) => i.id),
-      now
-    )
-    // Broadcast only on an actual change — see doHydrateIncomplete for why a silent
-    // no-op hydrate is mandatory (renderer re-read → hydrate → broadcast loop).
-    if (res.inserted + res.updated + res.adopted > 0) broadcastTasksChanged()
-  } catch (e) {
-    console.warn('[tasks] hydrateCompleted failed:', errName(e))
-  }
-}
-
-// --- Reads (local-first: return local instantly, kick background hydration) ---
-
-/** Incomplete tasks — returns the LOCAL rows instantly and kicks a background sync
+/** Incomplete tasks — the LOCAL rows, instantly. Freshness comes from the
+ *  throttled background sync (≤1 per 5 min); a read never talks to the backend
  *  (subscribe to `tasks:changed` to re-fetch). */
 export function listIncomplete(opts?: { limit?: number; offset?: number }): ActionItemRecord[] {
-  void hydrateIncomplete()
+  void scheduleBackgroundSync()
   return getLocalActionItems({ completed: false, limit: opts?.limit, offset: opts?.offset })
 }
 
-/** Completed tasks — local-first, kicks a background completed sync. */
+/** Completed tasks — local-first, same throttled-sync contract. */
 export function listCompleted(opts?: { limit?: number; offset?: number }): ActionItemRecord[] {
-  void hydrateCompleted()
+  void scheduleBackgroundSync()
   return getLocalActionItems({ completed: true, limit: opts?.limit, offset: opts?.offset })
 }
 
@@ -572,9 +732,10 @@ export function listDeleted(_opts?: { limit?: number; offset?: number }): Action
 }
 
 /** Dashboard slices for the Tasks home: overdue / due-today / no-due — all active
- *  tasks, read from local (getFilteredActionItems), with a background sync kicked. */
+ *  tasks, read from local (getFilteredActionItems); the throttled background sync
+ *  keeps the store fresh. */
 export function dashboardSlices(): TaskDashboardSlices {
-  void hydrateIncomplete()
+  void scheduleBackgroundSync()
   const start = new Date()
   start.setHours(0, 0, 0, 0)
   const startToday = start.getTime()
@@ -589,10 +750,9 @@ export function dashboardSlices(): TaskDashboardSlices {
 }
 
 // --- Optimistic write-through ------------------------------------------------
-
 /** Create a task: insert locally (unsynced) and return the row immediately; POST in
  *  the background. On success stamp it synced with the backend id. On FAILURE it
- *  stays unsynced (retried at the next hydrate) — never reverted. */
+ *  stays unsynced (retried at the next background sync) — never reverted. */
 export function createTask(fields: TaskCreateFields): ActionItemRecord {
   const now = Date.now()
   const rec = insertLocalActionItem({
@@ -835,7 +995,7 @@ function scheduleDeleteReVerify(
 
 /** Re-POST every unsynced local create (a create whose background POST never
  *  landed — offline at creation, or app killed before markSynced). Guarded against
- *  re-entry. Called at the start of each incomplete hydrate. */
+ *  re-entry. Called at the start of each background sync and explicit reconcile. */
 export async function retryUnsynced(): Promise<void> {
   if (retrying) return
   const session = getBackendSession()
@@ -879,8 +1039,58 @@ export async function retryUnsynced(): Promise<void> {
 
 // --- Public reconcile (IPC `tasks:reconcile`) --------------------------------
 
-/** Run a throttled reconcile: page the incomplete list, sync it, and hard-delete
- *  local tasks the backend no longer has (respecting the 5-min throttle). */
+/** EXPLICIT user refresh (the Tasks page refresh button): the strong path — full
+ *  paged listings of both buckets with forced reconciles. Rare by construction
+ *  (a user action), so the full-document cost is acceptable here and ONLY here;
+ *  it is also the one path that reliably picks up in-place remote EDITS (renames,
+ *  due-date changes) the ID census cannot see. Deduped and epoch-guarded like the
+ *  background sync. */
 export function reconcile(): Promise<void> {
-  return hydrateIncomplete()
+  if (reconcileInFlight) return reconcileInFlight
+  reconcileInFlight = doReconcile().finally(() => {
+    reconcileInFlight = null
+  })
+  return reconcileInFlight
+}
+
+async function doReconcile(): Promise<void> {
+  const session = getBackendSession()
+  if (!session) return
+  const epoch = getSessionEpoch()
+  const external = getAbortSignal()
+  try {
+    await retryUnsynced()
+    if (getSessionEpoch() !== epoch) return
+    const changed = await runFullSync(epoch, external)
+    if (getSessionEpoch() !== epoch) return
+    // Fresh data just landed under the user's eyes: restart the background
+    // window so the timer doesn't immediately census over it.
+    lastSyncAt = Date.now()
+    if (changed > 0) broadcastTasksChanged()
+  } catch (e) {
+    console.warn('[tasks] reconcile failed:', errName(e))
+  }
+}
+
+// --- Periodic timer ------------------------------------------------------------
+
+/** Start the background-sync interval (idempotent). Wired once at app startup;
+ *  ticks are session-gated and throttled, so a signed-out app does nothing. The
+ *  interval IS the remote-change visibility bound: adds / deletes / toggles made
+ *  on other surfaces appear within one interval; in-place edits appear on the
+ *  explicit reconcile. */
+export function startTaskBackgroundSync(): void {
+  if (syncTimer) return
+  syncTimer = setInterval(() => {
+    void scheduleBackgroundSync()
+  }, SYNC_THROTTLE_MS)
+}
+
+/** Test-only: stop and clear the interval so a timer started in one test never
+ *  leaks across a module reset. */
+export function __stopTaskBackgroundSyncForTest(): void {
+  if (syncTimer) {
+    clearInterval(syncTimer)
+    syncTimer = null
+  }
 }

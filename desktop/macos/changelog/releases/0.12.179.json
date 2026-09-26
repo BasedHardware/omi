@@ -1,0 +1,9 @@
+{
+  "version": "0.12.179",
+  "date": "2026-08-16",
+  "changes": [
+    "Workstream names like \"api\" or \"meetings\" are no longer treated as projects, so suggestions stay attached to real work",
+    "The microphone button now cycles through Off, Always On, and Only Meetings instead of skipping Always On — Only Meetings carries its own icon and explains that the mic stays closed until a call starts",
+    "Rewind's capture-span label and chat message timestamps now always show the date of the day they point at, even around midnight and across time zones"
+  ]
+}

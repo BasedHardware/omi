@@ -131,6 +131,26 @@ def test_beta_breakglass_routes_reuse_existing_admin_key_authority():
     assert all(route['policy']['auth']['mechanisms'] == ['admin_key'] for route in routes)
 
 
+def test_jit_mutation_routes_are_authenticated_and_rate_limited():
+    manifest = inventory.load_manifest(inventory.DEFAULT_MANIFEST_PATH)
+    routes = {
+        (route.get('method'), route.get('path')): route['policy']
+        for route in manifest['routes']
+        if route.get('path') in {'/v1/jit/trigger-feedback', '/v1/jit/proactivity/reservations'}
+    }
+
+    assert set(routes) == {
+        ('POST', '/v1/jit/trigger-feedback'),
+        ('POST', '/v1/jit/proactivity/reservations'),
+    }
+    for policy in routes.values():
+        assert policy['auth']['mechanisms'] == ['firebase_id_token']
+        assert policy['auth']['placement'] == 'dependency'
+        assert policy['rate_limit']['key_subject'] == 'uid'
+        assert policy['rate_limit']['enforcement'] == 'fail_open'
+        assert policy['rate_limit']['policy_name'] != 'none'
+
+
 def test_dependency_evidence_captures_nested_depends_and_security():
     app = FastAPI()
     api_key_header = APIKeyHeader(name='Authorization')

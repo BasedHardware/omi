@@ -45,6 +45,30 @@ final class PTTAttemptLifecycleRecorder {
     }
   }
 
+  /// What a bounded turn-audio duration collapses into for remote querying on
+  /// the product event (`floating_bar_ptt_ended`); the lifecycle event keeps
+  /// its rounded seconds and does not use this bucket.
+  enum AudioSecondsBucket: String {
+    case lt2 = "lt_2"
+    case lt5 = "lt_5"
+    case lt10 = "lt_10"
+    case lt20 = "lt_20"
+    case lt60 = "lt_60"
+    case ge60 = "ge_60"
+
+    /// Nil when the site genuinely does not know the turn's audio length, so
+    /// the property is omitted rather than reporting a fake bucket.
+    static func bucket(fromSeconds seconds: Double?) -> AudioSecondsBucket? {
+      guard let seconds else { return nil }
+      if seconds < 2 { return .lt2 }
+      if seconds < 5 { return .lt5 }
+      if seconds < 10 { return .lt10 }
+      if seconds < 20 { return .lt20 }
+      if seconds < 60 { return .lt60 }
+      return .ge60
+    }
+  }
+
   /// Energy class of the first received audio chunks — distinguishes a capture
   /// that delivers real samples from one that delivers only zeros.
   enum FirstChunksEnergyBucket: String {
@@ -87,6 +111,10 @@ final class PTTAttemptLifecycleRecorder {
     }
   }
 
+  /// Peak/RMS at or below this count as "no real signal". Mirrors
+  /// `PTTSilentMicRecoveryPolicy.deadMicPeakThreshold`, which gates dead-mic recovery.
+  static let nearZeroAmplitude = 5
+
   enum InputRouteClass: String {
     case builtIn = "built_in"
     case external
@@ -116,7 +144,20 @@ final class PTTAttemptLifecycleRecorder {
     case committed
     case silentRejected = "silent_rejected"
     case tooShort = "too_short"
+    case permissionDenied = "permission_denied"
     case cancelled
+  }
+
+  /// What the user used the PTT turn for, classified when the turn terminates.
+  /// Intent is only knowable once a route resolved it — a dictation is claimed
+  /// mid-hold (or by the closing decode) and closes through the voice-typing
+  /// pipeline; a question commits to an answer path. Cancels, too-short taps,
+  /// and silent discards happen before any intent exists and stay `unknown`
+  /// rather than being forced into a bucket they cannot support.
+  enum TurnKind: String {
+    case dictation
+    case question
+    case unknown
   }
 
   enum RecoveryAction: String {
@@ -138,6 +179,7 @@ final class PTTAttemptLifecycleRecorder {
     case recoveryOutcomeNotJudgeable = "recovery_outcome_not_judgeable"
     case committed
     case tooShortAudible = "too_short_audible"
+    case permissionDenied = "permission_denied"
     case cancelled
   }
 
@@ -158,6 +200,10 @@ final class PTTAttemptLifecycleRecorder {
     var msToFirstUsableFrameBucket: MillisecondsBucket
     var firstChunksEnergyBucket: FirstChunksEnergyBucket
     var turnDisposition: TurnDisposition
+    /// Intent classification at termination (dictation / question / unknown).
+    /// Defaulted so legacy direct `Snapshot` constructions — tests — keep
+    /// compiling while every production terminate site passes it explicitly.
+    var turnKind: TurnKind = .unknown
     var inputRouteClass: InputRouteClass
     var inputRouteSource: InputRouteSource
     var routeChangedDuringAttempt: Bool
@@ -171,11 +217,17 @@ final class PTTAttemptLifecycleRecorder {
     var source: String
     var hubActive: Bool
     var micPermissionGranted: Bool
-    var turnAudioSeconds: Double
+    /// Audio measurements are optional because some terminal paths genuinely do
+    /// not hold the turn's PCM (e.g. `sendTranscript`, which runs after the buffer
+    /// was consumed). Those paths omit the properties rather than reporting a
+    /// literal `0`: a fake zero is indistinguishable from a real dead mic and
+    /// silently poisons every admitted-vs-rejected energy comparison built on
+    /// this event — which is exactly the comparison PTT speech-gate tuning needs.
+    var turnAudioSeconds: Double?
     var voicedAudioSeconds: Double?
-    var peak: Int
-    var rms: Int
-    var isNearZero: Bool
+    var peak: Int?
+    var rms: Int?
+    var isNearZero: Bool?
     var judgeable: Bool
     var telemetrySchemaVersion: Int
 
@@ -191,6 +243,7 @@ final class PTTAttemptLifecycleRecorder {
         "ms_to_first_usable_frame_bucket": msToFirstUsableFrameBucket.rawValue,
         "first_chunks_energy_bucket": firstChunksEnergyBucket.rawValue,
         "turn_disposition": turnDisposition.rawValue,
+        "turn_kind": turnKind.rawValue,
         "input_route_class": inputRouteClass.rawValue,
         "input_route_source": inputRouteSource.rawValue,
         "route_changed_during_attempt": routeChangedDuringAttempt,
@@ -201,15 +254,23 @@ final class PTTAttemptLifecycleRecorder {
         "source": source,
         "hub_active": hubActive,
         "tcc_microphone_granted": micPermissionGranted,
-        "turn_audio_seconds": rounded(turnAudioSeconds),
-        "peak": peak,
-        "rms": rms,
-        "is_near_zero": isNearZero,
         "judgeable": judgeable,
         "telemetry_schema_version": telemetrySchemaVersion,
       ]
+      if let turnAudioSeconds {
+        dict["turn_audio_seconds"] = rounded(turnAudioSeconds)
+      }
       if let voicedAudioSeconds {
         dict["voiced_audio_seconds"] = rounded(voicedAudioSeconds)
+      }
+      if let peak {
+        dict["peak"] = peak
+      }
+      if let rms {
+        dict["rms"] = rms
+      }
+      if let isNearZero {
+        dict["is_near_zero"] = isNearZero
       }
       if let recoveryAttemptId {
         dict["recovery_attempt_id"] = recoveryAttemptId
@@ -236,6 +297,7 @@ final class PTTAttemptLifecycleRecorder {
   // Per-attempt accumulation state. Reset on every `beginAttempt`.
   private var attemptId: String = "0"
   private var attemptStartedAt: Date?
+  private var releasedAt: Date?
   private var captureStartOutcome: CaptureStartOutcome = .notRequested
   private var captureStartStatusClass: CaptureStartStatusClass = .none
   private var firstAudioCallbackAt: Date?
@@ -266,6 +328,7 @@ final class PTTAttemptLifecycleRecorder {
     attemptSequence &+= 1
     attemptId = String(attemptSequence)
     attemptStartedAt = now()
+    releasedAt = nil
     captureStartOutcome = .notRequested
     captureStartStatusClass = .none
     firstAudioCallbackAt = nil
@@ -333,6 +396,36 @@ final class PTTAttemptLifecycleRecorder {
     }
   }
 
+  /// The user let go. Latched, because finalization is not always prompt: a turn
+  /// that arrives while the realtime hub is still warming holds its buffered
+  /// audio and is judged a second or more later, on the hub warm deadline or on
+  /// the connection landing. Measuring the hold as "now minus the press" there
+  /// would count that wait as part of the user's press and turn every accidental
+  /// tap on a cold hub into a capture failure.
+  ///
+  /// Idempotent: the first call wins, so a re-entered finalization cannot extend
+  /// a hold that already ended.
+  func noteRelease() {
+    guard attemptStartedAt != nil, releasedAt == nil else { return }
+    releasedAt = now()
+  }
+
+  /// Whether a capture start was ever asked for. A turn that never requested one
+  /// has no capture-start latency to charge, so it must not be judged as though
+  /// it did — the automation bridge drives real PTT turns with the microphone
+  /// deliberately bypassed, and their "hold" is however long the harness took
+  /// between two HTTP calls.
+  var captureWasRequested: Bool { captureStartOutcome != .notRequested }
+
+  /// How long the user actually held the key, in seconds — not how much audio the
+  /// capture managed to deliver inside it. `nil` before `beginAttempt`. Read by
+  /// the discard paths so capture-start latency is charged to capture rather than
+  /// to the user's finger.
+  var holdSeconds: Double? {
+    guard let attemptStartedAt else { return nil }
+    return max(0, (releasedAt ?? now()).timeIntervalSince(attemptStartedAt))
+  }
+
   /// A recovery was requested for this attempt. Mints a bounded correlation id
   /// that the *next judgeable* attempt resolves.
   ///
@@ -356,18 +449,24 @@ final class PTTAttemptLifecycleRecorder {
   @discardableResult
   func terminate(
     disposition: TurnDisposition,
+    turnKind: TurnKind = .unknown,
     source: String,
-    peak: Int,
-    rms: Int,
-    turnAudioSeconds: Double,
+    peak: Int?,
+    rms: Int?,
+    turnAudioSeconds: Double?,
     voicedAudioSeconds: Double?,
-    isNearZero: Bool,
-    judgeable: Bool
+    judgeable: Bool,
+    captureStartedLate: Bool = false
   ) -> Snapshot {
+    // Derived here, never supplied: a caller that passes its own near-zero verdict
+    // can contradict the peak/rms it reported in the same call. Unknown energy
+    // yields an unknown verdict rather than a confident `false`.
+    let isNearZero: Bool? =
+      if let peak, let rms { peak <= Self.nearZeroAmplitude && rms <= Self.nearZeroAmplitude } else { nil }
     let msToFirstAudio = milliseconds(since: attemptStartedAt, to: firstAudioCallbackAt)
     let msToFirstUsable = milliseconds(since: attemptStartedAt, to: firstUsableFrameAt)
     let firstEnergy = finalizeFirstChunksEnergy(
-      hadCallbacks: firstAudioCallbackAt != nil, isNearZero: isNearZero, judgeable: judgeable)
+      hadCallbacks: firstAudioCallbackAt != nil, isNearZero: isNearZero ?? false, judgeable: judgeable)
 
     // Resolve a recovery requested on a *prior* attempt: this turn is the "next
     // judgeable turn" whose outcome proves whether the rebuild restored capture.
@@ -396,6 +495,7 @@ final class PTTAttemptLifecycleRecorder {
       hadFirstAudioCallback: firstAudioCallbackAt != nil,
       hadFirstUsableFrame: firstUsableFrameAt != nil,
       judgeable: judgeable,
+      captureStartedLate: captureStartedLate,
       resolvedRecoveryOutcome: resolvedOutcome)
 
     let snapshot = Snapshot(
@@ -407,6 +507,7 @@ final class PTTAttemptLifecycleRecorder {
       msToFirstUsableFrameBucket: MillisecondsBucket.bucket(fromMs: msToFirstUsable),
       firstChunksEnergyBucket: firstEnergy,
       turnDisposition: disposition,
+      turnKind: turnKind,
       inputRouteClass: inputRouteClass,
       inputRouteSource: inputRouteSource,
       routeChangedDuringAttempt: routeChangedDuringAttempt,
@@ -424,7 +525,7 @@ final class PTTAttemptLifecycleRecorder {
       rms: rms,
       isNearZero: isNearZero,
       judgeable: judgeable,
-      telemetrySchemaVersion: 2)
+      telemetrySchemaVersion: 3)
 
     emit(snapshot)
     return snapshot
@@ -441,6 +542,7 @@ final class PTTAttemptLifecycleRecorder {
     hadFirstAudioCallback: Bool,
     hadFirstUsableFrame: Bool,
     judgeable: Bool,
+    captureStartedLate: Bool = false,
     resolvedRecoveryOutcome: RecoveryOutcomeOfNextTurn
   ) -> FailureClass {
     if resolvedRecoveryOutcome == .recovered { return .recoveryOutcomeRecovered }
@@ -448,10 +550,16 @@ final class PTTAttemptLifecycleRecorder {
     if resolvedRecoveryOutcome == .notJudgeable { return .recoveryOutcomeNotJudgeable }
 
     if disposition == .cancelled { return .cancelled }
+    if disposition == .permissionDenied { return .permissionDenied }
 
-    // (1) Capture never became operational: start failed, or it was requested but
-    // never delivered a callback before the turn ended (startup race).
-    if captureStartOutcome == .failed || !hadFirstAudioCallback {
+    // (1) Capture never became operational for this press: the start failed, it
+    // was requested but never delivered a callback before the turn ended
+    // (startup race), or it came up so late in the hold that it delivered less
+    // audio than the commit gate needs. The last case used to land in
+    // `too_short_audible`, which reads as a user who tapped — it is the same
+    // capture defect as the other two and belongs in the same class so one query
+    // sizes the whole first-press gap.
+    if captureStartOutcome == .failed || !hadFirstAudioCallback || captureStartedLate {
       return .captureNeverOperational
     }
 

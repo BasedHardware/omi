@@ -5,23 +5,49 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
-from typing import Any, Dict, Optional, cast
+from collections import deque
+from typing import Any, Deque, Dict, Optional, Tuple, cast
 
 import av
 import numpy as np
 
+from models.transcript_segment import SpeakerIdentityStatus
 from utils.audio import AudioRingBuffer
 from utils.executors import storage_executor, sync_executor, run_blocking
 from utils.other.storage import get_profile_audio_if_exists
 from utils.speaker_sample import download_sample_audio
 from utils.speaker_sample_migration import maybe_migrate_person_samples
-from utils.stt.speaker_embedding import SPEAKER_MATCH_THRESHOLD, compare_embeddings, extract_embedding_from_bytes
+from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
+from utils.stt.speaker_match import (
+    SPEAKER_MATCH_MAX_CLIPS,
+    SPEAKER_MATCH_MIN_EVIDENCE_SECONDS,
+    mean_embedding,
+    select_speaker_match,
+)
 from utils.transcribe_decisions import USER_SELF_PERSON_ID, should_spawn_speaker_match
-from utils.transcribe_store import user_db
+from utils.transcribe_store import get_user_name, user_db
+from utils.metrics import OMI_SPEAKER_ID_MATCH_EXITS_TOTAL
 
 logger = logging.getLogger(__name__)
 
 MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS = 10.0
+
+# The enumerated early-exit reasons for live speaker-ID matching. Every return
+# before a match decision bumps exactly one of these (Prometheus counter label
+# and one log line), so a user report of lost recognition is attributable
+# instead of silently empty. The set is deliberately small:
+# - window_outside_buffer: the segment's audio window does not intersect the
+#   ring buffer's retained range (the post-failover clock bug's signature).
+# - too_short: the segment, or what remains of its window after subtracting
+#   already-embedded audio, is below the minimum embedding duration.
+# - no_pcm: no buffered audio at all, or the extraction returned no PCM.
+# - stale_generation: the matcher's conversation/profile state moved on while
+#   this detection was queued, or the segment belongs to an earlier conversation.
+# - already_mapped: a decision exists for this diarized speaker (a race drop,
+#   not a loss).
+SPEAKER_ID_EXIT_REASONS = frozenset(
+    {'window_outside_buffer', 'too_short', 'no_pcm', 'stale_generation', 'already_mapped'}
+)
 
 
 def _read_file(path: str) -> bytes:
@@ -36,20 +62,60 @@ class SpeakerMatcher:
         self.person_embeddings: Dict[str, Dict[str, Any]] = {}
         self.speaker_to_person: Dict[int, tuple[str, str]] = {}
         self.segment_assignments: Dict[str, str] = {}
+        self.segment_identity_status: Dict[str, SpeakerIdentityStatus] = {}
+        # Recent (embedding, clip seconds) per diarized speaker. A decision is made on
+        # the centroid once enough audio has accumulated, instead of letting the first
+        # clip that happens to land under the threshold stick for the whole session.
+        self.speaker_evidence: Dict[int, Deque[Tuple[Any, float]]] = {}
+        # Serialize evidence and decisions for each diarized speaker. Covered
+        # intervals survive centroid eviction, but are pruned with the audio ring.
+        self._speaker_locks: Dict[int, asyncio.Lock] = {}
+        self._covered_audio: Dict[int, list[tuple[float, float]]] = {}
+        self._generation = 0
         self.tasks: set[asyncio.Task[Any]] = set()
+        self._profile_conversation_id: Optional[str] = None
+        self._profile_lock = asyncio.Lock()
+        # The account owner's own first name, so hearing it in the transcript cannot
+        # mint a person who is really the user. Resolved lazily by
+        # resolve_owner_name(); used for display and as a veto, never as voice-match evidence.
+        self.owner_name: Optional[str] = None
+        self._owner_name_resolved = False
 
-    async def load_and_run(self) -> None:
-        state = self.host.state
-        if not state.speaker_id_enabled:
-            state.speaker_id_done.set()
-            return
+    async def refresh_for_conversation(self, conversation_id: str) -> None:
+        async with self._profile_lock:
+            if self._profile_conversation_id == conversation_id:
+                return
+            self.clear()
+            self._profile_conversation_id = conversation_id
+            if self.host.state.speaker_id_enabled:
+                await self._load_profiles()
+
+    async def resolve_owner_name(self) -> Optional[str]:
+        """The account owner's first name, resolved at most once per session.
+
+        Resolved when an owner embedding or a textual introduction needs it.
+        A failure leaves the veto off rather than failing the session.
+        """
+        if self._owner_name_resolved:
+            return self.owner_name
+        self._owner_name_resolved = True
+        try:
+            name = await self.host.persistence.call(get_user_name, self.host.request.uid, False)
+        except Exception as error:
+            logger.error('Speaker ID owner name load failed type=%s', type(error).__name__)
+            return None
+        if name and isinstance(name, str) and name.strip():
+            self.owner_name = name.strip()
+        return self.owner_name
+
+    async def _load_profiles(self) -> None:
         if self.host.has_speech_profile:
             try:
                 embedding = await self.host.persistence.call(user_db.get_user_speaker_embedding, self.host.request.uid)
                 if embedding:
                     self.person_embeddings[USER_SELF_PERSON_ID] = {
                         'embedding': np.array(embedding, dtype=np.float32).reshape(1, -1),
-                        'name': 'User',
+                        'name': await self.resolve_owner_name() or 'The User',
                     }
                 else:
                     path = await run_blocking(storage_executor, get_profile_audio_if_exists, self.host.request.uid)
@@ -59,10 +125,15 @@ class SpeakerMatcher:
                             sync_executor, cast(Any, extract_embedding_from_bytes), profile, 'speech_profile.wav'
                         )
                         del profile
-                        self.person_embeddings[USER_SELF_PERSON_ID] = {'embedding': result, 'name': 'User'}
+                        self.person_embeddings[USER_SELF_PERSON_ID] = {
+                            'embedding': result,
+                            'name': await self.resolve_owner_name() or 'The User',
+                        }
                         await self.host.persistence.call(
                             user_db.set_user_speaker_embedding, self.host.request.uid, result.flatten().tolist()
                         )
+                    else:
+                        logger.info('Speaker ID owner profile skipped reason=no_embedding_or_audio')
             except Exception as error:
                 logger.error('Speaker ID user embedding load failed type=%s', type(error).__name__)
         try:
@@ -82,11 +153,19 @@ class SpeakerMatcher:
                     self.person_embeddings[person['id']] = {'embedding': vector, 'name': person['name']}
         except Exception as error:
             logger.error('Speaker ID embeddings load failed type=%s', type(error).__name__)
+            return
+
+    async def load_and_run(self) -> None:
+        state = self.host.state
+        if not state.speaker_id_enabled:
             state.speaker_id_done.set()
             return
-        if not self.person_embeddings:
-            state.speaker_id_done.set()
-            return
+        # prepare() may already have loaded the first conversation's profiles.
+        # Keep the loop alive even with zero enrolled people so a later
+        # refresh_for_conversation can load a newly taught profile and still
+        # consume the queue in this socket session.
+        if self._profile_conversation_id is None:
+            await self._load_profiles()
         while True:
             try:
                 segment = await asyncio.wait_for(self.queue.get(), timeout=2.0)
@@ -103,7 +182,20 @@ class SpeakerMatcher:
                 task = self.host.spawn(self.match(speaker_id, segment), name='speaker_match')
                 self.tasks.add(task)
                 task.add_done_callback(self.tasks.discard)
+            else:
+                # Dropped before a match is attempted; count it with the same
+                # bounded vocabulary the match path uses.
+                self._record_exit('already_mapped' if speaker_id in self.speaker_to_person else 'too_short', speaker_id)
         state.speaker_id_done.set()
+
+    def _session_log_id(self) -> Any:
+        """Recording session id for speaker-ID log attribution; never the uid."""
+        return getattr(self.host, 'recording_session_id', None)
+
+    def _record_exit(self, reason: str, speaker_id: int) -> None:
+        assert reason in SPEAKER_ID_EXIT_REASONS, reason
+        OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason=reason).inc()
+        logger.info('speaker_id_exit reason=%s speaker=%s session=%s', reason, speaker_id, self._session_log_id())
 
     async def _recover_person_embedding(self, person: Dict[str, Any]) -> Optional[Any]:
         """Rebuild a taught person's missing embedding from their stored samples.
@@ -127,9 +219,15 @@ class SpeakerMatcher:
             if not audio:
                 return None
             vector = await run_blocking(sync_executor, cast(Any, extract_embedding_from_bytes), audio, 'sample.wav')
-            await self.host.persistence.call(
-                user_db.set_person_speaker_embedding, self.host.request.uid, person_id, vector.flatten().tolist()
+            saved = await self.host.persistence.call(
+                user_db.set_person_speaker_embedding,
+                self.host.request.uid,
+                person_id,
+                vector.flatten().tolist(),
+                expected_updated_at=person.get('updated_at'),
             )
+            if not saved:
+                return None
             logger.info('Speaker ID recovered missing person embedding person=%s', person_id)
             return vector
         except Exception as error:
@@ -138,29 +236,84 @@ class SpeakerMatcher:
             )
             return None
 
+    def _drop_reason(self, generation: int, conversation_id: Optional[str], speaker_id: int) -> Optional[str]:
+        """Why this in-flight detection can no longer produce a decision, if it can't."""
+        if generation != self._generation or self._profile_conversation_id != conversation_id:
+            return 'stale_generation'
+        if speaker_id in self.speaker_to_person:
+            return 'already_mapped'
+        return None
+
     async def match(self, speaker_id: int, segment: dict[str, Any]) -> None:
+        conversation_id = self._profile_conversation_id
+        if segment.get('conversation_id') is not None and segment['conversation_id'] != conversation_id:
+            self._record_exit('stale_generation', speaker_id)
+            return
+        generation = self._generation
+        lock = self._speaker_locks.setdefault(speaker_id, asyncio.Lock())
+        async with lock:
+            drop_reason = self._drop_reason(generation, conversation_id, speaker_id)
+            if drop_reason is not None:
+                self._record_exit(drop_reason, speaker_id)
+                return
+            await self._match_unmapped(speaker_id, segment, generation, conversation_id)
+
+    async def _match_unmapped(
+        self, speaker_id: int, segment: dict[str, Any], generation: int, conversation_id: Optional[str]
+    ) -> None:
         try:
             ring_buffer: Optional[AudioRingBuffer] = self.host.state.audio_ring_buffer
-            if ring_buffer is None or segment['duration'] < self.host.limits.speaker_id_min_audio:
+            if ring_buffer is None:
+                self._record_exit('no_pcm', speaker_id)
+                return
+            if segment['duration'] < self.host.limits.speaker_id_min_audio:
+                self._record_exit('too_short', speaker_id)
                 return
             time_range = ring_buffer.get_time_range()
             if time_range is None:
+                self._record_exit('no_pcm', speaker_id)
                 return
             buffer_start, buffer_end = time_range
-            segment_start = segment['abs_start']
-            segment_end = segment['abs_end']
-            if segment['duration'] <= MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS:
-                extract_start, extract_end = segment_start, segment_end
-            else:
-                center = (segment_start + segment_end) / 2
+            if segment['abs_end'] <= buffer_start or segment['abs_start'] >= buffer_end:
+                # The window does not intersect the retained audio at all —
+                # e.g. a provider stream whose timestamps restarted at zero
+                # after a failover while the window was still computed from
+                # the first provider's clock. Name it; never fall through to
+                # an inverted-clamp "too short" that hides the real cause.
+                self._record_exit('window_outside_buffer', speaker_id)
+                return
+            # Streaming providers resend/extend merged segments. Subtract every
+            # successfully embedded interval before choosing a fresh clip, so an
+            # update cannot turn three seconds of speech into six seconds of evidence.
+            covered = [(a, b) for a, b in self._covered_audio.get(speaker_id, []) if b > buffer_start]
+            self._covered_audio[speaker_id] = covered
+            fresh = [(max(buffer_start, segment['abs_start']), min(buffer_end, segment['abs_end']))]
+            for used_start, used_end in covered:
+                remaining = []
+                for start, end in fresh:
+                    if used_end <= start or used_start >= end:
+                        remaining.append((start, end))
+                    else:
+                        if start < used_start:
+                            remaining.append((start, used_start))
+                        if used_end < end:
+                            remaining.append((used_end, end))
+                fresh = remaining
+            if not fresh:
+                # Zero fresh seconds left after subtracting embedded audio.
+                self._record_exit('too_short', speaker_id)
+                return
+            extract_start, extract_end = max(fresh, key=lambda interval: interval[1] - interval[0])
+            if extract_end - extract_start > MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS:
+                center = (extract_start + extract_end) / 2
                 half_window = MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS / 2
                 extract_start, extract_end = center - half_window, center + half_window
-            extract_start = max(buffer_start, extract_start)
-            extract_end = min(buffer_end, extract_end)
             if extract_end - extract_start < self.host.limits.speaker_id_min_audio:
+                self._record_exit('too_short', speaker_id)
                 return
             pcm = ring_buffer.extract(extract_start, extract_end)
             if not pcm:
+                self._record_exit('no_pcm', speaker_id)
                 return
             samples = np.frombuffer(pcm, dtype=np.int16)
             buffer = io.BytesIO()
@@ -177,28 +330,79 @@ class SpeakerMatcher:
             query = await run_blocking(
                 sync_executor, cast(Any, extract_embedding_from_bytes), buffer.getvalue(), 'query.wav'
             )
-            best_id: Optional[str] = None
-            best_name: Optional[str] = None
-            best_distance = float('inf')
-            for person_id, value in self.person_embeddings.items():
-                distance = compare_embeddings(query, value['embedding'])
-                if distance < best_distance:
-                    best_id, best_name, best_distance = person_id, value['name'], distance
-            if best_id and best_name and best_distance < SPEAKER_MATCH_THRESHOLD:
+            if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
+                self._record_exit(drop_reason, speaker_id)
+                return
+            # Reserve only successful embeddings: a failed request may be retried.
+            covered.append((extract_start, extract_end))
+            clip_seconds = extract_end - extract_start
+            evidence = self.speaker_evidence.setdefault(speaker_id, deque(maxlen=SPEAKER_MATCH_MAX_CLIPS))
+            evidence.append((query, clip_seconds))
+            evidence_seconds = sum(seconds for _, seconds in evidence)
+            if evidence_seconds < SPEAKER_MATCH_MIN_EVIDENCE_SECONDS:
+                # Accumulation, not a drop: this speaker's next clip reuses the
+                # evidence and reaches a decision, so it logs (below) but is not
+                # an exit reason.
+                logger.info(
+                    'speaker_id_evidence surface=live speaker=%s clips=%d evidence_seconds=%.1f decision=pending session=%s',
+                    speaker_id,
+                    len(evidence),
+                    evidence_seconds,
+                    self._session_log_id(),
+                )
+                return
+            centroid = mean_embedding([embedding for embedding, _ in evidence]) if len(evidence) > 1 else query
+            distances = {
+                person_id: compare_embeddings(centroid, value['embedding'])
+                for person_id, value in self.person_embeddings.items()
+            }
+            decision = select_speaker_match(distances)
+            logger.info(
+                'speaker_id_decision surface=live speaker=%s clips=%d evidence_seconds=%.1f '
+                'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s session=%s',
+                speaker_id,
+                len(evidence),
+                evidence_seconds,
+                decision.best_id,
+                decision.best_distance,
+                decision.runner_up_distance,
+                decision.accepted,
+                self._session_log_id(),
+            )
+            if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
+                self._record_exit(drop_reason, speaker_id)
+                return
+            if decision.person_id is not None:
+                best_id = decision.person_id
+                best_name = self.person_embeddings[best_id]['name']
                 self.speaker_to_person[speaker_id] = (best_id, best_name)
                 self.segment_assignments[segment['id']] = best_id
+                self.segment_identity_status[segment['id']] = (
+                    SpeakerIdentityStatus.user if best_id == USER_SELF_PERSON_ID else SpeakerIdentityStatus.not_user
+                )
                 self.host.state.speaker_map_dirty = True
                 self.host.emit_speaker_suggestion(speaker_id, best_id, best_name, segment['id'])
             else:
-                logger.info('Speaker ID no match speaker=%s best_distance=%.3f', speaker_id, best_distance)
+                self.segment_identity_status[segment['id']] = SpeakerIdentityStatus.no_match
+                self.host.state.speaker_map_dirty = True
         except Exception as error:
-            logger.error('Speaker ID match failed speaker=%s type=%s', speaker_id, type(error).__name__)
+            logger.error(
+                'Speaker ID match failed speaker=%s type=%s session=%s',
+                speaker_id,
+                type(error).__name__,
+                self._session_log_id(),
+            )
 
     async def drain(self, *, timeout: float, label: str) -> None:
         if self.tasks:
             await self.host.drain(list(self.tasks), timeout=timeout, label=label)
 
     def clear(self) -> None:
+        self._generation += 1
+        self._profile_conversation_id = None
+        self._covered_audio.clear()
         self.person_embeddings.clear()
         self.speaker_to_person.clear()
+        self.speaker_evidence.clear()
         self.segment_assignments.clear()
+        self.segment_identity_status.clear()

@@ -6,6 +6,7 @@ L2 lifecycle filter withholds them until explicit disposition.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import List
 
@@ -16,10 +17,38 @@ from models.product_memory import (
     MemoryTier,
     ProcessingState,
     MemoryItem,
+    effective_short_term_expiry,
     is_default_access_eligible,
 )
+from utils.observability.fallback import record_fallback
 
 _L2_PROCESSED_REQUIRES_DISPOSITION = "short_term_l2_processed_requires_explicit_lifecycle_disposition"
+logger = logging.getLogger(__name__)
+
+
+def _log_expiry_disposition_observations(items: List[MemoryItem], *, now: datetime) -> None:
+    expired_pending_terminal_apply = 0
+    for item in items:
+        if (
+            item.tier == MemoryTier.short_term
+            and item.status == MemoryItemStatus.active
+            and item.processing_state == ProcessingState.processed
+            and effective_short_term_expiry(item) <= now
+        ):
+            expired_pending_terminal_apply += 1
+    if expired_pending_terminal_apply:
+        logger.warning(
+            "canonical_memory_expiry_observation: expired_active_pending_terminal_apply count=%d",
+            expired_pending_terminal_apply,
+        )
+        record_fallback(
+            component='memory_analytics',
+            from_mode='ttl_hidden',
+            to_mode='readable_pending_adjudication',
+            reason='policy',
+            outcome='degraded',
+            log=logger,
+        )
 
 
 def filter_canonical_default_visible_items(
@@ -29,6 +58,7 @@ def filter_canonical_default_visible_items(
     now: datetime,
 ) -> List[MemoryItem]:
     """Return default-visible canonical items, including §1.3 processed short_term."""
+    _log_expiry_disposition_observations(items, now=now)
     report = filter_default_product_memory_items(items, policy=policy, now=now)
     visible_by_id = {
         item.memory_id: item for item in report.visible_items if item.processing_state == ProcessingState.processed

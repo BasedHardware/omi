@@ -22,20 +22,14 @@ diarizer/               # Subservice: speaker audio analysis (separate Docker, G
                         #   - POST /v1/embedding — speaker vector extraction (pyannote/embedding)
                         #   - POST /v2/embedding — alt speaker vectors (wespeaker-voxceleb-resnet34-LM)
 
-agent-proxy/            # Subservice: WebSocket bridge between mobile app and user's agent VM
-                        #   - Firebase auth → Firestore VM lookup → GCE lifecycle (start/reset/health)
-                        #   - Bidirectional message pump with keepalive (120s)
-                        #   - Chat history injection (last 10 messages on first query)
-                        #   - Optional AES-256-GCM message encryption
-
 nllb_translation/       # Subservice: self-hosted NLLB translation (separate Docker, GPU/CUDA)
                         #   - POST /v1/translate — batch sentence translation (NLLB-200 + CTranslate2)
                         #   - Prometheus metrics at /metrics, health at /health, readiness at /ready
                         #   - Fallback to Gemini 2.5 Flash-Lite when NLLB is unavailable
 
 modal/                  # Serverless GPU services (deployed on Modal) + Cloud Run Jobs
-                        #   - Speaker identification: matches segments to speech profiles (SpeechBrain, T4 GPU)
                         #   - VAD: voice activity detection (pyannote/voice-activity-detection)
                         #   - notifications-job: hourly push notifications + X sync (Cloud Run Job)
                         #   - memory-maintenance-job: canonical ST→LT maintenance (Cloud Run Job)
+                        #   - knowledge-ledger-drain-job: bounded writer-mode migration (Cloud Run Job)
 ```

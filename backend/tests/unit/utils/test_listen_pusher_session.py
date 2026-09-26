@@ -1,10 +1,14 @@
 import asyncio
 import json
+import logging
 import struct
 
 import pytest
 
 from utils.listen_pusher_session import (
+    FINALIZATION_IN_FLIGHT_ERROR,
+    FINALIZATION_RESULT_PROTOCOL,
+    FINALIZATION_STALE_GENERATION_ERROR,
     TARGET_SAMPLE_RATE,
     ListenPusherSession,
     ListenPusherSessionConfig,
@@ -58,6 +62,25 @@ def error_response_201(conversation_id: str, terminal: bool = False):
     return struct.pack("<I", 201) + payload
 
 
+def in_flight_response_201(conversation_id: str):
+    payload = json.dumps(
+        {"conversation_id": conversation_id, "error": FINALIZATION_IN_FLIGHT_ERROR, "terminal": False}
+    ).encode("utf-8")
+    return struct.pack("<I", 201) + payload
+
+
+def stale_generation_response_201(conversation_id: str, dispatch_generation=None, terminal: bool = False):
+    payload = {
+        "conversation_id": conversation_id,
+        "error": FINALIZATION_STALE_GENERATION_ERROR,
+        "terminal": terminal,
+    }
+    if dispatch_generation is not None:
+        payload["dispatch_generation"] = dispatch_generation
+    payload = json.dumps(payload).encode("utf-8")
+    return struct.pack("<I", 201) + payload
+
+
 def fenced_response_201(conversation_id: str):
     payload = json.dumps({"conversation_id": conversation_id, "fenced": True}).encode("utf-8")
     return struct.pack("<I", 201) + payload
@@ -76,6 +99,7 @@ def make_session(
     config_overrides=None,
     deps_overrides=None,
     connect_calls=None,
+    client_kind_calls=None,
 ):
     active_ref = active_ref if active_ref is not None else {"active": True}
     config_values = {
@@ -93,9 +117,11 @@ def make_session(
     if config_overrides:
         config_values.update(config_overrides)
 
-    async def connect_to_pusher(uid, sample_rate, retries=5, is_active=None):
+    async def connect_to_pusher(uid, sample_rate, retries=5, is_active=None, client_kind='unknown'):
         if connect_calls is not None:
             connect_calls.append((uid, sample_rate, retries, is_active))
+        if client_kind_calls is not None:
+            client_kind_calls.append(client_kind)
         return ws or FakePusherWebSocket()
 
     async def wait_for_event(event, timeout):
@@ -184,6 +210,7 @@ async def test_finalization_job_identity_survives_pusher_reconnect():
             'byok_keys': {'openai': 'key'},
             'finalization_job_id': 'job-1',
             'dispatch_generation': 3,
+            'finalization_result_protocol': FINALIZATION_RESULT_PROTOCOL,
         },
         {
             'conversation_id': 'conv-1',
@@ -191,6 +218,7 @@ async def test_finalization_job_identity_survives_pusher_reconnect():
             'byok_keys': {'openai': 'key'},
             'finalization_job_id': 'job-1',
             'dispatch_generation': 3,
+            'finalization_result_protocol': FINALIZATION_RESULT_PROTOCOL,
         },
     ]
 
@@ -241,11 +269,13 @@ def test_bounded_audio_and_transcript_buffers():
 
     session.audio_bytes_send(b"abc", received_at=1.0)
     session.audio_bytes_send(b"def", received_at=2.0)
-    assert b"".join(session.audio_chunks) == b"def"
+    # Audio runs (not bare chunks) since audio-timeline v2: each run carries
+    # its conversation binding and projected start alongside the bytes.
+    assert b"".join(run.data for run in session.audio_runs) == b"def"
     assert session.audio_total_size == 3
 
     session.audio_bytes_send(b"123456789", received_at=3.0)
-    assert b"".join(session.audio_chunks) == b"56789"
+    assert b"".join(run.data for run in session.audio_runs) == b"56789"
     assert session.audio_total_size == 5
 
 
@@ -273,11 +303,11 @@ async def test_failed_audio_send_retains_buffer_for_retry():
     session.audio_bytes_send(b"abcd", received_at=100.0)
 
     await session._audio_bytes_flush()
-    assert b"".join(session.audio_chunks) == b"abcd"
+    assert b"".join(run.data for run in session.audio_runs) == b"abcd"
     assert session.audio_total_size == 4
 
     await session._audio_bytes_flush()
-    assert list(session.audio_chunks) == []
+    assert list(session.audio_runs) == []
     assert session.audio_total_size == 0
     assert ws.sent[-1][12:] == b"abcd"
 
@@ -297,7 +327,7 @@ async def test_cancelled_send_retains_buffer(flush):
         session.audio_bytes_send(b"abcd", received_at=100.0)
         with pytest.raises(asyncio.CancelledError):
             await session._audio_bytes_flush()
-        assert b"".join(session.audio_chunks) == b"abcd"
+        assert b"".join(run.data for run in session.audio_runs) == b"abcd"
         assert session.audio_total_size == 4
 
 
@@ -376,9 +406,41 @@ async def test_incoming_finalization_error_keeps_request_for_bounded_retry():
 
 
 @pytest.mark.anyio
-async def test_incoming_terminal_finalization_error_stops_retrying():
+async def test_will_retry_finalization_error_logs_warning_not_error(caplog):
+    # The will-retry branch is healthy in-flight work by the session's own
+    # accounting (the pending entry is re-armed for bounded retry); logging
+    # it at ERROR paged on-call for traffic that self-heals (2026-09-05:
+    # 40-50 ERROR/30min for 2h against ~250-270 healthy processing/30min,
+    # 0-17 terminal). Severity is the fault-origin signal — same boundary
+    # as the WS-auth reclassification (FC-request-input-rejection-escapes-
+    # as-server-fault). The terminal branch keeps ERROR (companion test).
+    with caplog.at_level(logging.DEBUG, logger="utils.listen_pusher_session"):
+        active_ref = {"active": True}
+        ws = FakePusherWebSocket(incoming=[error_response_201("conv-1")])
+        ws.on_recv = lambda: active_ref.update(active=False)
+        session = make_session(ws=ws, active_ref=active_ref)
+        await session.connect()
+        await session.request_conversation_processing("conv-1", "job-1", 2)
+
+        await session.pusher_receive()
+
+    records = [r for r in caplog.records if r.getMessage().startswith("Conversation processing failed")]
+    assert records, "expected a will-retry failure record"
+    assert all(
+        r.levelno == logging.WARNING for r in records
+    ), "the will-retry finalization branch must log at WARNING, not ERROR"
+    # WARNING must not mean dropped: the request stays armed for bounded retry.
+    assert session.pending_conversation_requests['conv-1']['retries'] == 1
+
+
+@pytest.mark.anyio
+async def test_in_flight_finalization_lease_does_not_consume_the_retry_burst():
+    # `job_leased` means a concurrent dispatch of the same job is finalizing
+    # normally. Treating it as a failure re-requested it immediately, and each
+    # rejection re-armed the next one, so the whole burst burned in under a
+    # second and left a genuine later failure with no attempts.
     active_ref = {"active": True}
-    ws = FakePusherWebSocket(incoming=[error_response_201("conv-1", terminal=True)])
+    ws = FakePusherWebSocket(incoming=[in_flight_response_201("conv-1")])
     ws.on_recv = lambda: active_ref.update(active=False)
     session = make_session(ws=ws, active_ref=active_ref)
     await session.connect()
@@ -386,11 +448,106 @@ async def test_incoming_terminal_finalization_error_stops_retrying():
 
     await session.pusher_receive()
 
+    finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
+    assert len(finalization_frames) == 1
+    pending = session.pending_conversation_requests['conv-1']
+    assert pending['retries'] == 0
+    assert pending['sent_at'] == session.deps.now()
+
+
+@pytest.mark.anyio
+async def test_stale_finalization_generation_drops_live_request_for_durable_replay():
+    active_ref = {"active": True}
+    ws = FakePusherWebSocket(incoming=[stale_generation_response_201("conv-1", 2)])
+    ws.on_recv = lambda: active_ref.update(active=False)
+    session = make_session(ws=ws, active_ref=active_ref)
+    await session.connect()
+    await session.request_conversation_processing("conv-1", "job-1", 2)
+
+    await session.pusher_receive()
+
+    # The reconciler owns the newer dispatch generation; a live retry of 2
+    # can never claim it and must not consume the session's retry burst.
+    assert session.pending_conversation_requests == {}
+    finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
+    assert len(finalization_frames) == 1
+
+
+@pytest.mark.anyio
+async def test_delayed_stale_finalization_response_does_not_drop_newer_pending_generation():
+    active_ref = {"active": True}
+    ws = FakePusherWebSocket(incoming=[stale_generation_response_201("conv-1", 1)])
+    ws.on_recv = lambda: active_ref.update(active=False)
+    session = make_session(ws=ws, active_ref=active_ref)
+    await session.connect()
+    await session.request_conversation_processing("conv-1", "job-1", 2)
+
+    await session.pusher_receive()
+
+    assert session.pending_conversation_requests["conv-1"]["dispatch_generation"] == 2
+    finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
+    assert len(finalization_frames) == 1
+
+
+@pytest.mark.anyio
+async def test_legacy_pusher_stale_response_without_generation_preserves_newer_pending_generation():
+    active_ref = {"active": True}
+    ws = FakePusherWebSocket(incoming=[stale_generation_response_201("conv-1")])
+    ws.on_recv = lambda: active_ref.update(active=False)
+    session = make_session(ws=ws, active_ref=active_ref)
+    await session.connect()
+    await session.request_conversation_processing("conv-1", "job-1", 2)
+
+    await session.pusher_receive()
+
+    # A pre-v2 pusher cannot identify which pending generation it rejected.
+    assert session.pending_conversation_requests["conv-1"]["dispatch_generation"] == 2
+    finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
+    assert len(finalization_frames) == 1
+
+
+@pytest.mark.anyio
+async def test_stale_generation_one_drops_pending_job_with_omitted_generation():
+    active_ref = {"active": True}
+    ws = FakePusherWebSocket(incoming=[stale_generation_response_201("conv-1", 1)])
+    ws.on_recv = lambda: active_ref.update(active=False)
+    session = make_session(ws=ws, active_ref=active_ref)
+    await session.connect()
+    await session.request_conversation_processing("conv-1", "job-1")
+
+    await session.pusher_receive()
+
+    # The wire serializer defaults an omitted generation to 1, so the stale
+    # response must match that effective generation and drop the request.
+    assert session.pending_conversation_requests == {}
+    finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
+    assert len(finalization_frames) == 1
+    assert frame_json(finalization_frames[0])["dispatch_generation"] == 1
+
+
+@pytest.mark.anyio
+async def test_incoming_terminal_finalization_error_stops_retrying(caplog):
+    active_ref = {"active": True}
+    ws = FakePusherWebSocket(incoming=[error_response_201("conv-1", terminal=True)])
+    ws.on_recv = lambda: active_ref.update(active=False)
+    session = make_session(ws=ws, active_ref=active_ref)
+    await session.connect()
+    await session.request_conversation_processing("conv-1", "job-1", 2)
+
+    with caplog.at_level(logging.DEBUG, logger="utils.listen_pusher_session"):
+        await session.pusher_receive()
+
     # A dead-lettered job can never succeed: re-requesting it would retry the
     # same failing finalization for the whole life of the session.
     assert session.pending_conversation_requests == {}
     finalization_frames = [frame for frame in ws.sent if frame_type(frame) == 104]
     assert len(finalization_frames) == 1
+    # The terminal branch is the genuine fault signal: it stays at ERROR.
+    terminal_records = [
+        r for r in caplog.records if r.getMessage().startswith("Conversation processing failed terminally")
+    ]
+    assert terminal_records, "expected a terminal failure record"
+    assert all(r.levelno == logging.ERROR for r in terminal_records)
 
 
 @pytest.mark.anyio
@@ -441,3 +598,98 @@ async def test_close_cancels_reconnect_flushes_buffers_and_closes_socket():
     assert session.reconnect_task is None
     assert [frame_type(frame) for frame in ws.sent] == [103, 101, 102]
     assert ws.closed_codes == [1001]
+
+
+@pytest.mark.anyio
+async def test_pusher_connection_carries_the_bounded_client_kind():
+    """The pusher session is the only place that knows which client opened it.
+
+    Without this the pusher-side journey counters cannot tell an iOS outage from
+    a healthy Android population, which is the aggregation that let a 19-hour
+    desktop chat outage hide behind a larger healthy client.
+    """
+    client_kind_calls = []
+    session = make_session(
+        config_overrides={"client_kind": "mobile_ios"},
+        client_kind_calls=client_kind_calls,
+    )
+
+    await session.connect()
+
+    assert client_kind_calls == ["mobile_ios"]
+
+
+@pytest.mark.anyio
+async def test_pusher_connection_defaults_to_unknown_rather_than_guessing():
+    client_kind_calls = []
+    session = make_session(client_kind_calls=client_kind_calls)
+
+    await session.connect()
+
+    assert client_kind_calls == ["unknown"]
+
+
+@pytest.mark.anyio
+async def test_v2_runs_split_into_separate_101_frames_across_a_wall_gap():
+    """A wall gap between buffered runs must not be concatenated into one frame.
+
+    Two v2 runs of the same conversation with a 0.5 s projected gap flush as
+    two opcode-101 frames, each header carrying its own run's projected start;
+    concatenating them would delete the gap from the stored audio while the
+    header still claimed the first run's position.
+    """
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws, config_overrides={'max_audio_buffer_size': 1_000_000})
+    await session.connect()
+
+    rate = 8000
+    run_a = b'\x01\x00' * rate  # 1 s at 100.0
+    run_b = b'\x02\x00' * rate  # 1 s at 101.5 (0.5 s past run A's end)
+    session.audio_bytes_send(run_a, received_at=100.5, conversation_id='conv-1', start_wall=100.0)
+    session.audio_bytes_send(run_b, received_at=101.5, conversation_id='conv-1', start_wall=101.5)
+    await session._audio_bytes_flush()
+
+    audio_frames = [frame for frame in ws.sent if frame_type(frame) == 101]
+    assert len(audio_frames) == 2, 'a projected discontinuity must flush separate frames'
+    first_ts = struct.unpack('d', audio_frames[0][4:12])[0]
+    second_ts = struct.unpack('d', audio_frames[1][4:12])[0]
+    assert first_ts == 100.0
+    assert second_ts == 101.5
+    assert audio_frames[0][12:] == run_a
+    assert audio_frames[1][12:] == run_b
+
+
+@pytest.mark.anyio
+async def test_v2_contiguous_runs_still_share_one_101_frame():
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws, config_overrides={'max_audio_buffer_size': 1_000_000})
+    await session.connect()
+
+    rate = 8000
+    run_a = b'\x03\x00' * rate
+    run_b = b'\x04\x00' * rate
+    session.audio_bytes_send(run_a, received_at=100.9, conversation_id='conv-1', start_wall=100.0)
+    # Contiguous within 1 ms: exactly run A's end.
+    session.audio_bytes_send(run_b, received_at=102.0, conversation_id='conv-1', start_wall=101.0)
+    await session._audio_bytes_flush()
+
+    audio_frames = [frame for frame in ws.sent if frame_type(frame) == 101]
+    assert len(audio_frames) == 1
+    assert struct.unpack('d', audio_frames[0][4:12])[0] == 100.0
+    assert audio_frames[0][12:] == run_a + run_b
+
+
+@pytest.mark.anyio
+async def test_legacy_runs_without_projection_keep_legacy_grouping():
+    """Runs without a projected start (flag-off sessions) never split on gaps."""
+    ws = FakePusherWebSocket()
+    session = make_session(ws=ws)
+    await session.connect()
+
+    session.audio_bytes_send(b'abcd', received_at=100.0)
+    session.audio_bytes_send(b'efgh', received_at=200.0)
+    await session._audio_bytes_flush()
+
+    audio_frames = [frame for frame in ws.sent if frame_type(frame) == 101]
+    assert len(audio_frames) == 1
+    assert audio_frames[0][12:] == b'abcdefgh'

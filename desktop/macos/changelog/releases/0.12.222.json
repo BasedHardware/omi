@@ -1,0 +1,8 @@
+{
+  "version": "0.12.222",
+  "date": "2026-08-26",
+  "changes": [
+    "Added a simpler BYOK provider menu with OpenRouter chat routing and separate transcription setup",
+    "Fixed a microphone failure warning that could freeze Omi instead of letting you keep using the app"
+  ]
+}

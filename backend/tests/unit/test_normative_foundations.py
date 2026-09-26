@@ -146,7 +146,7 @@ def test_persisted_memory_item_metadata_is_required_and_timestamps_are_valid():
         MemoryItem(**backwards)
 
 
-def test_access_policy_fails_closed_for_unknown_consumers_expiry_blocked_and_archive_default():
+def test_access_policy_fails_closed_except_expiry_pending_adjudication():
     now = datetime.now(timezone.utc)
     item = _item()
 
@@ -156,7 +156,9 @@ def test_access_policy_fails_closed_for_unknown_consumers_expiry_blocked_and_arc
     expired = _item(
         captured_at=now - timedelta(days=31), updated_at=now - timedelta(days=1), expires_at=now - timedelta(seconds=1)
     )
-    assert is_default_access_eligible(expired, MemoryAccessPolicy.for_omi_chat(), now=now).allowed is False
+    expired_decision = is_default_access_eligible(expired, MemoryAccessPolicy.for_omi_chat(), now=now)
+    assert expired_decision.allowed is True
+    assert expired_decision.reason == "short_term_expired_pending_adjudication"
 
     blocked = _item(processing_state=ProcessingState.blocked)
     assert is_default_access_eligible(blocked, MemoryAccessPolicy.for_omi_chat(), now=now).allowed is False

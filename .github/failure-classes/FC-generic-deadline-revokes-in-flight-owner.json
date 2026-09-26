@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-generic-deadline-revokes-in-flight-owner",
+  "violated_contract": "A generic listening, warm, or drain signal must not collapse or fail-close a more specific in-flight owner. A barge-in replacement that is still connecting during recording must stay admissible after hub_warm; a live selected-voice fallback lease is a playing owner, not a native hang; a mounted Interject notification card must keep notification chrome while PTT listening is also true.",
+  "canonical_prevention": "Admit the specific owner first. Defer hub_warm omni fallback while recording and providerConnection is replacing, restore the manager-owned warm rescue when replacement becomes ready, treat non-native playback drain as keepPlaying, and size collapsed chrome from the mounted notification (unioned with listening) rather than the listening island.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarGeometry.swift",
+    "desktop/macos/Desktop/Tests/VoiceTurnDomainTests/VoiceTurnReducerTests.swift",
+    "desktop/macos/Desktop/Tests/VoiceTurnOutputOwnershipTests.swift",
+    "desktop/macos/Desktop/Tests/FloatingBarGeometryTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/VoiceTurnDomain/**",
+    "desktop/macos/Desktop/Sources/FloatingControlBar/**"
+  ],
+  "status": "open"
+}

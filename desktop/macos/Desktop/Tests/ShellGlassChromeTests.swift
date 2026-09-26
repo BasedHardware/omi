@@ -104,20 +104,12 @@ final class ShellGlassChromeTests: XCTestCase {
     XCTAssertGreaterThanOrEqual(TopNavigationLayoutMetrics.barHeight, 32 + OmiSpacing.sm * 2)
   }
 
-  /// `.hiddenTitleBar` lays a transparent title bar over the content view, so the shell reserves a
-  /// band for it. The number is AppKit's own, not a guess — a hand-tuned constant is exactly what
-  /// drifts when a future macOS changes the title bar height.
-  func testTitlebarClearanceCoversTheWindowsDragBand() {
-    let content = NSRect(x: 0, y: 0, width: 640, height: 480)
-    let frame = NSWindow.frameRect(
-      forContentRect: content, styleMask: [.titled, .closable, .resizable])
-    let titlebarHeight = frame.height - content.height
-
-    XCTAssertGreaterThan(titlebarHeight, 0, "a titled window has a title bar to clear")
-    XCTAssertGreaterThanOrEqual(
-      GlassShell.titlebarClearance, titlebarHeight,
-      "the title bar takes the mouse before the content under it: a bar drawn into this band is a bar "
-        + "you cannot click and a window you cannot drag from its top edge")
+  /// The top bar is drawn in the hidden title-bar band, so reserving AppKit's titlebar height
+  /// *again* would put the glass 28–32 pt below the window's top edge — which is where the
+  /// resize handle would sit, on empty air.
+  func testTitlebarClearanceIsZeroBecauseTheTopBarOccupiesTheBand() {
+    XCTAssertEqual(GlassShell.titlebarClearance, 0)
+    XCTAssertTrue(WindowGlass.hasTitlebar(ShellWindowChrome.glassKind))
   }
 
   // MARK: - Shell controls
@@ -237,14 +229,12 @@ final class ShellGlassChromeTests: XCTestCase {
   private static let shellSources = [
     "MainWindow/GlassShellChrome.swift",
     "MainWindow/DesktopHomeView.swift",
-    "MainWindow/SidebarView.swift",
     "MainWindow/DesktopTopBar.swift",
     "MainWindow/ChatFirst/ChatFirstShell.swift",
     "MainWindow/ChatFirst/Blocks/ChatFirstContentBlockViews.swift",
     "MainWindow/Pages/ChatErrorCard.swift",
     "MainWindow/Components/ChatBubble.swift",
     "MainWindow/Components/ChatMessagesView.swift",
-    "MainWindow/Components/ChatSessionsSidebar.swift",
     "MainWindow/Components/ConversationRowView.swift",
     "MainWindow/Components/CitationCardView.swift",
     "MainWindow/Components/OmiSearchField.swift",

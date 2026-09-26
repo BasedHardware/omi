@@ -8,15 +8,16 @@ enum ChatContentBlockCodec {
 
   static func encode(_ blocks: [ChatContentBlock]) -> String? {
     guard !blocks.isEmpty else { return nil }
-    let encoded = blocks.map(persistenceDictionary(for:))
-    guard let data = try? JSONSerialization.data(withJSONObject: encoded),
+    let encoded = encodeArray(blocks)
+    guard !encoded.isEmpty,
+      let data = try? JSONSerialization.data(withJSONObject: encoded),
       let json = String(data: data, encoding: .utf8)
     else { return nil }
     return json
   }
 
   static func encodeArray(_ blocks: [ChatContentBlock]) -> [[String: Any]] {
-    blocks.map(persistenceDictionary(for:))
+    blocks.map(persistenceDictionary(for:)).filter { JSONSerialization.isValidJSONObject($0) }
   }
 
   /// Stable, in-process representation used to compare every persisted
@@ -116,21 +117,54 @@ enum ChatContentBlockCodec {
         }
         blocks.append(
           .captureLink(
-            id: id, conversationId: conversationId, momentTimestampMs: dict["momentTimestampMs"] as? Int,
+            id: id, conversationId: conversationId,
+            momentTimestampMs: ChatJSONScalar.int(dict["momentTimestampMs"]),
             summary: summary))
       case "conversationLink":
         guard let conversationId = dict["conversationId"] as? String, let summary = dict["summary"] as? String else {
           continue
         }
-        blocks.append(.conversationLink(id: id, conversationId: conversationId, summary: summary))
+        let recommendedActionItems = (dict["recommendedActionItems"] as? [[String: Any]] ?? []).compactMap {
+          item -> ConversationLinkActionItem? in
+          guard let description = item["description"] as? String,
+            !description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          else { return nil }
+          return ConversationLinkActionItem(description: description, taskID: item["taskId"] as? String)
+        }
+        blocks.append(
+          .conversationLink(
+            id: id,
+            conversationId: conversationId,
+            summary: summary,
+            recommendedActionItems: recommendedActionItems))
       case "memoryLink":
         guard let memoryId = dict["memoryId"] as? String, let summary = dict["summary"] as? String else { continue }
         blocks.append(.memoryLink(id: id, memoryId: memoryId, summary: summary))
+      case "memoryReviewCard":
+        guard let items = dict["items"] as? [[String: Any]] else { continue }
+        // A row without an id cannot be voted on or corrected, and a row without content has
+        // nothing to show, so neither is a review row. An empty card is not rendered at all.
+        let parsed = items.compactMap { entry -> MemoryReviewItem? in
+          guard let memoryID = entry["memoryId"] as? String,
+            !memoryID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            let content = entry["content"] as? String,
+            !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          else { return nil }
+          return MemoryReviewItem(
+            memoryID: memoryID, content: content, category: entry["category"] as? String ?? "")
+        }
+        guard !parsed.isEmpty else { continue }
+        blocks.append(
+          .memoryReviewCard(
+            id: id,
+            summaryId: dict["summaryId"] as? String ?? "",
+            date: dict["date"] as? String ?? "",
+            items: parsed))
       case "citation":
-        guard let ordinal = dict["ordinal"] as? Int,
+        guard let ordinal = ChatJSONScalar.int(dict["ordinal"]),
           let kindValue = dict["kind"] as? String,
           let kind = ChatCitationReference.Kind(rawValue: kindValue),
-          let sourceID = dict["sourceId"] as? String
+          let sourceID = (dict["sourceId"] as? String) ?? (dict["source_id"] as? String)
         else { continue }
         blocks.append(
           .citation(
@@ -141,10 +175,14 @@ enum ChatContentBlockCodec {
               sourceID: sourceID,
               title: dict["title"] as? String ?? "",
               preview: dict["preview"] as? String ?? "",
-              momentTimestampMs: dict["momentTimestampMs"] as? Int,
-              createdAt: dict["createdAt"] as? String,
-              appName: dict["appName"] as? String,
+              momentTimestampMs: ChatJSONScalar.int(dict["momentTimestampMs"])
+                ?? ChatJSONScalar.int(dict["moment_timestamp_ms"]),
+              createdAt: dict["createdAt"] as? String ?? dict["created_at"] as? String,
+              appName: dict["appName"] as? String ?? dict["app_name"] as? String,
               url: (dict["url"] as? String).flatMap(URL.init(string:)))))
+      case "followUp", "follow_up":
+        guard let question = ChatFollowUpTail.validatedQuestion(dict["text"] as? String ?? "") else { continue }
+        blocks.append(.followUp(id: id, text: question))
       case "agentSpawn":
         guard let sessionId = dict["sessionId"] as? String,
           !sessionId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -224,6 +262,29 @@ enum ChatContentBlockCodec {
     return decode(array)
   }
 
+  static func mergingCitationBackup(
+    _ blocks: [ChatContentBlock],
+    backup: [ChatContentBlock]
+  ) -> [ChatContentBlock] {
+    var seen = Set(
+      blocks.compactMap { block -> Int? in
+        guard case .citation(_, let reference) = block else { return nil }
+        return reference.ordinal
+      })
+    let recovered = backup.filter { block in
+      guard case .citation(_, let reference) = block else { return false }
+      return seen.insert(reference.ordinal).inserted
+    }
+    return recovered.isEmpty ? blocks : blocks + recovered
+  }
+
+  static func citationBlocks(in blocks: [ChatContentBlock]) -> [ChatContentBlock] {
+    blocks.filter { block in
+      if case .citation = block { return true }
+      return false
+    }
+  }
+
   private static func persistenceDictionary(for block: ChatContentBlock) -> [String: Any] {
     switch block {
     case .text(let id, let text):
@@ -276,10 +337,30 @@ enum ChatContentBlockCodec {
       var dict: [String: Any] = ["type": "captureLink", "id": id, "conversationId": conversationId, "summary": summary]
       if let momentTimestampMs { dict["momentTimestampMs"] = momentTimestampMs }
       return dict
-    case .conversationLink(let id, let conversationId, let summary):
-      return ["type": "conversationLink", "id": id, "conversationId": conversationId, "summary": summary]
+    case .conversationLink(let id, let conversationId, let summary, let recommendedActionItems):
+      var dict: [String: Any] = [
+        "type": "conversationLink", "id": id, "conversationId": conversationId, "summary": summary,
+      ]
+      if !recommendedActionItems.isEmpty {
+        dict["recommendedActionItems"] = recommendedActionItems.map { item in
+          var encoded: [String: Any] = ["description": item.description]
+          if let taskID = item.taskID { encoded["taskId"] = taskID }
+          return encoded
+        }
+      }
+      return dict
     case .memoryLink(let id, let memoryId, let summary):
       return ["type": "memoryLink", "id": id, "memoryId": memoryId, "summary": summary]
+    case .memoryReviewCard(let id, let summaryId, let date, let items):
+      return [
+        "type": "memoryReviewCard",
+        "id": id,
+        "summaryId": summaryId,
+        "date": date,
+        "items": items.map { item -> [String: Any] in
+          ["memoryId": item.memoryID, "content": item.content, "category": item.category]
+        },
+      ]
     case .citation(let id, let reference):
       var dict: [String: Any] = [
         "type": "citation",
@@ -295,6 +376,8 @@ enum ChatContentBlockCodec {
       if let value = reference.appName { dict["appName"] = value }
       if let value = reference.url { dict["url"] = value.absoluteString }
       return dict
+    case .followUp(let id, let text):
+      return ["type": "followUp", "id": id, "text": text]
     case .agentSpawn(
       let id, let pillId, let sessionId, let runId, let title, let objective, let provider
     ):
@@ -325,5 +408,85 @@ enum ChatContentBlockCodec {
       if let runId { dict["runId"] = runId }
       return dict
     }
+  }
+}
+
+enum ChatJSONScalar {
+  static func int(_ value: Any?) -> Int? {
+    if let value = value as? Int { return value }
+    if let value = value as? Int64 { return Int(value) }
+    if let value = value as? NSNumber { return value.intValue }
+    if let value = value as? String { return Int(value.trimmingCharacters(in: .whitespacesAndNewlines)) }
+    return nil
+  }
+}
+
+/// Field-by-field equality. Hand-written because `questionCard.options` is
+/// `[[String: Any]]`, which cannot synthesize conformance. This exists for
+/// `ChatBubbleIdentity`: SwiftUI diffs every bubble on every transcript pass,
+/// so identity comparison must compare fields — the previous
+/// `ChatContentBlockCodec.comparisonData` term re-encoded both sides of every
+/// unchanged row (a JSON serialization pair per bubble per pass).
+extension ChatContentBlock: Equatable {
+  static func == (lhs: ChatContentBlock, rhs: ChatContentBlock) -> Bool {
+    switch (lhs, rhs) {
+    case (.text(let aId, let aText), .text(let bId, let bText)):
+      return aId == bId && aText == bText
+    case (
+      .toolCall(let aId, let aName, let aStatus, let aUse, let aInput, let aOut),
+      .toolCall(let bId, let bName, let bStatus, let bUse, let bInput, let bOut)
+    ):
+      return aId == bId && aName == bName && aStatus == bStatus && aUse == bUse
+        && aInput == bInput && aOut == bOut
+    case (.thinking(let aId, let aText), .thinking(let bId, let bText)):
+      return aId == bId && aText == bText
+    case (.discoveryCard(let a, let b, let c, let d), .discoveryCard(let e, let f, let g, let h)):
+      return a == e && b == f && c == g && d == h
+    case (
+      .questionCard(let a, let b, let c, let d, let e, let f, let g),
+      .questionCard(let h, let i, let j, let k, let l, let m, let n)
+    ):
+      return a == h && b == i && c == j && d == k && e == l
+        && Self.questionOptionsEqual(f, m) && g == n
+    case (.taskCard(let a, let b), .taskCard(let c, let d)):
+      return a == c && b == d
+    case (.goalLink(let a, let b, let c), .goalLink(let d, let e, let f)):
+      return a == d && b == e && c == f
+    case (.captureLink(let a, let b, let c, let d), .captureLink(let e, let f, let g, let h)):
+      return a == e && b == f && c == g && d == h
+    case (.conversationLink(let a, let b, let c, let d), .conversationLink(let e, let f, let g, let h)):
+      return a == e && b == f && c == g && d == h
+    case (.memoryLink(let a, let b, let c), .memoryLink(let d, let e, let f)):
+      return a == d && b == e && c == f
+    case (.memoryReviewCard(let a, let b, let c, let d), .memoryReviewCard(let e, let f, let g, let h)):
+      return a == e && b == f && c == g && d == h
+    case (.citation(let aId, let aRef), .citation(let bId, let bRef)):
+      return aId == bId && aRef == bRef
+    case (.followUp(let aId, let aText), .followUp(let bId, let bText)):
+      return aId == bId && aText == bText
+    case (
+      .agentSpawn(let a, let b, let c, let d, let e, let f, let g),
+      .agentSpawn(let h, let i, let j, let k, let l, let m, let n)
+    ):
+      return a == h && b == i && c == j && d == k && e == l && f == m && g == n
+    case (
+      .agentCompletion(let a, let b, let c, let d, let e, let f, let g, let h),
+      .agentCompletion(let i, let j, let k, let l, let m, let n, let o, let p)
+    ):
+      return a == i && b == j && c == k && d == l && e == m && f == n && g == o && h == p
+    default:
+      return false
+    }
+  }
+
+  /// `NSDictionary` deep equality — the same semantics the JSON round-trip
+  /// provided, minus the encode. One deliberate strictness difference: numeric
+  /// literal type flips (1 vs 1.0) now compare unequal where JSON normalized
+  /// them; that can only force an extra re-render, never stale UI.
+  private static func questionOptionsEqual(
+    _ lhs: [[String: Any]], _ rhs: [[String: Any]]
+  ) -> Bool {
+    guard lhs.count == rhs.count else { return false }
+    return zip(lhs, rhs).allSatisfy { ($0 as NSDictionary) == ($1 as NSDictionary) }
   }
 }

@@ -8,7 +8,9 @@ from typing import Any, TypeAlias, cast
 import yaml
 from pydantic import BaseModel, ConfigDict
 
+from config.jev_decisions import JEV_AUTO_LANE_ID, JEV_GATEWAY_REQUEST_MS, JEV_MODEL, JEV_PROVIDER
 from llm_gateway.gateway.schemas import FeatureBundle, GeneratedRouteOverride, LaneConfig, RouteArtifact
+from utils.llm import vertex_pt_routing as ptr
 from utils.llm.gateway_client import feature_auto_lane_id
 from utils.llm.model_config import (
     get_all_configured_features,
@@ -48,9 +50,23 @@ def load_gateway_config(config_dir: str | Path | None = None, *, prod_mode: bool
     generated_lane_items, generated_artifact_items, generated_bundle_items = _generated_feature_route_items(
         generated_route_overrides
     )
+    desktop_lane_items, desktop_artifact_items = _generated_desktop_vertex_items()
+    embedding_lane_items, embedding_artifact_items = _generated_embedding_items()
+    systemone_lane_items, systemone_artifact_items = _generated_systemone_items()
 
-    lanes = _parse_lanes([*generated_lane_items, *lane_items])
-    route_artifacts = _parse_route_artifacts([*generated_artifact_items, *artifact_items], prod_mode=resolved_prod_mode)
+    lanes = _parse_lanes(
+        [*generated_lane_items, *desktop_lane_items, *embedding_lane_items, *systemone_lane_items, *lane_items]
+    )
+    route_artifacts = _parse_route_artifacts(
+        [
+            *generated_artifact_items,
+            *desktop_artifact_items,
+            *embedding_artifact_items,
+            *systemone_artifact_items,
+            *artifact_items,
+        ],
+        prod_mode=resolved_prod_mode,
+    )
     feature_bundles = _parse_feature_bundles([*generated_bundle_items, *bundle_items])
 
     _validate_lane_routes(lanes, route_artifacts)
@@ -241,7 +257,13 @@ def _generated_feature_route_items(
                 'fallbacks': [],
                 'provider_options': provider_options,
                 'output_budget': _output_budget_for_feature(feature, provider),
-                'timeouts': {'request_ms': 120000 if capabilities['streaming'] else 30000},
+                'timeouts': {
+                    'request_ms': (
+                        override.request_timeout_ms
+                        if override is not None and override.request_timeout_ms is not None
+                        else (120000 if capabilities['streaming'] else 30000)
+                    )
+                },
                 'retry': {'max_attempts': 1},
                 'capabilities': capabilities,
                 'evidence': {
@@ -278,6 +300,219 @@ def _generated_feature_route_items(
             }
         )
     return lanes, artifacts, bundles
+
+
+def _desktop_overflow_origin_options(anchor: str) -> dict[str, str]:
+    """Origin ceiling for a desktop anchor, omitted entirely when unset.
+
+    An empty dict keeps generated routes byte-identical until a lane declares
+    an origin in LANE_OVERFLOW_ORIGINS.
+    """
+    origin = ptr.lane_overflow_origin(anchor)
+    if not origin:
+        return {}
+    return {ptr.OVERFLOW_ORIGIN_OPTION: origin}
+
+
+def _generated_desktop_vertex_items() -> tuple[list[ConfigItem], list[ConfigItem]]:
+    """Company-paid desktop Gemini text lanes, generated from the PT policy.
+
+    One lane per desktop-requested anchor model: the desktop BFF maps the
+    requested model to `vertex_pt_routing.DESKTOP_TEXT_LANES`, and the Vertex
+    provider applies pin/overflow to the anchor at request time — so this
+    table and the policy stay derived from the same module, never forked.
+    """
+    lanes: list[ConfigItem] = []
+    artifacts: list[ConfigItem] = []
+    for anchor, lane_id in ptr.DESKTOP_TEXT_LANES.items():
+        route_id = f'route.{lane_id.removeprefix("omi:auto:")}.vertex_pt.001'
+        capabilities = {
+            'text_input': True,
+            'streaming': True,
+            'structured_output': 'json_schema',
+            'tools': True,
+            'translation': False,
+        }
+        lanes.append(
+            {
+                'lane_id': lane_id,
+                'surface': 'openai.chat_completions',
+                'capabilities': capabilities,
+                'objective': {'quality': 0.5, 'latency': 0.3, 'cost': 0.2},
+                'credential_policy': _credential_policy(),
+                'active_route': route_id,
+                'last_known_good': route_id,
+            }
+        )
+        artifacts.append(
+            {
+                'route_artifact_id': route_id,
+                'lane_id': lane_id,
+                'surface': 'openai.chat_completions',
+                'primary': {'provider': 'gemini', 'model': anchor},
+                'fallbacks': [],
+                'provider_options': _desktop_overflow_origin_options(anchor),
+                'output_budget': None,
+                'timeouts': {'request_ms': 120000},
+                'retry': {'max_attempts': 1},
+                'capabilities': capabilities,
+                'evidence': {
+                    'benchmark_snapshot': 'vertex_pt_routing.source_of_truth',
+                    'eval_report': f'{lane_id}.desktop_vertex_coverage',
+                    'benchmark_source': 'omi_eval',
+                    'dev_only': False,
+                },
+                'rollout': {'stage': 'active', 'percent': 100},
+                'credential_policy': _credential_policy(),
+                'fallback_policy': {
+                    'fallback_on': ['timeout_before_output', 'provider_429_omi_paid', 'provider_5xx_omi_paid'],
+                    'never_fallback_on': [
+                        'byok_auth',
+                        'byok_quota',
+                        'byok_rate_limit',
+                        'byok_unsupported_provider',
+                        'missing_byok_key',
+                        'capability_mismatch',
+                        'provider_invalid_request',
+                        'invalid_config',
+                    ],
+                },
+            }
+        )
+    return lanes, artifacts
+
+
+def _generated_embedding_items() -> tuple[list[ConfigItem], list[ConfigItem]]:
+    """Embedding lanes for the OpenAI-shaped /v1/embeddings surface.
+
+    ``omi:auto:gemini-embeddings`` serves both the server-side screen-activity
+    query embedding and the desktop proxy's company-paid embedContent traffic
+    (task type passed per request); ``omi:auto:openai-embeddings`` serves the
+    text-embedding-3-large vector pipeline.
+    """
+    entries = (
+        ('openai-embeddings', 'openai', 'text-embedding-3-large'),
+        ('gemini-embeddings', 'gemini', ptr.DESKTOP_EMBEDDING_MODEL),
+    )
+    lanes: list[ConfigItem] = []
+    artifacts: list[ConfigItem] = []
+    capabilities = {
+        'text_input': True,
+        'streaming': False,
+        'structured_output': 'none',
+        'tools': False,
+        'translation': False,
+    }
+    for slug, provider, model in entries:
+        lane_id = f'omi:auto:{slug}'
+        route_id = f'route.{slug}.embeddings.001'
+        lanes.append(
+            {
+                'lane_id': lane_id,
+                'surface': 'openai.embeddings',
+                'capabilities': capabilities,
+                'objective': {'quality': 0.2, 'latency': 0.5, 'cost': 0.3},
+                'credential_policy': _credential_policy(),
+                'active_route': route_id,
+                'last_known_good': route_id,
+            }
+        )
+        artifacts.append(
+            {
+                'route_artifact_id': route_id,
+                'lane_id': lane_id,
+                'surface': 'openai.embeddings',
+                'primary': {'provider': provider, 'model': model},
+                'fallbacks': [],
+                'provider_options': {},
+                'output_budget': None,
+                'timeouts': {'request_ms': 60000},
+                'retry': {'max_attempts': 1},
+                'capabilities': capabilities,
+                'evidence': {
+                    'benchmark_snapshot': 'model_endpoint_inventory.source_of_truth',
+                    'eval_report': f'{slug}.embeddings_coverage',
+                    'benchmark_source': 'omi_eval',
+                    'dev_only': False,
+                },
+                'rollout': {'stage': 'active', 'percent': 100},
+                'credential_policy': _credential_policy(),
+                'fallback_policy': {
+                    'fallback_on': ['timeout_before_output', 'provider_429_omi_paid', 'provider_5xx_omi_paid'],
+                    'never_fallback_on': [
+                        'byok_auth',
+                        'byok_quota',
+                        'byok_rate_limit',
+                        'byok_unsupported_provider',
+                        'missing_byok_key',
+                        'capability_mismatch',
+                        'provider_invalid_request',
+                        'invalid_config',
+                    ],
+                },
+            }
+        )
+    return lanes, artifacts
+
+
+def _generated_systemone_items() -> tuple[list[ConfigItem], list[ConfigItem]]:
+    """The one decision-model lane (``omi:auto:jev-decisions``, #14835).
+
+    Pinned to one Jev version on OpenRouter's systemone endpoint. One provider
+    attempt and no fallback: callers treat any failure as "no answer" and keep
+    their safe default, so a second provider would only add latency.
+    """
+    capabilities = {
+        'text_input': True,
+        'streaming': False,
+        'structured_output': 'none',
+        'tools': False,
+        'translation': False,
+    }
+    route_id = 'route.jev-decisions.systemone.001'
+    lane = {
+        'lane_id': JEV_AUTO_LANE_ID,
+        'surface': 'openrouter.systemone',
+        'capabilities': capabilities,
+        'objective': {'quality': 0.4, 'latency': 0.5, 'cost': 0.1},
+        'credential_policy': _credential_policy(),
+        'active_route': route_id,
+        'last_known_good': route_id,
+    }
+    artifact = {
+        'route_artifact_id': route_id,
+        'lane_id': JEV_AUTO_LANE_ID,
+        'surface': 'openrouter.systemone',
+        'primary': {'provider': JEV_PROVIDER, 'model': JEV_MODEL},
+        'fallbacks': [],
+        'provider_options': {},
+        'output_budget': None,
+        'timeouts': {'request_ms': JEV_GATEWAY_REQUEST_MS},
+        'retry': {'max_attempts': 1},
+        'capabilities': capabilities,
+        'evidence': {
+            'benchmark_snapshot': 'jev_pilots_2026_09_23',
+            'eval_report': 'github.com/BasedHardware/omi/issues/14835',
+            'benchmark_source': 'omi_eval',
+            'dev_only': False,
+        },
+        'rollout': {'stage': 'active', 'percent': 100},
+        'credential_policy': _credential_policy(),
+        'fallback_policy': {
+            'fallback_on': [],
+            'never_fallback_on': [
+                'byok_auth',
+                'byok_quota',
+                'byok_rate_limit',
+                'byok_unsupported_provider',
+                'missing_byok_key',
+                'capability_mismatch',
+                'provider_invalid_request',
+                'invalid_config',
+            ],
+        },
+    }
+    return [lane], [artifact]
 
 
 def _output_budget_for_feature(feature: str, provider: str) -> dict[str, Any] | None:

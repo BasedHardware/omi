@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
 import { withRowLimit } from "@/lib/posthog";
 import {
-  desktopQualificationFromMetadata,
   desktopReleaseLifecycle,
   desktopStableCandidateFromMetadata,
+  newestSparkleVersion,
+  tagBuildNumber,
   type DesktopReleaseChannel,
   type DesktopReleaseLifecycle,
 } from "@/lib/desktop-release-lifecycle";
@@ -33,10 +34,7 @@ interface ReleaseRow {
   broken_count: number | null;
   rating: number | null;
   summary: string | null;
-  qualified_beta: boolean;
-  qualified_at: string | null;
-  qualification_evidence_url: string | null;
-  qualification_source: "canonical" | "legacy";
+  beta_live: boolean;
   stable_candidate: boolean;
   stable_candidate_at: string | null;
   stable_candidate_by: string | null;
@@ -60,6 +58,15 @@ async function fetchGithubReleases(): Promise<any[]> {
   );
   if (!res.ok) throw new Error(`GitHub ${res.status}: ${await res.text()}`);
   return res.json();
+}
+
+async function fetchBetaAppcast(): Promise<string> {
+  const res = await fetch(
+    "https://api.omi.me/v2/desktop/appcast.xml?identity=beta",
+    { cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(`Beta appcast ${res.status}: ${await res.text()}`);
+  return res.text();
 }
 
 function parseVersion(tag: string): string | null {
@@ -275,17 +282,29 @@ export async function GET(request: NextRequest) {
 
   let github_error: string | null = null;
   let posthog_error: string | null = null;
+  let appcast_error: string | null = null;
 
-  // 1. GitHub releases
+  const [githubResult, appcastResult] = await Promise.allSettled([
+    fetchGithubReleases(),
+    fetchBetaAppcast(),
+  ]);
+
   let githubReleases: any[] = [];
-  try {
-    githubReleases = await fetchGithubReleases();
-  } catch (err: any) {
-    github_error = err?.message || String(err);
+  if (githubResult.status === "fulfilled") {
+    githubReleases = githubResult.value;
+  } else {
+    github_error = githubResult.reason?.message || String(githubResult.reason);
     return NextResponse.json(
       { releases: [], github_error, posthog_error: null, partial: true },
       { status: 502 },
     );
+  }
+
+  let liveBetaBuild: number | null = null;
+  if (appcastResult.status === "fulfilled") {
+    liveBetaBuild = newestSparkleVersion(appcastResult.value);
+  } else {
+    appcast_error = appcastResult.reason?.message || String(appcastResult.reason);
   }
 
   const desktopReleases = githubReleases
@@ -322,16 +341,12 @@ export async function GET(request: NextRequest) {
       channelRaw === "stable"
         ? channelRaw
         : null;
-    const qualification = desktopQualificationFromMetadata(metadata);
     const stableCandidate = desktopStableCandidateFromMetadata(metadata, {
       releaseTag: r.tag_name,
-      qualificationEvidence: qualification.evidence,
     });
-    const qualificationEvidenceUrl = qualification.evidence
-      ? (r.assets?.find(
-          (asset: { name?: string }) => asset.name === qualification.evidence,
-        )?.browser_download_url ?? null)
-      : null;
+    const build = tagBuildNumber(r.tag_name);
+    const betaLive =
+      liveBetaBuild !== null && build !== null && build === liveBetaBuild;
 
     return {
       version,
@@ -345,16 +360,13 @@ export async function GET(request: NextRequest) {
       broken_count: m?.brokens ?? null,
       rating,
       summary,
-      qualified_beta: qualification.qualified,
-      qualified_at: qualification.qualifiedAt,
-      qualification_evidence_url: qualificationEvidenceUrl,
-      qualification_source: qualification.source,
+      beta_live: betaLive,
       stable_candidate: stableCandidate.complete,
       stable_candidate_at: stableCandidate.nominatedAt,
       stable_candidate_by: stableCandidate.nominatedBy,
       lifecycle_state: desktopReleaseLifecycle(
         channel,
-        qualification,
+        betaLive,
         stableCandidate,
       ),
       channel,
@@ -365,6 +377,7 @@ export async function GET(request: NextRequest) {
     releases: rows,
     github_error: null,
     posthog_error,
-    partial: posthog_error !== null,
+    appcast_error,
+    partial: posthog_error !== null || appcast_error !== null,
   });
 }

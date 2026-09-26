@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from database.memory_vector_metadata import canonical_memory_provider_id
+from database.memory_apply_store import privacy_deletion_receipt_id
 from fakes.firestore import seed_conversation
 from fakes.vector_search import install_vector_search_fakes
 from models.memories import MemoryCategory
@@ -109,14 +110,6 @@ def _read_memory_item(db, uid: str, memory_id: str) -> dict:
     snapshot = db.collection("users").document(uid).collection("memory_items").document(memory_id).get()
     assert snapshot.exists, f"missing memory item {memory_id}"
     return snapshot.to_dict()
-
-
-def _list_outbox_records(db, uid: str) -> list[dict]:
-    records = []
-    for snapshot in db.collection("users").document(uid).collection("memory_outbox").stream():
-        if snapshot.exists:
-            records.append(snapshot.to_dict())
-    return records
 
 
 def _scripted_consolidation_llm(_prompt: str) -> str:
@@ -339,29 +332,26 @@ class TestCanonicalMemoryPipelineE2E:
         assert "visible-long-term" in product_ids
 
         delete_canonical_memory(PIPELINE_UID, memory_id, db_client=db)
-        tombstoned = _read_memory_item(db, PIPELINE_UID, memory_id)
-        assert tombstoned["status"] == MemoryItemStatus.tombstoned.value
-
-        outbox_records = _list_outbox_records(db, PIPELINE_UID)
-        durable_delete_records = [
-            record
-            for record in outbox_records
-            if record.get("memory_id") == memory_id
-            and record.get("payload", {}).get("action") == "delete"
-            and record.get("event_type") in {"projection_sync", "vector_sync"}
-        ]
-        assert {record["event_type"] for record in durable_delete_records} == {"projection_sync", "vector_sync"}
-        assert {record["payload"]["reason"] for record in durable_delete_records} == {"canonical_memory_delete"}
-
-        cleanup = _drain_canonical_outbox(
-            PIPELINE_UID,
-            db_client=db,
-            run_id="e2e-canonical-pipeline-delete",
-            now=OUTBOX_DUE_AT,
+        assert (
+            not db.collection("users")
+            .document(PIPELINE_UID)
+            .collection("memory_items")
+            .document(memory_id)
+            .get()
+            .exists
         )
-        assert cleanup["errors"] == []
-        assert cleanup["retryable_failure_count"] == 0
-        assert {action["action"] for action in cleanup["actions"]} >= {"projection_delete", "vector_delete"}
+        receipt_id = privacy_deletion_receipt_id(PIPELINE_UID, memory_id)
+        receipt = (
+            db.collection("users")
+            .document(PIPELINE_UID)
+            .collection("memory_deletion_receipts")
+            .document(receipt_id)
+            .get()
+        )
+        assert receipt.exists
+        receipt_payload = receipt.to_dict()
+        assert receipt_payload["schema_version"] == "memory_deletion_receipt.v2"
+        assert memory_id not in repr(receipt_payload)
         assert provider_id not in vectors
 
     def test_universal_repository_failure_fails_closed_without_historical_bleed(

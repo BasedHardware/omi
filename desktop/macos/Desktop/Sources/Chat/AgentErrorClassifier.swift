@@ -23,6 +23,7 @@ enum AgentErrorCode: String, CaseIterable, Sendable {
   case credentialLeakSuspected = "credential_leak_suspected"
   case planLimitReached = "plan_limit_reached"
   case agentModeUnavailable = "agent_mode_unavailable"
+  case upstreamProviderFailed = "upstream_provider_failed"
   case userInterrupted = "user_interrupted"
   case unknown
 }
@@ -111,6 +112,37 @@ enum AgentErrorClassifier {
         retryable: false)
     }
 
+    // Omi's own desktop chat backend reports every upstream failure as the
+    // fixed string "Upstream provider error" with code 502, delivered as an SSE
+    // error frame inside an HTTP 200 body. The corpus had no rule for it, so it
+    // fell through to `unknown` and the transcript showed the generic "Omi
+    // couldn't answer this one" — which is what users saw for ~19 hours during
+    // the 2026-08-20 gateway-parameter outage, with nothing on screen
+    // indicating the failure was ours rather than their message.
+    //
+    // Retryable: the backend emits this for transient gateway conditions
+    // (circuit open, transport failure, upstream timeout) as well as hard
+    // rejections, and it does not distinguish them on the wire. Resending is
+    // worth one attempt.
+    //
+    // Desktop-backend also answers a coded 503 with an empty body
+    // (`HTTP 503 status code (no body)`). That string never contains
+    // "Upstream provider error", so without a status-shaped rule it fell
+    // through to `unknown` and the generic "Omi couldn't answer this one".
+    if lower.contains("upstream provider error")
+      || lower.range(of: #"\bhttp[\s/]*503\b"#, options: .regularExpression) != nil
+      || lower.range(
+        of: #"\b(?:503\s+status|status(?:\s+code)?\s*[:=]?\s*503)\b"#,
+        options: .regularExpression) != nil
+    {
+      return ClassifiedAgentError(
+        code: .upstreamProviderFailed,
+        userMessage:
+          "Omi's AI service didn't respond. This is on our side, not your message. "
+          + "Try again in a moment.",
+        retryable: true)
+    }
+
     // The Omi-account proxy answers an exhausted billing lane with a bare 402
     // and no body, so the raw transport string ("HTTP 402 status code (no
     // body)") fell through to `unknown` and was shown verbatim — and, worse,
@@ -127,8 +159,11 @@ enum AgentErrorClassifier {
       return ClassifiedAgentError(
         code: .providerBillingExhausted,
         userMessage:
-          "Omi's AI service declined this request for billing reasons. "
-          + "Check Settings → Plan and Usage; resending the same message won't help.",
+          "Omi's managed AI service declined this request for billing reasons. "
+          + "This request ran on the managed lane — your own provider key is used only "
+          + "when the request goes to a provider you hold a key for. Check Settings → "
+          + "Plan and Usage, or add a key for the provider this path uses. "
+          + "Resending the same message won't help.",
         retryable: false)
     }
     if lower.contains("credit balance is too low") {

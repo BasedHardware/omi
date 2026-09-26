@@ -1,4 +1,8 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -40,6 +44,7 @@ void main() {
     AnalyticsManager.configure(analytics);
     await AnalyticsManager.init();
     SharedPreferencesUtil().uid = 'test-user';
+    AnalyticsManager().identify();
     final provider = DeviceProvider();
     addTearDown(provider.dispose);
     final device = BtDevice(
@@ -48,6 +53,7 @@ void main() {
       type: DeviceType.fieldy,
       rssi: -50,
       firmwareRevision: '3.0.20',
+      serialNumber: 'OMI-SERIAL-001',
     );
 
     await provider.setConnectedDevice(device);
@@ -56,12 +62,68 @@ void main() {
 
     expect(analytics.events.where((event) => event == 'Device Connected'), hasLength(1));
     final connectedProperties = analytics.eventProperties[analytics.events.indexOf('Device Connected')];
-    expect(connectedProperties['id'], device.id);
-    expect(connectedProperties['name'], device.name);
-    expect(connectedProperties['firmwareRevision'], device.firmwareRevision);
+    expect(connectedProperties.containsKey('id'), isFalse);
+    expect(connectedProperties.containsKey('name'), isFalse);
+    expect(connectedProperties.containsKey('serialNumber'), isFalse);
     expect(connectedProperties['type'], 'fieldy');
     expect(connectedProperties['device_vendor'], 'fieldlabs');
+    expect(connectedProperties['hardware_family'], 'fieldy');
+    expect(
+      connectedProperties['transport_device_id'],
+      sha256.convert(utf8.encode(device.id)).toString().substring(0, 16),
+    );
+    expect(connectedProperties['transport_id_stability'], 'platform_dependent');
+    expect(
+      connectedProperties['hardware_id'],
+      sha256.convert(utf8.encode('OMI-SERIAL-001')).toString().substring(0, 16),
+    );
+    expect(connectedProperties['hardware_id_kind'], 'manufacturer_serial');
+    expect(connectedProperties['hardware_id_stable'], isTrue);
     expect(analytics.personProperties.any((properties) => properties['device_vendor'] == 'fieldlabs'), isTrue);
+    expect(analytics.personProperties.any((properties) => properties['hardware_family'] == 'fieldy'), isTrue);
+  });
+
+  test('find device coalesces overlapping provider requests', () async {
+    final completion = Completer<bool>();
+    var runnerCalls = 0;
+    final provider = DeviceProvider(
+      findDeviceRunner: (_) {
+        runnerCalls++;
+        return completion.future;
+      },
+    );
+    addTearDown(provider.dispose);
+    provider.connectedDevice = BtDevice(id: 'omi-1', name: 'Omi', type: DeviceType.omi, rssi: -40);
+    provider.isConnected = true;
+
+    final first = provider.findDevice();
+    final second = provider.findDevice();
+
+    expect(identical(first, second), isTrue);
+    expect(runnerCalls, 1);
+
+    completion.complete(true);
+    expect(await first, isTrue);
+    expect(await second, isTrue);
+
+    expect(await provider.findDevice(), isTrue);
+    expect(runnerCalls, 2);
+  });
+
+  test('find device rejects OmiGlass devices before invoking the runner', () async {
+    var runnerCalls = 0;
+    final provider = DeviceProvider(
+      findDeviceRunner: (_) async {
+        runnerCalls++;
+        return true;
+      },
+    );
+    addTearDown(provider.dispose);
+    provider.connectedDevice = BtDevice(id: 'glass-1', name: 'OmiGlass', type: DeviceType.omi, rssi: -40);
+    provider.isConnected = true;
+
+    expect(await provider.findDevice(), isFalse);
+    expect(runnerCalls, 0);
   });
 
   test('Device Paired is deduped by user and device while connections recur', () async {
@@ -70,6 +132,7 @@ void main() {
     final analytics = _TestAnalyticsAdapter();
     AnalyticsManager.configure(analytics);
     await AnalyticsManager.init();
+    AnalyticsManager().identify();
     final provider = DeviceProvider();
     addTearDown(provider.dispose);
     final device = BtDevice(
@@ -84,13 +147,22 @@ void main() {
     await provider.setConnectedDevice(device);
     await provider.setConnectedDevice(null);
     await provider.setConnectedDevice(device);
+    await AnalyticsManager.flushPending(force: true);
     SharedPreferencesUtil().uid = 'user-b';
+    AnalyticsManager().bindIdentity('user-b');
+    AnalyticsManager().identify();
     await provider.setConnectedDevice(null);
     await provider.setConnectedDevice(device);
     await AnalyticsManager.flushPending(force: true);
 
     expect(analytics.events.where((event) => event == 'Device Paired'), hasLength(2));
     expect(analytics.events.where((event) => event == 'Device Connected'), hasLength(3));
+    final pairedProperties = [
+      for (var i = 0; i < analytics.events.length; i++)
+        if (analytics.events[i] == 'Device Paired') analytics.eventProperties[i],
+    ];
+    expect(pairedProperties.first, containsPair('hardware_id_kind', 'unavailable'));
+    expect(pairedProperties.first, containsPair('hardware_id_stable', false));
     for (final uid in ['user-a', 'user-b']) {
       expect(analytics.personPropertiesByUser[uid]?['has_paired_device'], isTrue);
       expect(DateTime.tryParse(analytics.personPropertiesByUser[uid]?['first_paired_at'] as String), isNotNull);
@@ -119,6 +191,8 @@ void main() {
             rssiTrend: 'falling',
           ),
         ],
+        nativeBackgroundBytesConsumed: 0,
+        nativeBackgroundPacketsConsumed: 0,
         reconnectionCount: 0,
         connectedAt: 0,
         failToConnectCount: 0,
@@ -148,6 +222,7 @@ void main() {
     expect(sessionEvents.single, containsPair('reason', 'connection_timeout'));
     expect(sessionEvents.single, containsPair('hci_reason_code', 8));
     expect(sessionEvents.single, containsPair('device_vendor', 'omi'));
+    expect(sessionEvents.single, containsPair('hardware_family', 'omi_devkit'));
     expect(sessionEvents.single, containsPair('model', 'Omi DevKit 2'));
     expect(sessionEvents.single, containsPair('firmware_revision', '3.0.20'));
     expect(sessionEvents.single, isNot(contains('reconnect_attempt_count')));
@@ -387,6 +462,9 @@ class _TestAnalyticsAdapter implements AnalyticsAdapter {
 
   @override
   void setInteractionContext({String? screenName, required String target}) {}
+
+  @override
+  void registerSuperProperties(Map<String, Object> properties) {}
 
   @override
   void enable() {}

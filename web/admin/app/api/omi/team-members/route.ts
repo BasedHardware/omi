@@ -13,6 +13,20 @@ const addTeamMemberSchema = z.object({
     .transform((email) => email.toLowerCase()),
 });
 
+const removeTeamMemberSchema = z.object({
+  uid: z.string().trim().min(1),
+});
+
+/**
+ * The workspace owner is an admin whose `adminData/{uid}` doc carries
+ * `owner: true`. Only the owner can remove other admins, including
+ * superadmins. Ownership is data, not a role string, so a superadmin cannot
+ * grant it to themselves through the "Add new person" flow.
+ */
+function isOwnerDoc(data: FirebaseFirestore.DocumentData | undefined) {
+  return data?.owner === true;
+}
+
 export async function GET(request: NextRequest) {
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
@@ -29,15 +43,24 @@ export async function GET(request: NextRequest) {
         role: data.role || "Admin",
         email: data.email || "No email",
         createdAt: data.createdAt || null,
+        owner: isOwnerDoc(data),
       };
     });
 
-    return NextResponse.json({ teamMembers: members });
+    const viewerDoc = snapshot.docs.find((doc) => doc.id === authResult.uid);
+
+    return NextResponse.json({
+      teamMembers: members,
+      viewer: {
+        uid: authResult.uid,
+        canRemove: isOwnerDoc(viewerDoc?.data()),
+      },
+    });
   } catch (error) {
     console.error("Error fetching team members:", error);
     return NextResponse.json(
       { error: "Failed to fetch team members" },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }
@@ -52,7 +75,7 @@ export async function POST(request: NextRequest) {
   } catch {
     return NextResponse.json(
       { error: "A valid email is required" },
-      { status: 400 },
+      { status: 400 }
     );
   }
 
@@ -60,7 +83,7 @@ export async function POST(request: NextRequest) {
   if (!parsedBody.success) {
     return NextResponse.json(
       { error: "A valid email is required" },
-      { status: 400 },
+      { status: 400 }
     );
   }
 
@@ -80,7 +103,7 @@ export async function POST(request: NextRequest) {
           {
             error: `No Omi account found for ${email}. Ask them to sign in to Omi once, then try again.`,
           },
-          { status: 404 },
+          { status: 404 }
         );
       }
       throw error;
@@ -91,7 +114,7 @@ export async function POST(request: NextRequest) {
     if ((await memberRef.get()).exists) {
       return NextResponse.json(
         { error: `${email} already has admin access.` },
-        { status: 409 },
+        { status: 409 }
       );
     }
 
@@ -114,7 +137,83 @@ export async function POST(request: NextRequest) {
     console.error("Error adding team member:", error);
     return NextResponse.json(
       { error: "Failed to add team member" },
-      { status: 500 },
+      { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { error: "A member uid is required" },
+      { status: 400 }
+    );
+  }
+
+  const parsedBody = removeTeamMemberSchema.safeParse(body);
+  if (!parsedBody.success) {
+    return NextResponse.json(
+      { error: "A member uid is required" },
+      { status: 400 }
+    );
+  }
+
+  const { uid } = parsedBody.data;
+
+  try {
+    const db = getDb();
+    const collection = db.collection("adminData");
+
+    const callerDoc = await collection.doc(authResult.uid).get();
+    if (!isOwnerDoc(callerDoc.data())) {
+      return NextResponse.json(
+        { error: "Only the workspace owner can remove admins." },
+        { status: 403 }
+      );
+    }
+
+    if (uid === authResult.uid) {
+      return NextResponse.json(
+        { error: "You cannot remove yourself." },
+        { status: 400 }
+      );
+    }
+
+    const memberRef = collection.doc(uid);
+    const memberDoc = await memberRef.get();
+    if (!memberDoc.exists) {
+      return NextResponse.json(
+        { error: "That person no longer has admin access." },
+        { status: 404 }
+      );
+    }
+
+    const data = memberDoc.data() ?? {};
+    await memberRef.delete();
+    console.log(
+      `Admin ${authResult.uid} removed admin ${uid} (${
+        data.email ?? "no email"
+      }, role ${data.role ?? "Admin"})`
+    );
+
+    return NextResponse.json({
+      removed: {
+        id: uid,
+        email: data.email ?? null,
+        role: data.role ?? "Admin",
+      },
+    });
+  } catch (error) {
+    console.error("Error removing team member:", error);
+    return NextResponse.json(
+      { error: "Failed to remove team member" },
+      { status: 500 }
     );
   }
 }

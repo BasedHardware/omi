@@ -75,6 +75,22 @@ describe('isRetryableDropError', () => {
     expect(isRetryableDropError('Omi transcription unavailable (not signed in)')).toBe(false)
     expect(isRetryableDropError('Omi v4/listen requires sign-in.')).toBe(false)
   })
+
+  it('does NOT retry a permanent mic/loopback source failure (no device, denied, unreadable)', () => {
+    // Live bug: enumerateDevices() found zero audio inputs on a real machine, so
+    // getUserMedia threw NotFoundError — the message alone ("Requested device not
+    // found") doesn't match any existing pattern, so only checking `name` catches
+    // it. Without this, a dead mic retried silently for the whole backoff budget.
+    expect(isRetryableDropError('Requested device not found', 'NotFoundError')).toBe(false)
+    expect(isRetryableDropError('Permission denied', 'NotAllowedError')).toBe(false)
+    expect(isRetryableDropError('Could not start source', 'NotReadableError')).toBe(false)
+    expect(isRetryableDropError('Overconstrained', 'OverconstrainedError')).toBe(false)
+  })
+
+  it('still retries an ordinary drop when a name is present but not a permanent one', () => {
+    expect(isRetryableDropError('socket dropped', 'AbortError')).toBe(true)
+    expect(isRetryableDropError('socket dropped', undefined)).toBe(true)
+  })
 })
 
 describe('toSyncSegments', () => {

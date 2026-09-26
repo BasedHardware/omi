@@ -12,6 +12,7 @@ enum ChatFirstAnalyticsEvent: Equatable, Sendable {
     case goals
     case memories
     case more
+    case dailyRecap = "daily-recap"
   }
 
   enum RouteOrigin: String, CaseIterable, Sendable {
@@ -42,6 +43,7 @@ enum ChatFirstAnalyticsEvent: Equatable, Sendable {
     case open
     case toggle
     case select
+    case copyLink = "copy_link"
   }
 
   enum QuestionLifecycle: String, CaseIterable, Sendable {

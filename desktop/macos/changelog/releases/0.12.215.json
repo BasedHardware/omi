@@ -1,0 +1,7 @@
+{
+  "version": "0.12.215",
+  "date": "2026-08-25",
+  "changes": [
+    "Delivered cloud-generated proactive messages directly to macOS desktop over the active listen stream"
+  ]
+}

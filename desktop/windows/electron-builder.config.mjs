@@ -20,6 +20,7 @@
 
 import { computeUnpackGlobs } from './scripts/gen-pimono-unpack.mjs'
 import { KGWORKER_NATIVE_UNPACK_GLOBS } from './scripts/kgworker-native-closure.mjs'
+import fixPimonoChalkUnpack from './scripts/fix-pimono-chalk-unpack.mjs'
 
 // Fresh at every pack: the closure is recomputed from the installed node_modules,
 // so it can never be stale relative to what is actually on disk.
@@ -154,15 +155,26 @@ export default {
     // Runtime tools/libs the Linux platform seams call out of process. Missing
     // ones degrade gracefully (OCR/active-window return empty), but packaging the
     // depends keeps the shipped App experience complete on Debian/Ubuntu.
-    depends: [
-      'tesseract-ocr',
-      'tesseract-ocr-eng',
-      'libnotify4',
-      'libxss1',
-      'x11-utils'
-    ]
+    depends: ['tesseract-ocr', 'tesseract-ocr-eng', 'libnotify4', 'libxss1', 'x11-utils'],
+    // A soft dependency, not `depends`: xdg-desktop-portal is the universal
+    // front-end virtually every desktop already has, but the BACKEND that
+    // actually answers ScreenCast (xdg-desktop-portal-gnome/-kde/-wlr/…) is
+    // compositor-specific and can't be a single correct hard dependency —
+    // forcing e.g. -gnome onto a KDE or wlroots-compositor user would be
+    // wrong. Rewind's screen recording surfaces a real in-app error (see
+    // RewindCaptureNotice.tsx) when no backend answers; this Recommends just
+    // narrows the common "portal front-end isn't even installed" case.
+    // electron-builder's `recommends` REPLACES its own default
+    // (["libappindicator3-1"], needed for the tray icon) rather than
+    // appending, so it must be listed explicitly here too.
+    recommends: ['libappindicator3-1', 'xdg-desktop-portal']
   },
   npmRebuild: false,
+  // See scripts/fix-pimono-chalk-unpack.mjs: corrects chalk's packaged version for
+  // pi-coding-agent's plain-Node child process — can't be fixed via a pnpm
+  // override like this repo's other pimono version collisions because chalk 5 is
+  // ESM-only and would break electron-builder's own CJS `require('chalk')`.
+  afterPack: fixPimonoChalkUnpack,
   // --- AUTO-UPDATE ---
   // electron-updater is wired in src/main/updater.ts (packaged builds only; silent
   // download + install-on-next-quit; NSIS differential updates stay default-on).

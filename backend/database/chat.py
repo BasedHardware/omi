@@ -6,9 +6,19 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterator, List, Optional, cast
 
-from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition
+from google.api_core.exceptions import AlreadyExists, Conflict, FailedPrecondition, NotFound
 from google.cloud import firestore, firestore_v1
 from google.cloud.firestore_v1 import FieldFilter
+
+from database.firestore_index_registry import (
+    CURRENT_CHAT_SESSION_ORDERED_QUERY,
+    CURRENT_CHAT_SESSION_QUERY,
+)
+
+# Sessions are per-user and per-app, so this is a ceiling on a small collection
+# rather than a page size; it exists so a pathological account cannot turn one
+# lookup into an unbounded read.
+CURRENT_CHAT_SESSION_SCAN_LIMIT = 200
 
 from models.chat import Message
 from utils import encryption
@@ -28,6 +38,14 @@ CHAT_HISTORY_APPEND_EPOCH_MESSAGES = 8
 # when a user has thousands of lifetime reported messages; the newest page
 # rarely contains more reported rows than this cap.
 CHAT_HISTORY_REPORTED_RAW_SCAN_CAP = 50
+# Extra documents a visible page may stream *beyond* the rows it would need if none
+# were reported. The floor is the page itself, never this: the previous raw
+# ``.offset(n).limit(m)`` query already streamed n + m documents, so budgeting
+# ``needed + slack`` can only read more than before by the slack, and can never fail
+# to service an offset the old query serviced. Capping the total instead made a deep
+# offset return an empty page, which the router reads as end-of-results -- the same
+# defect this scan exists to fix.
+CHAT_MESSAGES_VISIBLE_PAGE_SCAN_SLACK = 1000
 
 
 class ClientMessageIdPayloadConflict(ValueError):
@@ -85,6 +103,17 @@ def _prepare_message_for_read(message_data: Dict[str, Any], uid: str) -> Dict[st
         return _decrypt_chat_data(message_data, uid)
 
     return message_data
+
+
+def decrypt_message_payload(message_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
+    """Public read-path decryption for one raw message document.
+
+    Callers outside this module (the feedback-report context hydrator) need the
+    same enhanced-protection handling `get_message` applies, but starting from a
+    raw snapshot dict they already hold. Exposed rather than reaching into the
+    private helper so the encryption contract has one owner.
+    """
+    return _prepare_message_for_read(message_data, uid)
 
 
 # *****************************
@@ -164,26 +193,65 @@ def add_summary_message(text: str, uid: str) -> Message:
 
 @prepare_for_read(decrypt_func=_prepare_message_for_read)
 def get_app_messages(
-    uid: str, app_id: str, limit: int = 20, offset: int = 0, include_conversations: bool = False
+    uid: str, app_id: str, limit: int = 20, include_conversations: bool = False
 ) -> List[Dict[str, Any]]:
+    """Return an app's newest visible messages, up to ``limit``.
+
+    ``reported`` is intentionally filtered in Python because the legacy data
+    model permits the field to be absent.  The Firestore limit must therefore
+    not run before that visibility rule: a reported row inside the raw page
+    would otherwise consume a caller-visible slot and leave an older visible
+    message unfetched.  This follows the same bounded visible-row scan as
+    ``get_messages`` below.
+    """
+    visible_limit = max(0, int(limit))
+    if visible_limit == 0:
+        return []
+
     user_ref = db.collection('users').document(uid)
-    messages_ref = (
+    query: Any = (
         user_ref.collection('messages')
         .where(filter=FieldFilter('plugin_id', '==', app_id))
         .order_by('created_at', direction=firestore.Query.DESCENDING)
-        .limit(limit)
-        .offset(offset)
     )
+    # A clean page needs exactly ``visible_limit`` raw rows.  Bound only the
+    # extra rows needed to cross reported records, so this cannot become an
+    # unbounded history read while a deep run of reported rows still has a
+    # flat allowance to cross.
+    scan_budget = visible_limit + CHAT_MESSAGES_VISIBLE_PAGE_SCAN_SLACK
+    scanned = 0
+    reported_row_seen = False
+    cursor_snapshot: Any = None
     messages: List[Dict[str, Any]] = []
     conversations_id: set[str] = set()
 
-    # Fetch messages and collect conversation IDs
-    for doc in messages_ref.stream():
-        message: Dict[str, Any] = _typed_doc(doc)
-        if message.get('reported') is True:
-            continue
-        messages.append(message)
-        conversations_id.update(message.get('memories_id', []))
+    while scanned < scan_budget and len(messages) < visible_limit:
+        # A clean page reads exactly its requested visible rows, even when it
+        # needs more than one capped 100-row batch. Once a reported row has
+        # appeared, use capped batches to cross a dense hidden run without
+        # turning a missing visible row into one read per document.
+        batch_limit = min(100, scan_budget - scanned)
+        if not reported_row_seen:
+            batch_limit = min(batch_limit, max(1, visible_limit - len(messages)))
+        page_query = query.start_after(cursor_snapshot) if cursor_snapshot is not None else query
+        documents = list(page_query.limit(batch_limit).stream())
+        if not documents:
+            break
+
+        for document in documents:
+            scanned += 1
+            cursor_snapshot = document
+            message: Dict[str, Any] = _typed_doc(document)
+            if message.get('reported') is True:
+                reported_row_seen = True
+                continue
+            messages.append(message)
+            conversations_id.update(message.get('memories_id', []))
+            if len(messages) == visible_limit:
+                break
+
+        if len(documents) < batch_limit:
+            break
 
     if not include_conversations:
         return messages
@@ -218,6 +286,15 @@ def get_messages(
     app_id: Optional[str] = None,
     chat_session_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
+    """Return a visible chat page with offset counted in non-reported rows.
+
+    Firestore cannot apply ``reported != True`` cheaply for legacy docs that omit
+    the field, so reported rows are filtered in Python. Applying ``limit`` /
+    ``offset`` on the raw query first makes pages short and advances past
+    visible messages the client never saw. Scan with a bounded budget (same
+    spirit as ``get_messages_reconcile_page``) until ``offset`` visible rows are
+    skipped and ``limit`` visible rows are collected.
+    """
     logger.info(f'get_messages {uid} {limit} {offset} {app_id} {include_conversations}')
     user_ref = db.collection('users').document(uid)
     messages_ref = user_ref.collection('messages')
@@ -229,20 +306,54 @@ def get_messages(
         # App-scoped query: filter by plugin_id (None = main chat)
         messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
 
-    messages_ref = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit).offset(offset)
+    query: Any = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
+    # A page with no reported rows needs exactly this many documents, which is what the
+    # old raw query streamed. Bound the *slack* on top of it, not the page itself.
+    needed = max(offset, 0) + max(limit, 0)
+    # Flat slack, not proportional. Scaling it with the page size gave a small page a
+    # tiny allowance (limit=2 -> 6 documents), so a dense run of reported rows still
+    # returned an empty page the router reads as end-of-results. The read cost is set
+    # by the batch sizing below, not by this ceiling, so a flat allowance costs a clean
+    # page nothing and only bounds how far a page that meets reported rows may scan.
+    scan_budget = needed + CHAT_MESSAGES_VISIBLE_PAGE_SCAN_SLACK
+    scanned = 0
+    visible_skipped = 0
     messages: List[Dict[str, Any]] = []
     conversations_id: set[str] = set()
     files_id: set[str] = set()
+    cursor_snapshot: Any = None
 
-    # Fetch messages and collect conversation IDs
-    for doc in messages_ref.stream():
-        message: Dict[str, Any] = _typed_doc(doc)
-        if message.get('reported') is True:
-            continue
-        messages.append(message)
-        conversations_id.update(message.get('memories_id', []))
-        files_id.update(message.get('files_id', []))
+    while scanned < scan_budget and len(messages) < limit:
+        # Read exactly what the page needs before reading any slack. Without this the
+        # first batch was a flat 100 documents, so the chat-send path's limit=5 and
+        # limit=15 reads streamed ~20x the documents they used to. Slack is only paid
+        # for by a page that actually met a reported row.
+        batch_limit = min(100, scan_budget - scanned)
+        if scanned == 0:
+            batch_limit = min(batch_limit, max(1, needed))
+        page_query = query.start_after(cursor_snapshot) if cursor_snapshot is not None else query
+        documents = list(page_query.limit(batch_limit).stream())
+        if not documents:
+            break
+
+        for document in documents:
+            scanned += 1
+            cursor_snapshot = document
+            message: Dict[str, Any] = _typed_doc(document)
+            if message.get('reported') is True:
+                continue
+            if visible_skipped < offset:
+                visible_skipped += 1
+                continue
+            messages.append(message)
+            conversations_id.update(message.get('memories_id', []))
+            files_id.update(message.get('files_id', []))
+            if len(messages) == limit:
+                break
+
+        if len(documents) < batch_limit:
+            break
 
     if not include_conversations:
         return messages
@@ -451,19 +562,22 @@ def iter_all_messages(uid: str, batch_size: int = 1000) -> Iterator[Dict[str, An
     """Yield all chat messages for a user, decrypted, in batches. Used for streaming data export."""
     user_ref = db.collection('users').document(uid)
     msgs_ref = user_ref.collection('messages').order_by('created_at', direction=firestore.Query.DESCENDING)
-    offset = 0
+    cursor = None
     while True:
-        batch_ref = msgs_ref.limit(batch_size).offset(offset)
+        batch_ref = msgs_ref.limit(batch_size)
+        if cursor is not None:
+            batch_ref = batch_ref.start_after(cursor)
         batch: List[Dict[str, Any]] = []
-        for doc in batch_ref.stream():
+        snapshots = list(batch_ref.stream())
+        for doc in snapshots:
             msg: Dict[str, Any] = _typed_doc(doc)
             msg['id'] = doc.id
             msg = _prepare_message_for_read(msg, uid) or msg
             batch.append(msg)
         yield from batch
-        if len(batch) < batch_size:
+        if len(snapshots) < batch_size:
             break
-        offset += batch_size
+        cursor = snapshots[-1]
 
 
 def get_message(uid: str, message_id: str) -> tuple[Message, str] | None:
@@ -495,29 +609,30 @@ def report_message(uid: str, msg_doc_id: str) -> Dict[str, str]:
         return {"message": f"Update failed: {e}"}
 
 
-def update_message_rating(uid: str, message_id: str, rating: Optional[int]) -> bool:
+def update_message_rating(uid: str, message_id: str, rating: Optional[int]) -> Optional[Dict[str, Any]]:
     """
     Update the rating on a message document.
 
-    Args:
-        uid: User ID
-        message_id: Message ID (not doc ID)
-        rating: Rating value (1 = thumbs up, -1 = thumbs down, None = no rating)
+    Returns the already-streamed message snapshot on success so analytics can
+    copy identifiers (notification kind, app_id) without a second Firestore read.
+    Returns None if the message does not exist.
     """
     user_ref = db.collection('users').document(uid)
     message_ref = user_ref.collection('messages').where('id', '==', message_id).limit(1).stream()
     message_doc = next(message_ref, None)
     if not message_doc:
         logger.warning(f"⚠️ Message {message_id} not found for user {uid}")
-        return False
+        return None
 
+    snapshot = _typed_doc(message_doc)
     try:
         user_ref.collection('messages').document(message_doc.id).update({'rating': rating})
         logger.info(f"✅ Updated message {message_id} rating to {rating}")
-        return True
+        snapshot['rating'] = rating
+        return snapshot
     except Exception as e:
         logger.error(f"❌ Failed to update message rating: {e}")
-        return False
+        return None
 
 
 def batch_delete_messages(
@@ -653,19 +768,71 @@ def add_chat_session(uid: str, chat_session_data: Dict[str, Any]) -> Dict[str, A
 
 
 def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    session_ref = (
-        db.collection('users')
-        .document(uid)
-        .collection('chat_sessions')
-        .where(filter=FieldFilter('plugin_id', '==', app_id))
+    """The user's current chat session for an app.
+
+    Newest-first: an unordered `.limit(1)` lets Firestore return any matching
+    document, so once a user has more than one session for an app the "current"
+    one is whichever the index happens to yield. Callers treat this as the
+    session to read and append to, so an arbitrary pick silently splits a
+    conversation across sessions.
+
+    The ordering is applied after the read, not by `order_by`, because Firestore
+    drops documents that lack the ordered field entirely. `add_chat_session`
+    writes whatever dict it is handed, so a session with no `created_at` is
+    representable — and ordering in the query would make those sessions
+    invisible here, stranding a user's existing history behind a brand new
+    session. A session with no timestamp sorts oldest, and its id breaks ties so
+    the answer is stable across calls.
+    """
+    collection = db.collection('users').document(uid).collection('chat_sessions')
+    ordered_sessions = (
+        CURRENT_CHAT_SESSION_ORDERED_QUERY.build(
+            collection,
+            {'app_id': app_id},
+            field_filter_factory=FieldFilter,
+        )
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .order_by('__name__', direction=firestore.Query.DESCENDING)
         .limit(1)
+        .stream()
+    )
+    ordered_docs = [_typed_doc(session) for session in ordered_sessions]
+    if ordered_docs:
+        return max(
+            ordered_docs,
+            key=lambda data: (
+                data.get('created_at') is not None,
+                data.get('created_at') or datetime.min.replace(tzinfo=timezone.utc),
+                str(data.get('id') or ''),
+            ),
+        )
+
+    legacy_session = (
+        CURRENT_CHAT_SESSION_QUERY.build(
+            collection,
+            {'app_id': app_id},
+            field_filter_factory=FieldFilter,
+        )
+        .order_by('__name__', direction=firestore.Query.ASCENDING)
+        .limit(1)
+        .stream()
     )
 
-    sessions = session_ref.stream()
-    for session in sessions:
-        return _typed_doc(session)
+    legacy_docs = [_typed_doc(session) for session in legacy_session]
+    if len(legacy_docs) > 1:
+        legacy_docs = legacy_docs[:1]
 
-    return None
+    newest: Optional[Dict[str, Any]] = None
+    newest_key: Optional[tuple] = None
+    for data in legacy_docs:
+        # `_typed_doc` returns {} for a document with no fields, which sorts as
+        # untimestamped and loses to anything real rather than being skipped.
+        created = data.get('created_at')
+        key = (created is not None, created or datetime.min.replace(tzinfo=timezone.utc), str(data.get('id') or ''))
+        if newest_key is None or key > newest_key:
+            newest, newest_key = data, key
+
+    return newest
 
 
 def get_chat_session_by_id(uid: str, chat_session_id: str) -> Optional[Dict[str, Any]]:
@@ -704,35 +871,40 @@ def delete_chat_session(uid: str, chat_session_id: str, cascade_messages: bool =
     return None
 
 
+def _update_chat_session_if_exists(uid: str, chat_session_id: str, values: Dict[str, Any], what: str) -> bool:
+    """Apply a derived-state update to a chat session, tolerating a deleted session.
+
+    The message/file id lists and the OpenAI ids are derived state the session
+    document owns. Every writer below runs after a multi-second LLM call, and
+    DELETE /v2/messages (clear chat) deletes the session it read at the start of
+    that same window — so a concurrent clear, or a client retrying the slow
+    request, leaves these writes pointing at a tombstone. Firestore's update()
+    then raises NotFound and the user's chat call 500s even though the work it
+    was reporting already succeeded. A session that no longer exists has nothing
+    to record.
+
+    Returns True when the update was applied.
+    """
+    session_ref = db.collection('users').document(uid).collection('chat_sessions').document(chat_session_id)
+    try:
+        session_ref.update(values)
+        return True
+    except NotFound:
+        logger.warning(f"chat session {chat_session_id} no longer exists; skipping {what}")
+        return False
+
+
 def add_message_to_chat_session(uid: str, chat_session_id: str, message_id: str) -> None:
-    user_ref = db.collection('users').document(uid)
-    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
-    session_ref.update({"message_ids": firestore.ArrayUnion([message_id])})
+    _update_chat_session_if_exists(
+        uid, chat_session_id, {"message_ids": firestore.ArrayUnion([message_id])}, "message link"
+    )
 
 
 def add_files_to_chat_session(uid: str, chat_session_id: str, file_ids: List[str]) -> None:
     if not file_ids:
         return
 
-    user_ref = db.collection('users').document(uid)
-    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
-    session_ref.update({"file_ids": firestore.ArrayUnion(file_ids)})
-
-
-def update_chat_session_openai_ids(uid: str, chat_session_id: str, thread_id: str, assistant_id: str) -> None:
-    """Update OpenAI thread and assistant IDs for a chat session"""
-    user_ref = db.collection('users').document(uid)
-    session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
-
-    update_data: Dict[str, str] = {}
-    if thread_id:
-        update_data['openai_thread_id'] = thread_id
-    if assistant_id:
-        update_data['openai_assistant_id'] = assistant_id
-
-    if update_data:
-        session_ref.update(update_data)
-        logger.info(f"Updated session {chat_session_id} with thread {thread_id} and assistant {assistant_id}")
+    _update_chat_session_if_exists(uid, chat_session_id, {"file_ids": firestore.ArrayUnion(file_ids)}, "file link")
 
 
 # **************************************
@@ -796,7 +968,7 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
 # CHAT SESSIONS (v2)
 #
 # v2 sessions support: title, preview, message_count, starred, updated_at.
-# v1 sessions store: message_ids, file_ids, openai_thread_id.
+# v1 sessions store: message_ids, file_ids (legacy docs may still carry openai_thread_id).
 # Both schemas coexist in the same Firestore collection.
 # Both MUST write plugin_id alongside app_id for cross-platform query compat.
 # ============================================================================
@@ -850,11 +1022,9 @@ def acquire_chat_session(uid: str, app_id: Optional[str] = None) -> str:
     Queries by plugin_id to match both Python chat.py and Rust backend behavior.
     For main chat (app_id=None), matches sessions where plugin_id is None.
     """
-    col = db.collection('users').document(uid).collection('chat_sessions')
-    query = col.where(filter=FieldFilter('plugin_id', '==', app_id)).limit(1)
-    docs = list(query.stream())
-    if docs:
-        return docs[0].id
+    session = get_chat_session(uid, app_id=app_id)
+    if session:
+        return session['id']
     session = create_chat_session(uid, app_id=app_id)
     return session['id']
 
@@ -926,6 +1096,7 @@ def save_message(
     app_id: Optional[str] = None,
     session_id: Optional[str] = None,
     metadata: Optional[str] = None,
+    content_blocks: Optional[List[Dict[str, Any]]] = None,
     client_message_id: Optional[str] = None,
     message_source: str = 'desktop_chat',
     journal_revision: Optional[int] = None,
@@ -944,6 +1115,7 @@ def save_message(
         app_id=app_id,
         session_id=requested_session_id,
         metadata=metadata,
+        content_blocks=content_blocks,
         message_source=message_source,
     )
 
@@ -958,6 +1130,7 @@ def save_message(
                 app_id=app_id,
                 session_id=requested_session_id,
                 metadata=metadata,
+                content_blocks=content_blocks,
                 message_source=message_source,
                 payload_hash=idempotency_payload_hash,
                 journal_revision=journal_revision,
@@ -986,6 +1159,8 @@ def save_message(
         'metadata': metadata,
         'message_source': message_source,
     }
+    if content_blocks is not None:
+        doc['content_blocks'] = content_blocks
     if client_message_id:
         doc['client_message_id'] = client_message_id
         doc['client_message_payload_hash'] = idempotency_payload_hash
@@ -1003,6 +1178,7 @@ def save_message(
                 app_id=app_id,
                 session_id=requested_session_id,
                 metadata=metadata,
+                content_blocks=content_blocks,
                 message_source=message_source,
                 payload_hash=idempotency_payload_hash,
                 journal_revision=journal_revision,
@@ -1044,6 +1220,7 @@ def _apply_existing_message_revision(
     app_id: Optional[str],
     session_id: Optional[str],
     metadata: Optional[str],
+    content_blocks: Optional[List[Dict[str, Any]]],
     message_source: str,
     payload_hash: str,
     journal_revision: Optional[int],
@@ -1073,6 +1250,7 @@ def _apply_existing_message_revision(
                 app_id=app_id,
                 session_id=session_id,
                 metadata=metadata,
+                content_blocks=content_blocks,
                 message_source=message_source,
                 payload_hash=payload_hash,
             )
@@ -1090,17 +1268,20 @@ def _apply_existing_message_revision(
                 app_id=app_id,
                 session_id=session_id,
                 metadata=metadata,
+                content_blocks=content_blocks,
                 message_source=message_source,
                 payload_hash=payload_hash,
             )
             existing['_revision_updated'] = False
             return existing
-        patch = {
+        patch: Dict[str, Any] = {
             'text': text,
             'metadata': metadata,
             'client_message_payload_hash': payload_hash,
             'journal_revision': journal_revision,
         }
+        if content_blocks is not None:
+            patch['content_blocks'] = content_blocks
         write_transaction.update(message_ref, patch)
         existing.update(patch)
         existing['_revision_updated'] = True
@@ -1156,6 +1337,7 @@ def _assert_idempotent_message_payload(
     metadata: Optional[str],
     message_source: str,
     payload_hash: str,
+    content_blocks: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
     """Reject an idempotency-key collision without exposing message content."""
     existing_payload_hash = existing.get('client_message_payload_hash')
@@ -1169,6 +1351,8 @@ def _assert_idempotent_message_payload(
     # reconstructed from the stored row. New writes always use the exact hash.
     mismatched = existing.get('text') != text or existing.get('sender') != sender
     mismatched = mismatched or existing.get('metadata') != metadata
+    if content_blocks is not None:
+        mismatched = mismatched or existing.get('content_blocks') != content_blocks
     mismatched = mismatched or existing.get('message_source', 'desktop_chat') != message_source
     existing_app_ids = [existing[field] for field in ('app_id', 'plugin_id') if field in existing] or [None]
     mismatched = mismatched or any(existing_app_id != app_id for existing_app_id in existing_app_ids)
@@ -1191,9 +1375,10 @@ def _message_idempotency_payload_hash(
     session_id: Optional[str],
     metadata: Optional[str],
     message_source: str,
+    content_blocks: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """Return a stable digest of the caller-controlled immutable payload."""
-    payload = {
+    payload: Dict[str, Any] = {
         'app_id': app_id,
         'message_source': message_source,
         'metadata': metadata,
@@ -1201,6 +1386,8 @@ def _message_idempotency_payload_hash(
         'session_id': session_id,
         'text': text,
     }
+    if content_blocks is not None:
+        payload['content_blocks'] = content_blocks
     canonical = json.dumps(payload, ensure_ascii=False, separators=(',', ':'), sort_keys=True)
     return f'sha256:{hashlib.sha256(canonical.encode("utf-8")).hexdigest()}'
 

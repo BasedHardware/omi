@@ -50,6 +50,27 @@ final class MediaPlaybackDetector {
     return cachedValue
   }
 
+  private var didLogExemption = false
+
+  /// The idle value the capture gate should act on, with the once-per-episode
+  /// observability log folded in so the gate call site stays a single line.
+  func effectiveIdleSeconds(
+    hidIdleSeconds: TimeInterval,
+    threshold: TimeInterval,
+    now: Date = Date()
+  ) -> TimeInterval {
+    let effective = MediaPlaybackIdlePolicy.effectiveIdleSeconds(
+      hidIdleSeconds: hidIdleSeconds,
+      isDisplaySleepPrevented: isDisplaySleepPrevented(now: now))
+    if hidIdleSeconds >= threshold, effective < threshold, !didLogExemption {
+      didLogExemption = true
+      log("CaptureGate: HID-idle but media playback active — capture continues")
+    } else if hidIdleSeconds < threshold {
+      didLogExemption = false
+    }
+    return effective
+  }
+
   /// Whether any process other than this one holds a display-sleep-prevention
   /// assertion. Our own capture/recording stack can hold assertions of its own, and
   /// those must not count as "the user is watching something".

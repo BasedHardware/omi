@@ -1,6 +1,6 @@
 """The image-chat vision call must use max_completion_tokens, not max_tokens.
 
-PR #10907 swapped the vision model gpt-4.1 -> gpt-5.6-luna but kept max_tokens=2048, which
+PR #10907 swapped the vision model gpt-4.1 -> gpt-x-luna but kept max_tokens=2048, which
 gpt-5.x rejects with a 400 (use max_completion_tokens). The failure was masked until the
 gateway-mode upload block (#11419) was lifted; every image chat then failed with the canned
 stream-failure message.
@@ -63,7 +63,7 @@ def test_vision_stream_sends_max_completion_tokens():
     ]
 
     with patch.object(cf, '_get_async_openai', lambda: fake_client):
-        asyncio.run(cf.FileChatTool._ask_vision_stream(tool, 'what is this?', files, _Callback()))
+        asyncio.run(cf.FileChatTool._ask_files_stream(tool, 'what is this?', files, _Callback()))
 
     assert 'max_tokens' not in captured
     assert captured['max_completion_tokens'] == 2048

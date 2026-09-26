@@ -1,0 +1,7 @@
+{
+  "version": "0.12.205",
+  "date": "2026-08-22",
+  "changes": [
+    "Proactive insights no longer recap what you just did, tell you to keep doing what you're already doing, or report a record change you can't act on — a notification now has to answer your question or change your next step"
+  ]
+}

@@ -13,6 +13,7 @@ from omi_plugin_sdk.models import (
     ExternalIntegrationCreateConversation,
     Geolocation,
     PluginResult,
+    Section,
     Structured,
     TranscriptSegment,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "ExternalIntegrationCreateConversation",
     "Geolocation",
     "PluginResult",
+    "Section",
     "Structured",
     "TranscriptSegment",
 ]

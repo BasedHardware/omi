@@ -25,7 +25,9 @@ from typing import Any, Awaitable, Callable, Dict, Optional
 from cachetools import TTLCache
 from fastapi import HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 from starlette.websockets import WebSocket
+from utils.executors import critical_executor, run_blocking
 
 logger = logging.getLogger('byok')
 
@@ -98,6 +100,7 @@ BYOK_HEADERS = {
     'openai': 'x-byok-openai',
     'anthropic': 'x-byok-anthropic',
     'gemini': 'x-byok-gemini',
+    'openrouter': 'x-byok-openrouter',
     'deepgram': 'x-byok-deepgram',
 }
 
@@ -105,6 +108,15 @@ BYOK_HEADERS = {
 # Default is None (not {}) to avoid sharing a mutable object across contexts.
 _byok_ctx: ContextVar[Optional[Dict[str, str]]] = ContextVar('byok_keys', default=None)
 _byok_uid_ctx: ContextVar[Optional[str]] = ContextVar('byok_uid', default=None)
+_byok_validated_ctx: ContextVar[bool] = ContextVar('byok_validated', default=False)
+_BYOK_RECOVERY_PATHS = frozenset(
+    {
+        '/v1/payments/available-plans',
+        '/v1/payments/overage-info',
+        '/v1/users/me/byok-active',
+        '/v1/users/me/subscription',
+    }
+)
 
 
 def get_byok_keys() -> Dict[str, str]:
@@ -135,9 +147,22 @@ def has_byok_keys() -> bool:
     return bool(keys)
 
 
+def has_validated_byok_keys() -> bool:
+    """True when the current request's BYOK headers passed enrollment validation."""
+    return _byok_validated_ctx.get() and bool(_byok_ctx.get())
+
+
 def set_byok_keys(keys: Dict[str, str]):
     """Used by the middleware; also useful from WS handlers that read headers manually."""
     _byok_ctx.set({k: v for k, v in keys.items() if v})
+    _byok_validated_ctx.set(False)
+
+
+def set_validated_byok_keys(keys: Dict[str, str], uid: str) -> None:
+    """Install already-validated BYOK keys in the current request context."""
+    _byok_ctx.set({k: v for k, v in keys.items() if v})
+    _byok_validated_ctx.set(True)
+    set_byok_uid(uid)
 
 
 def extract_byok_from_websocket(websocket: WebSocket) -> Dict[str, str]:
@@ -170,11 +195,36 @@ class BYOKMiddleware(BaseHTTPMiddleware):
                 keys[provider] = value
         token = _byok_ctx.set(keys)
         uid_token = _byok_uid_ctx.set(None)
+        validated_token = _byok_validated_ctx.set(False)
         try:
+            if keys:
+                authorization = request.headers.get('authorization', '')
+                parts = authorization.split(' ', 1)
+                if len(parts) == 2 and parts[0].lower() == 'bearer' and parts[1]:
+                    try:
+                        from utils.other.endpoints import verify_token
+
+                        uid = await run_blocking(critical_executor, verify_token, parts[1])
+                        validated_keys, error = await run_blocking(critical_executor, _validated_byok_keys, uid, keys)
+                        if error:
+                            if request.url.path not in _BYOK_RECOVERY_PATHS:
+                                return JSONResponse(status_code=403, content={'detail': error})
+                            set_validated_byok_keys({}, uid)
+                        else:
+                            set_validated_byok_keys(validated_keys, uid)
+                    except Exception:
+                        # Transient verify/Firestore failures must not leave raw
+                        # headers in context; ContextVar mutations in worker
+                        # threads are discarded, so later route auth cannot
+                        # sanitize this request.
+                        set_byok_keys({})
+                        set_byok_uid(None)
+                        logger.warning('BYOK middleware validation failed; clearing unvalidated keys')
             return await call_next(request)
         finally:
             _byok_ctx.reset(token)
             _byok_uid_ctx.reset(uid_token)
+            _byok_validated_ctx.reset(validated_token)
 
 
 # ---------------------------------------------------------------------------
@@ -182,7 +232,7 @@ class BYOKMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 
 
-def _check_byok_validity(uid: str) -> Optional[str]:
+def _validated_byok_keys(uid: str, request_keys: Dict[str, str]) -> tuple[Dict[str, str], Optional[str]]:
     """Core validation: Firestore BYOK state is source of truth.
 
     Returns an error message string on failure, or ``None`` on success.
@@ -198,9 +248,8 @@ def _check_byok_validity(uid: str) -> Optional[str]:
     # Fast path: no BYOK headers on this request → nothing to validate.
     # Avoids hitting Firestore/cache for the vast majority of requests
     # (mobile, non-BYOK desktop).
-    request_keys = _byok_ctx.get() or {}
     if not request_keys:
-        return None
+        return {}, None
 
     import database.users as users_db
 
@@ -218,18 +267,17 @@ def _check_byok_validity(uid: str) -> Optional[str]:
     if not is_active:
         # Non-enrolled user — silently discard any BYOK headers so downstream
         # code always uses Omi's own keys.
-        if _byok_ctx.get():
-            _byok_ctx.set(None)
-        return None
+        return {}, None
 
     # BYOK-active user with headers present — validate every enrolled
     # provider fingerprint.
     stored_fingerprints = state.get('fingerprints', {})
 
+    validated: Dict[str, str] = {}
     for provider, stored_fp in stored_fingerprints.items():
         raw_key = request_keys.get(provider)
         if not raw_key:
-            return f"BYOK key header missing for enrolled provider: {provider}"
+            return {}, f"BYOK key header missing for enrolled provider: {provider}"
         request_fp = hashlib.sha256(raw_key.encode()).hexdigest()
         # Accept either the current peppered form or the legacy plain form,
         # so users enrolled before BYOK_FINGERPRINT_PEPPER was set aren't
@@ -238,15 +286,18 @@ def _check_byok_validity(uid: str) -> Optional[str]:
             hmac.compare_digest(peppered_fingerprint(request_fp), stored_fp)
             or hmac.compare_digest(request_fp, stored_fp)
         ):
-            return f"BYOK key fingerprint mismatch for provider: {provider}"
+            return {}, f"BYOK key fingerprint mismatch for provider: {provider}"
+        validated[provider] = raw_key
 
-    # A header for a provider the user never enrolled has no stored fingerprint, so the
-    # loop above never sees it and it would reach the provider clients unvalidated. Drop
-    # it, mirroring the non-enrolled-user path above: anything we cannot verify must not
-    # be used, and downstream falls back to Omi's own key for that provider.
-    if any(provider not in stored_fingerprints for provider in request_keys):
-        _byok_ctx.set({p: key for p, key in request_keys.items() if p in stored_fingerprints})
+    return validated, None
 
+
+def _check_byok_validity(uid: str) -> Optional[str]:
+    """Validate current context keys and retain only the enrolled capabilities."""
+    validated_keys, error = _validated_byok_keys(uid, _byok_ctx.get() or {})
+    if error:
+        return error
+    _byok_ctx.set(validated_keys)
     return None
 
 
@@ -260,6 +311,7 @@ def validate_byok_request(uid: str) -> None:
     if error:
         logger.warning('BYOK validation failed uid=%s: %s', uid, error)
         raise HTTPException(status_code=403, detail=error)
+    _byok_validated_ctx.set(True)
     set_byok_uid(uid)
 
 
@@ -274,5 +326,14 @@ def validate_byok_websocket(uid: str) -> Optional[str]:
     if error:
         logger.warning('BYOK WS validation failed uid=%s: %s', uid, error)
     else:
+        _byok_validated_ctx.set(True)
         set_byok_uid(uid)
     return error
+
+
+def validate_byok_websocket_keys(uid: str, request_keys: Dict[str, str]) -> tuple[Dict[str, str], Optional[str]]:
+    """Validate WebSocket BYOK keys without mutating worker-local ContextVars."""
+    validated_keys, error = _validated_byok_keys(uid, request_keys)
+    if error:
+        logger.warning('BYOK WS validation failed uid=%s: %s', uid, error)
+    return validated_keys, error

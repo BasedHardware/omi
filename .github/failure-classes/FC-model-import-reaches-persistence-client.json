@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-model-import-reaches-persistence-client",
+  "violated_contract": "A pure data/model module must stay import-pure: importing it must not reach the persistence layer. models/ is imported by nearly every backend module and by unit suites that load it under stubs, so a module-scope `from database.* import ...` drags the Firestore client and its proto descriptors into every one of those import graphs and turns unrelated suites red.",
+  "canonical_prevention": "Keep the record lookup in the layer that already owns the database import and inject it into the model as a callable (Message.get_messages_as_string(..., app_name_resolver=...)). Guard it by importing the model in a clean interpreter and asserting no `database.*` or `google.cloud.firestore*` module was loaded, so any future model-layer import that reaches persistence fails, not just this symbol.",
+  "canonical_prevention_artifact": [
+    "backend/models/chat.py",
+    "backend/utils/llm/chat.py",
+    "backend/tests/unit/test_models_chat_import_purity.py"
+  ],
+  "evidence_prs": [11913],
+  "scope_hints": [
+    "backend/models/**"
+  ],
+  "status": "open"
+}

@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-identity-fallback-used-as-authorization-gate",
+  "violated_contract": "A predicate that decides whether a process may act as the release must be derived from what that process actually reported about itself, never from an identity resolver whose contract is to supply a default for callers it does not recognise. Those resolvers exist so that unrelated processes still get a usable log subsystem, Keychain service or support directory, and defaulting an unknown principal INTO the shipping identity is the correct answer for all of those. Reusing the same answer as a gate inverts it: every foreign process is admitted as the release precisely because it could not be identified. Context for Claude derived `isDevelopmentBuild` from `ownIdentifier`, whose fallback hands the shipping bundle id to anything not running from a bundle of ours, so under `swift test` -- where Bundle.main is `com.apple.dt.xctest.tool` -- the suite was indistinguishable from the notarized app and POSTed to production PostHog from the real spool for as long as the suite had existed. It is silent by construction: the gate reports healthy, the events are well-formed, and the pollution is only visible by decoding a foreign bundle's version out of the payload.",
+  "canonical_prevention": "Keep the two questions separate and name them apart: an identity resolver answers 'which identity does this process own' and may default; a gate answers 'is this process the shipping app' over the raw reported identifier and treats unknown as no. Anything that phones home, spends quota, or writes shared production state asks the gate. Prove it from inside the process that was wrongly admitted -- a test asserting the suite itself is refused is the only seam that would have caught this -- and pair it with a pure table over the reported identifier covering nil, empty, a foreign id, and the dev-suffixed id.",
+  "canonical_prevention_artifact": [
+    "desktop/context-for-claude/Tests/ContextAppTests/AnalyticsTests.swift",
+    "desktop/context-for-claude/Tests/ContextCoreTests/BuildIdentityTests.swift"
+  ],
+  "evidence_prs": [
+    11863
+  ],
+  "scope_hints": [
+    "desktop/context-for-claude/Sources/ContextCore/Paths.swift",
+    "desktop/context-for-claude/Sources/ContextApp/Support/Analytics/**"
+  ],
+  "status": "open"
+}

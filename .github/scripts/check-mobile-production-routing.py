@@ -27,6 +27,18 @@ RETIRED_GKE_DESKTOP_BACKEND_WORKFLOW_ROOT = ".github/workflows"
 RETIRED_GKE_DESKTOP_BACKEND_MANIFEST_SUFFIXES = {".tpl", ".yaml", ".yml"}
 RETIRED_GKE_DESKTOP_BACKEND_MARKERS = ("desktop-api.omi.me", "desktop-backend")
 GKE_WORKFLOW_MARKERS = ("gcloud container clusters", "helm ", "kubectl ")
+CLOUD_RUN_OBSERVER_ROOT = Path("backend/charts/monitoring/prometheus-stackdriver-exporter")
+# What makes one of these files an observer of Cloud Run is the monitored
+# resource it selects, not how it spells the namespace set. `__run__` is Cloud
+# Run's reserved pseudo-cluster, so these two markers together are proof; keying
+# the exemption on an exact namespace comparison instead made it collapse the
+# moment that disjunction was rewritten as one_of(...) to satisfy Cloud
+# Monitoring's filter grammar, and flagged a read-only metrics reader as retired
+# GKE ownership.
+CLOUD_RUN_OBSERVER_MARKERS = (
+    "prometheus.googleapis.com/",
+    'resource.labels.cluster="__run__"',
+)
 LEGACY_BETA_ROUTING_PATHS = (
     "codemagic.yaml",
     "app/lib/env/dev_env.dart",
@@ -45,9 +57,7 @@ REQUIRED_PRODUCTION_FRAGMENTS = {
         'productionBundleIdentifier = "com.omi.computer-macos"',
         "externalPreviewBundleIdentifierPrefix",
     ),
-    "desktop/macos/Desktop/Sources/GoogleService-Info.plist": (
-        "<string>based-hardware</string>",
-    ),
+    "desktop/macos/Desktop/Sources/GoogleService-Info.plist": ("<string>based-hardware</string>",),
 }
 CANONICAL_MACOS_PRODUCTION_BUNDLE_IDENTIFIER = "com.omi.computer-macos"
 # INV-BETA-1: the side-by-side Omi Beta app is the single sanctioned second
@@ -75,16 +85,19 @@ def _retired_gke_desktop_backend_manifests(root: Path) -> list[Path]:
             if not manifest.is_file() or manifest.suffix not in RETIRED_GKE_DESKTOP_BACKEND_MANIFEST_SUFFIXES:
                 continue
             source = manifest.read_text(encoding="utf-8")
-            if any(marker in source for marker in RETIRED_GKE_DESKTOP_BACKEND_MARKERS):
-                retired_manifests.append(manifest.relative_to(root))
+            relative = manifest.relative_to(root)
+            is_cloud_run_observer = relative.is_relative_to(CLOUD_RUN_OBSERVER_ROOT) and all(
+                marker in source for marker in CLOUD_RUN_OBSERVER_MARKERS
+            )
+            if not is_cloud_run_observer and any(marker in source for marker in RETIRED_GKE_DESKTOP_BACKEND_MARKERS):
+                retired_manifests.append(relative)
 
     workflow_root = root / RETIRED_GKE_DESKTOP_BACKEND_WORKFLOW_ROOT
     if workflow_root.is_dir():
         for workflow in workflow_root.glob("*.y*ml"):
             source = workflow.read_text(encoding="utf-8")
-            if (
-                any(marker in source for marker in RETIRED_GKE_DESKTOP_BACKEND_MARKERS)
-                and any(marker in source for marker in GKE_WORKFLOW_MARKERS)
+            if any(marker in source for marker in RETIRED_GKE_DESKTOP_BACKEND_MARKERS) and any(
+                marker in source for marker in GKE_WORKFLOW_MARKERS
             ):
                 retired_manifests.append(workflow.relative_to(root))
     return retired_manifests
@@ -101,13 +114,9 @@ def validate(root: Path) -> list[str]:
         block = _workflow_block(text, workflow)
         assignments = re.findall(r"(?m)^\s*echo API_BASE_URL=([^\s]+) >> \.env\s*$", block or "")
         if assignments != [PIN]:
-            errors.append(
-                f"{workflow} must contain exactly one immutable API_BASE_URL=https://api.omi.me/ assignment"
-            )
+            errors.append(f"{workflow} must contain exactly one immutable API_BASE_URL=https://api.omi.me/ assignment")
     desktop_block = _workflow_block(text, DESKTOP_WORKFLOW)
-    desktop_bundle_identifiers = re.findall(
-        r"(?m)^\s*BUNDLE_ID:\s*[\"']?([^\"'\s]+)[\"']?\s*$", desktop_block or ""
-    )
+    desktop_bundle_identifiers = re.findall(r"(?m)^\s*BUNDLE_ID:\s*[\"']?([^\"'\s]+)[\"']?\s*$", desktop_block or "")
     if desktop_bundle_identifiers != [CANONICAL_MACOS_PRODUCTION_BUNDLE_IDENTIFIER]:
         errors.append(
             f"{DESKTOP_WORKFLOW} must contain exactly one immutable "

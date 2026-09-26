@@ -1,8 +1,12 @@
 """Global canonical-memory safety controls.
 
-Memory and task product authority is universal for authenticated accounts.  The
-remaining mode is a deployment-wide incident/readiness switch; it must never be
-combined with a UID inventory or used as product entitlement.
+Memory and task product authority is universal for authenticated accounts. The
+one user-facing product switch is ``MEMORY_ENABLED=on|off``. Code fail-closes
+to ``off`` when it is unset.
+
+``on`` enables intake and list. It maps to write-mode intake, not scheduled
+ST→LT maintenance (that remains ``MEMORY_CANONICAL_MAINTENANCE_ENABLED`` on
+``memory-maintenance-job``).
 """
 
 import os
@@ -10,8 +14,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 
-MEMORY_MODE_ENV = "MEMORY_MODE"
-MEMORY_V3_GET_ENABLED_ENV = "MEMORY_V3_GET_ENABLED"
+MEMORY_ENABLED_ENV = "MEMORY_ENABLED"
+
+_ENABLED_ON = frozenset({"on", "true", "1"})
 
 
 class MemoryRolloutMode(str, Enum):
@@ -45,7 +50,7 @@ def universal_memory_capabilities(uid: str, *, account_generation: int = 0) -> M
     The legacy fields remain in this internal DTO while released callers are
     migrated, but they are constants and never derive from UID enrollment or a
     persisted rollout state machine. Global write incident control is enforced
-    by ``MemoryService`` through ``MEMORY_MODE``.
+    by ``MemoryService`` through ``MEMORY_ENABLED``.
     """
 
     if account_generation < 0:
@@ -74,24 +79,28 @@ def _env_raw_value(
     return default
 
 
+def _explicit_enabled_token(env: Mapping[str, str] | None = None) -> str:
+    return (_env_raw_value(env, key=MEMORY_ENABLED_ENV, default="") or "").strip().lower()
+
+
+def memory_enabled_env_value(env: Mapping[str, str] | None = None) -> bool:
+    """Read the one user-facing product flag. Unset fail-closes to off."""
+    return _explicit_enabled_token(env) in _ENABLED_ON
+
+
 def rollout_mode_env_value(env: Mapping[str, str] | None = None) -> str:
-    """Read the deployment-wide memory safety mode from ``MEMORY_MODE``."""
-    raw = _env_raw_value(env, key=MEMORY_MODE_ENV, default="")
-    return (raw or MemoryRolloutMode.off.value).strip() or MemoryRolloutMode.off.value
+    """Derive the intake fence from ``MEMORY_ENABLED``.
 
-
-def rollout_v3_get_enabled_env_value(env: Mapping[str, str] | None = None) -> bool:
-    """Read v3 GET route toggle from ``MEMORY_V3_GET_ENABLED``."""
-    raw = _env_raw_value(env, key=MEMORY_V3_GET_ENABLED_ENV, default="")
-    return str(raw).strip().lower() == "true"
+    ``MEMORY_ENABLED=on`` is write-mode intake (create+list), never Gate 3 read.
+    """
+    return MemoryRolloutMode.write.value if memory_enabled_env_value(env) else MemoryRolloutMode.off.value
 
 
 __all__ = [
-    "MEMORY_MODE_ENV",
-    "MEMORY_V3_GET_ENABLED_ENV",
+    "MEMORY_ENABLED_ENV",
     "MemoryRolloutCapabilities",
     "MemoryRolloutMode",
+    "memory_enabled_env_value",
     "rollout_mode_env_value",
-    "rollout_v3_get_enabled_env_value",
     "universal_memory_capabilities",
 ]

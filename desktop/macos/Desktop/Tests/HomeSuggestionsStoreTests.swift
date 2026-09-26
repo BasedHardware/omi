@@ -36,14 +36,29 @@ final class HomeSuggestionComposerTests: XCTestCase {
       ]
     )
 
+    // No personalized questions, nothing from onboarding, no signals: the only
+    // honest top-up is the teach-me draft. The week-scale questions are gone.
     XCTAssertEqual(
       HomeSuggestionComposer.compose(personalized: [], onboarding: []),
-      [
-        "What should I do today?",
-        "What did I spend my time on this week?",
-        "What's the highest-leverage thing I can do next?",
-      ]
+      ["What should I do today?", DayZeroChips.rememberDraft]
     )
+  }
+
+  func testDayZeroTopUpIsGatedOnLiveSignalsAndNeverWeekScale() {
+    var signals = DayZeroChipSignals()
+    signals.canSeeScreen = true
+    signals.screenHistoryEnabled = true
+    let chips = HomeSuggestionComposer.compose(personalized: [], onboarding: [], dayZero: signals)
+    XCTAssertEqual(chips, ["What should I do today?", DayZeroChips.summarizeScreen, DayZeroChips.lastHour])
+
+    signals.systemLanguageName = "Español"
+    let localized = HomeSuggestionComposer.compose(personalized: [], onboarding: [], dayZero: signals)
+    XCTAssertEqual(localized, ["What should I do today?", "Switch to Español", DayZeroChips.summarizeScreen])
+
+    for retired in HomeSuggestionComposer.retiredStaticFallbacks {
+      XCTAssertFalse(
+        chips.contains(retired) || localized.contains(retired), "\(retired) asks for data day 0 cannot have")
+    }
   }
 
   func testComposeTopsUpSinglePersonalizedQuestionFromFallbacks() {
@@ -57,7 +72,7 @@ final class HomeSuggestionComposerTests: XCTestCase {
       [
         "What should I do today?",
         "How do I unblock the Atlas launch?",
-        "What did I spend my time on this week?",
+        DayZeroChips.rememberDraft,
       ]
     )
   }

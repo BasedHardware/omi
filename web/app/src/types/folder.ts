@@ -5,7 +5,7 @@ export interface Folder {
   name: string;
   description?: string;
   emoji?: string; // Frontend display (mapped from icon)
-  icon?: string;  // Backend field
+  icon?: string; // Backend field
   color?: string;
   conversation_count?: number;
   created_at: string;
@@ -44,7 +44,7 @@ export interface ReorderFoldersRequest {
 
 // Predefined folder colors
 export const FOLDER_COLORS = [
-  { id: 'purple', value: '#8B5CF6', label: 'Purple' },
+  { id: 'slate', value: '#64748B', label: 'Slate' },
   { id: 'blue', value: '#3B82F6', label: 'Blue' },
   { id: 'green', value: '#10B981', label: 'Green' },
   { id: 'yellow', value: '#F59E0B', label: 'Yellow' },
@@ -56,9 +56,23 @@ export const FOLDER_COLORS = [
 
 // Predefined folder emojis (matching mobile app)
 export const FOLDER_EMOJIS = [
-  '📁', '💼', '❤️', '👥', '🏠', '💡', '🎯', '📚',
-  '🔧', '🎨', '🎮', '🏃', '✈️', '🍔', '🎵', '📷',
+  '📁',
+  '💼',
+  '❤️',
+  '👥',
+  '🏠',
+  '💡',
+  '🎯',
+  '📚',
+  '🔧',
+  '🎨',
+  '🎮',
+  '🏃',
+  '✈️',
+  '🍔',
+  '🎵',
+  '📷',
 ] as const;
 
-export type FolderColor = typeof FOLDER_COLORS[number]['id'];
-export type FolderEmoji = typeof FOLDER_EMOJIS[number];
+export type FolderColor = (typeof FOLDER_COLORS)[number]['id'];
+export type FolderEmoji = (typeof FOLDER_EMOJIS)[number];

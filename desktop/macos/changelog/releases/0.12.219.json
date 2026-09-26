@@ -1,0 +1,9 @@
+{
+  "version": "0.12.219",
+  "date": "2026-08-26",
+  "changes": [
+    "Pressing Return while the assistant is still answering no longer clears your draft or miscounts a question.",
+    "Every chat surface now records a question only once the assistant actually accepts the send.",
+    "A chat send the assistant refuses no longer loses your typed question or miscounts toward the rating prompt."
+  ]
+}

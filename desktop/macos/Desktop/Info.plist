@@ -39,6 +39,10 @@
     <string>Omi needs permission to detect which application is currently active.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Omi needs microphone access to transcribe your conversations in real-time.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Omi uses nearby calendar events to add meeting titles and participant names to your conversation notes.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>Omi uses nearby calendar events to add meeting titles and participant names to your conversation notes.</string>
     <key>NSAudioCaptureUsageDescription</key>
     <string>Omi needs permission to capture system audio for transcription of calls and meetings.</string>
     <key>NSBluetoothAlwaysUsageDescription</key>

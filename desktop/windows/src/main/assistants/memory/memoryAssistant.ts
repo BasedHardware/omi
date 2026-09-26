@@ -55,10 +55,10 @@ export class MemoryAssistant implements ProactiveAssistant {
   }
 
   /** Memory's only cadence control: the fixed extraction interval (Mac's
-   *  `memoryExtractionInterval`, 600s / 10 min default). */
+   *  `memoryExtractionInterval`, 1800s / 30 min default). */
   private effectiveIntervalMs(): number {
     const min = getAppSettings().memoryExtractionIntervalMin
-    return Math.max(1, Number.isFinite(min) ? min : 10) * 60_000
+    return Math.max(1, Number.isFinite(min) ? min : 30) * 60_000
   }
 
   shouldAnalyze(_frameNumber: number, timeSinceLastAnalysisMs: number): boolean {

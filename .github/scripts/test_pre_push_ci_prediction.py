@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -12,12 +13,63 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from pre_push_ci_prediction import (  # noqa: E402
+    ACCEPTED_EVENTS,
     DESKTOP_FLOW_LINT_INPUTS,
     DESKTOP_RELEASE_PATHSPECS,
+    LOCAL_CHECK_ORDER,
     github_outputs,
     resolve_impact,
     select_checks,
 )
+
+WORKFLOWS_DIR = REPO_ROOT / ".github/workflows"
+# Both call sites forward `${{ github.event_name }}` verbatim, so a workflow reaching
+# either one can hand this script any trigger it declares. The direct pattern is
+# anchored on the script name rather than on `--event` alone: other workflows forward
+# `github.event_name` to unrelated scripts with their own `--event` flag, and matching
+# those would fail this test for a script it does not govern.
+_PREDICTOR_INVOCATION = "pre_push_ci_prediction.py"
+_EVENT_NAME_FORWARD = re.compile(r"--event\s+\"\$\{\{\s*github\.event_name\s*\}\}\"")
+_USES_DETECT_CHANGES = re.compile(r"uses:\s*\./\.github/actions/detect-changes")
+# A shell invocation continues across backslash-newlines; the flag always lands within
+# a few lines of the script name.
+_INVOCATION_TAIL_LINES = 12
+
+
+def _forwards_event_name_to_the_predictor(text: str) -> bool:
+    """True if some `pre_push_ci_prediction.py` call passes `${{ github.event_name }}`."""
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if _PREDICTOR_INVOCATION not in line:
+            continue
+        tail = "\n".join(lines[index : index + _INVOCATION_TAIL_LINES])
+        if _EVENT_NAME_FORWARD.search(tail):
+            return True
+    return False
+
+
+def _declared_triggers(workflow_text: str) -> list[str]:
+    """Trigger names from a workflow's top-level `on:` block, both YAML spellings."""
+    block = re.search(r"^on:[ \t]*(.*)\n((?:(?:[ \t].*)?\n)*?)(?=^\S)", workflow_text, re.MULTILINE)
+    if not block:
+        return []
+    inline = block.group(1).strip()
+    if inline.startswith("["):
+        return [name.strip().strip("'\"") for name in inline.strip("[]").split(",") if name.strip()]
+    if inline:
+        return [inline.strip("'\"")]
+    return re.findall(r"^  ([A-Za-z_]+):", block.group(2), re.MULTILINE)
+
+
+def _workflows_reaching_the_predictor() -> dict[str, list[str]]:
+    """-> {workflow filename: declared triggers} for every caller of this script."""
+    reaching = {}
+    for path in sorted(WORKFLOWS_DIR.glob("*.yml")) + sorted(WORKFLOWS_DIR.glob("*.yaml")):
+        text = path.read_text(encoding="utf-8")
+        if _forwards_event_name_to_the_predictor(text) or _USES_DETECT_CHANGES.search(text):
+            reaching[path.name] = _declared_triggers(text)
+    return reaching
+
 
 _PLANNER_SPEC = importlib.util.spec_from_file_location(
     "plan_desktop_release_pre_push_contract",
@@ -125,6 +177,54 @@ class PrePushCiPredictionTests(unittest.TestCase):
         self.assertTrue(plan.includes("desktop-swift-tests"))
         self.assertEqual(github_outputs(plan)["should_run_tests"], "true")
 
+    def test_app_dart_production_change_wakes_hermetic_journeys(self) -> None:
+        plan = self.plan(
+            ["app/lib/utils/date_formats.dart"], {"app/lib/utils/date_formats.dart": "class DateFormats {}"}
+        )
+        self.assertTrue(plan.includes("app-journeys-hermetic"))
+        self.assertEqual(github_outputs(plan)["has_app_journeys"], "true")
+
+    def test_generated_dart_and_l10n_do_not_wake_journeys(self) -> None:
+        plan = self.plan(["app/lib/models/task.g.dart", "app/lib/l10n/app_fr.arb"])
+        self.assertFalse(plan.includes("app-journeys-hermetic"))
+        self.assertEqual(github_outputs(plan)["has_app_journeys"], "false")
+
+    def test_journey_harness_and_replay_inputs_wake_journeys(self) -> None:
+        for path in (
+            "app/integration_test/journeys/j2_chat_send_assistant_reply_test.dart",
+            "app/integration_test/journeys/support/hermetic_boot.dart",
+            "app/test/support/capture/capture_replay_world.dart",
+            "app/lib/services/dev_controls/semantic_controls.dart",
+            "contracts/session/session-evidence-v1.schema.json",
+            "scripts/dev-harness/mobile-verify.sh",
+            "scripts/dev-harness/dev_harness/mobile_verify.py",
+        ):
+            with self.subTest(path=path):
+                plan = self.plan([path])
+                self.assertTrue(plan.includes("app-journeys-hermetic"), path)
+                self.assertEqual(github_outputs(plan)["has_app_journeys"], "true")
+
+    def test_non_journey_inputs_stay_off_the_journey_lane(self) -> None:
+        for path in (
+            "backend/routers/auth.py",
+            "scripts/dev-harness/dev_harness/mobile_session.py",
+            "app/android/app/src/main/AndroidManifest.xml",
+        ):
+            with self.subTest(path=path):
+                plan = self.plan([path])
+                self.assertFalse(plan.includes("app-journeys-hermetic"), path)
+
+    def test_selector_change_wakes_journeys(self) -> None:
+        plan = self.plan([".github/workflows/mobile-app-checks.yml"])
+        self.assertTrue(plan.includes("app-journeys-hermetic"))
+        self.assertEqual(github_outputs(plan)["has_app_journeys"], "true")
+
+    def test_journey_lane_stays_out_of_the_bounded_local_push_gate(self) -> None:
+        """SCA-490: hermetic journeys are CI + on-demand; never a pre-push phase."""
+        self.assertNotIn("app-journeys-hermetic", LOCAL_CHECK_ORDER)
+        selection = self.select(["app/lib/pages/chat/page.dart"], {"app/lib/pages/chat/page.dart": "class ChatPage {}"})
+        self.assertNotIn("app-journeys-hermetic", selection)
+
     def test_unknown_component_paths_select_the_normal_component_lane(self) -> None:
         app = self.plan(["app/tooling/unknown-input.txt"])
         desktop = self.plan(["desktop/macos/Resources/unknown-input.txt"])
@@ -134,32 +234,130 @@ class PrePushCiPredictionTests(unittest.TestCase):
     def test_selector_change_exercises_broad_resolver_fixtures(self) -> None:
         plan = self.plan(["scripts/pre_push_ci_prediction.py"])
         for phase in (
-            "flutter-codegen",
-            "flutter-l10n",
             "desktop-flow-lint",
             "desktop-swift-tests",
             "app-analysis-tests",
+            "app-compile-smoke",
+            "app-ios-compile",
         ):
             with self.subTest(phase=phase):
                 self.assertTrue(plan.includes(phase))
 
-    def test_release_compile_runs_on_prs_and_pushes_for_releasable_desktop_changes(self) -> None:
-        # Release-lane-only breaks (whole-module strict concurrency) must die in
-        # PRs: the KG ResolveOutcome Sendable error (#11373/#11374) merged with a
-        # green debug lane and wedged every candidate for three merges.
+    def test_routing_only_diff_does_not_wake_flutter_regeneration(self) -> None:
+        for path in (".github/checks-manifest.yaml", "scripts/pre_push_ci_prediction.py"):
+            with self.subTest(path=path):
+                plan = self.plan([path])
+                self.assertFalse(plan.includes("flutter-codegen"))
+                self.assertFalse(plan.includes("flutter-l10n"))
+                self.assertEqual(github_outputs(plan)["has_flutter_generated"], "false")
+
+    def test_manifest_only_diff_still_skips_flutter_regeneration(self) -> None:
+        plan = self.plan([".github/checks-manifest.yaml"])
+
+        self.assertFalse(plan.includes("flutter-codegen"))
+        self.assertFalse(plan.includes("flutter-l10n"))
+        self.assertEqual(github_outputs(plan)["has_flutter_generated"], "false")
+
+    def test_mobile_workflow_change_wakes_flutter_regeneration(self) -> None:
+        plan = self.plan([".github/workflows/mobile-app-checks.yml"])
+
+        self.assertTrue(plan.includes("flutter-codegen"))
+        self.assertTrue(plan.includes("flutter-l10n"))
+        outputs = github_outputs(plan)
+        self.assertEqual(outputs["has_flutter_generated"], "true")
+        self.assertEqual(outputs["has_app_codegen"], "true")
+        self.assertEqual(outputs["has_app_l10n"], "true")
+
+    def test_detect_changes_action_change_wakes_flutter_regeneration(self) -> None:
+        plan = self.plan([".github/actions/detect-changes/action.yml"])
+
+        self.assertTrue(plan.includes("flutter-codegen"))
+        self.assertTrue(plan.includes("flutter-l10n"))
+        outputs = github_outputs(plan)
+        self.assertEqual(outputs["has_flutter_generated"], "true")
+        self.assertEqual(outputs["has_app_codegen"], "true")
+        self.assertEqual(outputs["has_app_l10n"], "true")
+
+    def test_real_generator_inputs_still_wake_flutter_regeneration(self) -> None:
+        codegen = self.plan(["app/build.yaml"])
+        self.assertTrue(codegen.includes("flutter-codegen"))
+        annotated = self.plan(
+            ["app/lib/models/thing.dart"],
+            {"app/lib/models/thing.dart": "@JsonSerializable()\nclass Thing {}"},
+        )
+        self.assertTrue(annotated.includes("flutter-codegen"))
+        l10n = self.plan(["app/lib/l10n/app_en.arb"])
+        self.assertTrue(l10n.includes("flutter-l10n"))
+        self.assertEqual(github_outputs(l10n)["has_flutter_generated"], "true")
+
+    def test_release_compile_preserves_pr_and_main_asymmetry(self) -> None:
+        """Ordinary desktop PRs keep one hosted Mac; package edits and pushes compile release.
+
+        The release compile lane holds a second scarce macOS runner for ~25 min,
+        so the PR lane reserves it for package-manifest changes (the inputs most
+        likely to shift whole-module behavior), while every main push still
+        produces exact-SHA release evidence for the release planner.
+        """
         paths = ["desktop/macos/Resources/Info.plist"]
-        self.assertTrue(self.plan(paths, event="pull_request").includes("desktop-swift-release-compile"))
+        self.assertFalse(self.plan(paths, event="pull_request").includes("desktop-swift-release-compile"))
         self.assertTrue(self.plan(paths, event="push").includes("desktop-swift-release-compile"))
+        self.assertFalse(
+            self.plan(["desktop/macos/Desktop/Sources/OmiApp.swift"], event="pull_request").includes(
+                "desktop-swift-release-compile"
+            )
+        )
+        self.assertTrue(
+            self.plan(["desktop/macos/Desktop/Sources/OmiApp.swift"], event="push").includes(
+                "desktop-swift-release-compile"
+            )
+        )
         self.assertTrue(
             self.plan(["desktop/macos/Desktop/Package.resolved"], event="pull_request").includes(
                 "desktop-swift-release-compile"
             )
         )
-        self.assertFalse(
-            self.plan(["backend/routers/updates.py"], event="pull_request").includes(
+        self.assertTrue(
+            self.plan(["desktop/macos/Desktop/Package.swift"], event="pull_request").includes(
                 "desktop-swift-release-compile"
             )
         )
+        self.assertFalse(
+            self.plan(["backend/routers/updates.py"], event="pull_request").includes("desktop-swift-release-compile")
+        )
+
+    def test_notification_regression_still_wakes_release_lane_on_prs(self) -> None:
+        """The release-mode UserNotifications regression keeps its PR trigger."""
+        plan = self.plan(["desktop/macos/Desktop/Sources/NotificationProbe.swift"], event="pull_request")
+        self.assertTrue(plan.includes("desktop-swift-notification-release-regression"))
+        self.assertEqual(github_outputs(plan)["should_notification_release_regression"], "true")
+
+    def test_release_tests_cover_entire_target_on_prs_and_pushes(self) -> None:
+        """#13123/#13467: non-Notification tests also consume DEBUG-only seams."""
+        for path in (
+            "desktop/macos/Desktop/Tests/RealtimeTurnEvidenceTests.swift",
+            "desktop/macos/Desktop/Tests/ChatStreamingRenderBudgetTests.swift",
+            "desktop/macos/Desktop/Sources/Chat/ChatStreamingRenderBudget.swift",
+            "desktop/macos/Desktop/Sources/OmiSupport/Probe.swift",
+            "desktop/macos/Desktop/ObjCExceptionCatcher/include/Probe.h",
+            "desktop/macos/Desktop/CWebP/module.modulemap",
+            "desktop/macos/Desktop/FutureTarget/Probe.swift",
+            "desktop/macos/Desktop/Sources/Resources/probe.json",
+            "desktop/macos/Desktop/Package.swift",
+            "desktop/macos/Desktop/Package.resolved",
+            "desktop/macos/scripts/run-swift-ci.sh",
+            ".github/workflows/desktop-swift-ci.yml",
+        ):
+            for event in ("pull_request", "push"):
+                with self.subTest(path=path, event=event):
+                    plan = self.plan([path], event=event)
+                    self.assertTrue(plan.includes("desktop-swift-release-test-compile"))
+                    self.assertEqual(github_outputs(plan)["should_release_test_compile"], "true")
+
+    def test_unrelated_inputs_do_not_compile_release_tests(self) -> None:
+        for path in ("backend/database/users.py", "desktop/macos/AGENTS.md", "desktop/macos/Resources/Info.plist"):
+            for event in ("local", "pull_request", "push"):
+                with self.subTest(path=path, event=event):
+                    self.assertFalse(self.plan([path], event=event).includes("desktop-swift-release-test-compile"))
 
     def test_ci_producer_pathspecs_cover_every_planner_desktop_release_path(self) -> None:
         """Planner release inputs must wake exact-SHA desktop CI, with no silent drift."""
@@ -197,6 +395,78 @@ class PrePushCiPredictionTests(unittest.TestCase):
 
     def test_unrelated_windows_changes_do_not_select_kgworker_closure_test(self) -> None:
         self.assertEqual(self.select(["desktop/windows/src/renderer/src/pages/Tasks.tsx"]), [])
+
+    def test_every_declared_workflow_trigger_is_an_accepted_event(self) -> None:
+        """A trigger this script rejects kills change detection before it writes an output.
+
+        `--event` is validated by argparse, so an unlisted value exits 2 and the calling
+        step fails outright — no outputs, every dependent job skipped. `desktop-swift-ci.yml`
+        declared `workflow_dispatch` while the choices were push/pull_request only, so its
+        documented recovery hatch failed on every manual run. Deriving the requirement from
+        the workflows' own `on:` blocks makes the next added trigger fail here instead.
+        """
+        reaching = _workflows_reaching_the_predictor()
+        self.assertIn("desktop-swift-ci.yml", reaching, "predictor call sites moved; update the discovery patterns")
+        for workflow, triggers in reaching.items():
+            self.assertTrue(triggers, f"{workflow}: no triggers parsed out of its `on:` block")
+            for trigger in triggers:
+                with self.subTest(workflow=workflow, trigger=trigger):
+                    self.assertIn(trigger, ACCEPTED_EVENTS, f"{workflow} declares {trigger}, which --event rejects")
+
+    def test_accepted_events_keep_the_local_hook_value(self) -> None:
+        """`scripts/pre-push` relies on the default; dropping it would break the hook."""
+        self.assertIn("local", ACCEPTED_EVENTS)
+
+    def test_path_filtered_events_keep_unrelated_changes_off_macos(self) -> None:
+        """Ordinary local, PR, and push routing must retain the hosted-macOS saving."""
+        for event in ("local", "pull_request", "push"):
+            with self.subTest(event=event):
+                plan = self.plan(["backend/database/users.py"], event=event)
+                self.assertFalse(plan.includes("desktop-ci-only"))
+                self.assertFalse(plan.includes("desktop-swift-tests"))
+                self.assertFalse(plan.includes("desktop-swift-release-compile"))
+                self.assertFalse(plan.includes("app-ios-compile"))
+
+    def test_ios_compile_wakes_on_native_pigeon_and_pubspec_only(self) -> None:
+        """Ordinary Dart stays off the hosted Mac; iOS/Pigeon/pubspec wake it."""
+        self.assertNotIn("app-ios-compile", LOCAL_CHECK_ORDER)
+        dart = self.plan(["app/lib/pages/chat/page.dart"], {"app/lib/pages/chat/page.dart": "class ChatPage {}"})
+        self.assertFalse(dart.includes("app-ios-compile"))
+        self.assertEqual(github_outputs(dart)["has_app_ios_compile"], "false")
+        self.assertTrue(dart.includes("app-compile-smoke"))
+
+        android = self.plan(["app/android/app/src/main/AndroidManifest.xml"])
+        self.assertFalse(android.includes("app-ios-compile"))
+
+        for path in (
+            "app/ios/Runner/AppDelegate.swift",
+            "app/ios/Runner/PigeonCommunicator.g.swift",
+            "app/ios/Runner/PhoneMic/PhoneMicPigeon.g.swift",
+            "app/lib/pigeon_interfaces.dart",
+            "app/lib/phone_mic_interface.dart",
+            "app/pubspec.yaml",
+            "app/pubspec.lock",
+            ".github/workflows/mobile-app-checks.yml",
+            ".github/actions/detect-changes/action.yml",
+        ):
+            with self.subTest(path=path):
+                plan = self.plan([path])
+                self.assertTrue(plan.includes("app-ios-compile"), path)
+                self.assertEqual(github_outputs(plan)["has_app_ios_compile"], "true")
+
+        selector = self.plan([".github/workflows/mobile-app-checks.yml"])
+        self.assertTrue(selector.includes("app-ios-compile"))
+        self.assertEqual(github_outputs(selector)["has_app_ios_compile"], "true")
+
+    def test_authoritative_main_health_events_ignore_changed_paths(self) -> None:
+        """#12275: recovery/health runs must compile the current main SHA itself."""
+        for event in ("workflow_dispatch", "schedule"):
+            with self.subTest(event=event):
+                plan = self.plan(["backend/database/users.py"], event=event)
+                self.assertTrue(plan.includes("desktop-ci-only"))
+                self.assertTrue(plan.includes("desktop-swift-tests"))
+                self.assertTrue(plan.includes("desktop-swift-release-compile"))
+                self.assertTrue(plan.includes("desktop-swift-release-test-compile"))
 
 
 if __name__ == "__main__":

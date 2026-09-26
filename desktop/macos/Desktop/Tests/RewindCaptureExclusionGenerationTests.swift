@@ -187,4 +187,44 @@ final class RewindCaptureExclusionGenerationTests: XCTestCase {
     XCTAssertTrue(resumed.isCurrent())
     await OCREmbeddingService.shared.reset()
   }
+
+  /// #11572: launch / CI window where `auth_userId` is set but RewindDatabase
+  /// has not resolved `currentUserId` yet. Capture preferred auth; isCurrent
+  /// used to compare only the DB id and permanently fail-closed.
+  ///
+  /// #12039: establish the owner through the production transition boundary.
+  /// Mutating `auth_userId` directly makes the process-wide authorization
+  /// authority correctly revoke the out-of-band owner, so this test otherwise
+  /// depends on which owner-bound suite ran before it.
+  @MainActor
+  func testOwnerSnapshotStaysCurrentWhenAuthLeadsUnresolvedRewindDatabase() async {
+    let ownerFixture = RuntimeOwnerAuthorityTestFixture()
+    addTeardownBlock { @MainActor in
+      await ownerFixture.restore()
+    }
+    let previousDB = RewindDatabase.currentUserId
+    defer {
+      RewindDatabase.currentUserId = previousDB
+    }
+
+    // Reproduce the shared-state signature from #12039: another suite changed
+    // durable auth outside the transition boundary, so the authorization
+    // authority revoked itself before this test started.
+    await ownerFixture.establish(authOwnerID: "prior-owner-\(UUID().uuidString)")
+    UserDefaults.standard.set("out-of-band-owner-\(UUID().uuidString)", forKey: .authUserId)
+    XCTAssertNil(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
+
+    let authOwner = "auth-leading-\(UUID().uuidString)"
+    await ownerFixture.establish(authOwnerID: authOwner)
+    RewindDatabase.currentUserId = nil
+
+    guard let snapshot = RewindCaptureOwnerSnapshot.capture() else {
+      XCTFail("expected capture with auth_userId set")
+      return
+    }
+    XCTAssertEqual(snapshot.ownerID, authOwner)
+    XCTAssertTrue(
+      snapshot.isCurrent(),
+      "auth-backed snapshot must stay current while RewindDatabase.currentUserId is still nil")
+  }
 }

@@ -91,10 +91,10 @@ export function EditableTitle({
         onBlur={handleBlur}
         disabled={isSaving}
         className={cn(
-          'w-full bg-transparent border-b-2 border-purple-primary',
+          'w-full bg-transparent border-b-2 border-white/25',
           'outline-none text-text-primary',
           'disabled:opacity-50',
-          className
+          className,
         )}
         placeholder="Enter title..."
       />
@@ -109,7 +109,7 @@ export function EditableTitle({
         'cursor-text select-none',
         'hover:bg-bg-tertiary/50 rounded-lg transition-colors',
         '-mx-2 px-2 py-1',
-        className
+        className,
       )}
     >
       {title || 'Untitled Conversation'}

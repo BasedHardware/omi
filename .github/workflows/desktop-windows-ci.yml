@@ -70,6 +70,17 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: desktop/windows/pnpm-lock.yaml
+      # Same network-flake surface as the Linux job: electron-builder pulls
+      # nsis/winCodeSign tooling and Electron's postinstall pulls the release
+      # archive from github.com on every uncached run.
+      - name: Cache electron & electron-builder downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: electron-builder-windows-${{ hashFiles('desktop/windows/pnpm-lock.yaml') }}
+          restore-keys: electron-builder-windows-
       # OCR + UI-automation helpers are .NET projects built during install/build.
       - uses: actions/setup-dotnet@v6
         with:
@@ -94,6 +105,13 @@ jobs:
   build-linux:
     name: Linux package · helper smoke
     runs-on: ubuntu-latest
+    # A successful run finishes in ~10 minutes; 20 gives headroom while still
+    # failing fast instead of riding out the 6h GitHub Actions job ceiling.
+    # This job has hung for the full 6h on multiple unrelated PRs and on
+    # main (apt's mirror lookup in "Install Linux runtime dependencies"
+    # stalls with no output and no built-in timeout) -- a pre-existing,
+    # recurring infra flake, not specific to any one change.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -104,10 +122,31 @@ jobs:
           node-version: 22
           cache: pnpm
           cache-dependency-path: desktop/windows/pnpm-lock.yaml
+      # electron-builder fetches its packaging tools (AppImage runtime, 7zip,
+      # fpm) from github.com at build time, and Electron's postinstall fetches
+      # the release archive; a transient resolver or socket failure there fails
+      # the whole job (EAI_AGAIN on main, ECONNRESET on PRs). With the tool
+      # downloads cached, steady-state builds never touch those endpoints.
+      - name: Cache electron & electron-builder downloads
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: electron-builder-linux-${{ hashFiles('desktop/windows/pnpm-lock.yaml') }}
+          restore-keys: electron-builder-linux-
       - name: Install Linux runtime dependencies
+        # Bound apt's network calls explicitly: a stalled mirror connection
+        # (observed against the azure.archive.ubuntu.com mirror) otherwise
+        # hangs with no output and no built-in timeout, burning the full 6h
+        # job ceiling instead of failing fast. DEBIAN_FRONTEND=noninteractive
+        # avoids any possibility of a debconf prompt blocking on stdin.
+        timeout-minutes: 5
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
-          sudo apt-get install -y imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
       - name: Provision .env
         run: cp .env.example .env
       - name: Install dependencies

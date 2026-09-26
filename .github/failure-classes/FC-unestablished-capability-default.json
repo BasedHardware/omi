@@ -3,6 +3,10 @@
   "id": "FC-unestablished-capability-default",
   "violated_contract": "A surface that selects its presentation from a rollout or account capability must treat \"the capability is not established yet\" as its own state. A capability carried as a plain Bool cannot express it, so the default value is silently rendered as an authoritative answer and the wrong surface mounts until the real answer arrives.",
   "canonical_prevention": "Publish establishment alongside the capability and resolve presentation to an explicit undetermined state that mounts neither branch. Independently, any branch that performs destructive or shared-state work on first appearance must require a load that authoritatively succeeded, never an initial-value sentinel such as isEmpty.",
+  "canonical_prevention_artifact": [
+    "web/admin/lib/growth-metrics.ts",
+    "web/admin/lib/__tests__/growth-metrics.test.ts"
+  ],
   "evidence_prs": [9499],
   "scope_hints": [
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift",

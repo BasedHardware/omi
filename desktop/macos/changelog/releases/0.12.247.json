@@ -1,0 +1,8 @@
+{
+  "version": "0.12.247",
+  "date": "2026-08-31",
+  "changes": [
+    "Added a hold-to-reply hint, reading-time card timing, and voice feedback on proactive notifications (Interject, flag-gated). Hold-⌥ keeps the classification inject through PTT-up so Gemini can accept it when the activity window opens.",
+    "Added a notifications step to onboarding so you're actually asked once, instead of never getting proactive alerts with no way to grant access"
+  ]
+}

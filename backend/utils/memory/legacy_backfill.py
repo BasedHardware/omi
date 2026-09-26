@@ -19,7 +19,7 @@ import hashlib
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Sequence, cast
 
@@ -31,7 +31,13 @@ from models.memory_evidence import ArtifactPreservationState, MemoryEvidence
 from models.memory_apply import ApplyStatus, MemoryControlState, build_patch_mutation_identity
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
-from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, MemoryItem
+from models.product_memory import (
+    MemoryItemStatus,
+    MemoryLayer,
+    ProcessingState,
+    MemoryItem,
+    default_short_term_expiry,
+)
 from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.memory.legacy_backfill_support import (
     apply_with_control_refresh,
@@ -972,7 +978,7 @@ def _upgrade_pending_admission_candidate(
         "expected_item_revision": item.item_revision,
         "expected_content_hash": item.content_hash,
         "promotion_audit": promotion,
-        "expires_at": (item.expires_at or datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
+        "expires_at": (item.expires_at or default_short_term_expiry(datetime.now(timezone.utc))).isoformat(),
     }
     if isinstance(source_subject_id, str) and source_subject_id:
         patch_payload["subject_entity_id"] = source_subject_id
@@ -1089,14 +1095,14 @@ def _apply_one_legacy_row(
     }
     captured_at = None
     updated_at = None
-    expires_at = datetime.now(timezone.utc) + timedelta(days=30)
+    expires_at = default_short_term_expiry(datetime.now(timezone.utc))
     if bucket is not None:
         now = datetime.now(timezone.utc)
         captured_at = _coerce_optional_legacy_datetime(legacy_row.get("created_at")) or now
         updated_at = _coerce_optional_legacy_datetime(legacy_row.get("updated_at")) or captured_at
         if updated_at < captured_at:
             updated_at = captured_at
-        expires_at = now + timedelta(days=30)
+        expires_at = default_short_term_expiry(now)
         promotion.update(
             {
                 "migration_strategy": "bucketed_legacy_backfill",

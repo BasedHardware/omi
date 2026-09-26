@@ -2,10 +2,22 @@
 """Fail closed before a Pusher Helm mutation when live capacity cannot surge.
 
 This command is deliberately read-only.  It renders the exact digest-pinned
-chart input, reads Kubernetes metadata, and proves that the desired surge pods
-can fit on currently Ready, schedulable nodes that satisfy Pusher's placement
-constraints.  It never reads ConfigMap/Secret payloads and never creates a
-resource or sends application traffic.
+chart input, reads Kubernetes metadata, and proves the desired surge pods have
+somewhere to land under Pusher's placement constraints.  It never reads
+ConfigMap/Secret payloads other than the cluster-autoscaler status, and never
+creates a resource or sends application traffic.
+
+Capacity is modelled the way the scheduler and the cluster autoscaler behave:
+
+* surge pods are placed one at a time across the matching nodes, because
+  Kubernetes never requires a rollout's surge pods to share a node;
+* when the matching nodes are full, a node pool that has not reached its
+  autoscaler maximum can still supply the room, so remaining growth counts as
+  capacity when one fresh node of that pool would fit a pod.
+
+The gate stays closed for what it was written to catch: a pod that cannot be
+placed anywhere, a pool already at its maximum, and a pool whose nodes are too
+small for the request even when empty.
 """
 
 from __future__ import annotations
@@ -262,11 +274,60 @@ def surge_count(current_deployment: dict[str, Any], desired_deployment: dict[str
     return surge
 
 
+def _owned_by_daemonset(pod: dict[str, Any]) -> bool:
+    metadata = pod.get("metadata") if isinstance(pod.get("metadata"), dict) else {}
+    owners = metadata.get("ownerReferences") if isinstance(metadata.get("ownerReferences"), list) else []
+    return any(isinstance(owner, dict) and owner.get("kind") == "DaemonSet" for owner in owners)
+
+
+def parse_autoscaler_groups(status: str | None) -> list[dict[str, Any]]:
+    """Read node-group growth limits out of the cluster-autoscaler status document.
+
+    Returns an empty list when the status is absent or unreadable, which leaves
+    the gate with existing nodes only — the fail-closed answer.
+    """
+    if not status:
+        return []
+    try:
+        document = yaml.safe_load(status)
+    except yaml.YAMLError:
+        return []
+    if not isinstance(document, dict):
+        return []
+    groups = document.get("nodeGroups")
+    if not isinstance(groups, list):
+        return []
+    parsed: list[dict[str, Any]] = []
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        name = group.get("name")
+        health = group.get("health") if isinstance(group.get("health"), dict) else {}
+        maximum = health.get("maxSize")
+        counts = health.get("nodeCounts") if isinstance(health.get("nodeCounts"), dict) else {}
+        registered = counts.get("registered") if isinstance(counts.get("registered"), dict) else {}
+        current = registered.get("total")
+        if not isinstance(name, str) or not isinstance(maximum, int) or not isinstance(current, int):
+            continue
+        # GKE names a group's nodes after its instance group, minus the -grp suffix.
+        prefix = name.rsplit("/", 1)[-1]
+        parsed.append(
+            {"prefix": prefix[:-4] if prefix.endswith("-grp") else prefix, "max": maximum, "current": current}
+        )
+    return parsed
+
+
+def _group_for_node(name: str, groups: list[dict[str, Any]]) -> dict[str, Any] | None:
+    matches = [group for group in groups if name.startswith(f"{group['prefix']}-")]
+    return max(matches, key=lambda group: len(group["prefix"])) if matches else None
+
+
 def capacity_evidence(
     desired_deployment: dict[str, Any],
     current_deployment: dict[str, Any],
     nodes: list[dict[str, Any]],
     pods: list[dict[str, Any]],
+    autoscaler_status: str | None = None,
 ) -> tuple[list[str], dict[str, int]]:
     """Return fail-closed capacity findings for the next exact Pusher surge wave."""
 
@@ -281,13 +342,17 @@ def capacity_evidence(
     surge = surge_count(current_deployment, desired_deployment)
     needed = Resources(requested.cpu_millicores * surge, requested.memory_bytes * surge)
     usage = {node_name(node): ZERO for node in nodes}
+    daemon_usage = {node_name(node): ZERO for node in nodes}
     for pod in pods:
         spec = pod.get("spec") if isinstance(pod.get("spec"), dict) else {}
         status = pod.get("status") if isinstance(pod.get("status"), dict) else {}
         node = spec.get("nodeName")
         if not isinstance(node, str) or node not in usage or status.get("phase") in {"Succeeded", "Failed"}:
             continue
-        usage[node] = usage[node].add(pod_requests(pod))
+        requests = pod_requests(pod)
+        usage[node] = usage[node].add(requests)
+        if _owned_by_daemonset(pod):
+            daemon_usage[node] = daemon_usage[node].add(requests)
     candidates: list[tuple[str, Resources]] = []
     for node in nodes:
         if not node_matches_pod(node, pod_spec):
@@ -296,20 +361,62 @@ def capacity_evidence(
         candidates.append((name, node_allocatable(node).subtract(usage[name])))
     if not candidates:
         return (["no Ready, schedulable node satisfies the rendered Pusher node affinity and tolerations"], {})
-    fitting = [(name, available) for name, available in candidates if needed.fits_in(available)]
+
+    # One pod at a time: a rollout's surge pods never have to share a node.
+    remaining = surge
+    placed_on_nodes = 0
+    for _, available in candidates:
+        room = available
+        while remaining and requested.fits_in(room):
+            room = room.subtract(requested)
+            remaining -= 1
+            placed_on_nodes += 1
+
+    placed_by_growth = 0
+    groups = parse_autoscaler_groups(autoscaler_status)
+    if remaining and groups:
+        # A fresh node of a pool carries the same DaemonSets its siblings do.
+        fresh: dict[str, Resources] = {}
+        headroom: dict[str, int] = {}
+        for node in nodes:
+            if not node_matches_pod(node, pod_spec):
+                continue
+            name = node_name(node)
+            group = _group_for_node(name, groups)
+            if group is None:
+                continue
+            capacity = node_allocatable(node).subtract(daemon_usage[name])
+            known = fresh.get(group["prefix"])
+            if known is None or capacity.fits_in(known):
+                fresh[group["prefix"]] = capacity
+            headroom[group["prefix"]] = max(group["max"] - group["current"], 0)
+        for prefix, capacity in fresh.items():
+            per_node = 0
+            room = capacity
+            while requested.fits_in(room):
+                room = room.subtract(requested)
+                per_node += 1
+            while remaining and headroom.get(prefix, 0) > 0 and per_node:
+                take = min(remaining, per_node)
+                remaining -= take
+                placed_by_growth += take
+                headroom[prefix] -= 1
+
     details = {
         "candidate_nodes": len(candidates),
-        "fitting_nodes": len(fitting),
         "surge_pods": surge,
+        "placed_on_existing_nodes": placed_on_nodes,
+        "placed_by_pool_growth": placed_by_growth,
         "required_cpu_millicores": needed.cpu_millicores,
         "required_memory_bytes": needed.memory_bytes,
     }
-    if fitting:
+    if not remaining:
         return [], details
     return (
         [
             "insufficient schedulable Pusher headroom for the next surge wave: "
-            f"need {needed.cpu_millicores}m CPU and {needed.memory_bytes} bytes memory for {surge} surge pod(s)"
+            f"need {needed.cpu_millicores}m CPU and {needed.memory_bytes} bytes memory for {surge} surge pod(s); "
+            f"placed {placed_on_nodes} on existing nodes and {placed_by_growth} through node-pool growth"
         ],
         details,
     )
@@ -377,6 +484,21 @@ def render_deployment(root: Path, environment: str, image: str) -> dict[str, Any
     return documents[0]
 
 
+def autoscaler_status() -> str | None:
+    """Return the cluster-autoscaler status document, or None when unavailable.
+
+    A cluster without it is treated as one that cannot grow, which is the
+    fail-closed reading.
+    """
+    try:
+        payload = kubectl_json(["-n", "kube-system", "get", "configmap", "cluster-autoscaler-status"])
+    except GateError:
+        return None
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+    status = data.get("status")
+    return status if isinstance(status, str) else None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--environment", required=True, choices=("dev", "prod"))
@@ -397,6 +519,7 @@ def main() -> int:
             current,
             [item for item in nodes if isinstance(item, dict)],
             [item for item in pods if isinstance(item, dict)],
+            autoscaler_status(),
         )
     except GateError as exc:
         failures = [str(exc)]
@@ -407,9 +530,11 @@ def main() -> int:
         return 1
     print(
         "OK: live Pusher capacity gate passed: "
-        f"{evidence['fitting_nodes']}/{evidence['candidate_nodes']} matching nodes fit "
         f"{evidence['surge_pods']} surge pod(s) requiring {evidence['required_cpu_millicores']}m CPU and "
-        f"{evidence['required_memory_bytes']} bytes memory."
+        f"{evidence['required_memory_bytes']} bytes memory have room across "
+        f"{evidence['candidate_nodes']} matching node(s): "
+        f"{evidence['placed_on_existing_nodes']} on existing nodes, "
+        f"{evidence['placed_by_pool_growth']} through node-pool growth."
     )
     return 0
 

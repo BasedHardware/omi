@@ -38,7 +38,7 @@ env:
 
 jobs:
   stage:
-    environment: ${{ github.event.inputs.environment }}
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       actions: read
       contents: read
@@ -94,10 +94,22 @@ jobs:
           fi
           echo "path=$state_path" >> "$GITHUB_OUTPUT"
 
-      - name: Google Auth
+      # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C).
+      # Development keeps its JSON lane.
+      - name: Google Auth (prod WIF)
+        if: github.event.inputs.environment == 'prod'
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Google Auth
+        if: github.event.inputs.environment != 'prod'
+        uses: google-github-actions/auth@v3
+        with:
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -130,7 +142,7 @@ jobs:
     needs: stage
     # This second protected environment gate gives the operator a pause to set
     # SYNC_LEDGER_FENCE_MODE=active only after the standby barrier is complete.
-    environment: ${{ github.event.inputs.environment }}
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       actions: read
       contents: read
@@ -239,10 +251,22 @@ jobs:
           print(f"promote={promote}")
           PY
 
-      - name: Google Auth
+      # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C).
+      # Development keeps its JSON lane.
+      - name: Google Auth (prod WIF)
+        if: github.event.inputs.environment == 'prod'
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Google Auth
+        if: github.event.inputs.environment != 'prod'
+        uses: google-github-actions/auth@v3
+        with:
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -271,6 +295,12 @@ jobs:
           candidate_api_url: ${{ steps.prepare.outputs.candidate_probe_url }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
           firebase_auth_project_id: based-hardware
+          # Development deploys into a different project than the Firebase auth
+          # project, so the probe's custom token is signed through IAM signJwt as
+          # the no-role signer named by the development variable; no signer key
+          # is passed. Production already deploys into based-hardware and keeps
+          # signing with its active identity, so this stays empty there.
+          firebase_signer_service_account: ${{ github.event.inputs.environment == 'prod' && '' || vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
           evidence_path: ${{ runner.temp }}/transcription-capability-probe.json
 
       - name: Record protected full-route probe proof

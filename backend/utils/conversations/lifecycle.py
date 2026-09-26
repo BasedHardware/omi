@@ -18,6 +18,7 @@ from typing import Any, Mapping
 from database import conversation_finalization_jobs as jobs_db
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
+from database.firestore_read_metrics import FirestoreReadSite
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from models.conversation_enums import ConversationStatus
 from utils.cloud_tasks import (
@@ -31,8 +32,14 @@ from utils.conversations.finalization_decision import (
     LifecyclePhase,
     decide_finalization,
 )
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.observability.fallback import record_fallback
-from utils.observability.journeys import record_journey_accepted
+from utils.observability.transcription import record_sync_intake_outcome
+from utils.other.storage import delete_conversation_audio_files
+from utils.journey_metrics_contract import bounded_client_kind
+from utils.observability.journeys import record_client_journey_accepted, record_journey_accepted
+from utils.conversation_shape import observe_completed_conversation_shape
+from utils.product_metrics import record_product_event
 
 logger = logging.getLogger(__name__)
 
@@ -114,15 +121,35 @@ def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *
     """Create a fully processed conversation without granting processors recreate authority."""
     _require_status(conversation_data, ConversationStatus.completed)
     if idempotent:
-        return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
-    conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
-    return True
+        created = conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
+    else:
+        conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
+        created = True
+    if created:
+        observe_completed_conversation_shape(uid, conversation_data)
+    return created
+
+
+def ingest_sync_conversation(uid: str, incoming: dict[str, Any], *, candidate_id=None, target_id=None):
+    """Admit a retained deterministic sync row and atomically append later chunks.
+
+    Enrichment follows persistence; filler remains recoverable under Show discarded.
+    Existing lifecycle fields are preserved by the transactional append.
+    """
+    _require_status(incoming, ConversationStatus.completed)
+    assigned, created, survivors = conversations_db.assign_sync_conversation(
+        uid, incoming, candidate_id=candidate_id, target_id=target_id
+    )
+    record_sync_intake_outcome(created=created)
+    if created:
+        observe_completed_conversation_shape(uid, assigned)
+    return assigned, created, survivors
 
 
 def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) -> bool:
     """Persist a processing result and report whether the conversation still exists.
 
-    ``False`` means its owner deleted it.  Callers must stop before emitting
+    ``False`` means deletion or a newer sync transcript revision. Callers must stop before emitting
     derived side effects such as webhooks or integration fanout.
     """
     _require_status(
@@ -131,13 +158,29 @@ def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) 
         ConversationStatus.completed,
         ConversationStatus.failed,
     )
-    return conversations_db.persist_processing_result_with_lifecycle(uid, conversation_data)
+
+    def _observe_first_completion() -> None:
+        observe_completed_conversation_shape(uid, conversation_data)
+
+    return conversations_db.persist_processing_result_with_lifecycle(
+        uid, conversation_data, on_first_completion=_observe_first_completion
+    )
 
 
-def persist_imported_conversation(uid: str, conversation_data: dict[str, Any]) -> None:
-    """Persist an externally completed immutable import through the lifecycle owner."""
+def persist_imported_conversation(uid: str, conversation_data: dict[str, Any]) -> bool:
+    """Persist an externally completed immutable import through the lifecycle owner.
+
+    Create-if-absent: returns True when the conversation was created, False when it
+    already existed. Re-imports must not overwrite user edits (first import wins).
+    """
     _require_status(conversation_data, ConversationStatus.completed)
-    conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
+    # Stamp imported so selective delete can distinguish ZIP imports from source=limitless
+    # pendant/sync uploads that share the same ConversationSource.
+    conversation_data['imported'] = True
+    created = conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
+    if created:
+        observe_completed_conversation_shape(uid, conversation_data)
+    return created
 
 
 def transition(
@@ -343,26 +386,43 @@ def fail_and_discard_processing(uid: str, conversation_id: str) -> bool:
     processing. The compare-and-swap fences a stale worker from hiding a newer
     or already-completed generation.
     """
-    return conversations_db.claim_conversation_status(
+    claimed = conversations_db.claim_conversation_status(
         uid,
         conversation_id,
         ConversationStatus.processing,
         ConversationStatus.failed,
         extra_updates={'discarded': True},
     )
+    if claimed:
+        # This path flips `discarded` outside update_conversation /
+        # set_conversation_as_discarded, so their index hooks never run.
+        try:
+            from utils.conversations.typesense_index import sync_conversation_index_after_write
+
+            sync_conversation_index_after_write(uid, conversation_id)
+        except Exception:
+            logger.warning('failed-finalization Typesense sync failed uid=%s conversation_id=%s', uid, conversation_id)
+    return claimed
 
 
 def reacquire_deferred_processing(uid: str, conversation_id: str) -> bool:
-    """Atomically clear deferred and renew the admission lease.
+    """Atomically claim deferred ownership and renew the admission lease.
 
-    Deferred enrichment must clear ``deferred`` and renew its processing lease
-    in one guarded transition.  A plain ``update(deferred=False)`` followed by a
-    delayed first heartbeat leaves a window where the stale-processing sweep
-    can terminalize the row; the stale processor would then persist derived
-    side effects after ownership loss.  This transaction closes that window and
-    fails closed if the row is no longer ``processing`` or was discarded.
+    ``deferred=True`` is also the ownership fence, so two concurrent first
+    opens cannot both launch enrichment. A completed deferred row is an
+    explicit failed-attempt terminal and may be reopened for retry.
     """
     return jobs_db.reacquire_deferred_processing(uid, conversation_id)
+
+
+def recover_deferred_processing_failure(uid: str, conversation_id: str) -> bool:
+    """Atomically re-arm deferred enrichment and expose a non-spinning terminal.
+
+    The paired status/flag mutation belongs here rather than in a router so a
+    partial recovery write cannot strand a row in ``processing`` while the
+    stale sweep intentionally excludes deferred conversations.
+    """
+    return jobs_db.recover_deferred_processing_failure(uid, conversation_id)
 
 
 def begin_merge(uid: str, conversation_id: str) -> bool:
@@ -374,9 +434,14 @@ def discard(uid: str, conversation_id: str) -> None:
     conversations_db.set_conversation_as_discarded(uid, conversation_id)
 
 
-def restore_discarded(uid: str, conversation_id: str) -> None:
+def discard_by_relevance(uid: str, conversation_id: str, relevance_decision: dict[str, Any]) -> bool:
+    """A relevance verdict reached after the fact; never overrides a restore."""
+    return conversations_db.discard_by_relevance(uid, conversation_id, relevance_decision)
+
+
+def restore_discarded(uid: str, conversation_id: str) -> bool:
     """An explicit user intent may restore visibility without changing status."""
-    conversations_db.restore_conversation_from_discarded(uid, conversation_id)
+    return conversations_db.restore_conversation_from_discarded(uid, conversation_id)
 
 
 def open_recording_session(
@@ -545,16 +610,72 @@ def delete_empty_recording_conversation(
     recording_session_id: str | None,
 ) -> bool:
     """Delete only a still-empty listen generation and tombstone it atomically."""
+    deleted_conversation: dict[str, Any] = {}
     deleted = recording_sessions_db.tombstone_and_delete_empty_conversation(
         uid,
         conversation_id,
         recording_session_id,
+        deleted_conversation=deleted_conversation,
     )
     if deleted:
+        # Remove the search projection before photo/audio cleanup: a later
+        # cleanup failure must not leave the deleted conversation indexed.
+        # This path deletes the Firestore row in its own transaction inside
+        # recording_sessions_db, so conversations_db.delete_conversation's
+        # index cleanup never runs.
+        try:
+            from utils.conversations.typesense_index import delete_conversation_index_doc
+
+            delete_conversation_index_doc(uid, conversation_id)
+        except Exception:
+            logger.warning('empty-recording Typesense delete failed uid=%s conversation_id=%s', uid, conversation_id)
         # Parent deletion is transactionally fenced with content writes; photos
         # are a subcollection and need their physical cleanup afterwards.
         conversations_db.delete_conversation_photos(uid, conversation_id)
+        _discard_unreferenced_audio(uid, conversation_id, deleted_conversation)
     return deleted
+
+
+def _discard_unreferenced_audio(
+    uid: str,
+    conversation_id: str,
+    deleted_conversation: Mapping[str, Any],
+) -> None:
+    """Reclaim private-cloud bytes the deleted row was the last owner of.
+
+    Emptiness here means no transcript segments, no photos and no ``has_content``
+    — it never consults ``audio_files``. A generation whose STT produced nothing
+    because the provider was failing is therefore deleted with real audio still
+    registered on it, and those bytes are the only surviving copy of that
+    recording, so they stay: the row is gone either way, and retained chunks can
+    still be reprocessed or restored. Only a generation that never registered any
+    audio can be leaving chunks nothing will ever reference again (#11742).
+    """
+    if deleted_conversation.get('audio_files'):
+        logger.info(
+            'Retained registered audio for empty conversation uid=%s conversation_id=%s',
+            uid,
+            conversation_id,
+        )
+        return
+    try:
+        delete_conversation_audio_files(uid, conversation_id)
+    except Exception:
+        # The row is already gone, so there is nothing left to keep consistent
+        # with; a failed sweep just leaves the orphan this call meant to reclaim.
+        logger.exception(
+            'Failed to reclaim unreferenced audio uid=%s conversation_id=%s',
+            uid,
+            conversation_id,
+        )
+        record_fallback(
+            component='other',
+            from_mode='private_cloud_sync',
+            to_mode='drop',
+            reason='other',
+            outcome='exhausted',
+            log=logger,
+        )
 
 
 def open_live_recording_session(
@@ -584,9 +705,15 @@ def open_live_recording_session(
     if existing is None:
         return dict(binding) | {'requires_rollover': False}
 
-    conversation = conversations_db.get_conversation(uid, existing['conversation_id'])
+    conversation = conversations_db.get_conversation(
+        uid, existing['conversation_id'], read_site=FirestoreReadSite.LIFECYCLE_OPEN_LIVE_SESSION_BINDING
+    )
     if conversation is not None:
-        return dict(binding) | {'requires_rollover': False}
+        return dict(binding) | {
+            'requires_rollover': False,
+            'conversation_snapshot': conversation,
+            'conversation_snapshot_known': True,
+        }
 
     if existing['lifecycle_phase'] not in _TERMINAL_RECORDING_SESSION_PHASES:
         tombstone_recording_session(
@@ -644,9 +771,17 @@ def claim_finalization_fanout(
     return jobs_db.claim_finalization_fanout(job_id, dispatch_generation, lease_epoch)
 
 
-def complete_finalization_fanout(job_id: str, dispatch_generation: int, lease_epoch: int) -> bool:
+def complete_finalization_fanout(
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+) -> bool:
     """Persist completion only after the idempotency-keyed fanout succeeds."""
-    return jobs_db.mark_finalization_fanout_completed(job_id, dispatch_generation, lease_epoch)
+    return jobs_db.mark_finalization_fanout_completed(
+        job_id,
+        dispatch_generation,
+        lease_epoch,
+    )
 
 
 def complete_fenced_finalization(job_id: str, dispatch_generation: int, lease_epoch: int) -> bool:
@@ -659,13 +794,18 @@ def request_finalization(
     conversation_id: str,
     *,
     has_byok_keys: bool,
-    force_process: bool = False,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     extra_updates: Mapping[str, Any] | None = None,
     require_cloud_tasks: bool = False,
+    client_kind: object = 'unknown',
+    app_build: object = 'unknown',
+    recovery_cutoff: datetime | None = None,
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Atomically admit finalization and choose its sole durable handoff route."""
-    if require_cloud_tasks and not is_listen_finalization_dispatch_configured():
+    if require_cloud_tasks and not (
+        is_listen_finalization_dispatch_configured() and is_listen_finalization_dispatch_enabled()
+    ):
         # A REST request has no pusher session to execute an inline handoff.
         # Reject before mutating the conversation instead of persisting work
         # that this deployment cannot recover or dispatch.
@@ -677,8 +817,9 @@ def request_finalization(
             conversation_id,
             requires_byok=has_byok_keys,
             finalization_admission=lambda conversation: _finalization_admission(conversation, conversation_id),
-            force_process=force_process,
+            trigger=trigger,
             extra_updates=extra_updates,
+            recovery_cutoff=recovery_cutoff if trigger is ProcessingTrigger.SERVER_RECOVERY else None,
             firestore_client=firestore_client,
         )
     except FirestoreContentionExhausted as error:
@@ -689,6 +830,17 @@ def request_finalization(
     # only newly-created jobs so an idempotent re-dispatch cannot inflate traffic.
     if intent.get('created'):
         record_journey_accepted('capture_finalization')
+        record_client_journey_accepted(
+            'conversation_finalization',
+            bounded_client_kind(client_kind),
+            app_build if isinstance(app_build, str) else 'unknown',
+        )
+        record_product_event(
+            'conversation_finalized',
+            client_kind=bounded_client_kind(client_kind),
+            app_build=app_build if isinstance(app_build, str) else None,
+            outcome='ok',
+        )
     status = intent['status']
     if intent['job_id'] is None or status in {'missing', 'no_content', 'deferred', 'completed', 'dead_letter'}:
         return dict(intent) | {'route': 'noop'}
@@ -739,6 +891,12 @@ def get_finalization_status(uid: str, conversation_id: str) -> dict[str, Any] | 
         return None
 
     status = str(job.get('status') or 'unknown')
+    terminal_outcome = str(job.get('terminal_outcome') or 'unknown')
+    if terminal_outcome not in {'success', 'failure', 'stale'}:
+        terminal_outcome = 'unknown'
+    fanout_status = str(job.get('fanout_status') or 'unknown')
+    if fanout_status not in {'pending', 'leased', 'completed', 'fenced'}:
+        fanout_status = 'unknown'
     return {
         'job_id': job_id,
         'status': status,
@@ -748,4 +906,7 @@ def get_finalization_status(uid: str, conversation_id: str) -> dict[str, Any] | 
         'retryable': status == 'queued',
         'attempt_count': int(job.get('attempt_count') or 0),
         'task_retry_count': int(job.get('task_retry_count') or 0),
+        'meeting_treatment_eligible': bool(job.get('meeting_treatment_eligible', False)),
+        'terminal_outcome': terminal_outcome,
+        'fanout_status': fanout_status,
     }

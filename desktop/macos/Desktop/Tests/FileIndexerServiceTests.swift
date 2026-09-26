@@ -116,6 +116,31 @@ final class FileIndexerServiceTests: XCTestCase {
     XCTAssertTrue(try fetchIndexedRecords().isEmpty)
   }
 
+  func testPartialIncrementalScanPreservesRowsUnderAnIntentionallyOmittedRoot() async throws {
+    let documents = temporaryRoot.appendingPathComponent("Documents", isDirectory: true)
+    let projects = temporaryRoot.appendingPathComponent("Projects", isDirectory: true)
+    try FileManager.default.createDirectory(at: documents, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: projects, withIntermediateDirectories: true)
+    let privateFile = try writeFile("keep", at: documents.appendingPathComponent("private.md"))
+    let deletedFile = try writeFile("delete", at: projects.appendingPathComponent("old.md"))
+
+    let service = FileIndexerService(databasePool: databasePool, batchSize: 2)
+    _ = await service.scanFolders([documents, projects])
+    let privateIndexedPath = try XCTUnwrap(
+      fetchIndexedRecords().first { $0.filename == privateFile.lastPathComponent }?.path)
+    let protectedDocumentsPrefix = (privateIndexedPath as NSString).deletingLastPathComponent
+    try FileManager.default.removeItem(at: deletedFile)
+
+    _ = await service.scanFolders(
+      [projects],
+      incremental: true,
+      retentionProtectedPrefixes: [protectedDocumentsPrefix])
+
+    let records = try fetchIndexedRecords()
+    XCTAssertNotNil(records.first { $0.path == privateIndexedPath })
+    XCTAssertNil(records.first { $0.filename == deletedFile.lastPathComponent })
+  }
+
   private func writeFile(_ contents: String, at url: URL) throws -> URL {
     try FileManager.default.createDirectory(
       at: url.deletingLastPathComponent(),

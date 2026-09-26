@@ -30,6 +30,39 @@ final class ContextTitleNormalizerTests: XCTestCase {
       ContextTitleNormalizer.normalize("Project room", appName: "Safari"))
   }
 
+  func testLeadingUnreadBadgeIsRemovedForBrowsers() {
+    // `(4) Home / X` and `Home / X` are the same page with a different badge.
+    // The pre-existing count regexes were `$`-anchored, so these hashed apart.
+    XCTAssertEqual(
+      ContextTitleNormalizer.identityKey(appName: "Google Chrome", windowTitle: "(4) Home / X"),
+      ContextTitleNormalizer.identityKey(appName: "Google Chrome", windowTitle: "Home / X"))
+    XCTAssertEqual(
+      ContextTitleNormalizer.identityKey(appName: "Safari", windowTitle: "[12] Inbox - Gmail"),
+      ContextTitleNormalizer.identityKey(appName: "Safari", windowTitle: "Inbox - Gmail"))
+  }
+
+  func testLeadingBadgeStripDoesNotCollapseTrailingIdentity() {
+    // The leading strip must not weaken the deliberate per-item granularity that
+    // `testNumericDocumentSuffixRemainsPartOfIdentityOutsideMessagingApps` guards.
+    XCTAssertNotEqual(
+      ContextTitleNormalizer.identityKey(appName: "Google Chrome", windowTitle: "Issue (123)"),
+      ContextTitleNormalizer.identityKey(appName: "Google Chrome", windowTitle: "Issue (456)"))
+  }
+
+  func testLeadingBadgeIsPreservedOutsideBrowsersAndMessaging() {
+    XCTAssertNotEqual(
+      ContextTitleNormalizer.identityKey(appName: "Preview", windowTitle: "(1) Draft"),
+      ContextTitleNormalizer.identityKey(appName: "Preview", windowTitle: "Draft"))
+  }
+
+  func testSlackWebItemCounterIsRemoved() {
+    // Slack's web title says "1 new item", which the original `messages?`
+    // pattern never matched, leaving two buckets for one workspace.
+    XCTAssertEqual(
+      ContextTitleNormalizer.normalize("Unread messages - acme - 1 new item", appName: "Slack"),
+      ContextTitleNormalizer.normalize("Unread messages - acme - 3 new items", appName: "Slack"))
+  }
+
   func testUntitledDoesNotBecomeMergeableIdentity() {
     XCTAssertNil(ContextTitleNormalizer.normalize("   ", appName: "Safari"))
   }

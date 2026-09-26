@@ -579,6 +579,10 @@ final class ProactiveAssistantOrchestrationPolicyTests: XCTestCase {
       0.92)
     XCTAssertEqual(
       PreviewSimilarityThresholdPolicy.threshold(
+        bundleID: "com.tdesktop.Telegram", appName: "Telegram"),
+      0.92)
+    XCTAssertEqual(
+      PreviewSimilarityThresholdPolicy.threshold(
         bundleID: "com.apple.Safari", appName: "Safari"),
       0.90)
     XCTAssertEqual(

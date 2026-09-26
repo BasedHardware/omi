@@ -81,6 +81,14 @@ def test_layer_absent_for_default_legacy_row():
     assert serialized["memory_tier"] is None
 
 
+def test_memorydb_preserves_legacy_memory_id_alias():
+    memory = MemoryDB(**_minimal_memorydb_payload(memory_id="conversation-id"))
+    serialized = memory.model_dump(mode="json")
+
+    assert memory.memory_id == memory.id
+    assert serialized["memory_id"] == memory.id
+
+
 def test_legacy_firestore_dict_without_memory_tier_stays_untiered():
     memory = MemoryDB.model_validate(_minimal_memorydb_payload())
     serialized = memory.model_dump(mode="json")

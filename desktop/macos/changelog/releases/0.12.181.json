@@ -1,0 +1,9 @@
+{
+  "version": "0.12.181",
+  "date": "2026-08-16",
+  "changes": [
+    "Long-running work contexts now reuse their cached prompt history instead of rebuilding it on every visit",
+    "Fixed a task prompt customised on one Mac never reaching your other Macs, and reappearing after you reset it to the default",
+    "A workstream label now stays attached to the work it was earned from, so a label no longer shows up on another workstream's tasks"
+  ]
+}

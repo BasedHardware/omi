@@ -51,6 +51,33 @@ class WebLlmGatewayOnlyTest(unittest.TestCase):
             self.assertTrue(any('direct provider credential' in item for item in violations))
             self.assertTrue(any('direct provider dependency' in item for item in violations))
 
+    def test_org_admin_reporting_endpoints_are_not_inference_traffic(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'web' / 'admin' / 'lib' / 'services' / 'provider-costs.ts'
+            source.parent.mkdir(parents=True)
+            source.write_text(
+                "new URL('https://api.anthropic.com/v1/organizations/cost_report')\n"
+                "new URL('https://api.openai.com/v1/organization/costs')\n",
+                encoding='utf-8',
+            )
+
+            self.assertEqual(CHECKER.find_violations(root), [])
+
+    def test_inference_urls_still_fail_outside_the_org_namespace(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'web' / 'admin' / 'lib' / 'services' / 'provider-costs.ts'
+            source.parent.mkdir(parents=True)
+            source.write_text(
+                "fetch('https://api.anthropic.com/v1/messages')\n",
+                encoding='utf-8',
+            )
+
+            violations = CHECKER.find_violations(root)
+
+            self.assertTrue(any('direct provider URL' in item for item in violations))
+
     def test_test_fixtures_may_name_forbidden_tokens(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

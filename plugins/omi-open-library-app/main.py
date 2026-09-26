@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from html import unescape
 import re
 from typing import Any, Optional
+from urllib.parse import quote
 
 import httpx
 from fastapi import FastAPI
@@ -20,6 +21,7 @@ OPEN_LIBRARY_BASE_URL = "https://openlibrary.org"
 REQUEST_TIMEOUT_SECONDS = 10
 MAX_LIMIT = 10
 USER_AGENT = "omi-open-library-app/1.0 (https://omi.me)"
+_SUBJECT_CHARS_TO_DROP = frozenset(""";/?:@&=+$,<>#%"{}|\\^[]`\n\r""")
 
 _open_library_client: Optional[httpx.AsyncClient] = None
 
@@ -118,12 +120,12 @@ def _safe_isbn(value: Any) -> Optional[str]:
 
 
 def _subject_slug(subject: Any) -> Optional[str]:
-    text = _clean_text(subject).lower()
+    text = _clean_text(subject).strip().lower()
     if not text:
         return None
-    text = re.sub(r"[^a-z0-9]+", "_", text)
-    text = re.sub(r"_+", "_", text).strip("_")
-    return text[:80] or None
+    slug = "".join("_" if c == " " else c for c in text if c not in _SUBJECT_CHARS_TO_DROP)
+    slug = re.sub(r"_+", "_", slug).strip("_")
+    return slug[:80] or None
 
 
 def _format_book(doc: dict[str, Any], index: int) -> str:
@@ -396,7 +398,8 @@ async def search_subject(payload: dict[str, Any]):
         return ChatToolResponse(error="Provide a subject to browse.")
 
     try:
-        data = await _request_json(f"/subjects/{slug}.json", params={"limit": limit})
+        encoded_slug = quote(slug)
+        data = await _request_json(f"/subjects/{encoded_slug}.json", params={"limit": limit})
         works = data.get("works", [])[:limit]
         if not works:
             return ChatToolResponse(result=f"No books found for subject {subject}.")

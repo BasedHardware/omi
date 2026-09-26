@@ -11,8 +11,21 @@ inputs:
     description: Google Cloud project that owns the Cloud Run service.
     required: true
   gcp_credentials:
-    description: Google Cloud credentials used only by the deploy actions.
-    required: true
+    description: >-
+      Google Cloud credentials JSON used only by the deploy actions. Required
+      unless the WIF inputs are set; never pass both.
+    required: false
+    default: ""
+  workload_identity_provider:
+    description: >-
+      GitHub WIF provider resource name (prod: omi-gha-deploy-prod). Mutually
+      exclusive with gcp_credentials.
+    required: false
+    default: ""
+  workload_identity_service_account:
+    description: Deployer service account for WIF. Required when workload_identity_provider is set.
+    required: false
+    default: ""
   service_account:
     description: Optional Cloud Run service identity supplied by the owning workflow.
     required: false
@@ -56,6 +69,7 @@ runs:
         set -euo pipefail
         contract=config/public-build-contract.json
         target='${{ inputs.target }}'
+        environment='${{ inputs.environment }}'
         target_json="$(jq -ce --arg target "$target" '.targets[$target]' "$contract")"
         output_string() {
           local key="$1"
@@ -70,7 +84,14 @@ runs:
           echo 'platforms<<EOF'
           jq -er '.deployment.platforms[]' <<<"$target_json"
           echo EOF
-          printf 'flags=%s\n' "$(jq -r '[.deployment.flags[]?] | join(" ")' <<<"$target_json")"
+          printf 'flags=%s\n' "$(
+            jq -r --arg env "$environment" '
+              .deployment.flags as $flags
+              | if ($flags | type) == "object" then [($flags[$env] // [])[]?] | join(" ")
+                else [$flags[]?] | join(" ")
+                end
+            ' <<<"$target_json"
+          )"
           echo 'runtime_secrets<<EOF'
           jq -r '.deployment.runtime_secrets | to_entries[]? | "\(.key)=\(.value)"' <<<"$target_json"
           echo EOF
@@ -79,6 +100,10 @@ runs:
           echo EOF
           printf 'remove_runtime_secrets=%s\n' "$(
             jq -r '(.deployment.remove_runtime_secrets // []) | if length == 0 then "" else "--remove-secrets=" + join(",") end' \
+              <<<"$target_json"
+          )"
+          printf 'remove_runtime_env_vars=%s\n' "$(
+            jq -r '(.deployment.remove_runtime_env_vars // []) | if length == 0 then "" else "--remove-env-vars=" + join(",") end' \
               <<<"$target_json"
           )"
           # preserve_runtime_secrets are validated by the runtime preflight. The
@@ -92,7 +117,36 @@ runs:
         target: ${{ inputs.target }}
         environment: ${{ inputs.environment }}
 
-    - name: Google Auth
+    - name: Validate deploy authentication inputs
+      shell: bash
+      env:
+        HAS_JSON: ${{ inputs.gcp_credentials != '' }}
+        HAS_WIF: ${{ inputs.workload_identity_provider != '' }}
+        HAS_WIF_SA: ${{ inputs.workload_identity_service_account != '' }}
+      run: |
+        set -euo pipefail
+        if [[ "$HAS_JSON" == "true" && "$HAS_WIF" == "true" ]]; then
+          echo "Pass gcp_credentials or workload_identity_provider, not both" >&2
+          exit 1
+        fi
+        if [[ "$HAS_JSON" != "true" && "$HAS_WIF" != "true" ]]; then
+          echo "Need workload_identity_provider or gcp_credentials" >&2
+          exit 1
+        fi
+        if [[ "$HAS_WIF" == "true" && "$HAS_WIF_SA" != "true" ]]; then
+          echo "workload_identity_service_account is required with workload_identity_provider" >&2
+          exit 1
+        fi
+
+    - name: Google Auth (WIF)
+      if: ${{ inputs.workload_identity_provider != '' }}
+      uses: google-github-actions/auth@v3
+      with:
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+        service_account: ${{ inputs.workload_identity_service_account }}
+
+    - name: Google Auth (JSON)
+      if: ${{ inputs.workload_identity_provider == '' }}
       uses: google-github-actions/auth@v3
       with:
         credentials_json: ${{ inputs.gcp_credentials }}
@@ -117,7 +171,8 @@ runs:
         python3 .github/scripts/preflight_public_build_runtime.py \
           --target "${{ inputs.target }}" \
           --project-id "${{ inputs.project_id }}" \
-          --github-output "$GITHUB_OUTPUT"
+          --github-output "$GITHUB_OUTPUT" \
+          --service-account "${{ inputs.service_account }}"
 
     - name: Fail closed for a production first create
       shell: bash
@@ -137,6 +192,7 @@ runs:
         revision_suffix="${short_sha}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
         service='${{ steps.contract.outputs.service }}'
         {
+          echo "sha=${GITHUB_SHA}"
           echo "short_sha=${short_sha}"
           echo "revision_suffix=${revision_suffix}"
           echo "revision=${service}-${revision_suffix}"
@@ -156,7 +212,9 @@ runs:
         push: true
         platforms: ${{ steps.contract.outputs.platforms }}
         tags: ${{ steps.candidate.outputs.image }}
-        build-args: ${{ steps.public-build.outputs.build_args }}
+        build-args: |
+          ${{ steps.public-build.outputs.build_args }}
+          NEXT_PUBLIC_OMI_BUILD_SHA=${{ steps.candidate.outputs.sha }}
 
     - name: Deploy candidate revision
       uses: google-github-actions/deploy-cloudrun@v3
@@ -177,6 +235,7 @@ runs:
           ${{ inputs.subnet != '' && format('--subnet={0}', inputs.subnet) || '' }}
           ${{ inputs.network != '' && inputs.subnet != '' && '--vpc-egress=private-ranges-only' || '' }}
           ${{ steps.contract.outputs.remove_runtime_secrets }}
+          ${{ steps.contract.outputs.remove_runtime_env_vars }}
           ${{ steps.contract.outputs.flags }}
         env_vars: |-
           ${{ steps.contract.outputs.runtime_env_vars }}
@@ -191,8 +250,10 @@ runs:
       uses: ./.github/actions/public-build-candidate-promotion
       with:
         target: ${{ inputs.target }}
+        environment: ${{ inputs.environment }}
         service: ${{ steps.contract.outputs.service }}
         project_id: ${{ inputs.project_id }}
         region: ${{ steps.contract.outputs.region }}
         revision: ${{ steps.candidate.outputs.revision }}
         tag: ${{ steps.candidate.outputs.tag }}
+        sha: ${{ steps.candidate.outputs.sha }}

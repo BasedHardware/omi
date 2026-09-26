@@ -1,0 +1,158 @@
+---
+title: "Durable queues"
+description: "Inventory of Omi durable queues and the shared substrate they must use"
+---
+
+# Durable queues
+
+This is the **before** inventory for consolidating hand-rolled durable queues onto
+one substrate per language. The registered failure class is
+`FC-batch-fault-domain-head-of-line-poison`: one bad item at the head of an
+ordered batch must not stall independent items behind it, retries must be bounded,
+and a hard failure must not be laundered into success.
+
+Canonical prevention (from the class registry): give every independent item its
+own transaction and typed outcome, continue after rejection, move poison to a
+reasoned terminal state within a bounded rejection or fetch budget, reconcile
+already-satisfied identities, prioritize user-time-sensitive sources, and page on
+a durable stalled-queue event.
+
+After the substrate lands, **new queues must use it**. There is at most one
+durable-queue policy implementation in Python (`utils/durable_queue_policy.py`,
+re-exported by `database/durable_queue.py`) and one in TypeScript
+(`desktop/macos/agent/src/runtime/durable-queue.ts`).
+
+## Required properties
+
+| # | Property |
+|---|----------|
+| 1 | Per-item fault domain: each item is processed in its own transaction with a typed outcome; a rejected item never rolls back or blocks independent items behind it |
+| 2 | Bounded attempt budget with backoff, then a queryable / re-drivable dead letter that carries last error text and a typed reason |
+| 3 | Idempotency keyed on identity, never payload equality (adopt-and-receipt on collision) |
+| 4 | Priority ordering as a first-class option |
+| 5 | Oldest-ready-item age gauge, durable per queue (and per account where the queue is per-account) |
+| 6 | Failures are never laundered into success / "deferred" / HTTP 200 |
+
+Legend: **Y** = present, **P** = partial, **N** = absent.
+
+## TypeScript — macOS agent kernel (SQLite)
+
+Primary files: `desktop/macos/agent/src/runtime/conversation-journal.ts`,
+`desktop/macos/agent/src/runtime/sqlite-store.ts`,
+`desktop/macos/agent/src/index.ts`. Drain is a shared timer pump; each table has
+its own SELECT/lease/retry copy.
+
+| Queue | File | 1 fault | 2 budget+DL | 3 identity | 4 priority | 5 age gauge | 6 no launder |
+|---|---|---|---|---|---|---|---|
+| `backend_turn_outbox` | `conversation-journal.ts`, `sqlite-store.ts` | Y — hash-mismatch quarantines the row | Y — 5 attempts, `failed` is the DL | Y — `turn_id` PK, `ON CONFLICT DO NOTHING` | N — FIFO | Y — `getJournalObservability().oldestPendingDeliveryCreatedAtMs` | P — stale HTTP results absorbed as superseded |
+| `backend_conversation_delete_outbox` | `conversation-journal.ts`, `sqlite-store.ts` | P — lease is per row; a throw aborts the pump batch | Y — 5 attempts | Y — `operation_id`; duplicate insert can raise on UNIQUE | N | N | Y |
+| `chat_first_deferral_outbox` | `conversation-journal.ts`, `sqlite-store.ts` | Y | Y — 5 attempts, non-retry on `*_4xx` | Y — `continuity_key` PK; reused key keeps the first payload | N | N | Y |
+| `chat_first_materialization_receipts` | `conversation-journal.ts`, `sqlite-store.ts` | Y — not a drain queue; per-intent txn | N — receipts are not retried | P — `intent_id` PK; identity mismatch throws rather than adopt | N | N | Y |
+| `chat_first_cold_start_sequence_receipts` | `conversation-journal.ts`, `sqlite-store.ts` | Y | N | Y — `(sequence_id, owner_id)` | N | N | Y |
+
+Related but not journal outboxes: `cleared_backend_turn_claims` (tombstones for
+in-flight POSTs during journal clear), `backend_reconcile_state` (per-conversation
+cursor), `desktop_dispatches` / `desktop_artifact_deliveries` /
+`desktop_task_candidates` (coordinator domain; in-memory projection via
+`desktop-action-queue.ts`).
+
+## Python — backend (Firestore)
+
+| Queue | File | 1 fault | 2 budget+DL | 3 identity | 4 priority | 5 age gauge | 6 no launder |
+|---|---|---|---|---|---|---|---|
+| `memory_outbox` | `database/memory_outbox_worker.py`, `memory_apply_store.py` | Y — per-event lease | Y — `max_attempts=5`, `dead_letter` + `last_error_code` | P — deterministic `event_id`; no explicit adopt helper | P — FIFO by `available_at` | N | Y |
+| `memory_outbox` / `vector_repair_purge` | `database/memory_vector_repair_outbox.py`, `memory_vector_repair_outbox_worker.py` | Y | P — `max_attempts=3`, `dead_letter` + `last_error`, no typed reason enum, no backoff | Y — `idempotency_key` | N | N | P |
+| `candidate_integration_outbox` | `database/candidates.py`, `utils/task_intelligence/candidate_service.py` | Y — per-item claim | N — `failed` is retried forever; no DL | P — doc id = `candidate_id`; `set` overwrites | N | N | Y |
+| `chat_first_proactive_intents` + `chat_first_dead_letters` | `database/chat_first_intents.py`, `chat_first_delivery_attempts.py`, `routers/chat_first.py` | Y — per-intent txn (PR #12556) | Y — fetch/rejection/deferral budgets + own DL collection | Y — stable `intent_id`; dead letter blocks recreate | Y — meeting notes ahead of capture cards | N — stall is a counter event, not a durable gauge | P — materialize can return HTTP 200 with rejection outcomes |
+| `conversation_finalization_jobs` | `database/conversation_finalization_jobs.py` | Y — per-job lease | Y — Cloud Tasks attempt fence → `dead_letter` + `last_failure_code` | Y — seed `(uid, conversation_id, revision)` | N | Y — `listen_finalization_oldest_nonterminal_age_seconds` (not `omi_queue_*`) | Y |
+| daily-summary hour-group loop | `utils/other/notifications.py` | N — one hour-group exception aborts later hours (#12530) | N | P — per-uid per-day Redis lock | N | N | N — top-level `except` logs and returns |
+| daily memory sweep | `utils/memory/daily_memory_sweep_inventory.py`, `daily_memory_sweep.py` | P — per-UID with page cap (#12533) | P — retry collection, not a typed DL | Y — receipts / invocation fences | P — retries first | N | P |
+
+### Other durable work found (not the seven named in the brief)
+
+| Queue | File | Notes |
+|---|---|---|
+| `task_recurrence_inbox` | `database/recurrence_inbox.py` | Per-receipt drain; no DL; identity-keyed `receipt_id` |
+| `frame_deletion_outbox` | `database/frame_requests.py` | Per-item cleanup; exponential backoff; unbounded attempts |
+| `projection_repairs` | `database/projection_repair.py` | `max_attempts=3` → `dead_letter` |
+| `sync_jobs` | `database/sync_jobs.py`, Cloud Tasks | Redis job + GCP queue library, not a hand-rolled Firestore batch loop |
+
+Cloud Tasks (`sync-jobs`, `sync-backfill`, `audio-merge`, `account-deletion`,
+`conversation-finalization`) is a platform library, not a second Python queue
+implementation.
+
+## Swift — macOS desktop app (left alone)
+
+These are listed so the next queue in Swift is not invented by accident. They are
+**not** migrated in this change: the kernel already owns the SQLite journal
+outboxes, and the remaining Swift stores are app-local UserDefaults/GRDB loops
+outside `FC-batch-fault-domain-head-of-line-poison`'s four sibling incidents.
+
+| Queue | File | Why left alone |
+|---|---|---|
+| Notification settings sync (`NotificationSettingsSyncCoordinator`) | `Desktop/Sources/ProactiveAssistants/Services/NotificationSettingsSyncCoordinator.swift` | UserDefaults pending flag + revision; not a multi-row batch outbox. There is no `NotificationSettingsSyncQueue` type. |
+| Canonical capture outbox (`StagedTaskStorage` + `CandidateOutboxRetryPolicy`) | `Rewind/Core/StagedTaskStorage.swift`, `TaskExtraction/ScreenCandidateAdapter.swift` | App-local GRDB; already has poison-row policy. Substrate for this language would be a third implementation. |
+| Suggested / dashboard / JIT feedback outboxes | `SuggestedTasksStore.swift`, `DashboardIntelligenceStore.swift`, `JITTriggerFeedbackClient.swift` | UserDefaults JSON blobs, owner-scoped, UI attribution |
+| Kernel journal / chat-first deferral drivers | `Chat/KernelJournalBackendSyncDriver.swift`, `Chat/ChatFirstDeferralOutboxDriver.swift` | Transport only; durable store is the agent SQLite outboxes above |
+| WAL cloud sync, screen activity, transcription retry, action-item unsynced | `WAL/WALService.swift`, `ScreenActivitySyncService.swift`, `TranscriptionRetryService.swift`, `Stores/TasksStore.swift` | Domain-specific file/GRDB pipelines, not ordered batch outboxes |
+| In-memory: `ChatMessageRatingQueue`, `DeviceCommandQueue` | Chat / Bluetooth | Not durable |
+
+## Sibling incidents
+
+| Incident | Queue | Symptom |
+|---|---|---|
+| PR #12556 | chat-first intents | Poison intent at head of fetch/materialize batch |
+| 2026-08-30 | pusher finalization | Discard-as-success (failure laundered) |
+| #12530 | daily-summary hour groups | One hour-group abort skips later hours |
+| #12533 | daily memory sweep | Page-cap stall behind a bad UID |
+
+## After
+
+Every production drain in the inventory now goes through `drain_isolated` /
+`drain_isolated_async` / `drainIsolated`. Policy primitives (outcomes,
+`decide_attempt`, `backoff_seconds`, `adopt_on_identity`, `ready_sort_key`,
+`oldest_ready_age_seconds`, drain) live in `utils/durable_queue_policy.py` so
+async callers can import them without the async-blocker treating `database.*`
+as I/O. `database/durable_queue.py` re-exports those names and owns the
+additive redrive patch. Store-wide oldest-ready sampling lives in
+`database/durable_queue_age.py` and is published from the backend's periodic
+reconcile tick in `main.py`, never from a request or from the items a drain
+happened to lease.
+
+Remaining exceptions, called out because they must not change product semantics:
+
+- `conversation_finalization_jobs` keeps its Firestore document shape, BYOK
+  `blocked_byok`, Cloud Tasks fence, and `reconcile_after_at`. The attempt
+  decision in the async pusher helper comes from `decide_attempt` in
+  `utils/durable_queue_policy.py`. Age is sampled store-wide on the periodic
+  tick from `get_finalization_job_summary`.
+- `chat_first_proactive_intents` fetch order uses `ready_sort_key` via
+  `database/chat_first_intent_queue.py` so `chat_first_intents.py` does not
+  grow. Materialize keeps HTTP 200 for the client contract; a batch whose
+  every intent is a hard rejection increments `chat_first_proactive_total`
+  `materialize_batch_rejected`.
+- `frame_deletion_outbox` still retries storage deletes without a hard stop
+  (user objects must keep converging). Drain is `drain_isolated`; failures
+  record `last_error_text`.
+- `task_recurrence_inbox` drain uses `drain_isolated`; receipts already adopt
+  by identity. Retry stays pending rather than a new status enum.
+- Daily-summary hour groups are ephemeral (no durable row). One hour-group
+  failure never aborts later hours; `send_daily_summary_notification` returns
+  a typed non-success outcome when any hour rejects, including per-user send
+  failures and an hour whose every timezone-chunk read failed.
+- Daily-sweep cleanup **and** the #12533 per-UID process loop drain through
+  `drain_sweep_uids` in `daily_memory_sweep_queue.py`.
+- Kernel SQLite outboxes publish oldest-ready age through
+  `getJournalObservability`'s store-wide `MIN(created_at_ms)` union, not
+  `omi_queue_*`.
+- Swift app-local queues stay Swift; the kernel owns the SQLite outboxes.
+
+The implementations are `utils/durable_queue_policy.py` (I/O-free),
+`database/durable_queue.py` (redrive), `database/durable_queue_age.py`
+(store-wide sample), and `desktop/macos/agent/src/runtime/durable-queue.ts`.
+New queues must import those modules. The oldest-ready gauge is
+`omi_queue_oldest_ready_age_seconds`; it is **not** zero-initialized, so
+`absent()` means the periodic publisher has not run. The pager is
+`omi-queue-oldest-ready` in `backend/charts/monitoring/alerts/resilience.json`
+with `noDataState: Alerting`. No new Firestore composite indexes. Failure-class
+registry JSON is not edited in this PR.

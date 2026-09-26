@@ -1,14 +1,258 @@
 {
   "schema_version": 1,
   "policy_version": "capture.v2",
+  "wake_word_discard_cases": [
+    {
+      "id": "bare_short_command_whole_conversation",
+      "unmarked_transcript": "[segment:discard-wake-1 0.000-7.000] User: Hey Omi don't forget to send Sarah the budget",
+      "marked_transcript": "[segment:discard-wake-1 0.000-7.000] <omi-wake-word-invocation/> User: Hey Omi don't forget to send Sarah the budget",
+      "photos": [],
+      "duration_seconds": 7,
+      "expected_marked_discarded": false
+    },
+    {
+      "id": "mis_transcribed_omie_short_command",
+      "unmarked_transcript": "[segment:discard-wake-2 0.000-7.000] User: hey omie dont forget to send sarah the budget friday",
+      "marked_transcript": "[segment:discard-wake-2 0.000-7.000] <omi-wake-word-invocation/> User: hey omie dont forget to send sarah the budget friday",
+      "photos": [],
+      "duration_seconds": 7,
+      "expected_marked_discarded": false
+    },
+    {
+      "id": "welded_short_command",
+      "unmarked_transcript": "[segment:discard-wake-3 0.000-6.000] User: heyomi remind me to call the dentist tomorrow",
+      "marked_transcript": "[segment:discard-wake-3 0.000-6.000] <omi-wake-word-invocation/> User: heyomi remind me to call the dentist tomorrow",
+      "photos": [],
+      "duration_seconds": 6,
+      "expected_marked_discarded": false
+    }
+  ],
+  "wake_word_evaluation_cases": [
+    {
+      "id": "embedded_command_mid_meeting",
+      "segments": [
+        ["meeting-01", 0, 4, "David", "primary_user", "Thanks for joining; I want to close the forecast assumptions today."],
+        ["meeting-02", 4, 8, "Priya", "other", "Finance moved the renewal estimate down by three percent."],
+        ["meeting-03", 8, 12, "Omar", "other", "The enterprise pipeline still looks stronger than last week."],
+        ["meeting-04", 12, 16, "David", "primary_user", "Let's separate signed renewals from expansion opportunities."],
+        ["meeting-05", 16, 20, "Priya", "other", "I have the signed renewals in the second tab."],
+        ["meeting-06", 20, 24, "Omar", "other", "The west region has two deals that may slip."],
+        ["meeting-07", 24, 28, "David", "primary_user", "I'll circulate the cleaned pipeline notes after lunch."],
+        ["meeting-08", 28, 32, "Priya", "other", "Please include the probability assumptions beside each deal."],
+        ["meeting-09", 32, 36, "David", "primary_user", "Yes, that will make the review easier."],
+        ["meeting-10", 36, 40, "Omar", "other", "Should services revenue stay in the same worksheet?"],
+        ["meeting-11", 40, 44, "Priya", "other", "Keep it separate because the margin profile is different."],
+        ["meeting-12", 44, 48, "David", "primary_user", "Agreed; we can show it below the subscription subtotal."],
+        ["meeting-13", 48, 52, "Omar", "other", "The board view also needs the conservative scenario."],
+        ["meeting-14", 52, 56, "David", "primary_user", "Let's use eighty percent of weighted pipeline there."],
+        ["meeting-15", 56, 60, "Priya", "other", "That matches the model I sent yesterday."],
+        ["meeting-16", 60, 64, "Omar", "other", "I can verify the services margin before the next review."],
+        ["meeting-17", 64, 68, "David", "primary_user", "Good, and I want the final packet to use one source."],
+        ["meeting-18", 68, 73, "David", "primary_user", "Before we move on, hey omni, remind me to send Priya the revised forecast."],
+        ["meeting-19", 73, 77, "David", "primary_user", "Use the version with the conservative scenario on Friday morning."],
+        ["meeting-20", 77, 81, "Priya", "other", "Friday morning works; I need it before the board prep."],
+        ["meeting-21", 81, 85, "Omar", "other", "For hiring, are we holding the two support roles?"],
+        ["meeting-22", 85, 89, "David", "primary_user", "Hold one role and keep the other in the base case."],
+        ["meeting-23", 89, 93, "Priya", "other", "I'll reflect that in the expense plan."],
+        ["meeting-24", 93, 97, "Omar", "other", "The cash curve should then stay above the target."],
+        ["meeting-25", 97, 101, "Priya", "other", "David, please confirm the hiring assumption with Mia before Monday."],
+        ["meeting-26", 101, 105, "David", "primary_user", "I can confirm it during our one-on-one tomorrow."],
+        ["meeting-27", 105, 109, "Omar", "other", "I'll update the chart after that confirmation."],
+        ["meeting-28", 109, 113, "Priya", "other", "Then the deck should be ready for a final pass."],
+        ["meeting-29", 113, 117, "David", "primary_user", "Let's reconvene for fifteen minutes Monday afternoon."],
+        ["meeting-30", 117, 121, "Omar", "other", "Sounds good; I'll send the calendar hold."]
+      ],
+      "expected_command_segment_ids": ["meeting-18"],
+      "expected_non_command_segment_ids": []
+    },
+    {
+      "id": "omi_team_dogfood_killer",
+      "segments": [
+        ["dogfood-01", 0, 4, "David", "primary_user", "Let's review the wake-word draft using yesterday's dogfood transcript."],
+        ["dogfood-02", 4, 8, "Priya", "other", "The main risk is precision because product conversations mention the brand constantly."],
+        ["dogfood-03", 8, 12, "Marco", "other", "We should separate feature discussion from actual assistant use."],
+        ["dogfood-04", 12, 16, "David", "primary_user", "The matcher turns on whenever the transcript contains hey Omi, even during design discussion."],
+        ["dogfood-05", 16, 20, "Priya", "other", "Right, so the marker can only be a hint."],
+        ["dogfood-06", 20, 24, "Marco", "other", "The classifier needs the entire meeting to understand why we said it."],
+        ["dogfood-07", 24, 28, "David", "primary_user", "Documentation examples are especially dangerous because they look grammatical."],
+        ["dogfood-08", 28, 32, "Priya", "other", "The guide currently says quote hey Omi before a reminder."],
+        ["dogfood-09", 32, 36, "Marco", "other", "That should be quoted or meta, never an actionable command."],
+        ["dogfood-10", 36, 40, "David", "primary_user", "We also need a demo for tomorrow's product review."],
+        ["dogfood-11", 40, 44, "Priya", "other", "I can drive the dashboard while Marco narrates."],
+        ["dogfood-12", 44, 49, "Marco", "other", "For the demo I say, hey Omi, add a task to send the launch recap."],
+        ["dogfood-13", 49, 53, "David", "primary_user", "That is still a demonstration by another speaker, not my command."],
+        ["dogfood-14", 53, 57, "David", "primary_user", "I'll update the demo script to label the speaker explicitly."],
+        ["dogfood-15", 57, 61, "Priya", "other", "How are we handling questions in this first version?"],
+        ["dogfood-16", 61, 66, "David", "primary_user", "Hey Omi, what is the false-positive rate from the latest evaluation?"],
+        ["dogfood-17", 66, 70, "Marco", "other", "That is a real question, but the action-item extractor cannot route an answer."],
+        ["dogfood-18", 70, 74, "Priya", "other", "We should record the question and keep it out of task creation."],
+        ["dogfood-19", 74, 78, "David", "primary_user", "Agreed; question handling needs a separate product decision."],
+        ["dogfood-20", 78, 82, "Marco", "other", "Let's inspect the one command case now."],
+        ["dogfood-21", 82, 87, "David", "primary_user", "Hey Omi, add a task to send Fable the adjudicator eval results tomorrow."],
+        ["dogfood-22", 87, 91, "Priya", "other", "That one is intentionally real and should reach direct creation."],
+        ["dogfood-23", 91, 95, "Marco", "other", "Its payload and marker are in the same segment."],
+        ["dogfood-24", 95, 99, "David", "primary_user", "The rest of these mentions should remain rejection cases."],
+        ["dogfood-25", 99, 103, "Priya", "other", "Let's review the provenance requirement."],
+        ["dogfood-26", 103, 107, "David", "primary_user", "After hey Omi, the source list must retain the marker-bearing segment."],
+        ["dogfood-27", 107, 111, "Marco", "other", "Otherwise the policy cannot join the independent verdict safely."],
+        ["dogfood-28", 111, 115, "Priya", "other", "The join should never use the generated task wording."],
+        ["dogfood-29", 115, 119, "David", "primary_user", "Yes, descriptions are the anchoring vector we are removing."],
+        ["dogfood-30", 119, 123, "Marco", "other", "Our regression fixture should include the old documentation sentence."],
+        ["dogfood-31", 123, 127, "Priya", "other", "The sentence should show hey Omi as a quoted example in the docs."],
+        ["dogfood-32", 127, 131, "David", "primary_user", "That phrasing caused the fabricated documentation task in one trial."],
+        ["dogfood-33", 131, 135, "Marco", "other", "The independent call should reject it without seeing the draft intent."],
+        ["dogfood-34", 135, 139, "Priya", "other", "I'll add the result table to the review notes once the run finishes."],
+        ["dogfood-35", 139, 143, "David", "primary_user", "We also need an abandoned invocation in the set."],
+        ["dogfood-36", 143, 147, "David", "primary_user", "Hey Omi—actually, never mind, I don't need anything."],
+        ["dogfood-37", 147, 151, "Marco", "other", "That should be abandoned rather than unclear."],
+        ["dogfood-38", 151, 155, "Priya", "other", "Then we have discussion, quote, demo, question, command, provenance, docs, and abandonment."],
+        ["dogfood-39", 155, 159, "David", "primary_user", "Exactly eight detections and exactly one task command."],
+        ["dogfood-40", 159, 163, "Marco", "other", "That is the daily distribution we need to beat."]
+      ],
+      "expected_command_segment_ids": ["dogfood-21"],
+      "expected_non_command_segment_ids": ["dogfood-04", "dogfood-08", "dogfood-12", "dogfood-16", "dogfood-26", "dogfood-31", "dogfood-36"]
+    },
+    {
+      "id": "bystander_tv_command",
+      "segments": [
+        ["bystander-01", 0, 4, "David", "primary_user", "The kitchen display keeps waking while I work at the table."],
+        ["bystander-02", 4, 8, "Nina", "other", "It may be picking up dialogue from the television."],
+        ["bystander-03", 8, 12, "David", "primary_user", "Let's leave the show on and watch the transcript."],
+        ["bystander-04", 12, 16, "TV Host", "other", "Tonight we are helping a family organize their move."],
+        ["bystander-05", 16, 20, "TV Guest", "other", "We have boxes in every room and a long checklist."],
+        ["bystander-06", 20, 24, "Nina", "other", "The display is still idle."],
+        ["bystander-07", 24, 28, "David", "primary_user", "Good, ordinary dialogue is not enough."],
+        ["bystander-08", 28, 32, "TV Host", "other", "The next step is labeling the fragile items."],
+        ["bystander-09", 32, 36, "TV Guest", "other", "I promised to finish the garage boxes tonight."],
+        ["bystander-10", 36, 40, "Nina", "other", "That commitment belongs to the guest, not you."],
+        ["bystander-11", 40, 44, "David", "primary_user", "Right, speaker ownership still matters."],
+        ["bystander-12", 44, 48, "TV Host", "other", "Now try the assistant beside you."],
+        ["bystander-13", 48, 53, "TV Guest", "other", "Hey Omi, remind me to call the moving company tomorrow."],
+        ["bystander-14", 53, 57, "TV Host", "other", "Great, the reminder appeared on her device."],
+        ["bystander-15", 57, 61, "Nina", "other", "Our display should not create that reminder for you."],
+        ["bystander-16", 61, 65, "David", "primary_user", "The speaker label makes this a bystander invocation."],
+        ["bystander-17", 65, 69, "TV Host", "other", "After the break, we will pack the kitchen."],
+        ["bystander-18", 69, 73, "Nina", "other", "I'll mute the television after this test."],
+        ["bystander-19", 73, 77, "David", "primary_user", "Please note the timestamp in our test log."],
+        ["bystander-20", 77, 81, "Nina", "other", "I can add it when we finish."],
+        ["bystander-21", 81, 85, "TV Guest", "other", "The labels made the unpacking much easier."],
+        ["bystander-22", 85, 89, "David", "primary_user", "No other assistant phrase occurred in the clip."],
+        ["bystander-23", 89, 93, "Nina", "other", "Then this is a clean ownership test."],
+        ["bystander-24", 93, 97, "David", "primary_user", "Let's save the trace and move on."]
+      ],
+      "expected_command_segment_ids": [],
+      "expected_non_command_segment_ids": ["bystander-13"]
+    },
+    {
+      "id": "paired_real_and_quoted_invocations",
+      "segments": [
+        ["paired-01", 0, 4, "David", "primary_user", "We need the onboarding copy ready for Friday's review."],
+        ["paired-02", 4, 8, "Lena", "other", "The first screen explains how voice commands work."],
+        ["paired-03", 8, 12, "David", "primary_user", "Keep it short and avoid promising instant responses."],
+        ["paired-04", 12, 16, "Lena", "other", "I drafted a callout with one example phrase."],
+        ["paired-05", 16, 20, "David", "primary_user", "Read it aloud so we can hear the cadence."],
+        ["paired-06", 20, 24, "Lena", "other", "The heading is Ask Omi to remember what matters."],
+        ["paired-07", 24, 28, "David", "primary_user", "That heading is clear."],
+        ["paired-08", 28, 32, "Lena", "other", "The body includes a literal example."],
+        ["paired-09", 32, 36, "Lena", "other", "It says, hey Omi, remind me to bring my passport."],
+        ["paired-10", 36, 40, "David", "primary_user", "The quote should not become a task while we review copy."],
+        ["paired-11", 40, 44, "Lena", "other", "Agreed; I'll format it as quoted text."],
+        ["paired-12", 44, 48, "David", "primary_user", "The privacy sentence also needs a simpler verb."],
+        ["paired-13", 48, 52, "Lena", "other", "How about Your audio stays private by default?"],
+        ["paired-14", 52, 56, "David", "primary_user", "That works, but legal should confirm the final wording."],
+        ["paired-15", 56, 60, "Lena", "other", "I can send it to legal this afternoon."],
+        ["paired-16", 60, 64, "David", "primary_user", "Thanks; I also need to remember the asset handoff."],
+        ["paired-17", 64, 68, "Lena", "other", "We can finish the illustrations once copy is locked."],
+        ["paired-18", 68, 73, "David", "primary_user", "Hey Omi, remind me to send Lena the final icon assets tomorrow."],
+        ["paired-19", 73, 77, "Lena", "other", "That one was an actual command, separate from the quoted example."],
+        ["paired-20", 77, 81, "David", "primary_user", "Exactly; the adjudicator must return two different verdicts."],
+        ["paired-21", 81, 85, "Lena", "other", "I'll keep both phrases in the evaluation transcript."],
+        ["paired-22", 85, 89, "David", "primary_user", "Then we can compare marker-only with the conjunction gate."],
+        ["paired-23", 89, 93, "Lena", "other", "The ambient legal follow-up should remain unchanged too."],
+        ["paired-24", 93, 97, "David", "primary_user", "Good, let's use this version."]
+      ],
+      "expected_command_segment_ids": ["paired-18"],
+      "expected_non_command_segment_ids": ["paired-09"],
+      "split_assertion": {"command_segment_id": "paired-18", "rejection_segment_id": "paired-09"}
+    },
+    {
+      "id": "mis_transcription_variants_in_context",
+      "segments": [
+        ["variants-01", 0, 4, "David", "primary_user", "Let's plan the customer workshop and the travel around it."],
+        ["variants-02", 4, 8, "Sam", "other", "The workshop opens at nine on Tuesday."],
+        ["variants-03", 8, 12, "David", "primary_user", "I want the printed agenda at the venue beforehand."],
+        ["variants-04", 12, 16, "Sam", "other", "The hotel can print it if we email the PDF."],
+        ["variants-05", 16, 20, "David", "primary_user", "I'll finalize the exercises after today's rehearsal."],
+        ["variants-06", 20, 24, "Sam", "other", "We should also confirm the room layout."],
+        ["variants-07", 24, 28, "David", "primary_user", "I'll ask the venue about the tables."],
+        ["variants-08", 28, 33, "David", "primary_user", "hey omie remind me to email the workshop agenda to the hotel tonight"],
+        ["variants-09", 33, 37, "Sam", "other", "Use the final PDF with the updated exercises."],
+        ["variants-10", 37, 41, "David", "primary_user", "Yes, that is the version in the shared folder."],
+        ["variants-11", 41, 45, "Sam", "other", "For travel, your train arrives after the welcome dinner."],
+        ["variants-12", 45, 49, "David", "primary_user", "I may switch to the earlier train."],
+        ["variants-13", 49, 53, "Sam", "other", "The fare is refundable until tomorrow."],
+        ["variants-14", 53, 57, "David", "primary_user", "Then I can decide after checking the rehearsal timing."],
+        ["variants-15", 57, 61, "Sam", "other", "Don't forget the dietary list for the dinner."],
+        ["variants-16", 61, 65, "David", "primary_user", "Good catch; Maya has the latest responses."],
+        ["variants-17", 65, 70, "David", "primary_user", "okay before I go hey omni add a task to ask Maya for the dietary list"],
+        ["variants-18", 70, 74, "Sam", "other", "That should happen before we confirm catering."],
+        ["variants-19", 74, 78, "David", "primary_user", "I'll use the same headcount sheet for both."],
+        ["variants-20", 78, 82, "Sam", "other", "The venue also requested a mobile number."],
+        ["variants-21", 82, 86, "David", "primary_user", "They can use mine for delivery questions."],
+        ["variants-22", 86, 90, "Sam", "other", "Can you send that in the logistics email?"],
+        ["variants-23", 90, 94, "David", "primary_user", "Yes, along with the arrival window."],
+        ["variants-24", 94, 98, "Sam", "other", "The photographer needs the same arrival details."],
+        ["variants-25", 98, 103, "David", "primary_user", "heyomi remind me to send the photographer the venue access code Monday"],
+        ["variants-26", 103, 107, "Sam", "other", "The code is in the vendor portal."],
+        ["variants-27", 107, 111, "David", "primary_user", "I'll verify it before sending anything."],
+        ["variants-28", 111, 115, "Sam", "other", "Then all external vendors will have what they need."],
+        ["variants-29", 115, 119, "David", "primary_user", "Let's review the checklist once more tomorrow."],
+        ["variants-30", 119, 123, "Sam", "other", "I'll bring the latest schedule."]
+      ],
+      "expected_command_segment_ids": ["variants-08", "variants-17", "variants-25"],
+      "expected_non_command_segment_ids": []
+    },
+    {
+      "id": "no_wake_word_control",
+      "control": true,
+      "segments": [
+        ["control-01", 0, 4, "David", "primary_user", "Let's finish planning the quarterly customer newsletter."],
+        ["control-02", 4, 8, "Ava", "other", "The case study draft is ready for review."],
+        ["control-03", 8, 12, "David", "primary_user", "I'll review the case study tomorrow morning."],
+        ["control-04", 12, 16, "Ava", "other", "Please check the customer quote against the approval email."],
+        ["control-05", 16, 20, "David", "primary_user", "I will verify the quote before we publish."],
+        ["control-06", 20, 24, "Ava", "other", "The product section still needs the August screenshot."],
+        ["control-07", 24, 28, "David", "primary_user", "Marco said he can provide it this afternoon."],
+        ["control-08", 28, 32, "Ava", "other", "I'll leave a placeholder until it arrives."],
+        ["control-09", 32, 36, "David", "primary_user", "The subject line should focus on reliability."],
+        ["control-10", 36, 40, "Ava", "other", "How about A calmer way to remember your day?"],
+        ["control-11", 40, 44, "David", "primary_user", "That is warmer than the current headline."],
+        ["control-12", 44, 48, "Ava", "other", "We can test it against the shorter alternative."],
+        ["control-13", 48, 52, "David", "primary_user", "I'll write the alternative before lunch."],
+        ["control-14", 52, 56, "Ava", "other", "Legal also asked for the updated privacy footer."],
+        ["control-15", 56, 60, "David", "primary_user", "Please send me their approved wording."],
+        ["control-16", 60, 64, "Ava", "other", "I can forward it when this meeting ends."],
+        ["control-17", 64, 68, "David", "primary_user", "The send date is still next Thursday."],
+        ["control-18", 68, 72, "Ava", "other", "That gives us two days for final testing."],
+        ["control-19", 72, 76, "David", "primary_user", "Let's ask support to proofread the links."],
+        ["control-20", 76, 80, "Ava", "other", "I'll assign that review to Jordan."],
+        ["control-21", 80, 84, "David", "primary_user", "After the proofread, I will schedule the send."],
+        ["control-22", 84, 88, "Ava", "other", "The analytics tags are already in place."],
+        ["control-23", 88, 92, "David", "primary_user", "Great, then the checklist is complete."],
+        ["control-24", 92, 96, "Ava", "other", "I'll post the final draft in the channel."]
+      ],
+      "expected_command_segment_ids": [],
+      "expected_non_command_segment_ids": []
+    }
+  ],
   "cases": [
     {
       "id": "explicit_create",
       "inputs": {
-        "transcript": {"text": "Add a task to send Sarah the budget Friday.", "stub_output": {"explicit_command": true, "owner": "user", "concrete_deliverable": true, "deadline_confidence": 1}},
-        "screen": {"text": "User typed: Add a task to send Sarah the budget Friday.", "stub_output": {"explicit_command": true, "owner": "user", "concrete_deliverable": true, "deadline_confidence": 1}}
+        "transcript": {"text": "Add a task to send Sarah the budget Friday.", "stub_output": {"explicit_command": true, "owner": "user", "concrete_deliverable": true, "deadline_confidence": 1, "capture_confidence": 0.95, "ownership_confidence": 0.95}},
+        "screen": {"text": "User typed: Add a task to send Sarah the budget Friday.", "stub_output": {"explicit_command": true, "owner": "user", "concrete_deliverable": true, "deadline_confidence": 1, "capture_confidence": 0.95, "ownership_confidence": 0.95}}
       },
-      "expected": {"outcome": "create_direct", "interruption": "invoking_surface_only"}
+      "expected": {"outcome": "pending_candidate", "interruption": "none"}
     },
     {
       "id": "clear_commitment",
@@ -16,7 +260,7 @@
         "transcript": {"text": "I will send Sarah the budget by Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.95, "ownership_confidence": 1, "deadline_confidence": 1}},
         "screen": {"text": "Me: I will send Sarah the budget by Friday.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.95, "ownership_confidence": 1, "deadline_confidence": 1}}
       },
-      "expected": {"outcome": "auto_accept_silent", "interruption": "none"}
+      "expected": {"outcome": "pending_candidate", "interruption": "none"}
     },
     {
       "id": "immediate_commitment",
@@ -24,7 +268,7 @@
         "transcript": {"text": "I will update the pricing table now.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.9, "ownership_confidence": 1, "immediate_action": true}},
         "screen": {"text": "Me: I will update the pricing table now.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.9, "ownership_confidence": 1, "immediate_action": true}}
       },
-      "expected": {"outcome": "auto_accept_silent", "interruption": "none"}
+      "expected": {"outcome": "pending_candidate", "interruption": "none"}
     },
     {
       "id": "clear_commitment_low_confidence",
@@ -32,7 +276,7 @@
         "transcript": {"text": "I will maybe send Sarah something later.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.5}},
         "screen": {"text": "Me: I will maybe send Sarah something later.", "stub_output": {"clear_commitment": true, "owner": "user", "concrete_deliverable": true, "capture_confidence": 0.5}}
       },
-      "expected": {"outcome": "pending_candidate", "interruption": "none"}
+      "expected": {"outcome": "ignore", "interruption": "none"}
     },
     {
       "id": "clear_commitment_without_deliverable",

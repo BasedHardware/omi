@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-cte-filter-on-unprojected-column",
+  "violated_contract": "A raw SQL statement's outer query may only reference columns its CTE or subquery actually projects. SQLite resolves the reference when the statement is prepared, not when a row is scanned, so a filter on an unprojected column fails every single call regardless of whether any row would have matched. The result is a whole-feature outage that reads like a rare data-dependent edge case, and the throw surfaces far from the query in whatever caller wraps it.",
+  "canonical_prevention": "Execute every raw SQL string in a test against the real migrated schema. Preparation precedes the scan, so even a test that only exercises the empty case catches this — but only if the query is executed at all. A query reachable solely behind a rollout flag therefore needs a test that turns that flag on, otherwise the statement ships never having been prepared once.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/ScreenActivityLosslessSyncTests.swift"
+  ],
+  "evidence_prs": [
+    11865
+  ],
+  "scope_hints": [
+    "desktop/macos/**"
+  ],
+  "status": "open"
+}

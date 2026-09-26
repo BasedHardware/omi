@@ -2,11 +2,34 @@
 
 import { cn } from '@/lib/utils';
 
-const STAGE_META: Record<string, { label: string; dot: string; text: string; bg: string }> = {
-  none: { label: 'Normal', dot: 'bg-green-400', text: 'text-green-400', bg: 'bg-green-500/[0.06]' },
-  warning: { label: 'Warning', dot: 'bg-amber-400', text: 'text-amber-400', bg: 'bg-amber-500/[0.06]' },
-  throttle: { label: 'Throttled', dot: 'bg-orange-400', text: 'text-orange-400', bg: 'bg-orange-500/[0.06]' },
-  restrict: { label: 'Restricted', dot: 'bg-red-400', text: 'text-red-400', bg: 'bg-red-500/[0.06]' },
+const STAGE_META: Record<
+  string,
+  { label: string; dot: string; text: string; bg: string }
+> = {
+  none: {
+    label: 'Normal',
+    dot: 'bg-green-400',
+    text: 'text-green-400',
+    bg: 'bg-green-500/[0.06]',
+  },
+  warning: {
+    label: 'Warning',
+    dot: 'bg-amber-400',
+    text: 'text-amber-400',
+    bg: 'bg-amber-500/[0.06]',
+  },
+  throttle: {
+    label: 'Throttled',
+    dot: 'bg-orange-400',
+    text: 'text-orange-400',
+    bg: 'bg-orange-500/[0.06]',
+  },
+  restrict: {
+    label: 'Restricted',
+    dot: 'bg-red-400',
+    text: 'text-red-400',
+    bg: 'bg-red-500/[0.06]',
+  },
 };
 
 const SUPPORT_EMAIL = 'team@basedhardware.com';
@@ -55,11 +78,15 @@ export function CaseStatusView({
         <div className="max-w-md w-full text-center">
           <h1 className="text-lg font-semibold text-white mb-2">Case Not Found</h1>
           <p className="text-sm text-zinc-400 mb-1">
-            No case found for reference <span className="font-mono text-zinc-300">{caseRef}</span>
+            No case found for reference{' '}
+            <span className="font-mono text-zinc-300">{caseRef}</span>
           </p>
           <p className="text-xs text-zinc-500 mt-4">
             If you believe this is an error, contact{' '}
-            <a href={`mailto:${SUPPORT_EMAIL}`} className="text-purple-400 hover:text-purple-300">
+            <a
+              href={`mailto:${SUPPORT_EMAIL}`}
+              className="text-text-secondary hover:text-text-secondary"
+            >
               {SUPPORT_EMAIL}
             </a>
           </p>
@@ -86,11 +113,13 @@ export function CaseStatusView({
           className={cn(
             'rounded-2xl p-5',
             'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
-            'shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)]'
+            'shadow-[0_0_0_1px_rgba(255,255,255,0.04),0_2px_4px_rgba(0,0,0,0.1),0_8px_16px_rgba(0,0,0,0.1)]',
           )}
         >
           {/* Stage */}
-          <div className={cn('flex items-center gap-2.5 px-3 py-2 rounded-xl mb-4', meta.bg)}>
+          <div
+            className={cn('flex items-center gap-2.5 px-3 py-2 rounded-xl mb-4', meta.bg)}
+          >
             <div className={cn('w-2 h-2 rounded-full', meta.dot)} />
             <span className={cn('text-sm font-medium', meta.text)}>{meta.label}</span>
           </div>
@@ -99,12 +128,16 @@ export function CaseStatusView({
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <span className="text-xs text-zinc-500">Created</span>
-              <span className="text-sm text-zinc-300">{formatDate(status.created_at)}</span>
+              <span className="text-sm text-zinc-300">
+                {formatDate(status.created_at)}
+              </span>
             </div>
             <div className="h-px bg-zinc-800" />
             <div className="flex justify-between items-center">
               <span className="text-xs text-zinc-500">Last Updated</span>
-              <span className="text-sm text-zinc-300">{formatDate(status.updated_at)}</span>
+              <span className="text-sm text-zinc-300">
+                {formatDate(status.updated_at)}
+              </span>
             </div>
           </div>
 
@@ -121,8 +154,12 @@ export function CaseStatusView({
         {updatedDays >= 3 && (
           <div className="rounded-xl bg-zinc-900/50 px-4 py-3">
             <p className="text-xs text-zinc-400 leading-relaxed">
-              This case hasn&apos;t been updated in {updatedDays} days. If you need assistance, please contact{' '}
-              <a href={`mailto:${email}`} className="text-purple-400 hover:text-purple-300">
+              This case hasn&apos;t been updated in {updatedDays} days. If you need
+              assistance, please contact{' '}
+              <a
+                href={`mailto:${email}`}
+                className="text-text-secondary hover:text-text-secondary"
+              >
                 {email}
               </a>
             </p>
@@ -132,7 +169,10 @@ export function CaseStatusView({
         {/* Footer */}
         <p className="text-center text-xs text-zinc-600">
           Need help?{' '}
-          <a href={`mailto:${email}`} className="text-purple-400/70 hover:text-purple-300">
+          <a
+            href={`mailto:${email}`}
+            className="text-text-secondary hover:text-text-secondary"
+          >
             {email}
           </a>
         </p>

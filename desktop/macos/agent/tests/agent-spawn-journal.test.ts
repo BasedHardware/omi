@@ -377,6 +377,68 @@ describe("durable agent-spawn producer journal", () => {
     store.close();
   });
 
+  it("does not journal a user turn when no user text reached the run", async () => {
+    // A realtime tool authorized without a transcript drives the run from an
+    // internal instruction. Journaling it as the user's turn puts words in the
+    // user's mouth, and recentTurns replays them to the model as canonical
+    // history on the next press.
+    const root = newRoot();
+    const { store, kernel } = createKernelHarness(join(root, "synthetic-user-text.sqlite"), "acp");
+    const parent = resolveSurfaceSession(store, {
+      ownerId: "owner",
+      surfaceRef: {
+        surfaceKind: "realtime_voice",
+        externalRefKind: "voice_turn",
+        externalRefId: "voice-turn-synthetic",
+      },
+      defaultAdapterId: "acp",
+    }, () => 1);
+    const pillId = "10000000-0000-0000-0000-0000000000cc";
+    const descriptor = {
+      ...producerDescriptor(pillId),
+      surface: {
+        surfaceKind: "realtime_voice",
+        externalRefKind: "voice_turn",
+        externalRefId: "voice-turn-synthetic",
+      },
+      continuityKey: "realtime_spawn:voice-turn-synthetic",
+      userText: "",
+    };
+    const accepted = await kernel.spawnBackgroundAgent({
+      ownerId: "owner",
+      callerSessionId: parent.agentSessionId,
+      clientId: "realtime",
+      requestId: "voice-spawn-synthetic",
+      prompt: descriptor.objective,
+      title: descriptor.title,
+      surfaceKind: "floating_bar",
+      externalRefKind: "pill",
+      externalRefId: pillId,
+      mode: "act",
+      metadata: { pillId, producerJournal: descriptor },
+    });
+    await waitUntil(() => String(store.getRow(
+      "SELECT status FROM runs WHERE run_id = ?",
+      [accepted.run.runId],
+    ).status) === "succeeded");
+
+    const ensured = kernel.ensureAgentSpawnJournal({
+      ownerId: "owner",
+      sessionId: accepted.session.sessionId,
+      runId: accepted.run.runId,
+    });
+
+    expect(ensured.userTurn).toBeNull();
+    const userRows = store.allRows(
+      "SELECT turn_id FROM conversation_turns WHERE conversation_id = ? AND role = 'user'",
+      [ensured.conversationId],
+    );
+    expect(userRows).toHaveLength(0);
+    // The assistant side still records that the agent was admitted.
+    expect(ensured.assistantTurn).not.toBeNull();
+    store.close();
+  });
+
   it("promotes an optimistic streaming row to the canonical spawn exchange", async () => {
     const root = newRoot();
     const { store, kernel } = createKernelHarness(join(root, "streaming-promote.sqlite"), "acp");
