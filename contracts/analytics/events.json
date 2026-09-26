@@ -2428,7 +2428,8 @@
           "values": [
             "siri",
             "shortcuts",
-            "spotlight"
+            "spotlight",
+            "unknown"
           ]
         }
       },

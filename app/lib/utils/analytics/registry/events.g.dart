@@ -1513,7 +1513,8 @@ enum SiriIntentPerformedOutcome {
 enum SiriIntentPerformedInvokedVia {
   siri("siri"),
   shortcuts("shortcuts"),
-  spotlight("spotlight");
+  spotlight("spotlight"),
+  unknown("unknown");
   const SiriIntentPerformedInvokedVia(this.wireName);
   final String wireName;
 }

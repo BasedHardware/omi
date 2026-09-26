@@ -34,6 +34,6 @@ Failures have spoken, typed outcomes on both platforms: `auth` → “Open Omi a
 
 Annotate macOS conversation details, memory details, conversation rows and task rows with the corresponding App Entity ID. iOS uses `NSUserActivity.appEntityIdentifier` when a single conversation or memory detail is visible; Flutter canvas rows cannot be annotated individually. Attach entity IDs to relevant local notifications. Donate matching intents after UI memory creation, task completion or conversation opening, without including content in the donation.
 
-Register `Siri Intent Performed` with `intent`, `platform`, `outcome`, `latency_ms`, `invoked_via`; values of `outcome` are `ok`, `auth`, `network`, `rate_limited`, `quota`, `server`, `cancelled`, and values of `invoked_via` are `siri`, `shortcuts`, `spotlight` where the system provides that source. Register `Siri Index Rebuilt` with `platform`, `entity_counts`, `duration_ms`, `outcome`. Never send user content in analytics.
+Register `Siri Intent Performed` with `intent`, `platform`, `outcome`, `latency_ms`, `invoked_via`; values of `outcome` are `ok`, `auth`, `network`, `rate_limited`, `quota`, `server`, `cancelled`, and values of `invoked_via` are `siri`, `shortcuts`, `spotlight` where the system provides that source, or `unknown` otherwise. Register `Siri Index Rebuilt` with `platform`, `entity_counts`, `duration_ms`, `outcome`. Never send user content in analytics.
 
 Pending David's rulings: R1 index scope, R2 default ON, R3 defer Ask Omi, R4 verbatim manual memory tagged `siri`.
