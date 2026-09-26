@@ -265,6 +265,13 @@ def get_home_page_html(
     # it so quotes cannot break the attribute and &, #, or .. cannot
     # corrupt the query (same hardening as the other plugin apps).
     uid_q = quote(uid or "", safe="")
+    # display_name/email come from the OAuth provider and folder_name is
+    # user-controlled via POST /settings; escape them so a crafted value
+    # (e.g. a Dropbox display name containing markup) cannot inject HTML
+    # into this page (stored XSS).
+    display_name_html = html.escape(str(display_name))
+    email_html = html.escape(str(email))
+    folder_name_attr = html.escape(str(settings.get("folder_name", "Omi Conversations")), quote=True)
 
     if connected:
         return f"""
@@ -297,14 +304,14 @@ def get_home_page_html(
         <h1>Dropbox Connected</h1>
         <p class="status">Your Dropbox account is connected</p>
         <div class="user-info">
-            <strong>{display_name}</strong><br>
-            <span style="color: #666;">{email}</span>
+            <strong>{display_name_html}</strong><br>
+            <span style="color: #666;">{email_html}</span>
         </div>
 
         <form class="settings-form" method="POST" action="/settings?uid={uid_q}">
             <div class="form-group">
                 <label for="folder_name">Folder Name</label>
-                <input type="text" id="folder_name" name="folder_name" value="{settings.get('folder_name', 'Omi Conversations')}" placeholder="Omi Conversations">
+                <input type="text" id="folder_name" name="folder_name" value="{folder_name_attr}" placeholder="Omi Conversations">
             </div>
 
             <div class="form-group">
@@ -484,7 +491,10 @@ async def auth_callback(
         )
 
         if response.status_code != 200:
-            return HTMLResponse(f"Token exchange failed: {response.text}", status_code=400)
+            return HTMLResponse(
+                f"Token exchange failed: {html.escape(response.text)}",
+                status_code=400,
+            )
 
         token_data = response.json()
         access_token = token_data.get("access_token")
@@ -524,7 +534,10 @@ async def auth_callback(
         return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
     except Exception as e:
-        return HTMLResponse(f"Error during authorization: {str(e)}", status_code=500)
+        return HTMLResponse(
+            f"Error during authorization: {html.escape(str(e))}",
+            status_code=500,
+        )
 
 
 @app.get("/disconnect")
