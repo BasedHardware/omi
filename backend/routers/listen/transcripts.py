@@ -111,6 +111,8 @@ class TranscriptProcessor:
         self._v2_retry_counts: Dict[str, int] = {}
         self._v2_legacy_fallback: deque[Dict[str, Any]] = deque(maxlen=host.limits.max_segment_buffer_size)
         self._v2_legacy_fallback_ids: set[str] = set()
+        self._v2_fallback_retry_until: Dict[str, float] = {}
+        self._v2_fallback_failures: Dict[str, int] = {}
         self._v2_retry_until = 0.0
         self._v2_committed_ids: set[str] = set()
         self._v2_photos_committed = False
@@ -520,21 +522,33 @@ class TranscriptProcessor:
         while self.host.state.active or self.segment_buffer or self.photo_buffer or self._v2_legacy_fallback:
             if await self.host.wait(0.6) and not (self.segment_buffer or self.photo_buffer or self._v2_legacy_fallback):
                 break
-            if getattr(self.host.state, 'capture_timeline_v2', False) and time.monotonic() < self._v2_retry_until:
-                continue
-            if self._v2_legacy_fallback:
+            # One eligible fallback attempt per tick. A failing owner backs
+            # off independently and cannot prevent normal transcript/photo
+            # draining or eligible fallback items behind it from progressing.
+            for _ in range(len(self._v2_legacy_fallback)):
                 raw = self._v2_legacy_fallback[0]
+                key = str(raw.get('id') or '')
+                if time.monotonic() < self._v2_fallback_retry_until.get(key, 0.0):
+                    self._v2_legacy_fallback.rotate(-1)
+                    continue
                 try:
                     await self._persist_v1_unplaced(raw)
                 except asyncio.CancelledError:
                     raise
                 except Exception as error:
-                    self._v2_retry_until = time.monotonic() + 8.0
+                    failures = self._v2_fallback_failures.get(key, 0) + 1
+                    self._v2_fallback_failures[key] = failures
+                    self._v2_fallback_retry_until[key] = time.monotonic() + min(8.0, 0.5 * 2 ** min(failures - 1, 4))
+                    self._v2_legacy_fallback.rotate(-1)
                     logger.error('Unplaced transcript fallback persist failed type=%s', type(error).__name__)
                 else:
                     self._v2_legacy_fallback.popleft()
-                    self._v2_legacy_fallback_ids.discard(str(raw.get('id') or ''))
+                    self._v2_legacy_fallback_ids.discard(key)
+                    self._v2_fallback_retry_until.pop(key, None)
+                    self._v2_fallback_failures.pop(key, None)
                     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='persist_fallback_recovered').inc()
+                break
+            if getattr(self.host.state, 'capture_timeline_v2', False) and time.monotonic() < self._v2_retry_until:
                 continue
             if not self.segment_buffer and not self.photo_buffer:
                 if self.host.state.speaker_map_dirty and time.monotonic() >= self._flush_backoff_until:

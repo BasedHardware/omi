@@ -98,6 +98,7 @@ from utils.metrics import (
     AUDIO_TIMELINE_REJECT_REASONS,
     OMI_AUDIO_TIMELINE_CALLBACK_ERRORS_TOTAL,
     OMI_AUDIO_TIMELINE_MAPPED_TOTAL,
+    OMI_AUDIO_TIMELINE_ELAPSED_VALIDATION_TOTAL,
     OMI_AUDIO_TIMELINE_PAST_SEND_TOTAL,
     OMI_AUDIO_TIMELINE_PROVIDER_SOCKETS_TOTAL,
     OMI_AUDIO_TIMELINE_REJECTS_TOTAL,
@@ -550,6 +551,13 @@ class ListenReceiver:
         else:
             self._enqueue_clock_positioned_segments(segments)
 
+    @staticmethod
+    def _record_elapsed_validation(provider: str, interval: Optional[Tuple[int, int]], gate: Any) -> None:
+        outcome = gate.classify_capture_speech(*interval) if gate is not None and interval is not None else 'unknown'
+        OMI_AUDIO_TIMELINE_ELAPSED_VALIDATION_TOTAL.labels(
+            provider=audio_timeline_provider_label(provider), outcome=outcome
+        ).inc()
+
     def _build_stt_callbacks(self) -> Tuple[Any, Any, Optional[ProviderEpochTranslator]]:
         """Fresh legacy callbacks bound to one provider epoch's translator.
 
@@ -616,6 +624,9 @@ class ListenReceiver:
             ).inc(),
             owner_at_send=self._proven_send_owner,
             project_times=self.capture_timeline_v2,
+        )
+        epoch.set_validation_callback(
+            lambda provider, interval: self._record_elapsed_validation(provider, interval, self.vad_gate)
         )
         epoch.provider_label = audio_timeline_provider_label(getattr(self.host.stt_service, 'value', None))
 

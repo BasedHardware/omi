@@ -86,6 +86,22 @@ and finalize calls schedule their work on the provider loop. These contracts
 are exercised in `tests/unit/test_soniox_token_boundaries.py`, including the
 downstream transcript merge that inserts spaces between distinct segments.
 
+The managed Soniox leg keeps active VAD gating: after speech it forwards the
+four-second hangover, then withholds silence and sends a keepalive control every
+10 seconds. A VAD boundary also queues `finalize`; the provider emits `<fin>`
+after finalizing already received audio. Neither control carries PCM or adds a
+send span. Soniox's [keepalive](https://soniox.com/docs/stt/rt/connection-keepalive)
+and [manual finalization](https://soniox.com/docs/stt/rt/manual-finalization)
+docs describe this lifecycle, but do not promise an exact timestamp shift across
+a pause. Production final tokens observed 1–30 seconds beyond the cumulative
+sent-PCM axis. For Soniox only, the ledger therefore advances the provider
+position by elapsed capture wall time between accepted sends while recording
+no send span for withheld audio. Text timed inside that hole stays unplaced;
+Modulate and other providers retain their cumulative sent-PCM axis. The
+5/9/34-second managed-chain tests pin the observed model and the exact gated
+PCM payload. A live Soniox timing probe remains necessary to establish whether
+every paused session advances by precisely that duration.
+
 Segments buffered in `realtime_segment_buffers` are sorted by `start` time
 before processing — this corrects non-deterministic WebSocket arrival order
 from providers like Modulate whose internal parallelism can deliver shorter
@@ -1029,6 +1045,32 @@ segment reject denominator. These counts contain no user or session labels.
 A mapped legacy segment follows the existing v1 timestamp path, including the
 active gate's remap for non-passthrough providers; the mapping only attaches a
 private capture window for live speaker identification.
+
+`SONIOX_ELAPSED_AXIS=off|shadow|on` defaults to `shadow`. In shadow, Soniox
+keeps the compact send axis for all placement and speaker windows, exactly as
+`off` does. A separate elapsed-axis map supplies metrics only; it never gates
+window attachment, changes provider PCM, or changes transcript fields. `on`
+allows elapsed-axis placement only after a live timing probe and validation;
+`off` disables the candidate map. Each Soniox candidate and mapped Modulate
+control segment increments `omi_audio_timeline_elapsed_validation_total` by
+`provider` and `outcome=on_speech|on_silence|partial|unknown`. The comparison
+uses bounded raw VAD decisions by capture sample, not the provider send map;
+missing/evicted decisions or unmappable candidates count as `unknown`. Speech
+decisions are stored by input chunk; if a chunk contains both speech and silence
+VAD windows, any overlapping candidate counts as `partial` rather than claiming
+speech for the whole chunk. Buffered VAD windows can straddle input chunks or
+cover only part of one, while the Boolean result is assigned to the whole
+chunk. Thus `on_speech` and `on_silence` can disagree with the exact samples
+of a candidate, even when `partial` is not reported. Also, a positive provider
+interval starting exactly at the latest accepted send's end can receive a
+one-sample tail if its final arrives before the next send; a later send can
+reveal a capture gap and make that same start unplaceable. This boundary
+placement depends on callback order. A shadow calculation failure disables
+validation for that provider epoch and increments
+`omi_audio_timeline_elapsed_shadow_errors_total` once; compact placement and
+accepted sends continue. VAD can
+misclassify speech, so the metric is independent placement evidence rather
+than a substitute for a provider pause/finalize/keepalive timing probe.
 
 V2 keeps every emitted provider segment as text. Intervals crossing a VAD
 discontinuity, missing their owner, or arriving after owner closure are retained
