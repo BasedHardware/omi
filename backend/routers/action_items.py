@@ -71,6 +71,24 @@ CreateActionItemRequest = ActionItemCreateRequest
 UpdateActionItemRequest = ActionItemUpdateRequest
 
 
+def _sanitize_task_relationship_error(exc: Exception, fallback: str) -> str:
+    """Sanitize task relationship conflict details while preserving debug logging."""
+    logger.warning("Task relationship conflict: %s: %s", type(exc).__name__, exc)
+    msg = str(exc).strip()
+    safe_messages = {
+        'goal does not exist',
+        'goal account generation mismatch',
+        'ended goal cannot receive new task links',
+        'workstream does not exist',
+        'workstream account generation mismatch',
+        'task goal_id must match workstream goal_id',
+        'document id belongs to another account generation',
+    }
+    if msg in safe_messages:
+        return msg
+    return fallback
+
+
 def _batch_mutation_response(result, *, locked_ids: Optional[set[str]] = None) -> dict:
     """Preserve legacy success shape unless there is partial-outcome detail.
 
@@ -354,7 +372,8 @@ def create_action_item(
     except FirestoreContentionExhausted as exc:
         raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
     except action_items_db.TaskRelationshipConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        detail = _sanitize_task_relationship_error(exc, 'Task relationship conflict')
+        raise HTTPException(status_code=409, detail=detail) from exc
     action_item = action_items_db.get_action_item(uid, action_item_id)
 
     if not action_item:
@@ -709,7 +728,8 @@ def update_action_item(
     except FirestoreContentionExhausted as exc:
         raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
     except action_items_db.TaskRelationshipConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        detail = _sanitize_task_relationship_error(exc, 'Task relationship conflict')
+        raise HTTPException(status_code=409, detail=detail) from exc
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update action item")
 
@@ -960,7 +980,8 @@ def create_action_items_batch(
     except FirestoreContentionExhausted as exc:
         raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
     except action_items_db.TaskRelationshipConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        detail = _sanitize_task_relationship_error(exc, 'Task relationship conflict')
+        raise HTTPException(status_code=409, detail=detail) from exc
 
     # Fetch created items and send FCM messages
     created_items = []
