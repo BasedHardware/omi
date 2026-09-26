@@ -1184,4 +1184,3 @@ def test_persisted_started_seconds_guards_bool_and_iso():
     assert persisted_started_seconds(None) is None
     assert persisted_started_seconds('not-an-iso-string') is None
     assert persisted_started_seconds([]) is None
-
