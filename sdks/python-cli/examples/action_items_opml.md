@@ -32,8 +32,7 @@ The generated OPML maps Omi fields to standard outline attributes:
 - `text`: The task description.
 - `_status`: `completed` or `open` (mapped from Omi's completed status).
 - `created`: The creation timestamp.
-- `due`: The due date (if present).
-- `category`: The item's category (if present).
+- `due`: The due date (mapped from `due_at`, `due_date`, or `due`).
 
 Example output:
 ```xml
@@ -41,11 +40,11 @@ Example output:
 <opml version="2.0">
   <head>
     <title>Omi Action Items</title>
-    <dateCreated>2024-01-01T12:00:00Z</dateCreated>
+    <dateCreated>2024-01-01T12:00:00+00:00</dateCreated>
   </head>
   <body>
     <outline text="Review Omi recordings" _status="open" created="2024-01-01T10:00:00Z" />
-    <outline text="Send follow-up email" _status="completed" category="work" />
+    <outline text="Send follow-up email" _status="completed" />
   </body>
 </opml>
 ```

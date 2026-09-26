@@ -3,7 +3,7 @@ import json
 import argparse
 from pathlib import Path
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 
 def parse_args():
@@ -25,7 +25,7 @@ def create_opml(action_items):
     # Create head
     head = ET.SubElement(opml, "head")
     ET.SubElement(head, "title").text = "Omi Action Items"
-    ET.SubElement(head, "dateCreated").text = datetime.utcnow().isoformat() + "Z"
+    ET.SubElement(head, "dateCreated").text = datetime.now(timezone.utc).isoformat()
     
     # Create body
     body = ET.SubElement(opml, "body")
@@ -41,8 +41,7 @@ def create_opml(action_items):
         status = "completed" if is_completed else "open"
         
         created = safe_get(item, ["created_at", "created"], "")
-        due = safe_get(item, ["due_date", "due"], "")
-        category = safe_get(item, ["category"], "")
+        due = safe_get(item, ["due_at", "due_date", "due"], "")
         
         # Create outline element
         attribs = {
@@ -53,8 +52,6 @@ def create_opml(action_items):
             attribs["created"] = str(created)
         if due:
             attribs["due"] = str(due)
-        if category:
-            attribs["category"] = str(category)
             
         ET.SubElement(body, "outline", attribs)
         

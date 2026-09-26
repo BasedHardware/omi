@@ -2,7 +2,20 @@ import unittest
 import json
 import os
 import subprocess
-from action_items_to_opml import create_opml, get_opml_string, safe_get, atomic_write
+import importlib.util
+from pathlib import Path
+import xml.etree.ElementTree as ET
+
+# Dynamically load the action_items_to_opml module
+recipe_path = Path(__file__).resolve().parent.parent / "action_items_to_opml.py"
+spec = importlib.util.spec_from_file_location("action_items_to_opml", recipe_path)
+action_items_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(action_items_module)
+
+create_opml = action_items_module.create_opml
+get_opml_string = action_items_module.get_opml_string
+safe_get = action_items_module.safe_get
+atomic_write = action_items_module.atomic_write
 
 class TestActionItemsToOpml(unittest.TestCase):
     def setUp(self):
@@ -19,15 +32,23 @@ class TestActionItemsToOpml(unittest.TestCase):
         if os.path.exists(self.partial_output):
             os.remove(self.partial_output)
 
-    def test_basic_conversion(self):
+    def test_due_at_produces_due(self):
         data = [
-            {"description": "Task 1", "completed": False, "created_at": "2024-01-01"},
+            {"description": "Task Due", "completed": False, "due_at": "2024-12-31T23:59:59Z"}
+        ]
+        opml = create_opml(data)
+        xml_str = get_opml_string(opml)
+        self.assertIn('due="2024-12-31T23:59:59Z"', xml_str)
+        self.assertIn('<outline text="Task Due" _status="open" due="2024-12-31T23:59:59Z" />', xml_str)
+
+    def test_category_not_produced(self):
+        data = [
             {"description": "Task 2", "completed": True, "category": "Work"}
         ]
         opml = create_opml(data)
         xml_str = get_opml_string(opml)
-        self.assertIn('<outline text="Task 1" _status="open" created="2024-01-01" />', xml_str)
-        self.assertIn('<outline text="Task 2" _status="completed" category="Work" />', xml_str)
+        self.assertNotIn("category", xml_str)
+        self.assertIn('<outline text="Task 2" _status="completed" />', xml_str)
 
     def test_xml_escaping(self):
         data = [
@@ -35,7 +56,6 @@ class TestActionItemsToOpml(unittest.TestCase):
         ]
         opml = create_opml(data)
         xml_str = get_opml_string(opml)
-        import xml.etree.ElementTree as ET
         root = ET.fromstring(xml_str.encode('utf-8'))
         outline = root.find('.//outline')
         self.assertIsNotNone(outline)
@@ -53,7 +73,6 @@ class TestActionItemsToOpml(unittest.TestCase):
     def test_empty_input(self):
         opml = create_opml([])
         xml_str = get_opml_string(opml)
-        import xml.etree.ElementTree as ET
         root = ET.fromstring(xml_str.encode('utf-8'))
         outlines = root.findall('.//outline')
         self.assertEqual(len(outlines), 0)
@@ -67,12 +86,10 @@ class TestActionItemsToOpml(unittest.TestCase):
             self.assertEqual(f.read(), "test content")
 
     def test_cli_invocation(self):
-        # Create input json
         with open("test_input.json", "w", encoding="utf-8") as f:
             json.dump([{"description": "CLI Task"}], f)
         
-        # Run CLI
-        subprocess.run(["python", "action_items_to_opml.py", "test_input.json", self.test_output], check=True)
+        subprocess.run(["python", str(recipe_path), "test_input.json", self.test_output], check=True)
         
         self.assertTrue(os.path.exists(self.test_output))
         with open(self.test_output, "r", encoding="utf-8") as f:
