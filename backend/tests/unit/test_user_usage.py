@@ -383,6 +383,47 @@ def test_today_history_leaves_out_last_night_for_user_west_of_utc(mock_db):
     assert result['today']['transcription_seconds'] == 600
 
 
+@pytest.mark.parametrize(
+    'period,now,docs,expected',
+    [
+        (
+            'monthly',
+            datetime(2026, 7, 1, 3, tzinfo=timezone.utc),
+            [
+                {'year': 2026, 'month': 6, 'day': 1, 'hour': 6, 'words_transcribed': 10},
+                {'year': 2026, 'month': 7, 'day': 1, 'hour': 2, 'words_transcribed': 20},
+                {'year': 2026, 'month': 7, 'day': 1, 'hour': 7, 'words_transcribed': 99},
+            ],
+            [('2026-05-31', 10), ('2026-06-30', 20)],
+        ),
+        (
+            'yearly',
+            datetime(2027, 1, 1, 3, tzinfo=timezone.utc),
+            [
+                {'year': 2026, 'month': 1, 'day': 1, 'hour': 6, 'words_transcribed': 10},
+                {'year': 2027, 'month': 1, 'day': 1, 'hour': 2, 'words_transcribed': 20},
+                {'year': 2027, 'month': 1, 'day': 1, 'hour': 8, 'words_transcribed': 99},
+            ],
+            [('2025-12-01', 10), ('2026-12-01', 20)],
+        ),
+    ],
+)
+def test_local_period_buckets_and_totals_match(mock_db, period, now, docs, expected):
+    _setup_hourly_docs(mock_db, docs)
+    result = user_usage.get_current_user_usage('uid', period, tz_name='America/Los_Angeles', now=now)
+    # The first document is outside the local period. Only the second is in it.
+    assert result[period]['words_transcribed'] == 20
+    assert [(row['date'], row['words_transcribed']) for row in result['history']] == [expected[1]]
+
+
+@pytest.mark.parametrize('period', ['monthly', 'yearly'])
+def test_invalid_timezone_keeps_utc_period_buckets(mock_db, period):
+    _setup_hourly_docs(mock_db, _LA_HOURLY_DOCS)
+    now = datetime(2026, 6, 24, 3, tzinfo=timezone.utc)
+    result = user_usage.get_current_user_usage('uid', period, tz_name='Not/AZone', now=now)
+    assert result[period]['transcription_seconds'] == 13245
+
+
 def test_usage_endpoint_serves_the_users_local_day_not_the_utc_day(mock_db, monkeypatch):
     """Behavioural proof through the route the app actually calls.
 

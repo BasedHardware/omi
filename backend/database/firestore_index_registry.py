@@ -1207,6 +1207,23 @@ HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY = FirestoreQuerySpec(
     ),
 )
 
+HOURLY_USAGE_UTC_DAY_QUERY = FirestoreQuerySpec(
+    identifier='hourly_usage_utc_day',
+    collection_group='hourly_usage',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('year', '==', 'year'),
+        FirestoreQueryFilter('month', '==', 'month'),
+        FirestoreQueryFilter('day', '==', 'day'),
+    ),
+    index_fields=(
+        _asc('year'),
+        _asc('month'),
+        _asc('day'),
+        _asc('__name__'),
+    ),
+)
+
 FINALIZATION_OLDEST_NONTERMINAL_QUERY = FirestoreQuerySpec(
     identifier='conversation_finalization_jobs_oldest_nonterminal',
     collection_group='conversation_finalization_jobs',
@@ -1437,6 +1454,7 @@ QUERY_SPECS = (
     MEETING_RECEIPTS_DUE_QUERY,
     NEGATIVE_FEEDBACK_EVENTS_QUERY,
     HOURLY_USAGE_PLAN_ATTRIBUTION_QUERY,
+    HOURLY_USAGE_UTC_DAY_QUERY,
     FIRST_OPEN_FOLDER_CONVERSATION_COUNT_QUERY,
     MESSAGES_BY_APP_ORDERED_QUERY,
     MESSAGES_BY_SESSION_ORDERED_QUERY,
