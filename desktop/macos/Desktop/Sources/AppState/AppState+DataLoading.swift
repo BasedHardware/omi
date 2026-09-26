@@ -306,7 +306,8 @@ extension AppState {
     conversationId: String,
     segmentIds: [String],
     personId: String?,
-    isUser: Bool
+    isUser: Bool,
+    isCurrent: @MainActor () -> Bool = { true }
   ) async -> Bool {
     do {
       try await APIClient.shared.assignSegmentsBulk(
@@ -326,6 +327,7 @@ extension AppState {
       // converges once the session syncs. Failing here surfaced as the
       // "Couldn't assign this speaker" report on Beta.
       log("People: Conversation \(conversationId) not on backend yet; keeping speaker assignment local")
+      guard isCurrent() else { return false }
       // Here the local store is the ONLY holder of the user's decision — if the
       // write did not land (no matching session, no matching segment, or a
       // storage error) reporting success would silently drop the assignment.
@@ -351,15 +353,35 @@ extension AppState {
     // Backend accepted the change — it owns the assignment now. The local
     // mirror is best-effort: a conversation recorded on another device has no
     // local session, and 0 updated rows is expected there.
+    guard isCurrent() else { return true }
     _ = await applySpeakerAssignmentLocally(
       conversationId: conversationId, segmentIds: segmentIds, personId: personId, isUser: isUser)
     return true
   }
 
-  /// The client-side half of a speaker assignment: the in-memory conversation list
-  /// (so the label is fresh on next open) and the local SQLite cache (so it
-  /// survives restarts, and so a not-yet-synced session carries the assignment to
-  /// the backend when it finalizes).
+  /// Apply the same assignment to any conversation copy, including the detail and list.
+  static func assigningSpeaker(
+    _ conversation: ServerConversation, targets: [String], personId: String?, isUser: Bool
+  ) -> ServerConversation {
+    var updated = conversation
+    let parsed = SpeakerAssignmentTargets.parse(targets)
+    let ids = Set(parsed.ids)
+    let orders = Set(parsed.orders)
+    for index in updated.transcriptSegments.indices
+    where ids.contains(updated.transcriptSegments[index].id)
+      || updated.transcriptSegments[index].backendId.map(ids.contains) == true
+      || orders.contains(index)
+    {
+      let old = updated.transcriptSegments[index]
+      updated.transcriptSegments[index] = TranscriptSegment(
+        id: old.id, backendId: old.backendId, text: old.text, speaker: old.speaker,
+        isUser: isUser, personId: isUser ? nil : personId, start: old.start,
+        end: old.end, translations: old.translations)
+    }
+    return updated
+  }
+
+  /// The local SQLite cache survives restarts and carries assignments for pending sessions.
   /// - Returns: whether the SQLite write actually updated at least one segment.
   ///   False means nothing durable holds the assignment (no local session, no
   ///   matching segment, or a storage error).
@@ -371,32 +393,6 @@ extension AppState {
     isUser: Bool
   ) async -> Bool {
     let targets = SpeakerAssignmentTargets.parse(segmentIds)
-    // Update the in-memory conversations list so the label is fresh on next open.
-    // A target may be the segment's local id, its backend id, or a positional
-    // #index:N — all three must land, or the caller's positional targets are
-    // silently dropped on the floor.
-    let idSet = Set(targets.ids)
-    let orderSet = Set(targets.orders)
-    if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
-      for segIdx in conversations[idx].transcriptSegments.indices
-      where idSet.contains(conversations[idx].transcriptSegments[segIdx].id)
-        || conversations[idx].transcriptSegments[segIdx].backendId.map(idSet.contains) == true
-        || orderSet.contains(segIdx)
-      {
-        let old = conversations[idx].transcriptSegments[segIdx]
-        conversations[idx].transcriptSegments[segIdx] = TranscriptSegment(
-          id: old.id,
-          backendId: old.backendId,
-          text: old.text,
-          speaker: old.speaker,
-          isUser: isUser,
-          personId: isUser ? nil : personId,
-          start: old.start,
-          end: old.end,
-          translations: old.translations
-        )
-      }
-    }
     // Also update the local SQLite cache so the assignment survives restarts —
     // and, for a conversation the backend does not have yet, so the finalization
     // sync can carry person_id/is_user up with the session. Awaited: returning

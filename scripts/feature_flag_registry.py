@@ -43,9 +43,10 @@ def load_registry(path: Path) -> dict[str, list[dict[str, Any]]]:
     return _parse_yaml_subset(path)
 
 
-def validate_registry(registry: dict[str, list[dict[str, Any]]]) -> list[str]:
+def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path = ROOT) -> list[str]:
     errors: list[str] = []
     names: dict[str, str] = {}
+    resolved_root = root.resolve()
     if set(registry) != {"flags", "ignore", "retired"}:
         errors.append("registry must contain exactly flags:, ignore:, and retired: sections")
     for section in ("flags", "ignore", "retired"):
@@ -81,6 +82,20 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]]) -> list[str]:
                     errors.append(f"{label}: review_by is required for experiment/rollout")
                 if entry.get("lifecycle") in {"ops_kill", "config_switch"} and "review_by" in entry:
                     errors.append(f"{label}: ops_kill/config_switch must omit review_by")
+                prereg = entry.get("prereg")
+                if isinstance(prereg, str) and prereg.strip():
+                    candidate = Path(prereg)
+                    resolved = (resolved_root / candidate).resolve()
+                    if candidate.is_absolute():
+                        errors.append(f"{label}: prereg must be a repo-relative path: {prereg}")
+                    elif not resolved.is_relative_to(resolved_root):
+                        errors.append(f"{label}: prereg escapes the repository root: {prereg}")
+                    elif not resolved.is_file():
+                        errors.append(f"{label}: prereg file does not exist: {prereg}")
+                elif "prereg" in entry:
+                    errors.append(f"{label}: prereg must be a nonempty repo-relative path")
+                elif entry.get("lifecycle") == "experiment" and entry.get("decision") != "kill":
+                    errors.append(f"{label}: prereg is required for experiments")
                 ph = entry.get("posthog")
                 if entry.get("kind") == "posthog":
                     if not isinstance(ph, dict) or ph.get("row") not in {"expected", "absent"} or ph.get("role") not in POSTHOG_ROLES:
@@ -93,8 +108,15 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]]) -> list[str]:
                 if not isinstance(entry.get("reason"), str) or not entry["reason"].strip():
                     errors.append(f"{label}: ignore requires reason")
             else:
-                if entry.get("kind") != "posthog" or entry.get("posthog") != {"row": "delete"}:
-                    errors.append(f"{label}: retired names require kind: posthog and posthog row: delete")
+                kind = entry.get("kind")
+                if kind == "posthog":
+                    if entry.get("posthog") != {"row": "delete"}:
+                        errors.append(f"{label}: retired posthog rows require posthog row: delete")
+                elif kind == "hardcoded":
+                    if "posthog" in entry:
+                        errors.append(f"{label}: retired hardcoded entries must omit posthog")
+                else:
+                    errors.append(f"{label}: retired requires kind: posthog or hardcoded")
                 if not isinstance(entry.get("reason"), str) or not entry["reason"].strip():
                     errors.append(f"{label}: retired requires reason")
                 try:

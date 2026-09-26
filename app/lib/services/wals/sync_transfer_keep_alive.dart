@@ -4,28 +4,40 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/utils/logger.dart';
 
-/// Android-only refcount around the recording-transfer foreground service.
+/// Mobile refcount around bounded native recording-transfer execution.
 ///
 /// Acquiring the first ref starts [SyncTransferForegroundService] (dataSync FGS
-/// + PARTIAL_WAKE_LOCK) so BLE/cloud WAL drains survive screen-off (#5221).
-/// The last release, [releaseAll], or engine teardown stops it. iOS and tests
-/// that do not inject an Android seam are no-ops.
+/// + PARTIAL_WAKE_LOCK) on Android so BLE/cloud WAL drains survive screen-off
+/// (#5221). On iOS it owns a finite UIApplication background task. The last
+/// release, [releaseAll], or engine teardown stops the native lease.
 class SyncTransferKeepAlive {
   SyncTransferKeepAlive({
     bool Function()? isAndroid,
+    bool Function()? isIOS,
     Future<void> Function()? start,
     Future<void> Function()? stop,
+    void Function(Future<dynamic> Function(MethodCall)? handler)? installNativeHandler,
   })  : _isAndroid = isAndroid ?? _defaultIsAndroid,
+        _isIOS = isIOS ?? _defaultIsIOS,
         _start = start,
-        _stop = stop;
+        _stop = stop {
+    // Production uses the channel for both directions. Tests that replace the
+    // native start/stop calls need no binary messenger unless they explicitly
+    // inject a handler installer.
+    if (_isIOS() && (installNativeHandler != null || (start == null && stop == null))) {
+      (installNativeHandler ?? channel.setMethodCallHandler)(_handleNativeCall);
+    }
+  }
 
   static final SyncTransferKeepAlive instance = SyncTransferKeepAlive();
 
   static const MethodChannel channel = MethodChannel('com.friend.ios/sync_transfer');
 
   static bool _defaultIsAndroid() => !kIsWeb && Platform.isAndroid;
+  static bool _defaultIsIOS() => !kIsWeb && Platform.isIOS;
 
   final bool Function() _isAndroid;
+  final bool Function() _isIOS;
   final Future<void> Function()? _start;
   final Future<void> Function()? _stop;
 
@@ -35,6 +47,15 @@ class SyncTransferKeepAlive {
   int get refCount => _refs;
 
   bool get isHeld => _refs > 0;
+
+  Future<dynamic> _handleNativeCall(MethodCall call) async {
+    if (call.method != 'expired') return null;
+    _refs = 0;
+    final arguments = call.arguments;
+    final reason = arguments is Map ? arguments['reason'] : null;
+    Logger.debug('SyncTransferKeepAlive: native lease ended (${reason ?? 'expired'})');
+    return null;
+  }
 
   Future<void> acquire() async {
     _refs++;
@@ -58,7 +79,7 @@ class SyncTransferKeepAlive {
   }
 
   Future<void> _invokeStart() async {
-    if (!_isAndroid()) return;
+    if (!_isAndroid() && !_isIOS()) return;
     try {
       final start = _start;
       if (start != null) {
@@ -72,7 +93,7 @@ class SyncTransferKeepAlive {
   }
 
   Future<void> _invokeStop() async {
-    if (!_isAndroid()) return;
+    if (!_isAndroid() && !_isIOS()) return;
     try {
       final stop = _stop;
       if (stop != null) {
