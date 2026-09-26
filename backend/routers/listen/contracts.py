@@ -49,6 +49,10 @@ def persisted_started_seconds(started_at: Any) -> Optional[float]:
             return datetime.fromisoformat(started_at).timestamp()
         except ValueError:
             return None
+    # NB: bool is a subclass of int — exclude it explicitly so boolean flags
+    # never masquerade as epoch timestamps (True -> 1.0, i.e. 1970).
+    if isinstance(started_at, bool):
+        return None
     if isinstance(started_at, (int, float)):
         return float(started_at)
     return None
