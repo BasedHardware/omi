@@ -118,7 +118,7 @@ async def _safe_body(request: Any) -> dict:
 
 def _clean_str(val: Any) -> str:
     """Strip whitespace from string and return clean str."""
-    if val is None:
+    if val is None or isinstance(val, bool):
         return ""
     return str(val).strip()
 
@@ -130,9 +130,9 @@ def _clean_id(val: Any) -> str:
 
 def _coerce_int_bounds(val: Any, default: int = 10, min_val: int = 1, max_val: int = 100) -> int:
     """Coerce value to integer and clamp within bounds."""
+    if isinstance(val, bool) or val is None:
+        return default
     try:
-        if val is None:
-            return default
         num = int(val)
         return max(min_val, min(num, max_val))
     except (ValueError, TypeError):
@@ -753,6 +753,8 @@ async def tool_create_wro(request: Request):
         if not product_name:
             return ChatToolResponse(error="Product name is required")
 
+        if isinstance(quantity_raw, bool):
+            return ChatToolResponse(error="Quantity must be a valid positive integer")
         try:
             quantity = int(quantity_raw)
             if quantity <= 0:
@@ -761,11 +763,13 @@ async def tool_create_wro(request: Request):
             return ChatToolResponse(error="Quantity must be a valid positive integer")
 
         fulfillment_center_id = None
-        if fc_id_raw is not None and str(fc_id_raw).strip():
+        if fc_id_raw is not None and not isinstance(fc_id_raw, bool) and str(fc_id_raw).strip():
             try:
                 fulfillment_center_id = int(fc_id_raw)
             except (ValueError, TypeError):
                 return ChatToolResponse(error="fulfillment_center_id must be a valid integer")
+        elif isinstance(fc_id_raw, bool):
+            return ChatToolResponse(error="fulfillment_center_id must be a valid integer")
 
         headers = get_shipbob_headers(uid)
         if not headers:

@@ -1440,6 +1440,11 @@ checks:
     triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13997: create_wro and get_inventory returned the first item whose name contained the caller's or was contained by it, so a receiving order could be opened against a different SKU than the one named and still report success; the suite existed on main with no lane running it"
+  - id: shipbob-input-coercion-and-bool-guards-tests
+    command: ["python3", "plugins/omi-shipbob-app/test_input_coercion_and_bool_guards.py"]
+    triggers: ["plugins/omi-shipbob-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "ShipBob app must reject boolean quantities, fulfillment center IDs, and UIDs, and clamp integer limits safely"
   - id: shopify-app-limit-input-tests
     command: ["python3", "plugins/omi-shopify-app/test_limit_inputs.py"]
     triggers: ["plugins/omi-shopify-app/**", ".github/checks-manifest.yaml"]
