@@ -53,11 +53,13 @@ UID label, audio, embeddings, or identity receipts are copied there. This
 subcollection has one fixed-ID child and a fixed set of scalar fields, so its
 size is bounded independently of transcript length. No backend API or client
 reads it: the only production code reference is the shadow writer, and
-conversation reads load only the parent document. A parent-read transaction
-refuses a metric write after deletion;
+conversation reads load only the parent document. The result transaction reads
+the durable account-deletion marker and the conversation parent, refusing a
+write once account deletion starts or the conversation is deleted;
 the conversation delete path sweeps children again after deleting the parent
 to catch a child committed during its first enumeration. Account deletion's
-recursive user wipe removes the same subtree. Prometheus labels contain only
+recursive user wipe removes results committed before its deletion marker.
+Prometheus labels contain only
 the closed outcome vocabulary.
 
 Outcomes are `ok`, `failed`, `timeout`, `partial_audio`, `no_audio`, and

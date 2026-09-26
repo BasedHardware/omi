@@ -117,10 +117,8 @@ async def _run_later(uid: str, conversation_id: str) -> None:
 
 def _reserve_budget(conversation_id: str, seconds: float) -> str:
     hours = float(os.getenv('TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS', '0'))
-    if hours <= 0:
-        return 'budget_exhausted'
     requested = max(1, int(seconds * 1000 + 0.999))
-    limit = int(hours * 3600 * 1000)
+    limit = max(0, int(hours * 3600 * 1000))
     day = datetime.now(timezone.utc).strftime('%Y%m%d')
     result = redis_client.eval(
         _RESERVE_SCRIPT,
@@ -364,9 +362,15 @@ def _run_shadow(uid: str, conversation_id: str) -> None:
 def _store_result(uid: str, conversation_id: str, result: dict[str, Any]) -> None:
     parent = db.collection('users').document(uid).collection('conversations').document(conversation_id)
     child = parent.collection('transcription_shadow_results').document('v1')
+    deletion_marker = db.collection('account_deletions').document(uid)
 
     @firestore.transactional
     def write_if_current(transaction: Any) -> None:
+        # Account deletion persists this marker before its recursive sweep.
+        # Reading it in the same transaction fences a child commit after that
+        # sweep has passed the conversation, even while the parent still exists.
+        if deletion_marker.get(transaction=transaction).exists:
+            return
         snapshot = parent.get(transaction=transaction)
         if not snapshot.exists or (snapshot.to_dict() or {}).get('deleted'):
             return

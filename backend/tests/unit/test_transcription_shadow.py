@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 from models.transcript_segment import TranscriptSegment
 from utils.conversations import transcription_shadow as shadow
@@ -96,3 +97,45 @@ def test_budget_reservation_distinguishes_duplicate_from_exhaustion(monkeypatch)
     for code, expected in ((0, 'budget_exhausted'), (1, 'reserved'), (2, 'duplicate')):
         monkeypatch.setattr(shadow.redis_client, 'eval', lambda *_args, code=code: code)
         assert shadow._reserve_budget('synthetic-conversation', 10) == expected
+
+
+def test_zero_budget_still_checks_existing_reservation(monkeypatch):
+    monkeypatch.setenv('TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS', '0')
+    calls = []
+
+    def eval_reservation(*args):
+        calls.append(args)
+        return 2  # Existing same-day reservation wins over the zero cap.
+
+    monkeypatch.setattr(shadow.redis_client, 'eval', eval_reservation)
+    assert shadow._reserve_budget('synthetic-conversation', 10) == 'duplicate'
+    assert len(calls) == 1
+    assert calls[0][-1] == 0
+
+
+def test_result_write_is_fenced_by_account_deletion_intent(monkeypatch):
+    client = MagicMock()
+    user = MagicMock()
+    parent = user.collection.return_value.document.return_value
+    marker = MagicMock()
+    client.collection.side_effect = lambda name: {
+        'users': SimpleNamespace(document=lambda _uid: user),
+        'account_deletions': SimpleNamespace(document=lambda _uid: marker),
+    }[name]
+    transaction = client.transaction.return_value
+    monkeypatch.setattr(shadow, 'db', client)
+    monkeypatch.setattr(shadow.firestore, 'transactional', lambda fn: fn)
+    marker.get.return_value.exists = True
+
+    shadow._store_result('synthetic-uid', 'synthetic-conversation', {'outcome': 'ok'})
+
+    marker.get.assert_called_once_with(transaction=transaction)
+    parent.get.assert_not_called()
+    transaction.set.assert_not_called()
+
+    marker.get.return_value.exists = False
+    parent.get.return_value.exists = True
+    parent.get.return_value.to_dict.return_value = {}
+    shadow._store_result('synthetic-uid', 'synthetic-conversation', {'outcome': 'ok'})
+    parent.get.assert_called_once_with(transaction=transaction)
+    transaction.set.assert_called_once_with(parent.collection.return_value.document.return_value, {'outcome': 'ok'})
