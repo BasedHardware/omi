@@ -154,3 +154,39 @@ def test_memory_pretty_preserves_markup_like_content(authed_profile, respx_mock,
     result = cli_runner.invoke(app, ["--no-color", *command])
     assert result.exit_code == 0, result.output
     assert "[draft] literal [/bold] :warning:" in result.stdout
+
+
+@pytest.mark.parametrize("bad_content", ["", "   ", "a" * 501, ("a" * 500) + "   "])
+def test_memory_create_rejects_empty_or_oversized_content(authed_profile, cli_runner, bad_content: str) -> None:
+    result = cli_runner.invoke(app, ["memory", "create", bad_content])
+    assert result.exit_code == 1
+    assert "Invalid content" in result.output or "Content too long" in result.output
+
+
+@pytest.mark.parametrize("bad_tag", ["", "   "])
+def test_memory_create_rejects_empty_tag(authed_profile, cli_runner, bad_tag: str) -> None:
+    result = cli_runner.invoke(app, ["memory", "create", "valid content", "--tag", bad_tag])
+    assert result.exit_code == 1
+    assert "Invalid tag" in result.output
+
+
+@pytest.mark.parametrize("bad_content", ["", "   ", "a" * 501, ("a" * 500) + "   "])
+def test_memory_update_rejects_empty_or_oversized_content(authed_profile, cli_runner, bad_content: str) -> None:
+    result = cli_runner.invoke(app, ["memory", "update", "m1", "--content", bad_content])
+    assert result.exit_code == 1
+    assert "Invalid content" in result.output or "Content too long" in result.output
+
+
+def test_memory_update_rejects_empty_tag(authed_profile, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["memory", "update", "m1", "--tag", "  "])
+    assert result.exit_code == 1
+    assert "Invalid tag" in result.output
+
+
+def test_memory_create_escapes_created_id_markup(authed_profile, respx_mock, cli_runner) -> None:
+    respx_mock.post("/v1/dev/user/memories").respond(
+        json={"id": "[draft]bad[/bold]id", "content": "valid memory", "tags": []}
+    )
+    result = cli_runner.invoke(app, ["memory", "create", "valid memory"])
+    assert result.exit_code == 0, result.output
+    assert "[draft]bad[/bold]id" in result.output

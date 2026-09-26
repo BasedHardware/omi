@@ -93,6 +93,27 @@ def get_memory(
             offset += page_size
 
 
+def _validate_content(content: str) -> str:
+    """Validate content length against backend boundary, then strip whitespace."""
+    if len(content) > 500:
+        raise UsageError(
+            message="Content too long",
+            detail=f"Memory content cannot exceed 500 characters (got {len(content)}).",
+        )
+    cleaned = content.strip()
+    if not cleaned:
+        raise UsageError(message="Invalid content", detail="Memory content cannot be empty or whitespace.")
+    return cleaned
+
+
+def _validate_tags(tags: list[str]) -> list[str]:
+    """Validate and strip tags, rejecting any empty/whitespace tags."""
+    cleaned_tags = [t.strip() for t in tags]
+    if any(not t for t in cleaned_tags):
+        raise UsageError(message="Invalid tag", detail="Tags cannot be empty or whitespace.")
+    return cleaned_tags
+
+
 @app.command("create", help="Create a new memory.")
 def create_memory(
     typer_ctx: typer.Context,
@@ -102,12 +123,15 @@ def create_memory(
     tag: list[str] = typer.Option([], "--tag", help="Tag (repeat for multiple)."),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    body: dict[str, object] = {"content": content, "visibility": visibility.value, "tags": tag}
+    cleaned_content = _validate_content(content)
+    cleaned_tags = _validate_tags(tag)
+
+    body: dict[str, object] = {"content": cleaned_content, "visibility": visibility.value, "tags": cleaned_tags}
     if category is not None:
         body["category"] = category.value
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/memories", json_body=body)
-    ctx.renderer.success(f"Memory created: [bold]{result.get('id')}[/bold]")
+    ctx.renderer.success(f"Memory created: [bold]{escape(str(result.get('id', '')))}[/bold]")
     ctx.renderer.emit(result, title="memory")
 
 
@@ -115,7 +139,7 @@ def create_memory(
 def update_memory(
     typer_ctx: typer.Context,
     memory_id: str = typer.Argument(..., help="Memory ID."),
-    content: Optional[str] = typer.Option(None, "--content", help="New content."),
+    content: Optional[str] = typer.Option(None, "--content", help="New content (1-500 chars)."),
     category: Optional[MemoryCategory] = typer.Option(None, "--category", help="New category."),
     visibility: Optional[MemoryVisibility] = typer.Option(None, "--visibility", help="public or private."),
     tag: Optional[list[str]] = typer.Option(None, "--tag", help="Replace tags (repeat for multiple)."),
@@ -123,13 +147,13 @@ def update_memory(
     ctx = _ctx(typer_ctx)
     body: dict[str, object] = {}
     if content is not None:
-        body["content"] = content
+        body["content"] = _validate_content(content)
     if category is not None:
         body["category"] = category.value
     if visibility is not None:
         body["visibility"] = visibility.value
     if tag is not None:
-        body["tags"] = list(tag)
+        body["tags"] = _validate_tags(tag)
     if not body:
         raise UsageError(
             message="No fields to update", detail="Provide at least one of --content/--category/--visibility/--tag."
