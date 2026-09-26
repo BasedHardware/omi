@@ -22614,6 +22614,20 @@
         "title": "ReferralLinkResponse",
         "type": "object"
       },
+      "RejectAppRequest": {
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RejectAppRequest",
+        "type": "object"
+      },
       "ReorderFoldersRequest": {
         "description": "Request model for reordering folders.",
         "properties": {
@@ -37049,6 +37063,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RejectAppRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
