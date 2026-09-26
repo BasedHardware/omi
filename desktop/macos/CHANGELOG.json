@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.402",
+      "date": "2026-09-26",
+      "changes": [
+        "Improved chat scrolling reliability and added read-only automation that blocks actions which can change app or account data."
+      ]
+    },
+    {
       "version": "0.12.401",
       "date": "2026-09-26",
       "changes": [
