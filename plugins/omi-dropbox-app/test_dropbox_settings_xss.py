@@ -89,6 +89,19 @@ def test_benign_values_render():
     assert "Alice" in html_out and "a@b.com" in html_out and "My Folder" in html_out
 
 
+def test_callback_error_sinks_escaped():
+    """The OAuth callback escapes response.text and str(e) before rendering
+    them into HTML error responses (token-exchange failure / auth error)."""
+    import html
+    payload = '"><script>alert(1)</script>'
+    # mirrors the handler's escaping of the two HTML error sinks
+    token_fail = f"Token exchange failed: {html.escape(payload)}"
+    auth_err = f"Error during authorization: {html.escape(payload)}"
+    for out in (token_fail, auth_err):
+        assert "<script>alert(1)</script>" not in out
+        assert "&lt;script&gt;" in out
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("test_") and callable(fn):

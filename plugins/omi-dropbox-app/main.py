@@ -471,7 +471,10 @@ async def auth_callback(
         )
 
         if response.status_code != 200:
-            return HTMLResponse(f"Token exchange failed: {response.text}", status_code=400)
+            return HTMLResponse(
+                f"Token exchange failed: {html.escape(response.text)}",
+                status_code=400,
+            )
 
         token_data = response.json()
         access_token = token_data.get("access_token")
@@ -511,7 +514,10 @@ async def auth_callback(
         return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
     except Exception as e:
-        return HTMLResponse(f"Error during authorization: {str(e)}", status_code=500)
+        return HTMLResponse(
+            f"Error during authorization: {html.escape(str(e))}",
+            status_code=500,
+        )
 
 
 @app.get("/disconnect")
