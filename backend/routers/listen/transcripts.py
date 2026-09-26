@@ -109,7 +109,7 @@ class TranscriptProcessor:
         self._flush_failures = 0
         self._flush_backoff_until = 0.0
         self._v2_retry_counts: Dict[str, int] = {}
-        self._v2_legacy_fallback: deque[Dict[str, Any]] = deque()
+        self._v2_legacy_fallback: deque[Dict[str, Any]] = deque(maxlen=host.limits.max_segment_buffer_size)
         self._v2_legacy_fallback_ids: set[str] = set()
         self._v2_retry_until = 0.0
         self._v2_committed_ids: set[str] = set()
@@ -132,19 +132,36 @@ class TranscriptProcessor:
                 # The v2 batch path has exhausted its bounded budget. Keep a
                 # pristine copy until the ordinary segment transaction can
                 # persist it without claiming any capture placement.
-                self._v2_legacy_fallback.append(dict(raw))
-                self._v2_legacy_fallback_ids.add(key)
-                record_fallback(
-                    component='other',
-                    from_mode='v2_segment_persist',
-                    to_mode='v1_unplaced_persist',
-                    reason='other',
-                    outcome='degraded',
-                )
+                self._queue_v2_fallback(raw, reason='other')
                 continue
             self._v2_retry_counts[key] = attempts
             self._v2_retry_until = max(self._v2_retry_until, time.monotonic() + min(8.0, 0.5 * 2 ** (attempts - 1)))
-            self.segment_buffer.appendleft(raw)
+            if len(self.segment_buffer) == self.segment_buffer.maxlen:
+                # A concurrent provider callback may have filled the buffer
+                # while this batch was in flight. Never let maxlen evict text.
+                self._queue_v2_fallback(raw)
+            else:
+                self.segment_buffer.appendleft(raw)
+
+    def _queue_v2_fallback(self, raw: Dict[str, Any], *, reason: str = 'capacity_full') -> None:
+        """Move overflow to the bounded, unplaced legacy persistence lane."""
+        key = str(raw.get('id') or '')
+        if key in self._v2_legacy_fallback_ids:
+            return
+        if len(self._v2_legacy_fallback) == self._v2_legacy_fallback.maxlen:
+            OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='persist_fallback_exhausted').inc()
+            logger.error('Audio-timeline transcript capacity exhausted; refusing provider batch')
+            raise RuntimeError('Audio-timeline transcript persistence capacity exhausted')
+        self._v2_retry_counts.pop(key, None)
+        self._v2_legacy_fallback.append(dict(raw))
+        self._v2_legacy_fallback_ids.add(key)
+        record_fallback(
+            component='other',
+            from_mode='v2_segment_persist',
+            to_mode='v1_unplaced_persist',
+            reason=reason,
+            outcome='degraded',
+        )
 
     async def _persist_v1_unplaced(self, raw: Dict[str, Any]) -> None:
         """Use the legacy segment transaction, keeping the SEND owner and ID."""
@@ -205,11 +222,29 @@ class TranscriptProcessor:
         return data
 
     def enqueue(self, segments: List[Dict[str, Any]]) -> None:
-        if getattr(self.host.state, 'capture_timeline_v2', False) and self.segment_buffer.maxlen is not None:
-            # deque(maxlen=...) silently discards old provider text on
-            # overflow. V2 retains it and lets the persistence loop drain.
-            self.segment_buffer = deque(self.segment_buffer)
-        self.segment_buffer.extend(segments)
+        if not getattr(self.host.state, 'capture_timeline_v2', False):
+            self.segment_buffer.extend(segments)
+            return
+        # The callback is synchronous. Admit the whole batch before changing
+        # either queue; if both bounded lanes are full, fail visibly rather
+        # than silently evicting a previously accepted transcript.
+        pending_cap = self.segment_buffer.maxlen
+        fallback_cap = self._v2_legacy_fallback.maxlen
+        if pending_cap is None or fallback_cap is None:
+            raise RuntimeError('Audio-timeline transcript queues must be bounded')
+        free_v2 = pending_cap - len(self.segment_buffer)
+        free_fallback = fallback_cap - len(self._v2_legacy_fallback)
+        if len(segments) > free_v2 + free_fallback:
+            OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='persist_fallback_exhausted').inc()
+            logger.error('Audio-timeline transcript capacity exhausted; refusing provider batch')
+            raise RuntimeError('Audio-timeline transcript persistence capacity exhausted')
+        for raw in segments:
+            if not raw.get('id'):
+                raw['id'] = str(uuid.uuid4())
+        for raw in segments[:free_v2]:
+            self.segment_buffer.append(raw)
+        for raw in segments[free_v2:]:
+            self._queue_v2_fallback(raw)
 
     async def _on_translation_ready(
         self, segment_id: str, translated_text: str, _detected_language: str, conversation_id: str

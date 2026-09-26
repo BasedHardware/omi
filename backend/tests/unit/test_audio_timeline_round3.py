@@ -322,6 +322,14 @@ def _processor(monkeypatch, store, *, current: Optional[str], photos_sink=None):
     def _row(cid):
         return store.rows.get(('users', UID, 'conversations', cid)) or {}
 
+    def _decoded_row(cid):
+        data = dict(_row(cid))
+        if data and data.get('transcript_segments') is not None:
+            data['transcript_segments'] = conversations_db._decode_transcript_segments_strict(
+                UID, data.get('transcript_segments', []), bool(data.get('transcript_segments_compressed'))
+            )
+        return data
+
     class _Persistence:
         @staticmethod
         async def call(fn, *args, **kwargs):
@@ -342,11 +350,11 @@ def _processor(monkeypatch, store, *, current: Optional[str], photos_sink=None):
                 _row(cid).update(patch)
                 return True
             if fn is conversations_db.get_conversation:
-                return dict(_row(args[1]))
+                return _decoded_row(args[1])
             raise AssertionError(f'unexpected persistence call: {fn}')
 
     async def loader(cid):
-        return dict(_row(cid))
+        return _decoded_row(cid)
 
     websocket_sent = []
 
@@ -378,14 +386,15 @@ def _processor(monkeypatch, store, *, current: Optional[str], photos_sink=None):
         send_event=lambda event: None,
         emit_speaker_suggestion=lambda *a, **k: None,
         complete_live_transcription=lambda: None,
+        limits=SimpleNamespace(max_segment_buffer_size=1000),
     )
     processor = object.__new__(TranscriptProcessor)
     processor.host = host
     processor.cache = ConversationCache(loader)
-    processor.segment_buffer = deque()
+    processor.segment_buffer = deque(maxlen=host.limits.max_segment_buffer_size)
     processor.photo_buffer = deque()
     processor._v2_retry_counts = {}
-    processor._v2_legacy_fallback = deque()
+    processor._v2_legacy_fallback = deque(maxlen=host.limits.max_segment_buffer_size)
     processor._v2_legacy_fallback_ids = set()
     processor._v2_retry_until = 0.0
     processor._v2_committed_ids = set()
@@ -467,6 +476,58 @@ async def test_exhausted_v2_text_persists_once_after_legacy_store_recovers(monke
     assert written[0]['audio_alignment'] == 'unplaced'
     assert row['audio_timeline'] == {'version': 2}
     assert not processor._v2_legacy_fallback
+
+
+def test_v2_buffers_spill_without_eviction_and_refuse_full_batch(monkeypatch):
+    store = StrictFirestore()
+    processor, _ = _processor(monkeypatch, store, current='conv-fallback')
+    processor.host.state.capture_timeline_v2 = True
+    processor.segment_buffer = deque(maxlen=2)
+    processor._v2_legacy_fallback = deque(maxlen=2)
+    raws = [_v2_segment(str(index), T0 + index, T0 + index + 1, 'conv-fallback') for index in range(4)]
+
+    processor.enqueue(raws[:3])
+    assert [s['id'] for s in processor.segment_buffer] == ['0', '1']
+    assert [s['id'] for s in processor._v2_legacy_fallback] == ['2']
+    retry = _v2_segment('retry', T0 + 5, T0 + 6, 'conv-fallback')
+    processor._queue_v2_retry([retry])  # buffer full: retry spills, no silent maxlen eviction
+    assert [s['id'] for s in processor.segment_buffer] == ['0', '1']
+    assert [s['id'] for s in processor._v2_legacy_fallback] == ['2', 'retry']
+    with pytest.raises(RuntimeError, match='capacity exhausted'):
+        processor.enqueue([raws[3]])
+    assert [s['id'] for s in processor.segment_buffer] == ['0', '1']
+    assert [s['id'] for s in processor._v2_legacy_fallback] == ['2', 'retry']
+
+
+async def test_unplaced_retry_after_committed_write_with_lost_ack_is_idempotent(monkeypatch):
+    store = StrictFirestore()
+    row = _seed_row(store, 'conv-fallback', started_at=datetime.fromtimestamp(T0, tz=timezone.utc))
+    processor, _ = _processor(monkeypatch, store, current='conv-fallback')
+    processor.host.state.capture_timeline_v2 = True
+    raw = _v2_segment('ack-lost', T0 + 1, T0 + 2, 'conv-fallback', text='store once')
+    await processor._persist_v1_unplaced(_v2_segment('earlier', T0, T0 + 1, 'conv-fallback', text='earlier words'))
+    original_call = processor.host.persistence.call
+    first = True
+
+    async def lose_ack_after_commit(fn, *args, **kwargs):
+        nonlocal first
+        result = await original_call(fn, *args, **kwargs)
+        if fn is conversations_db.update_conversation_segments and first:
+            first = False
+            raise RuntimeError('ack lost after commit')
+        return result
+
+    processor.host.persistence.call = lose_ack_after_commit
+    with pytest.raises(RuntimeError, match='ack lost'):
+        await processor._persist_v1_unplaced(raw)
+    await processor._persist_v1_unplaced(raw)
+    written = conversations_db._decode_transcript_segments_strict(
+        UID, row.get('transcript_segments', []), bool(row.get('transcript_segments_compressed'))
+    )
+    assert [(s['id'], s['text']) for s in written] == [
+        ('earlier', 'earlier words'),
+        ('ack-lost', 'store once'),
+    ]
 
 
 async def test_resumed_v1_row_is_never_marked_v2(monkeypatch):

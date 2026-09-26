@@ -70,6 +70,14 @@ limit bounds accumulation; non-final and translated tokens do not enter the
 spoken transcript. Segment times use the provider's `start_ms` and `end_ms`,
 minus speech-profile preroll, rather than extending to the next token's start.
 
+Audio-timeline v2 retains at most the configured segment-buffer limit in each
+of its pending and unplaced fallback queues. If pending text fills the first
+queue, new text enters the legacy transaction as unplaced, retaining its ID
+and SEND conversation owner. A retry after an ambiguous commit filters IDs
+already stored inside that transaction. If both queues fill during a store
+outage, admission raises an explicit capacity error and emits a metric; the
+callback cannot buffer transcript indefinitely.
+
 When VAD requests finalization, Soniox queues a `{"type":"finalize"}` text
 control after accepted audio. Receive completion and synchronous `finish()`
 flush the last committed word exactly once; asynchronous draining awaits that
