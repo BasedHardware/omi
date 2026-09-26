@@ -55,9 +55,11 @@ class MemoryItem extends StatelessWidget {
     final editable = memoryIsEditable(memory);
     final Widget memoryWidget = GestureDetector(
       // Every memory opens: editable ones into the edit sheet, the rest read-only.
-      onTap:
-          editable ? () => onTap(context, memory, provider) : () => showMemoryQuickEditSheet(context, memory, provider),
-      onLongPress: () => _showRowMenu(context, editable),
+      onTap: editable
+          ? () => onTap(context, memory, provider)
+          : () => showMemoryQuickEditSheet(context, memory, provider),
+      // A locked row's content is behind the paywall overlay; the row menu would show it in full.
+      onLongPress: memory.isLocked ? null : () => _showRowMenu(context, editable),
       child: AnimatedContainer(
         duration: OmiMotion.of(context).standard,
         margin: const EdgeInsets.only(bottom: 12),
@@ -65,13 +67,7 @@ class MemoryItem extends StatelessWidget {
         decoration: BoxDecoration(
           color: highlighted ? OmiColors.surface3 : AppStyles.backgroundSecondary,
           borderRadius: OmiRadius.xlAll,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2))],
         ),
         child: Stack(
           children: [
@@ -97,17 +93,16 @@ class MemoryItem extends StatelessWidget {
                               ),
                             ),
                           ],
-                          Expanded(
-                            child: Text(
-                              memory.content.decodeString,
-                              style: AppStyles.body,
-                            ),
-                          ),
+                          Expanded(child: Text(memory.content.decodeString, style: AppStyles.body)),
                           if (editable)
                             Padding(
                               padding: const EdgeInsetsDirectional.only(start: 12),
-                              child: Icon(Icons.edit_outlined,
-                                  size: 16, color: OmiColors.textTertiary, semanticLabel: context.l10n.editMemoryTitle),
+                              child: Icon(
+                                Icons.edit_outlined,
+                                size: 16,
+                                color: OmiColors.textTertiary,
+                                semanticLabel: context.l10n.editMemoryTitle,
+                              ),
                             ),
                         ],
                       ),
@@ -132,18 +127,12 @@ class MemoryItem extends StatelessWidget {
                       if (provenanceLabel != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            provenanceLabel,
-                            style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
-                          ),
+                          child: Text(provenanceLabel, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
                         ),
                       if (temporalLabel != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            temporalLabel,
-                            style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
-                          ),
+                          child: Text(temporalLabel, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
                         ),
                     ],
                   ),
@@ -153,8 +142,12 @@ class MemoryItem extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (memory.isBaseline) ...[
-                      Icon(Icons.flag,
-                          color: OmiColors.textSecondary, size: 20, semanticLabel: context.l10n.baselineMemory),
+                      Icon(
+                        Icons.flag,
+                        color: OmiColors.textSecondary,
+                        size: 20,
+                        semanticLabel: context.l10n.baselineMemory,
+                      ),
                       const SizedBox(width: AppStyles.spacingS),
                     ],
                     if (memory.conversationId != null) ...[
@@ -192,13 +185,8 @@ class MemoryItem extends StatelessWidget {
                           showMemoryQuickEditSheet(context, memory, provider, readOnly: true);
                           return;
                         }
-                        PlatformManager.instance.analytics.paywallOpened(
-                          'Action Item',
-                        );
-                        routeToPage(
-                          context,
-                          const UsagePage(showUpgradeDialog: true),
-                        );
+                        PlatformManager.instance.analytics.paywallOpened('Action Item');
+                        routeToPage(context, const UsagePage(showUpgradeDialog: true));
                         return;
                       },
                       child: Container(
@@ -231,10 +219,7 @@ class MemoryItem extends StatelessWidget {
       onDismissed: (direction) => _delete(context),
       background: Container(
         margin: const EdgeInsets.only(bottom: 12),
-        decoration: const BoxDecoration(
-          color: OmiColors.danger,
-          borderRadius: OmiRadius.xlAll,
-        ),
+        decoration: const BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.xlAll),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
         child: const Icon(Icons.delete_outline, color: Colors.white),
@@ -264,7 +249,10 @@ class MemoryItem extends StatelessWidget {
         ),
         if (editable) ...[
           OmiMenuAction(
-              icon: Icons.edit_outlined, label: l10n.edit, onSelected: () => onTap(context, memory, provider)),
+            icon: Icons.edit_outlined,
+            label: l10n.edit,
+            onSelected: () => onTap(context, memory, provider),
+          ),
           OmiMenuAction(
             icon: Icons.delete_outline,
             label: l10n.delete,
@@ -336,10 +324,7 @@ class MemoryItem extends StatelessWidget {
             onPressed: inFlight
                 ? null
                 : () async {
-                    final persisted = await provider.setMemoryUse(
-                      memory,
-                      action,
-                    );
+                    final persisted = await provider.setMemoryUse(memory, action);
                     if (!persisted && context.mounted) {
                       OmiFeedback.error(context, context.l10n.somethingWentWrong);
                     }
@@ -397,9 +382,7 @@ class MemoryItem extends StatelessWidget {
             onPressed: inFlight
                 ? null
                 : () async {
-                    final persisted = await provider.revertSupersededFact(
-                      memory,
-                    );
+                    final persisted = await provider.revertSupersededFact(memory);
                     if (!persisted && context.mounted) {
                       OmiFeedback.error(context, context.l10n.somethingWentWrong);
                     }
@@ -415,10 +398,7 @@ class MemoryItem extends StatelessWidget {
   }
 
   /// Resolves a [DeviceProvenanceType] to a localized label, or null if none.
-  String? _resolveProvenanceLabel(
-    BuildContext context,
-    DeviceProvenanceType? type,
-  ) {
+  String? _resolveProvenanceLabel(BuildContext context, DeviceProvenanceType? type) {
     switch (type) {
       case DeviceProvenanceType.thisDevice:
         return context.l10n.memoryThisDevice;
@@ -464,21 +444,13 @@ class MemoryItem extends StatelessWidget {
     Navigator.of(context).pop();
 
     if (conversation != null) {
-      final conversationProvider = Provider.of<ConversationProvider>(
-        context,
-        listen: false,
-      );
-      final detailProvider = Provider.of<ConversationDetailProvider>(
-        context,
-        listen: false,
-      );
+      final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
+      final detailProvider = Provider.of<ConversationDetailProvider>(context, listen: false);
 
       // One derivation for both the group insert and the selected day, in local
       // time — inserting under the UTC day and selecting another key opened the
       // detail page on a day nothing was grouped under (#10980).
-      final conversationDate = conversationProvider.ensureConversationInGroup(
-        conversation,
-      );
+      final conversationDate = conversationProvider.ensureConversationInGroup(conversation);
       detailProvider.updateConversation(conversation.id, conversationDate);
 
       routeToPage(context, ConversationDetailPage(conversation: conversation));
