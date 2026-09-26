@@ -11794,4 +11794,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return '$saved ఆడియో సేవ్ అయింది ($totalలో)';
   }
+
+  @override
+  String get voiceIntroTitle => 'మిమ్మల్ని మీరు పరిచయం చేసుకోండి';
+
+  @override
+  String get memoryLabel => 'జ్ఞాపకం';
 }

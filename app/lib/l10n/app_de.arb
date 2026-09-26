@@ -3700,5 +3700,7 @@
     "greetingEvening": "Guten Abend",
     "unlimitedBadge": "Unbegrenzt",
     "voiceSetupTaskSubline": "Damit Omi weiß, dass du es bist · etwa eine Minute",
-    "audioPartiallySaved": "{saved} von {total} Audio gespeichert"
+    "audioPartiallySaved": "{saved} von {total} Audio gespeichert",
+    "voiceIntroTitle": "Stell dich vor",
+    "memoryLabel": "Erinnerung"
 }

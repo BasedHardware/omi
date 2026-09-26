@@ -11651,4 +11651,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return 'נשמרו $saved מתוך $total של שמע';
   }
+
+  @override
+  String get voiceIntroTitle => 'הציגו את עצמכם';
+
+  @override
+  String get memoryLabel => 'זיכרון';
 }

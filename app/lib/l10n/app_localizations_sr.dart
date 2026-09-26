@@ -11758,4 +11758,10 @@ class AppLocalizationsSr extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return 'Сачувано $saved од $total звука';
   }
+
+  @override
+  String get voiceIntroTitle => 'Представите се';
+
+  @override
+  String get memoryLabel => 'Успомена';
 }

@@ -11807,4 +11807,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return 'Зачувано $saved од $total аудио';
   }
+
+  @override
+  String get voiceIntroTitle => 'Претставете се';
+
+  @override
+  String get memoryLabel => 'Спомен';
 }

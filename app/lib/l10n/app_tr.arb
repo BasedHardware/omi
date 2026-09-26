@@ -3735,5 +3735,7 @@
     "greetingEvening": "İyi akşamlar",
     "unlimitedBadge": "Sınırsız",
     "voiceSetupTaskSubline": "Omi sizi tanısın diye · yaklaşık bir dakika",
-    "audioPartiallySaved": "{saved} ses kaydedildi ({total} içinden)"
+    "audioPartiallySaved": "{saved} ses kaydedildi ({total} içinden)",
+    "voiceIntroTitle": "Kendinizi tanıtın",
+    "memoryLabel": "Anı"
 }

@@ -11781,4 +11781,10 @@ class AppLocalizationsHr extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return 'Spremljeno $saved od $total zvuka';
   }
+
+  @override
+  String get voiceIntroTitle => 'Predstavite se';
+
+  @override
+  String get memoryLabel => 'Uspomena';
 }

@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/action_items/widgets/task_row_parts.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -257,12 +259,12 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
                   minHeight: 6,
                   color: OmiColors.textPrimary,
                   backgroundColor: OmiColors.textPrimary.withValues(alpha: 0.24),
-                  semanticsLabel: copy('title'),
+                  semanticsLabel: context.l10n.voiceIntroTitle,
                   semanticsValue: '${(flow.progress * 100).round()}%',
                 ))),
       ]),
       const SizedBox(height: 28),
-      Text(copy('hint'), style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.5)),
+      OmiBalancedText(copy('hint'), style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.5)),
       const SizedBox(height: 20),
       Text(_prompt,
           key: const Key('introduction_prompt'),
@@ -275,7 +277,13 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
             child: TextButton(
               key: const Key('introduction_another'),
               onPressed: ready && !flow.isGoalPrompt ? flow.changePrompt : null,
-              style: TextButton.styleFrom(foregroundColor: OmiColors.textSecondary),
+              // Flush with the prompt's text edge, still a full-size target.
+              style: TextButton.styleFrom(
+                foregroundColor: OmiColors.textSecondary,
+                padding: EdgeInsets.zero,
+                minimumSize: const Size(44, 44),
+                alignment: Alignment.centerLeft,
+              ),
               child: Text(copy('another')),
             )),
       const SizedBox(height: 24),
@@ -326,56 +334,32 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
   }
 
   Widget _review() => Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Semantics(header: true, child: Text(copy('review'), style: OmiType.title1)),
+        Semantics(header: true, child: OmiBalancedText(copy('review'), style: OmiType.title1)),
         const SizedBox(height: 12),
-        Text(copy('reviewHint'), style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.5)),
+        OmiBalancedText(copy('reviewHint'),
+            style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.5)),
         const SizedBox(height: 20),
         for (var i = 0; i < flow.answers.length; i++) ...[
-          DecoratedBox(
-            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-            child: Padding(
-                padding: const EdgeInsets.fromLTRB(4, 8, 16, 8),
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Checkbox(
-                      value: flow.answers[i].keep,
-                      activeColor: OmiColors.accent,
-                      checkColor: OmiColors.onAccent,
-                      onChanged:
-                          flow.busy || flow.answers[i].locked ? null : (value) => flow.setKeep(i, value ?? false)),
-                  Expanded(
-                      child: TextFormField(
-                    key: Key('introduction_memory_${flow.answers[i].id}_${flow.answers[i].editRevision}'),
-                    initialValue: flow.answers[i].text,
-                    minLines: 1,
-                    maxLines: 5,
-                    maxLength: flow.answers[i].isGoal ? 500 : null,
-                    enabled: !flow.busy && !flow.answers[i].locked,
-                    onChanged: (value) => flow.edit(i, value),
-                    style: TextStyle(color: OmiColors.textPrimary, height: 1.5),
-                    decoration: InputDecoration(
-                        border: InputBorder.none,
-                        counterText: '',
-                        labelText: flow.answers[i].isGoal ? context.l10n.myGoal : context.l10n.memories,
-                        labelStyle: TextStyle(color: OmiColors.textSecondary)),
-                  )),
-                  if (flow.answers[i].saved)
-                    Padding(
-                        padding: const EdgeInsets.only(top: 14),
-                        child: Icon(Icons.check, color: OmiColors.textPrimary, size: 18)),
-                ])),
-          ),
+          _answerCard(i),
           if (flow.answers[i].isGoal &&
               flow.answers[i].originalText != null &&
               flow.answers[i].originalText != flow.answers[i].text &&
               !flow.answers[i].locked)
-            Align(
+            Padding(
+              // Lined up with the card's text, under the goal it rewords.
+              padding: const EdgeInsets.only(left: 36, top: 2),
+              child: Align(
                 alignment: Alignment.centerLeft,
-                child: TextButton(
+                child: OmiButton.tertiary(
                   key: Key('introduction_original_${flow.answers[i].id}'),
+                  label: copy('originalGoal'),
+                  icon: Icons.undo_rounded,
+                  size: OmiButtonSize.compact,
                   onPressed: flow.busy ? null : () => flow.useOriginalGoal(i),
-                  child: Text(copy('originalGoal'), style: TextStyle(color: OmiColors.textSecondary)),
-                )),
-          const SizedBox(height: 12),
+                ),
+              ),
+            ),
+          const SizedBox(height: 10),
         ],
         if (flow.answers.isEmpty)
           Text(copy('noMemories'), style: TextStyle(color: OmiColors.textSecondary, height: 1.5)),
@@ -405,6 +389,73 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
           Text(copy('memoryError'), style: TextStyle(color: OmiColors.textPrimary, height: 1.5)),
       ]);
 
+  /// One answer, as a task is drawn in To do: the round tick keeps it (it is saved), an empty ring
+  /// leaves it out; what it becomes ("Memory", "My goal") over the text, which edits in place.
+  Widget _answerCard(int i) {
+    final answer = flow.answers[i];
+    final keep = answer.keep;
+    final canToggle = !flow.busy && !answer.locked;
+    final label = answer.isGoal ? context.l10n.myGoal : context.l10n.memoryLabel;
+    return DecoratedBox(
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 4, 16, 10),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Semantics(
+            checked: keep,
+            enabled: canToggle,
+            label: label,
+            onTap: canToggle ? () => flow.setKeep(i, !keep) : null,
+            excludeSemantics: true,
+            child: GestureDetector(
+              key: Key('introduction_keep_${answer.id}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: canToggle
+                  ? () {
+                      OmiHaptics.selection();
+                      flow.setKeep(i, !keep);
+                    }
+                  : null,
+              child: SizedBox(width: 48, height: 48, child: Center(child: TaskCompletionMark(completed: keep))),
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(label, style: OmiType.caption.copyWith(color: OmiColors.textSecondary)),
+                const SizedBox(height: 2),
+                TextFormField(
+                  key: Key('introduction_memory_${answer.id}_${answer.editRevision}'),
+                  initialValue: answer.text,
+                  minLines: 1,
+                  maxLines: 5,
+                  maxLength: answer.isGoal ? 500 : null,
+                  enabled: !flow.busy && !answer.locked,
+                  onChanged: (value) => flow.edit(i, value),
+                  // Left out, it reads as left out.
+                  style:
+                      OmiType.body.copyWith(color: keep ? OmiColors.textPrimary : OmiColors.textTertiary, height: 1.4),
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                    counterText: '',
+                  ),
+                ),
+              ]),
+            ),
+          ),
+          if (answer.saved)
+            Padding(
+              padding: const EdgeInsets.only(top: 12, left: 8),
+              child: Icon(Icons.cloud_done_outlined, color: OmiColors.textTertiary, size: 18),
+            ),
+        ]),
+      ),
+    );
+  }
+
   List<Widget> _actions() {
     // Scaffold removes consumed insets from its body MediaQuery. Read the
     // view to retain keyboard visibility after the body has been resized.
@@ -425,11 +476,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
                 : copy(_attemptedSave && flow.error != 'goalLong' ? 'retryRemaining' : 'saveFinish'),
             flow.busy ? null : () => unawaited(_saveAndFinish()),
             'introduction_save_all'),
-        if (!_attemptedSave && !editing) ...[
-          const SizedBox(height: 8),
-          Text(copy('saveHint'),
-              textAlign: TextAlign.center, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-        ],
         if (flow.voiceError == 'short' && !editing)
           TextButton(
             key: const Key('introduction_add_sample'),
@@ -493,6 +539,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
       animation: flow,
       builder: (context, _) {
         final done = flow.stage == IntroductionStage.done;
+        final reviewing = !done && flow.promptIndex >= GuidedVoiceController.promptCount;
         return PopScope(
             canPop: !flow.saving,
             child: ColoredBox(
@@ -500,36 +547,55 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
                 child: SafeArea(
                     child: Column(children: [
                   Expanded(
-                      child: SingleChildScrollView(
-                    key: const Key('introduction_scroll'),
-                    controller: _scrollController,
-                    keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                    // Text at the step layout's 20pt inset, as on every other step; in first run it
-                    // starts under the progress bar and back button, where every step's content does.
-                    padding: EdgeInsets.fromLTRB(20, widget.flowSource == 'first_run' ? 64 : 20, 20, 20),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-                      Semantics(header: true, child: Text(copy('title'), style: OmiType.title1)),
-                      if (flow.promptIndex == 0 && flow.stage == IntroductionStage.ready) ...[
-                        const SizedBox(height: 12),
-                        Text(copy('intro'),
-                            style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.5)),
-                      ],
-                      const SizedBox(height: 28),
-                      if (done) ...[
-                        Icon(Icons.check_circle_outline, size: 64, color: OmiColors.textPrimary),
-                        const SizedBox(height: 24),
-                        _status(flow.savedMemoryCount > 0 ? copy('savedMemories') : copy('noMemories'), success: true),
-                        if (flow.goalSaved) ...[const SizedBox(height: 16), _status(copy('savedGoal'), success: true)],
-                        if (flow.voiceSaved) ...[
-                          const SizedBox(height: 16),
-                          _status(copy('savedVoice'), success: true)
-                        ],
-                      ] else if (flow.promptIndex >= GuidedVoiceController.promptCount)
-                        _review()
-                      else
-                        _recording(),
-                    ]),
-                  )),
+                      // Content fades out at the top and bottom edges as it scrolls under the back
+                      // button and the buttons, rather than being cut off by them.
+                      child: ShaderMask(
+                          blendMode: BlendMode.dstIn,
+                          shaderCallback: (rect) => LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: const [Colors.transparent, Colors.black, Colors.black, Colors.transparent],
+                                stops: [0, math.min(0.5, 20 / rect.height), math.max(0.5, 1 - 28 / rect.height), 1],
+                              ).createShader(rect),
+                          child: SingleChildScrollView(
+                            key: const Key('introduction_scroll'),
+                            controller: _scrollController,
+                            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                            // Text at the step layout's 20pt inset, as on every other step; in first run it
+                            // starts under the progress bar and back button, where every step's content does.
+                            padding: EdgeInsets.fromLTRB(20, widget.flowSource == 'first_run' ? 64 : 20, 20, 20),
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+                              // One title per stage: the review has its own ("Here is what I heard").
+                              if (!reviewing) ...[
+                                Semantics(
+                                    header: true,
+                                    child: OmiBalancedText(context.l10n.voiceIntroTitle, style: OmiType.title1)),
+                                if (flow.promptIndex == 0 && flow.stage == IntroductionStage.ready) ...[
+                                  const SizedBox(height: 12),
+                                  OmiBalancedText(copy('intro'),
+                                      style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.5)),
+                                ],
+                                const SizedBox(height: 28),
+                              ],
+                              if (done) ...[
+                                Icon(Icons.check_circle_outline, size: 64, color: OmiColors.textPrimary),
+                                const SizedBox(height: 24),
+                                _status(flow.savedMemoryCount > 0 ? copy('savedMemories') : copy('noMemories'),
+                                    success: true),
+                                if (flow.goalSaved) ...[
+                                  const SizedBox(height: 16),
+                                  _status(copy('savedGoal'), success: true)
+                                ],
+                                if (flow.voiceSaved) ...[
+                                  const SizedBox(height: 16),
+                                  _status(copy('savedVoice'), success: true)
+                                ],
+                              ] else if (reviewing)
+                                _review()
+                              else
+                                _recording(),
+                            ]),
+                          ))),
                   // The step layout's footer: 16pt sides, 8pt above the bottom safe area, so the
                   // buttons sit where Continue does on every other step.
                   Padding(

@@ -11230,5 +11230,7 @@
     "greetingEvening": "மாலை வணக்கம்",
     "unlimitedBadge": "வரம்பற்றது",
     "voiceSetupTaskSubline": "நீங்கள்தான் என்று Omi அறிய · சுமார் ஒரு நிமிடம்",
-    "audioPartiallySaved": "{saved} ஆடியோ சேமிக்கப்பட்டது ({total} இல்)"
+    "audioPartiallySaved": "{saved} ஆடியோ சேமிக்கப்பட்டது ({total} இல்)",
+    "voiceIntroTitle": "உங்களை அறிமுகப்படுத்துங்கள்",
+    "memoryLabel": "நினைவு"
 }

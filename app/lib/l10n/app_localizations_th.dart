@@ -11678,4 +11678,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return 'บันทึกเสียงแล้ว $saved จาก $total';
   }
+
+  @override
+  String get voiceIntroTitle => 'แนะนำตัวเอง';
+
+  @override
+  String get memoryLabel => 'ความทรงจำ';
 }

@@ -11757,4 +11757,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return '$saved آڈیو محفوظ ہوا ($total میں سے)';
   }
+
+  @override
+  String get voiceIntroTitle => 'اپنا تعارف کرائیں';
+
+  @override
+  String get memoryLabel => 'یاد';
 }

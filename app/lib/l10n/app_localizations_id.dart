@@ -11757,4 +11757,10 @@ class AppLocalizationsId extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return '$saved dari $total audio tersimpan';
   }
+
+  @override
+  String get voiceIntroTitle => 'Perkenalkan diri Anda';
+
+  @override
+  String get memoryLabel => 'Kenangan';
 }

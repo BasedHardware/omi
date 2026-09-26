@@ -11530,4 +11530,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return '已保存 $saved／$total 的音频';
   }
+
+  @override
+  String get voiceIntroTitle => '介绍一下你自己';
+
+  @override
+  String get memoryLabel => '回忆';
 }

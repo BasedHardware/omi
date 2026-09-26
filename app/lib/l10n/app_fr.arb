@@ -3735,5 +3735,7 @@
     "greetingEvening": "Bonsoir",
     "unlimitedBadge": "Illimité",
     "voiceSetupTaskSubline": "Pour qu’Omi sache que c’est vous · environ une minute",
-    "audioPartiallySaved": "Audio enregistré : {saved} sur {total}"
+    "audioPartiallySaved": "Audio enregistré : {saved} sur {total}",
+    "voiceIntroTitle": "Présentez-vous",
+    "memoryLabel": "Souvenir"
 }

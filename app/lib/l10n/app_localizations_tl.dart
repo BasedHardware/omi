@@ -11847,4 +11847,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return '$saved sa $total na audio ang na-save';
   }
+
+  @override
+  String get voiceIntroTitle => 'Ipakilala ang sarili';
+
+  @override
+  String get memoryLabel => 'Alaala';
 }

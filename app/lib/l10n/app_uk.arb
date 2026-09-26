@@ -3700,5 +3700,7 @@
     "greetingEvening": "Добрий вечір",
     "unlimitedBadge": "Безліміт",
     "voiceSetupTaskSubline": "Щоб Omi знав, що це ви · близько хвилини",
-    "audioPartiallySaved": "Збережено {saved} аудіо з {total}"
+    "audioPartiallySaved": "Збережено {saved} аудіо з {total}",
+    "voiceIntroTitle": "Представтеся",
+    "memoryLabel": "Спогад"
 }

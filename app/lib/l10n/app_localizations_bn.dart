@@ -11747,4 +11747,10 @@ class AppLocalizationsBn extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return '$saved অডিও সংরক্ষিত ($total এর মধ্যে)';
   }
+
+  @override
+  String get voiceIntroTitle => 'নিজের পরিচয় দিন';
+
+  @override
+  String get memoryLabel => 'স্মৃতি';
 }

@@ -11230,5 +11230,7 @@
     "greetingEvening": "Magandang gabi",
     "unlimitedBadge": "Unlimited",
     "voiceSetupTaskSubline": "Para malaman ng Omi na ikaw ito · mga isang minuto",
-    "audioPartiallySaved": "{saved} sa {total} na audio ang na-save"
+    "audioPartiallySaved": "{saved} sa {total} na audio ang na-save",
+    "voiceIntroTitle": "Ipakilala ang sarili",
+    "memoryLabel": "Alaala"
 }

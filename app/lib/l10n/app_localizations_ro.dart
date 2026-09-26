@@ -11799,4 +11799,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return 'Audio salvat: $saved din $total';
   }
+
+  @override
+  String get voiceIntroTitle => 'Prezintă-te';
+
+  @override
+  String get memoryLabel => 'Amintire';
 }

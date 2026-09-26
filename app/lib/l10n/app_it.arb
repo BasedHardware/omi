@@ -3700,5 +3700,7 @@
     "greetingEvening": "Buonasera",
     "unlimitedBadge": "Illimitato",
     "voiceSetupTaskSubline": "Così Omi sa che sei tu · circa un minuto",
-    "audioPartiallySaved": "Audio salvato: {saved} su {total}"
+    "audioPartiallySaved": "Audio salvato: {saved} su {total}",
+    "voiceIntroTitle": "Presentati",
+    "memoryLabel": "Ricordo"
 }

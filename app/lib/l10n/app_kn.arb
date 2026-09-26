@@ -11230,5 +11230,7 @@
     "greetingEvening": "ಶುಭ ಸಂಜೆ",
     "unlimitedBadge": "ಸೀಮಾ ರಹಿತ",
     "voiceSetupTaskSubline": "ನೀವೇ ಎಂದು Omi ತಿಳಿಯಲು · ಸುಮಾರು ಒಂದು ನಿಮಿಷ",
-    "audioPartiallySaved": "{saved} ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ ({total} ರಲ್ಲಿ)"
+    "audioPartiallySaved": "{saved} ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ ({total} ರಲ್ಲಿ)",
+    "voiceIntroTitle": "ನಿಮ್ಮನ್ನು ಪರಿಚಯಿಸಿಕೊಳ್ಳಿ",
+    "memoryLabel": "ಸ್ಮೃತಿ"
 }

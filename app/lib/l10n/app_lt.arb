@@ -3700,5 +3700,7 @@
     "greetingEvening": "Labas vakaras",
     "unlimitedBadge": "Neribojamas",
     "voiceSetupTaskSubline": "Kad Omi žinotų, kad tai jūs · apie minutę",
-    "audioPartiallySaved": "Išsaugota {saved} iš {total} garso"
+    "audioPartiallySaved": "Išsaugota {saved} iš {total} garso",
+    "voiceIntroTitle": "Prisistatykite",
+    "memoryLabel": "Prisiminimas"
 }

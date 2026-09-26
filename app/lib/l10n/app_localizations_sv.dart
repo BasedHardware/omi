@@ -11753,4 +11753,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return '$saved av $total ljud sparat';
   }
+
+  @override
+  String get voiceIntroTitle => 'Presentera dig';
+
+  @override
+  String get memoryLabel => 'Minne';
 }

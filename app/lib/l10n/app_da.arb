@@ -3742,5 +3742,7 @@
     "greetingEvening": "Godaften",
     "unlimitedBadge": "Ubegrænset",
     "voiceSetupTaskSubline": "Så Omi ved, at det er dig · cirka et minut",
-    "audioPartiallySaved": "{saved} af {total} lyd gemt"
+    "audioPartiallySaved": "{saved} af {total} lyd gemt",
+    "voiceIntroTitle": "Præsentér dig",
+    "memoryLabel": "Minde"
 }

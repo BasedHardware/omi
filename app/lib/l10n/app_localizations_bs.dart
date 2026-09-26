@@ -11771,4 +11771,10 @@ class AppLocalizationsBs extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return 'Sačuvano $saved od $total zvuka';
   }
+
+  @override
+  String get voiceIntroTitle => 'Predstavite se';
+
+  @override
+  String get memoryLabel => 'Uspomena';
 }

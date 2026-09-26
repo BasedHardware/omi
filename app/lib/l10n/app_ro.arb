@@ -3700,5 +3700,7 @@
     "greetingEvening": "Bună seara",
     "unlimitedBadge": "Nelimitat",
     "voiceSetupTaskSubline": "Ca Omi să știe că ești tu · cam un minut",
-    "audioPartiallySaved": "Audio salvat: {saved} din {total}"
+    "audioPartiallySaved": "Audio salvat: {saved} din {total}",
+    "voiceIntroTitle": "Prezintă-te",
+    "memoryLabel": "Amintire"
 }

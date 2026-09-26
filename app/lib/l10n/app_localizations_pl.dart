@@ -11780,4 +11780,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return 'Zapisano $saved z $total dźwięku';
   }
+
+  @override
+  String get voiceIntroTitle => 'Przedstaw się';
+
+  @override
+  String get memoryLabel => 'Wspomnienie';
 }

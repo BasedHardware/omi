@@ -11552,4 +11552,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return '保存された音声：$saved（全$total）';
   }
+
+  @override
+  String get voiceIntroTitle => '自己紹介しましょう';
+
+  @override
+  String get memoryLabel => '記憶';
 }

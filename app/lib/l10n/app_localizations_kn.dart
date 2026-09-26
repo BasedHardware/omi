@@ -11782,4 +11782,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return '$saved ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ ($total ರಲ್ಲಿ)';
   }
+
+  @override
+  String get voiceIntroTitle => 'ನಿಮ್ಮನ್ನು ಪರಿಚಯಿಸಿಕೊಳ್ಳಿ';
+
+  @override
+  String get memoryLabel => 'ಸ್ಮೃತಿ';
 }

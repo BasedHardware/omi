@@ -14063,5 +14063,13 @@
                 "type": "String"
             }
         }
+    },
+    "voiceIntroTitle": "Introduce yourself",
+    "@voiceIntroTitle": {
+        "description": "Title of the guided voice introduction (say a few sentences so Omi learns your voice and what matters to you)"
+    },
+    "memoryLabel": "Memory",
+    "@memoryLabel": {
+        "description": "Label above one remembered fact (singular of Memories), e.g. on the voice introduction review"
     }
 }

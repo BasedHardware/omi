@@ -3700,5 +3700,7 @@
     "greetingEvening": "Buenas noches",
     "unlimitedBadge": "Ilimitado",
     "voiceSetupTaskSubline": "Para que Omi sepa que eres tú · un minuto, más o menos",
-    "audioPartiallySaved": "Audio guardado: {saved} de {total}"
+    "audioPartiallySaved": "Audio guardado: {saved} de {total}",
+    "voiceIntroTitle": "Preséntate",
+    "memoryLabel": "Recuerdo"
 }

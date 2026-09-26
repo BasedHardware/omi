@@ -11792,4 +11792,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return 'Mentett hang: $saved / $total';
   }
+
+  @override
+  String get voiceIntroTitle => 'Mutatkozz be';
+
+  @override
+  String get memoryLabel => 'Emlék';
 }

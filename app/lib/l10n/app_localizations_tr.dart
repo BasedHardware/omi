@@ -11760,4 +11760,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return '$saved ses kaydedildi ($total içinden)';
   }
+
+  @override
+  String get voiceIntroTitle => 'Kendinizi tanıtın';
+
+  @override
+  String get memoryLabel => 'Anı';
 }

@@ -11763,4 +11763,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String audioPartiallySaved(String saved, String total) {
     return 'Išsaugota $saved iš $total garso';
   }
+
+  @override
+  String get voiceIntroTitle => 'Prisistatykite';
+
+  @override
+  String get memoryLabel => 'Prisiminimas';
 }
