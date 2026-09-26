@@ -76,7 +76,8 @@ class MemoryItem extends StatelessWidget {
       // Every memory opens: editable ones into the edit sheet, the rest read-only.
       onTap:
           editable ? () => onTap(context, memory, provider) : () => showMemoryQuickEditSheet(context, memory, provider),
-      onLongPress: () => _showRowMenu(context, editable),
+      // A locked row's content is behind the paywall overlay; the row menu would show it in full.
+      onLongPress: memory.isLocked ? null : () => _showRowMenu(context, editable),
       child: AnimatedContainer(
         duration: OmiMotion.of(context).standard,
         margin: EdgeInsets.only(bottom: last ? 12 : 0),

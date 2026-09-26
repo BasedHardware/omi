@@ -840,6 +840,8 @@ async def extract_speaker_samples(
             if not seg or seg.get('person_id') != person_id or seg.get('is_user'):
                 logger.warning(f"Segment {seg_id} not found in conversation {uid} {conversation_id}")
                 continue
+            if seg.get('audio_alignment') == 'unplaced':
+                continue
 
             segment_start = seg.get('start')
             segment_end = seg.get('end')
@@ -860,6 +862,7 @@ async def extract_speaker_samples(
                             prev_seg.get('speaker_id') != speaker_id
                             or prev_seg.get('person_id') != person_id
                             or prev_seg.get('is_user')
+                            or prev_seg.get('audio_alignment') == 'unplaced'
                         ):
                             break
                         prev_start = prev_seg.get('start')

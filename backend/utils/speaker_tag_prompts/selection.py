@@ -122,6 +122,9 @@ def _runs(segments: Sequence[Mapping[str, Any]], decided_segments: set) -> List[
         current.clear()
 
     for segment in segments:
+        if segment.get('audio_alignment') == 'unplaced':
+            flush()
+            continue
         if segment['id'] in decided_segments:
             flush()
             continue
@@ -131,6 +134,7 @@ def _runs(segments: Sequence[Mapping[str, Any]], decided_segments: set) -> List[
             if (
                 segment['speaker_id'] != previous['speaker_id']
                 or _identity(segment) != _identity(previous)
+                or segment.get('audio_capture_run') != previous.get('audio_capture_run')
                 or gap > MAX_GAP_SECONDS
             ):
                 flush()

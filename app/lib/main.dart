@@ -439,7 +439,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         _appSessionTelemetry.recordResumed();
         _performanceTelemetry.setForeground(true);
         PlatformManager.instance.analytics.recordTelemetryHealth();
-        unawaited(PlatformManager.instance.analytics.refreshExperiments());
       }
       unawaited(_refreshAccountCutoverThenWakeUploads());
     } else if (state == AppLifecycleState.paused) {

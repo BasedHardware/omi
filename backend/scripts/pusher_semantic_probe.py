@@ -68,6 +68,10 @@ DISCARD_KEEP_AUDIO_PASSES = 8
 ALIGNMENT_DELIVERED_SILENCE_SECONDS = 5.0
 ALIGNMENT_INTERARRIVAL_GAP_SECONDS = 4.0
 ALIGNMENT_COVERAGE_TOLERANCE_SECONDS = 0.001
+# Private-cloud chunks upload asynchronously after finalization (batches up to
+# 60 s old), so coverage is polled rather than read once at terminal.
+ALIGNMENT_COVERAGE_WAIT_SECONDS = 150
+ALIGNMENT_COVERAGE_POLL_SECONDS = 5
 
 
 class ProbeError(RuntimeError):
@@ -294,6 +298,21 @@ def _http_json(url: str, token: str) -> tuple[int, dict[str, Any] | None]:
     return status, payload if isinstance(payload, dict) else None
 
 
+def _epoch_seconds(value: Any) -> float | None:
+    """Wall-epoch seconds of an API datetime (ISO string, naive = UTC) or number, else None."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp()
+    return None
+
+
 def _alignment_covered(spans: list[Any], start: float, end: float) -> bool:
     """Union-cover [start, end) with the conversation's validated chunk spans."""
     merged: list[list[float]] = []
@@ -319,6 +338,19 @@ def _alignment_covered(spans: list[Any], start: float, end: float) -> bool:
             return True
         remaining = finish
     return False
+
+
+def _alignment_word_counts(segments: list[Any], expected_phrase: str) -> tuple[int, int]:
+    """Check that two fixture sends did not become many durable copies."""
+    expected = 2 * len(expected_phrase.split())
+    observed = sum(
+        len(_normalize(item.get("text")).split()) for item in segments if isinstance(item, dict) and item.get("text")
+    )
+    return observed, expected
+
+
+def _alignment_word_count_ok(observed: int, expected: int) -> bool:
+    return expected > 0 and expected // 2 <= observed <= expected * 3 // 2
 
 
 def _http_json_method(url: str, token: str, method: str = "GET") -> tuple[int, dict[str, Any] | None]:
@@ -467,6 +499,10 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
     marker_ok: bool | None = None
     speaker_identity_ok: bool | None = None
     live_owner_segment: bool | None = None
+    candidate_pusher_observed: bool | None = None
+    conversation_id: str | None = None
+    live_word_count: int | None = None
+    expected_word_count: int | None = None
     try:
         token = _read_token(args.bearer_token_file)
         fixture = load_fixture()
@@ -474,6 +510,14 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
         if not isinstance(deployment_receipt, dict) or not deployment_receipt.get("source_sha"):
             raise ProbeError("deployment_receipt")
         base = args.api_url.rstrip("/")
+        parsed_base = urllib.parse.urlparse(base)
+        local_test = (
+            args.allow_local_http
+            and parsed_base.scheme == "http"
+            and parsed_base.hostname in {"127.0.0.1", "localhost"}
+        )
+        if base != "https://api.omiapi.com" and not local_test:
+            raise ProbeError("dev_api_url")
         status, sync_state = await asyncio.to_thread(_http_json_method, f"{base}/v1/users/private-cloud-sync", token)
         enabled = bool(sync_state and sync_state.get("private_cloud_sync_enabled"))
         if status != 200:
@@ -499,24 +543,57 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
         finally:
             hold.set()
         live_segments = await listen_task
-        quoted = urllib.parse.quote(conversation_id, safe="")
-        status, conversation = await asyncio.to_thread(_http_json_method, f"{base}/v1/conversations/{quoted}", token)
-        if status != 200 or not conversation or conversation.get("id") != conversation_id:
-            raise ProbeError("consumer_readback")
-        marker_ok = (conversation.get("audio_timeline") or {}).get("version") == 2
-        if not marker_ok:
-            raise ProbeError("audio_timeline_marker")
-        windows = sorted(
-            (float(item["start"]), float(item["end"]))
-            for item in conversation.get("transcript_segments") or []
-            if isinstance(item, dict) and item.get("start") is not None and item.get("end") is not None
+        await _observe_candidate_pusher(
+            deployment_receipt, conversation_id=conversation_id, project=args.project, namespace=args.namespace
         )
-        spans: list[Any] = []
-        for audio_file in conversation.get("audio_files") or []:
-            spans.extend(audio_file.get("chunk_spans") or [])
-        coverage_ok = bool(spans) and all(_alignment_covered(spans, start, end) for start, end in windows)
-        if not coverage_ok:
-            raise ProbeError("span_coverage")
+        candidate_pusher_observed = True
+        quoted = urllib.parse.quote(conversation_id, safe="")
+        coverage_deadline = time.monotonic() + ALIGNMENT_COVERAGE_WAIT_SECONDS
+        while True:
+            status, conversation = await asyncio.to_thread(
+                _http_json_method, f"{base}/v1/conversations/{quoted}", token
+            )
+            if status != 200 or not conversation or conversation.get("id") != conversation_id:
+                raise ProbeError("consumer_readback")
+            if conversation.get("private_cloud_sync_enabled") is not True:
+                raise ProbeError("private_cloud_conversation_flag")
+            marker_ok = (conversation.get("audio_timeline") or {}).get("version") == 2
+            if not marker_ok:
+                raise ProbeError("audio_timeline_marker")
+            windows = sorted(
+                (float(item["start"]), float(item["end"]))
+                for item in conversation.get("transcript_segments") or []
+                if isinstance(item, dict) and item.get("start") is not None and item.get("end") is not None
+            )
+            # A zero-length segment is a distinct bug signal (a provider interval
+            # collapsed onto one point instead of being mapped or rejected), not a
+            # coverage question: name it so the receipt points at the real defect.
+            if any(end <= start for start, end in windows):
+                raise ProbeError("zero_length_segment")
+            spans: list[Any] = []
+            for audio_file in conversation.get("audio_files") or []:
+                spans.extend(audio_file.get("chunk_spans") or [])
+            # Segment times are seconds from started_at; chunk spans are wall-epoch
+            # seconds. Compare them on one axis.
+            origin = _epoch_seconds(conversation.get("started_at"))
+            coverage_ok = (
+                origin is not None
+                and bool(spans)
+                and all(_alignment_covered(spans, origin + start, origin + end) for start, end in windows)
+            )
+            if coverage_ok:
+                break
+            if time.monotonic() >= coverage_deadline:
+                raise ProbeError("span_coverage")
+            await asyncio.sleep(ALIGNMENT_COVERAGE_POLL_SECONDS)
+        live_word_count, expected_word_count = _alignment_word_counts(
+            conversation.get("transcript_segments") or [], fixture.expected_phrase
+        )
+        # Exact words remain provider-dependent, but two spoken copies cannot
+        # legitimately produce four or eight complete copies. Fail the probe
+        # even when the expected phrase occurs somewhere in the transcript.
+        if not _alignment_word_count_ok(live_word_count, expected_word_count):
+            raise ProbeError("transcript_word_count")
         # Live speaker identity rides the same capture clock: when the probe
         # identity has a voiceprint (enrolled from the fixture voice), every
         # persisted segment must be is_user and at least one live-delivered
@@ -596,6 +673,10 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
             clip_phrase_match=clip_phrase_match,
             speaker_identity_ok=speaker_identity_ok,
             live_owner_segment=live_owner_segment,
+            candidate_pusher_observed=candidate_pusher_observed,
+            conversation_id=conversation_id,
+            live_word_count=live_word_count,
+            expected_word_count=expected_word_count,
         ),
         passed,
     )
@@ -612,6 +693,10 @@ def _alignment_receipt(
     clip_phrase_match: bool | None = None,
     speaker_identity_ok: bool | None = None,
     live_owner_segment: bool | None = None,
+    candidate_pusher_observed: bool | None = None,
+    conversation_id: str | None = None,
+    live_word_count: int | None = None,
+    expected_word_count: int | None = None,
 ) -> dict[str, Any]:
     """Receipt without transcript, audio, token, or endpoint data.
 
@@ -631,11 +716,15 @@ def _alignment_receipt(
             "clip_phrase_match_auxiliary": clip_phrase_match,
             "speaker_identity": speaker_identity_ok,
             "live_owner_segment": live_owner_segment,
+            "candidate_pusher_observed": candidate_pusher_observed,
         },
         "synthetic_uid_class": SYNTHETIC_UID_CLASS,
+        "word_counts": {"live": live_word_count, "expected": expected_word_count},
     }
     if failure_stage is not None:
         receipt["failure_stage"] = failure_stage
+    if conversation_id is not None:
+        receipt["conversation_id"] = conversation_id
     return receipt
 
 

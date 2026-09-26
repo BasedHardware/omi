@@ -102,7 +102,7 @@ one re-confirmation and the second must still be explained.
 
 The `ScreenCaptureStreamFeature` rollout flag and the persistent-stream wiring were
 removed: `captureWindowCGImage` always uses the one-shot `SCScreenshotManager`
-session path, and `WindowCaptureStreamEngine` remains in the tree with no callers.
+session path. The unused `WindowCaptureStreamEngine` was subsequently deleted.
 The prescription above is kept as the design rationale in case the persistent
 stream is reinstated; the declined-capture classification shipped unflagged as a
 straight bug fix.
