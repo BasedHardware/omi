@@ -26,6 +26,29 @@ enum SiriDebugProbe {
     static func runIfRequested() {
         guard ProcessInfo.processInfo.arguments.contains("-omi-siri-probe") else { return }
         Task {
+            let production = SiriStorageNamespace(bundleID: "com.friend-app-with-wearable.ios12")
+            let development = SiriStorageNamespace(bundleID: "com.friend-app-with-wearable.ios12.development")
+            let productionKeys = [production.ownerKey, production.pendingWipeOwnersKey,
+                production.generationKey, production.enabledKey, production.pendingRouteKey,
+                production.sessionConfigKey, production.telemetryKey]
+            let developmentKeys = [development.ownerKey, development.pendingWipeOwnersKey,
+                development.generationKey, development.enabledKey, development.pendingRouteKey,
+                development.sessionConfigKey, development.telemetryKey]
+            let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")!
+            let probeA = SiriStorageNamespace(bundleID: "com.omi.probe.a")
+            let probeB = SiriStorageNamespace(bundleID: "com.omi.probe.b")
+            defaults.set("probe-a", forKey: probeA.ownerKey)
+            defaults.set("probe-b", forKey: probeB.ownerKey)
+            let isolated = production.snapshotFileName != development.snapshotFileName &&
+                Set(productionKeys).isDisjoint(with: developmentKeys) &&
+                defaults.string(forKey: probeA.ownerKey) == "probe-a" &&
+                defaults.string(forKey: probeB.ownerKey) == "probe-b" &&
+                production.keychainService != development.keychainService &&
+                production.keychainAccount != development.keychainAccount &&
+                production.indexName(for: "same-user") != development.indexName(for: "same-user")
+            defaults.removeObject(forKey: probeA.ownerKey)
+            defaults.removeObject(forKey: probeB.ownerKey)
+            NSLog("[SiriProbe] flavorNamespace=%@", isolated ? "PASS" : "FAIL")
             if FirebaseApp.app() == nil { FirebaseApp.configure() }
             NSLog("[SiriProbe] engine=absent firebaseUser=%@", Auth.auth().currentUser?.uid ?? "nil")
             NSLog("[SiriProbe] classicShortcuts=%@", classicShortcutAvailability() ? "PASS" : "FAIL")
@@ -282,8 +305,7 @@ enum SiriDebugProbe {
                     NSLog("[SiriProbe] deviceListeningDialog=%@",
                           SiriListeningFailure(pigeonCode: "device_already_listening").spokenDialog ==
                           "Omi is already listening from your device." ? "PASS" : "FAIL")
-                    let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")!
-                    defaults.removeObject(forKey: "siri.snapshot.owner")
+                    defaults.removeObject(forKey: SiriStorageNamespace.current.ownerKey)
                     NSLog("[SiriProbe] ownerMissingVisible=%d", SiriSnapshotStore.shared.memories(ids: nil).count)
                     try await SiriSnapshotStore.shared.bind(uid: "siri-probe-next")
                     let next = SiriSessionConfig(uid: "siri-probe-next",
@@ -396,7 +418,7 @@ enum SiriDebugProbe {
                     SiriSnapshotStore.shared.simulateIndexDeleteFailure = true
                     do { try await SiriSnapshotStore.shared.wipe() }
                     catch { NSLog("[SiriProbe] injectedWipeFailure=observed") }
-                    let pending = defaults.stringArray(forKey: "siri.pending.wipe.owners") ?? []
+                    let pending = defaults.stringArray(forKey: SiriStorageNamespace.current.pendingWipeOwnersKey) ?? []
                     NSLog("[SiriProbe] failedWipeOwnerRecoverable=%@",
                           pending.contains(next.uid) ? "PASS" : "FAIL")
                     SiriSnapshotStore.shared.simulateIndexDeleteFailure = false

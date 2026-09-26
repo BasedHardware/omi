@@ -160,7 +160,7 @@ final class SiriBridge: SiriIndexApi {
 /// Records have enums/counts/durations only; user content never enters defaults.
 enum SiriTelemetry {
     private static let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")!
-    private static let key = "siri.telemetry.pending"
+    private static let key = SiriStorageNamespace.current.telemetryKey
     private static let lock = NSLock()
 
     static func outcome(_ error: Error) -> String {

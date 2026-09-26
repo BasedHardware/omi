@@ -2,17 +2,40 @@ import Foundation
 import CoreSpotlight
 import CryptoKit
 
+/// The two Runner flavors share an App Group, so every persisted Siri value
+/// needs a bundle-specific name even when its account uid is the same.
+struct SiriStorageNamespace {
+    static let current = SiriStorageNamespace(bundleID: Bundle.main.bundleIdentifier ?? "com.omi.unknown")
+    let bundleID: String
+    var snapshotFileName: String { "siri-index-snapshot-\(bundleID).json" }
+    var ownerKey: String { "\(bundleID).siri.snapshot.owner" }
+    var pendingWipeOwnersKey: String { "\(bundleID).siri.pending.wipe.owners" }
+    var generationKey: String { "\(bundleID).siri.session.generation" }
+    var enabledKey: String { "\(bundleID).siri.index.enabled" }
+    var pendingRouteKey: String { "\(bundleID).siri.pending.route" }
+    var sessionConfigKey: String { "\(bundleID).siri.session.config" }
+    var telemetryKey: String { "\(bundleID).siri.telemetry.pending" }
+    var keychainService: String { "com.omi.siri.session.\(bundleID)" }
+    var keychainAccount: String { "firebase-id-token.\(bundleID)" }
+    func indexName(for uid: String) -> String {
+        let digest = SHA256.hash(data: Data(uid.utf8)).prefix(12)
+            .map { String(format: "%02x", $0) }.joined()
+        return "omi.siri.\(bundleID).\(digest)"
+    }
+}
+
 /// Only the fields approved for Apple's on-device index are kept here.
 final class SiriSnapshotStore {
     static let shared = SiriSnapshotStore()
     private let lock = NSLock()
     private let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")!
     private let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.friend-app-with-wearable.ios12")!
-    private let ownerKey = "siri.snapshot.owner"
-    private let pendingWipeOwnersKey = "siri.pending.wipe.owners"
-    private let generationKey = "siri.session.generation"
-    private let enabledKey = "siri.index.enabled"
-    private let routeKey = "siri.pending.route"
+    private let namespace = SiriStorageNamespace.current
+    private var ownerKey: String { namespace.ownerKey }
+    private var pendingWipeOwnersKey: String { namespace.pendingWipeOwnersKey }
+    private var generationKey: String { namespace.generationKey }
+    private var enabledKey: String { namespace.enabledKey }
+    private var routeKey: String { namespace.pendingRouteKey }
 
     private struct Snapshot: Codable {
         var eligibilityVersion: Int? = nil
@@ -36,9 +59,9 @@ final class SiriSnapshotStore {
     #if OMI_SIRI_PROBE
     var simulateIndexDeleteFailure = false
     #endif
-    private var file: URL { container.appendingPathComponent("siri-index-snapshot.json") }
+    private var file: URL { container.appendingPathComponent(namespace.snapshotFileName) }
     private init() {
-        snapshot = (try? Data(contentsOf: container.appendingPathComponent("siri-index-snapshot.json")))
+        snapshot = (try? Data(contentsOf: container.appendingPathComponent(SiriStorageNamespace.current.snapshotFileName)))
             .flatMap { try? JSONDecoder().decode(Snapshot.self, from: $0) } ?? Snapshot()
         // Older snapshots did not retain the memory layer. Their rows cannot
         // prove archive eligibility, so drop them before launch maintenance
@@ -65,8 +88,7 @@ final class SiriSnapshotStore {
         return indexName(for: owner)
     }
     private func indexName(for uid: String) -> String {
-        let digest = SHA256.hash(data: Data(uid.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
-        return "omi.siri.\(digest)"
+        namespace.indexName(for: uid)
     }
     private func accountOwnerLocked() -> Bool {
         guard let uid = snapshot.ownerUid, !uid.isEmpty else { return false }

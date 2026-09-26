@@ -11,9 +11,9 @@ final class SiriSession {
     var beforeTokenLookup: (() -> Void)?
     #endif
     private let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")!
-    private let keychainService = "com.omi.siri.session"
-    private let keychainAccount = "firebase-id-token"
-    private let configKey = "siri.session.config"
+    private let keychainService = SiriStorageNamespace.current.keychainService
+    private let keychainAccount = SiriStorageNamespace.current.keychainAccount
+    private let configKey = SiriStorageNamespace.current.sessionConfigKey
 
     struct Config: Codable {
         let uid: String

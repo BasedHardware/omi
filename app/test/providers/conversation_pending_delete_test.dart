@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -11,6 +13,7 @@ import 'package:omi/ui/feedback/omi_feedback.dart';
 
 class _SiriUndoHost extends SiriIndexApi {
   List<SiriConversation> restored = [];
+  Completer<void>? deleteGate;
 
   @override
   Future<void> upsertConversations(String uid, List<SiriConversation> rows) async {
@@ -18,7 +21,9 @@ class _SiriUndoHost extends SiriIndexApi {
   }
 
   @override
-  Future<void> deleteEntities(String uid, String type, List<String> ids) async {}
+  Future<void> deleteEntities(String uid, String type, List<String> ids) async {
+    await deleteGate?.future;
+  }
 }
 
 /// D5: a conversation delete is held back long enough for its Undo toast to be real.
@@ -89,6 +94,45 @@ void main() {
     provider.undoDeletedConversation(a);
     await Future<void>.delayed(Duration.zero);
 
+    expect(host.restored.map((row) => row.id), ['a']);
+  });
+
+  for (final failure in ['rejected', 'throws']) {
+    test('a $failure server delete restores the optimistic Siri entry', () async {
+      final host = _SiriUndoHost();
+      SiriIntegration.testInstance = SiriIntegration.forTest(host, 'owner-a');
+      addTearDown(() => SiriIntegration.testInstance = null);
+      final provider = makeProvider([_conversation('a')]);
+      provider.conversationDeleteFetcherOverride = (_) async {
+        if (failure == 'throws') throw StateError('offline');
+        return false;
+      };
+
+      provider.deleteConversationLocally(provider.conversations.single);
+      await Future<void>.delayed(Duration.zero);
+      expect(host.restored, isEmpty);
+      provider.commitPendingDelete('a');
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(host.restored.map((row) => row.id), ['a']);
+    });
+  }
+
+  test('a failed server delete waits for the optimistic native delete before restoring', () async {
+    final host = _SiriUndoHost()..deleteGate = Completer<void>();
+    SiriIntegration.testInstance = SiriIntegration.forTest(host, 'owner-a');
+    addTearDown(() => SiriIntegration.testInstance = null);
+    final provider = makeProvider([_conversation('a')]);
+    provider.conversationDeleteFetcherOverride = (_) async => false;
+
+    provider.deleteConversationLocally(provider.conversations.single);
+    provider.commitPendingDelete('a');
+    await Future<void>.delayed(Duration.zero);
+    expect(host.restored, isEmpty);
+    host.deleteGate!.complete();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
     expect(host.restored.map((row) => row.id), ['a']);
   });
 

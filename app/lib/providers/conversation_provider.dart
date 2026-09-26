@@ -315,6 +315,7 @@ class ConversationProvider extends ChangeNotifier {
     _initialFetchRetryTimer = null;
     _initialFetchRetryCount = 0;
     memoriesToDelete = {};
+    _pendingSiriDeletes.clear();
     _cancelPendingDeleteTimers();
     _refreshDebounceTimer?.cancel();
     _refreshDebounceTimer = null;
@@ -1496,6 +1497,18 @@ class ConversationProvider extends ChangeNotifier {
   /// request so a concurrent refresh cannot reinsert them.
   Map<String, ServerConversation> memoriesToDelete = {};
   final Map<String, Timer> _pendingDeleteTimers = {};
+  final Map<String, Future<void>> _pendingSiriDeletes = {};
+
+  void _restoreSiriAfterOptimisticDelete(ServerConversation conversation) {
+    final generation = _sessionGeneration;
+    final pendingDelete = _pendingSiriDeletes.remove(conversation.id);
+    unawaited(() async {
+      if (pendingDelete != null) await pendingDelete;
+      if (generation == _sessionGeneration) {
+        await SiriIntegration.current.upsertConversations([conversation]);
+      }
+    }());
+  }
 
   /// How long a deleted conversation stays restorable. Well past the 5 s Undo toast
   /// (`OmiFeedbackTiming.undo`) so a toast that starts late behind other snack bars still gets its
@@ -1511,7 +1524,7 @@ class ConversationProvider extends ChangeNotifier {
   /// [undoDeletedConversation] restores it first. The one delete path for list, bulk and detail.
   void deleteConversationLocally(ServerConversation conversation, [DateTime? date]) {
     memoriesToDelete[conversation.id] = conversation;
-    unawaited(SiriIntegration.current.delete("conversation", conversation.id));
+    _pendingSiriDeletes[conversation.id] = SiriIntegration.current.delete("conversation", conversation.id);
     _pendingDeleteTimers.remove(conversation.id)?.cancel();
     _pendingDeleteTimers[conversation.id] = Timer(pendingDeleteWindow, () => commitPendingDelete(conversation.id));
     conversations.removeWhere((element) => element.id == conversation.id);
@@ -1573,6 +1586,10 @@ class ConversationProvider extends ChangeNotifier {
               group.removeWhere((conversation) => conversation.id == conversationId);
             }
             groupedConversations.removeWhere((_, group) => group.isEmpty);
+            _pendingSiriDeletes.remove(conversationId);
+          } else {
+            final deleted = memoriesToDelete[conversationId];
+            if (deleted != null) _restoreSiriAfterOptimisticDelete(deleted);
           }
           _clearDeleteTombstone(conversationId);
           notifyListeners();
@@ -1581,6 +1598,8 @@ class ConversationProvider extends ChangeNotifier {
           // Match the prior behavior on a failed request: release the local
           // tombstone, but do not rebase the server cursor.
           if (generation != _sessionGeneration) return;
+          final deleted = memoriesToDelete[conversationId];
+          if (deleted != null) _restoreSiriAfterOptimisticDelete(deleted);
           _clearDeleteTombstone(conversationId);
           notifyListeners();
         },
@@ -1601,7 +1620,7 @@ class ConversationProvider extends ChangeNotifier {
       conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     }
     groupConversationsByDate();
-    unawaited(SiriIntegration.current.upsertConversations([conversation]));
+    _restoreSiriAfterOptimisticDelete(conversation);
   }
 
   @override
