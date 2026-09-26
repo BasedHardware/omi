@@ -37,21 +37,14 @@ from utils.stt.speaker_match import SPEAKER_MATCH_MIN_EVIDENCE_SECONDS, select_s
 
 RESOLUTION_VERSION = 1
 
-# Average-linkage cut on cosine distance between segment embeddings.
 AHC_THRESHOLD = float(os.getenv('CONVERSATION_SPEAKER_AHC_THRESHOLD', '0.70'))
-# Clusters with at least this much speech anchor the conversation's voices.
 ANCHOR_SECONDS = float(os.getenv('CONVERSATION_SPEAKER_ANCHOR_SECONDS', '30'))
-# Short-clip clusters whose centroid is this close to an anchor are fragments of
-# that voice, not new people.
 ABSORB_DISTANCE = float(os.getenv('CONVERSATION_SPEAKER_ABSORB_DISTANCE', '0.60'))
 # A voice counts as a participant once it has spoken this long.
 SIGNIFICANT_SECONDS = float(os.getenv('CONVERSATION_SPEAKER_SIGNIFICANT_SECONDS', '10'))
 # Shorter segments are too noisy to embed; they inherit a voice instead.
 MIN_EMBED_SECONDS = 1.0
-# A voice's pooled centroid against an enrolled voiceprint. Pooling pulls the
-# owner's voice far closer than one clip (0.24-0.33 on three measured
-# conversations) while other voices stayed at or above 0.63, where the per-clip
-# enrollment threshold (0.65) named a companion the owner and merged them.
+# A voice's pooled centroid against an enrolled voiceprint.
 VOICE_MATCH_THRESHOLD = float(os.getenv('CONVERSATION_SPEAKER_VOICE_MATCH_THRESHOLD', '0.50'))
 
 OWNER_IDENTITY = 'user'
@@ -59,8 +52,7 @@ OWNER_IDENTITY = 'user'
 
 @dataclass(frozen=True)
 class Identity:
-    """Who a voice is: the owner, a person, or (``anonymous_key``) a voice a
-    receipt marked as neither, which stays distinct from every other voice."""
+    """Who a voice is: owner, person, or (anonymous_key) an unlabeled distinct voice."""
 
     is_user: bool
     person_id: Optional[str]
@@ -142,7 +134,10 @@ def resolve_conversation_speakers(
     eligible = [
         s
         for s in segments
-        if _seg(s, 'id') and _seg(s, 'speaker_id') is not None and _seg(s, 'speaker_id') != OMI_SPEAKER_ID_SENTINEL
+        if _seg(s, 'id')
+        and isinstance(sid := _seg(s, 'speaker_id'), (int, str))
+        and str(sid).isdigit()
+        and int(sid) != OMI_SPEAKER_ID_SENTINEL
     ]
     if not eligible:
         return None
@@ -320,7 +315,10 @@ def resolve_conversation_speakers(
             votes = by_old_id.setdefault(int(_seg(segment, 'speaker_id')), {})
             votes[position] = votes.get(position, 0.0) + max(_duration(segment), 1e-3)
     placed = sorted(
-        ((float(_seg(s, 'start', 0.0)) + float(_seg(s, 'end', 0.0))) / 2.0, cluster_of_segment[_seg(s, 'id')])
+        (
+            (float(_seg(s, 'start', 0.0) or 0.0) + float(_seg(s, 'end', 0.0) or 0.0)) / 2.0,
+            cluster_of_segment[_seg(s, 'id')],
+        )
         for s in eligible
         if _seg(s, 'id') in cluster_of_segment
     )
@@ -335,7 +333,7 @@ def resolve_conversation_speakers(
             cluster_of_segment[segment_id] = max(votes.items(), key=lambda item: (item[1], -item[0]))[0]
         elif placed and _duration(segment) < MIN_EMBED_SECONDS:
             # Too short to ever embed: the voice speaking around it.
-            center = (float(_seg(segment, 'start', 0.0)) + float(_seg(segment, 'end', 0.0))) / 2.0
+            center = (float(_seg(segment, 'start', 0.0) or 0.0) + float(_seg(segment, 'end', 0.0) or 0.0)) / 2.0
             cluster_of_segment[segment_id] = placed[int(np.argmin(np.abs(centers - center)))][1]
         # Otherwise it was embeddable but not embedded yet (budget, missing audio):
         # it keeps capture's id rather than borrowing a neighbour's voice.
@@ -349,7 +347,9 @@ def resolve_conversation_speakers(
         if position is not None:
             members_of.setdefault(position, []).append(segment)
 
-    all_old_ids = {int(_seg(s, 'speaker_id')) for s in segments if _seg(s, 'speaker_id') is not None}
+    all_old_ids = {
+        int(sid) for s in segments if isinstance(sid := _seg(s, 'speaker_id'), (int, str)) and str(sid).isdigit()
+    }
     reserved = set(all_old_ids) | set(manual_speakers) | {OMI_SPEAKER_ID_SENTINEL}
     next_fresh = max(reserved) + 1
     taken: Set[int] = set()
@@ -358,7 +358,7 @@ def resolve_conversation_speakers(
         manual_keys_by_token.setdefault(identity.token, []).append(key)
 
     def first_start(position: int) -> float:
-        return min(float(_seg(s, 'start', 0.0)) for s in members_of[position])
+        return min(float(_seg(s, 'start', 0.0) or 0.0) for s in members_of[position])
 
     new_id_of: Dict[int, int] = {}
     for position in sorted(members_of, key=first_start):
@@ -419,8 +419,8 @@ def significant_capture_speaker_ids(segments: Sequence[Any]) -> List[int]:
     """Participant ids when capture's own labels are trusted (one diarization scope)."""
     speech: Dict[int, float] = {}
     for segment in segments:
-        speaker_id = _seg(segment, 'speaker_id')
-        if speaker_id is None or speaker_id == OMI_SPEAKER_ID_SENTINEL:
+        sid = _seg(segment, 'speaker_id')
+        if not (isinstance(sid, (int, str)) and str(sid).isdigit() and int(sid) != OMI_SPEAKER_ID_SENTINEL):
             continue
-        speech[int(speaker_id)] = speech.get(int(speaker_id), 0.0) + _duration(segment)
+        speech[int(sid)] = speech.get(int(sid), 0.0) + _duration(segment)
     return sorted(k for k, seconds in speech.items() if seconds >= SIGNIFICANT_SECONDS)
