@@ -73,10 +73,10 @@ def build_person_embeddings_cache(
     people = users_db.get_people(uid)
     for person in people or []:
         emb = usable_person_voiceprint(person)
-        if emb:
+        if emb and person.get('id'):
             cache[person['id']] = {
                 'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
-                'name': person['name'],
+                'name': person.get('name') or 'Unknown',
             }
 
     return cache
@@ -229,13 +229,13 @@ def identify_speakers_for_segments(
             detected_name = detect_speaker_from_text(seg.text, language=language)
             if detected_name:
                 person = users_db.get_person_by_name(uid, detected_name)
-                if person:
+                if person and person.get('id'):
                     # Per-segment assignment always applies
                     if seg.id is not None:
                         segment_person_assignment_map[seg.id] = person['id']
                     # Update speaker map only when diarization is active
                     if speaker_id > 0:
-                        speaker_to_person_map[speaker_id] = (person['id'], person['name'])
+                        speaker_to_person_map[speaker_id] = (person['id'], person.get('name') or detected_name)
                     logger.info('speaker_id_decision surface=sync speaker=%s source=text accepted=True', speaker_id)
                     if speaker_id > 0:
                         break  # One match per diarized speaker is enough
