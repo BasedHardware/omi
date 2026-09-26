@@ -1414,11 +1414,11 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "local_embedding_benchmark",
+      effects: [.localArtifact],
       summary: "Run synthetic local hybrid retrieval metrics (recall@10 / nDCG@10) and write JSON",
       params: ["output"],
       category: "debug",
       surfaces: ["app"],
-      safety: "local_debug",
       sideEffects: ["writes a JSON report under Application Support; uses an in-memory synthetic DB"],
       examples: ["./scripts/omi-ctl action local_embedding_benchmark"]
     ) { params in
@@ -3939,8 +3939,7 @@ final class DesktopAutomationActionRegistry {
     registerRewindArtifactRecoveryGauntlet()
     register(
       name: "navigate_via_shortcut",
-      effects: [.localState, .networkOrModel],
-      summary: "Post the same sidebar navigation notification as Cmd+1..6 / Cmd+, shortcuts",
+      effects: [.localState],
       summary: "Post the same navigation notification as the Cmd+1..4 / Cmd+, shortcuts",
       params: ["shortcut"]
     ) { params in
