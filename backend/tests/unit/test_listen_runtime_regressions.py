@@ -912,6 +912,31 @@ async def test_transcript_delivery_marks_live_transcription_success_only_after_a
 
 
 @pytest.mark.anyio
+async def test_transcript_delivery_survives_a_non_string_started_at_on_a_resumed_conversation(monkeypatch):
+    """A resumed row with a float/None `started_at` must not crash process_loop with an AttributeError."""
+
+    class WebSocket:
+        def __init__(self):
+            self.sent = []
+
+        async def send_json(self, payload):
+            self.sent.append(payload)
+
+    async def cache_get(_conversation_id):
+        return {'transcript_segments': ['existing'], 'started_at': 100.0}
+
+    websocket = WebSocket()
+    processor, delivered, flushed = _transcript_processor_for_delivery(monkeypatch, websocket)
+    processor.cache = SimpleNamespace(get=cache_get)
+
+    await processor.process_loop()
+
+    assert websocket.sent == [[{'id': 'segment-1', 'text': 'Hello'}]]
+    assert delivered == [True]
+    assert flushed == ['conversation-1']
+
+
+@pytest.mark.anyio
 async def test_transcript_loop_still_flushes_speaker_assignments_when_the_client_socket_is_closed(monkeypatch):
     """A send after close must not kill the loop before its final speaker flush.
 

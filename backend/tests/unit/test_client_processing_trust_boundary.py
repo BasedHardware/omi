@@ -647,6 +647,11 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # sources, and windows only, written solely by database.capture_groups.
         # No client-authored text, so not projection-family.
         'capture_group',
+        # Server-authored audio-timeline provenance (AUDIO_TIMELINE_V2): the
+        # fenced {version: 2} marker written once by the listen pipeline's
+        # transactional pin. Never client-authored, carries no text — not
+        # projection-family (§1.7 precedent).
+        'audio_timeline',
         # Server-authored by speaker resolution during processing: a status and
         # the participant speaker ids. No client-authored text, so not
         # projection-family.

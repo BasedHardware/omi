@@ -330,7 +330,7 @@ async def test_stale_inflight_success_does_not_close_open_breaker():
     started = asyncio.Event()
     release = asyncio.Event()
 
-    async def connect(uid, sample_rate, client_kind='unknown'):
+    async def connect(uid, sample_rate, client_kind='unknown', audio_timeline=None):
         if uid == "slow":
             started.set()
             await release.wait()

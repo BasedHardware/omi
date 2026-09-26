@@ -510,7 +510,32 @@ class GeneratedConversationPhoto {
   }
 }
 
+class GeneratedChunkSpan {
+  final double end;
+  final double start;
+
+  const GeneratedChunkSpan({
+    required this.end,
+    required this.start,
+  });
+
+  factory GeneratedChunkSpan.fromJson(Map<String, dynamic> json) {
+    return GeneratedChunkSpan(
+      end: _required(_readFieldValue<double>(_readField(json, const ["end"]), "end", _readDouble, requiredField: true, nullable: false), "end"),
+      start: _required(_readFieldValue<double>(_readField(json, const ["start"]), "start", _readDouble, requiredField: true, nullable: false), "start"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'end': end,
+      'start': start,
+    };
+  }
+}
+
 class GeneratedAudioFile {
+  final List<GeneratedChunkSpan>? chunkSpans;
   final List<double> chunkTimestamps;
   final String conversationId;
   final double duration;
@@ -520,6 +545,7 @@ class GeneratedAudioFile {
   final String uid;
 
   const GeneratedAudioFile({
+    this.chunkSpans,
     required this.chunkTimestamps,
     required this.conversationId,
     required this.duration,
@@ -531,6 +557,7 @@ class GeneratedAudioFile {
 
   factory GeneratedAudioFile.fromJson(Map<String, dynamic> json) {
     return GeneratedAudioFile(
+      chunkSpans: _readFieldValue<List<GeneratedChunkSpan>>(_readField(json, const ["chunk_spans"]), "chunk_spans", (value) => _readObjectList(value, GeneratedChunkSpan.fromJson), requiredField: false, nullable: true),
       chunkTimestamps: _required(_readFieldValue<List<double>>(_readField(json, const ["chunk_timestamps"]), "chunk_timestamps", _readDoubleList, requiredField: true, nullable: false), "chunk_timestamps"),
       conversationId: _required(_readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: true, nullable: false), "conversation_id"),
       duration: _required(_readFieldValue<double>(_readField(json, const ["duration"]), "duration", _readDouble, requiredField: true, nullable: false), "duration"),
@@ -543,6 +570,7 @@ class GeneratedAudioFile {
 
   Map<String, dynamic> toJson() {
     return {
+      'chunk_spans': chunkSpans?.map((value) => value.toJson()).toList(),
       'chunk_timestamps': chunkTimestamps,
       'conversation_id': conversationId,
       'duration': duration,
@@ -846,10 +874,31 @@ class GeneratedConversationSpeakers {
   }
 }
 
+class GeneratedAudioTimelineProvenance {
+  final int version;
+
+  const GeneratedAudioTimelineProvenance({
+    required this.version,
+  });
+
+  factory GeneratedAudioTimelineProvenance.fromJson(Map<String, dynamic> json) {
+    return GeneratedAudioTimelineProvenance(
+      version: _required(_readFieldValue<int>(_readField(json, const ["version"]), "version", _readInt, requiredField: true, nullable: false), "version"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'version': version,
+    };
+  }
+}
+
 class GeneratedConversation {
   final String? appId;
   final List<GeneratedAppResult> appsResults;
   final List<GeneratedAudioFile> audioFiles;
+  final GeneratedAudioTimelineProvenance? audioTimeline;
   final GeneratedCalendarEventLink? calendarEvent;
   final String? callId;
   final GeneratedCaptureGroup? captureGroup;
@@ -899,6 +948,7 @@ class GeneratedConversation {
     this.appId,
     this.appsResults = const [],
     this.audioFiles = const [],
+    this.audioTimeline,
     this.calendarEvent,
     this.callId,
     this.captureGroup,
@@ -950,6 +1000,7 @@ class GeneratedConversation {
       appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: false, nullable: true),
       appsResults: _required(_readFieldValue<List<GeneratedAppResult>>(_readField(json, const ["apps_results"]), "apps_results", (value) => _readObjectList(value, GeneratedAppResult.fromJson), requiredField: false, nullable: false, defaultValue: const []), "apps_results"),
       audioFiles: _required(_readFieldValue<List<GeneratedAudioFile>>(_readField(json, const ["audio_files"]), "audio_files", (value) => _readObjectList(value, GeneratedAudioFile.fromJson), requiredField: false, nullable: false, defaultValue: const []), "audio_files"),
+      audioTimeline: _readFieldValue<GeneratedAudioTimelineProvenance>(_readField(json, const ["audio_timeline"]), "audio_timeline", (value) => _readObject(value, GeneratedAudioTimelineProvenance.fromJson), requiredField: false, nullable: true),
       calendarEvent: _readFieldValue<GeneratedCalendarEventLink>(_readField(json, const ["calendar_event"]), "calendar_event", (value) => _readObject(value, GeneratedCalendarEventLink.fromJson), requiredField: false, nullable: true),
       callId: _readFieldValue<String>(_readField(json, const ["call_id"]), "call_id", _readString, requiredField: false, nullable: true),
       captureGroup: _readFieldValue<GeneratedCaptureGroup>(_readField(json, const ["capture_group"]), "capture_group", (value) => _readObject(value, GeneratedCaptureGroup.fromJson), requiredField: false, nullable: true),
@@ -1002,6 +1053,7 @@ class GeneratedConversation {
       'app_id': appId,
       'apps_results': appsResults.map((value) => value.toJson()).toList(),
       'audio_files': audioFiles.map((value) => value.toJson()).toList(),
+      'audio_timeline': audioTimeline?.toJson(),
       'calendar_event': calendarEvent?.toJson(),
       'call_id': callId,
       'capture_group': captureGroup?.toJson(),
@@ -1242,6 +1294,7 @@ class GeneratedConversationSearchItem {
   final String? appId;
   final List<GeneratedAppResult> appsResults;
   final List<GeneratedAudioFile> audioFiles;
+  final GeneratedAudioTimelineProvenance? audioTimeline;
   final GeneratedCalendarEventLink? calendarEvent;
   final String? callId;
   final GeneratedCaptureGroup? captureGroup;
@@ -1292,6 +1345,7 @@ class GeneratedConversationSearchItem {
     this.appId,
     this.appsResults = const [],
     this.audioFiles = const [],
+    this.audioTimeline,
     this.calendarEvent,
     this.callId,
     this.captureGroup,
@@ -1344,6 +1398,7 @@ class GeneratedConversationSearchItem {
       appId: _readFieldValue<String>(_readField(json, const ["app_id"]), "app_id", _readString, requiredField: false, nullable: true),
       appsResults: _required(_readFieldValue<List<GeneratedAppResult>>(_readField(json, const ["apps_results"]), "apps_results", (value) => _readObjectList(value, GeneratedAppResult.fromJson), requiredField: false, nullable: false, defaultValue: const []), "apps_results"),
       audioFiles: _required(_readFieldValue<List<GeneratedAudioFile>>(_readField(json, const ["audio_files"]), "audio_files", (value) => _readObjectList(value, GeneratedAudioFile.fromJson), requiredField: false, nullable: false, defaultValue: const []), "audio_files"),
+      audioTimeline: _readFieldValue<GeneratedAudioTimelineProvenance>(_readField(json, const ["audio_timeline"]), "audio_timeline", (value) => _readObject(value, GeneratedAudioTimelineProvenance.fromJson), requiredField: false, nullable: true),
       calendarEvent: _readFieldValue<GeneratedCalendarEventLink>(_readField(json, const ["calendar_event"]), "calendar_event", (value) => _readObject(value, GeneratedCalendarEventLink.fromJson), requiredField: false, nullable: true),
       callId: _readFieldValue<String>(_readField(json, const ["call_id"]), "call_id", _readString, requiredField: false, nullable: true),
       captureGroup: _readFieldValue<GeneratedCaptureGroup>(_readField(json, const ["capture_group"]), "capture_group", (value) => _readObject(value, GeneratedCaptureGroup.fromJson), requiredField: false, nullable: true),
@@ -1397,6 +1452,7 @@ class GeneratedConversationSearchItem {
       'app_id': appId,
       'apps_results': appsResults.map((value) => value.toJson()).toList(),
       'audio_files': audioFiles.map((value) => value.toJson()).toList(),
+      'audio_timeline': audioTimeline?.toJson(),
       'calendar_event': calendarEvent?.toJson(),
       'call_id': callId,
       'capture_group': captureGroup?.toJson(),
