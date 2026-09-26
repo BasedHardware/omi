@@ -95,7 +95,7 @@ function usePhotos(device: BluetoothRemoteGATTServer) {
             }
 
             // Subscribe for photo updates
-            const service = await device.getPrimaryService('19B10000-E8F2-537E-4F6C-D104768A1214'.toLowerCase());
+            const service = await device.getPrimaryService('814B9B7C-25FD-4ACD-8604-D28877BEEE6D'.toLowerCase());
             const photoCharacteristic = await service.getCharacteristic('19b10005-e8f2-537e-4f6c-d104768a1214');
             await photoCharacteristic.startNotifications();
             setSubscribed(true);

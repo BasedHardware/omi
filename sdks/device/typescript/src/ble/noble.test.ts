@@ -67,7 +67,7 @@ function mockNobleDiscovery(hasAudio = true) {
     async discoverSomeServicesAndCharacteristicsAsync(services: string[], characteristics: string[]) {
       // Noble's HCI GATT decoder returns undashed UUIDs and filters by exact
       // membership (stoprocent/noble lib/hci-socket/gatt.js).
-      if (!services.includes('19b10000e8f2537e4f6cd104768a1214')) {
+      if (!services.includes('814b9b7c25fd4acd8604d28877beee6d')) {
         throw new Error('Could not find all requested services');
       }
       return {

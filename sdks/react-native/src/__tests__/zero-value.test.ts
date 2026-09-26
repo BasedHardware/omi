@@ -26,7 +26,7 @@ jest.mock('react-native-ble-plx', () => ({
 import { OmiConnection } from '../OmiConnection';
 import { BleAudioCodec } from '../types';
 
-const OMI_SERVICE_UUID = '19b10000-e8f2-537e-4f6c-d104768a1214';
+const OMI_SERVICE_UUID = '814b9b7c-25fd-4acd-8604-d28877beee6d';
 const AUDIO_CODEC_CHARACTERISTIC_UUID = '19b10002-e8f2-537e-4f6c-d104768a1214';
 const BATTERY_SERVICE_UUID = '0000180f-0000-1000-8000-00805f9b34fb';
 const BATTERY_LEVEL_CHARACTERISTIC_UUID = '00002a19-0000-1000-8000-00805f9b34fb';

@@ -6,7 +6,7 @@ Shared contract for device SDKs (`sdks/python`, `sdks/swift`, `sdks/react-native
 
 | Role | UUID |
 |------|------|
-| Omi service | `19b10000-e8f2-537e-4f6c-d104768a1214` |
+| Omi service | `814b9b7c-25fd-4acd-8604-d28877beee6d` |
 | Audio data stream (notify) | `19b10001-e8f2-537e-4f6c-d104768a1214` |
 | Audio codec (read) | `19b10002-e8f2-537e-4f6c-d104768a1214` |
 | Battery service | `0000180f-0000-1000-8000-00805f9b34fb` |

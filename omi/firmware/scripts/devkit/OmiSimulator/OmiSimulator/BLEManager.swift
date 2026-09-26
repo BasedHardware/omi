@@ -13,7 +13,7 @@ class BLEManager: NSObject, ObservableObject {
     var manager: CBPeripheralManager?
     var packetCounter: UInt16 = 0
     
-    private static let audioServiceUUID = CBUUID(string: "19B10000-E8F2-537E-4F6C-D104768A1214")
+    private static let audioServiceUUID = CBUUID(string: "814B9B7C-25FD-4ACD-8604-D28877BEEE6D")
     private static let audioCharacteristicUUID = CBUUID(string: "19B10001-E8F2-537E-4F6C-D104768A1214")
     private static let audioCodecCharacteristicUUID = CBUUID(string: "19B10002-E8F2-537E-4F6C-D104768A1214")
     
