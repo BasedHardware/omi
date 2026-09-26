@@ -138,3 +138,4 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | speakerTagPromptAnswerSubmitted | Speaker Tag Prompt Answer Submitted | kind, answer, clip_played, first_time, succeeded | active | speaker-tag-prompts-funnel |
 | speakerTagPromptsClosed | Speaker Tag Prompts Closed | answered_count, prompt_count | active | speaker-tag-prompts-funnel |
 | voiceProfileSettingToggled | Voice Profile Setting Toggled | setting, enabled, source, succeeded | active | speaker-tag-prompts-funnel |
+| voiceReplyPlayback | Voice Reply Playback | outcome, skip_reason, mode, output_route, chunks_requested, chunks_played, chunks_dropped, fallback_reason, first_audio_latency_ms, interrupt_source | active | mobile-instrumentation-presence |

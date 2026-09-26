@@ -116,6 +116,7 @@ async def test_multi_channel_receiver_drops_malformed_opus_frame_without_mixing_
     host = SimpleNamespace(
         request=SimpleNamespace(codec='opus', sample_rate=16000),
         state=SimpleNamespace(),
+        is_multi_channel=True,
         use_custom_stt=True,
     )
     receiver = ListenReceiver(host, [SimpleNamespace()], {1: 0})

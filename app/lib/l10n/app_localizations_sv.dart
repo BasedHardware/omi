@@ -2491,12 +2491,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Detaljerade diagnostiska meddelanden';
 
   @override
-  String get autoCreateSpeakers => 'Skapa talare automatiskt';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Skapa automatiskt när namn upptäcks';
-
-  @override
   String get followUpQuestions => 'Uppföljningsfrågor';
 
   @override
@@ -11181,9 +11175,6 @@ class AppLocalizationsSv extends AppLocalizations {
       'Transkriptioner är inte tillgängliga, inspelningen fortsätter på enheten och bearbetas senare';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transkription inte tillgänglig · sparas på enheten';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Transkriptioner i kö $pending/$total';
   }
@@ -11242,4 +11233,46 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Ljudet från hänget når inte appen — tryck för att reparera';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Stoppa Transcribe Later på ditt hängsmycke innan du spelar in med telefonen.';
+
+  @override
+  String get captureNotTranscribing => 'Transkriberar inte';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Ljud sparat, transkriberas senare';
+
+  @override
+  String get captureStillRecording => 'Spelar fortfarande in';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofonen används av en annan app';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Ett samtal eller en annan app tog mikrofonen, så Omi kan inte höra just nu. Omi fortsätter av sig själv när mikrofonen är ledig. Allt som spelats in innan är säkert.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Din egen tal-till-text-tjänst går inte att nå. Omi behåller ljudet på den här telefonen och skickar det när tjänsten är tillbaka. Inget går förlorat.';
+
+  @override
+  String get captureStarting => 'Startar…';
+
+  @override
+  String get capturePhoneStorageFull => 'Telefonens lagring är full';
+
+  @override
+  String get captureStorageAlmostFull => 'Lagringen är nästan full';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Hängsmycket tappade anslutningen till den här telefonen. Omi ansluter igen av sig själv när hängsmycket är på och i närheten. Allt som spelats in innan är säkert.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name och andra';
+  }
 }
