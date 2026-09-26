@@ -240,12 +240,10 @@ async def send_omi_notification(
             print(f"✓ Sent Omi notification to user {uid}: {message}")
             return {"success": True, "message": message}
         else:
-            error_msg = f"Omi API error: {response.status_code} - {response.text}"
-            print(f"✗ {error_msg}")
-            return {"success": False, "error": error_msg}
-
+            print(f"Omi API error: {response.status_code}")
+            return {"success": False, "error": "Omi API request failed."}
     except Exception as e:
-        error_msg = f"Failed to send Omi notification: {str(e)}"
+        error_msg = "Failed to send Omi notification"
         print(f"✗ {error_msg}")
         return {"success": False, "error": error_msg}
 
@@ -296,12 +294,10 @@ async def create_omi_memory(
             print(f"✓ Created Omi memory for user {uid}")
             return {"success": True, "memory": text}
         else:
-            error_msg = f"Omi API error: {response.status_code} - {response.text}"
-            print(f"✗ {error_msg}")
-            return {"success": False, "error": error_msg}
-
+            print(f"Omi API error: {response.status_code}")
+            return {"success": False, "error": "Omi API request failed."}
     except Exception as e:
-        error_msg = f"Failed to create Omi memory: {str(e)}"
+        error_msg = "Failed to create Omi memory"
         print(f"✗ {error_msg}")
         return {"success": False, "error": error_msg}
 
@@ -507,7 +503,7 @@ async def analyze_text_with_hume(text: str) -> Dict[str, Any]:
 
         return {
             "success": False,
-            "error": str(e),
+            "error": "Hume text analysis failed",
             "predictions": []
         }
 
@@ -596,7 +592,7 @@ async def analyze_audio_with_hume(wav_file_path: str) -> Dict[str, Any]:
 
         return {
             "success": False,
-            "error": str(e),
+            "error": "Hume audio analysis failed",
             "predictions": []
         }
 
@@ -648,6 +644,6 @@ async def _analyze_single_audio(wav_file_path: str, hume_api_key: str) -> Dict[s
     except Exception as e:
         return {
             "success": False,
-            "error": str(e),
+            "error": "Hume audio analysis failed",
             "predictions": []
         }
