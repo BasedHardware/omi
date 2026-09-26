@@ -75,7 +75,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       final phone = provider.liveCaptureSource == 'phone';
       if (provider.isPaused) {
         await provider.resumeCapture();
-        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStarted();
+        if (phone && !provider.isPaused) PlatformManager.instance.analytics.phoneMicRecordingStarted();
       } else {
         await provider.pauseCapture();
         if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
@@ -105,12 +105,19 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     Navigator.of(context).pop();
   }
 
-  /// The live page's state, resolved exactly as the conversation list's capture card resolves it
-  /// (`liveCaptureDisplayState`): an audio interruption, a mute or a call is Paused, a terminal
-  /// transcription failure or offline buffering is named as such, otherwise Listening.
+  /// The live page's state, resolved exactly as the Home capture card resolves it
+  /// (`captureInterruption` + `liveCaptureDisplayState`): the OS holding the mic, a mute or a call
+  /// is Paused, capture recovering on its own (a dropped socket, a mic stall) is Reconnecting, a
+  /// terminal transcription failure or offline buffering is named as such, otherwise Listening.
   CaptureDisplayState _displayState(CaptureProvider provider, {required bool capturingPhotos}) {
+    final interruption = captureInterruption(
+      interrupted: provider.recordingState == RecordingState.interrupted,
+      readerPaused: provider.isPaused,
+      osHoldsMic: provider.isCallActive,
+    );
     return liveCaptureDisplayState(
-      audioInterrupted: provider.recordingState == RecordingState.interrupted,
+      audioInterrupted: interruption == CaptureInterruption.micTaken,
+      reconnecting: interruption == CaptureInterruption.recovering,
       paused: provider.isPaused || provider.isCallActive,
       transcriptionUnavailable: provider.terminalTranscriptionFailure != null,
       bufferingFor: provider.customSttBufferingDuration,
@@ -649,5 +656,6 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       state == WalSyncDisplayState.failed ||
       state == WalSyncDisplayState.corrupted ||
       state == WalSyncDisplayState.outsideRecoveryWindow ||
-      state == WalSyncDisplayState.unsupportedAudio;
+      state == WalSyncDisplayState.unsupportedAudio ||
+      state == WalSyncDisplayState.uploadRejected;
 }

@@ -126,6 +126,29 @@ void main() {
     });
   });
 
+  test('initial audio subscription also retries a silent CCCD once', () {
+    fakeAsync((async) {
+      transport.dispose();
+      final hostApi = _FakeBleHostApi();
+      transport = NativeBleTransport(uuid, hostApi: hostApi);
+
+      BleBridge.instance.onDeviceReady(uuid, services);
+      transport.getCharacteristicStream(serviceUuid, charUuid).listen((_) {});
+      async.flushMicrotasks();
+
+      final subscribesBeforeWatch = hostApi.subscribed.where((s) => s.contains(charUuid)).length;
+      expect(subscribesBeforeWatch, 1);
+
+      async.elapse(const Duration(seconds: 4));
+      async.flushMicrotasks();
+      expect(
+        hostApi.subscribed.where((s) => s.contains(charUuid)).length,
+        subscribesBeforeWatch + 1,
+        reason: 'the first connection needs the same bounded CCCD recovery as a reconnect',
+      );
+    });
+  });
+
   test('Bee audio UUID silence after reconnect still schedules one CCCD retry', () {
     fakeAsync((async) {
       transport.dispose();

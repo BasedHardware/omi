@@ -35,7 +35,9 @@ def _make_receiver(audio_bytes_send):
         stt_sockets_multi=[None, None],
         channel_mix_buffers=[bytearray(), bytearray()],
     )
-    # Bind the real _mark_first_audio so first-audio gating runs in this fake too.
+    # Bind the accepted-frame hooks so lease renewal and first-audio gating run
+    # through the real receiver behavior in this minimal double.
+    recv._note_audio_activity = MethodType(receiver.ListenReceiver._note_audio_activity, recv)
     recv._mark_first_audio = MethodType(receiver.ListenReceiver._mark_first_audio, recv)
     recv._capture = MethodType(receiver.ListenReceiver._capture, recv)
     return recv
