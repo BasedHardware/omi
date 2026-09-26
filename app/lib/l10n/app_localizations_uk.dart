@@ -11760,4 +11760,9 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Щоб Omi знав, що це ви · близько хвилини';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Збережено $saved аудіо з $total';
+  }
 }

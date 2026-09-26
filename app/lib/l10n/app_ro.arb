@@ -3699,5 +3699,6 @@
     "greetingHomeStretch": "Final de zi",
     "greetingEvening": "Bună seara",
     "unlimitedBadge": "Nelimitat",
-    "voiceSetupTaskSubline": "Ca Omi să știe că ești tu · cam un minut"
+    "voiceSetupTaskSubline": "Ca Omi să știe că ești tu · cam un minut",
+    "audioPartiallySaved": "Audio salvat: {saved} din {total}"
 }

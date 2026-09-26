@@ -11819,4 +11819,9 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Για να ξέρει το Omi ότι είστε εσείς · περίπου ένα λεπτό';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Αποθηκεύτηκαν $saved από $total ήχου';
+  }
 }

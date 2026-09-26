@@ -11736,4 +11736,9 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Et Omi teaks, et see oled sina · umbes minut';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Salvestatud heli: $saved / $total';
+  }
 }

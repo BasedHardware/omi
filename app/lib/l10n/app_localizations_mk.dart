@@ -11802,4 +11802,9 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'За Omi да знае дека сте вие · околу една минута';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Зачувано $saved од $total аудио';
+  }
 }

@@ -11729,4 +11729,9 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Aby Omi vedel, že ste to vy · asi minúta';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Uložené $saved z $total zvuku';
+  }
 }

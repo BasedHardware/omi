@@ -11646,4 +11646,9 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'כדי ש-Omi ידע שזה אתם · בערך דקה';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'נשמרו $saved מתוך $total של שמע';
+  }
 }

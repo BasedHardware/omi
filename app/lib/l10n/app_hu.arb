@@ -3795,5 +3795,6 @@
     "greetingHomeStretch": "Hajrá",
     "greetingEvening": "Jó estét",
     "unlimitedBadge": "Korlátlan",
-    "voiceSetupTaskSubline": "Hogy az Omi tudja, hogy te vagy az · kb. egy perc"
+    "voiceSetupTaskSubline": "Hogy az Omi tudja, hogy te vagy az · kb. egy perc",
+    "audioPartiallySaved": "Mentett hang: {saved} / {total}"
 }

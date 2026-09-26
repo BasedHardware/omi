@@ -11770,4 +11770,9 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Каб Omi ведаў, што гэта вы · каля хвіліны';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Захавана $saved аўдыя з $total';
+  }
 }

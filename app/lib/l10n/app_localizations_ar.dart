@@ -11666,4 +11666,9 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'حتى يعرف Omi أنك أنت · دقيقة تقريبًا';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'تم حفظ $saved من $total من الصوت';
+  }
 }

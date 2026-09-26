@@ -3734,5 +3734,6 @@
     "greetingHomeStretch": "Son düzlük",
     "greetingEvening": "İyi akşamlar",
     "unlimitedBadge": "Sınırsız",
-    "voiceSetupTaskSubline": "Omi sizi tanısın diye · yaklaşık bir dakika"
+    "voiceSetupTaskSubline": "Omi sizi tanısın diye · yaklaşık bir dakika",
+    "audioPartiallySaved": "{saved} ses kaydedildi ({total} içinden)"
 }

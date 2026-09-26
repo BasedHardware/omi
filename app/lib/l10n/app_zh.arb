@@ -3699,5 +3699,6 @@
     "greetingHomeStretch": "冲刺时刻",
     "greetingEvening": "晚上好",
     "unlimitedBadge": "无限",
-    "voiceSetupTaskSubline": "让 Omi 认出你的声音 · 大约一分钟"
+    "voiceSetupTaskSubline": "让 Omi 认出你的声音 · 大约一分钟",
+    "audioPartiallySaved": "已保存 {saved}／{total} 的音频"
 }

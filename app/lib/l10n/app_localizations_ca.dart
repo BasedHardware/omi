@@ -11804,4 +11804,9 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Perquè Omi sàpiga que ets tu · un minut, més o menys';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Àudio desat: $saved de $total';
+  }
 }

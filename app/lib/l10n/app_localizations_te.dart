@@ -11789,4 +11789,9 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'మీరేనని Omi తెలుసుకునేందుకు · సుమారు ఒక నిమిషం';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '$saved ఆడియో సేవ్ అయింది ($totalలో)';
+  }
 }

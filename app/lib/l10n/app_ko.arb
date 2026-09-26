@@ -3699,5 +3699,6 @@
     "greetingHomeStretch": "마무리 시간",
     "greetingEvening": "좋은 저녁이에요",
     "unlimitedBadge": "무제한",
-    "voiceSetupTaskSubline": "Omi가 내 목소리를 알아보도록 · 약 1분"
+    "voiceSetupTaskSubline": "Omi가 내 목소리를 알아보도록 · 약 1분",
+    "audioPartiallySaved": "오디오 {saved} 저장됨 (전체 {total})"
 }

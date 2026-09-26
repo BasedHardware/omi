@@ -3699,5 +3699,6 @@
     "greetingHomeStretch": "Loppukiri",
     "greetingEvening": "Hyvää iltaa",
     "unlimitedBadge": "Rajoittamaton",
-    "voiceSetupTaskSubline": "Jotta Omi tietää, että se olet sinä · noin minuutti"
+    "voiceSetupTaskSubline": "Jotta Omi tietää, että se olet sinä · noin minuutti",
+    "audioPartiallySaved": "Ääntä tallennettu {saved}/{total}"
 }

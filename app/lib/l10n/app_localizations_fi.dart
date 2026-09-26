@@ -11742,4 +11742,9 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Jotta Omi tietää, että se olet sinä · noin minuutti';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Ääntä tallennettu $saved/$total';
+  }
 }

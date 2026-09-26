@@ -11777,4 +11777,9 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'ನೀವೇ ಎಂದು Omi ತಿಳಿಯಲು · ಸುಮಾರು ಒಂದು ನಿಮಿಷ';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '$saved ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ ($total ರಲ್ಲಿ)';
+  }
 }

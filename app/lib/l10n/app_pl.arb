@@ -3734,5 +3734,6 @@
     "greetingHomeStretch": "Ostatnia prosta",
     "greetingEvening": "Dobry wieczór",
     "unlimitedBadge": "Nieograniczony",
-    "voiceSetupTaskSubline": "Aby Omi wiedziało, że to Ty · około minuty"
+    "voiceSetupTaskSubline": "Aby Omi wiedziało, że to Ty · około minuty",
+    "audioPartiallySaved": "Zapisano {saved} z {total} dźwięku"
 }

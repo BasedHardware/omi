@@ -11229,5 +11229,6 @@
     "greetingHomeStretch": "Zaključek dneva",
     "greetingEvening": "Dober večer",
     "unlimitedBadge": "Neomejeno",
-    "voiceSetupTaskSubline": "Da Omi ve, da ste to vi · približno minuta"
+    "voiceSetupTaskSubline": "Da Omi ve, da ste to vi · približno minuta",
+    "audioPartiallySaved": "Shranjeno {saved} od {total} zvoka"
 }

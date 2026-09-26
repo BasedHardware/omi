@@ -11751,4 +11751,9 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'हे तुम्हीच आहात हे Omi ला कळावे म्हणून · सुमारे एक मिनिट';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '$saved ऑडिओ जतन केला ($total पैकी)';
+  }
 }

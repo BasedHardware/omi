@@ -3699,5 +3699,6 @@
     "greetingHomeStretch": "Τελική ευθεία",
     "greetingEvening": "Καλησπέρα",
     "unlimitedBadge": "Απεριόριστο",
-    "voiceSetupTaskSubline": "Για να ξέρει το Omi ότι είστε εσείς · περίπου ένα λεπτό"
+    "voiceSetupTaskSubline": "Για να ξέρει το Omi ότι είστε εσείς · περίπου ένα λεπτό",
+    "audioPartiallySaved": "Αποθηκεύτηκαν {saved} από {total} ήχου"
 }

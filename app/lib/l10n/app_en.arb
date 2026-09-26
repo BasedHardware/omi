@@ -14051,5 +14051,17 @@
     "voiceSetupTaskSubline": "So Omi knows it’s you · about a minute",
     "@voiceSetupTaskSubline": {
         "description": "Subline of the To do setup task \"Teach Omi your voice\": why it helps and how long it takes"
+    },
+    "audioPartiallySaved": "{saved} of {total} audio saved",
+    "@audioPartiallySaved": {
+        "description": "Under a conversation's audio player when the stored audio covers much less than the conversation: saved length and conversation length, e.g. \"0:03 of 5:49 audio saved\"",
+        "placeholders": {
+            "saved": {
+                "type": "String"
+            },
+            "total": {
+                "type": "String"
+            }
+        }
     }
 }

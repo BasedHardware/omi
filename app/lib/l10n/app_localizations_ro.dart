@@ -11794,4 +11794,9 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Ca Omi să știe că ești tu · cam un minut';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return 'Audio salvat: $saved din $total';
+  }
 }

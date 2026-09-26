@@ -407,18 +407,44 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   /// v2 Conversation: the recording as an inline card under the title — play, a waveform to tap
   /// or scrub (played bars in white), and position / length. Nothing without audio.
+  ///
+  /// When the saved audio covers much less than the conversation (the server stored only part of
+  /// it, IMG_1160: a 5m 49s conversation with 3 s of audio), the card says so under the player
+  /// instead of looking like a broken recording.
   Widget _buildDetailBar(BuildContext context) {
     final hasAudio = widget.conversation?.hasAudio() ?? false;
     if (!hasAudio) return const SizedBox.shrink();
+    final conversationSeconds = widget.conversation!.getDurationInSeconds();
+    final partial = conversationSeconds >= 30 &&
+        _totalDuration > Duration.zero &&
+        _totalDuration.inMilliseconds < conversationSeconds * 1000 * 0.5;
     return OmiCard(
       key: const Key('conversation_audio_card'),
       radius: 24,
       padding: const EdgeInsets.fromLTRB(12, 12, 14, 12),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          _buildPlayPauseButton(diameter: 44),
-          const SizedBox(width: 12),
-          Expanded(child: _buildWaveformScrubber()),
+          Row(
+            children: [
+              _buildPlayPauseButton(diameter: 44),
+              const SizedBox(width: 12),
+              Expanded(child: _buildWaveformScrubber()),
+            ],
+          ),
+          if (partial)
+            Padding(
+              key: const Key('conversation_audio_partial'),
+              padding: const EdgeInsets.fromLTRB(4, 8, 0, 0),
+              child: Text(
+                context.l10n.audioPartiallySaved(
+                  _clock(_totalDuration),
+                  _clock(Duration(seconds: conversationSeconds)),
+                ),
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+              ),
+            ),
         ],
       ),
     );
@@ -427,7 +453,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   /// The waveform strip (44 bars, 30 pt) and "0:12 / 0:30"; tap or drag it to seek.
   Widget _buildWaveformScrubber() {
     Widget strip(Duration position) {
-      final total = _totalDuration;
+      // Never a length shorter than what is playing ("0:03 / 0:02"): the audio file itself may run
+      // a little past the saved-audio manifest.
+      final fileLength = _singleArtifact ? _audioPlayer?.duration : null;
+      var total = _totalDuration;
+      if (fileLength != null && fileLength > total) total = fileLength;
+      if (position > total) total = position;
       final progress =
           total.inMilliseconds > 0 ? (position.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0).toDouble() : 0.0;
       return Row(

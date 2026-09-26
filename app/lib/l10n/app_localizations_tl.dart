@@ -11842,4 +11842,9 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get voiceSetupTaskSubline => 'Para malaman ng Omi na ikaw ito · mga isang minuto';
+
+  @override
+  String audioPartiallySaved(String saved, String total) {
+    return '$saved sa $total na audio ang na-save';
+  }
 }
