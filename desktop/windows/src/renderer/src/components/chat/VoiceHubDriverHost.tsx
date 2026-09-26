@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAppState } from '../../state/appState'
 import { useAuth } from '../../hooks/useAuth'
 import { getPreferences, onPreferencesChange } from '../../lib/preferences'
+import { openAiByokKeyCached } from '../../lib/byokKeys'
 import { useHubWarmLifecycle } from '../../hooks/useHubWarmLifecycle'
 import { interruptCurrentResponse } from '../../lib/voice/voiceController'
 import { startPttCapture } from '../../lib/ptt/capture'
@@ -64,7 +65,10 @@ export function VoiceHubDriverHost(): null {
           fetchSeed: () => getSeedRef.current(),
           // Advertise the host-built voice tool catalog (PR-C). Role is host-derived
           // main-side (never model/renderer-claimed); empty until signed in.
-          fetchTools: () => window.omi?.voiceHubToolCatalog?.() ?? Promise.resolve([])
+          fetchTools: () => window.omi?.voiceHubToolCatalog?.() ?? Promise.resolve([]),
+          // BYOK: when the user has an OpenAI key configured, the GPT-Live lane
+          // connects direct to OpenAI with it instead of riding the Omi relay.
+          byokKey: () => openAiByokKeyCached()
         }),
       interruptPlayback: (leaseID) => interruptCurrentResponse(leaseID),
       publishState: (state) => window.omi?.publishVoiceHubState?.(state),

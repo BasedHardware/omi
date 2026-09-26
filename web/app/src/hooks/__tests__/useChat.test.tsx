@@ -111,7 +111,7 @@ describe('useChat session ownership', () => {
     expect(result.current.messages).toHaveLength(0);
   });
 
-  it('adds and persists Gemini Live turns in the selected chat session', async () => {
+  it('adds and persists GPT Live turns in the selected chat session', async () => {
     vi.mocked(saveRealtimeMessage).mockImplementation(async (params) => ({
       id: params.clientMessageId,
       created_at: '2026-08-11T00:00:00Z',

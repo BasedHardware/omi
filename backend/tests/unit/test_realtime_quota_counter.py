@@ -304,13 +304,28 @@ class _FakeConnect:
 class _Socket:
     headers = {'authorization': 'Bearer token'}
 
-    def __init__(self, provider: str, drained: asyncio.Event, before_accept: Any = None) -> None:
+    def __init__(
+        self,
+        provider: str,
+        drained: asyncio.Event,
+        before_accept: Any = None,
+        *,
+        headers: dict[str, str] | None = None,
+        first_message: dict[str, Any] | None = None,
+        hang: bool = False,
+    ) -> None:
         self.query_params = {'provider': provider}
         self.closes: list[dict[str, Any]] = []
         self.forwarded = 0
         self.accepted = False
+        self.json_sent: list[dict[str, Any]] = []
         self._drained = drained
         self._before_accept = before_accept
+        self._first_message = first_message
+        self._first_message_sent = False
+        self._hang = hang
+        if headers is not None:
+            self.headers = headers
 
     async def accept(self) -> None:
         if self._before_accept is not None:
@@ -326,7 +341,15 @@ class _Socket:
     async def send_bytes(self, _data: bytes) -> None:
         self.forwarded += 1
 
+    async def send_json(self, payload: dict[str, Any]) -> None:
+        self.json_sent.append(payload)
+
     async def receive(self) -> dict[str, Any]:
+        if self._first_message is not None and not self._first_message_sent:
+            self._first_message_sent = True
+            return self._first_message
+        if self._hang:
+            await asyncio.Event().wait()
         await self._drained.wait()
         return {'type': 'websocket.disconnect'}
 
@@ -371,6 +394,9 @@ async def _run_relay(
     store: _Store | None = None,
     before_accept: Any = None,
     upstream: Any = None,
+    headers: dict[str, str] | None = None,
+    first_message: dict[str, Any] | None = None,
+    hang: bool = False,
 ) -> tuple[_Socket, list[str]]:
     """Drive the relay end to end. `snapshots` feeds the connect gate first, then each re-check.
 
@@ -407,7 +433,14 @@ async def _run_relay(
     monkeypatch.setattr(
         omni_relay.websockets, 'connect', lambda *_a, **_k: _FakeConnect(_FakeUpstream(frames, drained))
     )
-    socket = _Socket(provider, drained, before_accept=before_accept)
+    socket = _Socket(
+        provider,
+        drained,
+        before_accept=before_accept,
+        headers=headers,
+        first_message=first_message,
+        hang=hang,
+    )
     await omni_relay.omni_relay(socket)
     return socket, writes
 
@@ -542,6 +575,51 @@ async def test_a_quota_snapshot_that_cannot_be_read_at_connect_refuses_with_a_co
     socket, _ = await _run_relay(monkeypatch, frames=[_done(30)], snapshots=[RuntimeError('firestore unavailable')])
     assert not socket.accepted
     assert socket.closes == [{'code': 1008, 'reason': 'quota_unavailable'}]
+
+
+@pytest.mark.asyncio
+async def test_first_message_auth_authenticates_browser_clients_without_a_url_token(monkeypatch) -> None:
+    """Browsers cannot set an Authorization header, so a managed client authenticates in
+    the first WS message. The bearer token must never be required (or read) from the URL."""
+    seen: dict[str, Any] = {}
+
+    async def _first_message_auth(message, *, websocket=None):  # noqa: ANN001
+        seen['payload'] = json.loads(message['text'])
+        seen['websocket'] = websocket
+        return UID
+
+    monkeypatch.setattr(omni_relay, 'get_current_user_uid_from_ws_message', _first_message_auth)
+    socket, writes = await _run_relay(
+        monkeypatch,
+        frames=[_done(30)],
+        snapshots=[_allowed(PlanType.basic)],
+        headers={},  # no Authorization header (browser client)
+        first_message={
+            'type': 'websocket.receive',
+            'text': json.dumps({'type': 'auth', 'token': 'firebase-id-token'}),
+        },
+    )
+    assert seen['payload'] == {'type': 'auth', 'token': 'firebase-id-token'}
+    assert seen['websocket'] is socket
+    assert socket.accepted
+    assert socket.json_sent[0] == {'type': 'auth_response', 'success': True}
+    assert socket.forwarded == 1
+    assert writes == []
+
+
+@pytest.mark.asyncio
+async def test_a_managed_socket_is_closed_at_the_advertised_session_lifetime(monkeypatch) -> None:
+    """Mint advertises ~30 minutes; authentication runs only at the upgrade, so the relay
+    itself must cut a socket that outlives its lifetime (no provider work past `expires_at`)."""
+    monkeypatch.setattr(omni_relay, 'OMNI_RELAY_MAX_SESSION_SECONDS', 0.05)
+    socket, _ = await _run_relay(
+        monkeypatch,
+        frames=[],
+        snapshots=[_allowed(PlanType.basic)],
+        hang=True,
+    )
+    assert socket.accepted
+    assert socket.closes[-1] == {'code': 1008, 'reason': 'session_expired'}
 
 
 def test_completed_response_identities_are_retained_past_the_largest_hard_capped_allowance() -> None:

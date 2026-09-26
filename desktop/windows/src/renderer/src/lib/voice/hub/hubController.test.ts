@@ -17,7 +17,12 @@ vi.mock('../../analytics', () => ({ trackEvent: vi.fn() }))
 
 import { trackEvent } from '../../analytics'
 import { MintError } from '../tokenMint'
-import { HubController, type HubControllerEvents } from './hubController'
+import {
+  HubController,
+  createDefaultHubSession,
+  type HubControllerEvents,
+  type HubSessionSpec
+} from './hubController'
 import { HUB_IDLE_TEARDOWN_THRESHOLD_MS } from './hubClose'
 
 /** A provider-scoped mint failure (unconfigured / quota / auth / outage) — the class
@@ -125,6 +130,7 @@ function harness(opts?: {
   provider?: VoiceProvider
   instructions?: string
   mintToken?: (provider: VoiceProvider) => Promise<string>
+  byokKey?: () => string | undefined
   fetchTools?: () => Promise<
     { name: string; description: string; parameters: Record<string, unknown> }[]
   >
@@ -158,6 +164,7 @@ function harness(opts?: {
     buildInstructions: () => opts?.instructions ?? 'INSTRUCTIONS+CARD',
     mintToken,
     fetchTools: opts?.fetchTools,
+    byokKey: opts?.byokKey,
     createSession,
     now: () => now.value,
     setTimer: (_ms, fire) => {
@@ -206,6 +213,55 @@ async function failBeforeConnect(h: Harness, closeCode = 1008): Promise<void> {
 
 beforeEach(() => {
   vi.mocked(trackEvent).mockClear()
+})
+
+describe('HubController — default provider-session factory', () => {
+  const spec = (provider: VoiceProvider): HubSessionSpec => ({
+    provider,
+    token: 'tok',
+    instructions: 'instr',
+    events: {},
+    tools: []
+  })
+
+  it('picks GptLiveHubSession for gpt_live, keeping OpenAI and Gemini available', () => {
+    expect(createDefaultHubSession(spec('gpt_live')).provider).toBe('gpt_live')
+    expect(createDefaultHubSession(spec('openai')).provider).toBe('openai')
+    expect(createDefaultHubSession(spec('gemini')).provider).toBe('gemini')
+  })
+
+  it('declares GPT-Live as 24kHz full-duplex', () => {
+    const session = createDefaultHubSession(spec('gpt_live'))
+    expect(session.requiredInputSampleRate).toBe(24000)
+    expect(session.bargeInStrategy).toBe('inSessionCancel')
+  })
+})
+
+describe('HubController — BYOK GPT-Live', () => {
+  it('bypasses the managed mint and passes the key to the GPT-Live session', async () => {
+    const h = harness({ provider: 'gpt_live', byokKey: () => 'sk-user' })
+    const p = h.controller.ensureWarm()
+    await tick()
+    h.getSession().connect()
+    await p
+
+    expect(h.mintToken).not.toHaveBeenCalled()
+    const spec = h.createSession.mock.calls[0][0] as unknown as HubSessionSpec
+    expect(spec.token).toBe('sk-user')
+    expect(spec.byokKey).toBe('sk-user')
+  })
+
+  it('still mints for a non-GPT-Live provider even when a BYOK key exists', async () => {
+    const h = harness({ provider: 'gemini', byokKey: () => 'sk-user' })
+    const p = h.controller.ensureWarm()
+    await tick()
+    h.getSession().connect()
+    await p
+
+    expect(h.mintToken).toHaveBeenCalledExactlyOnceWith('gemini')
+    const spec = h.createSession.mock.calls[0][0] as unknown as HubSessionSpec
+    expect(spec.byokKey).toBeUndefined()
+  })
 })
 
 describe('HubController — ensureWarm (A8 provider + A9 instructions)', () => {

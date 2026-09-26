@@ -4,7 +4,7 @@ vi.mock('../apiClient', () => ({
   desktopApi: { post: vi.fn() }
 }))
 
-import { classifyMintFailure, mintRealtimeToken } from './tokenMint'
+import { classifyMintFailure, mintRealtimeToken, GPT_LIVE_MODEL } from './tokenMint'
 import { desktopApi } from '../apiClient'
 
 describe('mintRealtimeToken — request shape', () => {
@@ -16,6 +16,20 @@ describe('mintRealtimeToken — request shape', () => {
       { provider: 'openai' },
       expect.objectContaining({ __sessionPreserving: true })
     )
+  })
+
+  it('mints the GPT-Live lane with provider: gpt_live', async () => {
+    vi.mocked(desktopApi.post).mockResolvedValue({
+      data: { provider: 'gpt_live', token: 'omi-token' }
+    })
+    const minted = await mintRealtimeToken('gpt_live')
+    expect(desktopApi.post).toHaveBeenCalledWith(
+      '/v2/realtime/session',
+      { provider: 'gpt_live' },
+      expect.objectContaining({ __sessionPreserving: true })
+    )
+    expect(minted).toEqual({ provider: 'gpt_live', token: 'omi-token', expiresAt: undefined })
+    expect(GPT_LIVE_MODEL).toBe('gpt-live-1')
   })
 })
 

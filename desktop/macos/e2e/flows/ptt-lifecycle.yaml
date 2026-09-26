@@ -51,6 +51,16 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/ShortcutSettings.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RawWebSocket.swift
   - desktop/macos/Desktop/Sources/RealtimeOmni/RealtimeOmniService.swift
+  # Area ownership, not step-level execution: the auto provider pick and the
+  # provider settings feed this flow's omni voice lane before the first frame;
+  # their behavior is exercised in RealtimeHubIdleWarmPlanGateTests /
+  # BYOKPaywallTests.
+  - desktop/macos/Desktop/Sources/RealtimeOmni/AutoModelSelector.swift
+  - desktop/macos/Desktop/Sources/RealtimeOmni/RealtimeOmniSettings.swift
+  # Area ownership: hub session lifecycle files above classify provider/backend
+  # credential failures through this manager; behavioral coverage lives in
+  # RealtimeHubCloseClassifierTests.
+  - desktop/macos/Desktop/Sources/CredentialHealthManager.swift
   - desktop/macos/Desktop/Sources/RealtimeOmni/RealtimeOmniTestHarness.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+EventAdmission.swift

@@ -12,6 +12,7 @@ enum SttProvider {
   falai,
   gemini,
   geminiLive,
+  gptLive,
   localWhisper,
   custom,
   customLive,
@@ -164,6 +165,8 @@ class SttLanguages {
   ];
 
   static const List<String> geminiSupported = ['en', 'es', 'fr', 'de', 'it', 'pt', 'ja', 'ko', 'zh', 'ar', 'hi', 'ru'];
+
+  static const List<String> gptLiveSupported = ['en', 'es', 'fr', 'de', 'it', 'pt', 'ja', 'ko', 'zh', 'ar', 'hi', 'ru'];
 }
 
 class SttProviderConfig {
@@ -323,6 +326,21 @@ class SttProviderConfig {
       apiKeyUrl: 'https://aistudio.google.com/apikey',
       docsUrl: 'https://ai.google.dev/gemini-api/docs/models/gemini',
     ),
+    SttProvider.gptLive: const SttProviderConfig(
+      provider: SttProvider.gptLive,
+      displayName: 'OpenAI GPT-Live',
+      description: 'OpenAI GPT-Live-1 - Real-time streaming',
+      icon: FontAwesomeIcons.openai,
+      requiresApiKey: true,
+      requestType: SttRequestType.streaming,
+      supportedLanguages: SttLanguages.gptLiveSupported,
+      supportedModels: ['gpt-live-1'],
+      defaultLanguage: 'en',
+      defaultModel: 'gpt-live-1',
+      responseSchema: SttResponseSchema.gptLive,
+      apiKeyUrl: 'https://platform.openai.com/api-keys',
+      docsUrl: 'https://developers.openai.com/api/docs/guides/live',
+    ),
     SttProvider.localWhisper: const SttProviderConfig(
       provider: SttProvider.localWhisper,
       displayName: 'Local Whisper',
@@ -387,7 +405,7 @@ class SttProviderConfig {
     SttProvider.openai,
     SttProvider.openaiDiarize,
     SttProvider.deepgramLive,
-    SttProvider.geminiLive,
+    SttProvider.gptLive,
     SttProvider.localWhisper,
     SttProvider.onDeviceWhisper,
     SttProvider.customLive,
@@ -396,7 +414,7 @@ class SttProviderConfig {
   static List<SttProviderConfig> get allProviders => _visibleProviders.map((p) => get(p)).toList();
 
   /// Template names that are live/streaming
-  static const Set<String> liveRequestTemplates = {'Deepgram', 'Google Gemini'};
+  static const Set<String> liveRequestTemplates = {'Deepgram', 'OpenAI GPT-Live'};
 
   /// Available request config templates for custom STT configuration
   static Map<String, Map<String, dynamic>> get requestTemplates => {
@@ -406,9 +424,9 @@ class SttProviderConfig {
           SttProvider.deepgramLive,
         ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'multi', model: 'nova-3'),
         'Fal.AI': get(SttProvider.falai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en'),
-        'Google Gemini': get(
-          SttProvider.geminiLive,
-        ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'gemini-2.5-flash'),
+        'OpenAI GPT-Live': get(
+          SttProvider.gptLive,
+        ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'gpt-live-1'),
         'Whisper': get(SttProvider.localWhisper).buildRequestConfig(language: 'en'),
       };
 
@@ -494,11 +512,11 @@ class SttProviderConfig {
         config['params'] = {'language': lang};
         break;
 
-      case SttProvider.geminiLive:
-        config['url'] =
-            'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContent?key=${apiKey ?? ''}';
+      case SttProvider.gptLive:
+        config['url'] = 'wss://api.openai.com/v1/live/sessions';
+        config['headers'] = {'Authorization': 'Bearer ${apiKey ?? ''}'};
         config['params'] = {
-          'model': mdl.isNotEmpty ? mdl : 'gemini-2.5-flash-native-audio-preview-12-2025',
+          'model': mdl.isNotEmpty ? mdl : 'gpt-live-1',
           'language': lang,
         };
         break;

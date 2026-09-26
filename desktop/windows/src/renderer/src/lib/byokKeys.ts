@@ -55,6 +55,17 @@ export function isByokActiveCached(): boolean {
 }
 
 /**
+ * The cached OpenAI key, when configured. GPT-Live's direct-connect lane needs
+ * the raw key in the renderer (the WS subprotocol cannot be set from the REST
+ * request that carried `X-BYOK-OpenAI`), so read it from the same in-memory
+ * mirror the REST interceptor uses. Never logged, never persisted here.
+ */
+export function openAiByokKeyCached(): string | undefined {
+  const key = cached.openai
+  return typeof key === 'string' && key.length > 0 ? key : undefined
+}
+
+/**
  * True when a validated (enrolled, unrotated) Deepgram key backs managed-STT
  * quota suppression. Deliberately NOT raw key presence: a configured-but-
  * rejected key must keep the exhaustion popup actionable.

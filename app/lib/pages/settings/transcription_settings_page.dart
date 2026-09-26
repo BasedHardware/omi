@@ -997,6 +997,16 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                   value: config.provider,
                   child: TranscriptionOptionLabel(config.displayName, isLive: config.isLive),
                 ),
+            // A persisted selection that this build no longer offers (e.g.
+            // geminiLive from before GPT-Live replaced it) must still have
+            // exactly one matching item, or the DropdownButton assertion fires;
+            // keep the legacy item visible while it is selected so the active
+            // configuration can be inspected and changed.
+            if (!SttProviderConfig.allProviders.any((c) => c.provider == _selectedProvider))
+              DropdownMenuItem<SttProvider>(
+                value: _selectedProvider,
+                child: TranscriptionOptionLabel(_currentConfig.displayName, isLive: _currentConfig.isLive),
+              ),
           ],
           onChanged: (provider) async {
             if (provider != null) await _selectProvider(provider);

@@ -25,6 +25,14 @@ beforeEach(() => {
 })
 
 describe('autoModelSelector — core pick', () => {
+  it('fetches gptLive1, stores it, and resolves to gpt_live under Auto', async () => {
+    get.mockResolvedValue({ data: { provider: 'gptLive1' } })
+    await refresh()
+    expect(get).toHaveBeenCalledWith('/v1/auto/model-pick', expect.objectContaining({}))
+    expect(currentPick()).toBe('gptLive1')
+    expect(resolveEffectiveVoiceProvider()).toBe('gpt_live')
+  })
+
   it('fetches gptRealtime2, stores it, and resolves to openai under Auto', async () => {
     get.mockResolvedValue({ data: { provider: 'gptRealtime2' } })
     await refresh()
@@ -56,17 +64,17 @@ describe('autoModelSelector — core pick', () => {
 })
 
 describe('autoModelSelector — graceful fallback (never clobber a good pick)', () => {
-  it('network error with no prior pick defaults to gemini', async () => {
+  it('network error with no prior pick defaults to gpt_live', async () => {
     get.mockRejectedValue(new Error('offline'))
     await refresh()
-    expect(currentPick()).toBe('geminiFlashLive')
-    expect(resolveEffectiveVoiceProvider()).toBe('gemini')
+    expect(currentPick()).toBe('gptLive1')
+    expect(resolveEffectiveVoiceProvider()).toBe('gpt_live')
   })
 
-  it('unknown provider string with no prior pick defaults to gemini', async () => {
+  it('unknown provider string with no prior pick defaults to gpt_live', async () => {
     get.mockResolvedValue({ data: { provider: 'someBrandNewModel' } })
     await refresh()
-    expect(currentPick()).toBe('geminiFlashLive')
+    expect(currentPick()).toBe('gptLive1')
   })
 
   it('network error keeps the last good pick', async () => {
@@ -119,10 +127,12 @@ describe('autoModelSelector — a concrete setting bypasses the selector', () =>
     expect(resolveEffectiveVoiceProvider()).toBe('gemini')
     setPreferences({ voiceProvider: 'openai' })
     expect(resolveEffectiveVoiceProvider()).toBe('openai')
+    setPreferences({ voiceProvider: 'gpt_live' })
+    expect(resolveEffectiveVoiceProvider()).toBe('gpt_live')
   })
 
-  it('Auto with no cached pick resolves to gemini', () => {
-    expect(resolveEffectiveVoiceProvider()).toBe('gemini')
+  it('Auto with no cached pick resolves to gpt_live (the default lane)', () => {
+    expect(resolveEffectiveVoiceProvider()).toBe('gpt_live')
   })
 
   // Regression: preferences are a hand-editable localStorage blob with no
