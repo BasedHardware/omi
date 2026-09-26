@@ -29,6 +29,8 @@
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
 * [`conversations_html.md`](conversations_html.md) — build a self-contained HTML
   report of conversations: one section per day, printable, no scripts.
+* [`goals_html.md`](goals_html.md) — build a self-contained HTML dashboard
+  report of goals: progress bars, status badges, printable, no scripts.
 * [`conversations_markdown.pt.md`](conversations_markdown.pt.md) — exportar conversas do Omi para Markdown (Portuguese recipe).
 * [`conversations_csv.md`](conversations_csv.md) — convert a conversation-list
   JSON export to CSV for spreadsheets.
