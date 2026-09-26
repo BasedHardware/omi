@@ -55,6 +55,8 @@ void main() {
     expect(adapter.events.single.eventName, 'Queued Event');
     expect(adapter.events.single.properties, {
       'count': 1,
+      'trigger': 'user',
+      'platform': 'unknown',
       'app_platform': 'unknown',
       'app_version': '2.3.4',
       'app_build': '567',
@@ -72,6 +74,39 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 20));
     await AnalyticsManager.flushPending(force: true);
     expect(adapter.events.map((e) => e.eventName), ['late-ready']);
+  });
+
+  test('every delivered event carries platform and a trigger classification', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+
+    AnalyticsManager().track('Recording Started');
+    AnalyticsManager().track('Mobile Background Resource Session');
+    AnalyticsManager().track('Update Check Failed');
+    AnalyticsManager().track('custom background event', properties: {'trigger': 'background'});
+    await AnalyticsManager.flushPending(force: true);
+
+    final byName = {for (final e in adapter.events) e.eventName: e.properties};
+    expect(byName['Recording Started']?['trigger'], 'user');
+    expect(byName['Recording Started']?['platform'], isNotNull);
+    expect(byName['Mobile Background Resource Session']?['trigger'], 'background');
+    expect(byName['Update Check Failed']?['trigger'], 'system');
+    expect(byName['custom background event']?['trigger'], 'background');
+  });
+
+  test('account created event carries platform for signup cohort analysis', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+
+    AnalyticsManager().accountCreated(authProvider: 'apple');
+    await AnalyticsManager.flushPending(force: true);
+
+    expect(adapter.events, hasLength(1));
+    expect(adapter.events.single.eventName, 'Account Created');
+    expect(adapter.events.single.properties['platform'], isNotNull);
+    expect(adapter.events.single.properties['trigger'], 'user');
   });
 
   test('awaited retry preserves occurrence identity and session context', () async {
@@ -206,10 +241,14 @@ void main() {
     attempt.complete(ProductOutcome.success);
     telemetry.value(ProductValue.feedbackHelpful);
     await AnalyticsManager.flushPending(force: true);
-    expect(adapter.events.singleWhere((event) => event.eventName == 'Product Journey Outcome').properties,
-        containsPair(r'$feature/test-ui', 'compact'));
-    expect(adapter.events.singleWhere((event) => event.eventName == 'Product Value').properties,
-        isNot(contains(r'$feature/test-ui')));
+    expect(
+      adapter.events.singleWhere((event) => event.eventName == 'Product Journey Outcome').properties,
+      containsPair(r'$feature/test-ui', 'compact'),
+    );
+    expect(
+      adapter.events.singleWhere((event) => event.eventName == 'Product Value').properties,
+      isNot(contains(r'$feature/test-ui')),
+    );
   });
 
   test('attempt started without consent never emits after consent is restored', () async {
@@ -302,6 +341,8 @@ void main() {
       'total_bytes': 4096,
       'claims_live_capture': true,
       'upload_source': 'offline_audio_queue',
+      'trigger': 'user',
+      'platform': 'unknown',
       'app_platform': 'unknown',
       'app_version': '2.3.4',
       'app_build': '567',
@@ -364,6 +405,8 @@ void main() {
       'is_first_auth': true,
       'auth_provider': 'google',
       'acquisition_source': 'mobile_oauth',
+      'trigger': 'user',
+      'platform': 'unknown',
       'app_platform': 'unknown',
       'app_version': '2.3.4',
       'app_build': '567',
@@ -460,6 +503,8 @@ void main() {
       'new_plan': 'plus',
       'billing_interval': 'year',
       'change_source': 'mobile_checkout',
+      'trigger': 'user',
+      'platform': 'unknown',
       'app_platform': 'unknown',
       'app_version': '2.3.4',
       'app_build': '567',

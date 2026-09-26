@@ -44,10 +44,14 @@ void main() {
 
   Future<List<Map<String, Object>>> actions() async {
     await AnalyticsManager.flushPending(force: true);
-    // The manager adds its own app_* provenance to every event; the event itself carries only these.
+    // The manager adds its own provenance to every event (app_*, plus the
+    // churn-instrumentation platform/trigger classification); the event itself
+    // carries only these.
     return adapter.events
         .where((e) => e.$1 == 'Conversation Action')
-        .map((e) => Map<String, Object>.fromEntries(e.$2.entries.where((p) => !p.key.startsWith('app_'))))
+        .map((e) => Map<String, Object>.fromEntries(
+              e.$2.entries.where((p) => !p.key.startsWith('app_') && p.key != 'platform' && p.key != 'trigger'),
+            ))
         .toList();
   }
 

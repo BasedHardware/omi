@@ -111,8 +111,11 @@ void main() {
     fireC8Slice3(AnalyticsManager());
     await AnalyticsManager.flushPending(force: true);
     await AnalyticsManager.flushPending(force: true);
+    final platformName = PlatformService.isIOS ? 'ios' : (PlatformService.isAndroid ? 'android' : 'unknown');
     final globals = <String, Object>{
-      'app_platform': PlatformService.isIOS ? 'ios' : (PlatformService.isAndroid ? 'android' : 'unknown'),
+      'trigger': 'user',
+      'platform': platformName,
+      'app_platform': platformName,
       'app_version': '1.0.543',
       'app_build': '992',
     };

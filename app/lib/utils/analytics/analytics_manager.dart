@@ -49,7 +49,10 @@ class AnalyticsManager {
   static bool _flushInProgress = false;
   static Timer? _retryTimer;
   static int _droppedEvents = 0;
-  static Map<String, Object> _globalEventProperties = {'app_platform': _mobilePlatformName};
+  static Map<String, Object> _globalEventProperties = {
+    'platform': _mobilePlatformName,
+    'app_platform': _mobilePlatformName,
+  };
   static bool _analyticsReady = false;
   static bool _trackingEnabled = true;
   static int _consentRevision = 0;
@@ -139,12 +142,14 @@ class AnalyticsManager {
 
   static void _notifyIdentity(String? distinctId, bool enabled) {
     identityChanged?.call(distinctId, enabled);
-    _experiments?.updateContext(ExperimentContext(
-      identityKey: distinctId ?? '',
-      analyticsEnabled: enabled,
-      namespace: _experimentNamespace,
-      appBuild: _appBuild,
-    ));
+    _experiments?.updateContext(
+      ExperimentContext(
+        identityKey: distinctId ?? '',
+        analyticsEnabled: enabled,
+        namespace: _experimentNamespace,
+        appBuild: _appBuild,
+      ),
+    );
   }
 
   static Future<void> _settleIdentity() async {
@@ -191,23 +196,25 @@ class AnalyticsManager {
     await _experiments?.refresh();
   }
 
-  void recordProductError(ProductErrorKind kind) => track('Product Error', properties: {
-        'error_kind': switch (kind) {
-          ProductErrorKind.flutterFramework => 'flutter_framework',
-          ProductErrorKind.uncaughtDart => 'uncaught_dart',
-          ProductErrorKind.startup => 'startup',
+  void recordProductError(ProductErrorKind kind) => track(
+        'Product Error',
+        properties: {
+          'error_kind': switch (kind) {
+            ProductErrorKind.flutterFramework => 'flutter_framework',
+            ProductErrorKind.uncaughtDart => 'uncaught_dart',
+            ProductErrorKind.startup => 'startup',
+          },
+          'diagnostic_source': 'crashlytics',
         },
-        'diagnostic_source': 'crashlytics',
-      });
+      );
 
   /// Periodic operational signal; does not recursively emit on queue failures.
   void recordTelemetryHealth() {
     _reportHealth();
-    track('Mobile Telemetry Health', properties: {
-      ...healthSnapshot,
-      'delivery_semantics': 'sdk_handoff_only',
-      'queue_persistence': 'memory',
-    });
+    track(
+      'Mobile Telemetry Health',
+      properties: {...healthSnapshot, 'delivery_semantics': 'sdk_handoff_only', 'queue_persistence': 'memory'},
+    );
   }
 
   static void _reportHealth() {
@@ -275,9 +282,11 @@ class AnalyticsManager {
       }
     }();
     _initialization = operation;
-    unawaited(operation.whenComplete(() {
-      if (identical(_initialization, operation)) _initialization = null;
-    }));
+    unawaited(
+      operation.whenComplete(() {
+        if (identical(_initialization, operation)) _initialization = null;
+      }),
+    );
     try {
       await operation.timeout(timeout);
     } on TimeoutException {
@@ -316,7 +325,7 @@ class AnalyticsManager {
     _retryTimer?.cancel();
     _retryTimer = null;
     _droppedEvents = 0;
-    _globalEventProperties = {'app_platform': _mobilePlatformName};
+    _globalEventProperties = {'platform': _mobilePlatformName, 'app_platform': _mobilePlatformName};
     _analyticsReady = false;
     _trackingEnabled = true;
     _experiments?.dispose();
@@ -584,6 +593,7 @@ class AnalyticsManager {
             if (coerced != null) props[k] = coerced;
           });
         }
+        props['trigger'] = _resolveTrigger(eventName, properties);
         _evictStaleTimedEvents();
         final start = _pendingTimedEvents.remove(eventName);
         if (start != null) {
@@ -598,13 +608,15 @@ class AnalyticsManager {
             props.addAll(attribution?.$2 ?? captureExperimentContext());
           } catch (_) {}
         }
-        _enqueueEvent(_QueuedAnalyticsEvent(
-          eventName: eventName,
-          properties: props,
-          eventId: const Uuid().v4(),
-          occurredAt: DateTime.now().toUtc(),
-          identityEpoch: _identityEpoch,
-        ));
+        _enqueueEvent(
+          _QueuedAnalyticsEvent(
+            eventName: eventName,
+            properties: props,
+            eventId: const Uuid().v4(),
+            occurredAt: DateTime.now().toUtc(),
+            identityEpoch: _identityEpoch,
+          ),
+        );
       });
 
   static void _enqueueEvent(_QueuedAnalyticsEvent event) {
@@ -662,15 +674,18 @@ class AnalyticsManager {
           if (!_trackingEnabled || event.identityEpoch != _identityEpoch) continue;
           final properties = {...event.properties, ..._globalEventProperties};
           if (adapter is AnalyticsDeliveryAdapter) {
-            await (adapter as AnalyticsDeliveryAdapter).deliver(eventName: event.eventName, properties: {
-              ...properties,
-              'event_id': event.eventId,
-              r'$insert_id': event.eventId,
-              'occurred_at': event.occurredAt.toIso8601String(),
-              'schema_version': 1,
-              'client_app_namespace': _clientAppNamespace,
-              'client_app_profile': Env.profile.name,
-            }).timeout(_initTimeout);
+            await (adapter as AnalyticsDeliveryAdapter).deliver(
+              eventName: event.eventName,
+              properties: {
+                ...properties,
+                'event_id': event.eventId,
+                r'$insert_id': event.eventId,
+                'occurred_at': event.occurredAt.toIso8601String(),
+                'schema_version': 1,
+                'client_app_namespace': _clientAppNamespace,
+                'client_app_profile': Env.profile.name,
+              },
+            ).timeout(_initTimeout);
           } else {
             adapter.track(eventName: event.eventName, properties: properties);
           }
@@ -754,10 +769,12 @@ class AnalyticsManager {
       const TypedEvents().emit(DeviceOnboardingDoubleTapConfigured(action: action));
 
   void settingsSaved({bool hasWebhookConversationCreated = false, bool hasWebhookTranscriptReceived = false}) =>
-      const TypedEvents().emit(DeveloperSettingsSaved(
-        hasWebhookMemoryCreated: hasWebhookConversationCreated,
-        hasWebhookTranscriptReceived: hasWebhookTranscriptReceived,
-      ));
+      const TypedEvents().emit(
+        DeveloperSettingsSaved(
+          hasWebhookMemoryCreated: hasWebhookConversationCreated,
+          hasWebhookTranscriptReceived: hasWebhookTranscriptReceived,
+        ),
+      );
 
   void pageOpened(String name) {
     setInteractionContext(screenName: name, target: 'screen');
@@ -1109,14 +1126,16 @@ class AnalyticsManager {
   }
 
   void memoriesAllVisibilityChanged(MemoryVisibility newVisibility, int count) {
-    const TypedEvents().emit(MemoriesAllVisibilityChanged(
-      newVisibility: switch (newVisibility) {
-        MemoryVisibility.private => MemoriesAllVisibilityChangedNewVisibility.private,
-        MemoryVisibility.public => MemoriesAllVisibilityChangedNewVisibility.public,
-        MemoryVisibility.shared => MemoriesAllVisibilityChangedNewVisibility.shared,
-      },
-      factsCount: count,
-    ));
+    const TypedEvents().emit(
+      MemoriesAllVisibilityChanged(
+        newVisibility: switch (newVisibility) {
+          MemoryVisibility.private => MemoriesAllVisibilityChangedNewVisibility.private,
+          MemoryVisibility.public => MemoriesAllVisibilityChangedNewVisibility.public,
+          MemoryVisibility.shared => MemoriesAllVisibilityChangedNewVisibility.shared,
+        },
+        factsCount: count,
+      ),
+    );
   }
 
   void memoriesAllDeleted(int countBeforeDeletion) {
@@ -1437,24 +1456,23 @@ class AnalyticsManager {
       const TypedEvents().emit(ShowDiscardedConversationsToggled(showDiscarded: showDiscarded));
 
   void shortConversationThresholdChanged(int thresholdSeconds) => const TypedEvents().emit(
-        ShortConversationThresholdChanged(
-          thresholdSeconds: thresholdSeconds,
-          thresholdMinutes: thresholdSeconds ~/ 60,
-        ),
+        ShortConversationThresholdChanged(thresholdSeconds: thresholdSeconds, thresholdMinutes: thresholdSeconds ~/ 60),
       );
 
   void voiceResponseToggled(bool enabled) => const TypedEvents().emit(VoiceResponseToggled(enabled: enabled));
 
   void voiceResponseModeChanged(int mode) {
-    const TypedEvents().emit(VoiceResponseModeChanged(
-      mode: switch (mode) {
-        0 => VoiceResponseModeChangedMode.off,
-        1 => VoiceResponseModeChangedMode.headphonesOnly,
-        2 => VoiceResponseModeChangedMode.always,
-        _ => VoiceResponseModeChangedMode.unknown,
-      },
-      modeInt: mode,
-    ));
+    const TypedEvents().emit(
+      VoiceResponseModeChanged(
+        mode: switch (mode) {
+          0 => VoiceResponseModeChangedMode.off,
+          1 => VoiceResponseModeChangedMode.headphonesOnly,
+          2 => VoiceResponseModeChangedMode.always,
+          _ => VoiceResponseModeChangedMode.unknown,
+        },
+        modeInt: mode,
+      ),
+    );
   }
 
   // Conversation Merge Events
@@ -1584,8 +1602,10 @@ class AnalyticsManager {
   void subscriptionCancelReasonSelected({required String reason}) =>
       track('Subscription Cancel Reason Selected', properties: {'reason': reason});
 
-  void subscriptionCancelConfirmed({required String reason, String? details}) => track('Subscription Cancel Confirmed',
-      properties: {'reason': reason, 'has_details': details?.isNotEmpty == true});
+  void subscriptionCancelConfirmed({required String reason, String? details}) => track(
+        'Subscription Cancel Confirmed',
+        properties: {'reason': reason, 'has_details': details?.isNotEmpty == true},
+      );
 
   void subscriptionCancelKeptPlan({required int step, String? reason}) =>
       track('Subscription Cancel Kept Plan', properties: {'step': step, 'reason': reason});
@@ -1639,9 +1659,10 @@ class AnalyticsManager {
   void deleteAccountReasonSelected({required String reason}) =>
       track('Delete Account Reason Selected', properties: {'reason': reason});
 
-  void deleteAccountFeedbackSubmitted({required String reason, String? details}) =>
-      track('Delete Account Feedback Submitted',
-          properties: {'reason': reason, 'has_details': details?.isNotEmpty == true});
+  void deleteAccountFeedbackSubmitted({required String reason, String? details}) => track(
+        'Delete Account Feedback Submitted',
+        properties: {'reason': reason, 'has_details': details?.isNotEmpty == true},
+      );
 
   void deleteAccountAbandoned({required int step, String? reason}) =>
       track('Delete Account Abandoned', properties: {'step': step, 'reason': reason});
@@ -1685,9 +1706,12 @@ class AnalyticsManager {
   void brainMapOpened() => const TypedEvents().emit(const BrainMapOpened());
 
   void brainMapNodeClicked(String nodeId, String label, String type) {
-    track('Brain Map Node Clicked', properties: {
-      'type': const {'person', 'place', 'organization', 'concept', 'event', 'memory'}.contains(type) ? type : 'other'
-    });
+    track(
+      'Brain Map Node Clicked',
+      properties: {
+        'type': const {'person', 'place', 'organization', 'concept', 'event', 'memory'}.contains(type) ? type : 'other',
+      },
+    );
   }
 
   void brainMapShareClicked() => const TypedEvents().emit(const BrainMapShareClicked());
@@ -1833,12 +1857,14 @@ class AnalyticsManager {
     required int segmentCount,
     required int photoCount,
   }) =>
-      const TypedEvents().emit(LiveTranscriptCardClicked(
-        hasSegments: hasSegments,
-        hasPhotos: hasPhotos,
-        segmentCount: segmentCount,
-        photoCount: photoCount,
-      ));
+      const TypedEvents().emit(
+        LiveTranscriptCardClicked(
+          hasSegments: hasSegments,
+          hasPhotos: hasPhotos,
+          segmentCount: segmentCount,
+          photoCount: photoCount,
+        ),
+      );
 
   void conversationListItemClickedWithTimeDifference({
     required ServerConversation conversation,
@@ -1970,10 +1996,13 @@ class AnalyticsManager {
   // ============================================================================
 
   void audioPlaybackFailed({required String conversationId, required String reason}) {
-    track('Audio Playback Failed', properties: {
-      'conversation_id': conversationId,
-      'reason': const {'pending_timeout', 'no_matching_sources'}.contains(reason) ? reason : 'unknown'
-    });
+    track(
+      'Audio Playback Failed',
+      properties: {
+        'conversation_id': conversationId,
+        'reason': const {'pending_timeout', 'no_matching_sources'}.contains(reason) ? reason : 'unknown',
+      },
+    );
   }
 
   void audioPlaybackStarted({required String conversationId, int? durationSeconds}) {
@@ -2040,10 +2069,7 @@ class AnalyticsManager {
   }
 
   void audioShareFailed({required String conversationId, String? errorMessage}) {
-    track(
-      'Audio Share Failed',
-      properties: {'conversation_id': conversationId, 'failure_class': 'unknown'},
-    );
+    track('Audio Share Failed', properties: {'conversation_id': conversationId, 'failure_class': 'unknown'});
   }
 
   void audioShareCancelled({required String conversationId}) {
@@ -2080,15 +2106,17 @@ class AnalyticsManager {
     required int titleDuePushed,
     required int remindersUnlinked,
   }) =>
-      const TypedEvents().emit(AppleRemindersSyncCompleted(
-        pendingExported: pendingExported,
-        syncedChecked: syncedChecked,
-        completionsPulled: completionsPulled,
-        completionsPushed: completionsPushed,
-        titleDuePulled: titleDuePulled,
-        titleDuePushed: titleDuePushed,
-        remindersUnlinked: remindersUnlinked,
-      ));
+      const TypedEvents().emit(
+        AppleRemindersSyncCompleted(
+          pendingExported: pendingExported,
+          syncedChecked: syncedChecked,
+          completionsPulled: completionsPulled,
+          completionsPushed: completionsPushed,
+          titleDuePulled: titleDuePulled,
+          titleDuePushed: titleDuePushed,
+          remindersUnlinked: remindersUnlinked,
+        ),
+      );
 
   void appleReminderDirectSync({required String actionItemId}) {
     track('Apple Reminder Direct Sync', properties: {'action_item_id': actionItemId});
@@ -2362,11 +2390,13 @@ class AnalyticsManager {
     required int totalMinutes,
     required int daysActive,
   }) =>
-      const TypedEvents().emit(WrappedGenerationCompleted(
-        totalConversations: totalConversations,
-        totalMinutes: totalMinutes,
-        daysActive: daysActive,
-      ));
+      const TypedEvents().emit(
+        WrappedGenerationCompleted(
+          totalConversations: totalConversations,
+          totalMinutes: totalMinutes,
+          daysActive: daysActive,
+        ),
+      );
 
   void wrappedGenerationFailed({String? error}) {
     track('Wrapped Generation Failed', properties: {'failure_class': 'unknown'});
@@ -2692,6 +2722,40 @@ class AnalyticsManager {
     return 'unknown';
   }
 
+  /// Events that fire without user initiation. Churn/retention analysis must
+  /// exclude them when measuring "did the user come back": background refresh
+  /// and telemetry keep firing while the person is away (same trap as
+  /// launch-at-login keeping `App Launched` warm on desktop).
+  static const Map<String, String> _nonUserTriggerByEvent = {
+    'Mobile Background Resource Session': 'background',
+    'Mobile Background Observation Interrupted': 'background',
+    'Mobile Telemetry Health': 'background',
+    'Mobile Render Observation': 'background',
+    'App Startup Timing': 'system',
+    'desktop_health_event': 'system',
+    'fallback_triggered': 'system',
+    'authenticated_request_401': 'system',
+    'auth_token_refresh_failed': 'system',
+    'Notification Sent': 'system',
+    'Notification Dismissed': 'system',
+    'Notification Settings Checked': 'system',
+    'Update Available': 'system',
+    'Update Check Started': 'system',
+    'Update Check Completed': 'system',
+    'Update Check Failed': 'system',
+    'Update Install Started': 'system',
+    'Update Installed': 'system',
+  };
+
+  /// `trigger` for one event: an explicit `trigger` in [properties] wins
+  /// (escape hatch for emit sites that know better), then the non-user map,
+  /// then the `user` default for interaction-driven events.
+  static String _resolveTrigger(String eventName, Map<String, dynamic>? properties) {
+    final explicit = properties?['trigger'];
+    if (explicit is String && explicit.isNotEmpty) return explicit;
+    return _nonUserTriggerByEvent[eventName] ?? 'user';
+  }
+
   static Future<void> _loadGlobalEventProperties({required Duration timeout}) async {
     var version = 'unknown';
     var build = 'unknown';
@@ -2705,7 +2769,12 @@ class AnalyticsManager {
           ? 'mobile-prod'
           : 'mobile-dev';
     } catch (_) {}
-    _globalEventProperties = {'app_platform': _mobilePlatformName, 'app_version': version, 'app_build': build};
+    _globalEventProperties = {
+      'platform': _mobilePlatformName,
+      'app_platform': _mobilePlatformName,
+      'app_version': version,
+      'app_build': build,
+    };
   }
 
   static Map<String, dynamic> _searchProperties({required String query, required String surface, int? resultsCount}) {
@@ -2721,13 +2790,14 @@ class AnalyticsManager {
 }
 
 class _QueuedAnalyticsEvent {
-  const _QueuedAnalyticsEvent(
-      {required this.eventName,
-      required this.properties,
-      required this.eventId,
-      required this.occurredAt,
-      required this.identityEpoch,
-      this.attempts = 0});
+  const _QueuedAnalyticsEvent({
+    required this.eventName,
+    required this.properties,
+    required this.eventId,
+    required this.occurredAt,
+    required this.identityEpoch,
+    this.attempts = 0,
+  });
   final String eventName;
   final Map<String, Object> properties;
   final String eventId;
@@ -2735,10 +2805,11 @@ class _QueuedAnalyticsEvent {
   final int identityEpoch;
   final int attempts;
   _QueuedAnalyticsEvent nextAttempt() => _QueuedAnalyticsEvent(
-      eventName: eventName,
-      properties: properties,
-      eventId: eventId,
-      occurredAt: occurredAt,
-      identityEpoch: identityEpoch,
-      attempts: attempts + 1);
+        eventName: eventName,
+        properties: properties,
+        eventId: eventId,
+        occurredAt: occurredAt,
+        identityEpoch: identityEpoch,
+        attempts: attempts + 1,
+      );
 }
