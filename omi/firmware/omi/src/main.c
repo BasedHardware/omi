@@ -14,6 +14,7 @@
 #ifdef CONFIG_OMI_ENABLE_MONITOR
 #include "lib/core/monitor.h"
 #endif
+#include "lib/core/capture_mute.h"
 #include "lib/core/settings.h"
 #include "lib/core/transport.h"
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
@@ -298,6 +299,10 @@ int main(void)
         error_sd_card();
         return ret;
     }
+
+    /* app_sd_init() clears the in-memory write-pause bit. Re-apply the
+     * persisted mute so a reboot cannot resume capture (issue #5054). */
+    capture_mute_apply_runtime();
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     // Initialize storage service for offline audio

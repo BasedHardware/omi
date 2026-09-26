@@ -27,6 +27,7 @@ import 'package:omi/services/capture/capture_coordinator.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_lifetime.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
+import 'package:omi/services/capture/device_mute_sync.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/native_batch_geolocation.dart';
@@ -45,6 +46,7 @@ import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/audio_sources/ble_device_source.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/limitless_connection.dart';
+import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/audio_sources/phone_mic_source.dart';
 import 'package:omi/services/wals.dart';
@@ -108,6 +110,8 @@ class CaptureController extends ChangeNotifier
   late final NativeBatchGeolocationPreferenceFence _phoneBatchGeolocationPreference =
       NativeBatchGeolocationPreferenceFence(writer: _writePhoneBatchGeolocationPreference);
   final RecordingLifecycleTelemetry _recordingTelemetry;
+  final Future<bool?> Function(String deviceId)? _deviceMuteReader;
+  final Future<void> Function(String deviceId, bool muted)? _deviceMuteWriter;
 
   CaptureExternalActions externalActions;
   DeviceOnboardingProvider? deviceOnboardingProvider;
@@ -237,6 +241,8 @@ class CaptureController extends ChangeNotifier
     CaptureConversationSocketOpen? openSocket,
     CaptureSessionOwner? sessionOwner,
     Future<CreateConversationResponse?> Function()? processInProgressConversation,
+    Future<bool?> Function(String deviceId)? deviceMuteReader,
+    Future<void> Function(String deviceId, bool muted)? deviceMuteWriter,
     Future<DeviceConnection?> Function(String deviceId)? deviceConnectionLoader,
     ValueListenable<PhoneCallState>? omiCallState,
     CaptureNativeWriterGate? nativeWriterGate,
@@ -264,8 +270,13 @@ class CaptureController extends ChangeNotifier
         _omiCallState = omiCallState,
         _nativeWriterGate = nativeWriterGate ?? const NoopCaptureNativeWriterGate(),
         _wedgeMonitorOverride = captureWedgeMonitor,
-        _preferences = preferences ?? SharedPreferencesUtil() {
+        _preferences = preferences ?? SharedPreferencesUtil(),
+        _deviceMuteReader = deviceMuteReader,
+        _deviceMuteWriter = deviceMuteWriter {
     _isConnected = _connectivity.initiallyConnected;
+    // Local mute lives in capturePolicy (isPaused). On reconnect,
+    // streamDeviceRecording() reads the pendant over BLE (device wins) and
+    // falls back to this policy for firmware without the mute characteristic.
     lifetime.listen(_connectivity.changes, onConnectionStateChanged);
     final ble = _bleListeners ?? const BleBridgeCaptureListeners();
     ble.addBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
@@ -2702,6 +2713,9 @@ class CaptureController extends ChangeNotifier
     }
     _sessionRecordingDevice = _recordingDevice;
 
+    // Apply device mute before _resetState so streamAudioToWs admission sees it.
+    await applyReconnectMute(deviceMuted: await _readDeviceMute());
+
     // Product: recording is the tap; location is metadata. Do not block
     // device connect/start on the OS location dialog. Location still PATCHes
     // when the grant/fix lands and stamps the recording-owned WAL snapshot.
@@ -3560,6 +3574,54 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
+  Future<bool?> _readDeviceMute() async {
+    final device = _recordingDevice;
+    if (device == null) return null;
+    try {
+      if (_deviceMuteReader != null) {
+        return await _deviceMuteReader!(device.id);
+      }
+      final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+      if (connection is OmiDeviceConnection) {
+        return await connection.getCaptureMuted();
+      }
+    } catch (e) {
+      Logger.debug('Failed to read device mute: $e');
+    }
+    return null;
+  }
+
+  Future<void> _writeDeviceMute(bool muted) async {
+    final device = _recordingDevice;
+    if (device == null) return;
+    try {
+      if (_deviceMuteWriter != null) {
+        await _deviceMuteWriter!(device.id, muted);
+        return;
+      }
+      final connection = await ServiceManager.instance().device.ensureConnection(device.id);
+      if (connection is OmiDeviceConnection) {
+        await connection.setCaptureMuted(muted);
+      }
+    } catch (e) {
+      Logger.debug('Failed to write device mute: $e');
+    }
+  }
+
+  /// Apply the device-reported mute (or local fallback) as the reconnect
+  /// pause bit. Device state wins when present (issue #5054).
+  @visibleForTesting
+  Future<bool> applyReconnectMute({required bool? deviceMuted}) async {
+    final paused = DeviceMuteSync.resolveReconnectPaused(
+      deviceMuted: deviceMuted,
+      localMuted: isPaused,
+    );
+    if (paused != isPaused) {
+      await _setCaptureMuted(paused);
+    }
+    return isPaused;
+  }
+
   /// Pause whichever source is live. The live page, the Home capture card and the quick actions
   /// all call this, so the rule for what a pause does lives in one place.
   Future<void> pauseCapture() async {
@@ -3591,6 +3653,10 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> _pauseDeviceTailBody() async {
+    // Persist the hardware mute to the pendant before the local admission is
+    // retired and the stream torn down, so a Bluetooth disconnect during the
+    // pause cannot let the device resume capture on reconnect.
+    await _writeDeviceMute(true);
     var revision = _preferences.capturePolicy.revision;
     await BatteryWidgetService().updateMuteState(true);
     if (_preferences.capturePolicy.revision != revision) return;
@@ -3612,6 +3678,7 @@ class CaptureController extends ChangeNotifier
     if (_recordingDevice == null) return;
     final revision = _preferences.capturePolicy.revision;
     if (!_admitsCapture(revision)) return;
+    await _writeDeviceMute(false);
     await BatteryWidgetService().updateMuteState(false);
     if (!_admitsCapture(revision)) return;
     await _initiateDeviceAudioStreaming();
