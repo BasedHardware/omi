@@ -2,6 +2,7 @@
 
 import ast
 from pathlib import Path
+from typing import Any, Mapping, Optional
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -19,7 +20,7 @@ def _extract_get_samples_version():
     for node in tree.body:
         if isinstance(node, ast.FunctionDef) and node.name == "_get_samples_version":
             code = compile(ast.Module(body=[node], type_ignores=[]), filename="<ast>", mode="exec")
-            namespace = {}
+            namespace = {"Optional": Optional, "Mapping": Mapping, "Any": Any}
             exec(code, namespace)
             return namespace["_get_samples_version"]
     raise NameError("_get_samples_version not found in speaker_sample_migration.py")
