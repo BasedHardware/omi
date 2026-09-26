@@ -310,6 +310,30 @@ describe('ConversationSplitView review regressions', () => {
     );
   });
 
+  it('leaves the detail pane width to the responsive layout', async () => {
+    harness.conversations = [
+      conversation('pane-conversation', '2026-08-11T12:00:00Z'),
+    ];
+
+    render(<ConversationSplitView />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('conversation-detail')).toBeInTheDocument(),
+    );
+
+    const pane = document.querySelector<HTMLElement>(
+      '[style*="--conversation-detail-width"]',
+    );
+    expect(pane).not.toBeNull();
+    // An inline `width` outranks every responsive class, which is how the pane
+    // came to be 110px wide on a 390px phone with the rest of the row blank.
+    expect(pane?.style.width).toBe('');
+    expect(pane?.style.getPropertyValue('--conversation-detail-width')).toBe(
+      'min(480px, calc(100% - 280px))',
+    );
+    expect(pane?.className).toContain('lg:w-[var(--conversation-detail-width)]');
+  });
+
   it('keeps the timeline visible until the draft search is submitted', async () => {
     harness.conversations = [
       conversation('timeline-conversation', '2026-08-11T12:00:00Z'),

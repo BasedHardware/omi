@@ -2491,12 +2491,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Thông báo chẩn đoán chi tiết';
 
   @override
-  String get autoCreateSpeakers => 'Tự động tạo Người nói';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Tự động tạo khi phát hiện tên';
-
-  @override
   String get followUpQuestions => 'Câu hỏi Theo dõi';
 
   @override
@@ -11167,9 +11161,6 @@ class AppLocalizationsVi extends AppLocalizations {
       'Bản chép âm không khả dụng, quá trình ghi âm tiếp tục trên thiết bị và sẽ được xử lý sau';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Bản chép âm không khả dụng · đang lưu trên thiết bị';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Bản chép âm đang chờ $pending/$total';
   }
@@ -11228,4 +11219,46 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Dừng Transcribe Later trên mặt dây trước khi ghi âm bằng điện thoại.';
+
+  @override
+  String get captureNotTranscribing => 'Không phiên âm';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Đã lưu âm thanh, phiên âm sau';
+
+  @override
+  String get captureStillRecording => 'Vẫn đang ghi âm';
+
+  @override
+  String get captureMicInUseElsewhere => 'Ứng dụng khác đang dùng micrô';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Một cuộc gọi hoặc ứng dụng khác đang dùng micrô nên Omi hiện không nghe được. Omi sẽ tự tiếp tục khi micrô rảnh. Mọi thứ đã ghi trước đó vẫn an toàn.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Không thể kết nối dịch vụ chuyển giọng nói thành văn bản tùy chỉnh của bạn. Omi giữ âm thanh trên điện thoại này và sẽ gửi khi dịch vụ hoạt động trở lại. Không có gì bị mất.';
+
+  @override
+  String get captureStarting => 'Đang bắt đầu…';
+
+  @override
+  String get capturePhoneStorageFull => 'Bộ nhớ điện thoại đầy';
+
+  @override
+  String get captureStorageAlmostFull => 'Bộ nhớ gần đầy';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name và những người khác';
+  }
 }

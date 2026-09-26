@@ -8,7 +8,7 @@ import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/logger.dart';
 import 'device_transport.dart';
 
-/// After reconnect, one CCCD re-subscribe is allowed if no audio bytes arrive.
+/// After subscribing, one CCCD re-subscribe is allowed if no audio bytes arrive.
 const _captureAudioLivenessWindow = Duration(seconds: 4);
 const _captureAudioSilenceResubscribeLimit = 1;
 
@@ -175,6 +175,9 @@ class NativeBleTransport extends DeviceTransport {
     _subscribedSubscriptionKeys.add(key);
     try {
       await _hostApi.subscribeCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid);
+      if (isBleAudioCharacteristicUuid(characteristicUuid)) {
+        _armAudioLivenessWatch();
+      }
     } catch (e) {
       _subscribedSubscriptionKeys.remove(key);
       Logger.debug('[NativeBleTransport] Failed to subscribe $serviceUuid:$characteristicUuid: $e');

@@ -4143,6 +4143,21 @@
       },
       "AudioFile": {
         "properties": {
+          "chunk_spans": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChunkSpan"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Validated contiguous coverage spans (v2 only)",
+            "title": "Chunk Spans"
+          },
           "chunk_timestamps": {
             "description": "List of chunk timestamps (for on-demand merging)",
             "items": {
@@ -4279,6 +4294,20 @@
           "status"
         ],
         "title": "AudioPrecacheResponse",
+        "type": "object"
+      },
+      "AudioTimelineProvenance": {
+        "description": "Audio-timeline v2 provenance marker on eligible conversation rows.\n\nPresent only on single-channel, server-STT live captures admitted under\nAUDIO_TIMELINE_V2: both transcript segment offsets and audio chunk starts\nare projections of one capture sample cursor anchored at the conversation's\nfirst accepted audio sample (started_at is that origin, pinned once).\nAbsent on legacy, resumed-v1, multi-channel, custom-STT, sync-merged or\nmixed-source rows.",
+        "properties": {
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "AudioTimelineProvenance",
         "type": "object"
       },
       "AudioUrlsResponse": {
@@ -6768,6 +6797,25 @@
         "title": "CheckVerificationResponse",
         "type": "object"
       },
+      "ChunkSpan": {
+        "description": "One contiguous stretch of stored PCM, in wall-epoch seconds.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "number"
+          },
+          "start": {
+            "title": "Start",
+            "type": "number"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "ChunkSpan",
+        "type": "object"
+      },
       "CleanerMemory": {
         "properties": {
           "archive_default_visible": {
@@ -7249,6 +7297,16 @@
             "title": "Audio Files",
             "type": "array"
           },
+          "audio_timeline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AudioTimelineProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "calendar_event": {
             "anyOf": [
               {
@@ -7526,6 +7584,16 @@
               }
             ],
             "default": "omi"
+          },
+          "speaker_resolution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationSpeakers"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "starred": {
             "default": false,
@@ -8380,6 +8448,16 @@
             "title": "Audio Files",
             "type": "array"
           },
+          "audio_timeline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AudioTimelineProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "calendar_event": {
             "anyOf": [
               {
@@ -8666,6 +8744,16 @@
             ],
             "default": "omi"
           },
+          "speaker_resolution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationSpeakers"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "starred": {
             "default": false,
             "title": "Starred",
@@ -8808,6 +8896,38 @@
         ],
         "title": "ConversationSource",
         "type": "string"
+      },
+      "ConversationSpeakers": {
+        "description": "Server-authored meaning of this conversation's ``speaker_id`` values.\n\n``resolved``: re-diarized from the stored audio, so each ``speaker_id`` is one\nvoice for the whole conversation. ``capture``: one uninterrupted capture\ndiarized it, so capture's ids are that diarization. ``unavailable``: capture\nrestarted its numbering (reconnects, failovers, uploaded chunks) and no\nstored audio could resolve it, so ids are not people and must not be counted.\n``participant_speaker_ids`` lists the voices that spoke enough to count as\nparticipants; it is empty when the status is ``unavailable``.",
+        "properties": {
+          "participant_speaker_ids": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Participant Speaker Ids",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "resolved",
+              "capture",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ConversationSpeakers",
+        "type": "object"
       },
       "ConversationStatus": {
         "enum": [
@@ -39421,7 +39541,7 @@
             "name": "include_discarded",
             "required": false,
             "schema": {
-              "default": true,
+              "default": false,
               "title": "Include Discarded",
               "type": "boolean"
             }

@@ -22,8 +22,8 @@ causes, both ours:
 
 ## Prescription
 
-**A. One long-lived `SCStream` scoped to the frontmost window** (`WindowCaptureStreamEngine`,
-behind `ScreenCaptureStreamFeature`). One stream = one authorization at
+**A. One long-lived `SCStream` scoped to the frontmost window** (`WindowCaptureStreamEngine`).
+One stream = one authorization at
 `startCapture`; window switches go through `updateContentFilter` on the live stream and
 resizes through `updateConfiguration`, not new sessions. All existing capture entry
 points (`captureWindowCGImage`, including the ≤80 px preview requests, which are served
@@ -74,7 +74,7 @@ sampling rate drops from ~1.5/s to roughly one per stream start.
   Dogfood verification: watch tccd `kTCCServiceScreenCapture` request volume
   before/after.
 
-- **Preview semantics shift.** Flag-on, the ≤80 px preview is a downscale of the
+- **Preview semantics shift.** With the stream, the ≤80 px preview is a downscale of the
   stream's latest frame rather than its own capture, so the preview-similarity skip
   decision can be one frame stale. It self-corrects on the next tick, and the whole
   point is that a preview must not cost a capture session. If the downscale itself
@@ -100,12 +100,12 @@ one re-confirmation and the second must still be explained.
 
 ## Flag
 
-`ScreenCaptureStreamFeature`: non-production bundles default ON
-(`OMI_PERSISTENT_CAPTURE_STREAM=0` turns it off) for dogfooding; production reads the
-PostHog flag `desktop_persistent_capture_stream`, fail-closed, resolved at monitoring
-start and cached for the non-MainActor capture path. Flag off = byte-identical
-one-shot behavior (plus the terminal declined state, which ships unflagged as a
-straight bug fix).
+The `ScreenCaptureStreamFeature` rollout flag and the persistent-stream wiring were
+removed: `captureWindowCGImage` always uses the one-shot `SCScreenshotManager`
+session path. The unused `WindowCaptureStreamEngine` was subsequently deleted.
+The prescription above is kept as the design rationale in case the persistent
+stream is reinstated; the declined-capture classification shipped unflagged as a
+straight bug fix.
 
 ## Verification watchlist (dogfood)
 
