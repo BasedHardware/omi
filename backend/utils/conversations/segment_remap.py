@@ -26,34 +26,63 @@ def _bounds(segment: Mapping[str, Any]) -> tuple[float, float]:
     return start, end
 
 
-def estimate_offset(old: Sequence[Mapping[str, Any]], new: Sequence[Mapping[str, Any]]) -> float:
-    """Return the shift to add to live times, using distinctive matching text.
-
-    Zero remains the conservative default when there is no convincing anchor.
-    The caller sees the chosen shift and can reject a low remap rate.
-    """
-    candidates: list[float] = []
+def _offset_candidates(old: Sequence[Mapping[str, Any]], new: Sequence[Mapping[str, Any]]) -> set[float]:
+    """Keep repeated phrases as candidates; their timing resolves the repetition."""
+    buckets: dict[float, list[float]] = {}
     for source in old:
         phrase = _tokens(source)
         if len(phrase) < 12:
             continue
-        matches = []
         for target in new:
             other = _tokens(target)
             if len(other) < 12:
                 continue
             similarity = SequenceMatcher(None, phrase, other, autojunk=False).ratio()
-            if similarity >= 0.82:
-                matches.append((similarity, target))
-        matches.sort(key=lambda pair: pair[0], reverse=True)
-        if not matches or (len(matches) > 1 and matches[0][0] - matches[1][0] < 0.08):
-            continue
-        a, b = _bounds(source)
-        c, d = _bounds(matches[0][1])
-        shift = (c + d - a - b) / 2
-        if abs(shift) <= 600:
-            candidates.append(shift)
-    return round(median(candidates), 3) if candidates else 0.0
+            if similarity >= 0.65:
+                a, b = _bounds(source)
+                c, d = _bounds(target)
+                shifts = [(c + d - a - b) / 2]
+                if similarity < 0.82:
+                    # One transcript may split a longer sentence. Its first or
+                    # last edge can still anchor the common text on the clock.
+                    shifts.extend((c - a, d - b))
+                for candidate in shifts:
+                    shift = round(candidate, 3)
+                    if abs(shift) <= 600:
+                        buckets.setdefault(round(shift, 1), []).append(shift)
+    # Repeated speech can produce many placements. Keep the strongest clock
+    # clusters, with a fixed bound on the subsequent whole-transcript scoring.
+    ranked = sorted(buckets.values(), key=lambda values: (-len(values), abs(median(values))))[:64]
+    return {0.0, *(round(median(values), 3) for values in ranked)}
+
+
+def estimate_offset(old: Sequence[Mapping[str, Any]], new: Sequence[Mapping[str, Any]]) -> float:
+    """Choose the text-anchored shift with the most unambiguous time mappings.
+
+    A repeated sentence is not a unique anchor. Score every matching placement
+    against the whole ordered transcript, rather than taking the median of a
+    few locally unique matches.
+    """
+    candidates = _offset_candidates(old, new)
+    scored = []
+    for shift in candidates:
+        plan = _plan_at_offset(old, new, shift)
+        agreement = _text_agreement(old, new, plan)
+        scored.append((len(plan.ids), -len(plan.ambiguous), agreement, -len(plan.unresolved), -abs(shift), shift))
+    return max(scored)[-1] if scored else 0.0
+
+
+def _text_agreement(old: Sequence[Mapping[str, Any]], new: Sequence[Mapping[str, Any]], plan: 'RemapPlan') -> float:
+    targets = {str(item['id']): _tokens(item) for item in new}
+    matches = []
+    for source in old:
+        ids = plan.ids.get(str(source['id']))
+        if ids:
+            phrase = _tokens(source)
+            other = ' '.join(targets[tid] for tid in ids)
+            if phrase and other:
+                matches.append(SequenceMatcher(None, phrase, other, autojunk=False).ratio())
+    return sum(matches) / len(matches) if matches else 0.0
 
 
 @dataclass(frozen=True)
@@ -62,6 +91,7 @@ class RemapPlan:
     ids: dict[str, tuple[str, ...]]
     unresolved: tuple[str, ...]
     ambiguous: tuple[str, ...]
+    offset_verified: bool = True
 
     @property
     def success_rate(self) -> float:
@@ -70,7 +100,7 @@ class RemapPlan:
 
     @property
     def safe(self) -> bool:
-        return not self.unresolved and not self.ambiguous
+        return self.offset_verified and not self.unresolved and not self.ambiguous
 
 
 def plan_segment_remap(
@@ -80,6 +110,15 @@ def plan_segment_remap(
     offset_seconds: float | None = None,
 ) -> RemapPlan:
     shift = estimate_offset(old, new) if offset_seconds is None else offset_seconds
+    plan = _plan_at_offset(old, new, shift)
+    # An inferred shift, including zero, needs independent agreement from
+    # the mapped text. Explicit offsets are a caller-supplied clock contract.
+    if offset_seconds is None and old and new and _text_agreement(old, new, plan) < 0.65:
+        return RemapPlan(shift, plan.ids, plan.unresolved, plan.ambiguous, offset_verified=False)
+    return plan
+
+
+def _plan_at_offset(old: Sequence[Mapping[str, Any]], new: Sequence[Mapping[str, Any]], shift: float) -> RemapPlan:
     targets = [(str(s['id']), *_bounds(s)) for s in new]
     if len({item[0] for item in targets}) != len(targets):
         raise ValueError('duplicate target segment id')

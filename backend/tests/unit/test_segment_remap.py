@@ -93,6 +93,27 @@ def test_text_anchor_estimates_rebased_clock_without_using_started_at():
     assert plan_segment_remap(old, new).ids == {'a': ('x',), 'b': ('y',)}
 
 
+def test_repeated_identical_text_with_fifteen_second_offset_maps_every_segment_safely():
+    phrase = 'he began a confused complaint against the wizard who had vanished behind the curtain on the left'
+    old = [segment(f'live-{i}', 2 + i * 5, 6 + i * 5, phrase) for i in range(4)]
+    new = [segment(f'pass-{i}', 17 + i * 5, 21 + i * 5, phrase) for i in range(4)]
+    plan = plan_segment_remap(old, new)
+    assert plan.offset_seconds == 15
+    assert plan.ids == {f'live-{i}': (f'pass-{i}',) for i in range(4)}
+    assert plan.success_rate == 1.0
+    assert plan.safe
+    assert plan.offset_verified
+
+
+def test_auto_remap_rejects_time_overlap_without_text_agreement():
+    old = [segment('live', 1, 4, 'the distinctly blue harbor crane')]
+    new = [segment('pass', 1, 4, 'an entirely unrelated sentence about trains')]
+    plan = plan_segment_remap(old, new)
+    assert plan.success_rate == 1.0
+    assert not plan.offset_verified
+    assert not plan.safe
+
+
 def test_random_monotone_resegmentation_and_rebase_property():
     rng = random.Random(91231)
     for _ in range(200):
