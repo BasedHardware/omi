@@ -277,7 +277,8 @@ struct ConversationEntityQuery: IndexedEntityQuery {
             guard let memory = try await MemoryStorage.shared.getMemoryByBackendId(id),
               SiriIndexScope.memory(
                 backendId: memory.backendId, deleted: memory.deleted,
-                dismissed: memory.isDismissed, expiresAt: memory.expiresAt, now: Date()),
+                dismissed: memory.isDismissed, tier: memory.tier,
+                expiresAt: memory.expiresAt, now: Date()),
               let value = memory.toServerMemory()
             else { return nil }
             return ConversationEntity(value)
@@ -312,7 +313,8 @@ struct MemoryEntityQuery: IndexedEntityQuery {
       guard let record = try await MemoryStorage.shared.getMemoryByBackendId(memory.id),
         SiriIndexScope.memory(
           backendId: record.backendId, deleted: record.deleted,
-          dismissed: record.isDismissed, expiresAt: record.expiresAt, now: Date())
+          dismissed: record.isDismissed, tier: record.tier,
+          expiresAt: record.expiresAt, now: Date())
       else { continue }
       found.append(MemoryEntity(record))
     }

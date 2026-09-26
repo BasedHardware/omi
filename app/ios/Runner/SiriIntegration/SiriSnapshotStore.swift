@@ -15,6 +15,7 @@ final class SiriSnapshotStore {
     private let routeKey = "siri.pending.route"
 
     private struct Snapshot: Codable {
+        var eligibilityVersion: Int? = nil
         var ownerUid: String? = nil
         var conversations: [String: Conversation] = [:]
         var memories: [String: Memory] = [:]
@@ -39,6 +40,14 @@ final class SiriSnapshotStore {
     private init() {
         snapshot = (try? Data(contentsOf: container.appendingPathComponent("siri-index-snapshot.json")))
             .flatMap { try? JSONDecoder().decode(Snapshot.self, from: $0) } ?? Snapshot()
+        // Older snapshots did not retain the memory layer. Their rows cannot
+        // prove archive eligibility, so drop them before launch maintenance
+        // rebuilds Spotlight; Flutter will republish active rows.
+        if snapshot.eligibilityVersion != 1 {
+            snapshot.memories.removeAll()
+            snapshot.eligibilityVersion = 1
+            try? persist()
+        }
     }
     var enabled: Bool { defaults.object(forKey: enabledKey) as? Bool ?? true }
     var owner: String? { defaults.string(forKey: ownerKey) }
@@ -93,6 +102,9 @@ final class SiriSnapshotStore {
         expiryTask?.cancel()
         expiryTask = nil
     }
+    #if OMI_SIRI_PROBE
+    func simulateTerminatedExpiryTimer() { cancelExpiryTask() }
+    #endif
     /// Keep a live Runner's index fresh at the next expiry. A 24 hour cap also
     /// checks long-lived records without retaining an unbounded sleep.
     private func scheduleNextExpiry() {
@@ -172,6 +184,17 @@ final class SiriSnapshotStore {
         guard pending else { return false }
         try await wipe(expectedGeneration: generation)
         return true
+    }
+    func maintainOnLaunch() async throws -> Bool {
+        let retriedWipe = try await retryPendingWipe()
+        // setEnabled(false) persists the preference before Spotlight deletion.
+        // A failed delete must be retried even though rebuilding is disabled.
+        if !enabled {
+            try await removeIndex()
+        } else if let uid = owner, generationForOwner(uid) != nil {
+            try await rebuildIndex()
+        }
+        return retriedWipe
     }
     func setEnabled(_ value: Bool) async throws {
         defaults.set(value, forKey: enabledKey)

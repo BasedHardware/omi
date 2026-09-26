@@ -39,6 +39,32 @@ typedef SiriMemoryPageFetcher = Future<GetMemoriesResult> Function({
   String? cursor,
 });
 
+/// The same owner-visible scope is used by both incremental writes and full
+/// snapshot reconciliation. A row leaving this scope must be deleted from the
+/// native index, even when the account's indexing preference is off.
+bool siriMemoryIsIndexable(Memory row, DateTime now) =>
+    row.id.isNotEmpty &&
+    !row.deleted &&
+    row.layer != MemoryLayer.archive &&
+    (row.invalidAt == null || row.invalidAt!.isAfter(now)) &&
+    (row.ledgerStatus == null || row.ledgerStatus == 'active') &&
+    (row.supersededBy == null || row.supersededBy!.isEmpty) &&
+    row.userReview != false;
+
+bool siriConversationIsIndexable(ServerConversation row, DateTime now) =>
+    row.id.isNotEmpty &&
+    row.status == ConversationStatus.completed &&
+    !row.discarded &&
+    !row.deleted &&
+    (row.startedAt ?? row.createdAt).isAfter(now.subtract(const Duration(days: 180)));
+
+bool siriTaskIsIndexable(ActionItemWithMetadata row, DateTime now) =>
+    row.id.isNotEmpty &&
+    row.status != 'cancelled' &&
+    row.status != 'superseded' &&
+    (row.supersededBy == null || row.supersededBy!.isEmpty) &&
+    (!row.completed || (row.completedAt?.isAfter(now.subtract(const Duration(days: 30))) ?? false));
+
 /// The native index receives projections only after Dart's authoritative state
 /// has accepted a fetch or mutation. All methods are inert on Android.
 class SiriIntegration extends SiriEventsApi {
@@ -161,7 +187,12 @@ class SiriIntegration extends SiriEventsApi {
     final uid = _uid;
     if (!_isIOS || uid == null) return;
     try {
-      await _host.upsertConversations(uid, _conversationProjection(rows));
+      final now = DateTime.now();
+      final removed =
+          rows.where((row) => row.id.isNotEmpty && !siriConversationIsIndexable(row, now)).map((row) => row.id).toSet();
+      if (removed.isNotEmpty) await _host.deleteEntities(uid, 'conversation', removed.toList());
+      final projected = _conversationProjection(rows);
+      if (projected.isNotEmpty) await _host.upsertConversations(uid, projected);
     } catch (error) {
       Logger.debug('Siri conversation index failed: $error');
     }
@@ -180,16 +211,11 @@ class SiriIntegration extends SiriEventsApi {
   }
 
   List<SiriConversation> _conversationProjection(List<ServerConversation> rows) {
-    final cutoff = DateTime.now().subtract(const Duration(days: 180));
+    final now = DateTime.now();
     final newest = List<ServerConversation>.of(rows)
       ..sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     return newest
-        .where((row) =>
-            row.id.isNotEmpty &&
-            row.status == ConversationStatus.completed &&
-            !row.discarded &&
-            !row.deleted &&
-            (row.startedAt ?? row.createdAt).isAfter(cutoff))
+        .where((row) => siriConversationIsIndexable(row, now))
         .take(2000)
         .map((row) => SiriConversation(
               id: row.id,
@@ -205,7 +231,14 @@ class SiriIntegration extends SiriEventsApi {
     final uid = _uid;
     if (!_isIOS || uid == null) return;
     try {
-      await _host.upsertMemories(uid, _memoryProjection(rows));
+      final projected = _memoryProjection(rows, uid);
+      final now = DateTime.now();
+      final removed = rows
+          .where((row) => row.uid == uid && row.id.isNotEmpty && !siriMemoryIsIndexable(row, now))
+          .map((row) => row.id)
+          .toSet();
+      if (removed.isNotEmpty) await _host.deleteEntities(uid, 'memory', removed.toList());
+      if (projected.isNotEmpty) await _host.upsertMemories(uid, projected);
     } catch (error) {
       Logger.debug('Siri memory index failed: $error');
     }
@@ -214,25 +247,19 @@ class SiriIntegration extends SiriEventsApi {
   /// Only a complete, owner-wide and unfiltered traversal may call this.
   Future<void> reconcileMemories(List<Memory> rows) async {
     final uid = _uid;
-    if (!_isIOS || uid == null) return;
+    if (!_isIOS || uid == null || rows.any((row) => row.uid != uid)) return;
     try {
-      await _host.reconcileMemories(uid, _memoryProjection(rows));
+      await _host.reconcileMemories(uid, _memoryProjection(rows, uid));
     } catch (error) {
       Logger.debug('Siri memory reconciliation failed: $error');
     }
   }
 
-  List<SiriMemory> _memoryProjection(List<Memory> rows) {
+  List<SiriMemory> _memoryProjection(List<Memory> rows, String uid) {
     final now = DateTime.now();
     final newest = List<Memory>.of(rows)..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return newest
-        .where((row) =>
-            row.id.isNotEmpty &&
-            !row.deleted &&
-            (row.invalidAt == null || row.invalidAt!.isAfter(now)) &&
-            (row.ledgerStatus == null || row.ledgerStatus == 'active') &&
-            (row.supersededBy == null || row.supersededBy!.isEmpty) &&
-            row.userReview != false)
+        .where((row) => row.uid == uid && siriMemoryIsIndexable(row, now))
         .take(5000)
         .map((row) => SiriMemory(
               id: row.id,
@@ -298,7 +325,12 @@ class SiriIntegration extends SiriEventsApi {
     final uid = _uid;
     if (!_isIOS || uid == null) return;
     try {
-      await _host.upsertTasks(uid, _taskProjection(rows));
+      final now = DateTime.now();
+      final removed =
+          rows.where((row) => row.id.isNotEmpty && !siriTaskIsIndexable(row, now)).map((row) => row.id).toSet();
+      if (removed.isNotEmpty) await _host.deleteEntities(uid, 'task', removed.toList());
+      final projected = _taskProjection(rows);
+      if (projected.isNotEmpty) await _host.upsertTasks(uid, projected);
     } catch (error) {
       Logger.debug('Siri task index failed: $error');
     }
@@ -317,9 +349,9 @@ class SiriIntegration extends SiriEventsApi {
   }
 
   List<SiriTask> _taskProjection(List<ActionItemWithMetadata> rows) {
-    final cutoff = DateTime.now().subtract(const Duration(days: 30));
+    final now = DateTime.now();
     return rows
-        .where((row) => row.id.isNotEmpty && (!row.completed || (row.completedAt?.isAfter(cutoff) ?? false)))
+        .where((row) => siriTaskIsIndexable(row, now))
         .map((row) => SiriTask(
               id: row.id,
               title: row.description,

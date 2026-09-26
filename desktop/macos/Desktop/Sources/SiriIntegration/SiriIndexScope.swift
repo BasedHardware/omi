@@ -13,9 +13,11 @@ enum SiriIndexScope {
   }
 
   static func memory(
-    backendId: String?, deleted: Bool, dismissed: Bool, expiresAt: Date?, now: Date
+    backendId: String?, deleted: Bool, dismissed: Bool, tier: String, expiresAt: Date?, now: Date
   ) -> Bool {
-    backendId != nil && !deleted && !dismissed && (expiresAt.map { $0 > now } ?? true)
+    backendId != nil && !deleted && !dismissed
+      && (tier == MemoryLayer.shortTerm.rawValue || tier == MemoryLayer.longTerm.rawValue)
+      && (expiresAt.map { $0 > now } ?? true)
   }
 
   static func task(

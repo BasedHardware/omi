@@ -82,6 +82,7 @@ class ActionItemsProvider extends ChangeNotifier {
   List<ActionItemWithMetadata> _homeDayItems = [];
 
   List<ActionItemWithMetadata> _actionItems = [];
+  int _sessionGeneration = 0;
 
   bool _isLoading = false;
   bool _isFetching = false;
@@ -268,6 +269,7 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   Future<void> _fetchHomeTodayTasks({required DateTime now}) async {
+    final generation = _sessionGeneration;
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
     try {
@@ -278,7 +280,7 @@ class ActionItemsProvider extends ChangeNotifier {
         dueStartDate: sevenDaysAgo,
         dueEndDate: startOfTomorrow.subtract(const Duration(microseconds: 1)),
       );
-      if (response != null) {
+      if (response != null && generation == _sessionGeneration) {
         _homeDayItems = _pendingDeletionIds.isEmpty
             ? List.of(response.actionItems)
             : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
@@ -368,6 +370,7 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   Future<bool> fetchActionItems({bool showShimmer = false}) async {
+    final generation = _sessionGeneration;
     var loaded = false;
     if (showShimmer) {
       setLoading(true);
@@ -384,7 +387,7 @@ class ActionItemsProvider extends ChangeNotifier {
         endDate: _endDate,
         onTyped: _projectTypedList,
       );
-      if (response != null) {
+      if (response != null && generation == _sessionGeneration) {
         _applyFetchedActionItems(response);
         loaded = true;
       }
@@ -446,6 +449,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
   Future<void> loadMoreActionItems() async {
     if (_isFetching || !_hasMore) return;
+    final generation = _sessionGeneration;
 
     setFetching(true);
 
@@ -458,7 +462,7 @@ class ActionItemsProvider extends ChangeNotifier {
         endDate: _endDate,
       );
 
-      if (response != null) {
+      if (response != null && generation == _sessionGeneration) {
         final filtered = response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
         _actionItems.addAll(filtered);
         _hasMore = response.hasMore;
@@ -479,6 +483,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
   /// Returns whether the change reached the server; the caller decides what to tell the user.
   Future<bool> updateActionItemState(ActionItemWithMetadata item, bool newState) async {
+    final generation = _sessionGeneration;
     final attempt = ProductTelemetry.instance.start(
       ProductJourney.taskMutation,
       surface: ProductSurface.tasks,
@@ -491,6 +496,10 @@ class ActionItemsProvider extends ChangeNotifier {
       }
 
       final success = await _updateActionItemRequest(item.id, completed: newState);
+      if (generation != _sessionGeneration) {
+        attempt.complete(ProductOutcome.cancelled);
+        return false;
+      }
 
       if (success == null) {
         _findAndUpdateItemState(item.id, !newState);
@@ -504,6 +513,10 @@ class ActionItemsProvider extends ChangeNotifier {
       if (newState == true) {
         await ActionItemNotificationHandler.cancelNotification(item.id);
       }
+      if (generation != _sessionGeneration) {
+        attempt.complete(ProductOutcome.cancelled);
+        return false;
+      }
       _pushUpdateToAppleReminder(item, completed: newState);
       attempt.complete(ProductOutcome.success);
       if (newState) {
@@ -516,6 +529,10 @@ class ActionItemsProvider extends ChangeNotifier {
       }
       return true;
     } catch (e) {
+      if (generation != _sessionGeneration) {
+        attempt.complete(ProductOutcome.cancelled);
+        return false;
+      }
       _findAndUpdateItemState(item.id, !newState);
       notifyListeners();
       Logger.debug('Error updating action item state: $e');
@@ -526,6 +543,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
   /// Returns whether the change reached the server; the caller decides what to tell the user.
   Future<bool> updateActionItemDescription(ActionItemWithMetadata item, String newDescription) async {
+    final generation = _sessionGeneration;
     try {
       final itemInList = _findAndUpdateItemDescription(item.id, newDescription);
       if (itemInList != null) {
@@ -533,6 +551,7 @@ class ActionItemsProvider extends ChangeNotifier {
       }
 
       final updatedItem = await _updateActionItemRequest(item.id, description: newDescription);
+      if (generation != _sessionGeneration) return false;
 
       if (updatedItem == null) {
         // Revert on failure
@@ -551,6 +570,7 @@ class ActionItemsProvider extends ChangeNotifier {
       _pushUpdateToAppleReminder(item, title: newDescription);
       return true;
     } catch (e) {
+      if (generation != _sessionGeneration) return false;
       _findAndUpdateItemDescription(item.id, item.description);
       notifyListeners();
       Logger.debug('Error updating action item description: $e');
@@ -560,6 +580,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
   /// Returns whether the change reached the server; the caller decides what to tell the user.
   Future<bool> updateActionItemDueDate(ActionItemWithMetadata item, DateTime? dueDate) async {
+    final generation = _sessionGeneration;
     // Optimistic update: update locally first for instant UI feedback
     final index = _actionItems.indexWhere((i) => i.id == item.id);
     ActionItemWithMetadata? originalItem;
@@ -586,6 +607,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
     try {
       final updatedItem = await _updateDueDateRequest(item.id, dueAt: dueDate, clearDueAt: dueDate == null);
+      if (generation != _sessionGeneration) return false;
 
       if (updatedItem != null) {
         final idx = _actionItems.indexWhere((i) => i.id == item.id);
@@ -609,6 +631,7 @@ class ActionItemsProvider extends ChangeNotifier {
         return false;
       }
     } catch (e) {
+      if (generation != _sessionGeneration) return false;
       // Revert on error — re-find index in case list changed during await
       if (originalItem != null) {
         final revertIdx = _actionItems.indexWhere((i) => i.id == item.id);
@@ -623,6 +646,7 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   Future<int> clearTodayDeadlinesForIncompleteTasks() async {
+    final generation = _sessionGeneration;
     final now = DateTime.now();
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
 
@@ -649,6 +673,7 @@ class ActionItemsProvider extends ChangeNotifier {
     for (final item in itemsToClear) {
       try {
         final updatedItem = await _updateDueDateRequest(item.id, clearDueAt: true);
+        if (generation != _sessionGeneration) return successCount;
 
         final index = _actionItems.indexWhere((i) => i.id == item.id);
         if (updatedItem != null) {
@@ -664,6 +689,7 @@ class ActionItemsProvider extends ChangeNotifier {
           }
         }
       } catch (e) {
+        if (generation != _sessionGeneration) return successCount;
         final index = _actionItems.indexWhere((i) => i.id == item.id);
         if (index != -1) {
           final originalItem = originalItemsById[item.id];
@@ -680,6 +706,7 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   Future<bool> deleteActionItem(ActionItemWithMetadata item) async {
+    final generation = _sessionGeneration;
     // Delete linked Apple Reminder if one exists
     _deleteAppleReminderIfLinked(item);
 
@@ -694,6 +721,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
     try {
       final success = await _deleteActionItemRequest(item.id);
+      if (generation != _sessionGeneration) return false;
 
       if (!success) {
         Logger.debug('Failed to delete action item on server');
@@ -709,6 +737,7 @@ class ActionItemsProvider extends ChangeNotifier {
       // server confirms the item is gone.
       return success;
     } catch (e) {
+      if (generation != _sessionGeneration) return false;
       Logger.debug('Error deleting action item: $e');
       // On error, remove from pending set so a future reload can re-fetch it
       _pendingDeletionIds.remove(item.id);
@@ -751,6 +780,7 @@ class ActionItemsProvider extends ChangeNotifier {
   /// Deletes a task hidden by [stageDeleteActionItem] on the server. On failure the task comes
   /// back where it was. False when it was not staged.
   Future<bool> commitStagedDelete(String id) async {
+    final generation = _sessionGeneration;
     final staged = _stagedDeletes.remove(id);
     if (staged == null) return false;
     _deleteAppleReminderIfLinked(staged.item);
@@ -760,6 +790,7 @@ class ActionItemsProvider extends ChangeNotifier {
     } catch (e) {
       Logger.debug('Error deleting action item: $e');
     }
+    if (generation != _sessionGeneration) return false;
     if (!success) {
       _pendingDeletionIds.remove(id);
       _restoreDeletedItem(staged.item, staged.index);
@@ -788,6 +819,7 @@ class ActionItemsProvider extends ChangeNotifier {
     String? conversationId,
     bool completed = false,
   }) async {
+    final generation = _sessionGeneration;
     final optimisticItem = ActionItemWithMetadata(
       id: 'temp_${DateTime.now().millisecondsSinceEpoch}',
       description: description,
@@ -808,6 +840,7 @@ class ActionItemsProvider extends ChangeNotifier {
         conversationId: conversationId,
         completed: completed,
       );
+      if (generation != _sessionGeneration) return null;
 
       if (newItem != null) {
         final index = _actionItems.indexWhere((item) => item.id == optimisticItem.id);
@@ -826,6 +859,7 @@ class ActionItemsProvider extends ChangeNotifier {
         return null;
       }
     } catch (e) {
+      if (generation != _sessionGeneration) return null;
       _actionItems.removeWhere((item) => item.id == optimisticItem.id);
       notifyListeners();
       Logger.debug('Error creating action item: $e');
@@ -1089,6 +1123,7 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   void clearUserData() {
+    _sessionGeneration++;
     _actionItems = [];
     _homeDayItems = [];
     _homeDayLoaded = false;
@@ -1107,6 +1142,7 @@ class ActionItemsProvider extends ChangeNotifier {
   // Bulk operations
   Future<bool> deleteSelectedItems({BuildContext? context}) async {
     if (_selectedItems.isEmpty) return false;
+    final generation = _sessionGeneration;
 
     final itemsToDelete = _actionItems.where((item) => _selectedItems.contains(item.id)).toList();
     final ids = itemsToDelete.map((item) => item.id).toList(growable: false);
@@ -1131,6 +1167,7 @@ class ActionItemsProvider extends ChangeNotifier {
     }
 
     final deleted = await _bulkDeleteActionItemsRequest(ids);
+    if (generation != _sessionGeneration) return false;
     if (deleted == null) {
       Logger.debug('bulkDeleteActionItems returned null — rolling back local list');
       // Clear tombstones on rollback so future refreshes don't filter the

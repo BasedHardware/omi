@@ -171,21 +171,25 @@ final class SiriIntentServiceTests: XCTestCase {
 
   func testIndexScopeExpiresMemoriesAndBoundsConversationsAndMemories() {
     let now = Date(timeIntervalSince1970: 2_000_000_000)
+    XCTAssertFalse(
+      SiriIndexScope.memory(
+        backendId: "archived", deleted: false, dismissed: false,
+        tier: MemoryLayer.archive.rawValue, expiresAt: nil, now: now))
     XCTAssertTrue(
       SiriIndexScope.memory(
-        backendId: "m", deleted: false, dismissed: false,
+        backendId: "m", deleted: false, dismissed: false, tier: MemoryLayer.longTerm.rawValue,
         expiresAt: now.addingTimeInterval(1), now: now))
     XCTAssertFalse(
       SiriIndexScope.memory(
-        backendId: "m", deleted: false, dismissed: false,
+        backendId: "m", deleted: false, dismissed: false, tier: MemoryLayer.longTerm.rawValue,
         expiresAt: now, now: now))
     XCTAssertFalse(
       SiriIndexScope.memory(
-        backendId: nil, deleted: false, dismissed: false,
+        backendId: nil, deleted: false, dismissed: false, tier: MemoryLayer.longTerm.rawValue,
         expiresAt: nil, now: now))
     XCTAssertFalse(
       SiriIndexScope.memory(
-        backendId: "m", deleted: true, dismissed: false,
+        backendId: "m", deleted: true, dismissed: false, tier: MemoryLayer.longTerm.rawValue,
         expiresAt: nil, now: now))
     XCTAssertEqual(
       SiriIndexScope.capped(

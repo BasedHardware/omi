@@ -10,7 +10,7 @@ final class SiriIndexLifecycle {
   private init() {}
 
   func start(launchMode: String) {
-    log("OmiApp: Main window content appeared (mode: \(launchMode))")
+    log("Siri index launch maintenance started (mode: \(launchMode))")
     guard ownerObserver == nil else { return }
     ownerObserver = NotificationCenter.default.addObserver(
       forName: .runtimeOwnerDidChange, object: nil, queue: .main
@@ -24,9 +24,9 @@ final class SiriIndexLifecycle {
       if !SiriIntegrationSettings.isEnabled, #available(macOS 27, *) { Task { await SiriDonations.wipe() } }
     }
     maintenanceTimer = Timer.scheduledTimer(withTimeInterval: 3_600, repeats: true) { _ in
-      SiriIndexHooks.rebuild()
+      SiriIndexHooks.ownerChanged()
     }
-    SiriIndexHooks.rebuild()
+    SiriIndexHooks.ownerChanged()
     #if DEBUG
       if #available(macOS 27, *), ProcessInfo.processInfo.arguments.contains("-omi-siri-probe") {
         Task { await SiriDevProbe.run() }

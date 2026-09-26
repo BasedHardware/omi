@@ -30,7 +30,7 @@ final class SiriBridge: SiriIndexApi {
     func retryPendingWipeOnLaunch() {
         Task {
             do {
-                if try await SiriSnapshotStore.shared.retryPendingWipe() {
+                if try await SiriSnapshotStore.shared.maintainOnLaunch() {
                     NSLog("[SiriIndex] Pending account wipe retried successfully on launch")
                 }
             } catch {

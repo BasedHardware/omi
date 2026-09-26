@@ -14,6 +14,7 @@ class RecordingSiriHost extends SiriIndexApi {
   String? owner;
   List<SiriConversation> conversations = [];
   List<SiriMemory> memories = [];
+  bool reconciledMemories = false;
   List<SiriTask> tasks = [];
   String? deletedType;
   List<String> deletedIds = [];
@@ -26,6 +27,13 @@ class RecordingSiriHost extends SiriIndexApi {
 
   @override
   Future<void> upsertMemories(String uid, List<SiriMemory> rows) async {
+    owner = uid;
+    memories = rows;
+  }
+
+  @override
+  Future<void> reconcileMemories(String uid, List<SiriMemory> rows) async {
+    reconciledMemories = true;
     owner = uid;
     memories = rows;
   }
@@ -262,12 +270,15 @@ void main() {
     expect(host.owner, 'owner-a');
     expect(host.conversations.map((row) => row.id), ['newest', 'older']);
     expect(host.conversations.first.title, 'Title newest');
+    await siri.upsertConversations([conversation('newest', 1, status: ConversationStatus.processing)]);
+    expect(host.deletedType, 'conversation');
+    expect(host.deletedIds, ['newest']);
   });
 
   test('memory projection sorts newest and drops expired or deleted rows', () async {
     final host = RecordingSiriHost();
     final siri = SiriIntegration.forTest(host, 'owner-b');
-    Memory memory(String id, int ageDays, {bool deleted = false, DateTime? invalidAt}) => Memory(
+    Memory memory(String id, int ageDays, {bool deleted = false, DateTime? invalidAt, MemoryLayer? layer}) => Memory(
           id: id,
           uid: 'owner-b',
           content: 'Content $id',
@@ -277,18 +288,40 @@ void main() {
           visibility: MemoryVisibility.private,
           deleted: deleted,
           invalidAt: invalidAt,
+          layer: layer,
         );
 
     await siri.upsertMemories([
       memory('older', 10),
       memory('expired', 2, invalidAt: now.subtract(const Duration(days: 1))),
       memory('deleted', 1, deleted: true),
+      memory('archived', 0, layer: MemoryLayer.archive),
       memory('newest', 0),
     ]);
 
     expect(host.owner, 'owner-b');
     expect(host.memories.map((row) => row.id), ['newest', 'older']);
     expect(host.memories.first.content, 'Content newest');
+    await siri.upsertMemories([memory('newest', 0, layer: MemoryLayer.archive)]);
+    expect(host.deletedType, 'memory');
+    expect(host.deletedIds, ['newest']);
+  });
+
+  test('old-owner memory rows cannot clear the new owner snapshot', () async {
+    final host = RecordingSiriHost();
+    final siri = SiriIntegration.forTest(host, 'owner-b');
+    await siri.reconcileMemories([
+      Memory(
+        id: 'old-owner-memory',
+        uid: 'owner-a',
+        content: 'Private',
+        category: MemoryCategory.manual,
+        createdAt: now,
+        updatedAt: now,
+        visibility: MemoryVisibility.private,
+      )
+    ]);
+    expect(host.reconciledMemories, isFalse);
   });
 
   test('task projection keeps active tasks and recent completions with owner UID', () async {
@@ -310,6 +343,10 @@ void main() {
     expect(host.owner, 'owner-c');
     expect(host.tasks.map((row) => row.id), ['active', 'recent']);
     expect(host.tasks.last.completed, isTrue);
+
+    await siri.upsertTasks([task('active', false, null).copyWith(status: 'cancelled')]);
+    expect(host.deletedType, 'task');
+    expect(host.deletedIds, ['active']);
 
     await siri.delete('task', 'active');
     expect(host.owner, 'owner-c');

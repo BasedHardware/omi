@@ -159,9 +159,6 @@ struct OMIApp: App {
         .environmentObject(appState)
         .withFontScaling()
         .overlay(alignment: .bottomTrailing) { WhatsNewToastOverlay() }
-        .onAppear {
-          SiriIndexLifecycle.shared.start(launchMode: Self.launchMode.rawValue)
-        }
     }
     .windowStyle(.hiddenTitleBar)  // fullSizeContentView: the top bar occupies the title-bar band.
     .defaultSize(width: defaultWindowSize.width, height: defaultWindowSize.height)
@@ -663,6 +660,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
         restoreMainWindowAfterUpdateRelaunch: restoreMainWindowAfterUpdateRelaunch)
     }
 
+    SiriIndexLifecycle.shared.start(launchMode: OMIApp.launchMode.rawValue)
     log("AppDelegate: applicationDidFinishLaunching completed")
   }
 

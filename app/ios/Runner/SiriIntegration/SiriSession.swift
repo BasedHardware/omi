@@ -7,6 +7,9 @@ import FirebaseCore
 /// Tokens are never stored in UserDefaults or in the Spotlight snapshot.
 final class SiriSession {
     static let shared = SiriSession()
+    #if OMI_SIRI_PROBE
+    var beforeTokenLookup: (() -> Void)?
+    #endif
     private let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")!
     private let keychainService = "com.omi.siri.session"
     private let keychainAccount = "firebase-id-token"
@@ -14,6 +17,8 @@ final class SiriSession {
 
     struct Config: Codable {
         let uid: String
+        /// Optional for snapshots written before the generation was mirrored.
+        let generation: Int64?
         let baseUrl: String
         let profile: String
         let appVersion: String
@@ -29,7 +34,8 @@ final class SiriSession {
               ["http", "https"].contains(url.scheme ?? ""), url.host != nil else {
             throw Failure.invalidConfiguration
         }
-        let config = Config(uid: input.uid, baseUrl: input.baseUrl, profile: input.profile,
+        let config = Config(uid: input.uid, generation: input.generation,
+                            baseUrl: input.baseUrl, profile: input.profile,
                             appVersion: input.appVersion, appBuild: input.appBuild,
                             deviceIdHash: input.deviceIdHash, expiresAtMs: input.tokenExpiresAtMs)
         let previous = currentConfig()
@@ -60,13 +66,26 @@ final class SiriSession {
         SecItemDelete(keychainQuery() as CFDictionary)
     }
 
-    func token() async throws -> String {
-        guard let config = currentConfig() else { throw Failure.auth }
+    func validateOwner(_ config: Config) throws {
+        guard let current = currentConfig(), current.uid == config.uid,
+              (current.generation ?? 0) == (config.generation ?? 0),
+              SiriSnapshotStore.shared.generationForOwner(config.uid) == (config.generation ?? 0)
+        else { throw Failure.auth }
+    }
+
+    func token(for config: Config) async throws -> String {
+        #if OMI_SIRI_PROBE
+        beforeTokenLookup?()
+        #endif
+        try validateOwner(config)
         // Try Firebase first. On a clean background Runner launch, the SDK can
         // lack a hydrated user; the bounded mirror below is the fallback.
         if FirebaseApp.app() == nil { FirebaseApp.configure() }
         if let user = Auth.auth().currentUser, user.uid == config.uid {
-            if let fresh = try? await user.getIDToken(), !fresh.isEmpty { return fresh }
+            if let fresh = try? await user.getIDToken(), !fresh.isEmpty {
+                try validateOwner(config)
+                return fresh
+            }
         }
         guard let expiry = config.expiresAtMs,
               expiry > Int64(Date().timeIntervalSince1970 * 1000) + 60_000 else {
@@ -79,7 +98,13 @@ final class SiriSession {
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
               let data = result as? Data, let token = String(data: data, encoding: .utf8),
               !token.isEmpty else { throw Failure.auth }
+        try validateOwner(config)
         return token
+    }
+
+    func token() async throws -> String {
+        guard let config = currentConfig() else { throw Failure.auth }
+        return try await token(for: config)
     }
 
     private func keychainQuery() -> [String: Any] {
@@ -101,7 +126,7 @@ struct OmiNativeAPI {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.timeoutInterval = 8
-        request.setValue("Bearer \(try await SiriSession.shared.token())", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(try await SiriSession.shared.token(for: config))", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(String(Date().timeIntervalSince1970), forHTTPHeaderField: "X-Request-Start-Time")
         request.setValue("ios", forHTTPHeaderField: "X-App-Platform")
@@ -109,6 +134,7 @@ struct OmiNativeAPI {
         request.setValue(config.appVersion, forHTTPHeaderField: "X-App-Version")
         request.setValue(config.appBuild, forHTTPHeaderField: "X-App-Build")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        try SiriSession.shared.validateOwner(config)
         let data: Data
         let response: URLResponse
         #if OMI_SIRI_PROBE
@@ -118,6 +144,7 @@ struct OmiNativeAPI {
         #endif
         do { (data, response) = try await session.data(for: request) }
         catch { throw SiriSession.Failure.network }
+        try SiriSession.shared.validateOwner(config)
         guard let http = response as? HTTPURLResponse else { throw SiriSession.Failure.network }
         switch http.statusCode {
         case 200...299:

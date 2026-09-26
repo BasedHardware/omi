@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -107,5 +109,34 @@ void main() {
     provider.selectItem('b');
     expect(await provider.deleteSelectedItems(), isTrue);
     expect(host.deleted.toSet(), {'a', 'b'});
+  });
+
+  test('a task mutation finishing after account clear cannot index into the next owner', () async {
+    final host = _SiriTaskHost();
+    SiriIntegration.testInstance = SiriIntegration.forTest(host, 'owner-a');
+    addTearDown(() => SiriIntegration.testInstance = null);
+    final created = Completer<ActionItemWithMetadata?>();
+    final provider = ActionItemsProvider(
+      getActionItems: (
+              {limit = 100,
+              offset = 0,
+              completed,
+              conversationId,
+              startDate,
+              endDate,
+              dueStartDate,
+              dueEndDate}) async =>
+          const ActionItemsResponse(actionItems: []),
+      createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) => created.future,
+    );
+    addTearDown(provider.dispose);
+    await provider.fetchActionItems();
+    final pending = provider.createActionItem(description: 'Old account task');
+    provider.clearUserData();
+    SiriIntegration.testInstance = SiriIntegration.forTest(host, 'owner-b');
+    created.complete(_item('old-account-created'));
+    await pending;
+    await Future<void>.delayed(Duration.zero);
+    expect(host.indexed, isEmpty);
   });
 }

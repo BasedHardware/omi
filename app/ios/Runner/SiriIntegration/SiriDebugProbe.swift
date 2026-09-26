@@ -50,12 +50,14 @@ enum SiriDebugProbe {
                 NSLog("[SiriProbe] loopback URL missing; signed-out path only")
                 return
             }
-            let config = SiriSessionConfig(uid: "siri-probe", generation: 0, baseUrl: raw, profile: "local_dev",
+            do {
+              try await SiriSnapshotStore.shared.bind(uid: "siri-probe")
+              let config = SiriSessionConfig(uid: "siri-probe",
+                generation: SiriSnapshotStore.shared.generationForOwner("siri-probe") ?? 0,
+                baseUrl: raw, profile: "local_dev",
                 appVersion: "probe", appBuild: "0", deviceIdHash: "probe-device",
                 token: "fake-siri-probe-token",
                 tokenExpiresAtMs: Int64(Date().addingTimeInterval(300).timeIntervalSince1970 * 1000))
-            do {
-                try await SiriSnapshotStore.shared.bind(uid: config.uid)
                 try SiriSession.shared.publish(config)
                 let resumedGeneration = SiriSnapshotStore.shared.generationForOwner(config.uid)
                 NSLog("[SiriProbe] sameOwnerGeneration=%@ changedOwnerGeneration=%@",
@@ -123,6 +125,22 @@ enum SiriDebugProbe {
                         query.start()
                     }
                     NSLog("[SiriProbe] expiredSpotlightCount=%d", expiredIndexCount)
+                    let coldExpired = SiriMemory(id: "probe-cold-expired", content: "probe-cold-expired-private-2026",
+                        createdAtMs: Int64(Date().timeIntervalSince1970 * 1000),
+                        expiresAtMs: Int64(Date().addingTimeInterval(1.5).timeIntervalSince1970 * 1000))
+                    try await SiriSnapshotStore.shared.upsert([coldExpired], uid: config.uid)
+                    SiriSnapshotStore.shared.simulateTerminatedExpiryTimer()
+                    try await Task.sleep(nanoseconds: 2_000_000_000)
+                    SiriBridge.shared.retryPendingWipeOnLaunch()
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                    let coldExpiredCount: Int = await withCheckedContinuation { continuation in
+                        let query = CSSearchQuery(queryString: "title == \"probe-cold-expired-private-2026\"",
+                            queryContext: nil)
+                        query.completionHandler = { _ in continuation.resume(returning: query.foundItemCount) }
+                        query.start()
+                    }
+                    NSLog("[SiriProbe] coldLaunchExpiredSpotlight=%@ count=%d",
+                          coldExpiredCount == 0 ? "PASS" : "FAIL", coldExpiredCount)
                     var donation = OmiUiActivityIntent()
                     donation.kind = "memory"
                     donation.id = row.id
@@ -157,6 +175,25 @@ enum SiriDebugProbe {
                         NSLog("[SiriProbe] disabledDelete=FAIL error=%@", String(describing: error))
                         try? await SiriSnapshotStore.shared.setEnabled(true)
                     }
+                    let disableFailure = SiriMemory(id: "probe-disable-failure",
+                        content: "probe-disable-failure-private-2026",
+                        createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
+                    try await SiriSnapshotStore.shared.upsert([disableFailure], uid: config.uid)
+                    SiriSnapshotStore.shared.simulateIndexDeleteFailure = true
+                    do { try await SiriSnapshotStore.shared.setEnabled(false) }
+                    catch { NSLog("[SiriProbe] injectedDisableFailure=observed") }
+                    SiriSnapshotStore.shared.simulateIndexDeleteFailure = false
+                    SiriBridge.shared.retryPendingWipeOnLaunch()
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                    let disableFailureCount: Int = await withCheckedContinuation { continuation in
+                        let query = CSSearchQuery(queryString: "title == \"probe-disable-failure-private-2026\"",
+                            queryContext: nil)
+                        query.completionHandler = { _ in continuation.resume(returning: query.foundItemCount) }
+                        query.start()
+                    }
+                    NSLog("[SiriProbe] failedDisableRetriedOnLaunch=%@ count=%d",
+                          disableFailureCount == 0 ? "PASS" : "FAIL", disableFailureCount)
+                    try await SiriSnapshotStore.shared.setEnabled(true)
                     let removedByServer = SiriMemory(id: "probe-remote-deleted",
                         content: "probe-remote-deleted-private-2026",
                         createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
@@ -203,7 +240,9 @@ enum SiriDebugProbe {
                     defaults.removeObject(forKey: "siri.snapshot.owner")
                     NSLog("[SiriProbe] ownerMissingVisible=%d", SiriSnapshotStore.shared.memories(ids: nil).count)
                     try await SiriSnapshotStore.shared.bind(uid: "siri-probe-next")
-                    let next = SiriSessionConfig(uid: "siri-probe-next", generation: 0, baseUrl: raw, profile: "local_dev",
+                    let next = SiriSessionConfig(uid: "siri-probe-next",
+                        generation: SiriSnapshotStore.shared.generationForOwner("siri-probe-next") ?? 0,
+                        baseUrl: raw, profile: "local_dev",
                         appVersion: "probe", appBuild: "0", deviceIdHash: "probe-device",
                         token: "fake-siri-probe-token",
                         tokenExpiresAtMs: Int64(Date().addingTimeInterval(300).timeIntervalSince1970 * 1000))
@@ -217,6 +256,23 @@ enum SiriDebugProbe {
                     let sessionConfig = URLSessionConfiguration.ephemeral
                     sessionConfig.protocolClasses = [SiriProbeURLProtocol.self]
                     OmiNativeAPI.testSession = URLSession(configuration: sessionConfig)
+                    let switched = SiriSessionConfig(uid: "siri-probe-switched", generation: 0,
+                        baseUrl: raw, profile: "local_dev", appVersion: "probe", appBuild: "0",
+                        deviceIdHash: "probe-device", token: "switched-account-token",
+                        tokenExpiresAtMs: Int64(Date().addingTimeInterval(300).timeIntervalSince1970 * 1000))
+                    let requestsBeforeSwitch = SiriProbeURLProtocol.requestCount
+                    SiriSession.shared.beforeTokenLookup = { try? SiriSession.shared.publish(switched) }
+                    do {
+                        _ = try await OmiNativeAPI().request(method: "POST", path: "/v3/memories", body: [:])
+                        NSLog("[SiriProbe] switchedOwnerRequest=FAIL success")
+                    } catch SiriSession.Failure.auth {
+                        NSLog("[SiriProbe] switchedOwnerRequest=%@",
+                              SiriProbeURLProtocol.requestCount == requestsBeforeSwitch ? "PASS" : "FAIL sent")
+                    } catch {
+                        NSLog("[SiriProbe] switchedOwnerRequest=FAIL error=%@", String(describing: error))
+                    }
+                    SiriSession.shared.beforeTokenLookup = nil
+                    try SiriSession.shared.publish(next)
                     for status in [401, 402, 429, 500, 200, 0] {
                         SiriProbeURLProtocol.status = status
                         do {
@@ -296,9 +352,11 @@ enum SiriDebugProbe {
 /// URLProtocol is local to the debug probe and never appears in release builds.
 private final class SiriProbeURLProtocol: URLProtocol {
     static var status = 500
+    static var requestCount = 0
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
+        Self.requestCount += 1
         if Self.status == 0 {
             client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
             return

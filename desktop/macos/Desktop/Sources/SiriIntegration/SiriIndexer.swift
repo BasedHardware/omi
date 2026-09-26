@@ -260,7 +260,11 @@ actor SiriIndexer {
 
       let memories = try await MemoryStorage.shared.getLocalMemories(
         limit: SiriIndexScope.memoryLimit, backendOnly: true, expiresAfter: now)
-      let memoryEntities = memories.map(MemoryEntity.init)
+      let memoryEntities = memories.filter {
+        SiriIndexScope.memory(
+          backendId: $0.id, deleted: false, dismissed: $0.isDismissed,
+          tier: $0.tier.rawValue, expiresAt: $0.expiresAt, now: now)
+      }.map(MemoryEntity.init)
       for chunk in memoryEntities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
       for entity in memoryEntities { indexedMemoryExpirations[entity.id] = entity.expiresAt }
       if let indexedOwner { scheduleNextMemoryExpiry(owner: indexedOwner) }

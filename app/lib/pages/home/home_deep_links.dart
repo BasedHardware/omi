@@ -1,13 +1,16 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
+import 'package:omi/backend/http/api/memories.dart' as memories_api;
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/action_item.dart';
+import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
@@ -21,10 +24,10 @@ import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/ui/feedback/omi_feedback.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -78,6 +81,9 @@ Future<void> openHomeDeepLink(
   required Future<void> Function() openSettings,
   Future<ActionItemWithMetadata?> Function(String)? taskById,
   void Function(ActionItemWithMetadata)? onTaskOpened,
+  Future<Memory?> Function(String)? memoryById,
+  void Function(Memory)? onMemoryOpened,
+  void Function()? onItemUnavailable,
 }) async {
   final id = link.id;
   switch (link.alias) {
@@ -88,38 +94,39 @@ Future<void> openHomeDeepLink(
     case 'memory':
       if (id == null) return;
       final provider = context.read<MemoriesProvider>();
-      var matches = provider.memories.where((memory) => memory.id == id);
-      if (matches.isEmpty) {
-        await provider.loadMemories();
-        matches = provider.memories.where((memory) => memory.id == id);
-      }
+      final memory = await (memoryById?.call(id) ?? _resolveIndexedMemoryById(id));
       if (!context.mounted) return;
-      if (matches.isEmpty) {
-        unawaited(routeToPage(context, const MemoriesPage()));
+      if (memory == null) {
+        if (onItemUnavailable != null) {
+          onItemUnavailable();
+        } else {
+          OmiFeedback.info(context, context.l10n.somethingWentWrong);
+        }
+      } else if (onMemoryOpened != null) {
+        onMemoryOpened(memory);
       } else {
-        unawaited(showMemoryQuickEditSheet(context, matches.first, provider, readOnly: true));
+        unawaited(showMemoryQuickEditSheet(context, memory, provider, readOnly: true));
       }
     case 'task':
       if (id == null) return;
-      final provider = context.read<ActionItemsProvider>();
-      ActionItemWithMetadata? task;
-      for (final item in provider.actionItems) {
-        if (item.id == id) {
-          task = item;
-          break;
-        }
-      }
-      if (task == null) {
-        if (taskById != null) {
-          task = await taskById(id);
-        } else {
-          final result = await action_items_api.ActionItemsApi(baseUrl: Env.apiBaseUrl ?? '').getById(id);
-          if (result case ApiSuccess<ActionItemWithMetadata>(:final data)) task = data;
-        }
+      final ActionItemWithMetadata? task;
+      if (taskById != null) {
+        task = await taskById(id);
+      } else {
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        if (uid == null) return;
+        final result = await action_items_api.ActionItemsApi(baseUrl: Env.apiBaseUrl ?? '').getById(id);
+        task = FirebaseAuth.instance.currentUser?.uid == uid && result is ApiSuccess<ActionItemWithMetadata>
+            ? result.data
+            : null;
       }
       if (!context.mounted) return;
-      if (task == null) {
-        OmiFeedback.info(context, context.l10n.somethingWentWrong);
+      if (task == null || !siriTaskIsIndexable(task, DateTime.now())) {
+        if (onItemUnavailable != null) {
+          onItemUnavailable();
+        } else {
+          OmiFeedback.info(context, context.l10n.somethingWentWrong);
+        }
       } else if (onTaskOpened != null) {
         onTaskOpened(task);
       } else {
@@ -155,9 +162,11 @@ Future<void> openHomeDeepLink(
       unawaited(routeToPage(context, const MemoriesPage()));
     case 'conversation':
       if (id == null) return;
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
       final conversation = await getConversationById(id);
       if (!context.mounted) return;
-      if (conversation == null) {
+      if (FirebaseAuth.instance.currentUser?.uid != uid || conversation == null) {
         Logger.debug('Conversation not found: $id');
         OmiFeedback.info(context, context.l10n.conversationNotFoundOrDeleted);
         return;
@@ -179,6 +188,59 @@ Future<void> openHomeDeepLink(
       // `action-items` only selects its tab; unknown aliases open Home.
       return;
   }
+}
+
+/// The backend has no memory-by-id read endpoint. Walk its owner-wide All
+/// cursor, independent of the active Memories view or device filter. Incomplete
+/// reads never turn an unseen id into a claim that the memory was deleted.
+Future<Memory?> _resolveIndexedMemoryById(String id) async {
+  final uid = FirebaseAuth.instance.currentUser?.uid;
+  if (uid == null) return null;
+  return resolveIndexedMemoryById(id, uid: uid, ownerIsCurrent: () => FirebaseAuth.instance.currentUser?.uid == uid);
+}
+
+typedef IndexedMemoryPageFetcher = Future<memories_api.GetMemoriesResult> Function({
+  required int limit,
+  required int offset,
+  String? cursor,
+});
+
+/// Resolve a Siri memory against owner-wide pages, including rows hidden by
+/// useful-now, this-device, search, or the first visible page.
+Future<Memory?> resolveIndexedMemoryById(
+  String id, {
+  required String uid,
+  required bool Function() ownerIsCurrent,
+  IndexedMemoryPageFetcher? fetchPage,
+}) async {
+  const limit = 500;
+  var offset = 0;
+  String? cursor;
+  final seenCursors = <String>{};
+  for (var page = 0; page < 100; page++) {
+    final result = await (fetchPage?.call(limit: limit, offset: cursor == null ? offset : 0, cursor: cursor) ??
+        memories_api.getMemoriesResult(
+          limit: limit,
+          offset: cursor == null ? offset : 0,
+          cursor: cursor,
+          view: memories_api.MemoryReadView.all,
+          forceView: true,
+        ));
+    if (!ownerIsCurrent() || !result.ok || result.truncated) return null;
+    for (final row in result.memories) {
+      if (row.id == id && row.uid == uid && siriMemoryIsIndexable(row, DateTime.now())) return row;
+    }
+    final next = result.nextCursor;
+    if (next != null) {
+      if (!seenCursors.add(next)) return null;
+      cursor = next;
+    } else if (cursor != null || result.memories.length < limit) {
+      return null;
+    } else {
+      offset += result.memories.length;
+    }
+  }
+  return null;
 }
 
 Future<void> _prepareChat(BuildContext context, String? id) async {
