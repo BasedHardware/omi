@@ -103,7 +103,7 @@ final class DesktopExperimentTests: XCTestCase {
       store: store,
       defaults: defaults,
       ownerID: { "owner-1" },
-      cardSink: { _, _, _ in }
+      cardSink: { _, _, _, _ in }
     )
     // No summary: never lands.
     XCTAssertFalse(coordinator.consumeUnseenSummaryForPostcardLanding())
