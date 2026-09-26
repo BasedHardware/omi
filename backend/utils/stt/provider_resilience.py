@@ -11,6 +11,7 @@ import logging
 import os
 import threading
 import time
+import weakref
 from typing import Any, Callable, Final
 
 from utils.metrics import OMI_STT_PROVIDER_CIRCUIT_OPEN
@@ -127,21 +128,32 @@ class ProviderCircuitBreaker:
         # publishing must never influence or fail the breaker itself.
         self._provider_label = provider_label
         self._publish_state()
+        if provider_label is not None:
+            _register_published_breaker(self)
 
     def _publish_state(self) -> None:
         """Mirror the current bench state onto the per-pod gauge. Never raises.
 
         kind=account: the 402/balance bench is actively holding the provider
         out (cooldown not yet elapsed). kind=selection: the connect/serve bench
-        has the circuit fully open. half_open means a probe is in flight — that
-        is admitting traffic, not refusing it, so neither gauge is set.
+        has the circuit fully open. An open bench whose cooldown has already
+        elapsed publishes 0 for both kinds: the next ``allow_request`` would
+        flip it half-open and admit a probe, so it is not refusing traffic.
+        half_open means a probe is in flight — that is admitting traffic, not
+        refusing it, so neither gauge is set.
         """
 
         if self._provider_label is None:
             return
         try:
-            account_open = self._account_cooldown is not None and self.account_cooldown_seconds_remaining > 0
-            selection_open = self._state == 'open' and not account_open
+            with self._lock:
+                elapsed = self._clock() - self._opened_at
+                account_open = (
+                    self._account_cooldown is not None and self._state == 'open' and elapsed < self._account_cooldown
+                )
+                selection_open = (
+                    self._account_cooldown is None and self._state == 'open' and elapsed < self._active_cooldown()
+                )
             OMI_STT_PROVIDER_CIRCUIT_OPEN.labels(provider=self._provider_label, kind='account').set(
                 1 if account_open else 0
             )
@@ -407,6 +419,63 @@ class ProviderCircuitBreaker:
                 self.record_success(serving=serving)
 
         return settle, settle
+
+    def refresh_gauge_if_account_bench_elapsed(self) -> None:
+        """Publish the gauges when this breaker's account bench has elapsed.
+
+        Read-only observation of the clock: only an open, account-armed bench
+        whose cooldown has expired republishes (as 0 for both kinds — the next
+        ``allow_request`` would admit a probe). Breaker state is never mutated,
+        so the periodic refresh below cannot change admit/reject behavior.
+        """
+
+        with self._lock:
+            if self._account_cooldown is None or self._state != 'open':
+                return
+            if self._clock() - self._opened_at < self._account_cooldown:
+                return
+        self._publish_state()
+
+
+# Periodic refresh of the published breaker gauges. The account bench holds a
+# 402'd provider for up to 30 minutes and, while it stands, no dial happens —
+# so no transition can clear the gauge. Without a clock-driven refresh the
+# budget alert that reads kind=account would keep paging after a top-up until
+# some unrelated dial landed on the provider (2026-09-26 review).
+_CIRCUIT_GAUGE_REFRESH_SECONDS: Final[float] = float(os.getenv('STT_CIRCUIT_GAUGE_REFRESH_SECONDS', '15'))
+_published_breakers: 'weakref.WeakSet[ProviderCircuitBreaker]' = weakref.WeakSet()
+_gauge_refresh_thread_started = False
+
+
+def _register_published_breaker(breaker: 'ProviderCircuitBreaker') -> None:
+    global _gauge_refresh_thread_started
+    _published_breakers.add(breaker)
+    if _gauge_refresh_thread_started:
+        return
+    _gauge_refresh_thread_started = True
+    threading.Thread(target=_circuit_gauge_refresh_loop, name='stt-circuit-gauge-refresh', daemon=True).start()
+
+
+def _circuit_gauge_refresh_loop() -> None:
+    while True:
+        time.sleep(_CIRCUIT_GAUGE_REFRESH_SECONDS)
+        refresh_published_circuit_gauges()
+
+
+def refresh_published_circuit_gauges() -> None:
+    """Re-publish gauges whose account bench has elapsed on the clock alone.
+
+    Only elapsed account benches are refreshed: every other state already
+    published the same value at its transition, so re-publishing it cannot
+    change anything. Never raises, and never mutates breaker state — this is
+    the read side observing the clock, not a dial.
+    """
+
+    for breaker in list(_published_breakers):
+        try:
+            breaker.refresh_gauge_if_account_bench_elapsed()
+        except Exception:
+            continue
 
 
 def soniox_circuit_from_env() -> ProviderCircuitBreaker:

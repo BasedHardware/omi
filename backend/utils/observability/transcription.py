@@ -401,6 +401,24 @@ def record_live_session_transcript_outcome(*, outcome: LiveSessionTranscriptOutc
     OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome=outcome).inc()
 
 
+def initialize_live_session_transcript_outcome_children() -> None:
+    """Pre-create the three headline-SLI children at process start. Never raises.
+
+    A counter child only exists after its first increment. Touching ``labels``
+    instantiates it at 0 without counting a phantom session (the same trick
+    ``connect_metrics.initialize_stt_provider_connect_children`` uses), so the
+    ``outcome="transcribed"`` numerator is a real series from process start:
+    a rolling restart into a total outage reads as a 0% ratio instead of an
+    empty vector the alert math turns into No Data (2026-09-26 review).
+    """
+
+    try:
+        for outcome in sorted(LIVE_SESSION_TRANSCRIPT_OUTCOMES):
+            OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome=outcome)
+    except Exception:
+        pass
+
+
 def emit_listen_vad_gate_metrics(payload: Mapping[str, Any], *, source: str | None, platform: str | None) -> dict:
     """Emit the vad_gate_metrics payload as one pure JSON line on stdout.
 
@@ -465,3 +483,8 @@ def record_listen_unknown_channel_prefix(*, source: str | None, platform: str | 
         transcription_source=_bounded_source(source),
         client_platform=_bounded_platform(platform),
     ).inc()
+
+
+# Pre-create the headline-SLI children at import so every outcome series is
+# queryable (and the emitter provably alive) from process start.
+initialize_live_session_transcript_outcome_children()

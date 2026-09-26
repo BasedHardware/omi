@@ -17,7 +17,7 @@ def _runtime(
     last_audio=None,
     vad_gate='unset',
     total_speech_ms=None,
-    speech_ms_total=None
+    speech_ms_total=None,
 ):
     runtime = object.__new__(ListenSessionRuntime)
     runtime.use_custom_stt = use_custom_stt
@@ -68,6 +68,30 @@ def test_terminal_failure_is_never_excused_as_too_short():
 
 def test_close_1011_without_terminal_flag_is_still_a_failure():
     runtime = _runtime(close_code=1011, first_audio=100.0, last_audio=160.0)
+    assert _outcome(runtime) == 'no_transcript'
+
+
+def test_heartbeat_idle_reap_of_silent_session_is_too_short():
+    # lifetime_done (e.g. the 90s idle heartbeat reap) sets
+    # live_transcription_failed without any STT failure; a silent session
+    # keeps the too_short excuse instead of entering the failure ratio.
+    runtime = _runtime(
+        failed=True, close_code=1001, first_audio=100.0, last_audio=160.0, vad_gate='legacy', speech_ms_total=0
+    )
+    assert _outcome(runtime) == 'too_short'
+
+
+def test_heartbeat_idle_reap_of_short_session_is_too_short():
+    runtime = _runtime(failed=True, close_code=1001, first_audio=100.0, last_audio=105.0)
+    assert _outcome(runtime) == 'too_short'
+
+
+def test_lifetime_done_with_real_speech_is_still_no_transcript():
+    # A genuine mid-session failure on a session that actually spoke is a
+    # user-felt failure even though the flag is the generic one.
+    runtime = _runtime(
+        failed=True, close_code=1001, first_audio=100.0, last_audio=160.0, vad_gate='legacy', speech_ms_total=4200
+    )
     assert _outcome(runtime) == 'no_transcript'
 
 
@@ -122,3 +146,16 @@ def test_teardown_seam_calls_the_recorder_after_attempt_terminalization():
     with patch('routers.listen.runtime.record_live_session_transcript_outcome') as record:
         ListenSessionRuntime._record_session_transcript_outcome(runtime)
     record.assert_called_once_with(outcome='transcribed')
+
+
+def test_outcome_children_are_queryable_from_process_start_without_increments():
+    # All three children must exist before any session increments one: the
+    # headline ratio's numerator is zero-filled in PromQL too, but a series
+    # that was never born reads as No Data on a fresh pod, and the alert's
+    # noDataState is OK. get_sample_value does not create children, so None
+    # here means the pre-creation is missing.
+    from prometheus_client import REGISTRY
+
+    for outcome in ('transcribed', 'no_transcript', 'too_short'):
+        sample = REGISTRY.get_sample_value('omi_live_session_transcript_outcome_total', {'outcome': outcome})
+        assert sample is not None, f'outcome="{outcome}" child must be pre-created at import'

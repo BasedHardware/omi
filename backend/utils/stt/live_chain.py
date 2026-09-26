@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 from config.stt_provider_policy import DEEPGRAM_PROVIDERS, provider_for_model_token, provider_for_service
 from utils.observability.fallback import record_fallback
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
-from utils.stt.live_failure import PendingLiveFailover
+from utils.stt.live_failure import PendingLiveFailover, fallback_reason_for_typed_death
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS
 from utils.stt.provider_resilience import EXPECTED_REJECTIONS, close_rejected_socket, fallback_socket_is_serving
 from utils.stt.socket import STTSocket
@@ -37,10 +37,6 @@ class RejectedStream(RuntimeError):
     def __init__(self, reason: str):
         self.reason = reason
         super().__init__(reason)
-
-
-def account_death(socket: STTSocket) -> bool:
-    return getattr(socket, 'typed_death_reason', None) in ACCOUNT_REJECTION_REASONS
 
 
 async def connect_configured_chain(
@@ -80,7 +76,12 @@ async def connect_configured_chain(
             if socket is None:
                 raise RejectedStream('config_incomplete')
             if not await fallback_socket_is_serving(socket):
-                raise RejectedStream('auth' if account_death(socket) else 'provider_5xx')
+                # The typed death reason (provider_budget_exhausted /
+                # provider_auth_rejected) reaches the connect counter so a 402
+                # labels error_class=budget, not auth; 'auth' stays reserved
+                # for actual authentication refusals.
+                death_reason = getattr(socket, 'typed_death_reason', None)
+                raise RejectedStream(death_reason if death_reason in ACCOUNT_REJECTION_REASONS else 'provider_5xx')
         except BaseException as error:
             if socket is not None:
                 close_rejected_socket(socket)
@@ -91,9 +92,13 @@ async def connect_configured_chain(
                 on_close()
                 raise
             reason = error.reason if isinstance(error, RejectedStream) else failure_reason(error)
+            account_rejection = reason in ACCOUNT_REJECTION_REASONS
+            # omi_fallback_total keeps its bounded vocabulary: the typed account
+            # deaths fold onto quota/auth exactly like the socket path does.
+            fallback_reason = fallback_reason_for_typed_death(reason) if account_rejection else reason
             failed.add(provider_for_service(service) or service.value)
             record_stt_provider_connect(provider=service.value, outcome=CONNECT_FAILURE, reason=reason)
-            if reason == 'auth':
+            if reason == 'auth' or account_rejection:
                 circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
             elif reason in EXPECTED_REJECTIONS:
                 on_close()
@@ -107,10 +112,10 @@ async def connect_configured_chain(
                     component='stt_selection',
                     from_mode=origin,
                     to_mode=service.value,
-                    reason=reason,
+                    reason=fallback_reason,
                     outcome='degraded',
                 )
-            origin, prior_reason = service.value, reason
+            origin, prior_reason = service.value, fallback_reason
             return None
         LEG_ATTEMPTS.labels(to_mode=service.value, outcome='success').inc()
         record_stt_provider_connect(provider=service.value, outcome=CONNECT_SUCCESS)

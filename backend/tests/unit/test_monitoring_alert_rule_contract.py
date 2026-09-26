@@ -666,9 +666,10 @@ STT_FALLBACK_LEG_RECOVERED_EXPR = (
     '(increase(omi_fallback_total{job="backend-listen-metrics",component=~"stt_selection|stt_live_session"}[6h])) * 0'
 )
 STT_PROVIDER_BUDGET_EXPR = (
-    'sum by (provider) (increase(omi_stt_stream_close_total{job="backend-listen-metrics",'
-    'reason="provider_budget_exhausted"}[5m])) unless on (provider) '
-    '(max by (provider) (omi_stt_provider_retired{job="backend-listen-metrics"} == 1))'
+    '(sum by (provider) (increase(omi_stt_stream_close_total{job="backend-listen-metrics",'
+    'reason="provider_budget_exhausted"}[5m])) > 0 or max by (provider) '
+    '(omi_stt_provider_circuit_open{job="backend-listen-metrics",kind="account"}) == 1) '
+    'unless on (provider) (max by (provider) (omi_stt_provider_retired{job="backend-listen-metrics"} == 1))'
 )
 STT_PROVIDER_RETIRED_EXPR = '(max by (provider) (omi_stt_provider_retired{job="backend-listen-metrics"} == 1))'
 STT_CHAIN_EXHAUSTION_RULES = {
@@ -734,6 +735,12 @@ def test_stt_provider_budget_alert_pages_on_typed_stream_closes():
     no signal — Deepgram kept it firing for days) and subtracts deployment-
     retired providers so an intentionally unfunded leg (hosted Deepgram, per
     the 2026-09 cost ruling) cannot page forever.
+
+    2026-09-26 review fix: budget closes stop the moment pods open the 30m
+    account bench (no dial, no close), so the increase() term alone went green
+    mid-outage and flapped on every half-open probe. The rule now also holds
+    while the per-pod account breaker gauge is open and only resolves once the
+    cooldown has cleared — i.e. after a top-up actually took effect.
     """
     for export_name, rules in _all_rule_exports().items():
         rule = rules["omi-stt-provider-budget"]
@@ -745,6 +752,15 @@ def test_stt_provider_budget_alert_pages_on_typed_stream_closes():
         exprs = [d["model"]["expr"] for d in rule["data"] if d["model"].get("expr")]
         assert exprs[0] == STT_PROVIDER_BUDGET_EXPR, export_name
         assert "sum by (provider)" in exprs[0], export_name
+        # The or-union must be parenthesized: `unless` binds tighter than `or`,
+        # so without the parens the retired exclusion would only guard the gauge
+        # term and budget closes on a retired provider would page forever.
+        assert exprs[0].startswith("("), export_name
+        union_close = exprs[0].index(") unless on (provider)")
+        union = exprs[0][1:union_close]
+        assert " > 0 or " in union, export_name
+        assert 'reason="provider_budget_exhausted"' in union, export_name
+        assert 'kind="account"' in union, export_name
         assert "unless on (provider)" in exprs[0], export_name
         assert "omi_stt_provider_retired" in exprs[0], export_name
         math_nodes = [d["model"]["expression"] for d in rule["data"] if d["model"].get("type") == "math"]
@@ -752,6 +768,7 @@ def test_stt_provider_budget_alert_pages_on_typed_stream_closes():
         assert "top up" in rule["annotations"]["summary"].lower(), export_name
         assert "evaluated_bad" in rule["annotations"], export_name
         assert "evaluated_good" in rule["annotations"], export_name
+        assert "gauge=1" in rule["annotations"]["evaluated_bad"], export_name
         assert rule["annotations"]["__panelId__"] == "18"
 
 
@@ -759,6 +776,12 @@ LIVE_TRANSCRIPTION_SUCCESS_RULE = "omi-live-transcription-success-low"
 LIVE_TRANSCRIPTION_SUCCESS_TOTAL_EXPR = (
     'sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",'
     'outcome=~"transcribed|no_transcript"}[5m]))'
+)
+LIVE_TRANSCRIPTION_SUCCESS_RATIO_EXPR = (
+    '(sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",'
+    'outcome="transcribed"}[5m])) or vector(0)) / clamp_min(sum(increase('
+    'omi_live_session_transcript_outcome_total{job="backend-listen-metrics",'
+    'outcome=~"transcribed|no_transcript"}[5m])), 1)'
 )
 
 
@@ -789,6 +812,34 @@ def test_live_transcription_success_alert_measures_the_user_felt_outcome():
         assert (REPO / rule["annotations"]["runbook"]).is_file(), export_name
 
 
+def test_live_transcription_success_alert_fires_when_no_transcribed_series_exists():
+    """All no_transcript, zero transcribed must page, not read as No Data.
+
+    sum() of a selector with no series is an empty vector, not 0; empty /
+    number is No Data in Grafana math, and noDataState=OK would store the rule
+    as healthy through a rolling restart straight into a total outage (every
+    pod fresh, no outcome child incremented yet). The numerator zero-fills via
+    `or vector(0)` — the same defense omi-stt-fallback-leg-dead uses for a
+    recovered series that was never born — and the emitter pre-creates all
+    three outcome children at process start so the numerator is a real series.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules[LIVE_TRANSCRIPTION_SUCCESS_RULE]
+        exprs = [d["model"]["expr"] for d in rule["data"] if d["model"].get("expr")]
+        assert exprs[1] == LIVE_TRANSCRIPTION_SUCCESS_RATIO_EXPR, export_name
+        numerator = exprs[1][: exprs[1].index(") / clamp_min")]
+        assert numerator.startswith("("), export_name
+        assert numerator.endswith("or vector(0)"), export_name
+        # only the numerator is zero-filled: the denominator (the volume
+        # guard's subject) must stay a plain sum so a quiet night is still
+        # No Data / OK rather than a 0-ratio page.
+        denominator = exprs[1][exprs[1].index("clamp_min") :]
+        assert "or vector(0)" not in denominator, export_name
+        assert "or vector(0)" not in exprs[0], export_name
+        # evaluated_bad must name the zero-transcribed contract case.
+        assert "no transcribed series" in rule["annotations"]["evaluated_bad"], export_name
+
+
 def test_stt_leg_error_rate_reads_a_metric_every_connect_path_emits():
     """omi_stt_leg_attempts_total is configured-chain-only and was empty in prod
     while the chain was off (2026-09-26 incident: the rule could never fire).
@@ -808,18 +859,71 @@ def test_stt_leg_error_rate_reads_a_metric_every_connect_path_emits():
         assert "omi-stt-chain-terminal" not in rules, export_name
 
 
+# Series only the configured-order chain (STT_CONNECT_ORDER_FROM_CONFIG) ever
+# increments: declared in utils/stt/live_metrics.py, .inc()-ed solely from
+# utils/stt/live_chain.py. Being declared is not being emitted — while the
+# chain was off in prod both series were permanently empty and the rules
+# reading them were unfirable (the exact failure this gate family cites).
+CHAIN_ONLY_STT_SERIES = {
+    "omi_stt_leg_attempts_total": "utils/stt/live_chain.py",
+    "omi_stt_chain_exhausted_total": "utils/stt/live_chain.py",
+}
+
+
+def test_alert_rules_do_not_read_chain_only_series_without_documenting_the_dependency():
+    """Failure-Class: FC-alert-never-provably-fired
+
+    Declaring a Counter in backend source is not proof a rule can fire: these
+    chain-only series sit at zero/absent on any deployment without the
+    configured chain. A rule may read one only if its scope annotation names
+    the series AND the configured-chain dependency it is betting on.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        for uid, rule in rules.items():
+            expressions = " ".join(d["model"].get("expr", "") for d in rule.get("data", []))
+            for series, emitter in CHAIN_ONLY_STT_SERIES.items():
+                if series not in expressions:
+                    continue
+                scope = rule["annotations"].get("scope", "")
+                assert series in scope and "configured chain" in scope.lower(), (
+                    f"{export_name}:{uid} reads {series}, incremented only from {emitter} on the "
+                    f"configured-order chain: an empty series on every deployment without it "
+                    "(FC-alert-never-provably-fired). Document the dependency in the rule's "
+                    "scope annotation or read the every-path counter instead."
+                )
+
+
 # Metrics that legitimately come from outside the backend source tree. Each
 # entry must name its emitter; anything not listed here and not declared in
-# backend source as a Counter/Gauge/Histogram fails the gate below.
-EXTERNAL_ALERT_METRIC_PREFIXES = {
-    "kube_": "kube-state-metrics",
-    "namespace_workload_pod:": "kube-state-metrics relabeling rule",
-    "container_": "cAdvisor",
-    "stackdriver_": "prometheus-stackdriver-exporter",
-    "engine_": "deepgram self-hosted deployment exporter",
-}
+# backend source as a Counter/Gauge/Histogram fails the gate below. This is an
+# exact-name ratchet, not a prefix family: a typo inside a family (kube_,
+# container_, stackdriver_, ...) must fail exactly like an omi_* typo does, so
+# adding a new external metric to a rule requires naming it here.
 EXTERNAL_ALERT_METRICS = {
     "up": "Prometheus builtin target health",
+    # kube-state-metrics
+    "kube_deployment_status_replicas": "kube-state-metrics",
+    "kube_deployment_status_replicas_ready": "kube-state-metrics",
+    "kube_endpoint_address_available": "kube-state-metrics",
+    "kube_horizontalpodautoscaler_status_target_metric": "kube-state-metrics",
+    "kube_pod_container_resource_limits": "kube-state-metrics",
+    "kube_pod_container_status_restarts_total": "kube-state-metrics",
+    "kube_pod_status_ready": "kube-state-metrics",
+    "namespace_workload_pod:kube_pod_owner:relabel": "kube-state-metrics relabeling rule",
+    # cAdvisor
+    "container_memory_working_set_bytes": "cAdvisor",
+    # prometheus-stackdriver-exporter
+    "stackdriver_firestore_instance_firestore_googleapis_com_document_read_count": "prometheus-stackdriver-exporter",
+    "stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count": "prometheus-stackdriver-exporter",
+    "stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket": (
+        "prometheus-stackdriver-exporter"
+    ),
+    "stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count": (
+        "prometheus-stackdriver-exporter"
+    ),
+    "stackdriver_monitoring_last_scrape_error": "prometheus-stackdriver-exporter",
+    # deepgram self-hosted deployment exporter
+    "engine_stream_latency_bucket": "deepgram self-hosted deployment exporter",
 }
 
 _METRIC_DECLARATION = re.compile(r"(?:Counter|Gauge|Histogram)\(\s*['\"]([a-zA-Z0-9_:]+)['\"]")
@@ -917,7 +1021,7 @@ def _alert_expr_metric_names(expr: str) -> set[str]:
 
 
 def _is_external_alert_metric(token: str) -> bool:
-    return token in EXTERNAL_ALERT_METRICS or any(token.startswith(prefix) for prefix in EXTERNAL_ALERT_METRIC_PREFIXES)
+    return token in EXTERNAL_ALERT_METRICS
 
 
 def test_every_alert_expression_metric_is_emitted_in_backend_source():
@@ -1105,3 +1209,128 @@ def test_backend_listen_dashboard_has_live_transcription_health_row():
     assert "error_class" in exprs[22]
     for panel_id in range(17, 23):
         assert 'job="backend-listen-metrics"' in exprs[panel_id], panel_id
+    # Success percentages are red below the 90% floor and green above it: the
+    # 2026-09-26 review caught these steps inverted (green base, red at 90),
+    # which painted a healthy 99% line red and a 10% outage green.
+    for panel_id in (17, 20):
+        steps = panels[panel_id]["fieldConfig"]["defaults"]["thresholds"]["steps"]
+        assert steps == [
+            {"color": "red", "value": 0},
+            {"color": "green", "value": 90},
+        ], panel_id
+
+
+# ---------------------------------------------------------------------------
+# Structural PromQL syntax gate: every Prometheus expression in every rule
+# export and dashboard must at least balance its braces/brackets/parens and
+# use only label-matcher selector blocks. No PromQL parser is a backend
+# dependency, so this is deliberately structural — but it is exactly the class
+# of defect the 2026-09-26 review caught (an extra `}` before the range
+# selector made two shipped panels error instead of plotting while every
+# substring-based assertion stayed green).
+# ---------------------------------------------------------------------------
+_GRAFANA_VARIABLE = re.compile(r"\$(?:__\w+|\{[^}]*\}|\w+)")
+_PROMQL_LABEL_MATCHERS = re.compile(
+    r"^\{\s*(?:(?:\"[a-zA-Z_][a-zA-Z0-9_]*\"|[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=~|!~|!=|=)\s*"
+    r"(?:\"[^\"]*\"|'[^']*'|`[^`]*`)"
+    r"(?:\s*,\s*(?:\"[a-zA-Z_][a-zA-Z0-9_]*\"|[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=~|!~|!=|=)\s*"
+    r"(?:\"[^\"]*\"|'[^']*'|`[^`]*`))*)?\s*\}$"
+)
+
+
+def _mask_promql_strings(normalized: str) -> str | None:
+    """Blank out string literals so their contents cannot unbalance the check.
+
+    Returns None when a literal is unterminated (itself a syntax error).
+    """
+
+    out: list[str] = []
+    i = 0
+    while i < len(normalized):
+        char = normalized[i]
+        if char in "\"'`":
+            end = normalized.find(char, i + 1)
+            if end == -1:
+                return None
+            out.append(char + "n" + char)
+            i = end + 1
+        else:
+            out.append(char)
+            i += 1
+    return "".join(out)
+
+
+def _promql_syntax_errors(expr: str) -> list[str]:
+    normalized = _GRAFANA_VARIABLE.sub("5m", expr)
+    masked = _mask_promql_strings(normalized)
+    if masked is None:
+        return ["unterminated string literal"]
+    errors: list[str] = []
+    pairs = {")": "(", "]": "[", "}": "{"}
+    stack: list[str] = []
+    for char in masked:
+        if char in "([{":
+            stack.append(char)
+        elif char in ")]}":
+            if not stack or stack[-1] != pairs[char]:
+                errors.append(f"unbalanced {char!r}")
+                break
+            stack.pop()
+    if not errors and stack:
+        errors.append(f"unclosed {stack[-1]!r}")
+    for match in re.finditer(r"\{[^{}]*\}", masked):
+        if not _PROMQL_LABEL_MATCHERS.match(match.group(0)):
+            errors.append(f"brace block {match.group(0)[:50]!r} is not a label-matcher selector")
+    return errors
+
+
+def _dashboard_prometheus_exprs() -> list[tuple[str, str]]:
+    found: list[tuple[str, str]] = []
+
+    def walk(node: object, where: str) -> None:
+        if isinstance(node, dict):
+            datasource = node.get("datasource")
+            if isinstance(node.get("expr"), str) and isinstance(datasource, dict):
+                if datasource.get("type") == "prometheus":
+                    found.append((where, node["expr"]))
+            for value in node.values():
+                walk(value, where)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value, where)
+
+    for path in sorted((MONITORING / "dashboards").rglob("*.json")):
+        walk(json.loads(path.read_text(encoding="utf-8")), str(path.relative_to(REPO)))
+    return found
+
+
+def test_every_prometheus_expression_in_alerts_and_dashboards_is_well_formed():
+    """Prometheus rejects a syntactically invalid expr at query time, so the
+    panel errors instead of plotting and the alert errors instead of firing —
+    while every name-based contract assertion stays green. Both the rule
+    exports and the dashboards they link to must at least parse structurally.
+    """
+    checked = 0
+    offenders: dict[str, set[str]] = {}
+    for export_name, rules in _all_rule_exports().items():
+        for uid, rule in rules.items():
+            for node in rule.get("data", []):
+                model = node.get("model") or {}
+                expr = model.get("expr")
+                is_promql = (
+                    node.get("datasourceUid") == "prometheus"
+                    or (model.get("datasource") or {}).get("type") == "prometheus"
+                )
+                if not is_promql or not isinstance(expr, str) or not expr:
+                    continue
+                checked += 1
+                for error in _promql_syntax_errors(expr):
+                    offenders.setdefault(error, set()).add(f"{export_name}:{uid}")
+    for where, expr in _dashboard_prometheus_exprs():
+        checked += 1
+        for error in _promql_syntax_errors(expr):
+            offenders.setdefault(error, set()).add(where)
+    assert checked > 100, "the scan found too few exprs; the gate is broken"
+    assert not offenders, "PromQL syntax errors in alert/dashboard expressions: " + "; ".join(
+        f"{error} <- {sorted(places)}" for error, places in sorted(offenders.items())
+    )

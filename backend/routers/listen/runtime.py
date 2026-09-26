@@ -330,15 +330,20 @@ class ListenSessionRuntime:
                 logger.warning('Listen session speech total read failed type=%s', type(error).__name__)
         return None
 
-    def _session_ended_in_failure(self) -> bool:
-        return self.state.live_transcription_failed or self.state.stt_terminal_failure or self.state.close_code == 1011
+    def _session_ended_in_terminal_stt_failure(self) -> bool:
+        # Only an STT-terminal death (chain exhausted at session start, or a
+        # provider close 1011) forfeits the too_short excuse. The broader
+        # live_transcription_failed flag is also set by supervisor lifetime_done
+        # — including the 90s idle heartbeat reap of a silent socket — and a
+        # silent session must stay too_short, not count as no_transcript.
+        return self.state.stt_terminal_failure or self.state.close_code == 1011
 
     def _session_transcript_outcome(self) -> LiveSessionTranscriptOutcome:
         """Classify the session for the headline SLI (what the user felt)."""
 
         if self.state.live_transcript_delivered:
             return 'transcribed'
-        if self._session_ended_in_failure():
+        if self._session_ended_in_terminal_stt_failure():
             # An STT-terminal session never gets the too_short excuse, even when
             # it died before its first audio byte: initialize_stt failures are
             # exactly the incident shape (chain exhausted at session start).

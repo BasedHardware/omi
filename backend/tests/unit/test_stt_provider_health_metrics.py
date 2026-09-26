@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from utils.metrics import OMI_STT_PROVIDER_CIRCUIT_OPEN, OMI_STT_PROVIDER_RETIRED
 from utils.stt import connect_metrics, stream_close
+from utils.stt import provider_resilience
 from utils.stt.provider_resilience import ProviderCircuitBreaker
 
 
@@ -57,6 +58,32 @@ def test_elapsed_account_cooldown_flips_to_half_open_and_clears_the_gauge():
     clock[0] = 61.0
     assert circuit.allow_request() is True  # open -> half_open
     assert _gauge_value('deepgram', 'account') == 0
+
+
+def test_elapsed_account_cooldown_clears_the_gauge_without_a_dial():
+    # The budget top-up alert holds on kind=account: while the bench stands no
+    # dial happens, so no transition can clear the gauge — only the periodic
+    # clock refresh can. Advancing ONLY the clock (no allow_request, no
+    # record_*) must read as closed on both kinds, without mutating state.
+    clock = [0.0]
+    circuit = _breaker('soniox', clock=lambda: clock[0])
+    circuit.record_account_failure(60)
+    assert _gauge_value('soniox', 'account') == 1
+    clock[0] = 60.0
+    provider_resilience.refresh_published_circuit_gauges()  # what the timer runs
+    assert _gauge_value('soniox', 'account') == 0
+    assert _gauge_value('soniox', 'selection') == 0
+    assert circuit.state == 'open'  # read-only: the breaker itself is untouched
+    assert circuit.account_cooldown_elapsed() is True
+
+
+def test_unexpired_account_cooldown_keeps_the_gauge_up_through_a_refresh():
+    clock = [0.0]
+    circuit = _breaker('modulate', clock=lambda: clock[0])
+    circuit.record_account_failure(1800)
+    provider_resilience.refresh_published_circuit_gauges()
+    assert _gauge_value('modulate', 'account') == 1
+    assert _gauge_value('modulate', 'selection') == 0
 
 
 def test_unlabeled_breaker_does_not_touch_the_gauge():

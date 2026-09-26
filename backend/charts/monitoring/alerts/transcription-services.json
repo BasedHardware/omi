@@ -1489,7 +1489,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (provider) (increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\",reason=\"provider_budget_exhausted\"}[5m])) unless on (provider) (max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1))",
+          "expr": "(sum by (provider) (increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\",reason=\"provider_budget_exhausted\"}[5m])) > 0 or max by (provider) (omi_stt_provider_circuit_open{job=\"backend-listen-metrics\",kind=\"account\"}) == 1) unless on (provider) (max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -1568,14 +1568,14 @@
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "18",
       "summary": "A live STT provider is out of balance or quota - top up the provider named in the alert instance labels.",
-      "threshold": "omi_stt_stream_close_total reason=provider_budget_exhausted increases for one provider in 5m, for 2m",
-      "user_impact": "That provider will not serve any stream until a human tops up the balance or quota; sessions hopping onto it get no transcript. The alert clears about one window after the provider stops closing streams for budget reasons (i.e. once it serves again after a top-up).",
-      "scope": "backend-listen omi_stt_stream_close_total reason=provider_budget_exhausted, grouped by provider. Retired providers (intentionally unfunded - hosted Deepgram per the 2026-09 cost ruling) are excluded via omi_stt_provider_retired so they cannot fire forever.",
+      "threshold": "budget closes increase in 5m for one provider, or that provider's account breaker is open on any pod (omi_stt_provider_circuit_open kind=account), for 2m, minus retired providers",
+      "user_impact": "That provider will not serve any stream until a human tops up the balance or quota; sessions hopping onto it get no transcript. The alert stays firing for the whole account cooldown (default 30m) even while pods hold the provider out instead of re-dialing, and resolves only once the cooldown has elapsed with no fresh budget closes - i.e. after a top-up actually took effect (a successful serve or the elapsed cooldown clears the gauge).",
+      "scope": "backend-listen omi_stt_stream_close_total reason=provider_budget_exhausted plus omi_stt_provider_circuit_open kind=account, grouped by provider. Retired providers (intentionally unfunded - hosted Deepgram per the 2026-09 cost ruling) are excluded via omi_stt_provider_retired so they cannot fire forever.",
       "verification": "Hermetic rule contract checked; the metric names are also asserted to be emitted in backend source. No production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Top up the named provider (Soniox org balance, Modulate usage cap). This is a balance or monthly cap and can recur before month end. Do not rotate unrelated provider keys.",
       "runbook": "backend/docs/runbooks/resilience-dashboards.md",
-      "evaluated_bad": "Synthetic contract: soniox with 10 budget closes in 5m fires; deepgram with 100 budget closes stays silent because omi_stt_provider_retired{provider=\"deepgram\"}=1.",
-      "evaluated_good": "Synthetic contract: no provider with budget closes in 5m."
+      "evaluated_bad": "Synthetic contract: soniox with 10 budget closes in 5m fires; soniox with the account bench open (gauge=1) and zero fresh closes - pods are holding it out for the 30m cooldown - still fires; deepgram with 100 budget closes stays silent because omi_stt_provider_retired{provider=\"deepgram\"}=1.",
+      "evaluated_good": "Synthetic contract: no provider with budget closes in 5m and no open account bench (a topped-up provider clears the gauge once its cooldown elapses or a dial succeeds)."
     },
     "labels": {
       "alert_identity": "omi-stt-provider-budget",

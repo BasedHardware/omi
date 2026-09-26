@@ -740,7 +740,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"transcribed\"}[5m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m])), 1)",
+          "expr": "(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"transcribed\"}[5m])) or vector(0)) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m])), 1)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -818,13 +818,13 @@
     "annotations": {
       "summary": "Live transcription is working for under 90% of sessions that should have produced a transcript.",
       "user_impact": "Roughly one in ten or more live sessions ended with no transcript at all - the 2026-09-26 incident shape (whole chain degraded for hours without a page on the user outcome).",
-      "scope": "backend-listen omi_live_session_transcript_outcome_total, emitted exactly once per backend-STT listen session at teardown. too_short sessions (under 10s of audio or no VAD speech) are excluded from the denominator; custom-STT sessions are not counted.",
+      "scope": "backend-listen omi_live_session_transcript_outcome_total, emitted exactly once per backend-STT listen session at teardown (all three outcome children are pre-created at process start). too_short sessions (under 10s of audio or no VAD speech) are excluded from the denominator; custom-STT sessions are not counted.",
       "verification": "Hermetic rule contract checked; the metric name is also asserted to be emitted in backend source. No production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Open the Backend-listen dashboard Live transcription health row: check the per-provider success panels and breaker-open gauges, then inspect provider account state (top up balance) before touching routing.",
       "runbook": "backend/docs/operational/windowed-live-stt.md",
       "threshold": "$A >= 50 && $B < 0.90",
-      "evaluated_bad": "Synthetic contract: 100 counted sessions of which 80 transcribed (ratio 0.80 < 0.90).",
-      "evaluated_good": "Synthetic contract: 100 counted sessions of which 99 transcribed (ratio 0.99)."
+      "evaluated_bad": "Synthetic contract: 100 counted sessions of which 80 transcribed (ratio 0.80 < 0.90); and a window with 100 no_transcript and no transcribed series at all (numerator zero-fills via 'or vector(0)', ratio 0, still fires).",
+      "evaluated_good": "Synthetic contract: 100 counted sessions of which 99 transcribed (ratio 0.99); and zero counted sessions (no data, healthy)."
     },
     "labels": {
       "alert_identity": "omi-live-transcription-success-low",

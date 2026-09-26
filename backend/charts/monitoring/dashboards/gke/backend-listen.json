@@ -1742,11 +1742,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": 0
               },
               {
-                "color": "red",
+                "color": "green",
                 "value": 90
               }
             ]
@@ -1780,7 +1780,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "100 * sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"transcribed\"}[$__rate_interval])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}}[$__rate_interval])), 1)",
+          "expr": "100 * sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"transcribed\"}[$__rate_interval])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[$__rate_interval])), 1)",
           "instant": false,
           "legendFormat": "transcribed %",
           "range": true,
@@ -2059,11 +2059,11 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": 0
               },
               {
-                "color": "red",
+                "color": "green",
                 "value": 90
               }
             ]
@@ -2307,7 +2307,7 @@
             "uid": "prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (provider, error_class) (increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\",outcome=\"failure\"}}[$__rate_interval]))",
+          "expr": "sum by (provider, error_class) (increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\",outcome=\"failure\"}[$__rate_interval]))",
           "instant": false,
           "legendFormat": "{{provider}} {{error_class}}",
           "range": true,
