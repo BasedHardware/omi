@@ -513,8 +513,14 @@ class SiriPigeonPigeonCodec: FlutterStandardMessageCodec, @unchecked Sendable {
 /// Generated protocol from Pigeon that represents a handler of messages from Flutter.
 protocol SiriIndexApi {
   func upsertConversations(uid: String, conversations: [SiriConversation], completion: @escaping (Result<Void, Error>) -> Void)
+  /// Replace only the authoritative time window; null covers all conversations.
+  func reconcileConversations(uid: String, conversations: [SiriConversation], coveredAfterMs: Int64?, completion: @escaping (Result<Void, Error>) -> Void)
   func upsertMemories(uid: String, memories: [SiriMemory], completion: @escaping (Result<Void, Error>) -> Void)
+  /// Called only after a complete, unfiltered owner memory fetch.
+  func reconcileMemories(uid: String, memories: [SiriMemory], completion: @escaping (Result<Void, Error>) -> Void)
   func upsertTasks(uid: String, tasks: [SiriTask], completion: @escaping (Result<Void, Error>) -> Void)
+  /// A complete active-only fetch preserves completed rows when false.
+  func reconcileTasks(uid: String, tasks: [SiriTask], includeCompleted: Bool, completion: @escaping (Result<Void, Error>) -> Void)
   func deleteEntities(uid: String, type: String, ids: [String], completion: @escaping (Result<Void, Error>) -> Void)
   func wipe(completion: @escaping (Result<Int64, Error>) -> Void)
   func setEnabled(enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void)
@@ -550,6 +556,26 @@ class SiriIndexApiSetup {
     } else {
       upsertConversationsChannel.setMessageHandler(nil)
     }
+    /// Replace only the authoritative time window; null covers all conversations.
+    let reconcileConversationsChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_siri.SiriIndexApi.reconcileConversations\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      reconcileConversationsChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let uidArg = args[0] as! String
+        let conversationsArg = args[1] as! [SiriConversation]
+        let coveredAfterMsArg: Int64? = nilOrValue(args[2])
+        api.reconcileConversations(uid: uidArg, conversations: conversationsArg, coveredAfterMs: coveredAfterMsArg) { result in
+          switch result {
+          case .success:
+            reply(wrapResult(nil))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      reconcileConversationsChannel.setMessageHandler(nil)
+    }
     let upsertMemoriesChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_siri.SiriIndexApi.upsertMemories\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       upsertMemoriesChannel.setMessageHandler { message, reply in
@@ -568,6 +594,25 @@ class SiriIndexApiSetup {
     } else {
       upsertMemoriesChannel.setMessageHandler(nil)
     }
+    /// Called only after a complete, unfiltered owner memory fetch.
+    let reconcileMemoriesChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_siri.SiriIndexApi.reconcileMemories\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      reconcileMemoriesChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let uidArg = args[0] as! String
+        let memoriesArg = args[1] as! [SiriMemory]
+        api.reconcileMemories(uid: uidArg, memories: memoriesArg) { result in
+          switch result {
+          case .success:
+            reply(wrapResult(nil))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      reconcileMemoriesChannel.setMessageHandler(nil)
+    }
     let upsertTasksChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_siri.SiriIndexApi.upsertTasks\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       upsertTasksChannel.setMessageHandler { message, reply in
@@ -585,6 +630,26 @@ class SiriIndexApiSetup {
       }
     } else {
       upsertTasksChannel.setMessageHandler(nil)
+    }
+    /// A complete active-only fetch preserves completed rows when false.
+    let reconcileTasksChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_siri.SiriIndexApi.reconcileTasks\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
+    if let api = api {
+      reconcileTasksChannel.setMessageHandler { message, reply in
+        let args = message as! [Any?]
+        let uidArg = args[0] as! String
+        let tasksArg = args[1] as! [SiriTask]
+        let includeCompletedArg = args[2] as! Bool
+        api.reconcileTasks(uid: uidArg, tasks: tasksArg, includeCompleted: includeCompletedArg) { result in
+          switch result {
+          case .success:
+            reply(wrapResult(nil))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
+        }
+      }
+    } else {
+      reconcileTasksChannel.setMessageHandler(nil)
     }
     let deleteEntitiesChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_siri.SiriIndexApi.deleteEntities\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {

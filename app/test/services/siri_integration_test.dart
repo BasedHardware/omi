@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -85,7 +86,67 @@ class _RaceHost extends SiriIndexApi {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   final now = DateTime.now();
+
+  test('Siri Start and Stop use conversation capture and finalize the phone session', () async {
+    final calls = <String>[];
+    String? source;
+    final siri = SiriIntegration.forTest(RecordingSiriHost(), 'owner-capture', listeningCapture: (
+      start: () async {
+        calls.add('streamRecording');
+        source = 'phone';
+      },
+      stop: () async {
+        calls.add('stopStreamRecording');
+        source = null;
+        return true;
+      },
+      source: () => source,
+      deviceConnected: () => false,
+      phoneBatchRecording: () => false,
+      deviceBatchRecording: () => false,
+    ));
+
+    await siri.setListening(true);
+    await siri.setListening(false);
+    expect(calls, ['streamRecording', 'stopStreamRecording']);
+  });
+
+  test('Siri Start reports an already-streaming BLE device without opening phone capture', () async {
+    var phoneStarts = 0;
+    final siri = SiriIntegration.forTest(RecordingSiriHost(), 'owner-device', listeningCapture: (
+      start: () async {
+        phoneStarts++;
+      },
+      stop: () async => true,
+      source: () => 'omi',
+      deviceConnected: () => true,
+      phoneBatchRecording: () => false,
+      deviceBatchRecording: () => false,
+    ));
+
+    await expectLater(siri.setListening(true),
+        throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'device_already_listening')));
+    expect(phoneStarts, 0);
+  });
+
+  test('connected idle device does not block phone conversation capture', () async {
+    var phoneStarts = 0;
+    final siri = SiriIntegration.forTest(RecordingSiriHost(), 'owner-device', listeningCapture: (
+      start: () async {
+        phoneStarts++;
+      },
+      stop: () async => true,
+      source: () => null,
+      deviceConnected: () => true,
+      phoneBatchRecording: () => false,
+      deviceBatchRecording: () => false,
+    ));
+
+    await siri.setListening(true);
+    expect(phoneStarts, 1);
+  });
 
   test('sign-out ordered after an in-flight native session publication', () async {
     final host = _RaceHost();

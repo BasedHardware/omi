@@ -433,7 +433,11 @@ class ActionItemsProvider extends ChangeNotifier {
       _pendingDeletionIds.removeWhere((id) => !serverIds.contains(id));
     }
     _hasMore = response.hasMore;
-    unawaited(SiriIntegration.current.upsertTasks(_actionItems));
+    if (!_hasMore && !hasActiveFilter) {
+      unawaited(SiriIntegration.current.reconcileTasks(_actionItems, includeCompleted: _includeCompleted));
+    } else {
+      unawaited(SiriIntegration.current.upsertTasks(_actionItems));
+    }
 
     if (!_showCompletedView && shouldAutoRevealCompleted(_actionItems)) {
       _showCompletedView = true;
@@ -457,8 +461,12 @@ class ActionItemsProvider extends ChangeNotifier {
       if (response != null) {
         final filtered = response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
         _actionItems.addAll(filtered);
-        unawaited(SiriIntegration.current.upsertTasks(filtered));
         _hasMore = response.hasMore;
+        if (!_hasMore && !hasActiveFilter) {
+          unawaited(SiriIntegration.current.reconcileTasks(_actionItems, includeCompleted: _includeCompleted));
+        } else {
+          unawaited(SiriIntegration.current.upsertTasks(filtered));
+        }
       }
     } catch (e) {
       Logger.debug('Error loading more action items: $e');

@@ -641,6 +641,7 @@ class MemoriesProvider extends ChangeNotifier {
     final seenCurrent = <String>{};
     var offset = 0;
     String? memoryCursor;
+    var currentTraversalComplete = false;
     var viewProtocolRestarts = 0;
     var deviceScopeSupported = true;
     var ledgerHistorySupported = false;
@@ -730,7 +731,12 @@ class MemoriesProvider extends ChangeNotifier {
         memoryCursor = result.nextCursor;
         continue;
       }
-      if (result.memories.length < limit) break;
+      // A cursor ending or a short offset page proves this owner/view was
+      // exhausted. Truncated or capped traversals are additive only.
+      if (memoryCursor != null || result.memories.length < limit) {
+        currentTraversalComplete = true;
+        break;
+      }
       offset += result.memories.length;
     }
     // History is an additive owner-scoped projection, fetched independently
@@ -819,7 +825,17 @@ class MemoriesProvider extends ChangeNotifier {
     final currentTombstoneId = _pendingDeletionId;
     final effectiveTombstoneId = currentTombstoneId ?? tombstoneId;
     _memories = effectiveTombstoneId != null ? all.where((memory) => memory.id != effectiveTombstoneId).toList() : all;
-    unawaited(SiriIntegration.instance.upsertMemories(_memories));
+    // The default useful-now/device views do not cover every indexed memory.
+    // Only an exhausted, owner-wide all/current view may remove absent IDs.
+    final siriMemoryFetchIsAuthoritative = currentTraversalComplete &&
+        !_filterThisDeviceOnly &&
+        (_beliefEnabled != true || serverView == MemoryReadView.all);
+    if (siriMemoryFetchIsAuthoritative) {
+      unawaited(SiriIntegration.current.reconcileMemories(_memories));
+    } else {
+      unawaited(SiriIntegration.current.upsertMemories(_memories));
+      unawaited(SiriIntegration.current.refreshAuthoritativeMemories());
+    }
     _deviceScopeSupported = deviceScopeSupported;
     _ledgerHistorySupported = ledgerHistorySupported;
     _ledgerHistoryTruncated = ledgerHistoryTruncated;
@@ -1367,7 +1383,7 @@ class MemoriesProvider extends ChangeNotifier {
         _memories.add(deletedMemory!);
       }
       _setCategories();
-      unawaited(SiriIntegration.instance.upsertMemories([deletedMemory!]));
+      unawaited(SiriIntegration.current.upsertMemories([deletedMemory!]));
       notifyListeners();
     }
 
@@ -1391,7 +1407,7 @@ class MemoriesProvider extends ChangeNotifier {
     _cancelDeletionTimer();
     _pendingDeletionId = null;
     _memories.add(_lastDeletedMemory!);
-    unawaited(SiriIntegration.instance.upsertMemories([_lastDeletedMemory!]));
+    unawaited(SiriIntegration.current.upsertMemories([_lastDeletedMemory!]));
     _lastDeletedMemory = null;
     _setCategories();
     notifyListeners();

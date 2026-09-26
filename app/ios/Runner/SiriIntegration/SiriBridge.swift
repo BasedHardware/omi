@@ -3,6 +3,22 @@ import Flutter
 import UIKit
 import AppIntents
 
+enum SiriListeningFailure: Error {
+    case deviceAlreadyListening
+    case unavailable
+
+    init(pigeonCode: String) {
+        self = pigeonCode == "device_already_listening" ? .deviceAlreadyListening : .unavailable
+    }
+
+    var spokenDialog: String {
+        switch self {
+        case .deviceAlreadyListening: "Omi is already listening from your device."
+        case .unavailable: "Open Omi to start listening."
+        }
+    }
+}
+
 final class SiriBridge: SiriIndexApi {
     static let shared = SiriBridge()
     private var events: SiriEventsApi?
@@ -34,11 +50,24 @@ final class SiriBridge: SiriIndexApi {
     func upsertConversations(uid: String, conversations: [SiriConversation], completion: @escaping (Result<Void, Error>) -> Void) {
         complete({ try await SiriSnapshotStore.shared.upsert(conversations, uid: uid) }, completion: completion)
     }
+    func reconcileConversations(uid: String, conversations: [SiriConversation], coveredAfterMs: Int64?,
+                                completion: @escaping (Result<Void, Error>) -> Void) {
+        complete({ try await SiriSnapshotStore.shared.reconcile(conversations, uid: uid,
+            coveredAfterMs: coveredAfterMs) }, completion: completion)
+    }
     func upsertMemories(uid: String, memories: [SiriMemory], completion: @escaping (Result<Void, Error>) -> Void) {
         complete({ try await SiriSnapshotStore.shared.upsert(memories, uid: uid) }, completion: completion)
     }
+    func reconcileMemories(uid: String, memories: [SiriMemory], completion: @escaping (Result<Void, Error>) -> Void) {
+        complete({ try await SiriSnapshotStore.shared.reconcile(memories, uid: uid) }, completion: completion)
+    }
     func upsertTasks(uid: String, tasks: [SiriTask], completion: @escaping (Result<Void, Error>) -> Void) {
         complete({ try await SiriSnapshotStore.shared.upsert(tasks, uid: uid) }, completion: completion)
+    }
+    func reconcileTasks(uid: String, tasks: [SiriTask], includeCompleted: Bool,
+                        completion: @escaping (Result<Void, Error>) -> Void) {
+        complete({ try await SiriSnapshotStore.shared.reconcile(tasks, uid: uid,
+            includeCompleted: includeCompleted) }, completion: completion)
     }
     func deleteEntities(uid: String, type: String, ids: [String], completion: @escaping (Result<Void, Error>) -> Void) {
         complete({ try await SiriSnapshotStore.shared.delete(type: type, ids: ids, uid: uid) }, completion: completion)
@@ -103,7 +132,7 @@ final class SiriBridge: SiriIndexApi {
             events.setListening(enabled: enabled) { result in
                 switch result {
                 case .success: continuation.resume()
-                case .failure: continuation.resume(throwing: SiriSession.Failure.server)
+                case .failure(let error): continuation.resume(throwing: SiriListeningFailure(pigeonCode: error.code))
                 }
             }
         }

@@ -220,6 +220,22 @@ final class SiriSnapshotStore {
         }
         if enabled { try await rebuildIndex() }
     }
+    /// A successful owner-wide or newest-page fetch is authoritative only for
+    /// its covered window. The oldest row on a nonfinal page is excluded so
+    /// timestamp ties at the page boundary cannot delete unseen records.
+    func reconcile(_ values: [SiriConversation], uid: String, coveredAfterMs: Int64?) async throws {
+        try mutateForOwner(uid) {
+            let keep = Set(values.map(\.id))
+            snapshot.conversations = snapshot.conversations.filter { id, row in
+                keep.contains(id) || (coveredAfterMs.map { row.startedAtMs <= $0 } ?? false)
+            }
+            for value in values where !value.id.isEmpty {
+                snapshot.conversations[value.id] = Conversation(id: value.id, title: value.title,
+                    summary: value.summary, startedAtMs: value.startedAtMs, updatedAtMs: value.updatedAtMs)
+            }
+        }
+        if enabled { try await removeIndex(); try await rebuildIndex() }
+    }
     func upsert(_ values: [SiriMemory], uid: String) async throws {
         try mutateForOwner(uid) {
         for value in values where !value.id.isEmpty {
@@ -227,6 +243,18 @@ final class SiriSnapshotStore {
         }
         }
         if enabled { try await rebuildIndex() }
+    }
+    /// Called only after the entire unfiltered memory traversal succeeds.
+    func reconcile(_ values: [SiriMemory], uid: String) async throws {
+        try mutateForOwner(uid) {
+            let keep = Set(values.map(\.id))
+            snapshot.memories = snapshot.memories.filter { keep.contains($0.key) }
+            for value in values where !value.id.isEmpty {
+                snapshot.memories[value.id] = Memory(id: value.id, content: value.content,
+                    createdAtMs: value.createdAtMs, expiresAtMs: value.expiresAtMs)
+            }
+        }
+        if enabled { try await removeIndex(); try await rebuildIndex() }
     }
     func upsert(_ values: [SiriTask], uid: String) async throws {
         try mutateForOwner(uid) {
@@ -236,6 +264,20 @@ final class SiriSnapshotStore {
         }
         }
         if enabled { try await rebuildIndex() }
+    }
+    /// A complete active-only task list cannot speak for completed rows.
+    func reconcile(_ values: [SiriTask], uid: String, includeCompleted: Bool) async throws {
+        try mutateForOwner(uid) {
+            let keep = Set(values.map(\.id))
+            snapshot.tasks = snapshot.tasks.filter { id, row in
+                keep.contains(id) || (!includeCompleted && row.completed)
+            }
+            for value in values where !value.id.isEmpty {
+                snapshot.tasks[value.id] = Task(id: value.id, title: value.title, completed: value.completed,
+                    createdAtMs: value.createdAtMs, dueAtMs: value.dueAtMs, completedAtMs: value.completedAtMs)
+            }
+        }
+        if enabled { try await removeIndex(); try await rebuildIndex() }
     }
     func delete(type: String, ids: [String], uid: String) async throws {
         try mutateForOwner(uid) {
@@ -269,7 +311,10 @@ final class SiriSnapshotStore {
     func conversations(ids: [String]?) -> [ConversationEntity] {
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked() else { return [] }
-        let selected = snapshot.conversations.values.filter { ids == nil || ids!.contains($0.id) }
+        let cutoff = Int64(Date().timeIntervalSince1970 * 1000) - 180 * 86_400_000
+        let selected = snapshot.conversations.values.filter {
+            $0.startedAtMs > cutoff && (ids == nil || ids!.contains($0.id))
+        }
         return selected.map { ConversationEntity(id: $0.id, name: $0.title, content: $0.summary,
             creationDate: Date(timeIntervalSince1970: Double($0.startedAtMs) / 1000),
             modificationDate: Date(timeIntervalSince1970: Double($0.updatedAtMs) / 1000)) }
@@ -297,7 +342,10 @@ final class SiriSnapshotStore {
     func tasks(ids: [String]?) -> [TaskEntity] {
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked() else { return [] }
-        return snapshot.tasks.values.filter { ids == nil || ids!.contains($0.id) }.map {
+        let cutoff = Int64(Date().timeIntervalSince1970 * 1000) - 30 * 86_400_000
+        return snapshot.tasks.values.filter {
+            (ids == nil || ids!.contains($0.id)) && (!$0.completed || ($0.completedAtMs ?? 0) > cutoff)
+        }.map {
             TaskEntity(id: $0.id, title: $0.title, isCompleted: $0.completed,
                 creationDate: Date(timeIntervalSince1970: Double($0.createdAtMs) / 1000),
                 dueDate: $0.dueAtMs.map { Date(timeIntervalSince1970: Double($0) / 1000) },

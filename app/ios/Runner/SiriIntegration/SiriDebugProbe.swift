@@ -117,6 +117,48 @@ enum SiriDebugProbe {
                         NSLog("[SiriProbe] disabledDelete=FAIL error=%@", String(describing: error))
                         try? await SiriSnapshotStore.shared.setEnabled(true)
                     }
+                    let removedByServer = SiriMemory(id: "probe-remote-deleted",
+                        content: "probe-remote-deleted-private-2026",
+                        createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
+                    try await SiriSnapshotStore.shared.upsert([removedByServer], uid: config.uid)
+                    try await SiriSnapshotStore.shared.reconcile([SiriMemory](), uid: config.uid)
+                    NSLog("[SiriProbe] authoritativeMemoryRemoval=%@",
+                          SiriSnapshotStore.shared.memories(ids: [removedByServer.id]).isEmpty ? "PASS" : "FAIL")
+                    let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+                    let staleNew = SiriConversation(id: "probe-remote-deleted-conversation", title: "private",
+                        summary: "private summary", startedAtMs: nowMs, updatedAtMs: nowMs)
+                    let outsidePage = SiriConversation(id: "probe-outside-page", title: "older",
+                        summary: "older summary", startedAtMs: nowMs - 100 * 86_400_000, updatedAtMs: nowMs)
+                    try await SiriSnapshotStore.shared.upsert([staleNew, outsidePage], uid: config.uid)
+                    try await SiriSnapshotStore.shared.reconcile([SiriConversation](), uid: config.uid,
+                        coveredAfterMs: nowMs - 50 * 86_400_000)
+                    NSLog("[SiriProbe] authoritativePageWindow=%@",
+                          SiriSnapshotStore.shared.conversations(ids: [staleNew.id]).isEmpty &&
+                          !SiriSnapshotStore.shared.conversations(ids: [outsidePage.id]).isEmpty ? "PASS" : "FAIL")
+                    let activeTask = SiriTask(id: "probe-remote-deleted-task", title: "private active task",
+                        completed: false, createdAtMs: nowMs, dueAtMs: nil, completedAtMs: nil)
+                    let completedTask = SiriTask(id: "probe-preserved-completed-task", title: "recent done task",
+                        completed: true, createdAtMs: nowMs, dueAtMs: nil, completedAtMs: nowMs)
+                    try await SiriSnapshotStore.shared.upsert([activeTask, completedTask], uid: config.uid)
+                    try await SiriSnapshotStore.shared.reconcile([SiriTask](), uid: config.uid,
+                        includeCompleted: false)
+                    NSLog("[SiriProbe] authoritativeActiveTasks=%@",
+                          SiriSnapshotStore.shared.tasks(ids: [activeTask.id]).isEmpty &&
+                          !SiriSnapshotStore.shared.tasks(ids: [completedTask.id]).isEmpty ? "PASS" : "FAIL")
+                    let oldConversation = SiriConversation(id: "probe-too-old-conversation", title: "old",
+                        summary: "old summary", startedAtMs: nowMs - 181 * 86_400_000, updatedAtMs: nowMs)
+                    let oldTask = SiriTask(id: "probe-too-old-completion", title: "old task", completed: true,
+                        createdAtMs: nowMs - 45 * 86_400_000, dueAtMs: nil,
+                        completedAtMs: nowMs - 31 * 86_400_000)
+                    try await SiriSnapshotStore.shared.upsert([oldConversation], uid: config.uid)
+                    try await SiriSnapshotStore.shared.upsert([oldTask], uid: config.uid)
+                    try await SiriSnapshotStore.shared.rebuildIndex()
+                    NSLog("[SiriProbe] reindexScope=%@",
+                          SiriSnapshotStore.shared.conversations(ids: [oldConversation.id]).isEmpty &&
+                          SiriSnapshotStore.shared.tasks(ids: [oldTask.id]).isEmpty ? "PASS" : "FAIL")
+                    NSLog("[SiriProbe] deviceListeningDialog=%@",
+                          SiriListeningFailure(pigeonCode: "device_already_listening").spokenDialog ==
+                          "Omi is already listening from your device." ? "PASS" : "FAIL")
                     let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")!
                     defaults.removeObject(forKey: "siri.snapshot.owner")
                     NSLog("[SiriProbe] ownerMissingVisible=%d", SiriSnapshotStore.shared.memories(ids: nil).count)

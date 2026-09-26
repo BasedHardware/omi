@@ -64,10 +64,22 @@ class SiriTelemetryRecord {
 abstract class SiriIndexApi {
   @async
   void upsertConversations(String uid, List<SiriConversation> conversations);
+
+  /// Replace only the authoritative time window; null covers all conversations.
+  @async
+  void reconcileConversations(String uid, List<SiriConversation> conversations, int? coveredAfterMs);
   @async
   void upsertMemories(String uid, List<SiriMemory> memories);
+
+  /// Called only after a complete, unfiltered owner memory fetch.
+  @async
+  void reconcileMemories(String uid, List<SiriMemory> memories);
   @async
   void upsertTasks(String uid, List<SiriTask> tasks);
+
+  /// A complete active-only fetch preserves completed rows when false.
+  @async
+  void reconcileTasks(String uid, List<SiriTask> tasks, bool includeCompleted);
   @async
   void deleteEntities(String uid, String type, List<String> ids);
   @async

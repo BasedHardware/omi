@@ -284,6 +284,9 @@ struct StartOmiListeningIntent: AppIntent {
             try await SiriBridge.shared.setListening(true)
             SiriTelemetry.intent("startListening", outcome: "ok", started: started)
             return .result(dialog: "Omi is listening.")
+        } catch SiriListeningFailure.deviceAlreadyListening {
+            SiriTelemetry.intent("startListening", outcome: "ok", started: started)
+            return .result(dialog: "Omi is already listening from your device.")
         } catch {
             SiriTelemetry.intent("startListening", outcome: SiriTelemetry.outcome(error), started: started)
             return .result(dialog: "Open Omi to start listening.")
