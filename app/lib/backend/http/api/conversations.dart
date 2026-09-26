@@ -352,11 +352,15 @@ class ConversationApi {
     );
     return switch (sent) {
       ApiFailure(:final problem) => ApiFailure(problem),
-      ApiSuccess(:final data) => decodeApiRows<ServerConversation>(
+      ApiSuccess(:final data, :final truncated) => switch (decodeApiRows<ServerConversation>(
           data,
           ServerConversation.fromJson,
           fallback: recordFallback,
-        ),
+        )) {
+          ApiSuccess(:final data, :final rejectedRows) =>
+            ApiSuccess(data, rejectedRows: rejectedRows, truncated: truncated),
+          ApiFailure(:final problem) => ApiFailure(problem),
+        },
     };
   }
 

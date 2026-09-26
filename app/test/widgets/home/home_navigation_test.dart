@@ -209,7 +209,7 @@ void main() {
 
   test('indexed memory resolver follows owner-wide cursors beyond the visible page', () async {
     final now = DateTime.now();
-    Memory memory(String id, {String uid = 'owner', MemoryLayer? layer}) => Memory(
+    Memory memory(String id, {String uid = 'owner', MemoryLayer layer = MemoryLayer.longTerm}) => Memory(
           id: id,
           uid: uid,
           content: id,
@@ -218,6 +218,7 @@ void main() {
           updatedAt: now,
           visibility: MemoryVisibility.private,
           layer: layer,
+          layerIsExplicit: true,
         );
     final cursors = <String?>[];
     final found = await resolveIndexedMemoryById('target',

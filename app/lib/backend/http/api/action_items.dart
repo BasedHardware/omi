@@ -203,7 +203,11 @@ class ActionItemsApi {
     );
     return switch (sent) {
       ApiFailure(:final problem) => ApiFailure(problem),
-      ApiSuccess(:final data) => decodeActionItemsEnvelope(data, fallback: recordFallback),
+      ApiSuccess(:final data, :final truncated) => switch (decodeActionItemsEnvelope(data, fallback: recordFallback)) {
+          ApiSuccess(:final data, :final rejectedRows) =>
+            ApiSuccess(data, rejectedRows: rejectedRows, truncated: truncated),
+          ApiFailure(:final problem) => ApiFailure(problem),
+        },
     };
   }
 }

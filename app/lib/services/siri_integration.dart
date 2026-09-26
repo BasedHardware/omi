@@ -16,6 +16,9 @@ import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/http/api/memories.dart';
+import 'package:omi/backend/http/api/action_items.dart';
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/gen/siri_pigeon.g.dart';
 import 'package:omi/utils/logger.dart';
@@ -38,6 +41,16 @@ typedef SiriMemoryPageFetcher = Future<GetMemoriesResult> Function({
   required int limit,
   required int offset,
   String? cursor,
+});
+typedef SiriTaskPageFetcher = Future<ApiResult<ActionItemsResponse>> Function({
+  required int limit,
+  required int offset,
+  required bool completed,
+});
+typedef SiriConversationPageFetcher = Future<ApiResult<List<ServerConversation>>> Function({
+  required int limit,
+  required int offset,
+  required DateTime startDate,
 });
 
 /// The same owner-visible scope is used by both incremental writes and full
@@ -81,19 +94,28 @@ class SiriIntegration extends SiriEventsApi {
         _isIOS = Platform.isIOS,
         _testSessionConfig = null,
         _testListeningCapture = null,
-        _testMemoryPageFetcher = null;
+        _testMemoryPageFetcher = null,
+        _testTaskPageFetcher = null,
+        _testConversationPageFetcher = null,
+        _delay = Future<void>.delayed;
 
   /// Inject a Pigeon host for hermetic projection and account fencing tests.
   SiriIntegration.forTest(SiriIndexApi host, String uid,
       {SiriSessionConfig Function(User, IdTokenResult, int)? sessionConfig,
       SiriListeningCapture? listeningCapture,
       SiriMemoryPageFetcher? memoryPageFetcher,
+      SiriTaskPageFetcher? taskPageFetcher,
+      SiriConversationPageFetcher? conversationPageFetcher,
+      Future<void> Function(Duration)? delay,
       bool coldStart = false})
       : _host = host,
         _isIOS = true,
         _testSessionConfig = sessionConfig,
         _testListeningCapture = listeningCapture,
         _testMemoryPageFetcher = memoryPageFetcher,
+        _testTaskPageFetcher = taskPageFetcher,
+        _testConversationPageFetcher = conversationPageFetcher,
+        _delay = delay ?? Future<void>.delayed,
         _uid = coldStart ? null : uid,
         _nativeGeneration = coldStart ? null : 0;
   static final instance = SiriIntegration._();
@@ -105,6 +127,9 @@ class SiriIntegration extends SiriEventsApi {
   final SiriSessionConfig Function(User, IdTokenResult, int)? _testSessionConfig;
   final SiriListeningCapture? _testListeningCapture;
   final SiriMemoryPageFetcher? _testMemoryPageFetcher;
+  final SiriTaskPageFetcher? _testTaskPageFetcher;
+  final SiriConversationPageFetcher? _testConversationPageFetcher;
+  final Future<void> Function(Duration) _delay;
   void installEvents() {
     if (_isIOS) SiriEventsApi.setUp(this);
   }
@@ -113,6 +138,8 @@ class SiriIntegration extends SiriEventsApi {
   int? _nativeGeneration;
   Future<void> _nativeTail = Future<void>.value();
   String? _uid;
+  String? _ownerWideRefreshUid;
+  DateTime? _ownerWideRefreshAt;
 
   Future<T> _nativeOperation<T>(Future<T> Function() operation) {
     final result = _nativeTail.then((_) => operation());
@@ -151,6 +178,118 @@ class SiriIntegration extends SiriEventsApi {
     if (uid == null || generation != _accountGeneration) return;
     _uid = uid;
     await refreshSession(user!);
+    _scheduleOwnerWideRefresh(uid, generation);
+  }
+
+  void _scheduleOwnerWideRefresh(String uid, int generation) {
+    final now = DateTime.now();
+    if (_ownerWideRefreshUid == uid &&
+        _ownerWideRefreshAt != null &&
+        now.difference(_ownerWideRefreshAt!) < const Duration(days: 1)) {
+      return;
+    }
+    _ownerWideRefreshUid = uid;
+    _ownerWideRefreshAt = now;
+    unawaited(Future<void>.delayed(const Duration(seconds: 2), () async {
+      try {
+        if (_uid != uid || _accountGeneration != generation || !await isEnabled()) return;
+        await refreshOwnerWideIndex();
+      } catch (error) {
+        Logger.debug('Siri deferred owner-wide refresh failed: $error');
+      }
+    }));
+  }
+
+  /// Runs outside UI pagination and only reconciles an authoritative, complete
+  /// traversal. A capped, truncated, decoded-partial, or failed page is additive.
+  Future<void> refreshOwnerWideIndex() async {
+    final uid = _uid;
+    final generation = _accountGeneration;
+    if (!_isIOS || uid == null) return;
+    await _refreshOwnerWideTasks(uid, generation);
+    if (_uid != uid || generation != _accountGeneration) return;
+    await _refreshOwnerWideConversations(uid, generation);
+    if (_uid != uid || generation != _accountGeneration) return;
+    await refreshAuthoritativeMemories();
+  }
+
+  Future<void> _refreshOwnerWideTasks(String uid, int generation) async {
+    const limit = 100;
+    const maxPages = 50;
+    final rows = <ActionItemWithMetadata>[];
+    var complete = true;
+    for (final completed in [false, true]) {
+      var sectionComplete = false;
+      for (var page = 0; page < maxPages; page++) {
+        ApiResult<ActionItemsResponse> result;
+        try {
+          result = await (_testTaskPageFetcher?.call(limit: limit, offset: page * limit, completed: completed) ??
+              ActionItemsApi(baseUrl: Env.apiBaseUrl ?? '')
+                  .list(limit: limit, offset: page * limit, completed: completed));
+        } catch (error) {
+          Logger.debug('Siri task traversal failed: $error');
+          break;
+        }
+        if (_uid != uid || generation != _accountGeneration) return;
+        if (result is! ApiSuccess<ActionItemsResponse>) break;
+        final data = result.data;
+        if (result.rejectedRows > 0 || result.truncated || data.truncated) break;
+        rows.addAll(data.actionItems);
+        if (!data.hasMore) {
+          sectionComplete = true;
+          break;
+        }
+      }
+      complete = complete && sectionComplete;
+    }
+    if (_uid != uid || generation != _accountGeneration) return;
+    if (complete) {
+      await reconcileTasks(rows, includeCompleted: true);
+    } else if (rows.isNotEmpty) {
+      await upsertTasks(rows);
+    }
+  }
+
+  Future<void> _refreshOwnerWideConversations(String uid, int generation) async {
+    const limit = 100;
+    const maxPages = 50;
+    const maxEligible = 2000;
+    final cutoff = DateTime.now().subtract(const Duration(days: 180));
+    final rows = <ServerConversation>[];
+    var complete = false;
+    for (var page = 0; page < maxPages; page++) {
+      ApiResult<List<ServerConversation>> result;
+      try {
+        Future<ApiResult<List<ServerConversation>>> fetch() =>
+            _testConversationPageFetcher?.call(limit: limit, offset: page * limit, startDate: cutoff) ??
+            ConversationApi(baseUrl: Env.apiBaseUrl ?? '').list(
+                limit: limit, offset: page * limit, statuses: const [ConversationStatus.completed], startDate: cutoff);
+        result = await fetch();
+        if (result is ApiFailure<List<ServerConversation>> && result.problem.kind == ApiProblemKind.rateLimited) {
+          await _delay(result.problem.retryAfter ?? const Duration(seconds: 2));
+          if (_uid != uid || generation != _accountGeneration) return;
+          result = await fetch();
+        }
+      } catch (error) {
+        Logger.debug('Siri conversation traversal failed: $error');
+        break;
+      }
+      if (_uid != uid || generation != _accountGeneration) return;
+      if (result is! ApiSuccess<List<ServerConversation>>) break;
+      if (result.rejectedRows > 0 || result.truncated) break;
+      rows.addAll(result.data);
+      if (rows.where((row) => siriConversationIsIndexable(row, DateTime.now())).length >= maxEligible) break;
+      if (result.data.length < limit) {
+        complete = true;
+        break;
+      }
+    }
+    if (_uid != uid || generation != _accountGeneration) return;
+    if (complete) {
+      await reconcileConversations(rows, coveredAfter: cutoff);
+    } else if (rows.isNotEmpty) {
+      await upsertConversations(rows);
+    }
   }
 
   Future<void> refreshSession(User user) async {
@@ -389,6 +528,10 @@ class SiriIntegration extends SiriEventsApi {
   Future<void> setEnabled(bool enabled) async {
     if (!_isIOS) return;
     await _host.setEnabled(enabled);
+    if (enabled && _uid != null) {
+      _ownerWideRefreshAt = null;
+      _scheduleOwnerWideRefresh(_uid!, _accountGeneration);
+    }
   }
 
   Future<String?> takePendingRoute() async => _isIOS ? _host.takePendingRoute() : null;

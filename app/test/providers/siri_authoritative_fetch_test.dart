@@ -1,10 +1,15 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/memories.dart';
+import 'package:omi/backend/http/api/action_items.dart';
+import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/gen/siri_pigeon.g.dart';
 import 'package:omi/providers/action_items_provider.dart';
@@ -219,5 +224,158 @@ void main() {
     expect(await provider.fetchActionItems(), isTrue);
     await Future<void>.delayed(Duration.zero);
     expect(host.tasks.containsKey('outside-page'), isTrue);
+  });
+
+  test('owner-wide refresh indexes tasks, conversations and memories beyond UI pages', () async {
+    final now = DateTime.now();
+    final host = _SnapshotHost();
+    final taskOffsets = <String>[];
+    final conversationOffsets = <int>[];
+    final memoryCursors = <String?>[];
+    final siri = SiriIntegration.forTest(host, 'siri-fetch-owner',
+        taskPageFetcher: ({required limit, required offset, required completed}) async {
+      taskOffsets.add('$completed:$offset');
+      if (completed) {
+        return ApiSuccess(ActionItemsResponse(actionItems: [
+          ActionItemWithMetadata(
+              id: 'recent-completed', description: 'Recent', completed: true, completedAt: now, status: 'completed'),
+        ], hasMore: false));
+      }
+      return ApiSuccess(ActionItemsResponse(
+          actionItems: offset == 0
+              ? List.generate(
+                  100,
+                  (i) =>
+                      ActionItemWithMetadata(id: 'open-$i', description: 'Open $i', completed: false, status: 'active'))
+              : [
+                  const ActionItemWithMetadata(
+                      id: 'open-beyond-page', description: 'Later', completed: false, status: 'active')
+                ],
+          hasMore: offset == 0));
+    }, conversationPageFetcher: ({required limit, required offset, required startDate}) async {
+      conversationOffsets.add(offset);
+      final rows = offset == 0
+          ? List.generate(
+              100,
+              (i) => ServerConversation(
+                  id: 'conversation-$i',
+                  createdAt: now,
+                  structured: Structured('Title $i', 'Summary'),
+                  status: ConversationStatus.completed))
+          : [
+              ServerConversation(
+                  id: 'conversation-beyond-page',
+                  createdAt: now,
+                  structured: Structured('Later', 'Summary'),
+                  status: ConversationStatus.completed)
+            ];
+      return ApiSuccess<List<ServerConversation>>(rows);
+    }, memoryPageFetcher: ({required limit, required offset, cursor}) async {
+      memoryCursors.add(cursor);
+      Memory row(String id) => Memory(
+          id: id,
+          uid: 'siri-fetch-owner',
+          content: id,
+          category: MemoryCategory.manual,
+          createdAt: now,
+          updatedAt: now,
+          visibility: MemoryVisibility.private,
+          layer: MemoryLayer.longTerm,
+          layerIsExplicit: true);
+      return cursor == null
+          ? GetMemoriesResult([row('memory-first')], true, nextCursor: 'second')
+          : GetMemoriesResult([row('memory-beyond-page')], true);
+    });
+
+    await siri.refreshOwnerWideIndex();
+    expect(host.tasks.keys, containsAll(['open-beyond-page', 'recent-completed']));
+    expect(host.conversations.keys, contains('conversation-beyond-page'));
+    expect(host.memories.keys, contains('memory-beyond-page'));
+    expect(taskOffsets, ['false:0', 'false:100', 'true:0']);
+    expect(conversationOffsets, [0, 100]);
+    expect(memoryCursors, [null, 'second']);
+  });
+
+  test('owner-wide conversation refresh backs off on 429 and never prunes an incomplete window', () async {
+    final host = _SnapshotHost();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    host.conversations['unseen'] =
+        SiriConversation(id: 'unseen', title: 'Keep', summary: 'Private', startedAtMs: now, updatedAtMs: now);
+    var calls = 0;
+    final delays = <Duration>[];
+    final siri = SiriIntegration.forTest(host, 'siri-fetch-owner',
+        conversationPageFetcher: ({required limit, required offset, required startDate}) async {
+          calls++;
+          return calls == 1
+              ? const ApiFailure<List<ServerConversation>>(
+                  ApiProblem(ApiProblemKind.rateLimited, statusCode: 429, retryAfter: Duration(seconds: 3)))
+              : const ApiFailure<List<ServerConversation>>(ApiProblem(ApiProblemKind.server, statusCode: 503));
+        },
+        taskPageFetcher: ({required limit, required offset, required completed}) async =>
+            const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false)),
+        memoryPageFetcher: ({required limit, required offset, cursor}) async => const GetMemoriesResult([], true),
+        delay: (duration) async => delays.add(duration));
+    await siri.refreshOwnerWideIndex();
+    expect(calls, 2);
+    expect(delays, contains(const Duration(seconds: 3)));
+    expect(host.conversations.keys, contains('unseen'));
+  });
+
+  test('typed list APIs preserve server truncation headers for safe reconciliation', () async {
+    const headers = {'x-omi-list-truncated': 'true'};
+    final conversations = await ConversationApi(
+        baseUrl: 'http://localhost/', send: (_) async => http.Response('[]', 200, headers: headers)).list();
+    final tasks = await ActionItemsApi(
+        baseUrl: 'http://localhost/',
+        send: (_) async => http.Response('{"action_items":[],"has_more":false}', 200, headers: headers)).list();
+    expect((conversations as ApiSuccess<List<ServerConversation>>).truncated, isTrue);
+    expect((tasks as ApiSuccess<ActionItemsResponse>).truncated, isTrue);
+  });
+
+  test('incomplete owner-wide task traversal keeps unseen indexed tasks', () async {
+    final host = _SnapshotHost();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    host.tasks['unseen'] = SiriTask(id: 'unseen', title: 'Keep', completed: false, createdAtMs: now);
+    final siri = SiriIntegration.forTest(host, 'siri-fetch-owner',
+        taskPageFetcher: ({required limit, required offset, required completed}) async => completed
+            ? const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false))
+            : const ApiFailure(ApiProblem(ApiProblemKind.rateLimited, statusCode: 429)),
+        conversationPageFetcher: ({required limit, required offset, required startDate}) async =>
+            const ApiSuccess<List<ServerConversation>>([]),
+        memoryPageFetcher: ({required limit, required offset, cursor}) async => const GetMemoriesResult([], true));
+
+    await siri.refreshOwnerWideIndex();
+    expect(host.tasks.keys, contains('unseen'));
+  });
+
+  test('capped conversation traversal adds fetched rows without pruning unseen ids', () async {
+    final host = _SnapshotHost();
+    final now = DateTime.now();
+    host.conversations['unseen'] = SiriConversation(
+        id: 'unseen',
+        title: 'Keep',
+        summary: 'Private',
+        startedAtMs: now.millisecondsSinceEpoch,
+        updatedAtMs: now.millisecondsSinceEpoch);
+    var pages = 0;
+    final siri = SiriIntegration.forTest(host, 'siri-fetch-owner',
+        taskPageFetcher: ({required limit, required offset, required completed}) async =>
+            const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false)),
+        conversationPageFetcher: ({required limit, required offset, required startDate}) async {
+          pages++;
+          return ApiSuccess<List<ServerConversation>>(List.generate(
+              limit,
+              (i) => ServerConversation(
+                  id: 'row-${offset + i}',
+                  createdAt: now,
+                  structured: Structured('Title', 'Summary'),
+                  status: ConversationStatus.completed)));
+        },
+        memoryPageFetcher: ({required limit, required offset, cursor}) async => const GetMemoriesResult([], true));
+
+    await siri.refreshOwnerWideIndex();
+    expect(pages, 20);
+    expect(host.conversations.length, 2001);
+    expect(host.conversations.keys, contains('unseen'));
   });
 }
