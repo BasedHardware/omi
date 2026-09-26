@@ -96,6 +96,40 @@ def test_comparison_persists_only_bounded_scalars_and_detects_owner_parity():
     assert 'Synthetic private words' not in repr(result)
 
 
+def test_comparison_prometheus_metrics_use_only_closed_outcome_and_safety_labels(monkeypatch):
+    observed = []
+
+    class Metric:
+        def __init__(self, name):
+            self.name = name
+
+        def labels(self, **labels):
+            observed.append((self.name, labels))
+            return self
+
+        def observe(self, value):
+            observed.append((self.name, value))
+
+        def inc(self):
+            observed.append((self.name, 'increment'))
+
+    for name in ('SHADOW_WORD_DISTANCE', 'SHADOW_OWNER_DELTA', 'SHADOW_REMAP_SUCCESS', 'SHADOW_REMAP_SAFE'):
+        monkeypatch.setattr(shadow, name, Metric(name))
+    shadow._record_comparison_metrics(
+        {
+            'word_distance': 0.2,
+            'live_owner_seconds': 8,
+            'pass_owner_seconds': 6,
+            'remap_success_rate': 0.75,
+            'remap_safe': False,
+        },
+        'ok',
+    )
+    assert ('SHADOW_OWNER_DELTA', 0.25) in observed
+    assert ('SHADOW_REMAP_SAFE', {'outcome': 'ok', 'safe': 'false'}) in observed
+    assert all('uid' not in labels for _, labels in observed if isinstance(labels, dict))
+
+
 def test_duplicate_reservation_never_writes_or_counts_result(monkeypatch):
     conversation = SimpleNamespace(audio_files=[SimpleNamespace(duration=10, chunk_timestamps=[100])])
     monkeypatch.setattr(shadow.conversations_db, 'get_conversation', lambda *_args: {'synthetic': True})

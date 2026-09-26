@@ -55,6 +55,29 @@ class _BudgetExceeded(RuntimeError):
 
 SHADOW_OUTCOMES = Counter('omi_transcription_shadow_total', 'Bounded final-pass shadow outcomes', ['outcome'])
 SHADOW_LATENCY = Histogram('omi_transcription_shadow_latency_seconds', 'Final-pass shadow duration')
+SHADOW_WORD_DISTANCE = Histogram(
+    'omi_transcription_shadow_word_distance',
+    'Word edit distance versus streaming transcript',
+    ['outcome'],
+    buckets=(0, 0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1, 2, 4),
+)
+SHADOW_OWNER_DELTA = Histogram(
+    'omi_transcription_shadow_owner_delta_ratio',
+    'Owner-attributed seconds absolute delta divided by maximum owner seconds',
+    ['outcome'],
+    buckets=(0, 0.01, 0.05, 0.1, 0.2, 0.5, 1),
+)
+SHADOW_REMAP_SUCCESS = Histogram(
+    'omi_transcription_shadow_remap_success_rate',
+    'Fraction of live segments mapped to the shadow pass',
+    ['outcome'],
+    buckets=(0, 0.25, 0.5, 0.75, 0.9, 0.95, 1),
+)
+SHADOW_REMAP_SAFE = Counter(
+    'omi_transcription_shadow_remap_safe_total',
+    'Shadow remap safety verdicts',
+    ['outcome', 'safe'],
+)
 
 _RESERVE_SCRIPT = """
 if redis.call('exists', KEYS[2]) == 1 then return 2 end
@@ -295,6 +318,17 @@ def _compare(
     }
 
 
+def _record_comparison_metrics(result: dict[str, Any], outcome: str) -> None:
+    """Aggregate only bounded scalar comparison measures; no identity labels."""
+    if result.get('word_distance') is not None:
+        SHADOW_WORD_DISTANCE.labels(outcome=outcome).observe(result['word_distance'])
+    owner_denominator = max(result['live_owner_seconds'], result['pass_owner_seconds'], 1.0)
+    owner_delta = abs(result['live_owner_seconds'] - result['pass_owner_seconds']) / owner_denominator
+    SHADOW_OWNER_DELTA.labels(outcome=outcome).observe(owner_delta)
+    SHADOW_REMAP_SUCCESS.labels(outcome=outcome).observe(result['remap_success_rate'])
+    SHADOW_REMAP_SAFE.labels(outcome=outcome, safe='true' if result['remap_safe'] else 'false').inc()
+
+
 def _run_shadow(uid: str, conversation_id: str) -> None:
     began = time.monotonic()
     outcome = 'failed'
@@ -336,6 +370,7 @@ def _run_shadow(uid: str, conversation_id: str) -> None:
                 else:
                     result = _compare(live_conversation, passed, audio, receipt)
                     outcome = 'partial_audio' if audio['tail_gap_seconds'] > 5 or audio['coverage'] < 0.95 else 'ok'
+                    _record_comparison_metrics(result, outcome)
     except TimeoutError:
         outcome = 'timeout'
     except _BudgetExceeded:

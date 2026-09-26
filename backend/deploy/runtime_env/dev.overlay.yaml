@@ -90,19 +90,19 @@ overlay:
     pusher:
       env:
         TRANSCRIPTION_SHADOW_ENABLED:
-          value: 'false'
+          value: 'true'
           category: rollout
         TRANSCRIPTION_SHADOW_KILL_SWITCH:
           value: 'false'
           category: rollout
         TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-          value: ''
+          value: omi-release-probe
           category: rollout
         TRANSCRIPTION_SHADOW_PERCENT:
           value: '0'
           category: rollout
         TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
-          value: '0'
+          value: '1'
           category: rollout
         FREE_TIER_LOCAL_PROCESSING:
           value: 'true'
