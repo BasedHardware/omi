@@ -9149,6 +9149,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get voiceResponseAlways => 'Palagi';
 
   @override
+  String get voiceResponseOmiDevice => 'Device ng Omi';
+
+  @override
   String get agreeAndContinue => 'Sumasang-ayon at Magpatuloy';
 
   @override
@@ -11366,5 +11369,87 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get voiceResponseOmiDevice => 'Device ng Omi';
+  String get deviceOnboardingVoiceReplyTitle => 'Pakinggan ang mga sagot ni Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample =>
+      'Nakuha ko. Magsisimula ang susunod mong meeting sa loob ng dalawampung minuto.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Handa Ka Na';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'I-tap ang isang row para suriin o baguhin ito.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Kapag nagtanong ka gamit ang button, mababasa ng Omi ang sagot nito nang malakas.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Pakinggan ang iyong huling sagot';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Pinapatugtog ang iyong huling sagot...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Sa pamamagitan ng $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Sa pamamagitan ng speaker ng telepono';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Sa pamamagitan ng kasalukuyang output ng audio';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Mananatili sa screen ang mga sagot. Walang sinasabi.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Pribado. Nagsasalita lamang sa pamamagitan ng AirPods, Bluetooth o wired headphones.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Ginagamit ang speaker ng telepono kapag walang nakakonektang headphone.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi mananatiling tahimik. Lumalabas pa rin ang mga sagot sa app.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device konektado. Omi ang magsasalita dito.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'Walang nakakonektang headphone. Omi mananatiling tahimik hanggang sa kumonekta ka ng ilan.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Nagpe-play sa pamamagitan ng $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker =>
+      'Tumutugtog nang malakas sa pamamagitan ng speaker ng telepono.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Maaari mo itong baguhin anumang oras sa $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'I-replay ang tour na ito anumang oras sa $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Mga headphone';
 }

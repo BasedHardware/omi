@@ -57,7 +57,7 @@ The private `users/{uid}/conversations/{conversation_id}/transcription_shadow_re
 document stores only bounded scalar metrics: outcome, latency, captured
 audio seconds, coverage, missing tail seconds, word-level edit distance to
 the streaming transcript, word counts, owner-attributed seconds, speaker
-counts, estimated clock offset, and remap success/safety. No transcript text,
+counts, estimated clock offset, first stored chunk minus `started_at`, the v2 marker verdict, and remap success/safety. No transcript text,
 UID label, audio, embeddings, or identity receipts are copied there. This
 subcollection has one fixed-ID child and a fixed set of scalar fields, so its
 size is bounded independently of transcript length. No backend API or client
@@ -85,8 +85,20 @@ live transcript clock is correct. `word_distance` is a bounded WER-style edit
 distance with the live words as denominator; it is null above 4,000 words or
 when the live side has no words.
 
-`segment_remap.py` estimates drift from distinctive matching text and maps
-old segment IDs by time overlap. It expands source references and manual
+`segment_remap.py` aligns text in sequence and verifies an inferred clock shift
+with unique, consistently shifted phrases. Time overlap candidates come from a
+bounded interval index. Each annotation mapping needs ordered token coverage
+in both directions: at least 65% of source tokens must occur in its mapped
+targets, and unmatched tokens in each target may be at most 10% of that
+target's tokens, rounded down. Fillers count as speech. This allows limited
+ASR differences without requiring identical transcripts, while short targets
+have no allowance for extra speech (including a trailing `yeah`).
+`remap_safe` requires 100% of live segments mapped,
+no ambiguous overlap, verified inferred offset, and successful annotation
+remapping. The stored first-chunk minus `started_at` scalar lets operators
+compare the physical audio origin with the text-derived shift (opposite signs
+when both clocks refer to the same audio); an offset alone
+cannot establish which clock drifted. The mapper expands source references and manual
 speaker receipts over splits, rejects conflicting receipts on merges, and
 rejects all concurrent target overlaps even when their text similarity differs,
 rejects translations whose changed segmentation would duplicate or concatenate
@@ -102,13 +114,18 @@ processing, so this is a separate follow-up before a Cloud Run ramp.
 
 ## Dev operator readout
 
-The normal dev pusher qualification probe checks terminal finalization but
-does **not** enroll private-cloud sync or check stored audio. Run its existing
+The normal dev pusher qualification probe sends the 17-word LibriSpeech fixture
+eight times, or 136 spoken fixture words, followed by near-silence while the
+socket stays open. It checks terminal finalization and the durable transcript
+count within 80% to 120% of those eight sends, but does **not** enroll private-cloud sync or
+check stored audio. Run its existing
 `--alignment-scenario` with the fixed `omi-release-probe` token after the dev
 pusher deployment. That scenario enrolls the isolated test account if needed,
 creates one finalized conversation, checks that its private-cloud flag is set,
-and rejects a durable transcript whose word count is outside 50% to 150% of
-the two spoken 17-word fixture sentences. The receipt stores only live and
+and rejects a durable transcript whose word count is outside 80% to 120% of
+its two spoken 17-word fixture sends (34 expected). That scenario also delivers
+five seconds of digital silence and pauses sending for four seconds; it adds
+no other spoken audio. The receipt stores only live and
 expected scalar word counts, so repeated text cannot silently pass the probe.
 The scenario checks the candidate pusher's finalization-handoff log and waits for
 registered chunk spans covering its speech windows. Its receipt
