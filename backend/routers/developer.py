@@ -358,8 +358,8 @@ def get_memories(
     if categories:
         try:
             category_list = [MemoryCategory(c.strip()) for c in categories.split(",") if c.strip()]
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid memory category provided")
 
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
@@ -1511,9 +1511,9 @@ def get_conversations(
         limit = max(1, min(limit, 25 if include_transcript else 100))
         try:
             category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
-        except ValueError as e:
+        except ValueError:
             status = 400
-            raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
+            raise HTTPException(status_code=400, detail="Invalid conversation category provided")
 
         conversations = conversations_db.get_conversations(
             uid,
