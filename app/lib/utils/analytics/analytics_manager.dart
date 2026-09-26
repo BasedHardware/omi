@@ -46,10 +46,7 @@ class AnalyticsManager {
   static bool _flushInProgress = false;
   static Timer? _retryTimer;
   static int _droppedEvents = 0;
-  static Map<String, Object> _globalEventProperties = {
-    'platform': _mobilePlatformName,
-    'app_platform': _mobilePlatformName,
-  };
+  static Map<String, Object> _globalEventProperties = {'app_platform': _mobilePlatformName};
   static bool _analyticsReady = false;
   static bool _trackingEnabled = true;
   static int _consentRevision = 0;
@@ -278,7 +275,7 @@ class AnalyticsManager {
     _retryTimer?.cancel();
     _retryTimer = null;
     _droppedEvents = 0;
-    _globalEventProperties = {'platform': _mobilePlatformName, 'app_platform': _mobilePlatformName};
+    _globalEventProperties = {'app_platform': _mobilePlatformName};
     _analyticsReady = false;
     _trackingEnabled = true;
     _clientAppNamespace = 'unknown';
@@ -541,7 +538,6 @@ class AnalyticsManager {
             if (coerced != null) props[k] = coerced;
           });
         }
-        props['trigger'] = _resolveTrigger(eventName, properties);
         _evictStaleTimedEvents();
         final start = _pendingTimedEvents.remove(eventName);
         if (start != null) {
@@ -2665,40 +2661,6 @@ class AnalyticsManager {
     return 'unknown';
   }
 
-  /// Events that fire without user initiation. Churn/retention analysis must
-  /// exclude them when measuring "did the user come back": background refresh
-  /// and telemetry keep firing while the person is away (same trap as
-  /// launch-at-login keeping `App Launched` warm on desktop).
-  static const Map<String, String> _nonUserTriggerByEvent = {
-    'Mobile Background Resource Session': 'background',
-    'Mobile Background Observation Interrupted': 'background',
-    'Mobile Telemetry Health': 'background',
-    'Mobile Render Observation': 'background',
-    'App Startup Timing': 'system',
-    'desktop_health_event': 'system',
-    'fallback_triggered': 'system',
-    'authenticated_request_401': 'system',
-    'auth_token_refresh_failed': 'system',
-    'Notification Sent': 'system',
-    'Notification Dismissed': 'system',
-    'Notification Settings Checked': 'system',
-    'Update Available': 'system',
-    'Update Check Started': 'system',
-    'Update Check Completed': 'system',
-    'Update Check Failed': 'system',
-    'Update Install Started': 'system',
-    'Update Installed': 'system',
-  };
-
-  /// `trigger` for one event: an explicit `trigger` in [properties] wins
-  /// (escape hatch for emit sites that know better), then the non-user map,
-  /// then the `user` default for interaction-driven events.
-  static String _resolveTrigger(String eventName, Map<String, dynamic>? properties) {
-    final explicit = properties?['trigger'];
-    if (explicit is String && explicit.isNotEmpty) return explicit;
-    return _nonUserTriggerByEvent[eventName] ?? 'user';
-  }
-
   static Future<void> _loadGlobalEventProperties({required Duration timeout}) async {
     var version = 'unknown';
     var build = 'unknown';
@@ -2709,7 +2671,6 @@ class AnalyticsManager {
       _clientAppNamespace = packageInfo.packageName;
     } catch (_) {}
     _globalEventProperties = {
-      'platform': _mobilePlatformName,
       'app_platform': _mobilePlatformName,
       'app_version': version,
       'app_build': build,

@@ -53,10 +53,10 @@ void main() {
 
     expect(adapter.events, hasLength(1));
     expect(adapter.events.single.eventName, 'Queued Event');
+    // platform/trigger stamping lives at the PostHog SDK boundary now, so the
+    // manager's governed emission payload carries only the main-contract globals.
     expect(adapter.events.single.properties, {
       'count': 1,
-      'trigger': 'user',
-      'platform': 'unknown',
       'app_platform': 'unknown',
       'app_version': '2.3.4',
       'app_build': '567',
@@ -76,23 +76,21 @@ void main() {
     expect(adapter.events.map((e) => e.eventName), ['late-ready']);
   });
 
-  test('every delivered event carries platform and a trigger classification', () async {
+  test('manager emissions stay attribution-free; classification lives at the SDK boundary', () async {
+    // The governed manager payload is pinned exactly by the C7 spine contract, so
+    // platform/trigger enrichment must NOT appear at this boundary.
     final adapter = _FakeAnalyticsAdapter();
     AnalyticsManager.configure(adapter);
     await AnalyticsManager.init();
 
-    AnalyticsManager().track('Recording Started');
     AnalyticsManager().track('Mobile Background Resource Session');
-    AnalyticsManager().track('Update Check Failed');
     AnalyticsManager().track('custom background event', properties: {'trigger': 'background'});
     await AnalyticsManager.flushPending(force: true);
 
     final byName = {for (final e in adapter.events) e.eventName: e.properties};
-    expect(byName['Recording Started']?['trigger'], 'user');
-    expect(byName['Recording Started']?['platform'], isNotNull);
-    expect(byName['Mobile Background Resource Session']?['trigger'], 'background');
-    expect(byName['Update Check Failed']?['trigger'], 'system');
-    expect(byName['custom background event']?['trigger'], 'background');
+    expect(byName['Mobile Background Resource Session']?['trigger'], isNull);
+    expect(byName['Mobile Background Resource Session']?['platform'], isNull);
+    expect(byName['custom background event']?['trigger'], 'background'); // explicit caller property passes through
   });
 
   test('account created event carries platform for signup cohort analysis', () async {
@@ -105,8 +103,9 @@ void main() {
 
     expect(adapter.events, hasLength(1));
     expect(adapter.events.single.eventName, 'Account Created');
-    expect(adapter.events.single.properties['platform'], isNotNull);
-    expect(adapter.events.single.properties['trigger'], 'user');
+    // attribution now stamps at the PostHog SDK boundary, not the governed emission
+    expect(adapter.events.single.properties['platform'], isNull);
+    expect(adapter.events.single.properties['trigger'], isNull);
   });
 
   test('awaited retry preserves occurrence identity and session context', () async {
@@ -298,8 +297,6 @@ void main() {
       'total_bytes': 4096,
       'claims_live_capture': true,
       'upload_source': 'offline_audio_queue',
-      'trigger': 'user',
-      'platform': 'unknown',
       'app_platform': 'unknown',
       'app_version': '2.3.4',
       'app_build': '567',
@@ -362,8 +359,6 @@ void main() {
       'is_first_auth': true,
       'auth_provider': 'google',
       'acquisition_source': 'mobile_oauth',
-      'trigger': 'user',
-      'platform': 'unknown',
       'app_platform': 'unknown',
       'app_version': '2.3.4',
       'app_build': '567',
@@ -460,8 +455,6 @@ void main() {
       'new_plan': 'plus',
       'billing_interval': 'year',
       'change_source': 'mobile_checkout',
-      'trigger': 'user',
-      'platform': 'unknown',
       'app_platform': 'unknown',
       'app_version': '2.3.4',
       'app_build': '567',

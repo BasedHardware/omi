@@ -113,8 +113,6 @@ void main() {
     await AnalyticsManager.flushPending(force: true);
     final platformName = PlatformService.isIOS ? 'ios' : (PlatformService.isAndroid ? 'android' : 'unknown');
     final globals = <String, Object>{
-      'trigger': 'user',
-      'platform': platformName,
       'app_platform': platformName,
       'app_version': '1.0.543',
       'app_build': '992',
