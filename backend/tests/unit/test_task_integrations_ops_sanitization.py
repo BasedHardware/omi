@@ -22,15 +22,11 @@ async def test_refresh_oauth_token_sanitizes_unexpected_exception():
     ):
         mock_creds.return_value = ("client_id", "client_secret")
         client_instance = AsyncMock()
-        client_instance.post.side_effect = RuntimeError(
-            "Sensitive socket exception with internal credentials"
-        )
+        client_instance.post.side_effect = RuntimeError("Sensitive socket exception with internal credentials")
         mock_client.return_value.__aenter__.return_value = client_instance
 
         with pytest.raises(HTTPException) as exc_info:
-            await refresh_oauth_token(
-                "uid_123", "google_tasks", integration, client=client_instance
-            )
+            await refresh_oauth_token("uid_123", "google_tasks", integration, client=client_instance)
 
         assert exc_info.value.status_code == 500
         assert exc_info.value.detail == "Error refreshing token"
