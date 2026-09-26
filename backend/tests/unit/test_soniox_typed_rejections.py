@@ -354,7 +354,9 @@ def _receiver_with_dead_soniox(replacement):
     receiver = ListenReceiver(host, [], {})
     receiver.stt_socket = TypedFakeSocket(dead=True, typed=PROVIDER_BUDGET_EXHAUSTED)
     receiver.vad_gate = None
-    receiver._stt_rebuild = (lambda _s: None, lambda _s: None, 16000)
+    # Audio-timeline: _stt_rebuild holds a callback FACTORY plus the sample
+    # rate (a fresh epoch translator per rebuild), not the callbacks.
+    receiver._stt_rebuild = (lambda: (lambda _s: None, lambda _s: None, None), 16000)
     receiver._create_stt_socket = AsyncMock(return_value=replacement)
     return receiver
 

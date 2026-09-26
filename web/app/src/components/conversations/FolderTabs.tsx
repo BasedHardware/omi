@@ -47,8 +47,12 @@ export function FolderTabs({
 
   return (
     <div className="relative">
-      {/* Tabs container - wraps instead of scrolling */}
-      <div ref={scrollRef} className="flex items-center gap-2 flex-wrap">
+      {/* Tabs scroll sideways on phones and wrap on wider screens, where there
+          is room for the second line they used to force. */}
+      <div
+        ref={scrollRef}
+        className="no-scrollbar -mx-4 flex items-center gap-2 overflow-x-auto px-4 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0"
+      >
         {/* All tab - always first */}
         <TabButton
           label="All"
