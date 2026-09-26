@@ -45,6 +45,9 @@ PROVIDER_EDGE_TOLERANCE_SECONDS = 0.25
 MAX_SEND_SPANS = 4096
 
 AUDIO_TIMELINE_V2 = 2
+# V2 audio spans start at offset zero or later. A negative offset cannot be
+# resolved by released clients which only inspect segment.start when seeking.
+UNPLACED_SEGMENT_OFFSET = -1.0
 
 CoverageOutcome = str  # 'covered' | 'missing' | 'pending_upload' | 'no_audio' | 'unsupported'
 
@@ -380,6 +383,11 @@ class SendMap:
         provider_from, capture_from, length = span
         return capture_from + min(max(provider_sample - provider_from, 0), length)
 
+    def capture_run_start(self, provider_sample: int) -> Optional[int]:
+        """Stable start of the accepted capture run containing this point."""
+        span = self._locate(provider_sample)
+        return span[1] if span is not None else None
+
     def map_interval(self, provider_first_sample: int, provider_last_sample: int) -> Optional[Tuple[int, int]]:
         """Translate a provider interval to capture samples.
 
@@ -399,6 +407,19 @@ class SendMap:
         end_capture = self.map_sample(provider_last_sample)
         if end_capture is None:
             return None
+        # Provider time is continuous across VAD-skipped capture audio. The
+        # endpoints alone can therefore enclose a capture gap which was never
+        # sent. Keep the whole text unplaced instead of inventing that window.
+        previous: Optional[List[int]] = None
+        for span in self._spans:
+            provider_from, _, length = span
+            if provider_from >= provider_last_sample:
+                break
+            if provider_from + length < provider_first_sample:
+                continue
+            if previous is not None and previous[1] + previous[2] != span[1]:
+                return None
+            previous = span
         if provider_last_sample > provider_first_sample and end_capture <= start_capture:
             return None
         return (start_capture, end_capture)
@@ -421,6 +442,8 @@ class SendMap:
             return None
         provider_from, capture_from, length = span
         if provider_first_sample != provider_from + length:
+            return None
+        if self.map_sample(provider_last_sample) != capture_from + length:
             return None
         tolerance = int(PROVIDER_EDGE_TOLERANCE_SECONDS * self.provider_sample_rate)
         if provider_last_sample > provider_from + length + tolerance:
@@ -465,6 +488,7 @@ class ProviderEpochTranslator:
         self._on_mapped = on_mapped
         self._on_recover = on_recover
         self._project_times = project_times
+        self.provider_label = 'unknown'
 
     def note_accepted(self, capture_start_sample: int, length_samples: int) -> None:
         """Record one accepted send of contiguous capture audio."""
@@ -543,7 +567,12 @@ class ProviderEpochTranslator:
                     reason = 'outside_accepted_sends'
                 else:
                     interval = self.send_map.minimal_tail_interval(first_sample, last_sample)
-                    reason = 'collapsed_interval'
+                    reason = (
+                        'discontinuous_interval'
+                        if interval is None
+                        and self.send_map.map_sample(last_sample) != self.send_map.map_sample(first_sample)
+                        else 'collapsed_interval'
+                    )
                 if interval is None:
                     self._reject(segment, reason)
                     if self._project_times:
@@ -566,6 +595,8 @@ class ProviderEpochTranslator:
             # these keys before the segment enters any buffer.
             segment['_capture_start_sample'] = interval[0]
             segment['_capture_end_sample'] = interval[1]
+            if self._project_times:
+                segment['audio_capture_run'] = self.send_map.capture_run_start(first_sample)
             translated.append(segment)
             if self._on_mapped is not None:
                 try:

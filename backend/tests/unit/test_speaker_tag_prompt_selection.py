@@ -109,6 +109,14 @@ def test_unplaced_text_breaks_speaker_clip_run():
     assert [run.segment_ids for run in runs] == [('a',), ('b',)]
 
 
+def test_vad_capture_run_boundary_splits_speaker_clip_run():
+    segments = [
+        _segment('a', 0, 0, 3, audio_capture_run=0),
+        _segment('b', 0, 4, 7, audio_capture_run=5 * 16000),
+    ]
+    assert [run.segment_ids for run in selection._runs(segments, set())] == [('a',), ('b',)]
+
+
 def test_clip_overlapping_another_diarized_voice_is_not_asked():
     conversation = _conversation(
         segments=[

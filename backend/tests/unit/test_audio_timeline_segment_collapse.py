@@ -40,6 +40,7 @@ from routers.listen.contracts import ListenSessionState
 from routers.listen.receiver import ListenReceiver
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator, SendMap
 from utils.stt.socket import STTSocket
+from utils.stt.soniox import SafeSonioxSocket
 from utils.stt.vad_gate import GatedSTTSocket
 
 RATE = 16000
@@ -406,19 +407,13 @@ class TestSendMapCollapseRejection:
         assert sm.minimal_tail_interval(RATE, int(1.3 * RATE)) is None
         assert sm.minimal_tail_interval(RATE, int(1.1 * RATE)) == (RATE - 1, RATE)
 
-    def test_later_batch_segment_maps_independently_across_spans(self):
-        """A segment after the first provider batch keeps start < end.
-
-        Two accepted sends with a skipped capture silence between them (the
-        later batch sits at provider time [0.9 s, 1.1 s]); the segment starts
-        in the first span and ends in the second: each endpoint maps through
-        its own span, never through the skip.
-        """
+    def test_later_batch_segment_crossing_vad_gap_is_unplaced(self):
+        """A provider interval spanning skipped capture audio has no window."""
         sm = SendMap(RATE)
         sm.add_accepted_spans([(0, RATE), (5 * RATE, RATE)])
-        mapped = sm.map_interval(RATE - 1600, RATE + 1600)
-        assert mapped == (RATE - 1600, 5 * RATE + 1600)
-        assert mapped[0] < mapped[1]
+        assert sm.map_interval(RATE - 1600, RATE + 1600) is None
+        assert sm.map_interval(5 * RATE + 1600, 5 * RATE + 3200) is None
+        assert sm.map_interval(RATE + 1600, RATE + 3200) == (5 * RATE + 1600, 5 * RATE + 3200)
 
 
 class TestTranslatorDegenerateIntervals:
@@ -581,11 +576,12 @@ class TestSpeakerCaptureClockKillSwitch:
         receiver.collected.clear()
         receiver._enqueue_clock_positioned_segments([dict(segment)])
         reverted = receiver.collected[0]
-        # Transcript identical, speaker-ID window gone: the matcher falls back
-        # to the legacy first-audio + provider-time formula.
+        # Transcript identical; without a proven capture window the speaker
+        # matcher must not fall back to provider-relative audio.
         assert reverted['start'] == 0.25 and reverted['end'] == 1.25
         assert '_capture_abs_start' not in reverted
         assert '_capture_start_sample' not in reverted
+        assert reverted['_capture_window_unavailable'] is True
 
 
 class _RecordingRing:
@@ -692,6 +688,30 @@ async def test_managed_prod_order_mints_fresh_epoch_after_failover(monkeypatch, 
         sockets.append(raw)
         return raw
 
+    def emit_adapter_message(service, callback, text, start_ms, end_ms):
+        if service == st.STTService.modulate:
+            adapter = object.__new__(st.SafeModulateSocket)
+            adapter._stream_transcript = callback
+            adapter._preseconds = 0
+            adapter._prev_partial_text = ''
+            adapter._prev_partial_start_ms = 0
+            adapter._prev_partial_word_count = 0
+            adapter._observe_served = lambda: None
+            adapter._handle_partial_utterance({'text': f'preview {text}', 'start_ms': start_ms})
+            adapter._handle_utterance(
+                {'text': text, 'start_ms': start_ms, 'duration_ms': end_ms - start_ms, 'speaker': 1}
+            )
+        else:
+            adapter = object.__new__(SafeSonioxSocket)
+            adapter._stream_transcript = callback
+            adapter._preseconds = 0
+            adapter._pending_segment = None
+            adapter._handle_tokens([{'text': f'draft {text}', 'start_ms': start_ms, 'is_final': False}])
+            adapter._handle_tokens(
+                [{'text': f'{text} ', 'start_ms': start_ms, 'end_ms': end_ms, 'is_final': True, 'speaker': 1}]
+            )
+            adapter._handle_tokens([{'text': '<fin>', 'is_final': True}])
+
     monkeypatch.setattr(st, 'process_audio_modulate', connect)
     monkeypatch.setattr(st, 'process_audio_soniox', connect)
     assert await receiver.initialize_stt()
@@ -713,18 +733,23 @@ async def test_managed_prod_order_mints_fresh_epoch_after_failover(monkeypatch, 
             await REAL_SLEEP(0)
 
     await feed(1)
-    sockets[-1].callback([{'start': 0.5, 'end': 3.5, 'text': 'first leg', 'speaker': 'SPEAKER_00'}])
+    emit_adapter_message(first, sockets[-1].callback, 'first leg', 500, 3500)
     sockets[-1].dead = True
     assert await receiver._failover_stt_socket()
     assert receiver.host.stt_service == second
     assert len(sockets) == 2
+    # The superseded adapter can still deliver its final. It must keep its
+    # own epoch and owner, without settling the new provider's failover probe.
+    emit_adapter_message(first, sockets[0].callback, 'old leg final', 2000, 2500)
+    assert receiver._pending_live_failover is not None
+    assert not receiver._pending_live_failover.settled
     wall += 31 * 60
     monotonic += 31 * 60
     await feed(2)
-    sockets[-1].callback([{'start': 0.5, 'end': 3.5, 'text': 'second leg', 'speaker': 'SPEAKER_00'}])
-    sockets[-1].callback([{'start': 30.0, 'end': 31.0, 'text': 'unplaced final', 'speaker': 'SPEAKER_00'}])
-    assert [seg['text'] for seg in receiver.collected] == ['first leg', 'second leg', 'unplaced final']
-    second_seg = receiver.collected[1]
+    emit_adapter_message(second, sockets[-1].callback, 'second leg', 500, 3500)
+    emit_adapter_message(second, sockets[-1].callback, 'unplaced final', 30000, 31000)
+    assert [seg['text'] for seg in receiver.collected] == ['first leg', 'old leg final', 'second leg', 'unplaced final']
+    second_seg = receiver.collected[2]
     clip = receiver.host.state.audio_ring_buffer.extract(second_seg['start'], second_seg['end'])
     assert clip and clip[:2] == b'\x02\x00'
     assert receiver.collected[-1]['audio_alignment'] == 'unplaced'

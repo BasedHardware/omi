@@ -86,6 +86,9 @@ class TranscriptSegment(BaseModel):
     # Only present for v2 text whose provider position could not be proven.
     # Absence keeps every v1 serialized segment byte-identical.
     audio_alignment: SkipJsonSchema[Optional[str]] = Field(default=None, exclude=True)
+    # V2 accepted-send run start in capture samples. Stops live text merging
+    # from turning two valid windows across a VAD skip into one false window.
+    audio_capture_run: SkipJsonSchema[Optional[int]] = Field(default=None, exclude=True)
     # In-memory only: True when neither speaker nor speaker_id was in the
     # construction payload, so speaker_id is the SPEAKER_00 default rather
     # than persisted diarization. Not dumped; a stored synthesized 0 still
@@ -100,6 +103,8 @@ class TranscriptSegment(BaseModel):
         data = super().model_dump(*args, **kwargs)
         if self.audio_alignment is not None:
             data['audio_alignment'] = self.audio_alignment
+        if self.audio_capture_run is not None:
+            data['audio_capture_run'] = self.audio_capture_run
         return data
 
     def __init__(self, **data: Any):
@@ -281,6 +286,8 @@ class TranscriptSegment(BaseModel):
             # An unplaced point must not merge into a covered segment and
             # silently inherit that segment's audio provenance.
             if b.audio_alignment != a.audio_alignment:
+                return a, b
+            if b.audio_capture_run != a.audio_capture_run:
                 return a, b
 
             if (

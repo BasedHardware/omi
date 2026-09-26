@@ -19,6 +19,7 @@ to select the exact phrase bytes.
 import asyncio
 import struct
 import time
+from collections import Counter
 from collections import deque
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -43,6 +44,8 @@ from utils.listen_pusher_session import ListenPusherSession, ListenPusherSession
 from utils.product_telemetry import set_product_telemetry_client_for_tests
 from utils.stt.vad_gate import GatedSTTSocket
 from utils.stt import vad_gate as vad_gate_module
+from utils.stt.soniox import SafeSonioxSocket
+from utils.stt.streaming import SafeModulateSocket
 
 RATE = 16000
 UID = 'uid-at'
@@ -525,7 +528,7 @@ def _seed_conversation(store, cid):
 @pytest.mark.parametrize('first,second', [('modulate', 'soniox'), ('soniox', 'modulate')])
 @pytest.mark.parametrize('codec', ['pcm16', 'opus'])
 async def test_prod_order_failover_keeps_text_and_locates_second_leg_audio(monkeypatch, first, second, codec):
-    """Prod-shaped receiver replay: active gate, two provider epochs, Opus/PCM.
+    """Prod-shaped adapter replay: parser messages, active gate, Opus/PCM.
 
     The 31-minute logical inter-arrival hiatus exercises capture anchors
     without a long sleep. Opus uses a deterministic decoder double because
@@ -569,6 +572,16 @@ async def test_prod_order_failover_keeps_text_and_locates_second_leg_audio(monke
             else:
                 packet = silence
             result.append(_frame(packet, 0.5, 0.5))
+        # Speech after skipped VAD silence creates a real capture discontinuity
+        # in Soniox's continuous provider timeline.
+        for index in range(4):
+            part = _slice(_phrase(marker + 10, 2.0), index * 0.5, (index + 1) * 0.5)
+            if codec == 'opus':
+                packet = f'op{marker}-tail-{index}'.encode()
+                decoded_by_packet[packet] = part
+            else:
+                packet = part
+            result.append(_frame(packet, 0.5, 0.5))
         result.append(_disconnect_frame())
         return result
 
@@ -588,33 +601,76 @@ async def test_prod_order_failover_keeps_text_and_locates_second_leg_audio(monke
             await _run_receiver_frames(stack, replay)
             assert raw.accepted_samples >= 4 * RATE
             callback = passthrough_callback if provider == 'modulate' else gated_callback
-            callback([_provider_segment(0.5, 3.0, f'{provider} words')])
+            if provider == 'modulate':
+                adapter = object.__new__(SafeModulateSocket)
+                adapter._stream_transcript = callback
+                adapter._preseconds = 0
+                adapter._prev_partial_text = ''
+                adapter._prev_partial_start_ms = 0
+                adapter._prev_partial_word_count = 0
+                adapter._observe_served = lambda: None
+                adapter._handle_partial_utterance({'text': 'preview only', 'start_ms': 500})
+                adapter._handle_utterance(
+                    {'text': f'{provider} words', 'start_ms': 500, 'duration_ms': 2500, 'speaker': 1}
+                )
+            else:
+                adapter = object.__new__(SafeSonioxSocket)
+                adapter._stream_transcript = callback
+                adapter._preseconds = 0
+                adapter._pending_segment = None
+                adapter._handle_tokens([{'text': 'draft', 'is_final': False, 'start_ms': 500, 'end_ms': 1000}])
+                adapter._handle_tokens(
+                    [{'text': f'{provider} words ', 'is_final': True, 'start_ms': 500, 'end_ms': 3000}]
+                )
+                adapter._handle_tokens([{'text': '<fin>', 'is_final': True}])
+                adapter._handle_tokens([{'text': 'vad bridge ', 'is_final': True, 'start_ms': 3500, 'end_ms': 5000}])
+                adapter._handle_tokens([{'text': 'after gap ', 'is_final': True, 'start_ms': 5000, 'end_ms': 6000}])
             if leg_index:
-                callback([_provider_segment(1.0, 1.0, 'point word')])
-                callback([_provider_segment(30.0, 31.0, 'late word')])
+                if provider == 'modulate':
+                    adapter._handle_utterance({'text': 'point word', 'start_ms': 1000, 'duration_ms': 0})
+                    adapter._handle_utterance({'text': 'late word', 'start_ms': 30000, 'duration_ms': 1000})
+                    adapter._handle_partial_utterance({'text': 'partial tail', 'start_ms': 1100})
+                    adapter._flush_partial()
+                else:
+                    adapter._handle_tokens(
+                        [{'text': 'point word ', 'is_final': True, 'start_ms': 1000, 'end_ms': 1000}]
+                    )
+                    adapter._handle_tokens(
+                        [{'text': 'late word ', 'is_final': True, 'start_ms': 30000, 'end_ms': 31000}]
+                    )
 
-        assert [s['text'] for s in stack.segments_collected] == [
-            f'{first} words',
-            f'{second} words',
-            'point word',
-            'late word',
-        ]
-        second_segment = stack.segments_collected[1]
+        expected = Counter({f'{first} words': 1, f'{second} words': 1, 'point word': 1, 'late word': 1})
+        expected['vad bridge'] += 1
+        expected['after gap'] += 1
+        if second == 'modulate':
+            expected['partial tail'] += 1
+        assert Counter(s['text'] for s in stack.segments_collected) == expected
+        second_segment = next(s for s in stack.segments_collected if s['text'] == f'{second} words')
         window = stack.host.state.audio_ring_buffer.get_time_range()
         assert window is not None
         assert window[0] <= second_segment['start'] < second_segment['end'] <= window[1]
         clip = stack.host.state.audio_ring_buffer.extract(second_segment['start'], second_segment['end'])
         assert clip and clip != b'\x00' * len(clip)
-        assert stack.segments_collected[-1]['audio_alignment'] == 'unplaced'
-        assert stack.segments_collected[-1]['start'] == stack.segments_collected[-1]['end']
+        for text in ('late word', 'vad bridge'):
+            unplaced = next(s for s in stack.segments_collected if s['text'] == text)
+            assert unplaced['audio_alignment'] == 'unplaced'
+            assert unplaced['start'] == unplaced['end']
+        soniox_before = next(s for s in stack.segments_collected if s['text'] == 'soniox words')
+        soniox_after = next(s for s in stack.segments_collected if s['text'] == 'after gap')
+        assert soniox_before['audio_capture_run'] != soniox_after['audio_capture_run']
 
         await _persist_collected(stack, store, monkeypatch)
         persisted = _decode_segments(store.rows[('users', UID, 'conversations', CONV1)])
-        assert all(
-            text in ' '.join(s['text'] for s in persisted)
-            for text in [f'{first} words', f'{second} words', 'point word', 'late word']
-        )
+        # LiveTranscriptMerge may combine adjacent rows while preserving the
+        # word stream. Check multiplicity, including adapter final/tail text.
+        assert Counter(' '.join(s['text'] for s in persisted).split()) == Counter(' '.join(expected.elements()).split())
+        assert not any('soniox words after gap' in s['text'] for s in persisted)
+        assert all(s['start'] == s['end'] == -1.0 for s in persisted if s.get('audio_alignment') == 'unplaced')
         assert any(s.get('audio_alignment') == 'unplaced' for s in persisted)
+        assert (
+            next(s for s in persisted if s['text'] == 'soniox words')['audio_capture_run']
+            != next(s for s in persisted if s['text'] == 'after gap')['audio_capture_run']
+        )
     finally:
         stack.restore()
 

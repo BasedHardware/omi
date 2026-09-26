@@ -143,8 +143,10 @@ class LiveChainSession:
             passthrough = service == st.STTService.modulate
 
             def callback(segments: list[dict[str, Any]]) -> None:
-                if generation != self.generation:
+                if generation != self.generation and not (epoch is not None and epoch.project_times):
                     return
+                if epoch is not None:
+                    epoch.provider_label = service.value
                 if epoch is not None and epoch.project_times:
                     # Audio-timeline v2: the translator maps provider
                     # times through its accepted send spans onto the capture
