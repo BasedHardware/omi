@@ -232,7 +232,8 @@ async def test_late_final_resolves_owner_after_thirty_seconds(monkeypatch):
     assert len(receiver.collected) == 1
     assert receiver.collected[0]['_conversation_id'] == 'conv-r3'
 
-    # A segment straddling A→B keeps its text on B without an audio claim.
+    # A segment straddling A→B keeps its text on the socket's original
+    # conversation without inventing an audio claim.
     receiver.collected.clear()
     receiver._enqueue_translated_segments(
         [
@@ -249,7 +250,7 @@ async def test_late_final_resolves_owner_after_thirty_seconds(monkeypatch):
         ]
     )
     assert [segment['text'] for segment in receiver.collected] == ['straddle']
-    assert receiver.collected[0]['_conversation_id'] == 'conv-b'
+    assert receiver.collected[0]['_conversation_id'] == 'conv-r3'
     assert receiver.collected[0]['audio_alignment'] == 'unplaced'
 
 
@@ -546,7 +547,7 @@ async def test_fresh_v2_row_still_pins_marker(monkeypatch):
     assert row['started_at'].timestamp() == pytest.approx(T0 + 1.0)
 
 
-async def test_terminal_owner_final_is_persisted_as_unplaced_current_text(monkeypatch):
+async def test_terminal_owner_final_is_persisted_on_send_owner(monkeypatch):
     from routers.listen.contracts import ConversationCaptureOrigin
 
     store = StrictFirestore()
@@ -557,16 +558,46 @@ async def test_terminal_owner_final_is_persisted_as_unplaced_current_text(monkey
     processor.host.state.conversation_capture_origins['conv-current'] = ConversationCaptureOrigin(T0, pinnable=True)
 
     await processor._process_v2_batches([_v2_segment('late', T0 - 59, T0 - 58, 'conv-old', text='late final')], [], {})
-    pending = list(processor.segment_buffer)
-    processor.segment_buffer.clear()
-    assert [segment['text'] for segment in pending] == ['late final']
-    assert pending[0]['audio_alignment'] == 'unplaced'
-    await processor._process_v2_batches(pending, [], {})
-
-    current = store.rows[('users', UID, 'conversations', 'conv-current')]
+    assert not processor.segment_buffer
+    current = store.rows[('users', UID, 'conversations', 'conv-old')]
     stored = conversations_db._decode_transcript_segments_strict(
         UID, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
     )
     assert [(segment['text'], segment['start'], segment['end'], segment['audio_alignment']) for segment in stored] == [
         ('late final', -1.0, -1.0, 'unplaced')
     ]
+    assert current['status'] == 'completed'
+
+
+async def test_rollover_recovery_does_not_reuse_failed_owner_offsets_or_marker(monkeypatch):
+    from routers.listen.contracts import ConversationCaptureOrigin
+
+    store = StrictFirestore()
+    _seed_row(store, 'failed', started_at=datetime.fromtimestamp(T0, tz=timezone.utc))
+    processor, _ = _processor(monkeypatch, store, current='failed')
+    processor.host.state.conversation_capture_origins['failed'] = ConversationCaptureOrigin(T0, pinnable=True)
+
+    async def rollover(*, rollover):
+        assert rollover
+        _seed_row(store, 'fresh', started_at=datetime.fromtimestamp(T0 + 100, tz=timezone.utc))
+        processor.host.state.current_conversation_id = 'fresh'
+
+    processor.host.conversations.create_new_in_progress_conversation = rollover
+    original = processor._update_live_conversation
+    calls = 0
+
+    async def fail_first(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return None
+        return await original(*args, **kwargs)
+
+    processor._update_live_conversation = fail_first
+    await processor._process_v2_batches([_v2_segment('s1', T0 + 1, T0 + 2, 'failed')], [], {})
+    fresh = store.rows[('users', UID, 'conversations', 'fresh')]
+    stored = conversations_db._decode_transcript_segments_strict(
+        UID, fresh.get('transcript_segments', []), bool(fresh.get('transcript_segments_compressed'))
+    )
+    assert [(s['start'], s['end'], s['audio_alignment']) for s in stored] == [(-1.0, -1.0, 'unplaced')]
+    assert 'audio_timeline' not in fresh

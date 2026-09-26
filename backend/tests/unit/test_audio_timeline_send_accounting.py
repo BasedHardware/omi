@@ -17,7 +17,11 @@ from routers.listen.receiver import ListenReceiver
 from utils.stt.socket import STTSocket
 from utils.stt.streaming import STTService, SafeModulateSocket
 from utils.stt.vad_gate import GatedSTTSocket
-from utils.metrics import OMI_AUDIO_TIMELINE_REJECTS_TOTAL
+from utils.metrics import (
+    OMI_AUDIO_TIMELINE_MAPPED_TOTAL,
+    OMI_AUDIO_TIMELINE_PROVIDER_SOCKETS_TOTAL,
+    OMI_AUDIO_TIMELINE_REJECTS_TOTAL,
+)
 
 
 @pytest.fixture
@@ -113,6 +117,15 @@ async def test_legacy_receiver_accounts_every_accepted_modulate_send(monkeypatch
 
     monkeypatch.setattr(receiver, '_create_stt_socket', connect)
     assert await receiver.initialize_stt()
+    send_path = 'vad_gate_passthrough' if override is None else 'direct_recorded'
+    vad_state = 'passthrough' if override is None else 'off'
+    assert callbacks['epoch'].send_path == send_path
+    assert (
+        OMI_AUDIO_TIMELINE_PROVIDER_SOCKETS_TOTAL.labels(
+            provider='modulate', send_path=send_path, vad_state=vad_state
+        )._value.get()
+        >= 1
+    )
 
     pcm = b'\x01\x00' * (sample_rate // 5)
     for index in range(10):
@@ -122,9 +135,13 @@ async def test_legacy_receiver_accounts_every_accepted_modulate_send(monkeypatch
         await receiver._flush_stt_buffer(bytearray(pcm))
 
     outside = OMI_AUDIO_TIMELINE_REJECTS_TOTAL.labels(
-        mode='v2' if v2 else 'legacy', reason='outside_accepted_sends', provider='modulate'
+        mode='v2' if v2 else 'legacy', reason='outside_accepted_sends', provider='modulate', send_path=send_path
     )
     before_outside = outside._value.get()
+    mapped = OMI_AUDIO_TIMELINE_MAPPED_TOTAL.labels(
+        mode='v2' if v2 else 'legacy', provider='modulate', send_path=send_path
+    )
+    before_mapped = mapped._value.get()
     adapter = object.__new__(SafeModulateSocket)
     adapter._stream_transcript = callbacks['provider']
     adapter._preseconds = 0
@@ -137,6 +154,7 @@ async def test_legacy_receiver_accounts_every_accepted_modulate_send(monkeypatch
     assert provider.samples == 2 * sample_rate
     assert len(collected) == 10
     assert outside._value.get() - before_outside == 0
+    assert mapped._value.get() - before_mapped == 10
     assert isinstance(receiver.stt_socket, GatedSTTSocket)
     assert (receiver.stt_socket._gate is None) == (override is not None)
     assert callbacks['epoch'].send_map.last_capture_sample == 2 * sample_rate

@@ -306,6 +306,12 @@ class SendMap:
             return None
         return self._spans[-1][1] + self._spans[-1][2]
 
+    @property
+    def last_provider_sample(self) -> Optional[int]:
+        if not self._spans:
+            return None
+        return self._spans[-1][0] + self._spans[-1][2]
+
     def point_interval(self, provider_sample: int) -> Optional[Tuple[int, int]]:
         """A one-sample interval for an in-span zero-duration provider point.
 
@@ -478,6 +484,8 @@ class ProviderEpochTranslator:
         on_reject: Optional[Callable[[str], None]] = None,
         on_mapped: Optional[Callable[[], None]] = None,
         on_recover: Optional[Callable[[str], None]] = None,
+        on_past_send: Optional[Callable[[Optional[float]], None]] = None,
+        owner_at_send: Optional[Callable[[], Optional[str]]] = None,
         project_times: bool = True,
     ):
         self.timeline = timeline
@@ -487,12 +495,18 @@ class ProviderEpochTranslator:
         self._on_reject = on_reject
         self._on_mapped = on_mapped
         self._on_recover = on_recover
+        self._on_past_send = on_past_send
+        self._owner_at_send = owner_at_send
         self._project_times = project_times
         self.provider_label = 'unknown'
+        self.send_path = 'unknown'
+        self._send_owners: List[Tuple[int, int, Optional[str]]] = []
+        self.last_send_owner: Optional[str] = None
+        self.initial_owner: Optional[str] = None
 
     def note_accepted(self, capture_start_sample: int, length_samples: int) -> None:
         """Record one accepted send of contiguous capture audio."""
-        self.send_map.add_accepted_spans([(capture_start_sample, length_samples)])
+        self.note_accepted_spans([(capture_start_sample, length_samples)])
 
     @property
     def project_times(self) -> bool:
@@ -500,7 +514,28 @@ class ProviderEpochTranslator:
         return self._project_times
 
     def note_accepted_spans(self, spans: Sequence[Tuple[int, int]]) -> None:
+        start = self.send_map.last_provider_sample or 0
         self.send_map.add_accepted_spans(spans)
+        end = self.send_map.last_provider_sample or start
+        if end > start:
+            owner = self._owner_at_send() if self._owner_at_send is not None else None
+            self.last_send_owner = owner
+            if self._send_owners and self._send_owners[-1][1] == start and self._send_owners[-1][2] == owner:
+                first, _, _ = self._send_owners[-1]
+                self._send_owners[-1] = (first, end, owner)
+            else:
+                self._send_owners.append((start, end, owner))
+            # Keep owner history bounded even if a session switches recording
+            # generations pathologically often. Older timestamps use the
+            # epoch's last SEND owner and remain explicitly unplaced.
+            if len(self._send_owners) > MAX_SEND_SPANS:
+                self._send_owners.pop(0)
+
+    def owner_for_provider_sample(self, sample: int) -> Optional[str]:
+        for first, end, owner in reversed(self._send_owners):
+            if first <= sample < end:
+                return owner
+        return self.last_send_owner or self.initial_owner
 
     def translate(self, segments: List[Dict]) -> List[Dict]:
         """Map provider-relative segment times onto absolute wall seconds.
@@ -544,6 +579,8 @@ class ProviderEpochTranslator:
                 continue
             rate = self.provider_sample_rate
             first_sample, last_sample = int(start * rate), int(end * rate)
+            if self._project_times:
+                segment['_provider_send_owner'] = self.owner_for_provider_sample(first_sample)
             interval: Optional[Tuple[int, int]] = None
             if last_sample <= first_sample:
                 if self._project_times and last_sample == first_sample:
@@ -575,6 +612,12 @@ class ProviderEpochTranslator:
                     )
                 if interval is None:
                     self._reject(segment, reason)
+                    if reason == 'outside_accepted_sends' and self._on_past_send is not None:
+                        end = self.send_map.last_provider_sample
+                        try:
+                            self._on_past_send(None if end is None else (last_sample - end) / rate)
+                        except Exception:
+                            pass
                     if self._project_times:
                         self._append_unplaced(translated, segment)
                     else:
@@ -615,8 +658,9 @@ class ProviderEpochTranslator:
         segment['start'] = anchor
         segment['end'] = anchor
         segment['_capture_unplaced'] = True
-        if epoch_end is not None:
-            segment['_capture_owner_sample'] = max(0, epoch_end - 1)
+        segment['_provider_send_owner'] = (
+            segment.get('_provider_send_owner') or self.last_send_owner or self.initial_owner
+        )
         segment['audio_alignment'] = 'unplaced'
         translated.append(segment)
 
