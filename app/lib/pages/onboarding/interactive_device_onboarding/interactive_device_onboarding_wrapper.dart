@@ -8,8 +8,10 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/transcription_demo_step.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/single_press_step.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/voice_reply_step.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/power_cycle_step.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/double_press_config_step.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/all_set_step.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_intro_screen.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:omi/ui/ui.dart';
@@ -88,14 +90,38 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
 
   Widget _buildStep(int step) {
     switch (step) {
-      case 0:
-        return TranscriptionDemoStep(key: const ValueKey(0), onComplete: () => _onStepComplete('transcription_demo'));
-      case 1:
-        return SinglePressStep(key: const ValueKey(1), onComplete: () => _onStepComplete('single_press_ask_question'));
-      case 2:
-        return PowerCycleStep(key: const ValueKey(2), onComplete: () => _onStepComplete('power_cycle'));
+      case DeviceOnboardingProvider.transcriptionStep:
+        return TranscriptionDemoStep(
+          key: const ValueKey(DeviceOnboardingProvider.transcriptionStep),
+          onComplete: () => _onStepComplete('transcription_demo'),
+        );
+      case DeviceOnboardingProvider.askQuestionStep:
+        return SinglePressStep(
+          key: const ValueKey(DeviceOnboardingProvider.askQuestionStep),
+          onComplete: () => _onStepComplete('single_press_ask_question'),
+        );
+      case DeviceOnboardingProvider.voiceReplyStep:
+        return VoiceReplyStep(
+          key: const ValueKey(DeviceOnboardingProvider.voiceReplyStep),
+          firstRun: !widget.allowExit,
+          previewText: _onboardingProvider.aiResponse,
+          onComplete: () => _onStepComplete('voice_reply'),
+        );
+      case DeviceOnboardingProvider.powerCycleStep:
+        return PowerCycleStep(
+          key: const ValueKey(DeviceOnboardingProvider.powerCycleStep),
+          onComplete: () => _onStepComplete('power_cycle'),
+        );
+      case DeviceOnboardingProvider.doublePressStep:
+        return DoublePressConfigStep(
+          key: const ValueKey(DeviceOnboardingProvider.doublePressStep),
+          onComplete: () => _onStepComplete('double_press_config'),
+        );
       default:
-        return DoublePressConfigStep(key: const ValueKey(3), onComplete: () => _onStepComplete('double_press_config'));
+        return AllSetStep(
+          key: const ValueKey(DeviceOnboardingProvider.allSetStep),
+          onComplete: () => _onStepComplete('all_set'),
+        );
     }
   }
 

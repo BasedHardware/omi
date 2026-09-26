@@ -11115,5 +11115,11 @@
     "capturePhoneStorageFull": "אחסון הטלפון מלא",
     "captureStorageAlmostFull": "האחסון כמעט מלא",
     "capturePendantDisconnectedDetail": "התליון איבד את החיבור לטלפון הזה. Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב. כל מה שהוקלט עד עכשיו שמור.",
-    "participantsSummaryUncounted": "{name} ואחרים"
+    "participantsSummaryUncounted": "{name} ואחרים",
+    "deviceOnboardingVoiceReplyTitle": "האזינו לתשובות של Omi",
+    "deviceOnboardingVoiceReplySample": "הבנתי. הפגישה הבאה שלך מתחילה בעוד עשרים דקות.",
+    "deviceOnboardingAllSetTitle": "הכול מוכן",
+    "deviceOnboardingAllSetSubtitle": "יש להקיש על שורה כדי לבדוק או לשנות אותה.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

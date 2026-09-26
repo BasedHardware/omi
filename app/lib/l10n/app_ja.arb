@@ -3555,5 +3555,11 @@
     "capturePhoneStorageFull": "端末の空き容量なし",
     "captureStorageAlmostFull": "空き容量わずか",
     "capturePendantDisconnectedDetail": "ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。",
-    "participantsSummaryUncounted": "{name}ほか"
+    "participantsSummaryUncounted": "{name}ほか",
+    "deviceOnboardingVoiceReplyTitle": "Omiの回答を聞く",
+    "deviceOnboardingVoiceReplySample": "了解しました。次の会議は20分後に始まります。",
+    "deviceOnboardingAllSetTitle": "準備ができました",
+    "deviceOnboardingAllSetSubtitle": "確認または変更するには行をタップしてください。",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

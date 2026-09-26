@@ -11285,4 +11285,22 @@ class AppLocalizationsLt extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ir kiti';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Klausykitės „Omi“ atsakymų';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Supratau. Kitas jūsų susitikimas prasidės po dvidešimties minučių.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Viskas paruošta';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Palieskite eilutę, kad ją peržiūrėtumėte arba pakeistumėte.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

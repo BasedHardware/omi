@@ -3555,5 +3555,11 @@
     "capturePhoneStorageFull": "Tālruņa krātuve ir pilna",
     "captureStorageAlmostFull": "Krātuve gandrīz pilna",
     "capturePendantDisconnectedDetail": "Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.",
-    "participantsSummaryUncounted": "{name} un citi"
+    "participantsSummaryUncounted": "{name} un citi",
+    "deviceOnboardingVoiceReplyTitle": "Klausieties Omi atbildes",
+    "deviceOnboardingVoiceReplySample": "Sapratu. Jūsu nākamā sapulce sāksies pēc divdesmit minūtēm.",
+    "deviceOnboardingAllSetTitle": "Viss ir gatavs",
+    "deviceOnboardingAllSetSubtitle": "Pieskarieties rindai, lai to pārskatītu vai mainītu.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

@@ -3555,5 +3555,11 @@
     "capturePhoneStorageFull": "Ο χώρος του τηλεφώνου γέμισε",
     "captureStorageAlmostFull": "Ο χώρος σχεδόν γέμισε",
     "capturePendantDisconnectedDetail": "Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο. Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.",
-    "participantsSummaryUncounted": "{name} και άλλοι"
+    "participantsSummaryUncounted": "{name} και άλλοι",
+    "deviceOnboardingVoiceReplyTitle": "Ακούστε τις απαντήσεις του Omi",
+    "deviceOnboardingVoiceReplySample": "Έγινε. Η επόμενη συνάντησή σας ξεκινά σε είκοσι λεπτά.",
+    "deviceOnboardingAllSetTitle": "Είστε έτοιμοι",
+    "deviceOnboardingAllSetSubtitle": "Πατήστε μια σειρά για να την ελέγξετε ή να την αλλάξετε.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

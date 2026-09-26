@@ -3555,5 +3555,11 @@
     "capturePhoneStorageFull": "Bộ nhớ điện thoại đầy",
     "captureStorageAlmostFull": "Bộ nhớ gần đầy",
     "capturePendantDisconnectedDetail": "Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.",
-    "participantsSummaryUncounted": "{name} và những người khác"
+    "participantsSummaryUncounted": "{name} và những người khác",
+    "deviceOnboardingVoiceReplyTitle": "Nghe câu trả lời của Omi",
+    "deviceOnboardingVoiceReplySample": "Tôi hiểu rồi. Cuộc họp tiếp theo của bạn bắt đầu sau hai mươi phút nữa.",
+    "deviceOnboardingAllSetTitle": "Bạn đã sẵn sàng",
+    "deviceOnboardingAllSetSubtitle": "Nhấn vào một hàng để xem lại hoặc thay đổi.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

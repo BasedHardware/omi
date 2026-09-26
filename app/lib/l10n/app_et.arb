@@ -3555,5 +3555,11 @@
     "capturePhoneStorageFull": "Telefoni mälu on täis",
     "captureStorageAlmostFull": "Mälu on peaaegu täis",
     "capturePendantDisconnectedDetail": "Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.",
-    "participantsSummaryUncounted": "{name} ja teised"
+    "participantsSummaryUncounted": "{name} ja teised",
+    "deviceOnboardingVoiceReplyTitle": "Kuula Omi vastuseid",
+    "deviceOnboardingVoiceReplySample": "Selge. Sinu järgmine kohtumine algab kahekümne minuti pärast.",
+    "deviceOnboardingAllSetTitle": "Kõik on valmis",
+    "deviceOnboardingAllSetSubtitle": "Puuduta rida, et seda üle vaadata või muuta.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

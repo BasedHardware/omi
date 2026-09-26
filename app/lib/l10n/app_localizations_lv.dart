@@ -11292,4 +11292,22 @@ class AppLocalizationsLv extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name un citi';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Klausieties Omi atbildes';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Sapratu. Jūsu nākamā sapulce sāksies pēc divdesmit minūtēm.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Viss ir gatavs';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Pieskarieties rindai, lai to pārskatītu vai mainītu.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

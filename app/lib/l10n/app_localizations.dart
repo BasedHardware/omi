@@ -20522,6 +20522,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{name} + others'**
   String participantsSummaryUncounted(String name);
+
+  /// No description provided for @deviceOnboardingVoiceReplyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Hear Omi\'s Answers'**
+  String get deviceOnboardingVoiceReplyTitle;
+
+  /// No description provided for @deviceOnboardingVoiceReplySample.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ve got it. Your next meeting starts in twenty minutes.'**
+  String get deviceOnboardingVoiceReplySample;
+
+  /// No description provided for @deviceOnboardingAllSetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re All Set'**
+  String get deviceOnboardingAllSetTitle;
+
+  /// No description provided for @deviceOnboardingAllSetSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap a row to review or change it.'**
+  String get deviceOnboardingAllSetSubtitle;
+
+  /// No description provided for @deviceOnboardingAllSetSinglePressBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'1×'**
+  String get deviceOnboardingAllSetSinglePressBadge;
+
+  /// No description provided for @deviceOnboardingAllSetDoublePressBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'2×'**
+  String get deviceOnboardingAllSetDoublePressBadge;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

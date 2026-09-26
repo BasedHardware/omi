@@ -11246,4 +11246,22 @@ class AppLocalizationsHi extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name और अन्य';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Omi के जवाब सुनें';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'समझ गया। आपकी अगली मीटिंग बीस मिनट में शुरू होगी।';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'सब तैयार है';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'समीक्षा या बदलाव के लिए किसी पंक्ति पर टैप करें।';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

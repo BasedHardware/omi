@@ -11269,4 +11269,22 @@ class AppLocalizationsFi extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ja muut';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Kuuntele Omin vastaukset';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Selvä. Seuraava kokouksesi alkaa kahdenkymmenen minuutin kuluttua.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Kaikki on valmista';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Tarkista tai muuta riviä napauttamalla sitä.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

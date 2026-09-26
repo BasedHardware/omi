@@ -11308,4 +11308,22 @@ class AppLocalizationsBg extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name и други';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Чуйте отговорите на Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Готово. Следващата ви среща започва след двадесет минути.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Всичко е готово';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Докоснете ред, за да го прегледате или промените.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

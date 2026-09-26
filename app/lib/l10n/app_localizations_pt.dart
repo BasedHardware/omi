@@ -11281,4 +11281,22 @@ class AppLocalizationsPt extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name e outros';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Ouça as respostas do Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Entendido. Sua próxima reunião começa em vinte minutos.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Tudo pronto';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Toque em uma linha para revisar ou alterar.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

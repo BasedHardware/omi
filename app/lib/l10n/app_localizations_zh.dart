@@ -11058,4 +11058,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name等人';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => '聆听 Omi 的回答';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => '明白了。你的下一场会议将在二十分钟后开始。';
+
+  @override
+  String get deviceOnboardingAllSetTitle => '一切准备就绪';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => '轻点一行即可查看或更改。';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

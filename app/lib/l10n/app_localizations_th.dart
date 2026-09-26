@@ -11201,4 +11201,22 @@ class AppLocalizationsTh extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name และคนอื่นๆ';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'ฟังคำตอบของ Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'รับทราบ การประชุมครั้งถัดไปของคุณจะเริ่มในอีกยี่สิบนาที';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'พร้อมใช้งานแล้ว';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'แตะแถวเพื่อตรวจสอบหรือเปลี่ยนแปลง';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

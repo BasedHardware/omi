@@ -3555,5 +3555,11 @@
     "capturePhoneStorageFull": "Telefoonopslag vol",
     "captureStorageAlmostFull": "Opslag bijna vol",
     "capturePendantDisconnectedDetail": "Je hanger heeft de verbinding met deze telefoon verloren. Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is. Alles wat eerder is opgenomen, is veilig.",
-    "participantsSummaryUncounted": "{name} en anderen"
+    "participantsSummaryUncounted": "{name} en anderen",
+    "deviceOnboardingVoiceReplyTitle": "Luister naar Omi's antwoorden",
+    "deviceOnboardingVoiceReplySample": "Begrepen. Je volgende vergadering begint over twintig minuten.",
+    "deviceOnboardingAllSetTitle": "Alles is ingesteld",
+    "deviceOnboardingAllSetSubtitle": "Tik op een rij om deze te bekijken of te wijzigen.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

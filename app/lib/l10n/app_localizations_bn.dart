@@ -11267,4 +11267,22 @@ class AppLocalizationsBn extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ও অন্যরা';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Omi-এর উত্তর শুনুন';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'হয়ে গেছে। আপনার পরবর্তী মিটিং বিশ মিনিট পরে শুরু হবে।';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'সব প্রস্তুত';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'পর্যালোচনা বা পরিবর্তন করতে একটি সারিতে ট্যাপ করুন।';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

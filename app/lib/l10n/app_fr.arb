@@ -3590,5 +3590,11 @@
     "capturePhoneStorageFull": "Stockage du téléphone plein",
     "captureStorageAlmostFull": "Stockage presque plein",
     "capturePendantDisconnectedDetail": "Votre pendentif a perdu la connexion avec ce téléphone. Omi se reconnectera tout seul quand le pendentif sera allumé et à proximité. Tout ce qui a été enregistré avant est en sécurité.",
-    "participantsSummaryUncounted": "{name} et d'autres"
+    "participantsSummaryUncounted": "{name} et d'autres",
+    "deviceOnboardingVoiceReplyTitle": "Écoutez les réponses d’Omi",
+    "deviceOnboardingVoiceReplySample": "C’est noté. Votre prochaine réunion commence dans vingt minutes.",
+    "deviceOnboardingAllSetTitle": "Tout est prêt",
+    "deviceOnboardingAllSetSubtitle": "Touchez une ligne pour la vérifier ou la modifier.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

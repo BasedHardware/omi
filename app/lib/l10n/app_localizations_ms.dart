@@ -11295,4 +11295,23 @@ class AppLocalizationsMs extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name dan lain-lain';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Dengar jawapan Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample =>
+      'Baik. Mesyuarat anda yang seterusnya bermula dalam masa dua puluh minit.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Semuanya Sudah Sedia';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Ketik baris untuk menyemak atau mengubahnya.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

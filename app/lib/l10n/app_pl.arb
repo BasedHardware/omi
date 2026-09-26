@@ -3590,5 +3590,11 @@
     "capturePhoneStorageFull": "Pamięć telefonu pełna",
     "captureStorageAlmostFull": "Pamięć prawie pełna",
     "capturePendantDisconnectedDetail": "Wisiorek utracił połączenie z tym telefonem. Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu. Wszystko nagrane wcześniej jest bezpieczne.",
-    "participantsSummaryUncounted": "{name} i inni"
+    "participantsSummaryUncounted": "{name} i inni",
+    "deviceOnboardingVoiceReplyTitle": "Posłuchaj odpowiedzi Omi",
+    "deviceOnboardingVoiceReplySample": "Rozumiem. Twoje następne spotkanie zaczyna się za dwadzieścia minut.",
+    "deviceOnboardingAllSetTitle": "Wszystko gotowe",
+    "deviceOnboardingAllSetSubtitle": "Dotknij wiersza, aby go sprawdzić lub zmienić.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

@@ -11263,4 +11263,22 @@ class AppLocalizationsCs extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name a další';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Poslechněte si odpovědi Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Mám to. Vaše další schůzka začíná za dvacet minut.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Vše je připraveno';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Klepnutím na řádek ho zkontrolujete nebo změníte.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

@@ -11115,5 +11115,11 @@
     "capturePhoneStorageFull": "ಫೋನ್ ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ",
     "captureStorageAlmostFull": "ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ತುಂಬಿದೆ",
     "capturePendantDisconnectedDetail": "ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಈ ಫೋನ್‌ನೊಂದಿಗೆ ಸಂಪರ್ಕ ಕಳೆದುಕೊಂಡಿದೆ. ಪೆಂಡೆಂಟ್ ಆನ್ ಆಗಿದ್ದು ಹತ್ತಿರದಲ್ಲಿದ್ದಾಗ Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ. ಇದಕ್ಕೂ ಮೊದಲು ರೆಕಾರ್ಡ್ ಆದದ್ದೆಲ್ಲ ಸುರಕ್ಷಿತವಾಗಿದೆ.",
-    "participantsSummaryUncounted": "{name} ಮತ್ತು ಇತರರು"
+    "participantsSummaryUncounted": "{name} ಮತ್ತು ಇತರರು",
+    "deviceOnboardingVoiceReplyTitle": "Omi ಉತ್ತರಗಳನ್ನು ಕೇಳಿ",
+    "deviceOnboardingVoiceReplySample": "ಅರ್ಥವಾಯಿತು. ನಿಮ್ಮ ಮುಂದಿನ ಸಭೆ ಇಪ್ಪತ್ತು ನಿಮಿಷಗಳಲ್ಲಿ ಪ್ರಾರಂಭವಾಗುತ್ತದೆ.",
+    "deviceOnboardingAllSetTitle": "ಎಲ್ಲವೂ ಸಿದ್ಧವಾಗಿದೆ",
+    "deviceOnboardingAllSetSubtitle": "ಪರಿಶೀಲಿಸಲು ಅಥವಾ ಬದಲಾಯಿಸಲು ಸಾಲನ್ನು ಟ್ಯಾಪ್ ಮಾಡಿ.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

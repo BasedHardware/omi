@@ -11301,4 +11301,22 @@ class AppLocalizationsKn extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ಮತ್ತು ಇತರರು';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Omi ಉತ್ತರಗಳನ್ನು ಕೇಳಿ';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'ಅರ್ಥವಾಯಿತು. ನಿಮ್ಮ ಮುಂದಿನ ಸಭೆ ಇಪ್ಪತ್ತು ನಿಮಿಷಗಳಲ್ಲಿ ಪ್ರಾರಂಭವಾಗುತ್ತದೆ.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'ಎಲ್ಲವೂ ಸಿದ್ಧವಾಗಿದೆ';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'ಪರಿಶೀಲಿಸಲು ಅಥವಾ ಬದಲಾಯಿಸಲು ಸಾಲನ್ನು ಟ್ಯಾಪ್ ಮಾಡಿ.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

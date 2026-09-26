@@ -3555,5 +3555,11 @@
     "capturePhoneStorageFull": "手机存储空间已满",
     "captureStorageAlmostFull": "存储空间即将用完",
     "capturePendantDisconnectedDetail": "吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。",
-    "participantsSummaryUncounted": "{name}等人"
+    "participantsSummaryUncounted": "{name}等人",
+    "deviceOnboardingVoiceReplyTitle": "聆听 Omi 的回答",
+    "deviceOnboardingVoiceReplySample": "明白了。你的下一场会议将在二十分钟后开始。",
+    "deviceOnboardingAllSetTitle": "一切准备就绪",
+    "deviceOnboardingAllSetSubtitle": "轻点一行即可查看或更改。",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

@@ -3555,5 +3555,11 @@
     "capturePhoneStorageFull": "Puhelimen tallennustila täynnä",
     "captureStorageAlmostFull": "Tallennustila melkein täynnä",
     "capturePendantDisconnectedDetail": "Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa.",
-    "participantsSummaryUncounted": "{name} ja muut"
+    "participantsSummaryUncounted": "{name} ja muut",
+    "deviceOnboardingVoiceReplyTitle": "Kuuntele Omin vastaukset",
+    "deviceOnboardingVoiceReplySample": "Selvä. Seuraava kokouksesi alkaa kahdenkymmenen minuutin kuluttua.",
+    "deviceOnboardingAllSetTitle": "Kaikki on valmista",
+    "deviceOnboardingAllSetSubtitle": "Tarkista tai muuta riviä napauttamalla sitä.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

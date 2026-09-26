@@ -11295,4 +11295,22 @@ class AppLocalizationsBe extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name і іншыя';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Слухайце адказы Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Гатова. Ваша наступная сустрэча пачнецца праз дваццаць хвілін.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Усё гатова';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Націсніце на радок, каб праглядзець або змяніць яго.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

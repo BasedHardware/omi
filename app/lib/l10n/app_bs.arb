@@ -11115,5 +11115,11 @@
     "capturePhoneStorageFull": "Memorija telefona je puna",
     "captureStorageAlmostFull": "Memorija je skoro puna",
     "capturePendantDisconnectedDetail": "Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovo povezati kad je privjesak uključen i u blizini. Sve snimljeno do sada je sačuvano.",
-    "participantsSummaryUncounted": "{name} i drugi"
+    "participantsSummaryUncounted": "{name} i drugi",
+    "deviceOnboardingVoiceReplyTitle": "Čujte Omijeve odgovore",
+    "deviceOnboardingVoiceReplySample": "U redu. Vaš sljedeći sastanak počinje za dvadeset minuta.",
+    "deviceOnboardingAllSetTitle": "Sve je spremno",
+    "deviceOnboardingAllSetSubtitle": "Dodirnite red da ga pregledate ili promijenite.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

@@ -3555,5 +3555,11 @@
     "capturePhoneStorageFull": "Telefono atmintis pilna",
     "captureStorageAlmostFull": "Atmintis beveik pilna",
     "capturePendantDisconnectedDetail": "Pakabukas prarado ryšį su šiuo telefonu. Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese. Viskas, kas įrašyta iki šiol, išsaugota.",
-    "participantsSummaryUncounted": "{name} ir kiti"
+    "participantsSummaryUncounted": "{name} ir kiti",
+    "deviceOnboardingVoiceReplyTitle": "Klausykitės „Omi“ atsakymų",
+    "deviceOnboardingVoiceReplySample": "Supratau. Kitas jūsų susitikimas prasidės po dvidešimties minučių.",
+    "deviceOnboardingAllSetTitle": "Viskas paruošta",
+    "deviceOnboardingAllSetSubtitle": "Palieskite eilutę, kad ją peržiūrėtumėte arba pakeistumėte.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

@@ -11115,5 +11115,11 @@
     "capturePhoneStorageFull": "ఫోన్ స్టోరేజ్ నిండింది",
     "captureStorageAlmostFull": "స్టోరేజ్ దాదాపు నిండింది",
     "capturePendantDisconnectedDetail": "మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.",
-    "participantsSummaryUncounted": "{name} మరియు ఇతరులు"
+    "participantsSummaryUncounted": "{name} మరియు ఇతరులు",
+    "deviceOnboardingVoiceReplyTitle": "Omi సమాధానాలను వినండి",
+    "deviceOnboardingVoiceReplySample": "అర్థమైంది. మీ తదుపరి సమావేశం ఇరవై నిమిషాల్లో ప్రారంభమవుతుంది.",
+    "deviceOnboardingAllSetTitle": "అన్నీ సిద్ధంగా ఉన్నాయి",
+    "deviceOnboardingAllSetSubtitle": "సమీక్షించడానికి లేదా మార్చడానికి వరుసను నొక్కండి.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

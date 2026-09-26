@@ -11364,4 +11364,23 @@ class AppLocalizationsTl extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name at iba pa';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Pakinggan ang mga sagot ni Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample =>
+      'Nakuha ko. Magsisimula ang susunod mong meeting sa loob ng dalawampung minuto.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Handa Ka Na';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'I-tap ang isang row para suriin o baguhin ito.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

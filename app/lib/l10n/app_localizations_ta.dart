@@ -11343,4 +11343,22 @@ class AppLocalizationsTa extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name மற்றும் மற்றவர்கள்';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Omi-யின் பதில்களைக் கேளுங்கள்';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'புரிந்தது. உங்கள் அடுத்த சந்திப்பு இருபது நிமிடங்களில் தொடங்கும்.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'எல்லாம் தயாராக உள்ளது';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'மதிப்பாய்வு செய்ய அல்லது மாற்ற ஒரு வரியைத் தட்டவும்.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

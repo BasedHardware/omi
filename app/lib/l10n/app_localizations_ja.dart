@@ -11080,4 +11080,22 @@ class AppLocalizationsJa extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$nameほか';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Omiの回答を聞く';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => '了解しました。次の会議は20分後に始まります。';
+
+  @override
+  String get deviceOnboardingAllSetTitle => '準備ができました';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => '確認または変更するには行をタップしてください。';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

@@ -13385,5 +13385,11 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceOnboardingVoiceReplyTitle": "Hear Omi's Answers",
+    "deviceOnboardingVoiceReplySample": "I've got it. Your next meeting starts in twenty minutes.",
+    "deviceOnboardingAllSetTitle": "You're All Set",
+    "deviceOnboardingAllSetSubtitle": "Tap a row to review or change it.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

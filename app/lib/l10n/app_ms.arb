@@ -3555,5 +3555,11 @@
     "capturePhoneStorageFull": "Storan telefon penuh",
     "captureStorageAlmostFull": "Storan hampir penuh",
     "capturePendantDisconnectedDetail": "Loket anda terputus sambungan dengan telefon ini. Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan. Semua yang dirakam sebelum ini selamat.",
-    "participantsSummaryUncounted": "{name} dan lain-lain"
+    "participantsSummaryUncounted": "{name} dan lain-lain",
+    "deviceOnboardingVoiceReplyTitle": "Dengar jawapan Omi",
+    "deviceOnboardingVoiceReplySample": "Baik. Mesyuarat anda yang seterusnya bermula dalam masa dua puluh minit.",
+    "deviceOnboardingAllSetTitle": "Semuanya Sudah Sedia",
+    "deviceOnboardingAllSetSubtitle": "Ketik baris untuk menyemak atau mengubahnya.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

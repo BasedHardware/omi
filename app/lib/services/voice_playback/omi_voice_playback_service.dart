@@ -1,6 +1,7 @@
 // Plays Omi's spoken response when the user talks to the device via the
 // hardware button. Ports the chunking + pipelined-playback architecture from
 // `desktop/Desktop/Sources/FloatingControlBar/FloatingBarVoicePlaybackService.swift`.
+// ignore_for_file: experimental_member_use
 
 import 'dart:async';
 
@@ -104,8 +105,11 @@ class OmiVoicePlaybackService {
   bool _isPlayingQueue = false;
   bool _sessionActive = false;
   bool _pausedByInterruption = false;
+  bool _previewActive = false;
+  Completer<void>? _previewStopSignal;
 
-  bool get isSpeaking => _sessionActive && (_isPlayingQueue || _audioQueue.isNotEmpty || _synthesizing);
+  bool get isSpeaking =>
+      _previewActive || (_sessionActive && (_isPlayingQueue || _audioQueue.isNotEmpty || _synthesizing));
 
   Future<void> _ensureInitialized() async {
     if (_initialized) return;
@@ -150,7 +154,53 @@ class OmiVoicePlaybackService {
       await _fallbackTts.setSpeechRate(0.5);
       await _fallbackTts.setVolume(1.0);
       await _fallbackTts.setPitch(1.0);
+      await _fallbackTts.awaitSpeakCompletion(true);
     } catch (_) {}
+  }
+
+  /// Plays one onboarding preview regardless of the saved response mode.
+  /// Uses the same cloud voice as a real reply and falls back to system TTS.
+  Future<void> playPreview(String text) async {
+    final cleaned = _cleanedPlaybackText(text);
+    if (cleaned.isEmpty) return;
+
+    await _ensureInitialized();
+    await interrupt();
+    await _activateSession();
+
+    final stopSignal = Completer<void>();
+    _previewStopSignal = stopSignal;
+    _previewActive = true;
+
+    try {
+      final bytes = await synthesizeSpeech(text: cleaned);
+      if (!_previewActive || !identical(_previewStopSignal, stopSignal)) return;
+      if (bytes == null || bytes.isEmpty) throw TtsUnavailableException(503);
+
+      await _player.setAudioSource(_BytesAudioSource(bytes));
+      unawaited(_player.play());
+      await Future.any<void>([
+        _player.processingStateStream.firstWhere((state) => state == ProcessingState.completed),
+        stopSignal.future,
+      ]);
+    } catch (e) {
+      if (_previewActive && identical(_previewStopSignal, stopSignal)) {
+        Logger.debug('OmiVoicePlaybackService: preview cloud voice failed, using system voice: $e');
+        await _speakFallback(cleaned);
+      }
+    } finally {
+      if (identical(_previewStopSignal, stopSignal)) {
+        _previewActive = false;
+        _previewStopSignal = null;
+        await _deactivateSession();
+      }
+    }
+  }
+
+  /// Stops only an active onboarding preview; real reply playback is untouched.
+  Future<void> stopPreview() async {
+    if (!_previewActive) return;
+    await interrupt();
   }
 
   /// Start a new response lifecycle. Cancels any prior in-flight playback.
@@ -301,6 +351,9 @@ class OmiVoicePlaybackService {
       _lifecycleToken++;
       _emit(outcome: VoiceReplyPlaybackOutcome.interrupted, interruptSource: source);
     }
+    _previewActive = false;
+    _previewStopSignal?.complete();
+    _previewStopSignal = null;
     _activeMessageId = null;
     _spoken = 0;
     _synthesisQueue.clear();

@@ -11256,4 +11256,22 @@ class AppLocalizationsSk extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name a ďalší';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Vypočujte si odpovede Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Rozumiem. Vaše ďalšie stretnutie sa začne o dvadsať minút.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Všetko je pripravené';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Ťuknutím na riadok ho skontrolujete alebo zmeníte.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

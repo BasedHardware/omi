@@ -11115,5 +11115,11 @@
     "capturePhoneStorageFull": "ফোনের স্টোরেজ পূর্ণ",
     "captureStorageAlmostFull": "স্টোরেজ প্রায় পূর্ণ",
     "capturePendantDisconnectedDetail": "আপনার পেনড্যান্ট এই ফোনের সাথে সংযোগ হারিয়েছে। পেনড্যান্ট চালু ও কাছে থাকলে Omi নিজে থেকেই আবার সংযোগ করবে। এর আগে যা রেকর্ড হয়েছে তা নিরাপদ।",
-    "participantsSummaryUncounted": "{name} ও অন্যরা"
+    "participantsSummaryUncounted": "{name} ও অন্যরা",
+    "deviceOnboardingVoiceReplyTitle": "Omi-এর উত্তর শুনুন",
+    "deviceOnboardingVoiceReplySample": "হয়ে গেছে। আপনার পরবর্তী মিটিং বিশ মিনিট পরে শুরু হবে।",
+    "deviceOnboardingAllSetTitle": "সব প্রস্তুত",
+    "deviceOnboardingAllSetSubtitle": "পর্যালোচনা বা পরিবর্তন করতে একটি সারিতে ট্যাপ করুন।",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

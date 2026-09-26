@@ -11084,4 +11084,22 @@ class AppLocalizationsKo extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name 외 여러 명';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Omi의 답변 듣기';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => '알겠습니다. 다음 회의가 20분 후에 시작됩니다.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => '모두 준비됐어요';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => '검토하거나 변경하려면 행을 탭하세요.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

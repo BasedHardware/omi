@@ -11303,4 +11303,22 @@ class AppLocalizationsRu extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name и другие';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Слушайте ответы Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Понял. Ваша следующая встреча начнётся через двадцать минут.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Всё готово';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Нажмите на строку, чтобы проверить или изменить её.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

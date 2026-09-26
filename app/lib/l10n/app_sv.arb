@@ -3555,5 +3555,11 @@
     "capturePhoneStorageFull": "Telefonens lagring är full",
     "captureStorageAlmostFull": "Lagringen är nästan full",
     "capturePendantDisconnectedDetail": "Hängsmycket tappade anslutningen till den här telefonen. Omi ansluter igen av sig själv när hängsmycket är på och i närheten. Allt som spelats in innan är säkert.",
-    "participantsSummaryUncounted": "{name} och andra"
+    "participantsSummaryUncounted": "{name} och andra",
+    "deviceOnboardingVoiceReplyTitle": "Lyssna på Omis svar",
+    "deviceOnboardingVoiceReplySample": "Uppfattat. Ditt nästa möte börjar om tjugo minuter.",
+    "deviceOnboardingAllSetTitle": "Allt är klart",
+    "deviceOnboardingAllSetSubtitle": "Tryck på en rad för att granska eller ändra den.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

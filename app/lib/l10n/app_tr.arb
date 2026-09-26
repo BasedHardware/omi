@@ -3590,5 +3590,11 @@
     "capturePhoneStorageFull": "Telefon depolama alanı dolu",
     "captureStorageAlmostFull": "Depolama neredeyse dolu",
     "capturePendantDisconnectedDetail": "Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.",
-    "participantsSummaryUncounted": "{name} ve diğerleri"
+    "participantsSummaryUncounted": "{name} ve diğerleri",
+    "deviceOnboardingVoiceReplyTitle": "Omi'nin yanıtlarını dinleyin",
+    "deviceOnboardingVoiceReplySample": "Anladım. Sonraki toplantınız yirmi dakika içinde başlıyor.",
+    "deviceOnboardingAllSetTitle": "Her Şey Hazır",
+    "deviceOnboardingAllSetSubtitle": "İncelemek veya değiştirmek için bir satıra dokunun.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

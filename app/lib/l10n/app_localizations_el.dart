@@ -11342,4 +11342,22 @@ class AppLocalizationsEl extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name και άλλοι';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Ακούστε τις απαντήσεις του Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Έγινε. Η επόμενη συνάντησή σας ξεκινά σε είκοσι λεπτά.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Είστε έτοιμοι';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Πατήστε μια σειρά για να την ελέγξετε ή να την αλλάξετε.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

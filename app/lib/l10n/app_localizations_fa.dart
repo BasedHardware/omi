@@ -11262,4 +11262,22 @@ class AppLocalizationsFa extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name و دیگران';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'پاسخ‌های Omi را بشنوید';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'انجام شد. جلسه بعدی شما بیست دقیقه دیگر شروع می‌شود.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'همه‌چیز آماده است';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'برای بررسی یا تغییر، روی یک ردیف بزنید.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

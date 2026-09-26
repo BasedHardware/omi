@@ -11115,5 +11115,11 @@
     "capturePhoneStorageFull": "فون اسٹوریج بھر گئی",
     "captureStorageAlmostFull": "اسٹوریج تقریباً بھر گئی",
     "capturePendantDisconnectedDetail": "آپ کے پینڈنٹ کا اس فون سے رابطہ ٹوٹ گیا۔ پینڈنٹ آن اور قریب ہونے پر Omi خود دوبارہ جڑ جائے گا۔ اس سے پہلے ریکارڈ ہونے والی ہر چیز محفوظ ہے۔",
-    "participantsSummaryUncounted": "{name} اور دیگر"
+    "participantsSummaryUncounted": "{name} اور دیگر",
+    "deviceOnboardingVoiceReplyTitle": "Omi کے جوابات سنیں",
+    "deviceOnboardingVoiceReplySample": "سمجھ گیا۔ آپ کی اگلی میٹنگ بیس منٹ میں شروع ہوگی۔",
+    "deviceOnboardingAllSetTitle": "سب تیار ہے",
+    "deviceOnboardingAllSetSubtitle": "جائزہ لینے یا تبدیل کرنے کے لیے کسی قطار پر ٹیپ کریں۔",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

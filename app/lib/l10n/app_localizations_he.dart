@@ -11176,4 +11176,22 @@ class AppLocalizationsHe extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ואחרים';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'האזינו לתשובות של Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'הבנתי. הפגישה הבאה שלך מתחילה בעוד עשרים דקות.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'הכול מוכן';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'יש להקיש על שורה כדי לבדוק או לשנות אותה.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

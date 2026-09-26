@@ -11255,4 +11255,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name + others';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Hear Omi\'s Answers';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'I\'ve got it. Your next meeting starts in twenty minutes.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'You\'re All Set';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Tap a row to review or change it.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

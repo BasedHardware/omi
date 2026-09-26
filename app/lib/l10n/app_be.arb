@@ -11115,5 +11115,11 @@
     "capturePhoneStorageFull": "Памяць тэлефона запоўнена",
     "captureStorageAlmostFull": "Памяць амаль запоўнена",
     "capturePendantDisconnectedDetail": "Кулон страціў сувязь з гэтым тэлефонам. Omi перападключыцца сам, калі кулон уключаны і побач. Усё, што запісана да гэтага, захавана.",
-    "participantsSummaryUncounted": "{name} і іншыя"
+    "participantsSummaryUncounted": "{name} і іншыя",
+    "deviceOnboardingVoiceReplyTitle": "Слухайце адказы Omi",
+    "deviceOnboardingVoiceReplySample": "Гатова. Ваша наступная сустрэча пачнецца праз дваццаць хвілін.",
+    "deviceOnboardingAllSetTitle": "Усё гатова",
+    "deviceOnboardingAllSetSubtitle": "Націсніце на радок, каб праглядзець або змяніць яго.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

@@ -11297,4 +11297,22 @@ class AppLocalizationsSl extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name in drugi';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Poslušajte Omijeve odgovore';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Razumem. Vaš naslednji sestanek se začne čez dvajset minut.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Vse je pripravljeno';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Tapnite vrstico, da jo pregledate ali spremenite.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

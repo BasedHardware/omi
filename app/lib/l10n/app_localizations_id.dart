@@ -11276,4 +11276,22 @@ class AppLocalizationsId extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name dan lainnya';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Dengarkan jawaban Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Baik. Rapat Anda berikutnya dimulai dua puluh menit lagi.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Semua Sudah Siap';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Ketuk baris untuk meninjau atau mengubahnya.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

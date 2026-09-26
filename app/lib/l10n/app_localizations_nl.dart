@@ -11300,4 +11300,22 @@ class AppLocalizationsNl extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name en anderen';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Luister naar Omi\'s antwoorden';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Begrepen. Je volgende vergadering begint over twintig minuten.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Alles is ingesteld';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Tik op een rij om deze te bekijken of te wijzigen.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

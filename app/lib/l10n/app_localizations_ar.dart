@@ -11197,4 +11197,22 @@ class AppLocalizationsAr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name وآخرون';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'استمع إلى إجابات Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'تم. يبدأ اجتماعك التالي بعد عشرين دقيقة.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'أصبحت جاهزًا';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'اضغط على صف لمراجعته أو تغييره.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

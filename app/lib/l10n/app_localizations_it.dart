@@ -11329,4 +11329,22 @@ class AppLocalizationsIt extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name e altri';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Ascolta le risposte di Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Ricevuto. La tua prossima riunione inizia tra venti minuti.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'È tutto pronto';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Tocca una riga per rivederla o modificarla.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

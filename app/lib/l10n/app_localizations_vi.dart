@@ -11261,4 +11261,23 @@ class AppLocalizationsVi extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name và những người khác';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Nghe câu trả lời của Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample =>
+      'Tôi hiểu rồi. Cuộc họp tiếp theo của bạn bắt đầu sau hai mươi phút nữa.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Bạn đã sẵn sàng';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Nhấn vào một hàng để xem lại hoặc thay đổi.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

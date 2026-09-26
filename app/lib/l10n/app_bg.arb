@@ -3555,5 +3555,11 @@
     "capturePhoneStorageFull": "Паметта на телефона е пълна",
     "captureStorageAlmostFull": "Паметта е почти пълна",
     "capturePendantDisconnectedDetail": "Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.",
-    "participantsSummaryUncounted": "{name} и други"
+    "participantsSummaryUncounted": "{name} и други",
+    "deviceOnboardingVoiceReplyTitle": "Чуйте отговорите на Omi",
+    "deviceOnboardingVoiceReplySample": "Готово. Следващата ви среща започва след двадесет минути.",
+    "deviceOnboardingAllSetTitle": "Всичко е готово",
+    "deviceOnboardingAllSetSubtitle": "Докоснете ред, за да го прегледате или промените.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×"
 }

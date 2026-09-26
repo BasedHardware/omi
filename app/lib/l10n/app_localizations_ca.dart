@@ -11330,4 +11330,22 @@ class AppLocalizationsCa extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name i altres';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Escolta les respostes d\'Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Entesos. La teva pròxima reunió comença d\'aquí a vint minuts.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Ja ho tens tot a punt';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Toca una fila per revisar-la o canviar-la.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

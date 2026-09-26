@@ -11266,4 +11266,22 @@ class AppLocalizationsNo extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name og andre';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Hør svarene fra Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Skjønner. Det neste møtet ditt starter om tjue minutter.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Alt er klart';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Trykk på en rad for å se gjennom eller endre den.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

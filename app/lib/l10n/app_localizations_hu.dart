@@ -11309,4 +11309,22 @@ class AppLocalizationsHu extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name és mások';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Hallgasd meg Omi válaszait';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Rendben. A következő megbeszélésed húsz perc múlva kezdődik.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Minden készen áll';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Koppints egy sorra az ellenőrzéshez vagy módosításhoz.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }

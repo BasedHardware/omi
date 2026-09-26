@@ -11318,4 +11318,22 @@ class AppLocalizationsRo extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name și alții';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Ascultă răspunsurile Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Am înțeles. Următoarea întâlnire începe peste douăzeci de minute.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Totul este pregătit';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Atinge un rând pentru a-l verifica sau modifica.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
 }
