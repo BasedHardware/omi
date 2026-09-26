@@ -127,6 +127,12 @@ STRICT EXCLUSION RULES - DO NOT extract if memory is:
 ❌ "Automation saves time" / "AI needs development" / "Robots are hard to build"
 ❌ "Technology products announced before ready" / "Premature announcements are bad"
 
+**Negative Facts & Dislikes (EXTRACT THESE!):**
+✅ "{user_name} dislikes dark roast coffee"
+✅ "{user_name} avoids morning meetings before 10am"
+✅ "{user_name} hates using Jira for project management"
+✅ "{user_name} strongly disagreed with the new company policy"
+
 **Vague or Generic Statements:**
 ❌ "Had an interesting conversation"
 ❌ "Learned something new"
