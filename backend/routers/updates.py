@@ -884,7 +884,8 @@ async def get_desktop_appcast_xml(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating appcast: {str(e)}")
+        logger.exception(f"Error generating appcast: {e}")
+        raise HTTPException(status_code=500, detail="Error generating appcast. Please try again.")
 
 
 @router.get("/v2/desktop/download/latest")
