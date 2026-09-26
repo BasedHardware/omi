@@ -148,7 +148,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     if (!_isAudioInitialized) {
       await _initAudioIfNeeded();
     }
-    if (!mounted || _audioPlayer == null) return;
+    if (!mounted || _audioPlayer == null || !_isAudioInitialized) return;
 
     await _segmentStopSubscription?.cancel();
     _segmentStopSubscription = null;
@@ -226,6 +226,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     }
 
     _initCompleter = Completer<void>();
+    // Read before the awaits below: the messages for a load that fails.
+    final l10n = context.l10n;
 
     setState(() {
       _isAudioLoading = true;
@@ -246,12 +248,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         if (DateTime.now().isAfter(deadline)) {
           Logger.debug('Audio still pending after poll budget for ${widget.conversation!.id}');
           AnalyticsManager().audioPlaybackFailed(conversationId: widget.conversation!.id, reason: 'pending_timeout');
-          setState(() {
-            _isAudioLoading = false;
-          });
-          if (mounted) {
-            OmiFeedback.error(context, context.l10n.anErrorOccurredTryAgain);
-          }
+          await _dropFailedLoad(l10n.anErrorOccurredTryAgain);
           return;
         }
         await Future.delayed(Duration(milliseconds: urlsResponse.pollAfterMs ?? 3000));
@@ -282,9 +279,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       if (audioSources.isEmpty) {
         Logger.debug('No cached audio sources for ${widget.conversation!.id}');
         AnalyticsManager().audioPlaybackFailed(conversationId: widget.conversation!.id, reason: 'no_matching_sources');
-        if (mounted) {
-          OmiFeedback.error(context, context.l10n.anErrorOccurredTryAgain);
-        }
+        await _dropFailedLoad(l10n.audioPlaybackUnavailable);
         return;
       }
 
@@ -295,6 +290,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     } catch (e) {
       Logger.debug('Error initializing audio: $e');
       AnalyticsManager().audioPlaybackFailed(conversationId: widget.conversation?.id ?? '', reason: e.toString());
+      // Before, a failed load was silent and Play then "played" an empty player.
+      if (mounted) await _dropFailedLoad(l10n.audioPlaybackUnavailable);
     } finally {
       final completer = _initCompleter;
       _initCompleter = null;
@@ -307,13 +304,24 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     }
   }
 
+  /// A load that failed leaves nothing to play: drop the player so the next tap loads again, and
+  /// say why.
+  Future<void> _dropFailedLoad(String message) async {
+    final player = _audioPlayer;
+    _audioPlayer = null;
+    _isAudioInitialized = false;
+    await player?.dispose();
+    if (mounted) OmiFeedback.error(context, message);
+  }
+
   Future<void> _togglePlayPause() async {
     widget.onAudioInteraction?.call();
     if (!_isAudioInitialized && !_isAudioLoading) {
       await _initAudioIfNeeded();
     }
     if (!mounted) return;
-    if (_audioPlayer == null) return;
+    // Nothing loaded (still loading, or the load failed and said so): never show Pause over silence.
+    if (_audioPlayer == null || !_isAudioInitialized) return;
 
     final conversationId = widget.conversation?.id ?? '';
 

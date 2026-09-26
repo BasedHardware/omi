@@ -222,6 +222,19 @@ class HomeUpNext extends StatefulWidget {
 
   final VoidCallback onAllTasks;
 
+  /// Today's tasks first, then the other open ones soonest due first (undated last), so what is
+  /// coming shows ahead of its day (#5080).
+  static List<ActionItemWithMetadata> pick(
+    List<ActionItemWithMetadata> today,
+    List<ActionItemWithMetadata> open, {
+    int limit = 3,
+  }) {
+    final rest = open.where((task) => today.every((d) => d.id != task.id)).toList();
+    // Stable: tasks without a due date keep the order the list gave them.
+    final dated = rest.where((task) => task.dueAt != null).toList()..sort((a, b) => a.dueAt!.compareTo(b.dueAt!));
+    return [...today, ...dated, ...rest.where((task) => task.dueAt == null)].take(limit).toList();
+  }
+
   @override
   State<HomeUpNext> createState() => _HomeUpNextState();
 }
@@ -243,11 +256,7 @@ class _HomeUpNextState extends State<HomeUpNext> {
     final l10n = context.l10n;
     return Consumer<ActionItemsProvider>(
       builder: (context, provider, _) {
-        final due = provider.todayPreviewTasks();
-        final tasks = [
-          ...due,
-          ...provider.incompleteItems.where((task) => due.every((d) => d.id != task.id)),
-        ].take(3).toList();
+        final tasks = HomeUpNext.pick(provider.todayPreviewTasks(), provider.incompleteItems);
         if (tasks.isEmpty) return const SizedBox.shrink();
         return Padding(
           padding: const EdgeInsets.only(top: 22),
@@ -322,7 +331,9 @@ class _UpNextRow extends StatelessWidget {
               semanticLabel: done ? context.l10n.markIncomplete : context.l10n.markComplete,
               onChanged: (value) async {
                 OmiHaptics.light();
-                await provider.updateActionItemState(task, value);
+                final saved = await provider.updateActionItemState(task, value);
+                // The provider puts a rejected change back; tell the reader rather than fail silently.
+                if (!saved && context.mounted) OmiFeedback.error(context, context.l10n.failedToUpdateActionItem);
               },
             ),
             const SizedBox(width: 2),

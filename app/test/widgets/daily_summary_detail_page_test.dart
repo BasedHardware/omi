@@ -272,6 +272,50 @@ void main() {
     expect(find.text('A quiet day'), findsOneWidget);
   });
 
+  testWidgets('swiping sideways turns the day like the arrows (#5057)', (tester) async {
+    DailySummary day(String id, String date, String headline) => DailySummary(
+          id: id,
+          date: date,
+          createdAt: DateTime(2026, 7, 16),
+          headline: headline,
+          overview: 'Overview of $headline',
+          stats: DayStats(totalConversations: 1, totalDurationMinutes: 30),
+        );
+    final days = [
+      day('d3', '2026-07-16', 'A planning day'),
+      day('d2', '2026-07-15', 'A quiet day'),
+      day('d1', '2026-07-14', 'A busy day'),
+    ];
+    await tester.pumpWidget(
+      MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: ThemeData.dark(),
+        home: DailySummaryDetailPage(summaryId: 'd2', summary: days[1], days: days),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 900));
+    final page = find.byKey(const Key('recap_day_swipe'));
+
+    // Right: the day before, where the ‹ arrow points.
+    await tester.fling(page, const Offset(300, 0), 1200);
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(find.text('A busy day'), findsOneWidget);
+
+    // Left twice: back to the middle day, then the newer one.
+    await tester.fling(page, const Offset(-300, 0), 1200);
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(find.text('A quiet day'), findsOneWidget);
+    await tester.fling(page, const Offset(-300, 0), 1200);
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(find.text('A planning day'), findsOneWidget);
+
+    // Nothing is newer than the newest day.
+    await tester.fling(page, const Offset(-300, 0), 1200);
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(find.text('A planning day'), findsOneWidget);
+  });
+
   testWidgets('a recap opened on its own shows no day arrows', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

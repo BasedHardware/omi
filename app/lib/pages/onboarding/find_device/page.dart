@@ -35,11 +35,13 @@ class FindDevicesPage extends StatefulWidget {
 
 class _FindDevicesPageState extends State<FindDevicesPage> {
   OnboardingProvider? _provider;
+  BluetoothAdapterState _bluetooth = BluetoothReadiness.instance.state;
 
   @override
   void initState() {
     super.initState();
     _provider = Provider.of<OnboardingProvider>(context, listen: false);
+    BluetoothReadiness.instance.addListener(_onBluetoothChanged);
 
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (widget.isFromOnboarding) {
@@ -49,8 +51,24 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
     });
   }
 
+  /// Bluetooth switched back on: scan again at once, so the reader need not find a button. Switched
+  /// off: stop the scan; the list says Bluetooth is needed instead of showing stale devices.
+  void _onBluetoothChanged() {
+    final next = BluetoothReadiness.instance.state;
+    final wasOn = _bluetooth == BluetoothAdapterState.on;
+    _bluetooth = next;
+    if (!mounted) return;
+    setState(() {});
+    if (next == BluetoothAdapterState.on && !wasOn) {
+      unawaited(_scanAgain());
+    } else if (next == BluetoothAdapterState.off) {
+      _provider?.cancelActiveScan();
+    }
+  }
+
   @override
   dispose() {
+    BluetoothReadiness.instance.removeListener(_onBluetoothChanged);
     _provider?.cancelActiveScan();
     _provider = null;
 

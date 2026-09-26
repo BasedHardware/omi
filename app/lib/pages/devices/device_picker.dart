@@ -10,11 +10,19 @@ import 'package:omi/utils/platform/platform_service.dart';
 const String _kOmiGlass = 'OmiGlass';
 const String _kAppleWatch = 'Apple Watch';
 const String _kRayBanMeta = 'Ray-Ban Meta';
-const String _kOtherRecorders = 'Plaud · Bee · Limitless · Fieldy · Friend';
+
+/// Recorders people already own, one row each, in the order the app supports them.
+const List<(DeviceType, String, String)> _kOtherRecorders = [
+  (DeviceType.plaud, 'PLAUD NotePin', 'add_device_plaud'),
+  (DeviceType.bee, 'Bee', 'add_device_bee'),
+  (DeviceType.limitless, 'Limitless Pendant', 'add_device_limitless'),
+  (DeviceType.fieldy, 'Fieldy', 'add_device_fieldy'),
+  (DeviceType.friendPendant, 'Friend', 'add_device_friend'),
+];
 const String _kOmiBrand = 'Omi';
 
 /// The "What will you wear?" choices (Rev 3 PickDevice): Omi's own devices first, then ones people
-/// already own, then this phone — "no device" is a first-class choice. Every wearable opens the
+/// already own (each supported recorder on its own row), then this phone — "no device" is a first-class choice. Every wearable opens the
 /// same connect flow ([onConnect]), which finds whichever of them is nearby (and walks Apple Watch
 /// and Ray-Ban Meta through their setup). Shared by Add a device and onboarding.
 class DevicePickerGroups extends StatelessWidget {
@@ -68,13 +76,14 @@ class DevicePickerGroups extends StatelessWidget {
               subtitle: l10n.glassesAudio,
               onTap: onConnect,
             ),
-            OmiSettingsRow(
-              key: const Key('add_device_other'),
-              leading: const _Product(DeviceType.plaud),
-              title: _kOtherRecorders,
-              subtitle: l10n.bringRecordingsIntoOmi,
-              onTap: onConnect,
-            ),
+            for (final (type, name, key) in _kOtherRecorders)
+              OmiSettingsRow(
+                key: Key(key),
+                leading: _Product(type),
+                title: name,
+                subtitle: l10n.bringRecordingsIntoOmi,
+                onTap: onConnect,
+              ),
           ],
         ),
         const SizedBox(height: 22),

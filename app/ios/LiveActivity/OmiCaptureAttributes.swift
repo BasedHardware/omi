@@ -17,6 +17,9 @@ struct OmiCaptureAttributes: ActivityAttributes {
         var canFinish: Bool
         var busy: Bool
         var actionFailed: Bool = false
+        /// The ongoing conversation will be starred (Lock Screen Star).
+        var starred: Bool = false
+        var canStar: Bool = false
         /// Voice metering is available for this capture source.
         var metered: Bool
         /// Voice is currently heard; levels are empty otherwise.

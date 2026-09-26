@@ -109,10 +109,27 @@ void main() {
     expect(world.controller.isPaused, false);
   });
 
-  test('star is not a system surface action', () async {
-    expect(presentation.snapshot.containsKey('canStar'), false);
-    await expectLater(sink.action(request('star')), throwsStateError);
+  test('Star (Lock Screen design) marks the ongoing conversation, and again unmarks it', () async {
+    expect(presentation.snapshot['canStar'], true);
+    expect(presentation.snapshot['starred'], false);
+    await sink.action(request('star'));
+    expect(world.controller.isConversationMarkedForStarring, true);
+    expect(presentation.snapshot['starred'], true);
+    await sink.action(request('star'));
     expect(world.controller.isConversationMarkedForStarring, false);
+  });
+
+  test('after Finish the presentation stays closed until capture runs again', () async {
+    await sink.action(request('finish'));
+    await world.settle();
+    expect(presentation.snapshot['active'], false);
+    await expectLater(sink.action(request('pause')), throwsStateError);
+
+    await world.startLiveCapture();
+    world.emitNativeState(PhoneMicCaptureState.running);
+    world.injectAudioFrames(20, sessionId: world.hostApi.lastStartSessionId!);
+    await world.settle();
+    expect(presentation.snapshot['active'], true, reason: 'a new recording shows again');
   });
 
   test('stall recovery is not shown as a user pause and keeps Pause available', () async {

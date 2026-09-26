@@ -203,13 +203,21 @@ class _FolderTabsState extends State<FolderTabs> {
       margin: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          // Scrollable folder tabs
+          // Scrollable folder tabs. Chips that run on under the + fade out instead of stopping in a
+          // hard cut against it.
           Expanded(
-            child: ListView(
-              controller: _scrollController,
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.only(left: 16),
-              children: tabs,
+            child: ShaderMask(
+              blendMode: BlendMode.dstIn,
+              shaderCallback: (rect) => LinearGradient(
+                colors: const [Colors.black, Colors.black, Colors.transparent],
+                stops: [0, rect.width > 28 ? 1 - 28 / rect.width : 0, 1],
+              ).createShader(rect),
+              child: ListView(
+                controller: _scrollController,
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.only(left: 16),
+                children: tabs,
+              ),
             ),
           ),
           // Fixed add button

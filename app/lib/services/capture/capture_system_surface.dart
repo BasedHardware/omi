@@ -33,6 +33,10 @@ class CaptureSystemSurface {
   String? _lastFingerprint;
   bool _closed = false;
   bool _busy = false;
+
+  /// Finish on the Lock Screen or in the island stops capture for good, so the presentation closes
+  /// and stays closed until capture runs again (a resume or a new recording in Omi).
+  bool _closedByFinish = false;
   bool _ready = false;
   CaptureOwned? _listener;
   Timer? _heartbeat;
@@ -72,7 +76,7 @@ class CaptureSystemSurface {
     final id = capture.activeRecordingId;
     final revision = capture.systemSurfaceConversationRevision;
     final state = capture.recordingState;
-    final active = id != null &&
+    var active = id != null &&
         (state == RecordingState.record ||
             state == RecordingState.deviceRecord ||
             state == RecordingState.pause ||
@@ -81,6 +85,13 @@ class CaptureSystemSurface {
     // Only a user pause offers Resume. Connecting and interruptions recover on
     // their own; they freeze the clock but still offer Pause for privacy.
     final userPaused = capture.isPaused || state == RecordingState.pause;
+    if (_closedByFinish) {
+      if (active && !userPaused && state != RecordingState.initialising) {
+        _closedByFinish = false; // capturing again: show it again
+      } else {
+        active = false;
+      }
+    }
     final interrupted = state == RecordingState.interrupted;
     final connecting = state == RecordingState.initialising;
     final paused = userPaused || interrupted || connecting;
@@ -126,8 +137,10 @@ class CaptureSystemSurface {
       'elapsed': _anchor == null ? 0 : (_pausedAt ?? now).difference(_anchor!).inSeconds.clamp(0, 2147483647),
       'paused': paused,
       'canPause': active && !capture.isCallActive,
-      'canFinish': active &&
-          (capture.systemSurfacePhoneCapture || batch || capture.segments.isNotEmpty || capture.photos.isNotEmpty),
+      // Finish always stops: with nothing heard yet there is simply nothing to process.
+      'canFinish': active,
+      'starred': capture.isConversationMarkedForStarring,
+      'canStar': active,
       'busy': _busy,
       'actionFailed': false,
       ..._voice(active && !paused),
@@ -204,6 +217,7 @@ class CaptureSystemSurface {
     final allowed = switch (action) {
       'pause' || 'resume' => current['canPause'],
       'finish' => current['canFinish'],
+      'star' => current['canStar'],
       _ => false,
     };
     if (allowed != true) throw StateError('Action is unavailable for this recording');
@@ -212,6 +226,7 @@ class CaptureSystemSurface {
     try {
       await capture.performSystemSurfaceAction(action as String,
           recordingId: current['recordingId'] as String, conversationRevision: current['conversationRevision'] as int);
+      if (action == 'finish') _closedByFinish = true;
       return snapshot;
     } finally {
       _busy = false;

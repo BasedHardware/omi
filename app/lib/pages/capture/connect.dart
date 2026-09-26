@@ -11,6 +11,7 @@ import 'package:omi/pages/onboarding/find_device/page.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/services/devices/bluetooth_readiness.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -75,57 +76,69 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
           const SizedBox(width: OmiSpacing.xxs),
         ],
       ),
-      body: Consumer<OnboardingProvider>(
-        builder: (context, onboardingProvider, child) {
-          return ListView(
-            children: [
-              const SizedBox(height: 16),
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  if (!onboardingProvider.isConnected)
-                    ScanningRippleWidget(
-                      isScanning: !onboardingProvider.isConnected,
-                      size: MediaQuery.sizeOf(context).height <= 700 ? 280 : 360,
-                    ),
-                  // v2 Pairing: the Omi pendant is drawn (LED lit once connected); another kind of
-                  // device keeps its photo.
-                  if (onboardingProvider.deviceType == null || onboardingProvider.deviceType == DeviceType.omi)
-                    OmiPendant(size: 150, lit: onboardingProvider.isConnected)
-                  else
-                    DeviceAnimationWidget(
-                      isConnected: onboardingProvider.isConnected,
-                      deviceName: onboardingProvider.deviceName,
-                      deviceType: onboardingProvider.deviceType,
-                      animatedBackground: onboardingProvider.isConnected,
-                    ),
-                ],
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.lg),
-                child: ConnectSteps(
-                  found: onboardingProvider.deviceList.isNotEmpty || onboardingProvider.isConnected,
-                  bluetoothAllowed: onboardingProvider.hasBluetoothPermission ||
-                      onboardingProvider.deviceList.isNotEmpty ||
-                      onboardingProvider.isConnected,
-                  connected: onboardingProvider.isConnected,
-                  heard: onboardingProvider.isConnected ? _heardWords(context) : '',
+      body: ListenableBuilder(
+        // Bluetooth switched off or on from Control Center updates the steps at once.
+        listenable: BluetoothReadiness.instance,
+        builder: (context, _) => Consumer<OnboardingProvider>(
+          builder: (context, onboardingProvider, child) {
+            final bluetooth = BluetoothReadiness.instance.state;
+            // Unknown until the first scan asks; a device already found or connected proves it is on.
+            final bluetoothOn = bluetooth == BluetoothAdapterState.on ||
+                (bluetooth == BluetoothAdapterState.unknown &&
+                    (onboardingProvider.deviceList.isNotEmpty || onboardingProvider.isConnected));
+            final connected = onboardingProvider.isConnected;
+            return ListView(
+              children: [
+                const SizedBox(height: 8),
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    if (!connected)
+                      ScanningRippleWidget(
+                        isScanning: bluetoothOn,
+                        size: MediaQuery.sizeOf(context).height <= 700 ? 220 : 280,
+                      ),
+                    // v2 Pairing: the Omi pendant is drawn (LED lit once connected); another kind of
+                    // device keeps its photo.
+                    if (onboardingProvider.deviceType == null || onboardingProvider.deviceType == DeviceType.omi)
+                      OmiPendant(size: 130, lit: connected)
+                    else
+                      DeviceAnimationWidget(
+                        isConnected: connected,
+                        deviceName: onboardingProvider.deviceName,
+                        deviceType: onboardingProvider.deviceType,
+                        animatedBackground: connected,
+                      ),
+                  ],
                 ),
-              ),
-              FindDevicesPage(
-                // Onboarding stays here after pairing (the live test); elsewhere pairing pops back.
-                isFromOnboarding: widget.onDone != null,
-                goNext: () {
-                  Logger.debug('onConnected from FindDevicesPage');
-                  if (widget.onDone != null) return;
-                  // Back to the Home already underneath, not a second Home on top of it.
-                  HomeNavigation.returnHome(context);
-                },
-                includeSkip: false,
-              ),
-            ],
-          );
-        },
+                // The devices found nearby sit right under the device, where the tap to pair is
+                // always on screen (below the steps they fell off the bottom of a tall phone).
+                FindDevicesPage(
+                  // Onboarding stays here after pairing (the live test); elsewhere pairing pops back.
+                  isFromOnboarding: widget.onDone != null,
+                  goNext: () {
+                    Logger.debug('onConnected from FindDevicesPage');
+                    if (widget.onDone != null) return;
+                    // Back to the Home already underneath, not a second Home on top of it.
+                    HomeNavigation.returnHome(context);
+                  },
+                  includeSkip: false,
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.lg, OmiSpacing.md, OmiSpacing.lg),
+                  child: ConnectSteps(
+                    // Each tick follows the live state: switching Bluetooth off clears the first two.
+                    found: connected || (bluetoothOn && onboardingProvider.deviceList.isNotEmpty),
+                    // iOS reports "on" only once Omi may use Bluetooth, so on means allowed and switched on.
+                    bluetoothAllowed: connected || bluetoothOn,
+                    connected: connected,
+                    heard: connected ? _heardWords(context) : '',
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
       bottomNavigationBar: Consumer<OnboardingProvider>(
         builder: (context, onboardingProvider, child) {

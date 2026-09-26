@@ -455,6 +455,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       builder: (context, provider, child) {
         final showCompleted = provider.showCompletedView;
         final categorizedItems = _categorizeItems(provider.actionItems, showCompleted);
+        // All done is not "no tasks": the Completed section still shows what was ticked.
+        final nothingToShow = categorizedItems.values.every((l) => l.isEmpty) &&
+            (showCompleted || !provider.actionItems.any((item) => item.completed));
         final apiPhase = provider.apiViewState.phase;
         final showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
@@ -486,7 +489,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                                 ),
                               ],
                             )
-                          : categorizedItems.values.every((l) => l.isEmpty)
+                          : nothingToShow
                               ? _buildEmptyTasksList()
                               : _buildTasksList(categorizedItems, provider),
                 ),
@@ -494,7 +497,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               // Hide the corner FAB when the empty state already
               // shows its own "Create Task" button — otherwise we
               // render two competing add buttons on top of each other.
-              if (!categorizedItems.values.every((l) => l.isEmpty)) _buildFab(),
+              if (!nothingToShow) _buildFab(),
               // Selection-mode action bar is mounted at the home page's outer
               // Stack so it paints above the BottomNavBar (mirrors the
               // conversations merge bar). Don't mount it here.
@@ -607,6 +610,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   provider: provider,
                 ),
               ),
+          if (!provider.showCompletedView) SliverToBoxAdapter(child: _buildCompletedSection(provider)),
         ],
 
         // Bottom padding so the last row scrolls clear of the nav bar
@@ -615,6 +619,56 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           padding: EdgeInsets.only(bottom: bottomNavBarClearance(context) + OmiSize.primaryButton + OmiSpacing.sm),
         ),
       ],
+    );
+  }
+
+  /// Ticked tasks land here, newest first, so a check shows where the task went. Swipe one to delete
+  /// it, tick it again to reopen it, or ✕ to delete every completed task (asked first). "Show
+  /// completed tasks" (⋯) still lists them all by day.
+  Widget _buildCompletedSection(ActionItemsProvider provider) {
+    DateTime doneAt(ActionItemWithMetadata item) => item.completedAt ?? item.updatedAt ?? item.createdAt ?? DateTime(0);
+    final done = provider.actionItems.where((item) => item.completed).toList()
+      ..sort((a, b) => doneAt(b).compareTo(doneAt(a)));
+    if (done.isEmpty) return const SizedBox.shrink();
+    final shown = done.take(_kRecentlyCompletedShown).toList();
+    return Padding(
+      key: const ValueKey('tasks_completed_section'),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              children: [
+                Padding(
+                  padding: _sectionHeaderLinePadding,
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Text(context.l10n.completed, style: _sectionLabelStyle),
+                    const SizedBox(width: 8),
+                    _SectionCount(done.length),
+                  ]),
+                ),
+                const Spacer(),
+                _SectionHeaderTapTarget(
+                  key: const ValueKey('tasks_completed_clear'),
+                  semanticLabel: context.l10n.tasksClearCompleted,
+                  reach: const EdgeInsets.only(left: 16),
+                  onTap: () => _confirmClearCompleted(provider, done),
+                  child: Icon(Icons.close, size: 14, color: OmiColors.textTertiary),
+                ),
+              ],
+            ),
+          ),
+          TaskSectionCard(
+            children: [
+              for (final item in shown)
+                _buildTaskItem(item, provider, category: categoryForItem(item, true), categoryItems: shown),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
     );
   }
 
@@ -1166,8 +1220,14 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   Future<void> _toggleCompleted(ActionItemsProvider provider, ActionItemWithMetadata item) async {
     OmiHaptics.light();
-    await provider.updateActionItemState(item, !item.completed);
-    if (!item.completed) _onActionItemCompleted();
+    final completing = !item.completed;
+    final saved = await provider.updateActionItemState(item, completing);
+    // A rejected save has already been put back by the provider: say so, and log nothing (#17848).
+    if (!saved) {
+      if (mounted) OmiFeedback.error(context, context.l10n.failedToUpdateActionItem);
+      return;
+    }
+    if (completing) _onActionItemCompleted();
   }
 
   /// Long-press menu: the same shape as memories and conversations, with Select for multi-select
@@ -1433,6 +1493,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 /// and the sliver of space between it and the first task row.
 const EdgeInsets _sectionHeaderLinePadding = EdgeInsets.only(top: 16, bottom: 4);
 
+/// How many recently completed tasks the To do list keeps in view under Completed.
+const int _kRecentlyCompletedShown = 10;
+
 /// A section header's label ("Today", "Overdue").
 /// Canvas Tasks: Title Case at 20/25 semibold ("Overdue" is the danger colour).
 TextStyle get _sectionLabelStyle => OmiType.title3;
@@ -1464,6 +1527,7 @@ class _SectionCount extends StatelessWidget {
 /// nothing in the list moves; the target becomes the header's full 36pt height.
 class _SectionHeaderTapTarget extends StatelessWidget {
   const _SectionHeaderTapTarget({
+    super.key,
     required this.onTap,
     required this.child,
     required this.reach,
