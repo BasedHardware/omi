@@ -325,6 +325,19 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         )
     )
     payload = with_screen_frame_egress_env(payload)
+    # The final-pass shadow is dark by default on the dev finalization worker.
+    # Its deployed-state fixture must carry every explicit runtime binding.
+    payload = re.sub(
+        r'("backend-sync":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "TRANSCRIPTION_SHADOW_ENABLED", "value": "false"},'
+        r'\n        {"name": "TRANSCRIPTION_SHADOW_KILL_SWITCH", "value": "false"},'
+        r'\n        {"name": "TRANSCRIPTION_SHADOW_UID_ALLOWLIST", "value": ""},'
+        r'\n        {"name": "TRANSCRIPTION_SHADOW_PERCENT", "value": "0"},'
+        r'\n        {"name": "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS", "value": "0"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
     payload = re.sub(
         r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
         r'\1,\n' + GOOGLE_OAUTH_SECRETS.rstrip(','),
@@ -1356,6 +1369,10 @@ def test_repo_prod_manifest_rejects_noncanonical_model_order_for_every_surface(t
                     entry['value'] = (
                         'parakeet,modulate-velma-2' if key == 'STT_SERVICE_MODELS' else 'modulate-velma-2,parakeet'
                     )
+                    connect_order = (service.get('env') or {}).get('STT_CONNECT_ORDER_FROM_CONFIG') or {}
+                    # A service that connects in configured order owns its live order.
+                    if key == 'STT_SERVICE_MODELS' and connect_order.get('value') == 'true':
+                        continue
                     changed_scopes.append((f'prod/{platform}/{service_name}', key))
 
     path = tmp_path / 'runtime_env.yaml'
@@ -2863,6 +2880,46 @@ _JEV_PROCESS_CONVERSATION_HOSTS = {
     'cloud_run/backend',
     'cloud_run/backend-sync',
 }
+
+
+def test_transcription_shadow_dev_scope_matches_generated_manifest_and_charts():
+    controls = {
+        'TRANSCRIPTION_SHADOW_ENABLED': 'true',
+        'TRANSCRIPTION_SHADOW_KILL_SWITCH': 'false',
+        'TRANSCRIPTION_SHADOW_UID_ALLOWLIST': 'omi-release-probe',
+        'TRANSCRIPTION_SHADOW_PERCENT': '0',
+        'TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS': '1',
+    }
+    dark = {
+        **controls,
+        'TRANSCRIPTION_SHADOW_ENABLED': 'false',
+        'TRANSCRIPTION_SHADOW_UID_ALLOWLIST': '',
+        'TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS': '0',
+    }
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    dev = validator._get_env_config(manifest, 'dev')
+    overlay = validator._load_yaml(ROOT / 'deploy/runtime_env/dev.overlay.yaml')['overlay']
+
+    for source in (dev, overlay):
+        for scope, expected in (('pusher', controls), ('backend-listen', dark)):
+            env = source['gke'][scope]['env']
+            assert {key: env[key]['value'] for key in controls} == expected
+        sync = source['cloud_run']['services']['backend-sync']['env']
+        assert {key: sync[key]['value'] for key in controls} == dark
+
+    for scope, expected in (('pusher', controls), ('backend-listen', dark)):
+        chart = (
+            ROOT / f'charts/{scope}/dev_omi_backend_listen_values.yaml'
+            if scope == 'backend-listen'
+            else ROOT / 'charts/pusher/dev_omi_pusher_values.yaml'
+        )
+        entries = parse_env_entries(chart.read_text(encoding='utf-8'))
+        assert {key: entries[key].value for key in controls} == expected
+
+    prod = validator._get_env_config(manifest, 'prod')
+    for _, env in _manifest_env_blocks(prod):
+        assert all(key not in env for key in controls)
 
 
 def _manifest_env_blocks(env_config: dict) -> list[tuple[str, dict]]:
