@@ -388,9 +388,20 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     tester_apps: List[Dict[str, Any]] = cast(List[Dict[str, Any]], user_slice.get('tester_apps', []))
 
     user_enabled: Set[str] = set(get_enabled_apps(uid))
-    all_apps: List[Dict[str, Any]] = _records_with_ids(
-        private_data + public_approved_data + public_unapproved_data + tester_apps
+    public_approved_ids = {app.get('id') for app in public_approved_data if app.get('id')}
+    combined_records = (
+        [app for app in private_data if app.get('id') not in public_approved_ids]
+        + public_approved_data
+        + public_unapproved_data
+        + tester_apps
     )
+    seen_ids: Set[str] = set()
+    all_apps: List[Dict[str, Any]] = []
+    for record in _records_with_ids(combined_records):
+        app_id = record['id']
+        if app_id not in seen_ids:
+            seen_ids.add(app_id)
+            all_apps.append(record)
     apps: List[App] = []
 
     app_ids = [app['id'] for app in all_apps]
@@ -481,39 +492,21 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> Dict[s
 
 
 def get_public_unapproved_apps(uid: str) -> List[Dict[str, Any]]:
-    data = get_public_unapproved_apps_db(uid)
-    return data
+    return get_public_unapproved_apps_db(uid)
 
 
 def get_private_apps(uid: str) -> List[Dict[str, Any]]:
-    data = get_private_apps_db(uid)
-    return data
+    return get_private_apps_db(uid)
 
 
 def invalidate_approved_apps_cache() -> None:
-    """
-    Invalidate the approved apps cache across all backend instances.
-
-    This function:
-    1. Invalidates memory cache on local instance
-    2. Invalidates Redis cache
-    3. Publishes invalidation message to all other instances via pub/sub
-    """
-    # Get cache instances
+    """Invalidate the approved apps cache across all backend instances (local memory, Redis, and pub/sub)."""
     memory_cache = get_memory_cache()
     pubsub_manager = get_pubsub_manager()
-
-    # Invalidate both cache key variants (with and without reviews)
-    cache_keys = [f'{PUBLIC_APPROVED_APPS_CACHE_KEY}:reviews={n}' for n in (0, 1)]
-
-    # Clear local memory cache
+    cache_keys = [PUBLIC_APPROVED_APPS_CACHE_KEY, *(f'{PUBLIC_APPROVED_APPS_CACHE_KEY}:reviews={n}' for n in (0, 1))]
     for key in cache_keys:
         memory_cache.delete(key)
-
-    # Clear Redis cache
     delete_generic_cache(PUBLIC_APPROVED_APPS_CACHE_KEY)
-
-    # Notify all other instances to clear their memory cache
     pubsub_manager.publish_invalidation(cache_keys)
 
 
