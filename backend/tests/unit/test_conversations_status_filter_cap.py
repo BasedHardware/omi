@@ -33,9 +33,11 @@ class _FirestoreLikeDB:
     def __init__(self):
         self.last_statuses = None
         self.last_sources = None
+        self.last_include_discarded = None
 
     def get_conversations_without_photos(self, uid, limit, offset, *, statuses=(), **kwargs):
         self.last_statuses = list(statuses)
+        self.last_include_discarded = kwargs.get('include_discarded')
         if len(statuses) > _FIRESTORE_IN_LIMIT:
             raise Exception("'in' filters support a maximum of 30 elements.")
         return []
@@ -77,6 +79,25 @@ def test_list_normal_statuses_reach_db(db):
 
     assert result == []
     assert db.last_statuses == ["processing", "completed"]
+
+
+def test_list_hides_discarded_rows_by_default(db):
+    conv.get_conversations(statuses="processing,completed", sources=None, start_date=None, end_date=None, uid="u1")
+
+    assert db.last_include_discarded is False
+
+
+def test_list_can_explicitly_include_discarded_rows(db):
+    conv.get_conversations(
+        statuses="processing,completed",
+        sources=None,
+        start_date=None,
+        end_date=None,
+        include_discarded=True,
+        uid="u1",
+    )
+
+    assert db.last_include_discarded is True
 
 
 # --- count endpoint ----------------------------------------------------------------------
