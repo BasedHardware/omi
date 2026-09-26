@@ -1285,6 +1285,11 @@ checks:
     triggers: ["plugins/omi-slack-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Slack chat tools must resolve raw channel IDs, mention syntax (<#C...>), and archive URLs, while rejecting malformed/non-string parameters with 400 validation errors instead of uncaught AttributeErrors"
+  - id: dropbox-app-settings-page-encoding-tests
+    command: ["python3", "plugins/omi-dropbox-app/test_settings_page_encoding.py"]
+    triggers: ["plugins/omi-dropbox-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14892: the unauthenticated Dropbox OAuth callback reflected the error/error_description query parameters, the token-exchange failure body and the generic exception text of its 500 handler into HTML, and the settings page interpolated the uid into form actions, hrefs and redirects plus the Dropbox display name, email and stored folder name into text nodes and a value attribute; every boundary must use html.escape(..., quote=True) or quote(..., safe='') so a crafted link cannot inject markup or corrupt the query string"
   - id: notion-page-content-tests
     command: ["python3", "plugins/omi-notion-app/test_main.py"]
     triggers: ["plugins/omi-notion-app/**"]
