@@ -3590,5 +3590,7 @@
     "capturePhoneStorageFull": "Pamięć telefonu pełna",
     "captureStorageAlmostFull": "Pamięć prawie pełna",
     "capturePendantDisconnectedDetail": "Wisiorek utracił połączenie z tym telefonem. Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu. Wszystko nagrane wcześniej jest bezpieczne.",
-    "participantsSummaryUncounted": "{name} i inni"
+    "participantsSummaryUncounted": "{name} i inni",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

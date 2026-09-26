@@ -3555,5 +3555,7 @@
     "capturePhoneStorageFull": "Bộ nhớ điện thoại đầy",
     "captureStorageAlmostFull": "Bộ nhớ gần đầy",
     "capturePendantDisconnectedDetail": "Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.",
-    "participantsSummaryUncounted": "{name} và những người khác"
+    "participantsSummaryUncounted": "{name} và những người khác",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

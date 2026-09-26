@@ -52,6 +52,7 @@ import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/services/capture/capture_composition.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -210,6 +211,7 @@ Future _init() async {
   }
 
   await PhysicalQualification.startupStage('shared_preferences', SharedPreferencesUtil.init);
+  SiriIntegration.instance.installEvents();
 
   // TestFlight remains a distribution/telemetry signal; production-family
   // builds always use the established production backend.
@@ -326,6 +328,9 @@ Future<void> _start() async {
     });
   }
   runApp(const MyApp());
+  unawaited(SiriIntegration.instance.takePendingRoute().then((route) {
+    if (route != null) SiriIntegration.instance.openRoute(route);
+  }));
   if (PhysicalQualification.enabled) unawaited(PhysicalQualification.runtimeEvent('run_app_returned'));
 }
 

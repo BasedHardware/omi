@@ -138,6 +138,22 @@
 		F8D0037DFD95E0FA0591D087 /* PhoneMicSessionConfigurator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD05 /* PhoneMicSessionConfigurator.swift */; };
 		FAD7504969BE8B6F6D8D0BD1 /* devLaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */; };
 		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
+		056C8F8B6E91AEA3B8868E99 /* SiriSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037C2E4049E0EF06EF66231A /* SiriSession.swift */; };
+		1954F61FBABF92ACCFDBFFE4 /* SiriIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = E222EF675661E5A68C84D45B /* SiriIntents.swift */; };
+		1E4FA985AB866DBCBB524FFB /* SiriEntities.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D14DCA5CCF1F3CB05D36D2 /* SiriEntities.swift */; };
+		2A0DF503EBD959F1F386CE33 /* SiriPigeon.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BD5A208177AB3828AC0828 /* SiriPigeon.g.swift */; };
+		431670FD4CC27AE9A43EB1EA /* SiriPigeon.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50BD5A208177AB3828AC0828 /* SiriPigeon.g.swift */; };
+		46952FC3097F824B13B04DB4 /* SiriIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = E222EF675661E5A68C84D45B /* SiriIntents.swift */; };
+		69ED47586D3BAD8E9BD57BC5 /* OmiSceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C6263EDCD49BFDBF52353A6 /* OmiSceneDelegate.swift */; };
+		6F05FE70A6EBD0F070295CEC /* SiriBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04725A34C6451C370260A182 /* SiriBridge.swift */; };
+		89220BD57775CE7DEA3EFCA6 /* SiriEntities.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5D14DCA5CCF1F3CB05D36D2 /* SiriEntities.swift */; };
+		971A83B53D79AF7EE1BF4B95 /* SiriDebugProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = D289F7085D97C1A955A86231 /* SiriDebugProbe.swift */; };
+		98887352D51033DF9C804DCE /* SiriBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04725A34C6451C370260A182 /* SiriBridge.swift */; };
+		B18CDB03AF83DDF556D15E77 /* OmiSceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C6263EDCD49BFDBF52353A6 /* OmiSceneDelegate.swift */; };
+		B4A52A3CDB5EA39D8D74DD31 /* SiriSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B586798536A270D779BECE19 /* SiriSnapshotStore.swift */; };
+		BDAE310219125E12BCD121BA /* SiriSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B586798536A270D779BECE19 /* SiriSnapshotStore.swift */; };
+		D988BCB88D5D696871753297 /* SiriSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 037C2E4049E0EF06EF66231A /* SiriSession.swift */; };
+		F51480F9BEB79F68A8D7E013 /* SiriDebugProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = D289F7085D97C1A955A86231 /* SiriDebugProbe.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -299,6 +315,14 @@
 		EDFF6508A941E8259906DDE2 /* Pods-Runner.debug-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-dev.xcconfig"; sourceTree = "<group>"; };
 		EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; name = devLaunchScreen.storyboard; path = Runner/devLaunchScreen.storyboard; sourceTree = "<group>"; };
 		78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = FlutterGeneratedPluginSwiftPackage; path = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage; sourceTree = "<group>"; };
+		037C2E4049E0EF06EF66231A /* SiriSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriSession.swift; sourceTree = "<group>"; };
+		04725A34C6451C370260A182 /* SiriBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriBridge.swift; sourceTree = "<group>"; };
+		1C6263EDCD49BFDBF52353A6 /* OmiSceneDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OmiSceneDelegate.swift; sourceTree = "<group>"; };
+		50BD5A208177AB3828AC0828 /* SiriPigeon.g.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriPigeon.g.swift; sourceTree = "<group>"; };
+		B586798536A270D779BECE19 /* SiriSnapshotStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriSnapshotStore.swift; sourceTree = "<group>"; };
+		D289F7085D97C1A955A86231 /* SiriDebugProbe.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriDebugProbe.swift; sourceTree = "<group>"; };
+		E222EF675661E5A68C84D45B /* SiriIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriIntents.swift; sourceTree = "<group>"; };
+		F5D14DCA5CCF1F3CB05D36D2 /* SiriEntities.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriEntities.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -392,6 +416,21 @@
 				42BABFCE2F2A81B100E78A3C /* OmiRegionCheck.swift */,
 			);
 			path = PhoneCalls;
+			sourceTree = "<group>";
+		};
+		5C18084533C28B26479F7275 /* SiriIntegration */ = {
+			isa = PBXGroup;
+			children = (
+				50BD5A208177AB3828AC0828 /* SiriPigeon.g.swift */,
+				037C2E4049E0EF06EF66231A /* SiriSession.swift */,
+				F5D14DCA5CCF1F3CB05D36D2 /* SiriEntities.swift */,
+				B586798536A270D779BECE19 /* SiriSnapshotStore.swift */,
+				04725A34C6451C370260A182 /* SiriBridge.swift */,
+				E222EF675661E5A68C84D45B /* SiriIntents.swift */,
+				D289F7085D97C1A955A86231 /* SiriDebugProbe.swift */,
+			);
+			name = SiriIntegration;
+			path = SiriIntegration;
 			sourceTree = "<group>";
 		};
 		68E21E60C4FBF7F520F1D656 /* Pods */ = {
@@ -503,6 +542,8 @@
 				7A3F1C2E9B4D5E6F0A1B2C3D /* FlutterLaunchEngineGuard.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 				6436409C27A31CD800820AF7 /* InfoPlist.strings */,
+				5C18084533C28B26479F7275 /* SiriIntegration */,
+				1C6263EDCD49BFDBF52353A6 /* OmiSceneDelegate.swift */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
@@ -992,6 +1033,14 @@
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				4255287D2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift in Sources */,
 				42B17C7C2F69BC6600BFDA9D /* PigeonCommunicator.g.swift in Sources */,
+				431670FD4CC27AE9A43EB1EA /* SiriPigeon.g.swift in Sources */,
+				D988BCB88D5D696871753297 /* SiriSession.swift in Sources */,
+				89220BD57775CE7DEA3EFCA6 /* SiriEntities.swift in Sources */,
+				BDAE310219125E12BCD121BA /* SiriSnapshotStore.swift in Sources */,
+				6F05FE70A6EBD0F070295CEC /* SiriBridge.swift in Sources */,
+				1954F61FBABF92ACCFDBFFE4 /* SiriIntents.swift in Sources */,
+				F51480F9BEB79F68A8D7E013 /* SiriDebugProbe.swift in Sources */,
+				B18CDB03AF83DDF556D15E77 /* OmiSceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1041,6 +1090,14 @@
 				B07ABDD2736E2C87A59FB5E1 /* GeneratedPluginRegistrant.m in Sources */,
 				5B5A7C09B854EF0BFB2C4D18 /* RecorderHostApiImpl.swift in Sources */,
 				15BE32846414AB444D807D9B /* PigeonCommunicator.g.swift in Sources */,
+				2A0DF503EBD959F1F386CE33 /* SiriPigeon.g.swift in Sources */,
+				056C8F8B6E91AEA3B8868E99 /* SiriSession.swift in Sources */,
+				1E4FA985AB866DBCBB524FFB /* SiriEntities.swift in Sources */,
+				B4A52A3CDB5EA39D8D74DD31 /* SiriSnapshotStore.swift in Sources */,
+				98887352D51033DF9C804DCE /* SiriBridge.swift in Sources */,
+				46952FC3097F824B13B04DB4 /* SiriIntents.swift in Sources */,
+				971A83B53D79AF7EE1BF4B95 /* SiriDebugProbe.swift in Sources */,
+				69ED47586D3BAD8E9BD57BC5 /* OmiSceneDelegate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

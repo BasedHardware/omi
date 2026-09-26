@@ -8,13 +8,19 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/chat/page.dart';
+import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/memories/widgets/memory_edit_sheet.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/ui/feedback/omi_feedback.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -50,9 +56,10 @@ class HomeDeepLink {
   /// The home tab the link belongs to, so the parent (the tab) shows before the child (the page
   /// pushed over it). Null keeps the current tab.
   int? get tabIndex => switch (alias) {
-        'action-items' => 2,
+        'action-items' || 'task' => 2,
         'apps' => 3,
-        'memories' || 'facts' => 0,
+        'memories' || 'facts' || 'memory' => 0,
+        'search' || 'conversations' || 'conversation' => 1,
         _ => null,
       };
 }
@@ -68,6 +75,40 @@ Future<void> openHomeDeepLink(
 }) async {
   final id = link.id;
   switch (link.alias) {
+    case 'conversations':
+      context.read<HomeProvider>().setIndex(1);
+    case 'action-items':
+      context.read<HomeProvider>().setIndex(2);
+    case 'memory':
+      if (id == null) return;
+      final provider = context.read<MemoriesProvider>();
+      var matches = provider.memories.where((memory) => memory.id == id);
+      if (matches.isEmpty) {
+        await provider.loadMemories();
+        matches = provider.memories.where((memory) => memory.id == id);
+      }
+      if (!context.mounted) return;
+      if (matches.isEmpty) {
+        unawaited(routeToPage(context, const MemoriesPage()));
+      } else {
+        unawaited(showMemoryQuickEditSheet(context, matches.first, provider, readOnly: true));
+      }
+    case 'task':
+      if (id == null) return;
+      final provider = context.read<ActionItemsProvider>();
+      var matches = provider.actionItems.where((item) => item.id == id);
+      if (matches.isEmpty) {
+        await provider.fetchActionItems();
+        matches = provider.actionItems.where((item) => item.id == id);
+      }
+      if (!context.mounted) return;
+      if (matches.isNotEmpty) unawaited(showActionItemFormSheet(context, actionItem: matches.first));
+    case 'search':
+      final query = link.query['q']?.trim() ?? '';
+      final home = context.read<HomeProvider>();
+      home.setIndex(1);
+      if (!home.showConvoSearchBar) home.toggleConvoSearchBar();
+      if (query.isNotEmpty) await context.read<ConversationProvider>().searchConversations(query);
     case 'apps':
       if (id == null) return;
       final app = await context.read<AppProvider>().getAppFromId(id);

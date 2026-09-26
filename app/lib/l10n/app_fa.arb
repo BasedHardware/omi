@@ -11115,5 +11115,7 @@
     "capturePhoneStorageFull": "حافظه تلفن پر است",
     "captureStorageAlmostFull": "حافظه تقریباً پر است",
     "capturePendantDisconnectedDetail": "آویز شما اتصالش را با این تلفن از دست داد. وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود. هر آنچه پیش از این ضبط شده محفوظ است.",
-    "participantsSummaryUncounted": "{name} و دیگران"
+    "participantsSummaryUncounted": "{name} و دیگران",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

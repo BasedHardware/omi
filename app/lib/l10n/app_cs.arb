@@ -3555,5 +3555,7 @@
     "capturePhoneStorageFull": "Úložiště telefonu je plné",
     "captureStorageAlmostFull": "Úložiště je téměř plné",
     "capturePendantDisconnectedDetail": "Přívěsek ztratil spojení s tímto telefonem. Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž. Vše nahrané předtím je v bezpečí.",
-    "participantsSummaryUncounted": "{name} a další"
+    "participantsSummaryUncounted": "{name} a další",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

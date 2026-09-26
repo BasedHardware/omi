@@ -11115,5 +11115,7 @@
     "capturePhoneStorageFull": "Меморија телефона је пуна",
     "captureStorageAlmostFull": "Меморија је скоро пуна",
     "capturePendantDisconnectedDetail": "Привезак је изгубио везу са овим телефоном. Omi ће се сам поново повезати кад је привезак укључен и у близини. Све снимљено до сада је безбедно.",
-    "participantsSummaryUncounted": "{name} и други"
+    "participantsSummaryUncounted": "{name} и други",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

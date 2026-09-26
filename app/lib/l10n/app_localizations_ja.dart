@@ -11080,4 +11080,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$nameほか';
   }
+
+  @override
+  String get siriIndexSetting => 'SiriとApple IntelligenceでOmiを使用';
+
+  @override
+  String get siriIndexSettingDescription => 'Siriがこのデバイス上の会話、メモリー、タスクを検索できるようにします。オフにするとAppleの検索から削除されます。';
 }

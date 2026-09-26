@@ -14,6 +14,7 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/auth/clear_user_state.dart';
@@ -72,6 +73,7 @@ class AuthenticationProvider extends BaseProvider {
           'DEBUG AuthProvider: authStateChanges fired - user=${user?.uid}, isAnonymous=${user?.isAnonymous}',
         );
         this.user = user;
+        unawaited(SiriIntegration.instance.accountChanged(user));
         // Only update SharedPreferences if Firebase has a user
         // Don't clear cached credentials - allows fallback for dev builds
         if (user != null) {
@@ -83,7 +85,7 @@ class AuthenticationProvider extends BaseProvider {
         unawaited(AccountCutoverRuntime.instance.bindAuthenticatedOwner(cutoverOwner));
         notifyListeners();
       });
-      _idTokenSubscription = _auth.idTokenChanges().distinct((p, n) => p?.uid == n?.uid).listen((User? user) async {
+      _idTokenSubscription = _auth.idTokenChanges().listen((User? user) async {
         PlatformManager.instance.analytics.bindIdentity(user?.uid);
         AuthService.instance.handleAuthUserChanged(user?.uid);
         if (user == null) {
@@ -107,6 +109,7 @@ class AuthenticationProvider extends BaseProvider {
             Logger.debug('Failed to get token: $e');
           }
         }
+        if (user != null) unawaited(SiriIntegration.instance.refreshSession(user));
         notifyListeners();
       });
       _sessionExpiredSubscription = AuthService.instance.sessionExpiredEvents.listen((event) {
@@ -114,6 +117,7 @@ class AuthenticationProvider extends BaseProvider {
         _sessionExpirationGeneration++;
         user = null;
         authToken = null;
+        unawaited(SiriIntegration.instance.accountChanged(null));
         final rootContext = globalNavigatorKey.currentContext;
         if (rootContext != null && rootContext.mounted) {
           clearAllUserState(rootContext);

@@ -11115,5 +11115,7 @@
     "capturePhoneStorageFull": "ஃபோன் சேமிப்பகம் நிரம்பியது",
     "captureStorageAlmostFull": "சேமிப்பகம் கிட்டத்தட்ட நிரம்பியது",
     "capturePendantDisconnectedDetail": "உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது. பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.",
-    "participantsSummaryUncounted": "{name} மற்றும் மற்றவர்கள்"
+    "participantsSummaryUncounted": "{name} மற்றும் மற்றவர்கள்",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

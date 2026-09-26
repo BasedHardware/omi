@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/action_items/services/action_item_export_service.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/services/integrations/apple_reminders_service.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -414,6 +415,7 @@ class ActionItemsProvider extends ChangeNotifier {
       _pendingDeletionIds.removeWhere((id) => !serverIds.contains(id));
     }
     _hasMore = response.hasMore;
+    unawaited(SiriIntegration.instance.upsertTasks(_actionItems));
 
     if (!_showCompletedView && shouldAutoRevealCompleted(_actionItems)) {
       _showCompletedView = true;
@@ -477,6 +479,7 @@ class ActionItemsProvider extends ChangeNotifier {
       _pushUpdateToAppleReminder(item, completed: newState);
       attempt.complete(ProductOutcome.success);
       if (newState) {
+        unawaited(SiriIntegration.instance.donateUiAction('task', item.id));
         ProductTelemetry.instance.value(
           ProductValue.taskCompleted,
           surface: ProductSurface.tasks,
@@ -656,6 +659,7 @@ class ActionItemsProvider extends ChangeNotifier {
     // Remove immediately to prevent dismissed Dismissible from being rebuilt
     final index = _actionItems.indexWhere((actionItem) => actionItem.id == item.id);
     _actionItems.removeWhere((actionItem) => actionItem.id == item.id);
+    unawaited(SiriIntegration.instance.delete("task", item.id));
     notifyListeners();
 
     try {

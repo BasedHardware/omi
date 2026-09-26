@@ -20522,6 +20522,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{name} + others'**
   String participantsSummaryUncounted(String name);
+
+  /// No description provided for @siriIndexSetting.
+  ///
+  /// In en, this message translates to:
+  /// **'Use Omi with Siri & Apple Intelligence'**
+  String get siriIndexSetting;
+
+  /// No description provided for @siriIndexSettingDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.'**
+  String get siriIndexSettingDescription;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

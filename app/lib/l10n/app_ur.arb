@@ -11115,5 +11115,7 @@
     "capturePhoneStorageFull": "فون اسٹوریج بھر گئی",
     "captureStorageAlmostFull": "اسٹوریج تقریباً بھر گئی",
     "capturePendantDisconnectedDetail": "آپ کے پینڈنٹ کا اس فون سے رابطہ ٹوٹ گیا۔ پینڈنٹ آن اور قریب ہونے پر Omi خود دوبارہ جڑ جائے گا۔ اس سے پہلے ریکارڈ ہونے والی ہر چیز محفوظ ہے۔",
-    "participantsSummaryUncounted": "{name} اور دیگر"
+    "participantsSummaryUncounted": "{name} اور دیگر",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

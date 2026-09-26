@@ -35,7 +35,10 @@ void main() {
       expect(HomeDeepLink.parse('/action-items')!.tabIndex, 2);
       expect(HomeDeepLink.parse('/apps/xyz')!.tabIndex, 3);
       expect(HomeDeepLink.parse('/memories')!.tabIndex, 0);
-      expect(HomeDeepLink.parse('/conversation/abc')!.tabIndex, isNull);
+      expect(HomeDeepLink.parse('/conversation/abc')!.tabIndex, 1);
+      expect(HomeDeepLink.parse('/memory/m-1')!.tabIndex, 0);
+      expect(HomeDeepLink.parse('/task/t-1')!.tabIndex, 2);
+      expect(HomeDeepLink.parse('/search?q=meeting')!.tabIndex, 1);
     });
   });
 

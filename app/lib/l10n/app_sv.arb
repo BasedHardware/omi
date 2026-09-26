@@ -3555,5 +3555,7 @@
     "capturePhoneStorageFull": "Telefonens lagring är full",
     "captureStorageAlmostFull": "Lagringen är nästan full",
     "capturePendantDisconnectedDetail": "Hängsmycket tappade anslutningen till den här telefonen. Omi ansluter igen av sig själv när hängsmycket är på och i närheten. Allt som spelats in innan är säkert.",
-    "participantsSummaryUncounted": "{name} och andra"
+    "participantsSummaryUncounted": "{name} och andra",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

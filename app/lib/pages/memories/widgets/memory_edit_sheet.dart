@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -68,10 +69,12 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
     _originalContent = widget.memory.content.decodeString;
     contentController = TextEditingController(text: _originalContent);
     contentController.selection = TextSelection.fromPosition(TextPosition(offset: contentController.text.length));
+    unawaited(SiriIntegration.instance.setCurrentScreen('/memory/${widget.memory.id}', widget.memory.id));
   }
 
   @override
   void dispose() {
+    unawaited(SiriIntegration.instance.setCurrentScreen('', null));
     contentController.dispose();
     super.dispose();
   }
