@@ -912,6 +912,113 @@ async def test_transcript_delivery_marks_live_transcription_success_only_after_a
 
 
 @pytest.mark.anyio
+async def test_transcript_delivery_survives_a_non_string_started_at_on_a_resumed_conversation(monkeypatch):
+    """A resumed row with a float/None `started_at` must not crash process_loop with an AttributeError."""
+
+    class WebSocket:
+        def __init__(self):
+            self.sent = []
+
+        async def send_json(self, payload):
+            self.sent.append(payload)
+
+    async def cache_get(_conversation_id):
+        return {'transcript_segments': ['existing'], 'started_at': 100.0}
+
+    websocket = WebSocket()
+    processor, delivered, flushed = _transcript_processor_for_delivery(monkeypatch, websocket)
+    processor.cache = SimpleNamespace(get=cache_get)
+
+    await processor.process_loop()
+
+    assert websocket.sent == [[{'id': 'segment-1', 'text': 'Hello'}]]
+    assert delivered == [True]
+    assert flushed == ['conversation-1']
+
+
+@pytest.mark.anyio
+async def test_transcript_delivery_does_not_read_a_boolean_started_at_as_a_1970_offset(monkeypatch):
+    """`bool` is an `int` subclass, so `started_at=True` must not be coerced to a numeric
+    timestamp (1.0s past epoch): it must fail closed to the first_audio_byte_timestamp
+    fallback, same as an unparseable value, instead of shifting segments by ~decades."""
+
+    class WebSocket:
+        def __init__(self):
+            self.sent = []
+
+        async def send_json(self, payload):
+            self.sent.append(payload)
+
+    captured_segments = []
+
+    async def cache_get(_conversation_id):
+        return {'transcript_segments': ['existing'], 'started_at': True}
+
+    async def update(_conversation, segments, _photos, _finished_at, _started_at):
+        captured_segments.extend(segments)
+        return SimpleNamespace(id='conversation-1'), segments, []
+
+    websocket = WebSocket()
+    processor, delivered, flushed = _transcript_processor_for_delivery(monkeypatch, websocket)
+    processor.cache = SimpleNamespace(get=cache_get)
+    processor._update_live_conversation = update
+
+    await processor.process_loop()
+
+    assert captured_segments[0].start == 0.0
+    assert captured_segments[0].end == 0.5
+    assert delivered == [True]
+    assert flushed == ['conversation-1']
+
+
+@pytest.mark.anyio
+async def test_process_loop_dispatches_v2_batches_before_the_first_audio_guard():
+    """Pre-audio segments/photos must reach `_process_v2_batches`, which has its own
+    re-queue and photo-only-drain handling, instead of being silently dropped by the
+    legacy `first_audio_byte_timestamp` guard running first."""
+    calls = []
+
+    async def fake_process_v2_batches(segments, photos, _diarized):
+        calls.append((list(segments), list(photos)))
+
+    call_count = 0
+
+    async def wait(_seconds):
+        nonlocal call_count
+        call_count += 1
+        if call_count >= 2:
+            state.active = False
+        return False
+
+    async def no_op(*_args, **_kwargs):
+        return None
+
+    state = SimpleNamespace(
+        active=True,
+        capture_timeline_v2=True,
+        first_audio_byte_timestamp=None,
+        speaker_map_dirty=False,
+        current_conversation_id='conversation-1',
+    )
+    host = SimpleNamespace(
+        state=state,
+        wait=wait,
+        request=SimpleNamespace(uid='user-1'),
+        speakers=SimpleNamespace(tasks=set(), drain=no_op),
+    )
+    processor = object.__new__(TranscriptProcessor)
+    processor.host = host
+    processor.segment_buffer = deque([{'id': 'segment-1', 'text': 'Hello', 'start': 0.0, 'end': 0.5}])
+    processor.photo_buffer = deque(['photo-1'])
+    processor._process_v2_batches = fake_process_v2_batches
+    processor.flush_speaker_assignments = AsyncMock()
+
+    await asyncio.wait_for(processor.process_loop(), timeout=1.0)
+
+    assert calls == [([{'id': 'segment-1', 'text': 'Hello', 'start': 0.0, 'end': 0.5}], ['photo-1'])]
+
+
+@pytest.mark.anyio
 async def test_transcript_loop_still_flushes_speaker_assignments_when_the_client_socket_is_closed(monkeypatch):
     """A send after close must not kill the loop before its final speaker flush.
 

@@ -348,10 +348,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     // Report resources before starting heavy monitoring
     ResourceMonitor.shared.reportResourcesNow(context: "before_monitoring_start")
 
-    // Resolve the persistent-stream rollout flag while we are on the main actor
-    // (PostHog is MainActor-bound; the capture path is not and reads the cache).
-    ScreenCaptureStreamFeature.resolveAndCache()
-
     // Initialize services
     screenCaptureService = ScreenCaptureService()
 
@@ -553,9 +549,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     isInDelayPeriod = false
     backgroundPollTimer?.invalidate()
     backgroundPollTimer = nil
-    // The persistent stream keeps the OS screen-recording indicator lit; release it
-    // whenever the display is unavailable. Resume rebuilds it on the first tick.
-    ScreenCaptureService.suspendPersistentCaptureStream(reason: "system interruption")
   }
 
   private func resumeCaptureAfterSystemInterruption(reason: String) {
@@ -638,7 +631,6 @@ public class ProactiveAssistantsPlugin: NSObject {
     insightAssistant = nil
     memoryAssistant = nil
     screenCaptureService = nil
-    ScreenCaptureService.suspendPersistentCaptureStream(reason: "monitoring stopped")
 
     isMonitoring = false
     isStartingMonitoring = false  // Reset in case stop was called during startup

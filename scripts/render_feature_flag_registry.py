@@ -304,8 +304,8 @@ def _not_feature_flags(ignore: list[dict[str, Any]]) -> list[str]:
         "",
         "- Flutter `OmiFeatures` hardware capability bits.",
         "- Integration-nudge UserDefaults opt-out (per-user preference, not a remote gate).",
-        "- Local process overrides (`OMI_FORCE_*`, `OMI_PERSISTENT_CAPTURE_STREAM`,",
-        "  and the bucket-pipeline `OMI_FORCE_BUCKET_*` / `OMI_FORCE_DWELL_REFRESH` /",
+        "- Local process overrides (`OMI_FORCE_*` and the bucket-pipeline",
+        "  `OMI_FORCE_BUCKET_*` / `OMI_FORCE_DWELL_REFRESH` /",
         "  `OMI_FORCE_DEPARTURE_EVALUATION` / `OMI_FORCE_FACT_WRITE_POLICY` knobs).",
         "  Most are dev-only controls, but some (e.g. `OMI_FORCE_CLOUD_STT`,",
         "  `OMI_FORCE_NOTCH`) are deliberately honored by shipped builds. Either way",
@@ -315,11 +315,14 @@ def _not_feature_flags(ignore: list[dict[str, Any]]) -> list[str]:
         "The registry `ignore:` block names every other intentional non-flag with its",
         "reason:",
         "",
-        "| Key | Reason |",
-        "| --- | --- |",
+        "| Key | Reason | owner | decision | review_by | notes |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
     for entry in ignore:
-        lines.append(f"| `{entry['key']}` | {entry['reason']} |")
+        lines.append(
+            f"| `{entry['key']}` | {entry['reason']} | {entry.get('owner', '—')} | "
+            f"{entry.get('decision', '—')} | {entry.get('review_by', '—')} | {_md(entry.get('notes', '—'))} |"
+        )
     lines.append("")
     return lines
 
@@ -331,6 +334,31 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
 
     lines = [f"<!-- feature-flag-registry as-of: {as_of.isoformat()} -->", ""]
     lines += _preamble()
+
+    lines += ["## Running experiments", ""]
+    experiments = [
+        entry
+        for entry in flags
+        if entry.get("lifecycle") == "experiment" and entry.get("decision") != "kill"
+    ]
+    if experiments:
+        lines += [
+            "Every running experiment links its preregistration doc. `decision: kill`",
+            "entries are exempt: they are queued for removal, not running.",
+            "",
+            "| key | owner | prereg | review_by |",
+            "| --- | --- | --- | --- |",
+        ]
+        for entry in experiments:
+            prereg = entry.get("prereg")
+            prereg_cell = f"[{_md(prereg)}](../../{prereg})" if prereg else "—"
+            review_by = entry.get("review_by", "—")
+            if entry.get("review_by") and date.fromisoformat(entry["review_by"]) < as_of:
+                review_by += " OVERDUE"
+            lines.append(f"| `{entry['key']}` | {_md(entry['owner'])} | {prereg_cell} | {review_by} |")
+    else:
+        lines.append("(none)")
+    lines.append("")
 
     lines += ["## Overdue for a decision", ""]
     overdue = [
@@ -430,9 +458,10 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
     retired = registry.get("retired", [])
     if retired:
         lines += [
-            "Code was deleted but an external row may still exist; the sync reports",
-            "live leftovers as read-only delete candidates. Never re-read these names",
-            "for admission.",
+            "Code was deleted but an external row may still exist. Names cover PostHog",
+            "keys and shipped local preference keys; the sync reports live PostHog",
+            "leftovers as read-only delete candidates. Never re-read these names for",
+            "admission.",
             "",
             "| Key | Retired | Reason |",
             "| --- | --- | --- |",
