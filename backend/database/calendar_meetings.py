@@ -43,7 +43,11 @@ def create_meeting(uid: str, meeting_data: Dict[str, Any]) -> str:
 
     NOTE: Times should already be in UTC before calling this function.
     """
-    meeting_id = calendar_meeting_doc_id(uid, meeting_data['calendar_source'], meeting_data['calendar_event_id'])
+    calendar_source = meeting_data.get('calendar_source')
+    calendar_event_id = meeting_data.get('calendar_event_id')
+    if not calendar_source or not calendar_event_id:
+        raise ValueError("meeting_data must include 'calendar_source' and 'calendar_event_id'")
+    meeting_id = calendar_meeting_doc_id(uid, calendar_source, calendar_event_id)
     doc_ref = _get_meetings_collection(uid).document(meeting_id)
     transaction = db.transaction()
     _upsert_meeting_transaction(transaction, doc_ref, meeting_data, datetime.now(timezone.utc))
@@ -56,11 +60,13 @@ def update_meeting(uid: str, meeting_id: str, meeting_data: Dict[str, Any]) -> N
 
     NOTE: Times should already be in UTC before calling this function.
     """
+    if not meeting_id:
+        raise ValueError("meeting_id is required")
     # Update synced_at timestamp (always in UTC for consistent querying)
     meeting_data['synced_at'] = datetime.now(timezone.utc)
 
-    # Update document
-    _get_meetings_collection(uid).document(meeting_id).update(meeting_data)
+    # Update document with merge write for resilience
+    _get_meetings_collection(uid).document(meeting_id).set(meeting_data, merge=True)
 
 
 def get_meeting(uid: str, meeting_id: str) -> Optional[Dict[str, Any]]:
@@ -96,6 +102,8 @@ def get_meeting_id_by_calendar_event(uid: str, calendar_event_id: str, calendar_
 
 
 def _to_utc(dt: datetime) -> datetime:
+    if not isinstance(dt, datetime):
+        raise TypeError(f"Expected datetime, got {type(dt).__name__}")
     return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
 
 
@@ -122,6 +130,8 @@ def list_meetings(
 
 def delete_meeting(uid: str, meeting_id: str) -> None:
     """Delete a calendar meeting"""
+    if not meeting_id:
+        raise ValueError("meeting_id is required")
     _get_meetings_collection(uid).document(meeting_id).delete()
 
 
