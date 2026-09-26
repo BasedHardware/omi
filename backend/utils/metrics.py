@@ -140,6 +140,10 @@ OMI_AUDIO_TIMELINE_ELAPSED_VALIDATION_TOTAL = Counter(
     'Mapped capture windows compared with raw VAD speech decisions',
     ['provider', 'outcome'],
 )
+OMI_AUDIO_TIMELINE_ELAPSED_SHADOW_ERRORS_TOTAL = Counter(
+    'omi_audio_timeline_elapsed_shadow_errors_total',
+    'Failures in validation-only Soniox elapsed-axis bookkeeping',
+)
 AUDIO_TIMELINE_SEND_PATHS = (
     'vad_gate_active',
     'vad_gate_passthrough',

@@ -1058,7 +1058,17 @@ uses bounded raw VAD decisions by capture sample, not the provider send map;
 missing/evicted decisions or unmappable candidates count as `unknown`. Speech
 decisions are stored by input chunk; if a chunk contains both speech and silence
 VAD windows, any overlapping candidate counts as `partial` rather than claiming
-speech for the whole chunk. VAD can
+speech for the whole chunk. Buffered VAD windows can straddle input chunks or
+cover only part of one, while the Boolean result is assigned to the whole
+chunk. Thus `on_speech` and `on_silence` can disagree with the exact samples
+of a candidate, even when `partial` is not reported. Also, a positive provider
+interval starting exactly at the latest accepted send's end can receive a
+one-sample tail if its final arrives before the next send; a later send can
+reveal a capture gap and make that same start unplaceable. This boundary
+placement depends on callback order. A shadow calculation failure disables
+validation for that provider epoch and increments
+`omi_audio_timeline_elapsed_shadow_errors_total` once; compact placement and
+accepted sends continue. VAD can
 misclassify speech, so the metric is independent placement evidence rather
 than a substitute for a provider pause/finalize/keepalive timing probe.
 

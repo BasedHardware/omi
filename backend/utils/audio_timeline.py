@@ -6,22 +6,35 @@ and persisted segment offsets are projections of it. Provider timestamps are
 translated through the *actual accepted provider-send spans*, never by
 subtracting a wall-clock delta or extrapolating from the last callback.
 
-Everything in this module is pure: no IO, no clocks, no env. Callers pass
-arrival observations in. ``project(sample)`` is piecewise sample-linear with an
+Timeline projections use caller-supplied arrival observations; the optional
+translator reads its mode and reports bounded shadow failures. ``project(sample)``
+is piecewise sample-linear with an
 arrival-time anchor at the first accepted decoded frame and at each explicitly
 observed inter-arrival hiatus; anchors are never stored as a second playback
 index (stored segment and blob offsets are already projected).
+
+Known shadow-validation limits: an interval beginning exactly at the latest
+accepted send's end may receive a one-sample tail before a later send reveals
+a capture gap, so its placement can depend on callback order. Speech labels
+come from chunk-level approximations of buffered VAD windows; a window that
+straddles chunks or only covers part of a chunk can differ from the label of
+the candidate's exact samples.
 """
 
 from __future__ import annotations
 
+import logging
 import math
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, cast
 
 # Pure span helpers live in the database-layer module (stdlib only) so
 # database/ can share them without importing utils/.
 from database.audio_timeline import COVERAGE_TOLERANCE_SECONDS, chunk_span_bounds
+
+logger = logging.getLogger(__name__)
+_last_shadow_error_log = float('-inf')
 
 # Measured inter-arrival gap beyond which a new anchor is set. This is a jitter
 # guard, not a semantic silence boundary: a client still sending PCM silence
@@ -515,6 +528,7 @@ class ProviderEpochTranslator:
 
         self.soniox_elapsed_mode = soniox_elapsed_axis_mode()
         self._elapsed_send_map = SendMap(provider_sample_rate)
+        self._shadow_elapsed_healthy = True
         self._send_owners: List[Tuple[int, int, Optional[str]]] = []
         self._only_send_owner: Optional[str] = None
         self._send_owner_ambiguous = False
@@ -536,19 +550,8 @@ class ProviderEpochTranslator:
             if length <= 0:
                 continue
             start = self.send_map.last_provider_sample or 0
-            if self.provider_label == 'soniox' and self.soniox_elapsed_mode != 'off':
-                elapsed_start = self._elapsed_send_map.last_provider_sample or 0
-                wall_start = self.timeline.wall_strict(capture_start)
-                if wall_start is not None and self._last_accepted_wall_end is not None:
-                    # Keepalives/finalize send no PCM, but observed Soniox
-                    # token offsets continue along elapsed stream time. A
-                    # withheld interval gets axis space, never a send span.
-                    elapsed = max(0.0, wall_start - self._last_accepted_wall_end)
-                    elapsed_start += round(elapsed * self.provider_sample_rate)
-                self._last_accepted_wall_end = self.timeline.wall_strict(capture_start + length)
-                self._elapsed_send_map.add_accepted(elapsed_start, capture_start, length)
-                if self.soniox_elapsed_mode == 'on':
-                    start = elapsed_start
+            if self.provider_label == 'soniox' and self.soniox_elapsed_mode == 'on':
+                start = self._note_elapsed_span(capture_start, length)
             self.send_map.add_accepted(start, capture_start, length)
             end = start + length
             owner = self._owner_at_send(capture_start, length) if self._owner_at_send is not None else None
@@ -565,6 +568,47 @@ class ProviderEpochTranslator:
             # generations pathologically often. Evicted ownership is unknown.
             if len(self._send_owners) > MAX_SEND_SPANS:
                 self._send_owners.pop(0)
+            # Shadow is validation-only. Its entire path follows the compact
+            # map and owner update, and a broken candidate map stays disabled.
+            if (
+                self.provider_label == 'soniox'
+                and self.soniox_elapsed_mode == 'shadow'
+                and self._shadow_elapsed_healthy
+            ):
+                try:
+                    self._note_elapsed_span(capture_start, length)
+                except Exception as error:
+                    self._shadow_elapsed_error(error)
+
+    def _note_elapsed_span(self, capture_start: int, length: int) -> int:
+        elapsed_start = self._elapsed_send_map.last_provider_sample or 0
+        wall_start = self.timeline.wall_strict(capture_start)
+        if wall_start is not None and self._last_accepted_wall_end is not None:
+            # Keepalives/finalize send no PCM, but observed Soniox token
+            # offsets continue along elapsed stream time. A withheld
+            # interval gets axis space, never a send span.
+            elapsed = max(0.0, wall_start - self._last_accepted_wall_end)
+            elapsed_start += round(elapsed * self.provider_sample_rate)
+        wall_end = self.timeline.wall_strict(capture_start + length)
+        self._elapsed_send_map.add_accepted(elapsed_start, capture_start, length)
+        self._last_accepted_wall_end = wall_end
+        return elapsed_start
+
+    def _shadow_elapsed_error(self, error: Exception) -> None:
+        global _last_shadow_error_log
+        self._shadow_elapsed_healthy = False
+        # At most one metric per epoch and one log per minute per process.
+        # Telemetry itself cannot affect sends.
+        try:
+            from utils.metrics import OMI_AUDIO_TIMELINE_ELAPSED_SHADOW_ERRORS_TOTAL
+
+            OMI_AUDIO_TIMELINE_ELAPSED_SHADOW_ERRORS_TOTAL.inc()
+            now = time.monotonic()
+            if now - _last_shadow_error_log >= 60.0:
+                _last_shadow_error_log = now
+                logger.warning('Soniox elapsed shadow disabled after %s', type(error).__name__)
+        except Exception:
+            pass
 
     def owner_for_provider_sample(self, sample: int) -> Optional[str]:
         for first, end, owner in reversed(self._send_owners):
@@ -617,21 +661,23 @@ class ProviderEpochTranslator:
             rate = self.provider_sample_rate
             first_sample, last_sample = int(start * rate), int(end * rate)
             if self._on_validation is not None:
+                is_shadow = self.provider_label == 'soniox' and self.soniox_elapsed_mode == 'shadow'
                 validation_map = (
                     self._elapsed_send_map
                     if self.provider_label == 'soniox' and self.soniox_elapsed_mode != 'off'
                     else self.send_map if self.provider_label == 'modulate' else None
                 )
-                if validation_map is not None:
-                    candidate = (
-                        validation_map.point_interval(first_sample)
-                        if first_sample == last_sample
-                        else validation_map.map_interval(first_sample, last_sample)
-                    )
+                if validation_map is not None and (not is_shadow or self._shadow_elapsed_healthy):
                     try:
+                        candidate = (
+                            validation_map.point_interval(first_sample)
+                            if first_sample == last_sample
+                            else validation_map.map_interval(first_sample, last_sample)
+                        )
                         self._on_validation(self.provider_label, candidate)
-                    except Exception:
-                        pass
+                    except Exception as error:
+                        if is_shadow:
+                            self._shadow_elapsed_error(error)
             if self._project_times:
                 segment['_provider_send_owner'] = self.owner_for_provider_sample(first_sample)
             interval: Optional[Tuple[int, int]] = None

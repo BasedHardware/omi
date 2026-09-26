@@ -396,6 +396,8 @@ def _processor(monkeypatch, store, *, current: Optional[str], photos_sink=None):
     processor._v2_retry_counts = {}
     processor._v2_legacy_fallback = deque(maxlen=host.limits.max_segment_buffer_size)
     processor._v2_legacy_fallback_ids = set()
+    processor._v2_fallback_retry_until = {}
+    processor._v2_fallback_failures = {}
     processor._v2_retry_until = 0.0
     processor._v2_committed_ids = set()
     processor._v2_photos_committed = False
