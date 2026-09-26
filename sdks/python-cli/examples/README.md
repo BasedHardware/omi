@@ -6,6 +6,8 @@
   omi-cli 指南 (Simplified Chinese agent guide).
 * [`agent_quickstart.zh-TW.md`](agent_quickstart.zh-TW.md) — 給 Agent 的
   omi-cli 指南 (Traditional Chinese agent guide).
+* [`agent_quickstart.es.md`](agent_quickstart.es.md) — guía para agentes de
+  omi-cli en español (Spanish agent guide).
 * [`agent_quickstart.ja.md`](agent_quickstart.ja.md) — エージェントのための
   omi-cli ガイド (Japanese agent guide).
 * [`agent_quickstart.fr.md`](agent_quickstart.fr.md) — guide omi-cli pour les
@@ -32,6 +34,8 @@
 * [`conversations_markdown.pt.md`](conversations_markdown.pt.md) — exportar conversas do Omi para Markdown (Portuguese recipe).
 * [`conversations_csv.md`](conversations_csv.md) — convert a conversation-list
   JSON export to CSV for spreadsheets.
+* [`conversations_csv.es.md`](conversations_csv.es.md) — convertir una
+  exportación de conversaciones a CSV en español.
 * [`conversations_digest.md`](conversations_digest.md) — summarise conversation-list
   exports into a digest: per-day totals, categories and longest sessions.
 * [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
