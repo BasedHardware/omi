@@ -27,6 +27,7 @@ users/{uid}/desktop_daily_usage/{date}__{client_device_id}
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 
+from google.api_core.exceptions import NotFound
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
 from ._client import db
@@ -51,6 +52,17 @@ def upsert_desktop_daily_usage(
     counters: Dict[str, int],
 ) -> None:
     """Atomically merge one device's running daily counters by maximum value."""
+    if (
+        not uid or not isinstance(uid, str) or not uid.strip()
+        or not date or not isinstance(date, str) or not date.strip()
+        or not client_device_id or not isinstance(client_device_id, str) or not client_device_id.strip()
+    ):
+        raise ValueError('uid, date, and client_device_id are required')
+    uid = uid.strip()
+    date = date.strip()
+    client_device_id = client_device_id.strip()
+    counters = counters if isinstance(counters, dict) else {}
+
     user_ref = db.collection('users').document(uid)
     usage_ref = user_ref.collection(DESKTOP_DAILY_USAGE_COLLECTION).document(f'{date}__{client_device_id}')
     transaction = db.transaction()
@@ -69,7 +81,9 @@ def upsert_desktop_daily_usage(
         for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS:
             previous = existing.get(field, 0)
             previous_value = previous if isinstance(previous, int) and not isinstance(previous, bool) else 0
-            payload[field] = max(previous_value, counters[field])
+            incoming = counters.get(field, 0)
+            incoming_value = incoming if isinstance(incoming, int) and not isinstance(incoming, bool) else 0
+            payload[field] = max(previous_value, incoming_value)
         write_transaction.set(usage_ref, payload)
 
     merge_running_totals(transaction)
@@ -80,6 +94,10 @@ def get_desktop_daily_usage(uid: str, date: str) -> Dict[str, int]:
 
     A date with no usage documents returns every counter as zero.
     """
+    if not uid or not isinstance(uid, str) or not uid.strip() or not date or not isinstance(date, str) or not date.strip():
+        return {field: 0 for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS}
+    uid = uid.strip()
+    date = date.strip()
     user_ref = db.collection('users').document(uid)
     query = user_ref.collection(DESKTOP_DAILY_USAGE_COLLECTION).where(filter=FieldFilter('date', '==', date))
     totals = {field: 0 for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS}
@@ -105,10 +123,20 @@ def create_daily_summary(uid: str, summary_data: Dict[str, Any]) -> str:
     Returns:
         The summary ID
     """
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        raise ValueError('uid is required')
+    if not isinstance(summary_data, dict):
+        raise ValueError('summary_data must be a dictionary')
+    summary_id = summary_data.get('id')
+    if not summary_id or not isinstance(summary_id, str) or not summary_id.strip():
+        raise ValueError('summary_data id is required')
+
+    uid = uid.strip()
+    summary_id = summary_id.strip()
     user_ref = db.collection('users').document(uid)
-    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_data['id'])
-    summary_ref.set(summary_data)
-    return summary_data['id']
+    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
+    summary_ref.set(summary_data, merge=True)
+    return summary_id
 
 
 def get_daily_summary(uid: str, summary_id: str) -> Optional[Dict[str, Any]]:
@@ -122,6 +150,10 @@ def get_daily_summary(uid: str, summary_id: str) -> Optional[Dict[str, Any]]:
     Returns:
         Summary data dict or None if not found
     """
+    if not uid or not isinstance(uid, str) or not uid.strip() or not summary_id or not isinstance(summary_id, str) or not summary_id.strip():
+        return None
+    uid = uid.strip()
+    summary_id = summary_id.strip()
     user_ref = db.collection('users').document(uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
     doc = summary_ref.get()
@@ -143,6 +175,10 @@ def get_daily_summary_by_date(uid: str, date: str) -> Optional[Dict[str, Any]]:
     Returns:
         Summary data dict or None if not found
     """
+    if not uid or not isinstance(uid, str) or not uid.strip() or not date or not isinstance(date, str) or not date.strip():
+        return None
+    uid = uid.strip()
+    date = date.strip()
     user_ref = db.collection('users').document(uid)
     query = user_ref.collection(DAILY_SUMMARIES_COLLECTION).where(filter=FieldFilter('date', '==', date)).limit(1)
 
@@ -173,13 +209,19 @@ def get_daily_summaries(
     Returns:
         List of summary data dicts
     """
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return []
+    uid = uid.strip()
+    limit = max(1, min(limit if isinstance(limit, int) else 30, 100))
+    offset = max(0, offset if isinstance(offset, int) else 0)
+
     user_ref = db.collection('users').document(uid)
     query = user_ref.collection(DAILY_SUMMARIES_COLLECTION)
 
     if start_date:
-        query = query.where(filter=FieldFilter('date', '>=', start_date))
+        query = query.where(filter=FieldFilter('date', '>=', start_date.strip()))
     if end_date:
-        query = query.where(filter=FieldFilter('date', '<=', end_date))
+        query = query.where(filter=FieldFilter('date', '<=', end_date.strip()))
 
     query = query.order_by('date', direction=firestore.Query.DESCENDING)
     query = query.limit(limit).offset(offset)
@@ -200,6 +242,13 @@ def update_daily_summary(uid: str, summary_id: str, summary_data: Dict[str, Any]
     contents of the summary the user is looking at instead of spawning a
     duplicate doc for the same date.
     """
+    if not uid or not isinstance(uid, str) or not uid.strip() or not summary_id or not isinstance(summary_id, str) or not summary_id.strip():
+        raise ValueError('uid and summary_id are required')
+    if not isinstance(summary_data, dict):
+        raise ValueError('summary_data must be a dictionary')
+
+    uid = uid.strip()
+    summary_id = summary_id.strip()
     user_ref = db.collection('users').document(uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
     # Force id back to the existing doc id: the generator always allocates a
@@ -220,17 +269,40 @@ def delete_daily_summary(uid: str, summary_id: str) -> bool:
     Returns:
         True if deleted successfully
     """
+    if not uid or not isinstance(uid, str) or not uid.strip() or not summary_id or not isinstance(summary_id, str) or not summary_id.strip():
+        return False
+
+    uid = uid.strip()
+    summary_id = summary_id.strip()
     user_ref = db.collection('users').document(uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
-    summary_ref.delete()
-    redis_db.remove_daily_summary_to_uid(summary_id)
+    try:
+        summary_ref.delete()
+    except NotFound:
+        pass
+    try:
+        redis_db.remove_daily_summary_to_uid(summary_id)
+    except Exception:
+        pass
     return True
 
 
-def set_daily_summary_visibility(uid: str, summary_id: str, visibility: str) -> None:
+def set_daily_summary_visibility(uid: str, summary_id: str, visibility: str) -> bool:
+    if not uid or not isinstance(uid, str) or not uid.strip() or not summary_id or not isinstance(summary_id, str) or not summary_id.strip():
+        raise ValueError('uid and summary_id are required')
+    if not visibility or not isinstance(visibility, str) or not visibility.strip():
+        raise ValueError('visibility is required')
+
+    uid = uid.strip()
+    summary_id = summary_id.strip()
+    visibility = visibility.strip()
     user_ref = db.collection('users').document(uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
-    summary_ref.update({'visibility': visibility})
+    try:
+        summary_ref.update({'visibility': visibility})
+        return True
+    except NotFound:
+        return False
 
 
 def get_summaries_count(uid: str) -> int:
@@ -243,7 +315,12 @@ def get_summaries_count(uid: str) -> int:
     Returns:
         Count of summaries
     """
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return 0
+    uid = uid.strip()
     user_ref = db.collection('users').document(uid)
     count_query = user_ref.collection(DAILY_SUMMARIES_COLLECTION).count()
     result = count_query.get()
+    if not result or not result[0]:
+        return 0
     return int(result[0][0].value or 0)
