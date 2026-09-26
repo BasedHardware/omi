@@ -42,6 +42,29 @@ void main() {
     expect(short, 20);
   });
 
+  testWidgets('works where a layout measures its children first (IntrinsicHeight, fill-remaining)', (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(
+        body: CustomScrollView(slivers: [
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: IntrinsicHeight(child: OmiBalancedText('aaaa bbbb cccc dddd eeee', style: style)),
+          ),
+        ]),
+      ),
+    ));
+    expect(tester.takeException(), isNull);
+    expect(find.text('aaaa bbbb cccc dddd eeee'), findsOneWidget);
+  });
+
+  testWidgets('text cut short at maxLines keeps the full width (never narrowed into more cutting)', (tester) async {
+    await pumpIn(
+        tester,
+        const OmiBalancedText('aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj kkkk llll',
+            style: style, maxLines: 2));
+    expect(tester.getSize(find.byType(Text)).width, 200);
+  });
+
   testWidgets('minLines holds that many lines', (tester) async {
     await pumpIn(tester, const OmiBalancedText('Ready', style: style, minLines: 2));
     expect(tester.getSize(find.byType(OmiBalancedText)).height, 20);

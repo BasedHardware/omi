@@ -125,7 +125,7 @@ class _ConsentRow extends StatelessWidget {
                 children: [
                   Text(title, style: OmiType.headline),
                   const SizedBox(height: 2),
-                  Text(body, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                  OmiBalancedText(body, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
                 ],
               ),
             ),

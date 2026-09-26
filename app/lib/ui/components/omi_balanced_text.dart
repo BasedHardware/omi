@@ -1,3 +1,4 @@
+import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
 /// Short UI copy that wraps into even lines instead of leaving one word alone on the last line
@@ -7,8 +8,8 @@ import 'package:flutter/widgets.dart';
 /// A card whose copy changes with state keeps its height when [reserveFor] names the other copy it
 /// can show ("Start with this phone, or connect a device…" and "Pendant · Ready"): the text holds
 /// the height of the tallest of them at this width and text size, so nothing below it moves.
-/// [minLines] holds at least that many lines. For titles, card subtitles and empty states — not for
-/// long prose or user text.
+/// [minLines] holds at least that many lines. For titles, card subtitles, empty states and sheet
+/// descriptions — not for user content.
 class OmiBalancedText extends StatelessWidget {
   const OmiBalancedText(
     this.data, {
@@ -29,63 +30,137 @@ class OmiBalancedText extends StatelessWidget {
   final List<String> reserveFor;
   final TextOverflow? overflow;
 
-  /// The narrowest width, at most [maxWidth], at which [painter]'s text still takes the lines it
-  /// takes at [maxWidth]: the lines come out even. Returns [maxWidth] for one line or a clipped text.
-  static double balancedWidth(TextPainter painter, double maxWidth) {
-    painter.layout(maxWidth: maxWidth);
-    final lines = painter.computeLineMetrics().length;
-    if (!maxWidth.isFinite || lines < 2 || painter.didExceedMaxLines) return maxWidth;
+  @override
+  Widget build(BuildContext context) {
+    final centered = textAlign == TextAlign.center;
+    Widget text = _BalancedWidth(
+      alignment: centered ? Alignment.topCenter : AlignmentDirectional.topStart,
+      balance: !data.contains('\n'),
+      maxLines: maxLines,
+      child: Text(data, style: style, textAlign: textAlign, maxLines: maxLines, overflow: overflow),
+    );
+    final reserved = [
+      if (minLines > 1) '\n' * (minLines - 1),
+      for (final other in reserveFor)
+        if (other != data) other,
+    ];
+    if (reserved.isEmpty) return text;
+    // The other copy is laid out unseen (no paint, no semantics) so the box is as tall as the
+    // tallest of them.
+    return Stack(
+      alignment: centered ? Alignment.topCenter : AlignmentDirectional.topStart,
+      children: [
+        for (final other in reserved)
+          Visibility(
+            visible: false,
+            maintainSize: true,
+            maintainAnimation: true,
+            maintainState: true,
+            child: Text(other, style: style, textAlign: textAlign, maxLines: maxLines, overflow: overflow),
+          ),
+        text,
+      ],
+    );
+  }
+}
+
+/// Lays its text child out at the narrowest width that keeps the lines it takes at the full width.
+class _BalancedWidth extends SingleChildRenderObjectWidget {
+  const _BalancedWidth({required this.alignment, required this.balance, required this.maxLines, required super.child});
+
+  final AlignmentGeometry alignment;
+  final bool balance;
+  final int? maxLines;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderBalancedWidth(alignment, balance, maxLines, Directionality.of(context));
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderBalancedWidth renderObject) {
+    renderObject
+      ..alignment = alignment
+      ..balance = balance
+      ..maxLines = maxLines
+      ..textDirection = Directionality.of(context);
+  }
+}
+
+class _RenderBalancedWidth extends RenderShiftedBox {
+  _RenderBalancedWidth(this._alignment, this._balance, this._maxLines, this._textDirection) : super(null);
+
+  AlignmentGeometry _alignment;
+  set alignment(AlignmentGeometry value) {
+    if (value == _alignment) return;
+    _alignment = value;
+    markNeedsLayout();
+  }
+
+  bool _balance;
+  set balance(bool value) {
+    if (value == _balance) return;
+    _balance = value;
+    markNeedsLayout();
+  }
+
+  int? _maxLines;
+  set maxLines(int? value) {
+    if (value == _maxLines) return;
+    _maxLines = value;
+    markNeedsLayout();
+  }
+
+  TextDirection _textDirection;
+  set textDirection(TextDirection value) {
+    if (value == _textDirection) return;
+    _textDirection = value;
+    markNeedsLayout();
+  }
+
+  /// The narrowest width, at most [maxWidth], at which the child is as tall as at [maxWidth]. Text
+  /// that fits one line, breaks lines itself, or reaches [_maxLines] (it may be cut short) keeps
+  /// the full width.
+  double _balancedWidth(RenderBox child, double maxWidth) {
+    if (!_balance || !maxWidth.isFinite || maxWidth <= 0) return maxWidth;
+    final oneLine = child.getMaxIntrinsicHeight(double.infinity);
+    final full = child.getMaxIntrinsicHeight(maxWidth);
+    if (oneLine <= 0) return maxWidth;
+    final lines = (full / oneLine).round();
+    if (lines < 2) return maxWidth;
+    final cap = _maxLines;
+    if (cap != null && lines >= cap) return maxWidth;
     var fits = maxWidth;
     var tooNarrow = 0.0;
     while (fits - tooNarrow > 1) {
       final width = (fits + tooNarrow) / 2;
-      painter.layout(maxWidth: width);
-      if (painter.computeLineMetrics().length > lines || painter.didExceedMaxLines) {
+      if (child.getMaxIntrinsicHeight(width) > full + 0.5) {
         tooNarrow = width;
       } else {
         fits = width;
       }
     }
-    return fits.ceilToDouble().clamp(0, maxWidth);
+    return fits.ceilToDouble().clamp(0.0, maxWidth);
   }
 
   @override
-  Widget build(BuildContext context) {
-    final resolved = DefaultTextStyle.of(context).style.merge(style);
-    final scaler = MediaQuery.textScalerOf(context);
-    final direction = Directionality.of(context);
-    final locale = Localizations.maybeLocaleOf(context);
-    final centered = textAlign == TextAlign.center;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final painter = TextPainter(
-          text: TextSpan(text: data, style: resolved),
-          textDirection: direction,
-          textScaler: scaler,
-          maxLines: maxLines,
-          locale: locale,
-        );
-        final width = balancedWidth(painter, constraints.maxWidth);
-        var reserved = painter.preferredLineHeight * minLines;
-        for (final other in reserveFor) {
-          painter
-            ..text = TextSpan(text: other, style: resolved)
-            ..layout(maxWidth: constraints.maxWidth);
-          if (painter.height > reserved) reserved = painter.height;
-        }
-        painter.dispose();
-        return ConstrainedBox(
-          constraints: BoxConstraints(minHeight: reserved),
-          child: Align(
-            alignment: centered ? Alignment.topCenter : AlignmentDirectional.topStart,
-            heightFactor: 1,
-            child: SizedBox(
-              width: width.isFinite ? width : null,
-              child: Text(data, style: style, textAlign: textAlign, maxLines: maxLines, overflow: overflow),
-            ),
-          ),
-        );
-      },
-    );
+  Size computeDryLayout(BoxConstraints constraints) {
+    final child = this.child;
+    if (child == null) return constraints.smallest;
+    final width = _balancedWidth(child, constraints.maxWidth);
+    return constraints.constrain(child.getDryLayout(constraints.copyWith(minWidth: 0, maxWidth: width)));
+  }
+
+  @override
+  void performLayout() {
+    final child = this.child;
+    if (child == null) {
+      size = constraints.smallest;
+      return;
+    }
+    final width = _balancedWidth(child, constraints.maxWidth);
+    child.layout(constraints.copyWith(minWidth: 0, maxWidth: width), parentUsesSize: true);
+    size = constraints.constrain(child.size);
+    final parentData = child.parentData! as BoxParentData;
+    parentData.offset = _alignment.resolve(_textDirection).alongOffset(size - child.size as Offset);
   }
 }

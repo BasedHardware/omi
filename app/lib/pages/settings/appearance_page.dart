@@ -86,7 +86,8 @@ class _AppearancePageState extends State<AppearancePage> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, 0),
-            child: Text(l10n.appearanceMotionNote, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+            child: OmiBalancedText(l10n.appearanceMotionNote,
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
           ),
         ],
       ),

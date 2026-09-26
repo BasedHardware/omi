@@ -112,9 +112,9 @@ class _AuthComponentState extends State<AuthComponent> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Semantics(header: true, child: Text(l10n.welcomeRememberTitle, style: OmiType.serifDisplay)),
+              Semantics(header: true, child: OmiBalancedText(l10n.welcomeRememberTitle, style: OmiType.serifDisplay)),
               const SizedBox(height: OmiSpacing.sm),
-              Text(
+              OmiBalancedText(
                 l10n.welcomeRememberSubtitle,
                 style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.4),
               ),
