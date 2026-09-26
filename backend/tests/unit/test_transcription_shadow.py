@@ -8,6 +8,25 @@ from models.transcript_segment import TranscriptSegment
 from utils.conversations import transcription_shadow as shadow
 
 
+def test_finalizer_starts_shadow_only_for_enabled_admission(monkeypatch):
+    from utils.conversations import finalizer
+
+    calls = []
+    monkeypatch.setattr(shadow, 'maybe_start_shadow', lambda uid, conversation: calls.append((uid, conversation)))
+    conversation = SimpleNamespace(id='synthetic')
+    monkeypatch.delenv('TRANSCRIPTION_SHADOW_ENABLED', raising=False)
+    finalizer._maybe_start_shadow('synthetic-uid', conversation)
+    assert calls == []
+
+    monkeypatch.setenv('TRANSCRIPTION_SHADOW_ENABLED', 'true')
+    finalizer._maybe_start_shadow('synthetic-uid', conversation)
+    assert calls == [('synthetic-uid', conversation)]
+
+    monkeypatch.setenv('TRANSCRIPTION_SHADOW_KILL_SWITCH', 'true')
+    finalizer._maybe_start_shadow('synthetic-uid', conversation)
+    assert calls == [('synthetic-uid', conversation)]
+
+
 def test_shadow_requires_opt_in_stored_audio_and_budget(monkeypatch):
     conversation = SimpleNamespace(private_cloud_sync_enabled=True, discarded=False, uses_custom_stt=False)
     monkeypatch.setenv('TRANSCRIPTION_SHADOW_ENABLED', 'true')

@@ -7,6 +7,7 @@ fallback.  Callers must first own a durable finalization job lease.
 from __future__ import annotations
 
 import logging
+import os
 from enum import Enum
 
 from database import conversations as conversations_db
@@ -27,7 +28,6 @@ from utils.conversations.process_conversation import (
     process_conversation,
 )
 from utils.conversations import lifecycle as lifecycle_service
-from utils.conversations.transcription_shadow import maybe_start_shadow
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.jit_rollout import JITDecisionStage
 from utils.log_sanitizer import sanitize_pii
@@ -38,6 +38,21 @@ from utils.retrieval.frame_request_authority import resolve_frame_request_author
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
+
+
+def _maybe_start_shadow(uid: str, conversation) -> None:
+    # Keep the optional provider/storage import chain off the canonical
+    # finalizer path, including when this module is loaded by isolated tests.
+    if os.getenv('TRANSCRIPTION_SHADOW_ENABLED', 'false').lower() != 'true':
+        return
+    if os.getenv('TRANSCRIPTION_SHADOW_KILL_SWITCH', 'false').lower() == 'true':
+        return
+    try:
+        from utils.conversations.transcription_shadow import maybe_start_shadow
+
+        maybe_start_shadow(uid, conversation)
+    except Exception as error:
+        logger.warning('event=transcription_shadow outcome=admission_failed exception_type=%s', type(error).__name__)
 
 
 class ConversationFinalizationError(RuntimeError):
@@ -140,7 +155,7 @@ async def finalize_persisted_conversation(
         # Admission only schedules a bounded shadow job. It never awaits audio,
         # STT or metric persistence and cannot alter this processing input.
         if conversation.status != ConversationStatus.completed:
-            maybe_start_shadow(uid, conversation)
+            _maybe_start_shadow(uid, conversation)
         persistence: dict[str, bool] = {'owned': True}
         derived_effects: list = []
         derived_disposition: list[DerivedEffectsDisposition] = [DerivedEffectsDisposition.RUN]
