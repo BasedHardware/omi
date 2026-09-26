@@ -1825,9 +1825,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get openSettings => '설정 열기';
 
   @override
-  String get whatsYourName => '이름이 무엇인가요?';
-
-  @override
   String get speakTranscribeSummarize => '말하기. 변환. 요약.';
 
   @override
@@ -1841,12 +1838,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get termsOfUse => '이용약관';
-
-  @override
-  String get omiYourAiCompanion => 'Omi – 당신의 AI 동반자';
-
-  @override
-  String get captureEveryMoment => '모든 순간을 기록하세요. AI 기반\n요약을 받으세요. 더 이상 메모할 필요가 없습니다.';
 
   @override
   String get appleWatchSetup => 'Apple Watch 설정';
@@ -1889,18 +1880,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String errorStartingRecording(String error) {
     return '녹음 시작 오류: $error';
   }
-
-  @override
-  String get selectPrimaryLanguage => '기본 언어 선택';
-
-  @override
-  String get languageBenefits => '더 정확한 변환과 맞춤형 경험을 위해 언어를 설정하세요';
-
-  @override
-  String get whatsYourPrimaryLanguage => '기본 언어가 무엇인가요?';
-
-  @override
-  String get selectYourLanguage => '언어를 선택하세요';
 
   @override
   String get personalGrowthJourney => '모든 말을 듣는 AI와 함께하는 개인 성장 여정.';
@@ -3317,9 +3296,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get dataProtection => '데이터 보호';
-
-  @override
-  String get yourDataIsProtected => '귀하의 데이터는 보호되며 ';
 
   @override
   String get pleaseSelectYourPrimaryLanguage => '기본 언어를 선택하세요';
@@ -4960,10 +4936,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => '추가 음성 샘플이 삭제되었습니다';
-
-  @override
-  String get consentDataMessage =>
-      '계속하면 대화, 녹음 및 개인 정보가 서버에 안전하게 저장됩니다. 오디오 녹음 및 텍스트 변환은 제3자 AI 서비스(전사를 위한 Deepgram 및 분석을 위한 OpenAI 포함)에 의해 처리되어 AI 기반 인사이트를 제공하고 모든 앱 기능을 활성화합니다.';
 
   @override
   String get tasksEmptyStateMessage => '대화에서 생성된 작업이 여기에 표시됩니다.\n수동으로 만들려면 +를 탭하세요.';
@@ -7651,9 +7623,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get authorizingMcpServer => '인증 중…';
 
   @override
-  String get whereDidYouHearAboutOmi => '어떻게 알게 되셨나요?';
-
-  @override
   String get tiktok => 'TikTok';
 
   @override
@@ -9790,9 +9759,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcriptionNoAudio => '전사가 오디오를 받지 못하고 있습니다';
 
   @override
-  String get tapPlusToStartRecording => '녹음 버튼을 눌러 녹음 시작';
-
-  @override
   String get chatBlockTask => '작업';
 
   @override
@@ -10504,9 +10470,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceConnecting => '연결 중…';
 
   @override
-  String get recordOptionsTip => '팁: 녹음 버튼의 화살표를 누르면 전화 통화를 녹음할 수 있습니다.';
-
-  @override
   String get firmwareUpdateFailedTitle => '업데이트 실패';
 
   @override
@@ -11042,14 +11005,466 @@ class AppLocalizationsKo extends AppLocalizations {
   String get keepUsingPendant => '펜던트 계속 사용';
 
   @override
-  String get recordWith => '녹음 방법';
-
-  @override
-  String get moreWaysToRecord => '다른 녹음 방법';
-
-  @override
   String get openCall => '통화 열기';
 
   @override
   String get captureRecoveryBanner => '펜던트 오디오가 앱에 도달하지 않습니다 — 탭하여 복구';
+
+  @override
+  String get goodMorning => '좋은 아침이에요';
+
+  @override
+  String get goodAfternoon => '좋은 오후예요';
+
+  @override
+  String get goodEvening => '좋은 저녁이에요';
+
+  @override
+  String get alreadyHaveAccount => '이미 계정이 있나요?';
+
+  @override
+  String get signInToOmi => 'Omi에 로그인';
+
+  @override
+  String get signInSubtitle => '대화와 메모리는 휴대폰, Mac, 웹 어디서나 계정과 함께합니다.';
+
+  @override
+  String onboardingAllSetName(String name) {
+    return '준비가 끝났어요, $name님.';
+  }
+
+  @override
+  String get completeHomeBody => '하루, 할 일, 요약을 한곳에서.';
+
+  @override
+  String get completeAskTitle => '질문';
+
+  @override
+  String get foundOmiOptionalHint => '선택 사항 — 작은 팀이 무엇이 효과적인지 아는 데 도움이 돼요.';
+
+  @override
+  String get consentTitle => '내 데이터, 쉽게 설명해 드려요';
+
+  @override
+  String get consentSubtitle => 'Omi가 듣기 시작하기 전에, 들은 내용이 정확히 어떻게 처리되는지 알려 드려요.';
+
+  @override
+  String get consentStoredTitle => '저장되는 것';
+
+  @override
+  String get consentStoredBody => '오디오, 전사 기록, Omi가 알게 된 내용은 계정에 안전하게 저장돼요.';
+
+  @override
+  String get consentProcessorsTitle => '처리하는 곳';
+
+  @override
+  String get consentProcessorsBody => '음성은 Deepgram이 전사하고 OpenAI가 분석해 요약, 할 일, 메모리를 작성해요.';
+
+  @override
+  String get consentControlTitle => '내가 관리할 수 있는 것';
+
+  @override
+  String get consentControlBody => '대화, 메모리, 계정 전체를 언제든지 삭제할 수 있어요.';
+
+  @override
+  String get readPrivacyPolicy => '개인정보 처리방침 읽기';
+
+  @override
+  String get whatShouldOmiCallYou => 'Omi가 뭐라고 부르면 될까요?';
+
+  @override
+  String get nameUsageHint => '전사 기록과 내보내기에서 나를 표시하는 데 사용돼요.';
+
+  @override
+  String get yourNamePlaceholder => '이름';
+
+  @override
+  String get whatLanguageDoYouSpeakMost => '가장 많이 쓰는 언어는 무엇인가요?';
+
+  @override
+  String get languageOnboardingSubtitle => '언어를 알면 Omi가 더 정확하게 전사해요. 나중에 더 추가할 수 있어요.';
+
+  @override
+  String get permissionsFewTitle => '몇 가지 권한';
+
+  @override
+  String get permissionsFewSubtitle => 'Omi는 사용하는 권한만 요청해요. 설정에서 언제든지 바꿀 수 있어요.';
+
+  @override
+  String get permissionsContinueNote => '\'계속\'을(를) 눌러도 아무것도 요청하지 않아요. 각 권한은 \'허용\'을(를) 탭할 때만 요청돼요.';
+
+  @override
+  String get howDidYouHearAboutOmi => 'Omi를 어떻게 알게 되셨나요?';
+
+  @override
+  String get showOnLockScreen => '잠금 화면에 표시';
+
+  @override
+  String get seeAll => '모두 보기';
+
+  @override
+  String get upNext => '다음 할 일';
+
+  @override
+  String get allTasks => '모든 할 일';
+
+  @override
+  String get thisWeek => '이번 주';
+
+  @override
+  String capturedDuration(String duration) {
+    return '$duration 기록됨';
+  }
+
+  @override
+  String newMemoriesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '새 기억 $count개',
+      one: '새 기억 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncingFromPendant => '펜던트에서 동기화 중';
+
+  @override
+  String get pendantRecordingsSynced => '펜던트 녹음 동기화 완료';
+
+  @override
+  String recordedOnPendantWhileAway(String duration) {
+    return '휴대폰과 떨어져 있는 동안 펜던트에 약 $duration 녹음됨';
+  }
+
+  @override
+  String dailyRecapOn(String day) {
+    return '일일 요약 · $day';
+  }
+
+  @override
+  String taskDueDayTime(String day, String time) {
+    return '$day $time';
+  }
+
+  @override
+  String fromConversation(String title) {
+    return '$title에서';
+  }
+
+  @override
+  String get endCapture => '종료';
+
+  @override
+  String get toDo => '할 일';
+
+  @override
+  String get devices => '기기';
+
+  @override
+  String get devicesSubtitle => '나를 위해 듣는 모든 것. 한 번에 하나만 녹음해요.';
+
+  @override
+  String get addADevice => '기기 추가';
+
+  @override
+  String get deviceReady => '준비됨';
+
+  @override
+  String get importFromOtherApps => '다른 앱에서 가져오기';
+
+  @override
+  String get whatWillYouWear => '무엇을 착용하시나요?';
+
+  @override
+  String get pickDeviceSubtitle => '나중에 더 추가할 수 있어요. 한 번에 하나만 녹음해요.';
+
+  @override
+  String get alreadyHaveOne => '이미 가지고 있나요?';
+
+  @override
+  String get noDeviceHeader => '기기 없음';
+
+  @override
+  String get omiPendantName => 'Omi 펜던트';
+
+  @override
+  String get allDayConversations => '하루 종일 대화';
+
+  @override
+  String get conversationsAndPhotos => '대화 + 사진';
+
+  @override
+  String get wristMic => '손목 마이크';
+
+  @override
+  String get glassesAudio => '안경 오디오';
+
+  @override
+  String get bringRecordingsIntoOmi => '녹음을 Omi로 가져오기';
+
+  @override
+  String get useThisIphone => '이 iPhone 사용';
+
+  @override
+  String get useThisPhone => '이 휴대폰 사용';
+
+  @override
+  String get startInSeconds => '10초 만에 시작';
+
+  @override
+  String get askAboutThisConversationPlaceholder => '이 대화에 대해 질문하기';
+
+  @override
+  String get summaryStyle => '요약 스타일';
+
+  @override
+  String get summaryStyleSubtitle => '이 요약을 작성할 앱 선택';
+
+  @override
+  String get appearance => '화면 모드';
+
+  @override
+  String get appearanceSystem => '시스템';
+
+  @override
+  String get appearanceLight => '라이트';
+
+  @override
+  String get appearanceDark => '다크';
+
+  @override
+  String get feel => '느낌';
+
+  @override
+  String get haptics => '햅틱';
+
+  @override
+  String get hapticsSubtitle => '끝내거나, 별표를 표시하거나, 완료할 때 가벼운 진동';
+
+  @override
+  String get textSize => '텍스트 크기';
+
+  @override
+  String get textSizeSubtitle => '휴대폰의 텍스트 크기를 따릅니다';
+
+  @override
+  String get appearanceMotionNote => '움직임은 휴대폰 설정의 동작 줄이기를 따릅니다 — 기기 표시등을 포함한 모든 반복 애니메이션이 멈춥니다.';
+
+  @override
+  String get signedInWithApple => 'Apple로 로그인됨';
+
+  @override
+  String get signedInWithGoogle => 'Google로 로그인됨';
+
+  @override
+  String premiumMinutesLeftThisMonth(String left, int limit) {
+    return '이번 달 프리미엄 시간 $left/$limit분 남음';
+  }
+
+  @override
+  String get recordingFrom => '녹음 소스';
+
+  @override
+  String get recordingFromSubtitle => '한 번에 하나의 소스만 녹음합니다. 전환하면 현재 대화가 마무리됩니다.';
+
+  @override
+  String get manageDevices => '기기 관리';
+
+  @override
+  String get notListeningTitle => '듣고 있지 않음';
+
+  @override
+  String get notListeningSubtitle => '이 휴대폰으로 시작하거나, 하루 종일 듣도록 기기를 연결하세요.';
+
+  @override
+  String get startListening => '듣기 시작';
+
+  @override
+  String get searchEverything => '전체 검색';
+
+  @override
+  String searchResultsCount(int count) {
+    return '결과 · $count';
+  }
+
+  @override
+  String get nothingFound => '찾은 항목 없음';
+
+  @override
+  String get searchNothingFoundHint => '다른 단어로 찾아보거나 Omi에게 물어보세요. Omi는 단어만이 아니라 의미를 이해합니다.';
+
+  @override
+  String get askOmiInstead => 'Omi에게 묻기';
+
+  @override
+  String get recentSearches => '최근';
+
+  @override
+  String get searchAskSuggestion => '이번 주에 하기로 약속한 일은?';
+
+  @override
+  String get welcomeRememberTitle => '모든 대화를 기억하세요.';
+
+  @override
+  String get welcomeRememberSubtitle => '원하는 기기를 착용하세요. Omi가 들은 내용을 메모, 할 일, 하루 요약으로 바꿔 줍니다.';
+
+  @override
+  String get memoriesSubtitle => 'Omi가 아는 것과 그 출처';
+
+  @override
+  String get memoryTierLongTerm => '장기';
+
+  @override
+  String get memoryTierShortTerm => '단기';
+
+  @override
+  String get memoriesTierNote => '새 메모리는 단기로 시작합니다. 계속 중요한 것은 Omi가 알아서 장기로 옮깁니다.';
+
+  @override
+  String get askEmptyTitle => '들은 것이라면 무엇이든 물어보세요.';
+
+  @override
+  String get askEmptySubtitle => 'Omi는 대화, 메모리, 할 일을 바탕으로 답합니다.';
+
+  @override
+  String get completeListeningTitle => '듣기';
+
+  @override
+  String get completeListeningBody => '파란색은 착용한 기기나 이 휴대폰으로 Omi가 듣고 있다는 뜻입니다.';
+
+  @override
+  String get completeAskAnyBody => '질문을 탭하면 들은 것에 대해 무엇이든 물어볼 수 있어요.';
+
+  @override
+  String get completeDevicesBody => '웨어러블은 언제든 추가할 수 있어요. 이 휴대폰으로 시작해도 됩니다.';
+
+  @override
+  String get conversationSourceGlasses => '안경';
+
+  @override
+  String get conversationSourceImported => '가져온 항목';
+
+  @override
+  String get conversationSourceEmptyHint => '이 소스에서 아직 녹음된 내용이 없습니다.';
+
+  @override
+  String get findMyPendant => '내 펜던트 찾기';
+
+  @override
+  String get findMyPendantHint => '소리를 내서 찾을 수 있게 합니다';
+
+  @override
+  String get upToDate => '최신 상태';
+
+  @override
+  String get updateAvailable => '업데이트 가능';
+
+  @override
+  String get storageTitle => '저장 공간';
+
+  @override
+  String get connectStepTurnOn => '전원을 켜고 가까이 두세요';
+
+  @override
+  String get connectStepAllowBluetooth => '블루투스 허용';
+
+  @override
+  String get connectStepTest => '테스트로 말해 보세요';
+
+  @override
+  String get connectStepTestHint => '말하면 여기에 단어가 표시됩니다';
+
+  @override
+  String get setUpLater => '나중에 설정';
+
+  @override
+  String recapPreviousDay(String day) {
+    return '이전 날 요약: $day';
+  }
+
+  @override
+  String recapNextDay(String day) {
+    return '다음 날 요약: $day';
+  }
+
+  @override
+  String get askStarterToday => '오늘을 요약해 줘';
+
+  @override
+  String get askStarterPeople => '누구를 만났지?';
+
+  @override
+  String get askStarterOpen => '아직 남은 게 뭐지?';
+
+  @override
+  String get peopleSubtitle => 'Omi가 전사에서 알아볼 수 있는 목소리';
+
+  @override
+  String get usageCurrentPlan => '현재 요금제';
+
+  @override
+  String get appsExplore => '둘러보기';
+
+  @override
+  String get appOutOfFive => '5점 만점';
+
+  @override
+  String get appStatUsers => '사용자';
+
+  @override
+  String homeWelcomeName(String name) {
+    return '환영해요, $name님';
+  }
+
+  @override
+  String get homeWelcome => '환영해요';
+
+  @override
+  String get homeFirstDaySubtitle => 'Omi와 함께하는 첫날';
+
+  @override
+  String get homeListeningHeroTitle => 'Omi가 듣고 있어요';
+
+  @override
+  String get homeListeningHeroBody => '첫 대화는 끝나고 1분 뒤 여기에 나타나요.';
+
+  @override
+  String get homeGettingStarted => '시작하기';
+
+  @override
+  String get gettingStartedConnect => '기기 연결하기';
+
+  @override
+  String get gettingStartedConversation => '대화해 보기';
+
+  @override
+  String get gettingStartedAsk => 'Omi에게 물어보기';
+
+  @override
+  String get homeGoodToKnow => '알아두면 좋아요';
+
+  @override
+  String get tipFinishTitle => '언제든 끝내기';
+
+  @override
+  String get tipFinishBody => '종료를 탭하거나 펜던트를 두 번 누르면 바로 요약이 시작돼요.';
+
+  @override
+  String get tipStarTitle => '중요한 건 별표로';
+
+  @override
+  String get tipStarBody => '별표한 대화는 나중에 쉽게 찾을 수 있어요.';
+
+  @override
+  String get tipPrivateTitle => '기본적으로 비공개';
+
+  @override
+  String get tipPrivateBody => '공유하지 않는 한 대화는 비공개로 유지돼요.';
+
+  @override
+  String homeGettingStartedProgress(int done, int total) {
+    return '$done/$total';
+  }
 }

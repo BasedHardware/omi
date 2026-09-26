@@ -56,7 +56,7 @@ class PendingTranscriptionsBanner extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.cloud_upload_outlined, size: 16, color: OmiColors.textSecondary),
+                Icon(Icons.cloud_upload_outlined, size: 16, color: OmiColors.textSecondary),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -64,7 +64,7 @@ class PendingTranscriptionsBanner extends StatelessWidget {
                     style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
                   ),
                 ),
-                const Icon(Icons.chevron_right, size: 16, color: OmiColors.textTertiary),
+                Icon(Icons.chevron_right, size: 16, color: OmiColors.textTertiary),
               ],
             ),
           ),

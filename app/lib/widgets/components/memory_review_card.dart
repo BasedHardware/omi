@@ -315,7 +315,7 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
       key: Key('memory_review_row_${item.memoryId}'),
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
-      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -370,9 +370,9 @@ class _MemoryReviewCardState extends State<MemoryReviewCard> {
       autofocus: true,
       style: OmiType.subhead,
       cursorColor: OmiColors.accent,
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         isDense: true,
-        contentPadding: EdgeInsets.symmetric(vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(vertical: 8),
         enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: OmiColors.border)),
         focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: OmiColors.accent)),
       ),

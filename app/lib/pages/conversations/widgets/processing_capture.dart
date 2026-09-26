@@ -158,13 +158,25 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     );
   }
 
-  Widget _cardShell(Widget child) => Container(
-        margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        width: double.maxFinite,
-        padding: const EdgeInsets.fromLTRB(18, 14, 12, 16),
-        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)),
-        child: child,
+  /// The live card (Liquid Dock): a 28 pt card with the design's rim and top light.
+  Widget _cardShell(Widget child) => Padding(
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.lg, OmiSpacing.md, OmiSpacing.sm),
+        child: OmiCard(
+          radius: OmiRadius.cardLarge,
+          padding: const EdgeInsets.all(OmiSpacing.md),
+          child: SizedBox(width: double.maxFinite, child: child),
+        ),
       );
+
+  /// Finish: ends and processes this conversation (a phone recording stops first; a pendant keeps
+  /// listening for the next one). Same call as the live page's Finish.
+  Future<void> _finish(CaptureProvider provider) async {
+    final phone = provider.liveCaptureSource == 'phone' || provider.liveCaptureSource == null;
+    // "Finish a conversation": a success notification (the Haptics board).
+    OmiHaptics.success();
+    await provider.finishCapture();
+    if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
+  }
 
   Future<void> _togglePause(CaptureProvider provider) async {
     final phone = provider.liveCaptureSource == 'phone';
@@ -253,6 +265,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         onPauseToggle: !LiveCaptureCard.canPause(provider.recordingDevice, source: liveSource) || isAudioInterrupted
             ? null
             : () => _togglePause(provider),
+        onFinish: () => _finish(provider),
       );
       return Column(
         mainAxisSize: MainAxisSize.min,
@@ -262,7 +275,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           if (provider.isConversationMarkedForStarring) ...[
             const SizedBox(height: OmiSpacing.sm),
             Row(children: [
-              const FaIcon(FontAwesomeIcons.solidStar, size: 12, color: OmiColors.textSecondary),
+              FaIcon(FontAwesomeIcons.solidStar, size: 12, color: OmiColors.textSecondary),
               const SizedBox(width: OmiSpacing.xs),
               Text(context.l10n.starred, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
             ]),
@@ -300,7 +313,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     } else if (elapsed != null) {
       elapsedLabel = '${elapsed ~/ 60}m ${(elapsed % 60).toString().padLeft(2, '0')}s';
     }
-    final dotColor = paused ? Colors.grey.shade600 : OmiColors.danger;
+    // v2: blue only while audio is really being saved; paused is amber.
+    final dotColor = paused ? OmiColors.warning : OmiColors.live;
     return Padding(
       padding: const EdgeInsets.only(left: 8, right: 6),
       child: Column(
@@ -310,7 +324,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(20)),
+                decoration: BoxDecoration(color: OmiColors.surface4, borderRadius: BorderRadius.circular(20)),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -326,7 +340,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                           : muted
                               ? context.l10n.paused
                               : context.l10n.recording,
-                      style: const TextStyle(color: OmiColors.textSecondary, fontSize: 14, fontWeight: FontWeight.w500),
+                      style: TextStyle(color: OmiColors.textSecondary, fontSize: 14, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
@@ -335,11 +349,11 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               if (elapsedLabel != null)
                 Text(
                   elapsedLabel,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: OmiColors.textSecondary,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
-                    fontFeatures: [FontFeature.tabularFigures()],
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
             ],
@@ -351,7 +365,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 : storageFull
                     ? context.l10n.transcribeLaterStorageFull
                     : (muted ? context.l10n.transcribeLaterPaused : context.l10n.transcribeLaterNote),
-            style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.35),
+            style: TextStyle(color: OmiColors.textSecondary, fontSize: 13, height: 1.35),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -359,7 +373,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             const SizedBox(height: 8),
             Text(
               context.l10n.pendantStorageAlmostFull,
-              style: TextStyle(color: Colors.orange.shade300, fontSize: 12, height: 1.3),
+              style: TextStyle(color: OmiColors.warning, fontSize: 12, height: 1.3),
             ),
           ],
           // Mute / New recording drive the native writer prefs, which the pendant
@@ -417,7 +431,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     required bool primary,
     required VoidCallback onTap,
   }) {
-    final color = primary ? Colors.white : OmiColors.textSecondary;
+    final color = primary ? OmiColors.textPrimary : OmiColors.textSecondary;
     return Expanded(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -425,7 +439,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: primary ? const Color(0xFF35343B) : const Color(0xFF2A2A2E),
+            color: primary ? OmiColors.surface4 : OmiColors.surface3,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
@@ -476,7 +490,8 @@ class _RecordingStatusIndicatorState extends State<RecordingStatusIndicator> wit
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _opacityAnim,
-      child: const Icon(Icons.fiber_manual_record, color: Colors.red, size: 16.0),
+      // v2: the LED colour means "audio is being captured right now".
+      child: Icon(Icons.fiber_manual_record, color: OmiColors.live, size: 16.0),
     );
   }
 }
@@ -512,7 +527,7 @@ class _PausedStatusIndicatorState extends State<PausedStatusIndicator> with Sing
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _opacityAnim,
-      child: const Icon(Icons.fiber_manual_record, color: Colors.orange, size: 16.0),
+      child: Icon(Icons.fiber_manual_record, color: OmiColors.warning, size: 16.0),
     );
   }
 }
@@ -542,7 +557,7 @@ getPhoneMicRecordingButton(
         margin: const EdgeInsets.only(right: 4),
         width: 24,
         height: 24,
-        decoration: const BoxDecoration(color: Colors.orange, shape: BoxShape.circle),
+        decoration: BoxDecoration(color: OmiColors.warning, shape: BoxShape.circle),
         child: const Center(child: Icon(Icons.pause, color: Colors.white, size: 14)),
       );
     } else if (isPhoneMicPaused) {
@@ -551,8 +566,8 @@ getPhoneMicRecordingButton(
         margin: const EdgeInsets.only(right: 4),
         width: 24,
         height: 24,
-        decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-        child: const Center(child: Icon(Icons.play_arrow, color: OmiColors.onAccent, size: 14)),
+        decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+        child: Center(child: Icon(Icons.play_arrow, color: OmiColors.onAccent, size: 14)),
       );
     } else {
       text = context.l10n.continueRecording;
@@ -571,7 +586,10 @@ getPhoneMicRecordingButton(
         const SizedBox(width: 4),
         Text(
           text,
-          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontWeight: FontWeight.w500),
+          style: Theme.of(context)
+              .textTheme
+              .bodyMedium!
+              .copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w500),
         ),
         const SizedBox(width: 4),
       ],
@@ -735,7 +753,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                     // Processing label
                     Container(
                       decoration: BoxDecoration(
-                        color: const Color(0xFF35343B),
+                        color: OmiColors.surface4,
                         borderRadius: BorderRadius.circular(16),
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -763,7 +781,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                   const SizedBox(height: 12),
                   Text(
                     context.l10n.processingTakingLonger,
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.3),
+                    style: TextStyle(color: OmiColors.textSecondary, fontSize: 13, height: 1.3),
                   ),
                   const SizedBox(height: 10),
                   Align(
@@ -774,7 +792,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                         key: const Key('processing_conversation_retry_button'),
                         onPressed: _retrying ? null : _onRetry,
                         style: TextButton.styleFrom(
-                          foregroundColor: Colors.white,
+                          foregroundColor: OmiColors.textPrimary,
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           minimumSize: const Size(44, 44),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,

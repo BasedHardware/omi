@@ -6,7 +6,6 @@ import 'dart:ui' as ui;
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -214,7 +213,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
     PlatformManager.instance.analytics.wrappedShareButtonClicked(cardName: cardName, cardIndex: cardIndex);
 
     try {
-      HapticFeedback.mediumImpact();
+      OmiHaptics.medium();
 
       // Set the template and trigger rebuild
       setState(() {
@@ -776,7 +775,7 @@ class _Wrapped2025PageState extends State<Wrapped2025Page> {
           itemCount: cards.length,
           onPageChanged: (index) {
             setState(() => _currentPage = index);
-            HapticFeedback.selectionClick();
+            OmiHaptics.selection();
           },
           itemBuilder: (context, index) => cards[index],
         ),
@@ -1324,7 +1323,7 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
     _minutesController.addListener(_onMinutesTick);
     _minutesController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
-        HapticFeedback.mediumImpact();
+        OmiHaptics.medium();
         _lastTickValue = 0;
         _convosController.forward();
       }
@@ -1333,7 +1332,7 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
     _convosController.addListener(_onConvosTick);
     _convosController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
-        HapticFeedback.mediumImpact();
+        OmiHaptics.medium();
         _lastTickValue = 0;
         _daysController.forward();
       }
@@ -1342,7 +1341,7 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
     _daysController.addListener(_onDaysTick);
     _daysController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
-        HapticFeedback.mediumImpact();
+        OmiHaptics.medium();
         Future.delayed(const Duration(milliseconds: 200), () {
           if (mounted) {
             _badgeController.forward();
@@ -1354,7 +1353,7 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
     _badgeController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
         // Stamp sound - heavy impact
-        HapticFeedback.heavyImpact();
+        OmiHaptics.heavy();
         // Start share button animation after badge completes
         Future.delayed(const Duration(milliseconds: 300), () {
           if (mounted) {
@@ -1376,7 +1375,7 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
     final tickInterval = (widget.totalMinutes / 20).ceil().clamp(10, 500);
     if ((current - _lastTickValue).abs() >= tickInterval) {
       _lastTickValue = current;
-      HapticFeedback.selectionClick();
+      OmiHaptics.selection();
     }
   }
 
@@ -1385,7 +1384,7 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
     final tickInterval = (widget.totalConvs / 20).ceil().clamp(5, 100);
     if ((current - _lastTickValue).abs() >= tickInterval) {
       _lastTickValue = current;
-      HapticFeedback.selectionClick();
+      OmiHaptics.selection();
     }
   }
 
@@ -1394,7 +1393,7 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
     final tickInterval = (widget.daysActive / 15).ceil().clamp(3, 30);
     if ((current - _lastTickValue).abs() >= tickInterval) {
       _lastTickValue = current;
-      HapticFeedback.selectionClick();
+      OmiHaptics.selection();
     }
   }
 
@@ -1552,7 +1551,7 @@ class _YearInNumbersAnimatedState extends State<_YearInNumbersAnimated> with Tic
                       child: GestureDetector(
                         key: const ValueKey('wrapped_share_button'),
                         onTap: () {
-                          HapticFeedback.mediumImpact();
+                          OmiHaptics.medium();
                           widget.onShare?.call();
                         },
                         child: Container(
@@ -1654,7 +1653,7 @@ class _AnimatedShareButtonState extends State<_AnimatedShareButton> with SingleT
               alignment: Alignment.centerLeft,
               child: GestureDetector(
                 onTap: () {
-                  HapticFeedback.mediumImpact();
+                  OmiHaptics.medium();
                   widget.onShare?.call();
                 },
                 child: Container(
@@ -1785,7 +1784,7 @@ class _CategoryChartAnimatedState extends State<_CategoryChartAnimated> with Tic
     for (int i = 0; i < _sliceControllers.length - 1; i++) {
       _sliceControllers[i].addStatusListener((status) {
         if (status == AnimationStatus.completed && mounted) {
-          HapticFeedback.selectionClick();
+          OmiHaptics.selection();
           _sliceControllers[i + 1].forward();
         }
       });
@@ -1795,7 +1794,7 @@ class _CategoryChartAnimatedState extends State<_CategoryChartAnimated> with Tic
     if (_sliceControllers.isNotEmpty) {
       _sliceControllers.last.addStatusListener((status) {
         if (status == AnimationStatus.completed && mounted) {
-          HapticFeedback.mediumImpact();
+          OmiHaptics.medium();
           Future.delayed(const Duration(milliseconds: 200), () {
             if (mounted) _trophyController.forward();
           });
@@ -1805,7 +1804,7 @@ class _CategoryChartAnimatedState extends State<_CategoryChartAnimated> with Tic
 
     _trophyController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
-        HapticFeedback.heavyImpact();
+        OmiHaptics.heavy();
       }
     });
 
@@ -2021,7 +2020,7 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
     _totalController.addListener(_onTotalTick);
     _totalController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
-        HapticFeedback.mediumImpact();
+        OmiHaptics.medium();
         _lastTickValue = 0;
         _completedController.forward();
       }
@@ -2030,7 +2029,7 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
     _completedController.addListener(_onCompletedTick);
     _completedController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
-        HapticFeedback.mediumImpact();
+        OmiHaptics.medium();
         Future.delayed(const Duration(milliseconds: 200), () {
           if (mounted) _checkmarkController.forward();
         });
@@ -2039,7 +2038,7 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
 
     _checkmarkController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
-        HapticFeedback.heavyImpact();
+        OmiHaptics.heavy();
         Future.delayed(const Duration(milliseconds: 200), () {
           if (mounted) _chipController.forward();
         });
@@ -2048,7 +2047,7 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
 
     _chipController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
-        HapticFeedback.heavyImpact();
+        OmiHaptics.heavy();
         Future.delayed(const Duration(milliseconds: 200), () {
           if (mounted) _strikethroughController.forward();
         });
@@ -2065,7 +2064,7 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
     final tickInterval = (widget.totalTasks / 15).ceil().clamp(1, 50);
     if ((current - _lastTickValue).abs() >= tickInterval) {
       _lastTickValue = current;
-      HapticFeedback.selectionClick();
+      OmiHaptics.selection();
     }
   }
 
@@ -2074,7 +2073,7 @@ class _ActionsAnimatedState extends State<_ActionsAnimated> with TickerProviderS
     final tickInterval = (widget.completedTasks / 12).ceil().clamp(1, 30);
     if ((current - _lastTickValue).abs() >= tickInterval) {
       _lastTickValue = current;
-      HapticFeedback.selectionClick();
+      OmiHaptics.selection();
     }
   }
 
@@ -2481,7 +2480,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
 
     _introController.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
-        HapticFeedback.mediumImpact();
+        OmiHaptics.medium();
         _startCalendarSequence();
       }
     });
@@ -2542,7 +2541,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
 
     setState(() => _showSummary = true);
     _summaryController.forward();
-    HapticFeedback.mediumImpact();
+    OmiHaptics.medium();
   }
 
   Future<void> _scrollToMonth(int targetMonth) async {
@@ -2568,7 +2567,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
     setState(() {
       _displayedMonth = targetMonth;
     });
-    HapticFeedback.selectionClick();
+    OmiHaptics.selection();
   }
 
   Future<void> _circleDate() async {
@@ -2581,7 +2580,7 @@ class _MemorableDaysAnimatedState extends State<_MemorableDaysAnimated> with Tic
     }
     if (!mounted) return;
     setState(() => _circleScale = 1.0);
-    HapticFeedback.mediumImpact();
+    OmiHaptics.medium();
   }
 
   Future<void> _showDetails() async {
@@ -3076,14 +3075,14 @@ class _TypewriterEndPageAnimatedState extends State<_TypewriterEndPageAnimated> 
     if (!mounted) return;
 
     _mainController.forward();
-    HapticFeedback.mediumImpact();
+    OmiHaptics.medium();
 
     // Stagger item animations
     for (int i = 0; i < _itemControllers.length; i++) {
       await Future.delayed(const Duration(milliseconds: 120));
       if (!mounted) return;
       _itemControllers[i].forward();
-      HapticFeedback.selectionClick();
+      OmiHaptics.selection();
     }
   }
 
@@ -3267,14 +3266,14 @@ class _TopPhrasesAnimatedState extends State<_TopPhrasesAnimated> with TickerPro
     if (!mounted) return;
 
     _mainController.forward();
-    HapticFeedback.mediumImpact();
+    OmiHaptics.medium();
 
     // Stagger phrase animations
     for (int i = 0; i < _phraseControllers.length; i++) {
       await Future.delayed(const Duration(milliseconds: 150));
       if (!mounted) return;
       _phraseControllers[i].forward();
-      HapticFeedback.selectionClick();
+      OmiHaptics.selection();
     }
   }
 
@@ -3462,14 +3461,14 @@ class _MyBuddiesAnimatedState extends State<_MyBuddiesAnimated> with TickerProvi
     if (!mounted) return;
 
     _mainController.forward();
-    HapticFeedback.mediumImpact();
+    OmiHaptics.medium();
 
     // Stagger buddy animations
     for (int i = 0; i < _buddyControllers.length; i++) {
       await Future.delayed(const Duration(milliseconds: 120));
       if (!mounted) return;
       _buddyControllers[i].forward();
-      HapticFeedback.selectionClick();
+      OmiHaptics.selection();
     }
   }
 
@@ -3683,12 +3682,12 @@ class _BigMomentAnimatedState extends State<_BigMomentAnimated> with TickerProvi
     if (!mounted) return;
 
     _mainController.forward();
-    HapticFeedback.mediumImpact();
+    OmiHaptics.medium();
 
     await Future.delayed(const Duration(milliseconds: 400));
     if (!mounted) return;
     _titleController.forward();
-    HapticFeedback.selectionClick();
+    OmiHaptics.selection();
 
     await Future.delayed(const Duration(milliseconds: 300));
     if (!mounted) return;
@@ -3865,7 +3864,7 @@ class _SummaryCollageAnimatedState extends State<_SummaryCollageAnimated> with T
     if (!mounted) return;
 
     _mainController.forward();
-    HapticFeedback.mediumImpact();
+    OmiHaptics.medium();
   }
 
   @override

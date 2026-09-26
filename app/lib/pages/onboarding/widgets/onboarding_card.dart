@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/ui/omi_tokens.dart';
 
-/// The black bottom card every first-run step sits in, pinned to the bottom of the step.
+/// The body of a first-run step (v2): content from the top of the page under the progress bar,
+/// left-aligned by default, and the step's buttons pinned to the bottom.
 ///
-/// [content] scrolls when they do not fit (large text, small phones); [footer] (the step's
-/// buttons) stays visible under them. The card reserves the bottom system inset once, through its
-/// [SafeArea], not twice.
+/// [content] scrolls when it does not fit (large text, small phones); [footer] (the step's
+/// buttons) stays visible under it. The bottom system inset is reserved once, through [SafeArea].
 ///
 /// ```dart
 /// OnboardingStep(card: OnboardingCard(content: [...], footer: [OmiButton(...)]))
@@ -16,9 +16,13 @@ class OnboardingCard extends StatelessWidget {
     super.key,
     required this.content,
     this.footer = const [],
-    this.padding = const EdgeInsets.fromLTRB(OmiSpacing.xxl, OmiSpacing.xxl, OmiSpacing.xxl, OmiSpacing.xs),
-    this.crossAxisAlignment = CrossAxisAlignment.center,
+    this.padding = const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xs),
+    this.crossAxisAlignment = CrossAxisAlignment.start,
   });
+
+  /// v2 insets running text 4pt further than the cards, fields and buttons at the page edge
+  /// (text at 20pt, controls at 16pt). [OnboardingHeader] applies it; wrap other text with it.
+  static const EdgeInsets textInset = EdgeInsets.symmetric(horizontal: OmiSpacing.xxs);
 
   final List<Widget> content;
   final List<Widget> footer;
@@ -27,23 +31,20 @@ class OnboardingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
+    return Padding(
       padding: padding,
-      decoration: const BoxDecoration(
-        color: OmiColors.surface0,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(OmiRadius.xl)),
-      ),
       child: SafeArea(
         top: false,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Flexible(
+            Expanded(
               child: SingleChildScrollView(
-                child:
-                    Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: crossAxisAlignment, children: content),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: crossAxisAlignment,
+                  children: content,
+                ),
               ),
             ),
             ...footer,
@@ -54,8 +55,34 @@ class OnboardingCard extends StatelessWidget {
   }
 }
 
-/// A first-run step: the background shows through above, the [card] sits at the bottom and grows
-/// up to the full height before its content scrolls.
+/// A first-run step's heading (v2): the title in [OmiType.display] and an optional subtitle, inset
+/// by [OnboardingCard.textInset].
+class OnboardingHeader extends StatelessWidget {
+  const OnboardingHeader({super.key, required this.title, this.subtitle});
+
+  final String title;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: OnboardingCard.textInset,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Semantics(header: true, child: Text(title, style: OmiType.display)),
+          if (subtitle != null) ...[
+            const SizedBox(height: OmiSpacing.xs),
+            Text(subtitle!, style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.35)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// A first-run step: the page under the back button and progress bar, filled by [card].
 class OnboardingStep extends StatelessWidget {
   const OnboardingStep({super.key, required this.card});
 
@@ -63,10 +90,10 @@ class OnboardingStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Keep clear of the progress dots and back button drawn over the top of the step.
+    // Keep clear of the progress bar and back button drawn over the top of the step.
     return Padding(
-      padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top + 64),
-      child: Column(mainAxisAlignment: MainAxisAlignment.end, children: [Flexible(child: card)]),
+      padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top + 56),
+      child: card,
     );
   }
 }

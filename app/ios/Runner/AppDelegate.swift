@@ -90,6 +90,8 @@ final class QuickActionsIconPatcher: NSObject {
   private let appleRemindersService = AppleRemindersService()
   private let appleHealthService = AppleHealthService()
   private var phoneMicController: PhoneMicController?
+  // Any keeps the Runner's existing iOS 15 deployment support intact.
+  private var liveActivityManager: Any?
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
 
@@ -120,6 +122,9 @@ final class QuickActionsIconPatcher: NSObject {
       return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }
     GeneratedPluginRegistrant.register(with: self)
+    if #available(iOS 16.1, *) {
+        liveActivityManager = LiveActivityManager(messenger: controller.binaryMessenger)
+    }
     // Read-only admission evidence for the separately signed capture lane.
     // Missing flags stay nil so Dart fails closed before app-owned networking.
     FlutterMethodChannel(name: "omi/physical_qualification", binaryMessenger: controller.binaryMessenger)
@@ -135,6 +140,21 @@ final class QuickActionsIconPatcher: NSObject {
           "firebase_crashlytics_collection": info["FirebaseCrashlyticsCollectionEnabled"] ?? NSNull(),
           "firebase_data_collection": info["FirebaseDataCollectionDefaultEnabled"] ?? NSNull()
         ])
+      }
+    // The v2 haptic vocabulary's notification moments (success, warning, error) and the soft
+    // impact when capture starts. Flutter's HapticFeedback has impacts and selection only.
+    FlutterMethodChannel(name: "omi/haptics", binaryMessenger: controller.binaryMessenger)
+      .setMethodCallHandler { call, result in
+        switch call.method {
+        case "success": UINotificationFeedbackGenerator().notificationOccurred(.success)
+        case "warning": UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        case "error": UINotificationFeedbackGenerator().notificationOccurred(.error)
+        case "soft": UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        default:
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        result(nil)
       }
     QuickActionsIconPatcher.shared.startObserving()
       
@@ -316,6 +336,12 @@ final class QuickActionsIconPatcher: NSObject {
         defaults?.set(args["isConnected"] as? Bool ?? false, forKey: "widget_is_connected")
         defaults?.set(Date(), forKey: "widget_last_updated")
         // NOTE: isMuted is intentionally NOT written here — only updateMuteState controls it
+        if #available(iOS 14.0, *) {
+          WidgetCenter.shared.reloadTimelines(ofKind: "OmiBatteryWidget")
+        }
+      case "updateChargingState":
+        let isCharging = (args["isCharging"] as? Bool) ?? (args["isCharging"] as? NSNumber)?.boolValue ?? false
+        defaults?.set(isCharging, forKey: "widget_is_charging")
         if #available(iOS 14.0, *) {
           WidgetCenter.shared.reloadTimelines(ofKind: "OmiBatteryWidget")
         }

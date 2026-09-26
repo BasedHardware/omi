@@ -6,6 +6,7 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class PowerCycleStep extends StatefulWidget {
   final VoidCallback onComplete;
@@ -125,8 +126,8 @@ class _PowerCycleStepState extends State<PowerCycleStep> {
                   child: Container(
                     width: 36,
                     height: 36,
-                    decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFFEF5350)),
-                    child: const Icon(Icons.close, color: Colors.white, size: 20),
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: OmiColors.danger),
+                    child: Icon(Icons.close, color: OmiColors.textPrimary, size: 20),
                   ),
                 ),
               ],
@@ -143,22 +144,22 @@ class _PowerCycleStepState extends State<PowerCycleStep> {
 
     switch (state) {
       case PowerCycleSubState.waitingForOff:
-        statusColor = const Color(0xFF4CAF50);
+        statusColor = OmiColors.success;
         statusText = context.l10n.deviceOnboardingStatusConnected;
         statusIcon = Icons.bluetooth_connected;
         break;
       case PowerCycleSubState.deviceOff:
-        statusColor = const Color(0xFFEF5350);
+        statusColor = OmiColors.danger;
         statusText = context.l10n.deviceOnboardingStatusTurningOff;
         statusIcon = Icons.power_off;
         break;
       case PowerCycleSubState.waitingForReconnect:
-        statusColor = const Color(0xFFEF5350);
+        statusColor = OmiColors.danger;
         statusText = context.l10n.deviceOnboardingStatusDisconnected;
         statusIcon = Icons.bluetooth_disabled;
         break;
       case PowerCycleSubState.reconnected:
-        statusColor = const Color(0xFF4CAF50);
+        statusColor = OmiColors.success;
         statusText = context.l10n.deviceOnboardingStatusConnectedDone;
         statusIcon = Icons.check_circle;
         break;
@@ -186,17 +187,17 @@ class _PowerCycleStepState extends State<PowerCycleStep> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFA726).withValues(alpha: 0.12),
+        color: OmiColors.warning.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
         children: [
-          const Icon(Icons.info_outline, color: Color(0xFFFFA726), size: 20),
+          Icon(Icons.info_outline, color: OmiColors.warning, size: 20),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               context.l10n.deviceOnboardingHoldButtonHint,
-              style: const TextStyle(color: Color(0xFFFFA726), fontSize: 14),
+              style: TextStyle(color: OmiColors.warning, fontSize: 14),
             ),
           ),
         ],

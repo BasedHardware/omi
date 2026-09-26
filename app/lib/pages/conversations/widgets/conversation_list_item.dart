@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -22,7 +21,6 @@ import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
@@ -49,6 +47,17 @@ String conversationSnippet(ServerConversation conversation, {int maxChars = 160}
   return '${space > maxChars ~/ 2 ? cut.substring(0, space) : cut}…';
 }
 
+/// Where a row sits in its day's card (v2 draws one card per day, rows separated by hairlines).
+enum ConversationRowPosition {
+  only,
+  first,
+  middle,
+  last;
+
+  bool get isFirst => this == only || this == first;
+  bool get isLast => this == only || this == last;
+}
+
 class ConversationListItem extends StatefulWidget {
   final bool isFromOnboarding;
   final DateTime date;
@@ -62,6 +71,9 @@ class ConversationListItem extends StatefulWidget {
   /// (the Home preview), so selection mode can never start without a way to act on it or leave.
   final bool allowSelection;
 
+  /// The row's place in its day card; a lone row is a whole card.
+  final ConversationRowPosition position;
+
   const ConversationListItem({
     super.key,
     required this.conversation,
@@ -70,6 +82,7 @@ class ConversationListItem extends StatefulWidget {
     this.isFromOnboarding = false,
     this.reprocess,
     this.allowSelection = true,
+    this.position = ConversationRowPosition.only,
   });
 
   @override
@@ -143,7 +156,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
             key: const Key('conversation_failed_title_reprocess_button'),
             onPressed: _reprocessing ? null : _onReprocess,
             style: TextButton.styleFrom(
-              foregroundColor: Colors.white,
+              foregroundColor: OmiColors.textPrimary,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               minimumSize: const Size(44, 44),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -163,7 +176,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
       routeToPage(context, const UsagePage(showUpgradeDialog: true));
       return;
     }
-    HapticFeedback.selectionClick();
+    OmiHaptics.selection();
     // The detail page seeds its provider from the supplied conversation
     // after its first frame. Notifying that provider before pushing the
     // route delayed visible navigation and rebuilt listeners behind it.
@@ -245,7 +258,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
 
   /// Long-press: the row's one context menu (hub audit #7). Multi-select is one of its entries.
   Future<void> _showActions(BuildContext context, ConversationProvider provider) async {
-    HapticFeedback.mediumImpact();
+    OmiHaptics.medium();
     final conversation = widget.conversation;
     final action = await showConversationActionsSheet(
       context,
@@ -321,11 +334,11 @@ class _ConversationListItemState extends State<ConversationListItem> {
               if (isSelectionMode) {
                 if (!isEligible) {
                   // Show feedback that this conversation cannot be selected
-                  HapticFeedback.lightImpact();
+                  OmiHaptics.light();
                   OmiFeedback.info(context, context.l10n.conversationCannotBeMerged);
                   return;
                 }
-                HapticFeedback.selectionClick();
+                OmiHaptics.selection();
                 provider.toggleConversationSelection(widget.conversation.id);
                 return;
               }
@@ -336,7 +349,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
               children: [
                 Padding(
                   padding: EdgeInsets.only(
-                    top: 12,
+                    top: widget.position.isFirst ? OmiSpacing.xs : 0,
                     left: widget.isFromOnboarding ? 0 : 16,
                     right: widget.isFromOnboarding ? 0 : 16,
                   ),
@@ -354,7 +367,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                               : (isSelectionMode && !isEligible)
                                   ? OmiColors.surface2
                                   : OmiColors.surface1,
-                          borderRadius: OmiRadius.xlAll,
+                          borderRadius: _cardRadius,
                           border: isSelected
                               ? Border.all(color: OmiColors.accent, width: 2)
                               : (isSelectionMode && !isEligible)
@@ -362,7 +375,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                                   : null,
                         ),
                         child: ClipRRect(
-                          borderRadius: OmiRadius.xlAll,
+                          borderRadius: _cardRadius,
                           child: Dismissible(
                             // Keep the dismissible state stable when the conversation provider
                             // refreshes. A UniqueKey here recreated every row during unrelated
@@ -378,7 +391,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                             ),
                             // One delete path (D5): confirm unless opted out, then Undo.
                             confirmDismiss: (direction) async {
-                              HapticFeedback.mediumImpact();
+                              OmiHaptics.medium();
                               trackConversationAction(
                                   ConversationActionAction.delete, ConversationActionSurface.rowSwipe);
                               return confirmConversationDelete(context);
@@ -388,25 +401,16 @@ class _ConversationListItemState extends State<ConversationListItem> {
                               PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
                               unawaited(deleteConversationsWithUndo(context, [conversation]));
                             },
-                            child: Padding(
-                              padding: PlatformService.isMobile
-                                  ? const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 20)
-                                  : const EdgeInsetsDirectional.all(16),
-                              child: PlatformService.isMobile
-                                  ? _buildMobileLayout(context)
-                                  : Column(
-                                      mainAxisSize: MainAxisSize.max,
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        _getConversationHeader(),
-                                        const SizedBox(height: 16),
-                                        _buildConversationBody(context),
-                                        if (widget.conversation.isFailedTitleRecoverable) ...[
-                                          const SizedBox(height: 10),
-                                          _buildFailedTitleRecovery(context),
-                                        ],
-                                      ],
+                            child: Container(
+                              // v2: hairline between rows of the same day card.
+                              decoration: widget.position.isFirst
+                                  ? null
+                                  : BoxDecoration(
+                                      border: Border(top: BorderSide(color: OmiColors.border, width: 0.5)),
                                     ),
+                              // The app is mobile-only (PlatformService): one layout.
+                              padding: const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 14),
+                              child: _buildMobileLayout(context),
                             ),
                           ),
                         ),
@@ -419,7 +423,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   Positioned.fill(
                     child: Padding(
                       padding: EdgeInsets.only(
-                        top: 12,
+                        top: widget.position.isFirst ? OmiSpacing.xs : 0,
                         left: widget.isFromOnboarding ? 0 : 16,
                         right: widget.isFromOnboarding ? 0 : 16,
                       ),
@@ -434,38 +438,69 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
   }
 
-  static const _metaStyle = TextStyle(color: OmiColors.textTertiary, fontSize: 14);
+  /// Rounded only on the outside of the day card (v2 `card` radius).
+  BorderRadius get _cardRadius => BorderRadius.vertical(
+        top: widget.position.isFirst ? const Radius.circular(OmiRadius.card) : Radius.zero,
+        bottom: widget.position.isLast ? const Radius.circular(OmiRadius.card) : Radius.zero,
+      );
+
+  static TextStyle get _metaStyle => OmiType.footnote.copyWith(color: OmiColors.textTertiary);
 
   /// Time and length, with the New badge beside them (hub audit #16) and the star.
+  /// Length, tasks and capture sources, with the New badge and the star (the time is the row's
+  /// left column in v2).
   Widget _buildMetaRow(BuildContext context) {
     final duration = _getConversationDuration(context);
+    final tasks = widget.conversation.structured.actionItems.length;
+    final photos = widget.conversation.photos.length;
+    final category = widget.conversation.structured.category.trim();
+    Widget part(IconData icon, String text) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ExcludeSemantics(child: Icon(icon, size: 12, color: OmiColors.textTertiary)),
+            const SizedBox(width: 3),
+            Text(text, style: _metaStyle, maxLines: 1),
+          ],
+        );
+    // Rev 3: every row says which device heard it ("Pendant · 14 s"); an event several devices
+    // recorded shows their icons at the end instead.
+    final source = _captureSources.length > 1 ? null : widget.conversation.source?.name;
+    final parts = <Widget>[
+      // The category alone: the source has its own part (getTag names some devices instead).
+      if (category.isNotEmpty && !widget.conversation.discarded)
+        part(Icons.sell_outlined, category[0].toUpperCase() + category.substring(1)),
+      if (source != null) part(CaptureSources.icon(source), CaptureSources.label(context, source)),
+      if (duration.isNotEmpty) part(Icons.schedule_rounded, duration),
+      if (photos > 0) part(Icons.photo_outlined, context.l10n.conversationPhotosCount(photos)),
+      if (tasks > 0) part(Icons.checklist_rounded, context.l10n.tasksCountLabel(tasks)),
+      // One row stands for an event several devices recorded.
+      if (_captureSources.length > 1) CaptureSourceIcons(sources: _captureSources),
+    ];
+    // The parts take the whole width (a Spacer beside them would halve it and wrap early); the New
+    // badge follows the last part and the star sits at the end.
     return Row(
       children: [
-        Text(
-          OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
-          style: _metaStyle,
-          maxLines: 1,
+        Expanded(
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (var i = 0; i < parts.length; i++) ...[
+                if (i > 0) Text('  ·  ', style: _metaStyle),
+                parts[i],
+              ],
+              if (isNew) ...[
+                const SizedBox(width: OmiSpacing.xs),
+                ConversationNewStatusIndicator(text: context.l10n.conversationNewIndicator),
+              ],
+            ],
+          ),
         ),
-        if (duration.isNotEmpty) ...[
-          const Text(' • ', style: _metaStyle),
-          Text(duration, style: _metaStyle, maxLines: 1),
-        ],
-        // One row stands for an event several devices recorded.
-        if (_captureSources.length > 1) ...[
-          const Text(' • ', style: _metaStyle),
-          CaptureSourceIcons(sources: _captureSources),
-        ],
-        if (isNew) ...[
-          const SizedBox(width: OmiSpacing.xs),
-          ConversationNewStatusIndicator(text: context.l10n.conversationNewIndicator),
-        ],
-        const Spacer(),
         if (widget.conversation.starred)
           Padding(
             padding: const EdgeInsets.only(right: 4.0),
             child: Semantics(
               label: context.l10n.starred,
-              child: const FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
+              child: FaIcon(FontAwesomeIcons.solidStar, size: 12, color: OmiColors.warning),
             ),
           ),
       ],
@@ -480,32 +515,48 @@ class _ConversationListItemState extends State<ConversationListItem> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Emoji + Title row
+            // v2: the start time is the row's left column; title, summary and meta on the right.
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (!discarded)
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-                    alignment: Alignment.center,
-                    child: Text(
-                      widget.conversation.structured.getEmoji(),
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500),
-                    ),
+                SizedBox(
+                  width: 52,
+                  child: _TimeColumn(
+                    OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
                   ),
-                if (!discarded) const SizedBox(width: 12),
+                ),
+                const SizedBox(width: OmiSpacing.sm),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        conversationRowTitle(context, widget.conversation),
-                        style: Theme.of(context).textTheme.titleMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              conversationRowTitle(context, widget.conversation),
+                              style: OmiType.headline.copyWith(
+                                color: discarded ? OmiColors.textSecondary : OmiColors.textPrimary,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          ExcludeSemantics(
+                            child: Icon(Icons.chevron_right, size: 18, color: OmiColors.textTertiary),
+                          ),
+                        ],
                       ),
+                      if (!discarded && widget.conversation.structured.overview.trim().isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          OmiPlainText.fromMarkdown(widget.conversation.structured.overview),
+                          style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.3),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                       if (discardedSnippet.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(
@@ -526,9 +577,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Padding(
-                              padding: EdgeInsets.only(top: 2),
-                              child: Icon(Icons.graphic_eq, size: 14, color: Colors.white70),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Icon(Icons.graphic_eq, size: 14, color: OmiColors.textSecondary),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
@@ -572,58 +623,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
       width: double.infinity,
       height: double.infinity,
       alignment: Alignment.center,
-      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: OmiRadius.xlAll),
+      decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: _cardRadius),
       child: const MergingIndicator(),
-    );
-  }
-
-  Widget _buildConversationBody(BuildContext context) {
-    if (widget.conversation.discarded) {
-      return Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (widget.conversation.photos.isNotEmpty) ...[
-                Row(
-                  children: [
-                    Icon(Icons.photo_library, color: Colors.grey.shade400, size: 18),
-                    const SizedBox(width: 12),
-                    Text(
-                      context.l10n.conversationPhotosCount(widget.conversation.photos.length),
-                      style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-              ],
-              Text(
-                conversationSnippet(widget.conversation),
-                style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
-              ),
-            ],
-          ),
-          if (widget.conversation.isLocked) _buildLockedOverlay(),
-        ],
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(conversationRowTitle(context, widget.conversation), style: Theme.of(context).textTheme.titleLarge),
-        if (_searchSnippetText() != null) ...[
-          const SizedBox(height: 10),
-          Text(
-            _searchSnippetText()!,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade400, height: 1.35, fontStyle: FontStyle.italic),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ],
     );
   }
 
@@ -644,84 +645,6 @@ class _ConversationListItemState extends State<ConversationListItem> {
             style: OmiType.callout.copyWith(fontWeight: FontWeight.bold),
           ),
         ),
-      ),
-    );
-  }
-
-  _getConversationHeader() {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4.0, right: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // 🧠 Emoji + Tag
-          Flexible(
-            fit: FlexFit.tight,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!widget.conversation.discarded)
-                  Text(
-                    widget.conversation.structured.getEmoji(),
-                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
-                  ),
-                if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded)
-                  const SizedBox(width: 8),
-                if (widget.conversation.structured.category.isNotEmpty)
-                  Flexible(
-                    child: Container(
-                      decoration:
-                          BoxDecoration(color: widget.conversation.getTagColor(), borderRadius: OmiRadius.lgAll),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(
-                        widget.conversation.getTag(),
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodyMedium!.copyWith(color: widget.conversation.getTagTextColor()),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-
-          const SizedBox(width: 12),
-
-          // 🕒 Timestamp + Duration, New badge beside them, Starred
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
-                  style: _metaStyle,
-                  maxLines: 1,
-                ),
-                if (_getConversationDuration(context).isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 8.0),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-                      child: Text(_getConversationDuration(context), style: OmiType.caption, maxLines: 1),
-                    ),
-                  ),
-                if (isNew) ...[
-                  const SizedBox(width: 8),
-                  ConversationNewStatusIndicator(text: context.l10n.conversationNewIndicator),
-                ],
-                if (widget.conversation.starred)
-                  const Padding(
-                    padding: EdgeInsets.only(left: 8.0),
-                    child: FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
-                  ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -805,12 +728,41 @@ class _MergingIndicatorState extends State<MergingIndicator> with SingleTickerPr
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.merge_rounded, color: Colors.white, size: 18),
+          Icon(Icons.merge_rounded, color: OmiColors.textPrimary, size: 18),
           const SizedBox(width: 8),
           Text(
             context.l10n.mergingStatus,
-            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+            style: TextStyle(color: OmiColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w600),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// v2 time column: the clock digits in bold, with any day-period marker ("PM", "오후") on a small
+/// second line, whichever side of the digits the locale puts it. A 24-hour time is one line.
+class _TimeColumn extends StatelessWidget {
+  const _TimeColumn(this.formatted);
+
+  final String formatted;
+
+  static final RegExp _digits = RegExp(r'\d{1,2}[:.]\d{2}');
+
+  @override
+  Widget build(BuildContext context) {
+    final match = _digits.firstMatch(formatted);
+    final digits = match?.group(0) ?? formatted;
+    final period = match == null ? '' : formatted.replaceRange(match.start, match.end, '').trim();
+    return Semantics(
+      label: formatted,
+      excludeSemantics: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(digits, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w700), maxLines: 1),
+          if (period.isNotEmpty)
+            Text(period, style: OmiType.caption.copyWith(color: OmiColors.textTertiary), maxLines: 1),
         ],
       ),
     );

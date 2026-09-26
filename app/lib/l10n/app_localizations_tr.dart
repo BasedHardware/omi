@@ -1864,9 +1864,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get openSettings => 'Ayarları Aç';
 
   @override
-  String get whatsYourName => 'Adın ne?';
-
-  @override
   String get speakTranscribeSummarize => 'Konuş. Transkripsiyonu Oluştur. Özetle.';
 
   @override
@@ -1880,12 +1877,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get termsOfUse => 'Kullanım Koşulları';
-
-  @override
-  String get omiYourAiCompanion => 'Omi – Yapay Zeka Yardımcınız';
-
-  @override
-  String get captureEveryMoment => 'Her anı yakalayın. Yapay zeka destekli\nözetler alın. Artık not almayın.';
 
   @override
   String get appleWatchSetup => 'Apple Watch Kurulumu';
@@ -1930,19 +1921,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String errorStartingRecording(String error) {
     return 'Kayıt başlatma hatası: $error';
   }
-
-  @override
-  String get selectPrimaryLanguage => 'Ana dilinizi seçin';
-
-  @override
-  String get languageBenefits =>
-      'Daha keskin transkripsiyonlar ve kişiselleştirilmiş bir deneyim için dilinizi ayarlayın';
-
-  @override
-  String get whatsYourPrimaryLanguage => 'Ana diliniz nedir?';
-
-  @override
-  String get selectYourLanguage => 'Dilinizi seçin';
 
   @override
   String get personalGrowthJourney => 'Her kelimenizi dinleyen yapay zeka ile kişisel gelişim yolculuğunuz.';
@@ -3378,9 +3356,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get dataProtection => 'Veri Koruması';
-
-  @override
-  String get yourDataIsProtected => 'Verileriniz korunmaktadır ve ';
 
   @override
   String get pleaseSelectYourPrimaryLanguage => 'Lütfen birincil dilinizi seçin';
@@ -5062,10 +5037,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'Ek ses örneği kaldırıldı';
-
-  @override
-  String get consentDataMessage =>
-      'Devam ederek, konuşmalarınız, kayıtlarınız ve kişisel bilgileriniz sunucularımızda güvenli bir şekilde saklanacaktır. Ses kayıtlarınız ve transkriptleriniz, size yapay zeka destekli içgörüler sağlamak ve tüm uygulama özelliklerini etkinleştirmek için üçüncü taraf yapay zeka hizmetleri (transkripsiyon için Deepgram ve analiz için OpenAI dahil) tarafından işlenir.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -7788,9 +7759,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get authorizingMcpServer => 'Yetkilendiriliyor…';
 
   @override
-  String get whereDidYouHearAboutOmi => 'Bizi nasıl buldunuz?';
-
-  @override
   String get tiktok => 'TikTok';
 
   @override
@@ -9970,9 +9938,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripsiyon ses almıyor';
 
   @override
-  String get tapPlusToStartRecording => 'Kaydı başlatmak için kayıt düğmesine dokunun';
-
-  @override
   String get chatBlockTask => 'Görev';
 
   @override
@@ -10690,9 +10655,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deviceConnecting => 'Bağlanıyor…';
 
   @override
-  String get recordOptionsTip => 'İpucu: telefon görüşmesi kaydetmek için kayıt düğmesindeki oka dokunun.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Güncelleme Başarısız';
 
   @override
@@ -11235,14 +11197,477 @@ class AppLocalizationsTr extends AppLocalizations {
   String get keepUsingPendant => 'Kolyeyi kullanmaya devam et';
 
   @override
-  String get recordWith => 'Kayıt yöntemi';
-
-  @override
-  String get moreWaysToRecord => 'Diğer kayıt yöntemleri';
-
-  @override
   String get openCall => 'Aramayı aç';
 
   @override
   String get captureRecoveryBanner => 'Kolye sesi uygulamaya ulaşmıyor — onarmak için dokunun';
+
+  @override
+  String get goodMorning => 'Günaydın';
+
+  @override
+  String get goodAfternoon => 'İyi öğleden sonralar';
+
+  @override
+  String get goodEvening => 'İyi akşamlar';
+
+  @override
+  String get alreadyHaveAccount => 'Zaten hesabın var mı?';
+
+  @override
+  String get signInToOmi => 'Omi\'ye giriş yap';
+
+  @override
+  String get signInSubtitle => 'Konuşmaların ve anıların hesabınla birlikte telefonda, Mac\'te ve web\'de seninle.';
+
+  @override
+  String onboardingAllSetName(String name) {
+    return 'Her şey hazır, $name.';
+  }
+
+  @override
+  String get completeHomeBody => 'Günün, görevlerin ve özetlerin tek bir yerde.';
+
+  @override
+  String get completeAskTitle => 'Sor';
+
+  @override
+  String get foundOmiOptionalHint => 'İsteğe bağlı — küçük bir ekibin neyin işe yaradığını bilmesine yardımcı olur.';
+
+  @override
+  String get consentTitle => 'Verilerin, sade bir dille';
+
+  @override
+  String get consentSubtitle =>
+      'Omi dinlemeye başlamadan önce, duyduklarına tam olarak ne olduğunu burada görebilirsin.';
+
+  @override
+  String get consentStoredTitle => 'Neler saklanır';
+
+  @override
+  String get consentStoredBody =>
+      'Ses kayıtların, dökümlerin ve Omi\'nin öğrendiği ayrıntılar hesabında güvenle saklanır.';
+
+  @override
+  String get consentProcessorsTitle => 'Kim işler';
+
+  @override
+  String get consentProcessorsBody =>
+      'Konuşmalar Deepgram tarafından yazıya dökülür ve OpenAI tarafından analiz edilerek özetler, görevler ve anılar oluşturulur.';
+
+  @override
+  String get consentControlTitle => 'Senin kontrolündekiler';
+
+  @override
+  String get consentControlBody => 'İstediğin zaman herhangi bir konuşmayı, anıyı ya da tüm hesabını sil.';
+
+  @override
+  String get readPrivacyPolicy => 'Gizlilik Politikası\'nı oku';
+
+  @override
+  String get whatShouldOmiCallYou => 'Omi sana nasıl hitap etsin?';
+
+  @override
+  String get nameUsageHint => 'Omi bunu dökümlerde ve dışa aktarmalarda seni etiketlemek için kullanır.';
+
+  @override
+  String get yourNamePlaceholder => 'Adın';
+
+  @override
+  String get whatLanguageDoYouSpeakMost => 'En çok hangi dili konuşuyorsun?';
+
+  @override
+  String get languageOnboardingSubtitle =>
+      'Omi dili bildiğinde en iyi şekilde yazıya döker. Daha fazlasını sonra ekleyebilirsin.';
+
+  @override
+  String get permissionsFewTitle => 'Birkaç izin';
+
+  @override
+  String get permissionsFewSubtitle =>
+      'Omi yalnızca kullandığı izinleri ister. Bunları istediğin zaman Ayarlar\'dan değiştirebilirsin.';
+
+  @override
+  String get permissionsContinueNote =>
+      '\"Devam et\" hiçbir şey istemez. Her izin yalnızca \"İzin Ver\" düğmesine dokunduğunda istenir.';
+
+  @override
+  String get howDidYouHearAboutOmi => 'Omi\'yi nereden duydun?';
+
+  @override
+  String get showOnLockScreen => 'Kilit ekranında göster';
+
+  @override
+  String get seeAll => 'Tümünü Gör';
+
+  @override
+  String get upNext => 'Sıradakiler';
+
+  @override
+  String get allTasks => 'Tüm Görevler';
+
+  @override
+  String get thisWeek => 'Bu hafta';
+
+  @override
+  String capturedDuration(String duration) {
+    return '$duration kaydedildi';
+  }
+
+  @override
+  String newMemoriesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count yeni anı',
+      one: '1 yeni anı',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncingFromPendant => 'Pendant\'ından eşitleniyor';
+
+  @override
+  String get pendantRecordingsSynced => 'Pendant kayıtları eşitlendi';
+
+  @override
+  String recordedOnPendantWhileAway(String duration) {
+    return 'Telefonun uzaktayken pendant\'a ~$duration kaydedildi';
+  }
+
+  @override
+  String dailyRecapOn(String day) {
+    return 'Günlük özet · $day';
+  }
+
+  @override
+  String taskDueDayTime(String day, String time) {
+    return '$day, $time';
+  }
+
+  @override
+  String fromConversation(String title) {
+    return 'Kaynak: $title';
+  }
+
+  @override
+  String get endCapture => 'Bitir';
+
+  @override
+  String get toDo => 'Yapılacaklar';
+
+  @override
+  String get devices => 'Cihazlar';
+
+  @override
+  String get devicesSubtitle => 'Senin için dinleyen her şey. Aynı anda yalnızca biri kaydeder.';
+
+  @override
+  String get addADevice => 'Cihaz ekle';
+
+  @override
+  String get deviceReady => 'Hazır';
+
+  @override
+  String get importFromOtherApps => 'Diğer uygulamalardan içe aktar';
+
+  @override
+  String get whatWillYouWear => 'Ne takacaksın?';
+
+  @override
+  String get pickDeviceSubtitle => 'Daha fazlasını sonra ekleyebilirsin. Aynı anda yalnızca biri kaydeder.';
+
+  @override
+  String get alreadyHaveOne => 'Zaten var mı?';
+
+  @override
+  String get noDeviceHeader => 'Cihaz yok';
+
+  @override
+  String get omiPendantName => 'Omi Pendant';
+
+  @override
+  String get allDayConversations => 'Gün boyu konuşmalar';
+
+  @override
+  String get conversationsAndPhotos => 'Konuşmalar + fotoğraflar';
+
+  @override
+  String get wristMic => 'Bilek mikrofonu';
+
+  @override
+  String get glassesAudio => 'Gözlük sesi';
+
+  @override
+  String get bringRecordingsIntoOmi => 'Kayıtlarını Omi\'ye getir';
+
+  @override
+  String get useThisIphone => 'Bu iPhone\'u kullan';
+
+  @override
+  String get useThisPhone => 'Bu telefonu kullan';
+
+  @override
+  String get startInSeconds => '10 saniyede başla';
+
+  @override
+  String get askAboutThisConversationPlaceholder => 'Bu konuşma hakkında sor';
+
+  @override
+  String get summaryStyle => 'Özet stili';
+
+  @override
+  String get summaryStyleSubtitle => 'Bu özeti hangi uygulamanın yazacağını seç';
+
+  @override
+  String get appearance => 'Görünüm';
+
+  @override
+  String get appearanceSystem => 'Sistem';
+
+  @override
+  String get appearanceLight => 'Açık';
+
+  @override
+  String get appearanceDark => 'Koyu';
+
+  @override
+  String get feel => 'His';
+
+  @override
+  String get haptics => 'Dokunsal geri bildirim';
+
+  @override
+  String get hapticsSubtitle => 'Bir şeyi bitirdiğinde, yıldızladığında veya tamamladığında hafif bir dokunuş';
+
+  @override
+  String get textSize => 'Metin boyutu';
+
+  @override
+  String get textSizeSubtitle => 'Telefonunun metin boyutunu izler';
+
+  @override
+  String get appearanceMotionNote =>
+      'Hareket, telefon ayarlarındaki Hareketi Azalt seçeneğini izler; cihaz ışığı dahil tüm döngüler durur.';
+
+  @override
+  String get signedInWithApple => 'Apple ile giriş yapıldı';
+
+  @override
+  String get signedInWithGoogle => 'Google ile giriş yapıldı';
+
+  @override
+  String premiumMinutesLeftThisMonth(String left, int limit) {
+    return 'Bu ay $left/$limit premium dakika kaldı';
+  }
+
+  @override
+  String get recordingFrom => 'Kayıt kaynağı';
+
+  @override
+  String get recordingFromSubtitle => 'Aynı anda tek bir kaynak kayıt yapar. Değiştirmek mevcut konuşmayı bitirir.';
+
+  @override
+  String get manageDevices => 'Cihazları yönet';
+
+  @override
+  String get notListeningTitle => 'Dinlemiyor';
+
+  @override
+  String get notListeningSubtitle => 'Bu telefonla başla ya da gün boyu dinlemesi için bir cihaz bağla.';
+
+  @override
+  String get startListening => 'Dinlemeye başla';
+
+  @override
+  String get searchEverything => 'Her şeyde ara';
+
+  @override
+  String searchResultsCount(int count) {
+    return 'Sonuçlar · $count';
+  }
+
+  @override
+  String get nothingFound => 'Hiçbir şey bulunamadı';
+
+  @override
+  String get searchNothingFoundHint =>
+      'Başka bir kelime dene ya da Omi\'ye sor; yalnızca kelimeleri değil, anlamı da anlar.';
+
+  @override
+  String get askOmiInstead => 'Omi\'ye sor';
+
+  @override
+  String get recentSearches => 'Son aramalar';
+
+  @override
+  String get searchAskSuggestion => 'Bu hafta ne yapacağıma söz verdim?';
+
+  @override
+  String get welcomeRememberTitle => 'Her konuşmayı hatırla.';
+
+  @override
+  String get welcomeRememberSubtitle =>
+      'Ne istersen onu tak. Omi duyduklarını notlara, yapılacaklara ve günün özetine dönüştürür.';
+
+  @override
+  String get memoriesSubtitle => 'Omi\'nin bildikleri ve bunları nereden öğrendiği';
+
+  @override
+  String get memoryTierLongTerm => 'Uzun vadeli';
+
+  @override
+  String get memoryTierShortTerm => 'Kısa vadeli';
+
+  @override
+  String get memoriesTierNote =>
+      'Yeni anılar kısa vadeli olarak başlar. Önemini koruyanları Omi kendiliğinden uzun vadeliye taşır.';
+
+  @override
+  String get askEmptyTitle => 'Duyduğun her şey hakkında soru sor.';
+
+  @override
+  String get askEmptySubtitle => 'Omi konuşmalarından, anılarından ve görevlerinden yanıt verir.';
+
+  @override
+  String get completeListeningTitle => 'Dinleme';
+
+  @override
+  String get completeListeningBody =>
+      'Mavi, Omi\'nin seni duyduğu anlamına gelir; taktığın bir cihazdan ya da bu telefondan.';
+
+  @override
+  String get completeAskAnyBody => 'Duyduğun her şeyi sormak için Sor\'a dokun.';
+
+  @override
+  String get completeDevicesBody => 'İstediğin zaman giyilebilir bir cihaz ekle ya da bu telefonla başla.';
+
+  @override
+  String get conversationSourceGlasses => 'Gözlük';
+
+  @override
+  String get conversationSourceImported => 'İçe aktarılanlar';
+
+  @override
+  String get conversationSourceEmptyHint => 'Bu kaynaktan henüz bir şey kaydedilmedi.';
+
+  @override
+  String get findMyPendant => 'Kolyemi bul';
+
+  @override
+  String get findMyPendantHint => 'Bulabilmen için ses çalar';
+
+  @override
+  String get upToDate => 'Güncel';
+
+  @override
+  String get updateAvailable => 'Güncelleme var';
+
+  @override
+  String get storageTitle => 'Depolama';
+
+  @override
+  String get connectStepTurnOn => 'Aç ve yakında tut';
+
+  @override
+  String get connectStepAllowBluetooth => 'Bluetooth\'a izin ver';
+
+  @override
+  String get connectStepTest => 'Test için bir şey söyle';
+
+  @override
+  String get connectStepTestHint => 'Konuştukça kelimeler burada görünür';
+
+  @override
+  String get setUpLater => 'Daha sonra kur';
+
+  @override
+  String recapPreviousDay(String day) {
+    return 'Önceki günün özeti: $day';
+  }
+
+  @override
+  String recapNextDay(String day) {
+    return 'Sonraki günün özeti: $day';
+  }
+
+  @override
+  String get askStarterToday => 'Bugünü özetle';
+
+  @override
+  String get askStarterPeople => 'Kimlerle görüştüm?';
+
+  @override
+  String get askStarterOpen => 'Hâlâ açık olan ne var?';
+
+  @override
+  String get peopleSubtitle => 'Omi\'nin dökümlerde tanıyabildiği sesler';
+
+  @override
+  String get usageCurrentPlan => 'Mevcut plan';
+
+  @override
+  String get appsExplore => 'Keşfet';
+
+  @override
+  String get appOutOfFive => '5 üzerinden';
+
+  @override
+  String get appStatUsers => 'Kullanıcılar';
+
+  @override
+  String homeWelcomeName(String name) {
+    return 'Hoş geldin, $name';
+  }
+
+  @override
+  String get homeWelcome => 'Hoş geldin';
+
+  @override
+  String get homeFirstDaySubtitle => 'Omi ile ilk günün';
+
+  @override
+  String get homeListeningHeroTitle => 'Omi dinliyor';
+
+  @override
+  String get homeListeningHeroBody => 'İlk konuşman bittikten bir dakika sonra burada görünür.';
+
+  @override
+  String get homeGettingStarted => 'Başlarken';
+
+  @override
+  String get gettingStartedConnect => 'Bir cihaz bağla';
+
+  @override
+  String get gettingStartedConversation => 'Bir konuşma yap';
+
+  @override
+  String get gettingStartedAsk => 'Omi\'ye bunu sor';
+
+  @override
+  String get homeGoodToKnow => 'Bilmekte fayda var';
+
+  @override
+  String get tipFinishTitle => 'İstediğin zaman bitir';
+
+  @override
+  String get tipFinishBody => 'Bitir\'e dokun — ya da kolyene iki kez bas — özet hemen başlar.';
+
+  @override
+  String get tipStarTitle => 'Önemli olanı yıldızla';
+
+  @override
+  String get tipStarBody => 'Yıldızlı konuşmaları sonra kolayca bulursun.';
+
+  @override
+  String get tipPrivateTitle => 'Varsayılan olarak gizli';
+
+  @override
+  String get tipPrivateBody => 'Paylaşmadığın sürece konuşmaların gizli kalır.';
+
+  @override
+  String homeGettingStartedProgress(int done, int total) {
+    return '$done/$total';
+  }
 }

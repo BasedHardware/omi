@@ -1870,9 +1870,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get openSettings => 'Buksan ang Settings';
 
   @override
-  String get whatsYourName => 'Ano ang iyong pangalan?';
-
-  @override
   String get speakTranscribeSummarize => 'Magsalita. Mag-transcribe. Bumuod.';
 
   @override
@@ -1886,13 +1883,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get termsOfUse => 'Terms of Use';
-
-  @override
-  String get omiYourAiCompanion => 'Omi – Ang Iyong AI Companion';
-
-  @override
-  String get captureEveryMoment =>
-      'Kunan ang bawat sandali. Makakuha ng AI-powered\nsummaries. Hindi na kailangan mag-notes.';
 
   @override
   String get appleWatchSetup => 'Apple Watch Setup';
@@ -1937,19 +1927,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String errorStartingRecording(String error) {
     return 'Error sa pagsisimula ng recording: $error';
   }
-
-  @override
-  String get selectPrimaryLanguage => 'Pumili ng iyong pangunahing wika';
-
-  @override
-  String get languageBenefits =>
-      'Itakda ang iyong wika para sa mas matalinong transcriptions at personalized na karanasan';
-
-  @override
-  String get whatsYourPrimaryLanguage => 'Ano ang iyong pangunahing wika?';
-
-  @override
-  String get selectYourLanguage => 'Pumili ng iyong wika';
 
   @override
   String get personalGrowthJourney => 'Ang iyong personal growth journey gamit ang AI na nakikinig sa bawat salita mo.';
@@ -3398,9 +3375,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get dataProtection => 'Proteksyon ng Data';
-
-  @override
-  String get yourDataIsProtected => 'Ang iyong data ay protektado at pinamamahalaan ng aming ';
 
   @override
   String get pleaseSelectYourPrimaryLanguage => 'Piliin ang iyong pangunahing wika';
@@ -5096,10 +5070,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'Additional Speech Sample Removed';
-
-  @override
-  String get consentDataMessage =>
-      'Sa pagpapatuloy, ang iyong mga pag-uusap, recording, at personal na impormasyon ay ligtas na maiimbak sa aming mga server. Ang iyong mga audio recording at transcript ay pinoproseso ng third-party na mga serbisyo ng AI (kabilang ang Deepgram para sa transcription at OpenAI para sa analysis) upang mabigyan ka ng AI-powered na mga insight at ma-enable ang lahat ng feature ng app.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -7845,9 +7815,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get authorizingMcpServer => 'Nag-authorize…';
 
   @override
-  String get whereDidYouHearAboutOmi => 'Paano ka nakahanap sa amin?';
-
-  @override
   String get tiktok => 'TikTok';
 
   @override
@@ -10049,9 +10016,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get transcriptionNoAudio => 'Hindi tumatanggap ng audio ang transkripsyon';
 
   @override
-  String get tapPlusToStartRecording => 'I-tap ang record button para magsimulang mag-record';
-
-  @override
   String get chatBlockTask => 'Gawain';
 
   @override
@@ -10770,9 +10734,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deviceConnecting => 'Kumokonekta…';
 
   @override
-  String get recordOptionsTip => 'Tip: i-tap ang arrow sa record button para mag-record ng tawag.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Nabigo ang Update';
 
   @override
@@ -11321,14 +11282,479 @@ class AppLocalizationsTl extends AppLocalizations {
   String get keepUsingPendant => 'Ituloy ang paggamit ng pendant';
 
   @override
-  String get recordWith => 'Mag-record gamit ang';
-
-  @override
-  String get moreWaysToRecord => 'Iba pang paraan ng pag-record';
-
-  @override
   String get openCall => 'Buksan ang tawag';
 
   @override
   String get captureRecoveryBanner => 'Hindi nakakarating sa app ang audio ng pendant — i-tap para ayusin';
+
+  @override
+  String get goodMorning => 'Magandang umaga';
+
+  @override
+  String get goodAfternoon => 'Magandang hapon';
+
+  @override
+  String get goodEvening => 'Magandang gabi';
+
+  @override
+  String get alreadyHaveAccount => 'May account ka na?';
+
+  @override
+  String get signInToOmi => 'Mag-sign in sa Omi';
+
+  @override
+  String get signInSubtitle => 'Kasama ng account mo ang iyong mga usapan at alaala sa telepono, Mac at web.';
+
+  @override
+  String onboardingAllSetName(String name) {
+    return 'Handa na ang lahat, $name.';
+  }
+
+  @override
+  String get completeHomeBody => 'Ang araw mo, mga gawain at buod sa iisang lugar.';
+
+  @override
+  String get completeAskTitle => 'Magtanong';
+
+  @override
+  String get foundOmiOptionalHint =>
+      'Opsyonal — nakakatulong ito sa isang maliit na team na malaman kung ano ang gumagana.';
+
+  @override
+  String get consentTitle => 'Ang data mo, sa simpleng salita';
+
+  @override
+  String get consentSubtitle => 'Bago magsimulang makinig si Omi, ito mismo ang nangyayari sa naririnig nito.';
+
+  @override
+  String get consentStoredTitle => 'Ano ang itinatago';
+
+  @override
+  String get consentStoredBody =>
+      'Ligtas na itinatago sa account mo ang iyong audio, mga transcript at mga detalyeng natututunan ni Omi.';
+
+  @override
+  String get consentProcessorsTitle => 'Sino ang nagpoproseso nito';
+
+  @override
+  String get consentProcessorsBody =>
+      'Tina-transcribe ng Deepgram ang pananalita at sinusuri ng OpenAI para isulat ang mga buod, gawain at alaala.';
+
+  @override
+  String get consentControlTitle => 'Ang kontrolado mo';
+
+  @override
+  String get consentControlBody => 'Burahin ang anumang usapan, alaala o ang buong account mo kahit kailan.';
+
+  @override
+  String get readPrivacyPolicy => 'Basahin ang Patakaran sa Privacy';
+
+  @override
+  String get whatShouldOmiCallYou => 'Ano ang itatawag sa iyo ni Omi?';
+
+  @override
+  String get nameUsageHint => 'Ginagamit ito ni Omi para lagyan ka ng label sa mga transcript at export.';
+
+  @override
+  String get yourNamePlaceholder => 'Pangalan mo';
+
+  @override
+  String get whatLanguageDoYouSpeakMost => 'Anong wika ang pinakamadalas mong gamitin?';
+
+  @override
+  String get languageOnboardingSubtitle =>
+      'Pinakamahusay mag-transcribe si Omi kapag alam nito ang wika. Puwede kang magdagdag pa mamaya.';
+
+  @override
+  String get permissionsFewTitle => 'Ilang pahintulot';
+
+  @override
+  String get permissionsFewSubtitle =>
+      'Hinihingi lang ni Omi ang ginagamit nito. Mapapalitan mo ang mga ito anumang oras sa Settings.';
+
+  @override
+  String get permissionsContinueNote =>
+      'Walang hihingin ang \"Magpatuloy\". Hinihingi lang ang bawat pahintulot kapag tinapik mo ang \"Payagan\".';
+
+  @override
+  String get howDidYouHearAboutOmi => 'Paano mo nalaman ang tungkol sa Omi?';
+
+  @override
+  String get showOnLockScreen => 'Ipakita sa lock screen';
+
+  @override
+  String get seeAll => 'Tingnan Lahat';
+
+  @override
+  String get upNext => 'Susunod';
+
+  @override
+  String get allTasks => 'Lahat ng Gawain';
+
+  @override
+  String get thisWeek => 'Ngayong linggo';
+
+  @override
+  String capturedDuration(String duration) {
+    return '$duration na-capture';
+  }
+
+  @override
+  String newMemoriesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bagong alaala',
+      one: '1 bagong alaala',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncingFromPendant => 'Nagsi-sync mula sa iyong pendant';
+
+  @override
+  String get pendantRecordingsSynced => 'Na-sync na ang mga recording ng pendant';
+
+  @override
+  String recordedOnPendantWhileAway(String duration) {
+    return '~$duration ang na-record sa pendant habang malayo ang telepono mo';
+  }
+
+  @override
+  String dailyRecapOn(String day) {
+    return 'Pang-araw-araw na recap · $day';
+  }
+
+  @override
+  String taskDueDayTime(String day, String time) {
+    return '$day, $time';
+  }
+
+  @override
+  String fromConversation(String title) {
+    return 'Mula sa $title';
+  }
+
+  @override
+  String get endCapture => 'Tapusin';
+
+  @override
+  String get toDo => 'Gagawin';
+
+  @override
+  String get devices => 'Mga Device';
+
+  @override
+  String get devicesSubtitle => 'Lahat ng nakikinig para sa iyo. Isa lang ang nagre-record sa bawat pagkakataon.';
+
+  @override
+  String get addADevice => 'Magdagdag ng device';
+
+  @override
+  String get deviceReady => 'Handa';
+
+  @override
+  String get importFromOtherApps => 'Mag-import mula sa ibang app';
+
+  @override
+  String get whatWillYouWear => 'Ano ang isusuot mo?';
+
+  @override
+  String get pickDeviceSubtitle => 'Puwede kang magdagdag pa mamaya. Isa lang ang nagre-record sa bawat pagkakataon.';
+
+  @override
+  String get alreadyHaveOne => 'Mayroon ka na ba?';
+
+  @override
+  String get noDeviceHeader => 'Walang device';
+
+  @override
+  String get omiPendantName => 'Omi pendant';
+
+  @override
+  String get allDayConversations => 'Mga usapan buong araw';
+
+  @override
+  String get conversationsAndPhotos => 'Mga usapan + larawan';
+
+  @override
+  String get wristMic => 'Mikropono sa pulso';
+
+  @override
+  String get glassesAudio => 'Audio ng salamin';
+
+  @override
+  String get bringRecordingsIntoOmi => 'Dalhin ang mga recording mo sa Omi';
+
+  @override
+  String get useThisIphone => 'Gamitin ang iPhone na ito';
+
+  @override
+  String get useThisPhone => 'Gamitin ang teleponong ito';
+
+  @override
+  String get startInSeconds => 'Magsimula sa loob ng 10 segundo';
+
+  @override
+  String get askAboutThisConversationPlaceholder => 'Magtanong tungkol sa usapang ito';
+
+  @override
+  String get summaryStyle => 'Estilo ng buod';
+
+  @override
+  String get summaryStyleSubtitle => 'Piliin kung aling app ang susulat ng buod na ito';
+
+  @override
+  String get appearance => 'Hitsura';
+
+  @override
+  String get appearanceSystem => 'System';
+
+  @override
+  String get appearanceLight => 'Maliwanag';
+
+  @override
+  String get appearanceDark => 'Madilim';
+
+  @override
+  String get feel => 'Pakiramdam';
+
+  @override
+  String get haptics => 'Haptics';
+
+  @override
+  String get hapticsSubtitle => 'Isang mahinang tapik kapag may tinapos, ni-star o kinumpleto ka';
+
+  @override
+  String get textSize => 'Laki ng text';
+
+  @override
+  String get textSizeSubtitle => 'Sumusunod sa laki ng text ng phone mo';
+
+  @override
+  String get appearanceMotionNote =>
+      'Sinusunod ng galaw ang Reduce Motion sa settings ng phone mo — humihinto ang bawat loop, pati ang ilaw ng device.';
+
+  @override
+  String get signedInWithApple => 'Naka-sign in gamit ang Apple';
+
+  @override
+  String get signedInWithGoogle => 'Naka-sign in gamit ang Google';
+
+  @override
+  String premiumMinutesLeftThisMonth(String left, int limit) {
+    return '$left sa $limit premium na minuto ang natitira ngayong buwan';
+  }
+
+  @override
+  String get recordingFrom => 'Nire-record mula sa';
+
+  @override
+  String get recordingFromSubtitle =>
+      'Isang source lang ang nagre-record sa isang pagkakataon. Tatapusin ng paglipat ang kasalukuyang usapan.';
+
+  @override
+  String get manageDevices => 'Pamahalaan ang mga device';
+
+  @override
+  String get notListeningTitle => 'Hindi nakikinig';
+
+  @override
+  String get notListeningSubtitle => 'Magsimula sa phone na ito, o magkonekta ng device para makinig buong araw.';
+
+  @override
+  String get startListening => 'Simulang makinig';
+
+  @override
+  String get searchEverything => 'Hanapin ang lahat';
+
+  @override
+  String searchResultsCount(int count) {
+    return 'Mga resulta · $count';
+  }
+
+  @override
+  String get nothingFound => 'Walang nahanap';
+
+  @override
+  String get searchNothingFoundHint =>
+      'Sumubok ng ibang salita, o tanungin si Omi — naiintindihan nito ang kahulugan, hindi lang ang mga salita.';
+
+  @override
+  String get askOmiInstead => 'Tanungin na lang si Omi';
+
+  @override
+  String get recentSearches => 'Kamakailan';
+
+  @override
+  String get searchAskSuggestion => 'Ano ang ipinangako kong gagawin ngayong linggo?';
+
+  @override
+  String get welcomeRememberTitle => 'Tandaan ang bawat usapan.';
+
+  @override
+  String get welcomeRememberSubtitle =>
+      'Isuot ang gusto mo. Ginagawa ni Omi ang naririnig mo na mga tala, gagawin at buod ng araw mo.';
+
+  @override
+  String get memoriesSubtitle => 'Ang alam ni Omi, at kung saan niya ito natutunan';
+
+  @override
+  String get memoryTierLongTerm => 'Pangmatagalan';
+
+  @override
+  String get memoryTierShortTerm => 'Panandalian';
+
+  @override
+  String get memoriesTierNote =>
+      'Nagsisimula bilang panandalian ang mga bagong alaala. Kusang inililipat ni Omi sa pangmatagalan ang mga patuloy na mahalaga.';
+
+  @override
+  String get askEmptyTitle => 'Magtanong tungkol sa kahit anong narinig mo.';
+
+  @override
+  String get askEmptySubtitle => 'Sumasagot si Omi mula sa iyong mga usapan, alaala at gawain.';
+
+  @override
+  String get completeListeningTitle => 'Pakikinig';
+
+  @override
+  String get completeListeningBody =>
+      'Asul ibig sabihin ay naririnig ka ni Omi — mula sa device na suot mo o sa phone na ito.';
+
+  @override
+  String get completeAskAnyBody => 'I-tap ang Magtanong para magtanong tungkol sa kahit anong narinig mo.';
+
+  @override
+  String get completeDevicesBody => 'Magdagdag ng wearable kahit kailan, o magsimula sa phone na ito.';
+
+  @override
+  String get conversationSourceGlasses => 'Salamin';
+
+  @override
+  String get conversationSourceImported => 'Na-import';
+
+  @override
+  String get conversationSourceEmptyHint => 'Wala pang na-record mula sa source na ito.';
+
+  @override
+  String get findMyPendant => 'Hanapin ang pendant ko';
+
+  @override
+  String get findMyPendantHint => 'Magpapatunog para mahanap mo ito';
+
+  @override
+  String get upToDate => 'Napapanahon';
+
+  @override
+  String get updateAvailable => 'May update';
+
+  @override
+  String get storageTitle => 'Storage';
+
+  @override
+  String get connectStepTurnOn => 'I-on ito at ilapit';
+
+  @override
+  String get connectStepAllowBluetooth => 'Payagan ang Bluetooth';
+
+  @override
+  String get connectStepTest => 'Magsabi ng kahit ano para subukan';
+
+  @override
+  String get connectStepTestHint => 'Lalabas dito ang mga salita habang nagsasalita ka';
+
+  @override
+  String get setUpLater => 'I-set up mamaya';
+
+  @override
+  String recapPreviousDay(String day) {
+    return 'Recap ng nakaraang araw: $day';
+  }
+
+  @override
+  String recapNextDay(String day) {
+    return 'Recap ng susunod na araw: $day';
+  }
+
+  @override
+  String get askStarterToday => 'Ibuod ang araw na ito';
+
+  @override
+  String get askStarterPeople => 'Sino ang nakilala ko?';
+
+  @override
+  String get askStarterOpen => 'Ano pa ang bukas?';
+
+  @override
+  String get peopleSubtitle => 'Mga boses na nakikilala ng Omi sa mga transcript';
+
+  @override
+  String get usageCurrentPlan => 'Kasalukuyang plan';
+
+  @override
+  String get appsExplore => 'Tuklasin';
+
+  @override
+  String get appOutOfFive => 'sa 5';
+
+  @override
+  String get appStatUsers => 'Mga user';
+
+  @override
+  String homeWelcomeName(String name) {
+    return 'Maligayang pagdating, $name';
+  }
+
+  @override
+  String get homeWelcome => 'Maligayang pagdating';
+
+  @override
+  String get homeFirstDaySubtitle => 'Ang una mong araw kasama ang Omi';
+
+  @override
+  String get homeListeningHeroTitle => 'Nakikinig ang Omi';
+
+  @override
+  String get homeListeningHeroBody => 'Lalabas dito ang una mong usapan isang minuto pagkatapos nito.';
+
+  @override
+  String get homeGettingStarted => 'Pagsisimula';
+
+  @override
+  String get gettingStartedConnect => 'Magkonekta ng device';
+
+  @override
+  String get gettingStartedConversation => 'Makipag-usap';
+
+  @override
+  String get gettingStartedAsk => 'Tanungin ang Omi tungkol dito';
+
+  @override
+  String get homeGoodToKnow => 'Mabuting malaman';
+
+  @override
+  String get tipFinishTitle => 'Tapusin kahit kailan';
+
+  @override
+  String get tipFinishBody =>
+      'I-tap ang Tapusin — o pindutin nang dalawang beses ang pendant — at magsisimula agad ang buod.';
+
+  @override
+  String get tipStarTitle => 'Lagyan ng star ang mahalaga';
+
+  @override
+  String get tipStarBody => 'Madaling mahanap mamaya ang mga usapang may star.';
+
+  @override
+  String get tipPrivateTitle => 'Pribado bilang default';
+
+  @override
+  String get tipPrivateBody => 'Pribado ang mga usapan mo maliban kung ibahagi mo.';
+
+  @override
+  String homeGettingStartedProgress(int done, int total) {
+    return '$done sa $total';
+  }
 }

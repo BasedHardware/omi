@@ -104,6 +104,22 @@ class UsageProvider with ChangeNotifier {
     return false;
   }
 
+  /// Seeds one period's stats ('today', 'monthly', 'yearly' or 'all_time') without a request.
+  @visibleForTesting
+  void debugSetUsageStats(String period, UsageStats stats) {
+    switch (period) {
+      case 'today':
+        _todayUsage = stats;
+      case 'monthly':
+        _monthlyUsage = stats;
+      case 'yearly':
+        _yearlyUsage = stats;
+      case 'all_time':
+        _allTimeUsage = stats;
+    }
+    notifyListeners();
+  }
+
   @visibleForTesting
   void debugSetSubscription(UserSubscriptionResponse? value) {
     _subscription = value;

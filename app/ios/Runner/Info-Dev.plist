@@ -174,6 +174,10 @@
 	<string>We need access to your reminders to export action items from Omi conversations.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>We use speech recognition to convert your speech to text for processing on your device.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
+	<true/>
 	<key>PermissionGroupNotification</key>
 	<string>You need to enable notifications to receive your pro-active feedback.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

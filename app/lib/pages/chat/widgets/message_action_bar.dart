@@ -102,7 +102,7 @@ class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
           const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: OmiSpacing.xxs),
-            decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+            decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
             child: TextField(
               controller: _commentController,
               style: OmiType.subhead.copyWith(height: 1.4),
@@ -295,8 +295,8 @@ class _MessageActionBarState extends State<MessageActionBar> {
         selected: isSelected,
         child: InkWell(
           borderRadius: OmiRadius.mdAll,
-          splashColor: Colors.white24,
-          highlightColor: Colors.white10,
+          splashColor: OmiColors.textPrimary.withValues(alpha: 0.24),
+          highlightColor: OmiColors.textPrimary.withValues(alpha: 0.1),
           onTap: onTap,
           child: SizedBox(
             width: 48,

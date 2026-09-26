@@ -338,7 +338,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           child: GestureDetector(
             onTap: () => FocusScope.of(context).unfocus(),
             child: Scaffold(
-              appBar: AppBar(
+              appBar: OmiAppBar(
                 leading: const OmiBackButton(),
                 title: Text(l10n.developerSettings),
                 actions: [
@@ -413,7 +413,7 @@ class _DeveloperTextField extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
         border: border,
         enabledBorder: border,
-        focusedBorder: const OutlineInputBorder(
+        focusedBorder: OutlineInputBorder(
           borderRadius: OmiRadius.mdAll,
           borderSide: BorderSide(color: OmiColors.textTertiary),
         ),

@@ -1863,9 +1863,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get openSettings => 'Atvērt iestatījumus';
 
   @override
-  String get whatsYourName => 'Kā tevi sauc?';
-
-  @override
   String get speakTranscribeSummarize => 'Runāt. Transkribēt. Apkopot.';
 
   @override
@@ -1879,13 +1876,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get termsOfUse => 'Lietošanas noteikumi';
-
-  @override
-  String get omiYourAiCompanion => 'Omi – jūsu AI pavadonis';
-
-  @override
-  String get captureEveryMoment =>
-      'Fiksējiet katru brīdi. Iegūstiet AI\nkopsavilkumus. Nekad vairs nerakstiet piezīmes.';
 
   @override
   String get appleWatchSetup => 'Apple Watch iestatīšana';
@@ -1930,18 +1920,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String errorStartingRecording(String error) {
     return 'Kļūda, sākot ierakstīšanu: $error';
   }
-
-  @override
-  String get selectPrimaryLanguage => 'Izvēlieties savu primāro valodu';
-
-  @override
-  String get languageBenefits => 'Iestatiet savu valodu precīzākai transkripcijai un personalizētai pieredzei';
-
-  @override
-  String get whatsYourPrimaryLanguage => 'Kāda ir jūsu primārā valoda?';
-
-  @override
-  String get selectYourLanguage => 'Izvēlieties savu valodu';
 
   @override
   String get personalGrowthJourney => 'Jūsu personīgās izaugsmes ceļojums ar AI, kas klausās katru jūsu vārdu.';
@@ -3377,9 +3355,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get dataProtection => 'Datu aizsardzība';
-
-  @override
-  String get yourDataIsProtected => 'Jūsu dati ir aizsargāti un regulēti ar mūsu ';
 
   @override
   String get pleaseSelectYourPrimaryLanguage => 'Lūdzu, izvēlieties savu primāro valodu';
@@ -5060,10 +5035,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'Papildu balss paraugs noņemts';
-
-  @override
-  String get consentDataMessage =>
-      'Turpinot, jūsu sarunas, ieraksti un personiskā informācija tiks droši glabāta mūsu serveros. Jūsu audio ieraksti un transkripcijas tiek apstrādātas ar trešo pušu AI pakalpojumiem (ieskaitot Deepgram transkripcijai un OpenAI analīzei), lai sniegtu jums AI vadītus ieskatus un iespējotu visas lietotnes funkcijas.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -7793,9 +7764,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get authorizingMcpServer => 'Autorizēšana…';
 
   @override
-  String get whereDidYouHearAboutOmi => 'Kā jūs mūs atradāt?';
-
-  @override
   String get tiktok => 'TikTok';
 
   @override
@@ -9982,9 +9950,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripcija nesaņem audio';
 
   @override
-  String get tapPlusToStartRecording => 'Pieskarieties ieraksta pogai, lai sāktu ierakstīšanu';
-
-  @override
   String get chatBlockTask => 'Uzdevums';
 
   @override
@@ -10704,9 +10669,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deviceConnecting => 'Savienojas…';
 
   @override
-  String get recordOptionsTip => 'Padoms: lai ierakstītu tālruņa zvanu, pieskarieties bultiņai uz ieraksta pogas.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Atjaunināšana neizdevās';
 
   @override
@@ -11250,14 +11212,474 @@ class AppLocalizationsLv extends AppLocalizations {
   String get keepUsingPendant => 'Turpināt ar kulonu';
 
   @override
-  String get recordWith => 'Ierakstīt ar';
-
-  @override
-  String get moreWaysToRecord => 'Citi ierakstīšanas veidi';
-
-  @override
   String get openCall => 'Atvērt zvanu';
 
   @override
   String get captureRecoveryBanner => 'Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu';
+
+  @override
+  String get goodMorning => 'Labrīt';
+
+  @override
+  String get goodAfternoon => 'Labdien';
+
+  @override
+  String get goodEvening => 'Labvakar';
+
+  @override
+  String get alreadyHaveAccount => 'Jau ir konts?';
+
+  @override
+  String get signInToOmi => 'Pierakstīties Omi';
+
+  @override
+  String get signInSubtitle => 'Tavas sarunas un atmiņas ir tavā kontā tālrunī, Mac un tīmeklī.';
+
+  @override
+  String onboardingAllSetName(String name) {
+    return 'Viss gatavs, $name.';
+  }
+
+  @override
+  String get completeHomeBody => 'Tava diena, uzdevumi un kopsavilkumi vienuviet.';
+
+  @override
+  String get completeAskTitle => 'Jautā';
+
+  @override
+  String get foundOmiOptionalHint => 'Neobligāti — palīdz nelielai komandai uzzināt, kas darbojas.';
+
+  @override
+  String get consentTitle => 'Tavi dati vienkāršos vārdos';
+
+  @override
+  String get consentSubtitle => 'Pirms Omi sāk klausīties, lūk, kas tieši notiek ar to, ko tas dzird.';
+
+  @override
+  String get consentStoredTitle => 'Kas tiek saglabāts';
+
+  @override
+  String get consentStoredBody =>
+      'Tavs audio, atšifrējumi un informācija, ko Omi uzzina, tiek droši glabāta tavā kontā.';
+
+  @override
+  String get consentProcessorsTitle => 'Kas tos apstrādā';
+
+  @override
+  String get consentProcessorsBody =>
+      'Runu atšifrē Deepgram un analizē OpenAI, lai izveidotu kopsavilkumus, uzdevumus un atmiņas.';
+
+  @override
+  String get consentControlTitle => 'Ko tu kontrolē';
+
+  @override
+  String get consentControlBody => 'Dzēs jebkuru sarunu, atmiņu vai visu kontu, kad vien vēlies.';
+
+  @override
+  String get readPrivacyPolicy => 'Lasīt privātuma politiku';
+
+  @override
+  String get whatShouldOmiCallYou => 'Kā Omi tevi saukt?';
+
+  @override
+  String get nameUsageHint => 'Omi to izmanto, lai atzīmētu tevi atšifrējumos un eksportos.';
+
+  @override
+  String get yourNamePlaceholder => 'Tavs vārds';
+
+  @override
+  String get whatLanguageDoYouSpeakMost => 'Kādā valodā tu runā visvairāk?';
+
+  @override
+  String get languageOnboardingSubtitle => 'Omi atšifrē vislabāk, ja zina valodu. Vēlāk vari pievienot vēl.';
+
+  @override
+  String get permissionsFewTitle => 'Dažas atļaujas';
+
+  @override
+  String get permissionsFewSubtitle => 'Omi prasa tikai to, ko izmanto. Tos vari jebkurā laikā mainīt iestatījumos.';
+
+  @override
+  String get permissionsContinueNote =>
+      '“Turpināt” neko neprasa. Katra atļauja tiek pieprasīta tikai tad, kad pieskaries “Atļaut”.';
+
+  @override
+  String get howDidYouHearAboutOmi => 'Kā tu uzzināji par Omi?';
+
+  @override
+  String get showOnLockScreen => 'Rādīt bloķēšanas ekrānā';
+
+  @override
+  String get seeAll => 'Skatīt visu';
+
+  @override
+  String get upNext => 'Nākamais';
+
+  @override
+  String get allTasks => 'Visi uzdevumi';
+
+  @override
+  String get thisWeek => 'Šonedēļ';
+
+  @override
+  String capturedDuration(String duration) {
+    return 'Ierakstīts $duration';
+  }
+
+  @override
+  String newMemoriesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Jaunas atmiņas: $count',
+      one: '1 jauna atmiņa',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncingFromPendant => 'Sinhronizē no jūsu kulona';
+
+  @override
+  String get pendantRecordingsSynced => 'Kulona ieraksti sinhronizēti';
+
+  @override
+  String recordedOnPendantWhileAway(String duration) {
+    return '~$duration ierakstīts kulonā, kamēr tālrunis bija prom';
+  }
+
+  @override
+  String dailyRecapOn(String day) {
+    return 'Dienas kopsavilkums · $day';
+  }
+
+  @override
+  String taskDueDayTime(String day, String time) {
+    return '$day, $time';
+  }
+
+  @override
+  String fromConversation(String title) {
+    return 'No: $title';
+  }
+
+  @override
+  String get endCapture => 'Beigt';
+
+  @override
+  String get toDo => 'Darāmais';
+
+  @override
+  String get devices => 'Ierīces';
+
+  @override
+  String get devicesSubtitle => 'Viss, kas klausās tavā vietā. Vienlaikus ieraksta viens.';
+
+  @override
+  String get addADevice => 'Pievienot ierīci';
+
+  @override
+  String get deviceReady => 'Gatavs';
+
+  @override
+  String get importFromOtherApps => 'Importēt no citām lietotnēm';
+
+  @override
+  String get whatWillYouWear => 'Ko tu valkāsi?';
+
+  @override
+  String get pickDeviceSubtitle => 'Vēlāk vari pievienot vēl. Vienlaikus ieraksta viens.';
+
+  @override
+  String get alreadyHaveOne => 'Jau ir?';
+
+  @override
+  String get noDeviceHeader => 'Bez ierīces';
+
+  @override
+  String get omiPendantName => 'Omi kulons';
+
+  @override
+  String get allDayConversations => 'Sarunas visu dienu';
+
+  @override
+  String get conversationsAndPhotos => 'Sarunas + fotoattēli';
+
+  @override
+  String get wristMic => 'Mikrofons uz plaukstas locītavas';
+
+  @override
+  String get glassesAudio => 'Briļļu audio';
+
+  @override
+  String get bringRecordingsIntoOmi => 'Pārnes savus ierakstus uz Omi';
+
+  @override
+  String get useThisIphone => 'Izmantot šo iPhone';
+
+  @override
+  String get useThisPhone => 'Izmantot šo tālruni';
+
+  @override
+  String get startInSeconds => 'Sāc 10 sekundēs';
+
+  @override
+  String get askAboutThisConversationPlaceholder => 'Jautā par šo sarunu';
+
+  @override
+  String get summaryStyle => 'Kopsavilkuma stils';
+
+  @override
+  String get summaryStyleSubtitle => 'Izvēlies, kura lietotne raksta šo kopsavilkumu';
+
+  @override
+  String get appearance => 'Izskats';
+
+  @override
+  String get appearanceSystem => 'Sistēma';
+
+  @override
+  String get appearanceLight => 'Gaišs';
+
+  @override
+  String get appearanceDark => 'Tumšs';
+
+  @override
+  String get feel => 'Sajūta';
+
+  @override
+  String get haptics => 'Haptika';
+
+  @override
+  String get hapticsSubtitle => 'Viegls pieskāriens, kad kaut ko pabeidzat, atzīmējat ar zvaigznīti vai izpildāt';
+
+  @override
+  String get textSize => 'Teksta lielums';
+
+  @override
+  String get textSizeSubtitle => 'Atbilst tālruņa teksta lielumam';
+
+  @override
+  String get appearanceMotionNote =>
+      'Kustība seko tālruņa iestatījumam “Samazināt kustību” — visas cilpas, arī ierīces gaisma, apstājas.';
+
+  @override
+  String get signedInWithApple => 'Pierakstījies ar Apple';
+
+  @override
+  String get signedInWithGoogle => 'Pierakstījies ar Google';
+
+  @override
+  String premiumMinutesLeftThisMonth(String left, int limit) {
+    return 'Šomēnes atlikušas $left no $limit premium minūtēm';
+  }
+
+  @override
+  String get recordingFrom => 'Ieraksta no';
+
+  @override
+  String get recordingFromSubtitle =>
+      'Vienlaikus ieraksta tikai viens avots. Pārslēdzot pašreizējā saruna tiek pabeigta.';
+
+  @override
+  String get manageDevices => 'Pārvaldīt ierīces';
+
+  @override
+  String get notListeningTitle => 'Neklausās';
+
+  @override
+  String get notListeningSubtitle => 'Sāciet ar šo tālruni vai pievienojiet ierīci, kas klausās visu dienu.';
+
+  @override
+  String get startListening => 'Sākt klausīties';
+
+  @override
+  String get searchEverything => 'Meklēt visur';
+
+  @override
+  String searchResultsCount(int count) {
+    return 'Rezultāti · $count';
+  }
+
+  @override
+  String get nothingFound => 'Nekas netika atrasts';
+
+  @override
+  String get searchNothingFoundHint =>
+      'Izmēģiniet citu vārdu vai pajautājiet Omi — tas saprot nozīmi, ne tikai vārdus.';
+
+  @override
+  String get askOmiInstead => 'Jautāt Omi';
+
+  @override
+  String get recentSearches => 'Nesenie';
+
+  @override
+  String get searchAskSuggestion => 'Ko es apsolīju izdarīt šonedēļ?';
+
+  @override
+  String get welcomeRememberTitle => 'Atcerieties katru sarunu.';
+
+  @override
+  String get welcomeRememberSubtitle =>
+      'Valkājiet, ko vēlaties. Omi dzirdēto pārvērš piezīmēs, darāmajos darbos un dienas apkopojumā.';
+
+  @override
+  String get memoriesSubtitle => 'Ko Omi zina un kur to uzzināja';
+
+  @override
+  String get memoryTierLongTerm => 'Ilgtermiņa';
+
+  @override
+  String get memoryTierShortTerm => 'Īstermiņa';
+
+  @override
+  String get memoriesTierNote =>
+      'Jaunas atmiņas sākas kā īstermiņa. Tās, kas joprojām ir svarīgas, Omi pats pārceļ uz ilgtermiņa.';
+
+  @override
+  String get askEmptyTitle => 'Jautājiet par jebko, ko esat dzirdējis.';
+
+  @override
+  String get askEmptySubtitle => 'Omi atbild, balstoties uz jūsu sarunām, atmiņām un uzdevumiem.';
+
+  @override
+  String get completeListeningTitle => 'Klausīšanās';
+
+  @override
+  String get completeListeningBody => 'Zils nozīmē, ka Omi jūs dzird — no ierīces, ko valkājat, vai no šī tālruņa.';
+
+  @override
+  String get completeAskAnyBody => 'Pieskarieties Jautāt, lai jautātu par jebko, ko esat dzirdējis.';
+
+  @override
+  String get completeDevicesBody => 'Pievienojiet valkājamu ierīci jebkurā laikā vai sāciet ar šo tālruni.';
+
+  @override
+  String get conversationSourceGlasses => 'Brilles';
+
+  @override
+  String get conversationSourceImported => 'Importētie';
+
+  @override
+  String get conversationSourceEmptyHint => 'No šī avota vēl nekas nav ierakstīts.';
+
+  @override
+  String get findMyPendant => 'Atrast manu kulonu';
+
+  @override
+  String get findMyPendantHint => 'Atskaņo skaņu, lai to varētu atrast';
+
+  @override
+  String get upToDate => 'Atjaunināts';
+
+  @override
+  String get updateAvailable => 'Pieejams atjauninājums';
+
+  @override
+  String get storageTitle => 'Krātuve';
+
+  @override
+  String get connectStepTurnOn => 'Ieslēdziet un turiet tuvumā';
+
+  @override
+  String get connectStepAllowBluetooth => 'Atļaujiet Bluetooth';
+
+  @override
+  String get connectStepTest => 'Pasakiet kaut ko pārbaudei';
+
+  @override
+  String get connectStepTestHint => 'Vārdi parādās šeit, kamēr runājat';
+
+  @override
+  String get setUpLater => 'Iestatīt vēlāk';
+
+  @override
+  String recapPreviousDay(String day) {
+    return 'Iepriekšējās dienas kopsavilkums: $day';
+  }
+
+  @override
+  String recapNextDay(String day) {
+    return 'Nākamās dienas kopsavilkums: $day';
+  }
+
+  @override
+  String get askStarterToday => 'Apkopo šodienu';
+
+  @override
+  String get askStarterPeople => 'Ar ko es tikos?';
+
+  @override
+  String get askStarterOpen => 'Kas vēl nav pabeigts?';
+
+  @override
+  String get peopleSubtitle => 'Balsis, ko Omi atpazīst atšifrējumos';
+
+  @override
+  String get usageCurrentPlan => 'Pašreizējais plāns';
+
+  @override
+  String get appsExplore => 'Izpētīt';
+
+  @override
+  String get appOutOfFive => 'no 5';
+
+  @override
+  String get appStatUsers => 'Lietotāji';
+
+  @override
+  String homeWelcomeName(String name) {
+    return 'Laipni lūdzam, $name';
+  }
+
+  @override
+  String get homeWelcome => 'Laipni lūdzam';
+
+  @override
+  String get homeFirstDaySubtitle => 'Jūsu pirmā diena ar Omi';
+
+  @override
+  String get homeListeningHeroTitle => 'Omi klausās';
+
+  @override
+  String get homeListeningHeroBody => 'Jūsu pirmā saruna šeit parādīsies minūti pēc tās beigām.';
+
+  @override
+  String get homeGettingStarted => 'Darba sākšana';
+
+  @override
+  String get gettingStartedConnect => 'Pievienojiet ierīci';
+
+  @override
+  String get gettingStartedConversation => 'Aprunājieties';
+
+  @override
+  String get gettingStartedAsk => 'Pajautājiet Omi par to';
+
+  @override
+  String get homeGoodToKnow => 'Noderīgi zināt';
+
+  @override
+  String get tipFinishTitle => 'Beidziet jebkurā laikā';
+
+  @override
+  String get tipFinishBody => 'Pieskarieties “Beigt” vai divreiz nospiediet kulonu – un kopsavilkums sāksies uzreiz.';
+
+  @override
+  String get tipStarTitle => 'Atzīmējiet svarīgo ar zvaigzni';
+
+  @override
+  String get tipStarBody => 'Ar zvaigzni atzīmētās sarunas vēlāk viegli atrast.';
+
+  @override
+  String get tipPrivateTitle => 'Pēc noklusējuma privāti';
+
+  @override
+  String get tipPrivateBody => 'Jūsu sarunas paliek privātas, ja vien tās nekopīgojat.';
+
+  @override
+  String homeGettingStartedProgress(int done, int total) {
+    return '$done no $total';
+  }
 }

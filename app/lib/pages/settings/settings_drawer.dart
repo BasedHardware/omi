@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/settings/settings_destinations.dart';
 import 'package:omi/pages/settings/settings_groups.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -13,9 +18,10 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
-/// The Settings sheet: Account, then seven groups (Device, Recording & Transcription,
-/// Notifications & Display, Integrations, Privacy & Data, Help & About, Developer Settings), plus
-/// search over every row in Settings and its pages ([settingsSearchEntries]).
+/// The Settings sheet (Rev 3 "Account + groups"): the account, the plan and what is left of it,
+/// Referral, then the groups (Devices, Recording & Transcription, Notifications & Display, Apps,
+/// Integrations, Data & Privacy, Import from other apps, Help & About, Feedback, Developer
+/// Settings), plus search over every row in Settings and its pages ([settingsSearchEntries]).
 ///
 /// Every setting is at most one tap below the sheet: a group row opens its group page
 /// (settings_groups.dart), whose rows open the same pages the sheet used to open directly.
@@ -110,16 +116,20 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     );
   }
 
-  /// "Pro" on the Plan & Usage row for a paid plan.
-  String? _planValue(UsageProvider usage) {
-    final plan = usage.subscription?.subscription.plan;
-    if (plan == null || !plan.isPaid) return null;
-    return context.l10n.pro;
+  /// "Signed in with Apple" (or Google) from the account's sign-in provider; the email otherwise.
+  static String? _accountSubtitle(AppLocalizations l10n, String email) {
+    // No Firebase app in previews and widget tests: there is no provider to name there.
+    final providers = Firebase.apps.isEmpty
+        ? const <String>[]
+        : [...?FirebaseAuth.instance.currentUser?.providerData.map((info) => info.providerId)];
+    if (providers.contains('apple.com')) return l10n.signedInWithApple;
+    if (providers.contains('google.com')) return l10n.signedInWithGoogle;
+    return email.isEmpty ? null : email;
   }
 
   Widget _buildSettings(BuildContext context) {
     final l10n = context.l10n;
-    final planValue = _planValue(context.watch<UsageProvider>());
+    final subscription = context.watch<UsageProvider>().subscription;
     final prefs = SharedPreferencesUtil();
     final name = prefs.givenName;
     final email = prefs.email;
@@ -128,22 +138,22 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
       children: [
         OmiSettingsGroup(
           children: [
-            _row(SettingsDestination.profile,
-                key: 'settings_account',
-                icon: FontAwesomeIcons.solidUser,
-                title: name.isEmpty ? l10n.account : name,
-                subtitle: email.isEmpty ? null : email),
+            OmiSettingsRow(
+              key: const ValueKey('settings_account'),
+              leading: OmiInitialAvatar(name: name.isEmpty ? (email.isEmpty ? l10n.account : email) : name),
+              title: name.isEmpty ? l10n.account : name,
+              subtitle: _accountSubtitle(l10n, email),
+              showChevron: true,
+              onTap: () => _open(SettingsDestination.profile),
+            ),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
         // Plan, referrals and feedback stay one tap from the sheet (David, 2026-09-24).
+        _PlanCard(subscription: subscription, onTap: () => _open(SettingsDestination.planAndUsage)),
+        const SizedBox(height: OmiSpacing.sm),
         OmiSettingsGroup(
           children: [
-            _row(SettingsDestination.planAndUsage,
-                key: 'settings_row_planAndUsage',
-                icon: FontAwesomeIcons.chartLine,
-                title: l10n.planAndUsage,
-                value: planValue),
             _row(SettingsDestination.referral,
                 key: 'settings_row_referral',
                 icon: FontAwesomeIcons.gift,
@@ -155,7 +165,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         OmiSettingsGroup(
           children: [
             _row(SettingsDestination.deviceGroup,
-                key: 'settings_group_device', icon: FontAwesomeIcons.bluetooth, title: l10n.device),
+                key: 'settings_group_device', icon: FontAwesomeIcons.headphones, title: l10n.devices),
             _row(SettingsDestination.recordingGroup,
                 key: 'settings_group_recording',
                 icon: FontAwesomeIcons.microphone,
@@ -164,6 +174,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 key: 'settings_group_notifications',
                 icon: FontAwesomeIcons.solidBell,
                 title: l10n.notificationsAndDisplay),
+            _row(SettingsDestination.apps,
+                key: 'settings_row_apps', icon: FontAwesomeIcons.tableCellsLarge, title: l10n.apps),
             _row(SettingsDestination.integrations,
                 key: 'settings_group_integrations',
                 icon: FontAwesomeIcons.networkWired,
@@ -171,6 +183,11 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 tag: SettingsTag(l10n.beta, OmiColors.warning)),
             _row(SettingsDestination.privacyGroup,
                 key: 'settings_group_privacy', icon: FontAwesomeIcons.shield, title: l10n.dataAndPrivacy),
+            // Rev 3: bringing recordings over from Plaud, Limitless, Bee… sits at the top level.
+            _row(SettingsDestination.importData,
+                key: 'settings_row_importData',
+                icon: FontAwesomeIcons.fileImport,
+                title: l10n.importFromOtherApps),
           ],
         ),
         const SizedBox(height: OmiSpacing.xl),
@@ -237,19 +254,61 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         ),
       );
     }
+    // v2: a large title with the close X on its trailing edge (UX contract §1), then a search
+    // capsule that opens the search header. The capsule is a button named "Search", so the
+    // search entry point reads the same to a screen reader as before.
     return Padding(
       key: const ValueKey('normal-header'),
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
-      child: Row(
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, 0, OmiSpacing.xxs, 0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          OmiIconButton(icon: const Icon(Icons.search), label: l10n.search, onPressed: _startSearch),
-          Expanded(
+          Row(
+            children: [
+              Expanded(
+                child: Semantics(
+                  header: true,
+                  child: Text(l10n.settings, maxLines: 1, overflow: TextOverflow.ellipsis, style: OmiType.largeTitle),
+                ),
+              ),
+              const OmiCloseButton(),
+            ],
+          ),
+          const SizedBox(height: OmiSpacing.sm),
+          Padding(
+            padding: const EdgeInsets.only(right: OmiSpacing.md),
             child: Semantics(
-              header: true,
-              child: Text(l10n.settings, textAlign: TextAlign.center, style: OmiType.headline),
+              button: true,
+              label: l10n.search,
+              onTap: _startSearch,
+              excludeSemantics: true,
+              child: GestureDetector(
+                key: const Key('settings_search_launcher'),
+                behavior: HitTestBehavior.opaque,
+                onTap: _startSearch,
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: OmiSize.minTap),
+                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
+                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+                  child: Row(
+                    children: [
+                      Icon(Icons.search, size: 20, color: OmiColors.textTertiary),
+                      const SizedBox(width: OmiSpacing.xs),
+                      Expanded(
+                        child: Text(
+                          l10n.searchSettings,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
-          const OmiCloseButton(),
         ],
       ),
     );
@@ -271,6 +330,65 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The plan at a glance (v2 Settings): which plan, what is left of this month's premium
+/// transcription on the free plan, and a bar of it. Opens Plan & Usage.
+class _PlanCard extends StatelessWidget {
+  const _PlanCard({required this.subscription, required this.onTap});
+
+  final UserSubscriptionResponse? subscription;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final sub = subscription;
+    final paid = sub?.subscription.plan.isPaid ?? false;
+    final limitSeconds = sub?.transcriptionSecondsLimit ?? 0;
+    final metered = sub != null && !paid && limitSeconds > 0;
+    final limit = (limitSeconds / 60).round();
+    final left = metered ? ((limitSeconds - sub.transcriptionSecondsUsed).clamp(0, limitSeconds) / 60).round() : 0;
+    final title = sub == null ? l10n.planAndUsage : (paid ? l10n.pro : l10n.freePlan);
+    final subtitle = metered
+        ? l10n.premiumMinutesLeftThisMonth(NumberFormat.decimalPattern(l10n.localeName).format(left), limit)
+        : null;
+    return OmiCard(
+      key: const ValueKey('settings_row_planAndUsage'),
+      padding: const EdgeInsets.all(OmiSpacing.md),
+      onTap: onTap,
+      semanticLabel: subtitle == null ? title : '$title, $subtitle',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const OmiIconTile(child: FaIcon(FontAwesomeIcons.chartLine, size: 16)),
+              const SizedBox(width: OmiSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: OmiType.headline),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(subtitle, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: OmiSpacing.xs),
+              OmiGlyph(OmiGlyphs.chevronRight, size: 14, color: OmiColors.textTertiary),
+            ],
+          ),
+          if (metered) ...[
+            const SizedBox(height: 10),
+            OmiProgressBar(value: limit == 0 ? 0 : left / limit),
+          ],
+        ],
+      ),
     );
   }
 }

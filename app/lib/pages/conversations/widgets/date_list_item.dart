@@ -13,13 +13,11 @@ class DateListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(24, isFirst ? 0 : 20, 16, 4),
+      padding: EdgeInsets.fromLTRB(OmiSize.screenMargin + OmiSpacing.xxs, isFirst ? 0 : 20, 16, 4),
+      // v2: day headers are section titles (22pt bold).
       child: Semantics(
         header: true,
-        child: Text(
-          OmiDateFormat.of(context).dayHeader(date),
-          style: OmiType.body.copyWith(fontWeight: FontWeight.w600),
-        ),
+        child: Text(OmiDateFormat.of(context).dayHeader(date), style: OmiType.title2),
       ),
     );
   }

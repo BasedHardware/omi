@@ -110,7 +110,7 @@ class _StateLayout extends StatelessWidget {
           children: [
             ExcludeSemantics(
               child: IconTheme.merge(
-                data: const IconThemeData(size: 40, color: OmiColors.textTertiary),
+                data: IconThemeData(size: 40, color: OmiColors.textTertiary),
                 child: glyph,
               ),
             ),

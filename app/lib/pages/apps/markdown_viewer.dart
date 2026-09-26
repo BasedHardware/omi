@@ -19,7 +19,7 @@ class _MarkdownViewerState extends State<MarkdownViewer> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(backgroundColor: OmiColors.surface0, leading: const OmiBackButton(), title: Text(widget.title)),
+      appBar: OmiAppBar(backgroundColor: OmiColors.surface0, leading: const OmiBackButton(), title: Text(widget.title)),
       backgroundColor: OmiColors.surface0,
       body: ListView(
         children: [
@@ -38,7 +38,7 @@ class _MarkdownViewerState extends State<MarkdownViewer> {
                   backgroundColor: Colors.transparent,
                   color: OmiColors.textSecondary,
                 ),
-                blockquoteDecoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+                blockquoteDecoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
                 code: OmiType.callout.copyWith(
                   height: 1.2,
                   backgroundColor: Colors.transparent,

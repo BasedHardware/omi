@@ -3,14 +3,19 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
+import 'package:pull_down_button/pull_down_button.dart';
 
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/pages/apps/add_app.dart';
+import 'package:omi/pages/apps/add_mcp_server_page.dart';
 import 'package:omi/pages/apps/explore_install_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 class AppsPage extends StatefulWidget {
   final bool showAppBar;
@@ -48,6 +53,44 @@ class AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin {
     _exploreInstallPageKey.currentState?.scrollToTop();
   }
 
+  /// "+": create an app or add an MCP server.
+  Widget _createMenu(BuildContext context) {
+    return PullDownButton(
+      itemBuilder: (context) => [
+        PullDownMenuItem(
+          title: context.l10n.createAnApp,
+          subtitle: context.l10n.createAndShareYourApp,
+          iconWidget: const Icon(Icons.apps, size: 18),
+          onTap: () {
+            PlatformManager.instance.analytics.pageOpened('Submit App');
+            routeToPage(context, const AddAppPage());
+          },
+        ),
+        PullDownMenuItem(
+          title: context.l10n.addMcpServer,
+          subtitle: context.l10n.connectExternalAiTools,
+          iconWidget: const Icon(Icons.cable, size: 18),
+          onTap: () {
+            PlatformManager.instance.analytics.pageOpened('Add MCP Server');
+            routeToPage(context, const AddMcpServerPage());
+          },
+        ),
+      ],
+      buttonBuilder: (context, showMenu) => OmiToolbarCapsule(
+        children: [
+          OmiIconButton(
+            icon: const Icon(Icons.add),
+            label: context.l10n.createAnApp,
+            onPressed: () {
+              OmiHaptics.selection();
+              showMenu();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -59,15 +102,9 @@ class AppsPageState extends State<AppsPage> with AutomaticKeepAliveClientMixin {
     super.build(context); // Required for AutomaticKeepAliveClientMixin
     return Scaffold(
       backgroundColor: OmiColors.surface0,
-      appBar: widget.showAppBar
-          ? AppBar(
-              backgroundColor: OmiColors.surface0,
-              leading: const OmiBackButton(),
-              title: Text(context.l10n.apps),
-              centerTitle: true,
-              elevation: 0,
-            )
-          : null,
+      // Pushed as a page (Settings → Apps): the round back button and "+" to create an app or add
+      // an MCP server; the body carries the large "Apps" title.
+      appBar: widget.showAppBar ? OmiAppBar(leading: const OmiBackButton(), actions: [_createMenu(context)]) : null,
       body: DefaultTabController(
         length: 1,
         initialIndex: 0,

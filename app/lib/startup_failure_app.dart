@@ -7,6 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/l10n/app_localizations_en.dart';
+import 'package:omi/ui/components/omi_pendant.dart';
+import 'package:omi/ui/components/omi_ring_logo.dart';
 import 'package:omi/ui/components/omi_spinner.dart';
 import 'package:omi/ui/omi_tokens.dart';
 
@@ -75,50 +77,68 @@ class StartupFailureApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       home: Scaffold(
         backgroundColor: OmiColors.surface0,
-        body: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(OmiSpacing.xl),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Semantics(
-                  header: true,
-                  child: Text(l10n.startupFailedTitle, style: OmiType.title2),
-                ),
-                const SizedBox(height: OmiSpacing.sm),
-                Text(
-                  _isConfiguration ? l10n.startupFailedConfigMessage : l10n.startupFailedMessage,
-                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4),
-                ),
-                const SizedBox(height: OmiSpacing.lg),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: SelectableText(
-                      // Selectable so the message can be copied off a device
-                      // that has no debugger attached — which is the situation
-                      // this screen exists for.
-                      (kDebugMode || kProfileMode) && stack != null ? '$error\n\n$stack' : '$error',
-                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, height: 1.4),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: OmiSpacing.md),
-                if (retry != null) ...[
-                  _RetryButton(label: l10n.tryAgain, onRetry: retry),
-                  const SizedBox(height: OmiSpacing.xs),
-                ],
-                TextButton(
-                  key: const Key('startup_failure_contact_support'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: OmiColors.textPrimary,
-                    minimumSize: const Size.fromHeight(_kTapTarget),
-                  ),
-                  onPressed: () => launchUrl(_supportUri(l10n)),
-                  child: Text(l10n.contactSupportAction, style: OmiType.headline),
-                ),
-              ],
+        // Startup (Rev 3, any device): the Omi mark at rest above a centred message.
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            Align(
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                height: OmiPendantHero.heightFor(0.62),
+                child: const Center(child: OmiRingLogo(size: 64)),
+              ),
             ),
-          ),
+            SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(OmiSpacing.xl),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SizedBox(height: OmiPendantHero.heightFor(0.62) - OmiSpacing.lg),
+                    Semantics(
+                      header: true,
+                      child: Text(l10n.startupFailedTitle, style: OmiType.title2, textAlign: TextAlign.center),
+                    ),
+                    const SizedBox(height: OmiSpacing.sm),
+                    Text(
+                      _isConfiguration ? l10n.startupFailedConfigMessage : l10n.startupFailedMessage,
+                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: OmiSpacing.lg),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: SelectableText(
+                          // Selectable so the message can be copied off a device
+                          // that has no debugger attached — which is the situation
+                          // this screen exists for.
+                          (kDebugMode || kProfileMode) && stack != null ? '$error\n\n$stack' : '$error',
+                          style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, height: 1.4),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: OmiSpacing.md),
+                    if (retry != null) ...[
+                      _RetryButton(label: l10n.tryAgain, onRetry: retry),
+                      const SizedBox(height: OmiSpacing.xs),
+                    ],
+                    TextButton(
+                      key: const Key('startup_failure_contact_support'),
+                      style: TextButton.styleFrom(
+                        backgroundColor: OmiColors.surface2,
+                        foregroundColor: OmiColors.textPrimary,
+                        minimumSize: const Size.fromHeight(_kTapTarget + 6),
+                        shape: const StadiumBorder(),
+                      ),
+                      onPressed: () => launchUrl(_supportUri(l10n)),
+                      child: Text(l10n.contactSupportAction, style: OmiType.headline),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -156,7 +176,7 @@ class _RetryButtonState extends State<_RetryButton> {
         backgroundColor: OmiColors.accent,
         foregroundColor: OmiColors.onAccent,
         minimumSize: const Size.fromHeight(_kTapTarget + 6),
-        shape: const RoundedRectangleBorder(borderRadius: OmiRadius.pillAll),
+        shape: const StadiumBorder(),
       ),
       onPressed: _busy ? null : _retry,
       child: _busy

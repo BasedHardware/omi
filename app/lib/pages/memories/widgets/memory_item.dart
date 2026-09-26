@@ -31,6 +31,11 @@ class MemoryItem extends StatelessWidget {
   final bool showDismissible;
   final bool highlighted;
 
+  /// Where the row sits on the list's one card (v2 Memories): the first rounds the top, the last
+  /// the bottom, and rows after the first draw a hairline above. A lone row is a whole card.
+  final bool first;
+  final bool last;
+
   /// Invoked after the row deleted its memory (swipe or long-press menu). The row already shows
   /// the Undo toast itself; this is for hosts that track deletes.
   final void Function(String content, Memory memory)? onDeleteNotification;
@@ -42,8 +47,22 @@ class MemoryItem extends StatelessWidget {
     required this.onTap,
     this.showDismissible = true,
     this.highlighted = false,
+    this.first = true,
+    this.last = true,
     this.onDeleteNotification,
   });
+
+  BorderRadius get _radius => BorderRadius.vertical(
+        top: first ? const Radius.circular(OmiRadius.card) : Radius.zero,
+        bottom: last ? const Radius.circular(OmiRadius.card) : Radius.zero,
+      );
+
+  /// Short-term or long-term, for the row's first word (v2 Memories).
+  static String? _tierLabel(BuildContext context, Memory memory) => switch (memory.layer) {
+        MemoryLayer.longTerm => context.l10n.memoryTierLongTerm,
+        MemoryLayer.shortTerm => context.l10n.memoryTierShortTerm,
+        _ => null,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -60,19 +79,14 @@ class MemoryItem extends StatelessWidget {
       onLongPress: () => _showRowMenu(context, editable),
       child: AnimatedContainer(
         duration: OmiMotion.of(context).standard,
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.fromLTRB(18, 18, 16, 18),
+        margin: EdgeInsets.only(bottom: last ? 12 : 0),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
         decoration: BoxDecoration(
-          color: highlighted ? OmiColors.surface3 : AppStyles.backgroundSecondary,
-          borderRadius: OmiRadius.xlAll,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          color: highlighted ? OmiColors.surface3 : OmiColors.surface1,
+          borderRadius: _radius,
         ),
+        foregroundDecoration:
+            first ? null : BoxDecoration(border: Border(top: BorderSide(color: OmiColors.border, width: 0.5))),
         child: Stack(
           children: [
             Row(
@@ -100,7 +114,7 @@ class MemoryItem extends StatelessWidget {
                           Expanded(
                             child: Text(
                               memory.content.decodeString,
-                              style: AppStyles.body,
+                              style: OmiType.serifRow,
                             ),
                           ),
                           if (editable)
@@ -129,20 +143,16 @@ class MemoryItem extends StatelessWidget {
                             style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
                           ),
                         ),
-                      if (provenanceLabel != null)
+                      if (_tierLabel(context, memory) != null || provenanceLabel != null || temporalLabel != null)
                         Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            provenanceLabel,
-                            style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
-                          ),
-                        ),
-                      if (temporalLabel != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            temporalLabel,
-                            style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                          padding: const EdgeInsets.only(top: 8),
+                          child: _MemoryMetaLine(
+                            tier: _tierLabel(context, memory),
+                            longTerm: memory.layer == MemoryLayer.longTerm,
+                            details: [
+                              if (provenanceLabel != null) provenanceLabel,
+                              if (temporalLabel != null) temporalLabel
+                            ].join(' · '),
                           ),
                         ),
                     ],
@@ -230,11 +240,8 @@ class MemoryItem extends StatelessWidget {
       direction: DismissDirection.endToStart,
       onDismissed: (direction) => _delete(context),
       background: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: const BoxDecoration(
-          color: OmiColors.danger,
-          borderRadius: OmiRadius.xlAll,
-        ),
+        margin: EdgeInsets.only(bottom: last ? 12 : 0),
+        decoration: BoxDecoration(color: OmiColors.danger, borderRadius: _radius),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
         child: const Icon(Icons.delete_outline, color: Colors.white),
@@ -485,5 +492,41 @@ class MemoryItem extends StatelessWidget {
     } else {
       OmiFeedback.error(context, context.l10n.conversationNotFoundOrDeleted);
     }
+  }
+}
+
+/// A memory row's second line (v2 Memories): the tier with its dot — filled for long-term, a ring
+/// for short-term — then where and when it was learned.
+class _MemoryMetaLine extends StatelessWidget {
+  const _MemoryMetaLine({required this.tier, required this.longTerm, required this.details});
+
+  final String? tier;
+  final bool longTerm;
+  final String details;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = OmiType.footnote.copyWith(color: OmiColors.textSecondary);
+    final tierColor = longTerm ? OmiColors.textPrimary : OmiColors.textSecondary;
+    return Row(
+      children: [
+        if (tier != null) ...[
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: longTerm ? tierColor : null,
+              border: longTerm ? null : Border.all(color: tierColor, width: 1.2),
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(tier!, style: style.copyWith(color: tierColor, fontWeight: FontWeight.w600)),
+          if (details.isNotEmpty) const SizedBox(width: 10),
+        ],
+        if (details.isNotEmpty)
+          Expanded(child: Text(details, style: style, maxLines: 1, overflow: TextOverflow.ellipsis)),
+      ],
+    );
   }
 }

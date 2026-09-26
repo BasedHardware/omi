@@ -159,7 +159,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
     PlatformManager.instance.analytics.pageOpened('Language Settings');
 
     return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.languageTitle)),
+      appBar: OmiAppBar(leading: const OmiBackButton(), title: Text(context.l10n.languageTitle)),
       body: Consumer4<HomeProvider, UserProvider, CaptureProvider, LocaleProvider>(
         builder: (context, homeProvider, userProvider, captureProvider, localeProvider, _) {
           return SingleChildScrollView(
@@ -205,7 +205,7 @@ class _LanguageOptionList extends StatelessWidget {
                 fontWeight: option.selected ? FontWeight.w500 : FontWeight.w400,
               ),
             ),
-            trailing: option.selected ? const Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
+            trailing: option.selected ? Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
             onTap: option.onTap,
           );
         },

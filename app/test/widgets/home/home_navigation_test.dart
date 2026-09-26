@@ -33,7 +33,8 @@ void main() {
 
     test('selects the parent tab before the page', () {
       expect(HomeDeepLink.parse('/action-items')!.tabIndex, 2);
-      expect(HomeDeepLink.parse('/apps/xyz')!.tabIndex, 3);
+      // Rev 3: Apps is in Settings, not a tab.
+      expect(HomeDeepLink.parse('/apps/xyz')!.tabIndex, isNull);
       expect(HomeDeepLink.parse('/memories')!.tabIndex, 0);
       expect(HomeDeepLink.parse('/conversation/abc')!.tabIndex, isNull);
     });

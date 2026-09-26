@@ -1872,9 +1872,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get openSettings => 'Beállítások megnyitása';
 
   @override
-  String get whatsYourName => 'Mi a neved?';
-
-  @override
   String get speakTranscribeSummarize => 'Beszélj. Átírás. Összefoglalás.';
 
   @override
@@ -1888,13 +1885,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get termsOfUse => 'Felhasználási feltételeket';
-
-  @override
-  String get omiYourAiCompanion => 'Omi – AI társad';
-
-  @override
-  String get captureEveryMoment =>
-      'Rögzítsd minden pillanatot. Kapj AI-alapú\nösszefoglalókat. Soha többé ne kelljen jegyzetet készítened.';
 
   @override
   String get appleWatchSetup => 'Apple Watch beállítása';
@@ -1939,18 +1929,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String errorStartingRecording(String error) {
     return 'Hiba a felvétel indításakor: $error';
   }
-
-  @override
-  String get selectPrimaryLanguage => 'Válaszd ki az elsődleges nyelvedet';
-
-  @override
-  String get languageBenefits => 'Állítsd be a nyelvedet a pontosabb átíráshoz és személyre szabott élményhez';
-
-  @override
-  String get whatsYourPrimaryLanguage => 'Mi az elsődleges nyelved?';
-
-  @override
-  String get selectYourLanguage => 'Válaszd ki a nyelvedet';
 
   @override
   String get personalGrowthJourney => 'Személyes növekedési utazásod AI-val, amely minden szavadra figyel.';
@@ -3391,9 +3369,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get dataProtection => 'Adatvédelem';
-
-  @override
-  String get yourDataIsProtected => 'Adataid védettek és ';
 
   @override
   String get pleaseSelectYourPrimaryLanguage => 'Kérjük, válassza ki az elsődleges nyelvét';
@@ -5078,10 +5053,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'További hangminta eltávolítva';
-
-  @override
-  String get consentDataMessage =>
-      'A folytatással beszélgetéseit, felvételeit és személyes adatait biztonságosan tároljuk szervereinken. Hangfelvételeit és átiratait harmadik féltől származó AI szolgáltatások dolgozzák fel (beleértve a Deepgramot az átíráshoz és az OpenAI-t az elemzéshez), hogy AI-alapú betekintéseket nyújtsunk Önnek és az alkalmazás összes funkcióját biztosítsuk.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -7809,9 +7780,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get authorizingMcpServer => 'Engedélyezés…';
 
   @override
-  String get whereDidYouHearAboutOmi => 'Hogyan találtál ránk?';
-
-  @override
   String get tiktok => 'TikTok';
 
   @override
@@ -9997,9 +9965,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get transcriptionNoAudio => 'Az átírás nem kap hangot';
 
   @override
-  String get tapPlusToStartRecording => 'Koppints a felvétel gombra a felvétel indításához';
-
-  @override
   String get chatBlockTask => 'Feladat';
 
   @override
@@ -10719,9 +10684,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deviceConnecting => 'Csatlakozás…';
 
   @override
-  String get recordOptionsTip => 'Tipp: telefonhívás rögzítéséhez koppints a felvétel gomb nyilára.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'A frissítés nem sikerült';
 
   @override
@@ -11266,14 +11228,478 @@ class AppLocalizationsHu extends AppLocalizations {
   String get keepUsingPendant => 'Maradok a medálnál';
 
   @override
-  String get recordWith => 'Rögzítés ezzel';
-
-  @override
-  String get moreWaysToRecord => 'További rögzítési módok';
-
-  @override
   String get openCall => 'Hívás megnyitása';
 
   @override
   String get captureRecoveryBanner => 'A medál hangja nem érkezik meg az alkalmazásba — a javításhoz koppintson';
+
+  @override
+  String get goodMorning => 'Jó reggelt';
+
+  @override
+  String get goodAfternoon => 'Jó napot';
+
+  @override
+  String get goodEvening => 'Jó estét';
+
+  @override
+  String get alreadyHaveAccount => 'Már van fiókod?';
+
+  @override
+  String get signInToOmi => 'Bejelentkezés az Omiba';
+
+  @override
+  String get signInSubtitle => 'A beszélgetéseid és emlékeid a fiókoddal együtt elérhetők telefonon, Macen és a weben.';
+
+  @override
+  String onboardingAllSetName(String name) {
+    return 'Minden kész, $name.';
+  }
+
+  @override
+  String get completeHomeBody => 'A napod, a feladataid és az összefoglalóid egy helyen.';
+
+  @override
+  String get completeAskTitle => 'Kérdezz';
+
+  @override
+  String get foundOmiOptionalHint => 'Nem kötelező – segít egy kis csapatnak megtudni, mi működik.';
+
+  @override
+  String get consentTitle => 'Az adataid, érthetően';
+
+  @override
+  String get consentSubtitle => 'Mielőtt az Omi elkezd figyelni, itt pontosan láthatod, mi történik azzal, amit hall.';
+
+  @override
+  String get consentStoredTitle => 'Mit tárolunk';
+
+  @override
+  String get consentStoredBody =>
+      'A hangfelvételeid, átirataid és az, amit az Omi megtud, biztonságosan tárolódik a fiókodban.';
+
+  @override
+  String get consentProcessorsTitle => 'Ki dolgozza fel';
+
+  @override
+  String get consentProcessorsBody =>
+      'A beszédet a Deepgram írja át, az OpenAI pedig elemzi, hogy összefoglalók, feladatok és emlékek készüljenek.';
+
+  @override
+  String get consentControlTitle => 'Mi van a kezedben';
+
+  @override
+  String get consentControlBody => 'Bármikor törölhetsz bármely beszélgetést, emléket vagy akár az egész fiókodat.';
+
+  @override
+  String get readPrivacyPolicy => 'Adatvédelmi szabályzat elolvasása';
+
+  @override
+  String get whatShouldOmiCallYou => 'Hogyan szólítson az Omi?';
+
+  @override
+  String get nameUsageHint => 'Az Omi ezzel jelöl téged az átiratokban és az exportokban.';
+
+  @override
+  String get yourNamePlaceholder => 'A neved';
+
+  @override
+  String get whatLanguageDoYouSpeakMost => 'Milyen nyelven beszélsz a legtöbbet?';
+
+  @override
+  String get languageOnboardingSubtitle =>
+      'Az Omi akkor ír át a legjobban, ha ismeri a nyelvet. Később továbbiakat is hozzáadhatsz.';
+
+  @override
+  String get permissionsFewTitle => 'Néhány engedély';
+
+  @override
+  String get permissionsFewSubtitle =>
+      'Az Omi csak azt kéri, amit használ. Ezeket bármikor módosíthatod a Beállításokban.';
+
+  @override
+  String get permissionsContinueNote =>
+      'A(z) „Folytatás” gomb semmit sem kér. Minden engedélyt csak akkor kérünk, ha a(z) „Engedélyezés” gombra koppintasz.';
+
+  @override
+  String get howDidYouHearAboutOmi => 'Honnan hallottál az Omiról?';
+
+  @override
+  String get showOnLockScreen => 'Megjelenítés a zárolási képernyőn';
+
+  @override
+  String get seeAll => 'Az összes';
+
+  @override
+  String get upNext => 'Következik';
+
+  @override
+  String get allTasks => 'Összes feladat';
+
+  @override
+  String get thisWeek => 'Ezen a héten';
+
+  @override
+  String capturedDuration(String duration) {
+    return '$duration rögzítve';
+  }
+
+  @override
+  String newMemoriesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count új emlék',
+      one: '1 új emlék',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncingFromPendant => 'Szinkronizálás a medálodról';
+
+  @override
+  String get pendantRecordingsSynced => 'A medál felvételei szinkronizálva';
+
+  @override
+  String recordedOnPendantWhileAway(String duration) {
+    return '~$duration felvétel készült a medálon, amíg a telefonod távol volt';
+  }
+
+  @override
+  String dailyRecapOn(String day) {
+    return 'Napi összefoglaló · $day';
+  }
+
+  @override
+  String taskDueDayTime(String day, String time) {
+    return '$day, $time';
+  }
+
+  @override
+  String fromConversation(String title) {
+    return 'Innen: $title';
+  }
+
+  @override
+  String get endCapture => 'Befejezés';
+
+  @override
+  String get toDo => 'Teendők';
+
+  @override
+  String get devices => 'Eszközök';
+
+  @override
+  String get devicesSubtitle => 'Minden, ami figyel helyetted. Egyszerre egy rögzít.';
+
+  @override
+  String get addADevice => 'Eszköz hozzáadása';
+
+  @override
+  String get deviceReady => 'Kész';
+
+  @override
+  String get importFromOtherApps => 'Importálás más appokból';
+
+  @override
+  String get whatWillYouWear => 'Mit fogsz viselni?';
+
+  @override
+  String get pickDeviceSubtitle => 'Később továbbiakat is hozzáadhatsz. Egyszerre egy rögzít.';
+
+  @override
+  String get alreadyHaveOne => 'Már van egy?';
+
+  @override
+  String get noDeviceHeader => 'Eszköz nélkül';
+
+  @override
+  String get omiPendantName => 'Omi medál';
+
+  @override
+  String get allDayConversations => 'Egész napos beszélgetések';
+
+  @override
+  String get conversationsAndPhotos => 'Beszélgetések + fotók';
+
+  @override
+  String get wristMic => 'Csuklómikrofon';
+
+  @override
+  String get glassesAudio => 'Szemüveg hangja';
+
+  @override
+  String get bringRecordingsIntoOmi => 'Hozd át a felvételeidet az Omiba';
+
+  @override
+  String get useThisIphone => 'Ennek az iPhone-nak a használata';
+
+  @override
+  String get useThisPhone => 'Ennek a telefonnak a használata';
+
+  @override
+  String get startInSeconds => 'Kezdés 10 másodperc alatt';
+
+  @override
+  String get askAboutThisConversationPlaceholder => 'Kérdezz erről a beszélgetésről';
+
+  @override
+  String get summaryStyle => 'Összefoglaló stílusa';
+
+  @override
+  String get summaryStyleSubtitle => 'Válaszd ki, melyik app írja ezt az összefoglalót';
+
+  @override
+  String get appearance => 'Megjelenés';
+
+  @override
+  String get appearanceSystem => 'Rendszer';
+
+  @override
+  String get appearanceLight => 'Világos';
+
+  @override
+  String get appearanceDark => 'Sötét';
+
+  @override
+  String get feel => 'Érzet';
+
+  @override
+  String get haptics => 'Haptika';
+
+  @override
+  String get hapticsSubtitle => 'Egy finom koppintás, amikor befejezel, csillagozol vagy elvégzel valamit';
+
+  @override
+  String get textSize => 'Szövegméret';
+
+  @override
+  String get textSizeSubtitle => 'A telefon szövegméretét követi';
+
+  @override
+  String get appearanceMotionNote =>
+      'A mozgás követi a telefon „Mozgás csökkentése” beállítását – minden ismétlődő animáció, az eszköz fénye is, leáll.';
+
+  @override
+  String get signedInWithApple => 'Bejelentkezve Apple-lel';
+
+  @override
+  String get signedInWithGoogle => 'Bejelentkezve Google-lel';
+
+  @override
+  String premiumMinutesLeftThisMonth(String left, int limit) {
+    return 'Ebben a hónapban még $left/$limit prémium perc maradt';
+  }
+
+  @override
+  String get recordingFrom => 'Felvétel innen';
+
+  @override
+  String get recordingFromSubtitle => 'Egyszerre egy forrás rögzít. A váltás lezárja az aktuális beszélgetést.';
+
+  @override
+  String get manageDevices => 'Eszközök kezelése';
+
+  @override
+  String get notListeningTitle => 'Nem figyel';
+
+  @override
+  String get notListeningSubtitle =>
+      'Kezdd ezzel a telefonnal, vagy csatlakoztass egy eszközt, amely egész nap figyel.';
+
+  @override
+  String get startListening => 'Figyelés indítása';
+
+  @override
+  String get searchEverything => 'Keresés mindenben';
+
+  @override
+  String searchResultsCount(int count) {
+    return 'Találatok · $count';
+  }
+
+  @override
+  String get nothingFound => 'Nincs találat';
+
+  @override
+  String get searchNothingFoundHint =>
+      'Próbálj másik szót, vagy kérdezd Omit – a jelentést is érti, nem csak a szavakat.';
+
+  @override
+  String get askOmiInstead => 'Kérdezd Omit';
+
+  @override
+  String get recentSearches => 'Legutóbbi';
+
+  @override
+  String get searchAskSuggestion => 'Mit ígértem meg, hogy megcsinálok ezen a héten?';
+
+  @override
+  String get welcomeRememberTitle => 'Emlékezz minden beszélgetésre.';
+
+  @override
+  String get welcomeRememberSubtitle =>
+      'Viseld, amit szeretsz. Omi a hallottakból jegyzeteket, teendőket és napi összefoglalót készít.';
+
+  @override
+  String get memoriesSubtitle => 'Amit Omi tud, és ahonnan tudja';
+
+  @override
+  String get memoryTierLongTerm => 'Hosszú távú';
+
+  @override
+  String get memoryTierShortTerm => 'Rövid távú';
+
+  @override
+  String get memoriesTierNote =>
+      'Az új emlékek rövid távúként kezdenek. Amelyek fontosak maradnak, azokat Omi magától hosszú távúvá teszi.';
+
+  @override
+  String get askEmptyTitle => 'Kérdezz bármiről, amit hallottál.';
+
+  @override
+  String get askEmptySubtitle => 'Omi a beszélgetéseidből, emlékeidből és teendőidből válaszol.';
+
+  @override
+  String get completeListeningTitle => 'Figyelés';
+
+  @override
+  String get completeListeningBody =>
+      'A kék azt jelenti, hogy Omi hall téged – egy viselt eszközről vagy erről a telefonról.';
+
+  @override
+  String get completeAskAnyBody => 'Koppints a Kérdezés gombra, és kérdezz bármiről, amit hallottál.';
+
+  @override
+  String get completeDevicesBody => 'Bármikor hozzáadhatsz viselhető eszközt, vagy kezdd ezzel a telefonnal.';
+
+  @override
+  String get conversationSourceGlasses => 'Szemüveg';
+
+  @override
+  String get conversationSourceImported => 'Importált';
+
+  @override
+  String get conversationSourceEmptyHint => 'Ebből a forrásból még nem készült felvétel.';
+
+  @override
+  String get findMyPendant => 'Medálom keresése';
+
+  @override
+  String get findMyPendantHint => 'Hangot ad, hogy megtaláld';
+
+  @override
+  String get upToDate => 'Naprakész';
+
+  @override
+  String get updateAvailable => 'Frissítés érhető el';
+
+  @override
+  String get storageTitle => 'Tárhely';
+
+  @override
+  String get connectStepTurnOn => 'Kapcsold be, és tartsd közel';
+
+  @override
+  String get connectStepAllowBluetooth => 'Bluetooth engedélyezése';
+
+  @override
+  String get connectStepTest => 'Mondj valamit tesztként';
+
+  @override
+  String get connectStepTestHint => 'A szavak itt jelennek meg, ahogy beszélsz';
+
+  @override
+  String get setUpLater => 'Beállítás később';
+
+  @override
+  String recapPreviousDay(String day) {
+    return 'Előző nap összefoglalója: $day';
+  }
+
+  @override
+  String recapNextDay(String day) {
+    return 'Következő nap összefoglalója: $day';
+  }
+
+  @override
+  String get askStarterToday => 'Foglald össze a mai napot';
+
+  @override
+  String get askStarterPeople => 'Kivel találkoztam?';
+
+  @override
+  String get askStarterOpen => 'Mi van még nyitva?';
+
+  @override
+  String get peopleSubtitle => 'Hangok, amelyeket az Omi felismer az átiratokban';
+
+  @override
+  String get usageCurrentPlan => 'Jelenlegi csomag';
+
+  @override
+  String get appsExplore => 'Felfedezés';
+
+  @override
+  String get appOutOfFive => 'az 5-ből';
+
+  @override
+  String get appStatUsers => 'Felhasználók';
+
+  @override
+  String homeWelcomeName(String name) {
+    return 'Üdv, $name';
+  }
+
+  @override
+  String get homeWelcome => 'Üdvözlünk';
+
+  @override
+  String get homeFirstDaySubtitle => 'Az első napod az Omival';
+
+  @override
+  String get homeListeningHeroTitle => 'Az Omi figyel';
+
+  @override
+  String get homeListeningHeroBody => 'Az első beszélgetésed egy perccel a vége után itt jelenik meg.';
+
+  @override
+  String get homeGettingStarted => 'Első lépések';
+
+  @override
+  String get gettingStartedConnect => 'Eszköz csatlakoztatása';
+
+  @override
+  String get gettingStartedConversation => 'Beszélgess egyet';
+
+  @override
+  String get gettingStartedAsk => 'Kérdezd az Omit róla';
+
+  @override
+  String get homeGoodToKnow => 'Jó tudni';
+
+  @override
+  String get tipFinishTitle => 'Bármikor befejezheted';
+
+  @override
+  String get tipFinishBody =>
+      'Koppints a Befejezésre – vagy nyomd meg kétszer a medált –, és az összefoglaló azonnal elindul.';
+
+  @override
+  String get tipStarTitle => 'Csillagozd meg, ami fontos';
+
+  @override
+  String get tipStarBody => 'A csillagozott beszélgetéseket később könnyű megtalálni.';
+
+  @override
+  String get tipPrivateTitle => 'Alapból privát';
+
+  @override
+  String get tipPrivateBody => 'A beszélgetéseid privátak maradnak, hacsak meg nem osztod őket.';
+
+  @override
+  String homeGettingStartedProgress(int done, int total) {
+    return '$done/$total';
+  }
 }

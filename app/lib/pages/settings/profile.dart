@@ -45,7 +45,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
     return Scaffold(
       key: const ValueKey('settings_page_account'),
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.account)),
+      appBar: OmiAppBar(leading: const OmiBackButton(), title: Text(l10n.account)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.xxl),
         children: [

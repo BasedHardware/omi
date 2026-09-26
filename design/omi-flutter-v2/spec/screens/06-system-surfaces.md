@@ -54,4 +54,3 @@ Reference: `renders/{se,mini,iphone16,max}/{dark,light}/HomeScreen.webp`, `specs
 | 1 | ‹dynamic› | always | Complete task A (App Intent; widget reloads timeline). | — | in place |
 | 2 | ‹dynamic› | always | Complete task B. | — | in place |
 | 3 | ‹dynamic› | always | Complete task C. | — | in place |
-

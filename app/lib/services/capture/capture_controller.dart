@@ -55,6 +55,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/app_globals.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 import 'package:omi/backend/schema/message_event.dart'
     show
@@ -335,7 +336,7 @@ class CaptureController extends ChangeNotifier
     final revision = _preferences.capturePolicy.revision;
     if (!_admitsCapture(revision)) return;
     updateRecordingState(RecordingState.initialising);
-    _activeSource = PhoneMicSource();
+    _activeSource = PhoneMicSource(onAudio: _tapAudio);
     _phoneMicWalActive = true;
     await _phoneMic.start(
       onByteReceived: (bytes) {
@@ -435,6 +436,74 @@ class CaptureController extends ChangeNotifier
   /// conversation so the pipeline can be joined without timing heuristics.
   String? get activeRecordingId => _recordingTelemetry.recordingId;
 
+  // Identifies a conversation boundary within a continuous recording. This is
+  // presentation/action identity, not another capture authorization generation.
+  int _systemSurfaceConversationRevision = 0;
+  int get systemSurfaceConversationRevision => _systemSurfaceConversationRevision;
+  bool get systemSurfacePhoneCapture => _activeSource is PhoneMicSource || _phoneMicBatchActive;
+  bool get systemSurfaceBatchCapture =>
+      _phoneMicBatchActive || (_recordingDevice != null && _preferences.batchModeEnabled);
+  // Presentation-only observer of captured audio; never affects capture.
+  AudioTap? systemSurfaceAudioTap;
+  void _tapAudio(List<int> audio, BleAudioCodec codec) {
+    try {
+      systemSurfaceAudioTap?.call(audio, codec);
+    } catch (_) {} // The tap runs before WAL/socket delivery; it must never drop audio.
+  }
+
+  Future<void> performSystemSurfaceAction(String action,
+      {required String recordingId, required int conversationRevision}) async {
+    bool current() =>
+        activeRecordingId == recordingId &&
+        _systemSurfaceConversationRevision == conversationRevision &&
+        !lifetime.isClosed;
+    if (!current()) throw StateError('Recording changed');
+    final phone = systemSurfacePhoneCapture;
+    final batch = systemSurfaceBatchCapture;
+    switch (action) {
+      case 'pause':
+      case 'resume':
+        final mute = action == 'pause';
+        if (isPaused == mute) return;
+        if (!phone) {
+          if (mute) {
+            await pauseDeviceRecording();
+          } else {
+            await resumeDeviceRecording();
+          }
+        } else {
+          final revision = await _setCaptureMuted(mute);
+          if (!current() || _preferences.capturePolicy.revision != revision) {
+            throw StateError('Recording changed');
+          }
+          if (!mute) {
+            if (batch) {
+              updateRecordingState(RecordingState.record);
+            } else {
+              // Rebind the existing native session to the new admission
+              // revision while preserving the socket and conversation.
+              await _resumeMicRecording();
+            }
+          }
+        }
+      case 'finish':
+        if (phone) {
+          final hasContent = segments.isNotEmpty || photos.isNotEmpty;
+          await stopStreamRecording();
+          if (lifetime.isClosed || (activeRecordingId != null && activeRecordingId != recordingId)) {
+            throw StateError('Recording changed');
+          }
+          if (!batch && hasContent) await forceProcessingCurrentConversation();
+        } else if (batch) {
+          startNewOfflineRecording();
+        } else {
+          await forceProcessingCurrentConversation();
+        }
+      default:
+        throw ArgumentError.value(action, 'action');
+    }
+  }
+
   @visibleForTesting
   set testSessionStartSeconds(int v) => _sessionStartSeconds = v;
 
@@ -508,6 +577,7 @@ class CaptureController extends ChangeNotifier
   /// Manually finalize the current recording and start a fresh one. The native
   /// writer cuts on the next packet; the timer resets immediately for feedback.
   void startNewOfflineRecording() {
+    _systemSurfaceConversationRevision++;
     _preferences.batchCutRequested = true;
     _offlineSessionStartSeconds = _nowSeconds;
     _offlineMuteStartedAt = isPaused ? _nowSeconds : null;
@@ -516,6 +586,7 @@ class CaptureController extends ChangeNotifier
 
   void _onOfflineRecordingFinalized(String _) {
     if (_offlineSessionStartSeconds == 0) return;
+    _systemSurfaceConversationRevision++;
     _offlineSessionStartSeconds = _nowSeconds;
     _offlineMuteStartedAt = isPaused ? _nowSeconds : null;
     notifyListeners();
@@ -789,6 +860,7 @@ class CaptureController extends ChangeNotifier
   }
 
   Future _resetStateVariables() async {
+    _systemSurfaceConversationRevision++;
     _stopInProgressConversationRefresh();
     segments = [];
     photos = [];
@@ -1429,12 +1501,12 @@ class CaptureController extends ChangeNotifier
                 markConversationForStarring();
                 PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
                 // Haptic feedback to confirm
-                HapticFeedback.mediumImpact();
+                OmiHaptics.medium();
               } else {
                 // Toggle off if already marked
                 unmarkConversationForStarring();
                 PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
-                HapticFeedback.lightImpact();
+                OmiHaptics.light();
               }
             } else {
               // End conversation and process (default)
@@ -1550,12 +1622,12 @@ class CaptureController extends ChangeNotifier
           markConversationForStarring();
           PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
           // Haptic feedback to confirm
-          HapticFeedback.mediumImpact();
+          OmiHaptics.medium();
         } else {
           // Toggle off if already marked
           unmarkConversationForStarring();
           PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
-          HapticFeedback.lightImpact();
+          OmiHaptics.light();
         }
       } else {
         // End conversation and process (default)
@@ -1816,7 +1888,7 @@ class CaptureController extends ChangeNotifier
     final pd = await device.getDeviceInfo(connection);
     final deviceModel = pd.modelNumber.isNotEmpty ? pd.modelNumber : "Omi";
     if (device.type == DeviceType.omi || device.type == DeviceType.openglass) {
-      _activeSource = BleDeviceSource(codec: codec, deviceId: deviceId, deviceModel: deviceModel);
+      _activeSource = BleDeviceSource(codec: codec, deviceId: deviceId, deviceModel: deviceModel, onAudio: _tapAudio);
     }
     _wal.getSyncs().phone.setDeviceInfo(deviceId, deviceModel);
 
@@ -2255,7 +2327,7 @@ class CaptureController extends ChangeNotifier
     await changeAudioRecordProfile(audioCodec: BleAudioCodec.pcm16, sampleRate: 16000);
 
     // Initialize WAL for phone mic recording
-    _activeSource = PhoneMicSource();
+    _activeSource = PhoneMicSource(onAudio: _tapAudio);
     _phoneMicWalActive = true;
     await _wal.getSyncs().phone.onAudioCodecChanged(BleAudioCodec.pcm16);
     _wal.getSyncs().phone.setDeviceInfo('phone-mic', 'Phone Microphone');
@@ -3100,6 +3172,8 @@ class CaptureController extends ChangeNotifier
 
   Future<void> forceProcessingCurrentConversation() async {
     final sessionStart = _sessionStartSeconds;
+    final recordingId = activeRecordingId;
+    final conversationRevision = _systemSurfaceConversationRevision;
 
     final phoneSync = _wal.getSyncs().phone;
     // Show the Conversations-tab skeleton before the WAL drain. Awaiting
@@ -3108,6 +3182,14 @@ class CaptureController extends ChangeNotifier
     externalActions.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
 
     await phoneSync.finalizeCurrentSession();
+    if (lifetime.isClosed ||
+        recordingId != activeRecordingId ||
+        conversationRevision != _systemSurfaceConversationRevision) {
+      // Another path finished this conversation during the drain; never reset
+      // the next one, and never leave the skeleton stranded.
+      externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
+      return;
+    }
     _clearSessionLocation();
 
     _resetStateVariables();

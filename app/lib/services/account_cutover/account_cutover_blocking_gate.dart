@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/services/account_cutover/account_cutover_gate.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class AccountCutoverBlockingGate extends StatefulWidget {
   const AccountCutoverBlockingGate({super.key, this.productBuilder, this.child})
@@ -154,7 +155,7 @@ class AccountCutoverBlockingView extends StatelessWidget {
       explicitChildNodes: true,
       label: '$title. $message',
       child: Material(
-        color: Colors.black,
+        color: OmiColors.surface0,
         child: SafeArea(
           child: Center(
             child: ConstrainedBox(
@@ -164,18 +165,19 @@ class AccountCutoverBlockingView extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(icon, color: Colors.white, size: 36),
+                    Icon(icon, color: OmiColors.textPrimary, size: 36),
                     const SizedBox(height: 16),
                     Text(
                       title,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
+                      style: TextStyle(color: OmiColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 12),
                     Text(
                       message,
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 15, height: 1.35),
+                      style:
+                          TextStyle(color: OmiColors.textPrimary.withValues(alpha: 0.72), fontSize: 15, height: 1.35),
                     ),
                     if (forceUpgrade) ...[
                       const SizedBox(height: 20),
@@ -194,7 +196,7 @@ class AccountCutoverBlockingView extends StatelessWidget {
                       const SizedBox(height: 20),
                       TextButton(
                         onPressed: onSkipUnresolvedFence,
-                        child: Text(l10n.continueAction, style: const TextStyle(color: Colors.white70)),
+                        child: Text(l10n.continueAction, style: TextStyle(color: OmiColors.textSecondary)),
                       ),
                     ],
                   ],

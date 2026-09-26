@@ -19,7 +19,7 @@ class DeveloperApiKeysSection extends StatelessWidget {
 
   Widget _card(Widget child) {
     return DecoratedBox(
-      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: child,
     );
   }

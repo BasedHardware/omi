@@ -28,6 +28,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/file.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 typedef ChatFilesUploader = Future<List<MessageFile>?> Function(List<File> files, {String? appId});
 typedef ChatReplyStreamer = Stream<ServerMessageChunk> Function(
@@ -804,7 +805,7 @@ class MessageProvider extends ChangeNotifier {
         message.text += textBuffer;
         textBuffer = '';
         aiStreamProgress = (aiStreamProgress + 0.05).clamp(0.0, 1.0);
-        HapticFeedback.lightImpact();
+        OmiHaptics.light();
         notifyListeners();
       }
     }

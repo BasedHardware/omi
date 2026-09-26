@@ -103,7 +103,7 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton()),
+      appBar: const OmiAppBar(leading: OmiBackButton()),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
@@ -123,7 +123,7 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
               ),
               const SizedBox(height: 40),
               Container(
-                decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+                decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
                 child: Row(
                   children: [
                     Semantics(
@@ -143,7 +143,7 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
                               const SizedBox(width: 6),
                               Text('+${_selectedCountry.telephoneCode}', style: OmiType.callout),
                               const SizedBox(width: OmiSpacing.xxs),
-                              const Icon(Icons.arrow_drop_down, color: OmiColors.textTertiary, size: 20),
+                              Icon(Icons.arrow_drop_down, color: OmiColors.textTertiary, size: 20),
                             ],
                           ),
                         ),
@@ -282,7 +282,7 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
                           ),
                           if (isSelected) ...[
                             const SizedBox(width: OmiSpacing.xs),
-                            const Icon(Icons.check, color: OmiColors.textPrimary, size: 20),
+                            Icon(Icons.check, color: OmiColors.textPrimary, size: 20),
                           ],
                         ],
                       ),

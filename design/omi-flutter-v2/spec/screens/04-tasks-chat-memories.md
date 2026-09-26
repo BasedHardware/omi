@@ -299,4 +299,3 @@ Reference: `renders/{se,mini,iphone16,max}/{dark,light}/Graph.webp`, `specs/geom
 **Gestures and motion.**
 
 - Pinch to zoom, drag to pan, double-tap to recentre.
-

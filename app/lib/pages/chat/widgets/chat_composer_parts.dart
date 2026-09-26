@@ -10,12 +10,18 @@ import 'package:omi/utils/l10n_extensions.dart';
 // Pieces of the chat composer that carry no page state. The text field and the Send button stay
 // in `chat/page.dart`: they are the catalogued controls (omi.chat.input / omi.chat.send).
 
-/// The soft shadow that lifts the composer pill and its side button off the transcript.
-const List<BoxShadow> kChatComposerShadow = [
-  BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.65), blurRadius: 60, spreadRadius: 14, offset: Offset(0, -16)),
-  BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.45), blurRadius: 32, spreadRadius: 6, offset: Offset(0, -8)),
-  BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.25), blurRadius: 10, offset: Offset(0, 2)),
-];
+/// The soft shadow that lifts the composer pill and its side button off the transcript. In daylight
+/// it is the glass's faint ink shadow; a dark halo would read as a smudge on the pale page.
+List<BoxShadow> get kChatComposerShadow => OmiColors.isLight
+    ? [
+        BoxShadow(color: OmiColors.palette.glassShadow, blurRadius: 30, offset: const Offset(0, 10)),
+        BoxShadow(color: OmiColors.palette.glassShadowTight, blurRadius: 2, offset: const Offset(0, 1)),
+      ]
+    : const [
+        BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.65), blurRadius: 60, spreadRadius: 14, offset: Offset(0, -16)),
+        BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.45), blurRadius: 32, spreadRadius: 6, offset: Offset(0, -8)),
+        BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.25), blurRadius: 10, offset: Offset(0, 2)),
+      ];
 
 /// The 48 pt round button beside the composer pill: Add (idle) or Stop (recording).
 ///
@@ -157,8 +163,7 @@ class ChatSelectedFilesStrip extends StatelessWidget {
                 ),
                 child: Stack(
                   children: [
-                    if (!isImage)
-                      const Center(child: Icon(Icons.insert_drive_file, color: OmiColors.textPrimary, size: 24)),
+                    if (!isImage) Center(child: Icon(Icons.insert_drive_file, color: OmiColors.textPrimary, size: 24)),
                     if (provider.isFileUploading(file.path))
                       Container(
                         decoration: BoxDecoration(
@@ -209,8 +214,8 @@ class _RemoveFileButton extends StatelessWidget {
                 width: 20,
                 height: 20,
                 margin: const EdgeInsets.all(OmiSpacing.xxs),
-                decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-                child: const Center(child: FaIcon(FontAwesomeIcons.xmark, size: 10, color: OmiColors.onAccent)),
+                decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+                child: Center(child: FaIcon(FontAwesomeIcons.xmark, size: 10, color: OmiColors.onAccent)),
               ),
             ),
           ),

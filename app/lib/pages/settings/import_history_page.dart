@@ -228,7 +228,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
             color: OmiColors.surface1,
             shape: RoundedRectangleBorder(
               borderRadius: OmiRadius.mdAll,
-              side: isAvailable ? const BorderSide(color: OmiColors.border) : BorderSide.none,
+              side: isAvailable ? BorderSide(color: OmiColors.border) : BorderSide.none,
             ),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
@@ -251,7 +251,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                               width: 48,
                               height: 48,
                               color: OmiColors.surface2,
-                              child: const Icon(Icons.device_unknown, color: OmiColors.textTertiary),
+                              child: Icon(Icons.device_unknown, color: OmiColors.textTertiary),
                             );
                           },
                         ),
@@ -278,7 +278,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                                 const SizedBox(width: OmiSpacing.xs),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: 2),
-                                  decoration: const BoxDecoration(
+                                  decoration: BoxDecoration(
                                     color: OmiColors.surface2,
                                     borderRadius: OmiRadius.smAll,
                                   ),
@@ -307,13 +307,13 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                           : Container(
                               width: 30,
                               height: 30,
-                              decoration: const BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.smAll),
-                              child: const Center(
+                              decoration: BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.smAll),
+                              child: Center(
                                 child: FaIcon(FontAwesomeIcons.plus, color: OmiColors.onAccent, size: 16),
                               ),
                             )
                     else
-                      const Icon(Icons.lock_outline, color: OmiColors.textTertiary, size: 20),
+                      Icon(Icons.lock_outline, color: OmiColors.textTertiary, size: 20),
                   ],
                 ),
               ),
@@ -339,14 +339,14 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         Container(
           margin: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 6),
           padding: const EdgeInsets.all(OmiSpacing.md),
-          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
           child: Row(
             children: [
               Container(
                 width: 48,
                 height: 48,
-                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-                child: const Icon(Icons.devices_other, color: OmiColors.textTertiary, size: 24),
+                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+                child: Icon(Icons.devices_other, color: OmiColors.textTertiary, size: 24),
               ),
               const SizedBox(width: OmiSpacing.md),
               Expanded(
@@ -396,7 +396,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 6),
       padding: const EdgeInsets.all(OmiSpacing.md),
-      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -540,7 +540,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 6),
           padding: const EdgeInsets.all(OmiSpacing.md),
-          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
           child: ShimmerWithTimeout(
             baseColor: OmiColors.surface2,
             highlightColor: OmiColors.surface3,
@@ -584,10 +584,10 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
           Container(
             margin: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 6),
             padding: const EdgeInsets.all(OmiSpacing.xl),
-            decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
             child: Row(
               children: [
-                const Icon(Icons.history, color: OmiColors.textTertiary, size: 24),
+                Icon(Icons.history, color: OmiColors.textTertiary, size: 24),
                 const SizedBox(width: OmiSpacing.md),
                 Expanded(
                   child: Text(
@@ -607,7 +607,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: OmiAppBar(
         leading: const OmiBackButton(),
         title: Text(context.l10n.importData),
         actions: [
@@ -626,7 +626,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                 PullDownMenuItem(
                   title: context.l10n.deleteImportedData,
                   isDestructive: true,
-                  iconWidget: const FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
+                  iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
                   onTap: () {
                     _showDeleteLimitlessDialog();
                   },

@@ -6,6 +6,7 @@ import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/double_tap_demo_animation.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class DoublePressConfigStep extends StatefulWidget {
   final VoidCallback onComplete;
@@ -54,17 +55,17 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFFFA726).withValues(alpha: 0.12),
+                    color: OmiColors.warning.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(100),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.touch_app, color: Color(0xFFFFA726), size: 24),
+                      Icon(Icons.touch_app, color: OmiColors.warning, size: 24),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           context.l10n.deviceOnboardingSingleTapHint,
-                          style: const TextStyle(color: Color(0xFFFFA726), fontSize: 15),
+                          style: TextStyle(color: OmiColors.warning, fontSize: 15),
                         ),
                       ),
                     ],
@@ -74,17 +75,17 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.06),
+                    color: OmiColors.textPrimary.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(100),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.touch_app, color: Colors.white.withValues(alpha: 0.6), size: 24),
+                      Icon(Icons.touch_app, color: OmiColors.textPrimary.withValues(alpha: 0.6), size: 24),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           context.l10n.deviceOnboardingTryDoubleTap,
-                          style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 15),
+                          style: TextStyle(color: OmiColors.textSecondary, fontSize: 15),
                         ),
                       ),
                     ],
@@ -116,9 +117,10 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.04),
+          color: isSelected ? OmiColors.textPrimary : OmiColors.textPrimary.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.1), width: 1),
+          border: Border.all(
+              color: isSelected ? OmiColors.textPrimary : OmiColors.textPrimary.withValues(alpha: 0.1), width: 1),
         ),
         child: Column(
           children: [
@@ -129,9 +131,11 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                   height: 44,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: isSelected ? Colors.black.withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.06),
+                    color: isSelected
+                        ? OmiColors.surface0.withValues(alpha: 0.1)
+                        : OmiColors.textPrimary.withValues(alpha: 0.06),
                   ),
-                  child: Icon(icon, color: isSelected ? Colors.black : const Color(0xFF9E9E9E), size: 24),
+                  child: Icon(icon, color: isSelected ? OmiColors.onAccent : OmiColors.textSecondary, size: 24),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -141,7 +145,7 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                       Text(
                         title,
                         style: TextStyle(
-                          color: isSelected ? Colors.black : Colors.white,
+                          color: isSelected ? OmiColors.onAccent : OmiColors.textPrimary,
                           fontSize: 16,
                           fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                         ),
@@ -150,7 +154,7 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                       Text(
                         description,
                         style: TextStyle(
-                          color: isSelected ? Colors.black.withValues(alpha: 0.5) : const Color(0xFF9E9E9E),
+                          color: isSelected ? OmiColors.onAccent.withValues(alpha: 0.5) : OmiColors.textSecondary,
                           fontSize: 13,
                         ),
                       ),

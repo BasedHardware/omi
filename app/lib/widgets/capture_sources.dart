@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 /// The device vocabulary shared by the conversation list and the detail
 /// header: one icon and one name per capture surface (wire source string).
@@ -8,8 +9,10 @@ abstract final class CaptureSources {
   static IconData icon(String? source) {
     switch (source) {
       case 'desktop':
+      case 'screenpipe':
         return Icons.desktop_mac_outlined;
       case 'omi':
+      case 'sdcard':
       case 'friend':
       case 'friend_com':
       case 'limitless':
@@ -23,6 +26,7 @@ abstract final class CaptureSources {
         return Icons.watch_outlined;
       case 'openglass':
       case 'rayban_meta':
+      case 'frame':
         return Icons.camera_alt_outlined;
       default:
         return Icons.mic_none;
@@ -36,6 +40,8 @@ abstract final class CaptureSources {
       // The wearable is "Pendant" wherever a capture source is named (design ruling 2026-09-24),
       // never "Omi", which is the app.
       case 'omi':
+      // Recordings synced from the pendant's storage.
+      case 'sdcard':
         return context.l10n.captureSourcePendant;
       case 'phone':
         return context.l10n.phone;
@@ -54,6 +60,10 @@ abstract final class CaptureSources {
         return 'OmiGlass';
       case 'rayban_meta':
         return 'Ray-Ban Meta';
+      case 'frame':
+        return 'Frame';
+      case 'screenpipe':
+        return 'Screenpipe';
       case 'friend':
       case 'friend_com':
         return 'Friend';
@@ -65,10 +75,12 @@ abstract final class CaptureSources {
 
 /// The devices that recorded one event, as a row of small icons (list rows).
 class CaptureSourceIcons extends StatelessWidget {
-  const CaptureSourceIcons({super.key, required this.sources, this.color = const Color(0xFF9A9BA1), this.size = 14});
+  const CaptureSourceIcons({super.key, required this.sources, this.color, this.size = 14});
 
   final List<String> sources;
-  final Color color;
+
+  /// The icons' colour; [OmiColors.textSecondary] by default.
+  final Color? color;
   final double size;
 
   @override
@@ -82,7 +94,7 @@ class CaptureSourceIcons extends StatelessWidget {
         children: [
           for (final (index, source) in sources.indexed) ...[
             if (index > 0) const SizedBox(width: 3),
-            Icon(CaptureSources.icon(source), size: size, color: color),
+            Icon(CaptureSources.icon(source), size: size, color: color ?? OmiColors.textSecondary),
           ],
         ],
       ),
@@ -116,11 +128,11 @@ class CaptureSourceStack extends StatelessWidget {
                 width: _diameter,
                 height: _diameter,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2A2A31),
+                  color: OmiColors.surface3,
                   shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF1F1F25), width: 1.5),
+                  border: Border.all(color: OmiColors.border, width: 1.5),
                 ),
-                child: Icon(CaptureSources.icon(source), size: 12, color: Colors.white),
+                child: Icon(CaptureSources.icon(source), size: 12, color: OmiColors.textPrimary),
               ),
             ),
         ],

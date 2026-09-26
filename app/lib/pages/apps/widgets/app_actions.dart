@@ -130,7 +130,9 @@ class _AppListActionButtonState extends State<AppListActionButton> {
     if (appNeedsDetailToEnable(app)) {
       return OmiButton.secondary(label: l10n.view, onPressed: widget.onOpen, size: OmiButtonSize.compact);
     }
-    return OmiButton(
+    // v2: Enable is a quiet capsule like Open and View; the app's own detail page carries the
+    // primary action.
+    return OmiButton.secondary(
       label: l10n.enable,
       size: OmiButtonSize.compact,
       isLoading: _enabling || state.loading,

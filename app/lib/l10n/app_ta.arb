@@ -1781,10 +1781,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "whatsYourName": "உங்கள் பெயர் என்ன?",
-    "@whatsYourName": {
-        "description": "Question asking for user's name"
-    },
     "@enterYourName": {
         "description": "Hint text for name input field"
     },
@@ -1807,14 +1803,6 @@
     "termsOfUse": "பயன்பாட்டு விதிமுறைகளை",
     "@termsOfUse": {
         "description": "Link text for Terms of Use"
-    },
-    "omiYourAiCompanion": "Omi – உங்கள் AI சாங்கี",
-    "@omiYourAiCompanion": {
-        "description": "App title or branding on onboarding screen"
-    },
-    "captureEveryMoment": "ஒவ்வொரு தருணத்தையும் ஆட்டவும். AI-உயர்ந்த\nசுருக்கங்களைப் பெற்றுக் கொள்ளவும். பதிப்புகளை உருவாக்க வேண்டாம்.",
-    "@captureEveryMoment": {
-        "description": "App value proposition or description"
     },
     "appleWatchSetup": "Apple Watch அமைப்பு",
     "@appleWatchSetup": {
@@ -1877,27 +1865,11 @@
             }
         }
     },
-    "selectPrimaryLanguage": "உங்கள் முதன்மை மொழியைத் தேர்ந்தெடுக்கவும்",
-    "@selectPrimaryLanguage": {
-        "description": "Title for language selection dialog"
-    },
-    "languageBenefits": "তীக்ஷ்ணமான தட்டச்சு மற்றும் தனிப்பாக்கப்பட்ட அভிज்ஞதைக்கு உங்கள் மொழியை அமைக்கவும்",
-    "@languageBenefits": {
-        "description": "Explanation of why language selection matters"
-    },
     "@searchLanguageHint": {
         "description": "Hint text for language search"
     },
     "@noLanguagesFound": {
         "description": "Text when search returns no results"
-    },
-    "whatsYourPrimaryLanguage": "உங்கள் முதன்மை மொழி என்ன?",
-    "@whatsYourPrimaryLanguage": {
-        "description": "Question asking for primary language"
-    },
-    "selectYourLanguage": "உங்கள் மொழியைத் தேர்ந்தெடுக்கவும்",
-    "@selectYourLanguage": {
-        "description": "Placeholder for selected language name"
     },
     "personalGrowthJourney": "உங்கள் ஒவ்வொரு வார்த்தைக்கும் கேட்கும் AI உடன் உங்கள் தனிப்பட்ட வளர்ச்சி பயணம்.",
     "@personalGrowthJourney": {
@@ -3922,10 +3894,6 @@
     "@dataProtection": {
         "description": "Section title for data protection info"
     },
-    "yourDataIsProtected": "உங்கள் தரவு பாதுகாக்கப்பட்டுள்ளது மற்றும் நமது ",
-    "@yourDataIsProtected": {
-        "description": "First part of data protection text"
-    },
     "pleaseSelectYourPrimaryLanguage": "உங்கள் முதன்மை மொழியைத் தேர்ந்தெடுக்கவும்",
     "chooseYourLanguage": "உங்கள் மொழியைத் தேர்ந்தெடுக்கவும்",
     "selectPreferredLanguageForBestExperience": "சிறந்த Omi அভிজ্ঞதைக்கான உங்கள் விரும்பிய மொழியைத் தேர்ந்தெடுக்கவும்",
@@ -5933,10 +5901,6 @@
     "additionalSpeechSampleRemoved": "கூடுதல் பேச்சு மாதிரி அகற்றப்பட்டது",
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
-    },
-    "consentDataMessage": "தொடர்வதன் மூலம், உங்கள் உரையாடல்கள், பதிவுகள் மற்றும் தனிப்பட்ட தகவல்கள் எங்கள் சேவையகங்களில் பாதுகாப்பாக சேமிக்கப்படும். உங்கள் ஆடியோ பதிவுகள் மற்றும் படியெடுப்புகள் மூன்றாம் தரப்பு AI சேவைகளால் செயலாக்கப்படுகின்றன (படியெடுப்பிற்கு Deepgram மற்றும் பகுப்பாய்விற்கு OpenAI உட்பட) AI இயக்கும் நுண்ணறிவுகளை உங்களுக்கு வழங்கவும் அனைத்து பயன்பாட்டு அம்சங்களையும் இயக்கவும்.",
-    "@consentDataMessage": {
-        "description": "Consent message explaining how user data will be stored and used"
     },
     "tasksEmptyStateMessage": "உங்கள் உரையாடல்களிலிருந்து பணிகள் இங்கே தோன்றும்।\n+ தட்டி கைமுறை ஒன்றை உருவாக்கவும்।",
     "@tasksEmptyStateMessage": {
@@ -9501,7 +9465,6 @@
     },
     "mcpConnectionFailed": "MCP சேவையகத்துடன் இணைக்க முடியவில்லை",
     "authorizingMcpServer": "அங்கீகாரம் கொடுக்கப்படுகிறது…",
-    "whereDidYouHearAboutOmi": "நீங்கள் எங்களை எப்படிக் கண்டுபிடித்தீர்கள்?",
     "tiktok": "TikTok",
     "youtube": "YouTube",
     "instagram": "Instagram",
@@ -10790,7 +10753,6 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "பதிவைத் தொடங்க பதிவு பொத்தானைத் தட்டவும்",
     "processingTakingLonger": "இன்னும் செயல்படுகிறது — இது வழக்கத்தை விட அதிக நேரம் எடுக்கிறது.",
     "speechProfileEnrollmentPrompt": "Omi உங்கள் குரலை அடையாளம் காண — எதைப் பற்றியாவது சுமார் 5 வினாடிகள் பேசுங்கள்.",
     "home": "முகப்பு",
@@ -10956,7 +10918,6 @@
     "batteryLevelSemantics": "பேட்டரி {level}%",
     "updateOmiGlassFirmware": "OmiGlass ஃபர்ம்வேரைப் புதுப்பி",
     "deviceConnecting": "இணைக்கிறது…",
-    "recordOptionsTip": "குறிப்பு: தொலைபேசி அழைப்பைப் பதிவுசெய்ய பதிவு பொத்தானில் உள்ள அம்புக்குறியைத் தட்டவும்.",
     "firmwareUpdateFailedTitle": "புதுப்பிப்பு தோல்வியடைந்தது",
     "firmwareUpdateFailedMessage": "புதுப்பிப்பு முடியவில்லை. உங்கள் சாதனம் இன்னும் தற்போதைய ஃபர்ம்வேரில் உள்ளது, பயன்படுத்தப் பாதுகாப்பானது. சார்ஜ் செய்து ஃபோன் அருகில் வைத்து மீண்டும் முயலுங்கள்.",
     "firmwareDownloadFailedMessage": "புதுப்பிப்பைப் பதிவிறக்க முடியவில்லை, உங்கள் சாதனம் மாற்றப்படவில்லை. இணைய இணைப்பைச் சரிபார்த்து மீண்டும் முயலுங்கள்.",
@@ -11109,8 +11070,148 @@
     "pendantPausesUntilYouFinish": "நீங்கள் முடிக்கும் வரை பதக்கம் இடைநிறுத்தப்படும்",
     "pendantPausesDuringCall": "அழைப்பின்போது பதக்கம் இடைநிறுத்தப்படும்",
     "keepUsingPendant": "பதக்கத்தையே பயன்படுத்தவும்",
-    "recordWith": "பதிவுசெய்யும் முறை",
-    "moreWaysToRecord": "பதிவுசெய்ய மேலும் வழிகள்",
     "openCall": "அழைப்பைத் திறக்கவும்",
-    "captureRecoveryBanner": "பென்டன்ட் ஆடியோ செயலியை அடையவில்லை — சரிசெய்ய தட்டவும்"
+    "captureRecoveryBanner": "பென்டன்ட் ஆடியோ செயலியை அடையவில்லை — சரிசெய்ய தட்டவும்",
+    "goodMorning": "காலை வணக்கம்",
+    "goodAfternoon": "மதிய வணக்கம்",
+    "goodEvening": "மாலை வணக்கம்",
+    "alreadyHaveAccount": "ஏற்கனவே கணக்கு உள்ளதா?",
+    "signInToOmi": "Omi-இல் உள்நுழைக",
+    "signInSubtitle": "உங்கள் உரையாடல்களும் நினைவுகளும் உங்கள் கணக்குடன் தொலைபேசி, Mac, இணையத்தில் இருக்கும்.",
+    "onboardingAllSetName": "எல்லாம் தயார், {name}.",
+    "completeHomeBody": "உங்கள் நாள், பணிகள், சுருக்கங்கள் ஒரே இடத்தில்.",
+    "completeAskTitle": "கேள்",
+    "foundOmiOptionalHint": "விருப்பத்திற்குரியது — எது வேலை செய்கிறது என்று ஒரு சிறிய குழு அறிய உதவுகிறது.",
+    "consentTitle": "உங்கள் தரவு, எளிய வார்த்தைகளில்",
+    "consentSubtitle": "Omi கேட்கத் தொடங்கும் முன், அது கேட்பவற்றுக்கு சரியாக என்ன நடக்கிறது என்பது இதோ.",
+    "consentStoredTitle": "என்ன சேமிக்கப்படுகிறது",
+    "consentStoredBody": "உங்கள் ஆடியோ, டிரான்ஸ்கிரிப்ட்கள் மற்றும் Omi அறியும் விவரங்கள் உங்கள் கணக்கில் பாதுகாப்பாகச் சேமிக்கப்படுகின்றன.",
+    "consentProcessorsTitle": "இதை யார் செயலாக்குகிறார்கள்",
+    "consentProcessorsBody": "சுருக்கங்கள், பணிகள், நினைவுகளை எழுத, பேச்சை Deepgram எழுத்தாக்குகிறது; OpenAI பகுப்பாய்வு செய்கிறது.",
+    "consentControlTitle": "உங்கள் கட்டுப்பாட்டில் இருப்பவை",
+    "consentControlBody": "எந்த உரையாடல், நினைவு அல்லது உங்கள் முழுக் கணக்கையும் எப்போது வேண்டுமானாலும் நீக்கலாம்.",
+    "readPrivacyPolicy": "தனியுரிமைக் கொள்கையைப் படிக்கவும்",
+    "whatShouldOmiCallYou": "Omi உங்களை எப்படி அழைக்க வேண்டும்?",
+    "nameUsageHint": "டிரான்ஸ்கிரிப்ட்கள், ஏற்றுமதிகளில் உங்களைக் குறிக்க Omi இதைப் பயன்படுத்துகிறது.",
+    "yourNamePlaceholder": "உங்கள் பெயர்",
+    "whatLanguageDoYouSpeakMost": "நீங்கள் அதிகம் பேசும் மொழி எது?",
+    "languageOnboardingSubtitle": "மொழி தெரிந்தால் Omi சிறப்பாக எழுத்தாக்கும். பிறகு மேலும் சேர்க்கலாம்.",
+    "permissionsFewTitle": "சில அனுமதிகள்",
+    "permissionsFewSubtitle": "Omi தான் பயன்படுத்துவதை மட்டுமே கேட்கும். அமைப்புகளில் எப்போது வேண்டுமானாலும் இவற்றை மாற்றலாம்.",
+    "permissionsContinueNote": "\"தொடரவும்\" எதையும் கேட்காது. \"அனுமதி\" என்பதைத் தட்டும்போது மட்டுமே ஒவ்வொரு அனுமதியும் கேட்கப்படும்.",
+    "howDidYouHearAboutOmi": "Omi பற்றி உங்களுக்கு எப்படித் தெரிந்தது?",
+    "showOnLockScreen": "பூட்டுத் திரையில் காட்டு",
+    "seeAll": "அனைத்தையும் காண்க",
+    "upNext": "அடுத்தது",
+    "allTasks": "அனைத்துப் பணிகளும்",
+    "thisWeek": "இந்த வாரம்",
+    "capturedDuration": "{duration} பதிவு செய்யப்பட்டது",
+    "newMemoriesCount": "{count, plural, =1{1 புதிய நினைவு} other{{count} புதிய நினைவுகள்}}",
+    "syncingFromPendant": "உங்கள் பெண்டன்ட்டிலிருந்து ஒத்திசைக்கிறது",
+    "pendantRecordingsSynced": "பெண்டன்ட் பதிவுகள் ஒத்திசைக்கப்பட்டன",
+    "recordedOnPendantWhileAway": "உங்கள் போன் தொலைவில் இருந்தபோது பெண்டன்ட்டில் ~{duration} பதிவானது",
+    "dailyRecapOn": "தினசரி சுருக்கம் · {day}",
+    "taskDueDayTime": "{day}, {time}",
+    "fromConversation": "{title} இலிருந்து",
+    "endCapture": "முடி",
+    "toDo": "செய்ய வேண்டியவை",
+    "devices": "சாதனங்கள்",
+    "devicesSubtitle": "உங்களுக்காகக் கேட்கும் அனைத்தும். ஒரே நேரத்தில் ஒன்றே பதிவு செய்யும்.",
+    "addADevice": "சாதனத்தைச் சேர்",
+    "deviceReady": "தயார்",
+    "importFromOtherApps": "பிற ஆப்களிலிருந்து இறக்குமதி செய்",
+    "whatWillYouWear": "நீங்கள் எதை அணிவீர்கள்?",
+    "pickDeviceSubtitle": "பிறகு மேலும் சேர்க்கலாம். ஒரே நேரத்தில் ஒன்றே பதிவு செய்யும்.",
+    "alreadyHaveOne": "ஏற்கனவே இருக்கிறதா?",
+    "noDeviceHeader": "சாதனம் இல்லை",
+    "omiPendantName": "Omi பெண்டன்ட்",
+    "allDayConversations": "நாள் முழுவதும் உரையாடல்கள்",
+    "conversationsAndPhotos": "உரையாடல்கள் + புகைப்படங்கள்",
+    "wristMic": "மணிக்கட்டு மைக்",
+    "glassesAudio": "கண்ணாடி ஆடியோ",
+    "bringRecordingsIntoOmi": "உங்கள் பதிவுகளை Omi-க்குக் கொண்டு வாருங்கள்",
+    "useThisIphone": "இந்த iPhone-ஐப் பயன்படுத்து",
+    "useThisPhone": "இந்த ஃபோனைப் பயன்படுத்து",
+    "startInSeconds": "10 வினாடிகளில் தொடங்குங்கள்",
+    "askAboutThisConversationPlaceholder": "இந்த உரையாடலைப் பற்றிக் கேளுங்கள்",
+    "summaryStyle": "சுருக்க பாணி",
+    "summaryStyleSubtitle": "இந்தச் சுருக்கத்தை எந்த ஆப் எழுத வேண்டும் எனத் தேர்ந்தெடுக்கவும்",
+    "appearance": "தோற்றம்",
+    "appearanceSystem": "சிஸ்டம்",
+    "appearanceLight": "லைட்",
+    "appearanceDark": "டார்க்",
+    "feel": "உணர்வு",
+    "haptics": "ஹாப்டிக்ஸ்",
+    "hapticsSubtitle": "ஏதாவது முடிக்கும்போது, நட்சத்திரமிடும்போது அல்லது நிறைவு செய்யும்போது மெல்லிய தட்டு",
+    "textSize": "உரை அளவு",
+    "textSizeSubtitle": "உங்கள் ஃபோனின் உரை அளவைப் பின்பற்றுகிறது",
+    "appearanceMotionNote": "இயக்கம் உங்கள் ஃபோன் அமைப்புகளில் உள்ள «இயக்கத்தைக் குறை» என்பதைப் பின்பற்றும் — சாதன ஒளி உட்பட எல்லா சுழற்சிகளும் நிற்கும்.",
+    "signedInWithApple": "Apple மூலம் உள்நுழைந்துள்ளீர்கள்",
+    "signedInWithGoogle": "Google மூலம் உள்நுழைந்துள்ளீர்கள்",
+    "premiumMinutesLeftThisMonth": "இந்த மாதம் {left}/{limit} பிரீமியம் நிமிடங்கள் மீதமுள்ளன",
+    "recordingFrom": "பதிவு மூலம்",
+    "recordingFromSubtitle": "ஒரே நேரத்தில் ஒரு மூலம் மட்டுமே பதிவு செய்யும். மாற்றினால் தற்போதைய உரையாடல் முடியும்.",
+    "manageDevices": "சாதனங்களை நிர்வகி",
+    "notListeningTitle": "கேட்கவில்லை",
+    "notListeningSubtitle": "இந்த ஃபோனுடன் தொடங்குங்கள், அல்லது நாள் முழுவதும் கேட்க ஒரு சாதனத்தை இணைக்கவும்.",
+    "startListening": "கேட்கத் தொடங்கு",
+    "searchEverything": "அனைத்திலும் தேடு",
+    "searchResultsCount": "முடிவுகள் · {count}",
+    "nothingFound": "எதுவும் கிடைக்கவில்லை",
+    "searchNothingFoundHint": "வேறு வார்த்தையை முயற்சிக்கவும், அல்லது Omi-யிடம் கேளுங்கள் — அது வார்த்தைகளை மட்டுமல்ல, அர்த்தத்தையும் புரிந்துகொள்ளும்.",
+    "askOmiInstead": "பதிலாக Omi-யிடம் கேளுங்கள்",
+    "recentSearches": "சமீபத்தியவை",
+    "searchAskSuggestion": "இந்த வாரம் நான் என்ன செய்வதாக வாக்களித்தேன்?",
+    "welcomeRememberTitle": "ஒவ்வொரு உரையாடலையும் நினைவில் வையுங்கள்.",
+    "welcomeRememberSubtitle": "உங்களுக்குப் பிடித்ததை அணியுங்கள். நீங்கள் கேட்பதை Omi குறிப்புகள், செய்ய வேண்டியவை, உங்கள் நாளின் சுருக்கமாக மாற்றும்.",
+    "memoriesSubtitle": "Omi-க்கு என்ன தெரியும், அதை எங்கிருந்து கற்றது",
+    "memoryTierLongTerm": "நீண்ட கால",
+    "memoryTierShortTerm": "குறுகிய கால",
+    "memoriesTierNote": "புதிய நினைவுகள் குறுகிய காலமாகத் தொடங்கும். தொடர்ந்து முக்கியமானவற்றை Omi தானாகவே நீண்ட காலத்துக்கு நகர்த்தும்.",
+    "askEmptyTitle": "நீங்கள் கேட்ட எதைப் பற்றியும் கேளுங்கள்.",
+    "askEmptySubtitle": "Omi உங்கள் உரையாடல்கள், நினைவுகள், பணிகளிலிருந்து பதில் தரும்.",
+    "completeListeningTitle": "கேட்டல்",
+    "completeListeningBody": "நீலம் என்றால் Omi உங்களைக் கேட்கிறது — நீங்கள் அணிந்துள்ள சாதனம் அல்லது இந்த ஃபோன் மூலம்.",
+    "completeAskAnyBody": "நீங்கள் கேட்ட எதைப் பற்றியும் கேட்க ‘கேள்’ என்பதைத் தட்டவும்.",
+    "completeDevicesBody": "எப்போது வேண்டுமானாலும் அணியக்கூடிய சாதனத்தைச் சேர்க்கவும், அல்லது இந்த ஃபோனுடன் தொடங்கவும்.",
+    "conversationSourceGlasses": "கண்ணாடி",
+    "conversationSourceImported": "இறக்குமதி செய்தவை",
+    "conversationSourceEmptyHint": "இந்த மூலத்திலிருந்து இன்னும் எதுவும் பதிவாகவில்லை.",
+    "findMyPendant": "என் பதக்கத்தைக் கண்டுபிடி",
+    "findMyPendantHint": "நீங்கள் கண்டுபிடிக்க ஒலி எழுப்பும்",
+    "upToDate": "புதுப்பிக்கப்பட்டது",
+    "updateAvailable": "புதுப்பிப்பு கிடைக்கிறது",
+    "storageTitle": "சேமிப்பகம்",
+    "connectStepTurnOn": "இயக்கி அருகில் வையுங்கள்",
+    "connectStepAllowBluetooth": "புளூடூத்தை அனுமதியுங்கள்",
+    "connectStepTest": "சோதிக்க ஏதாவது பேசுங்கள்",
+    "connectStepTestHint": "நீங்கள் பேசும்போது சொற்கள் இங்கே தோன்றும்",
+    "setUpLater": "பின்னர் அமை",
+    "recapPreviousDay": "முந்தைய நாளின் சுருக்கம்: {day}",
+    "recapNextDay": "அடுத்த நாளின் சுருக்கம்: {day}",
+    "askStarterToday": "இன்றைய சுருக்கம் தா",
+    "askStarterPeople": "நான் யாரைச் சந்தித்தேன்?",
+    "askStarterOpen": "இன்னும் என்ன நிலுவையில் உள்ளது?",
+    "peopleSubtitle": "டிரான்ஸ்கிரிப்ட்களில் Omi அடையாளம் காணும் குரல்கள்",
+    "usageCurrentPlan": "தற்போதைய திட்டம்",
+    "appsExplore": "ஆராய்",
+    "appOutOfFive": "5-இல்",
+    "appStatUsers": "பயனர்கள்",
+    "homeWelcomeName": "வரவேற்கிறோம், {name}",
+    "homeWelcome": "வரவேற்கிறோம்",
+    "homeFirstDaySubtitle": "Omi உடன் உங்கள் முதல் நாள்",
+    "homeListeningHeroTitle": "Omi கேட்கிறது",
+    "homeListeningHeroBody": "உங்கள் முதல் உரையாடல் முடிந்த ஒரு நிமிடத்தில் இங்கே தோன்றும்.",
+    "homeGettingStarted": "தொடங்குதல்",
+    "gettingStartedConnect": "சாதனத்தை இணையுங்கள்",
+    "gettingStartedConversation": "ஒரு உரையாடல் நடத்துங்கள்",
+    "gettingStartedAsk": "அதைப் பற்றி Omi-யிடம் கேளுங்கள்",
+    "homeGoodToKnow": "தெரிந்துகொள்ள வேண்டியவை",
+    "tipFinishTitle": "எப்போது வேண்டுமானாலும் முடிக்கலாம்",
+    "tipFinishBody": "முடி என்பதைத் தட்டுங்கள் — அல்லது பதக்கத்தை இருமுறை அழுத்துங்கள் — சுருக்கம் உடனே தொடங்கும்.",
+    "tipStarTitle": "முக்கியமானதை நட்சத்திரமிடுங்கள்",
+    "tipStarBody": "நட்சத்திரமிட்ட உரையாடல்களைப் பின்னர் எளிதாகக் கண்டுபிடிக்கலாம்.",
+    "tipPrivateTitle": "இயல்பாகவே தனிப்பட்டது",
+    "tipPrivateBody": "நீங்கள் பகிராத வரை உங்கள் உரையாடல்கள் தனிப்பட்டவையாகவே இருக்கும்.",
+    "homeGettingStartedProgress": "{done}/{total}"
 }

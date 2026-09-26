@@ -13,7 +13,7 @@ class ExpandableTextWidget extends StatefulWidget {
   final int maxLines;
   final String? expandText;
   final String? collapseText;
-  final Color linkColor;
+  final Color? linkColor;
 
   const ExpandableTextWidget({
     super.key,
@@ -22,7 +22,7 @@ class ExpandableTextWidget extends StatefulWidget {
     this.maxLines = 3,
     this.expandText,
     this.collapseText,
-    this.linkColor = OmiColors.textSecondary,
+    this.linkColor,
     required this.isExpanded,
     required this.toggleExpand,
   });
@@ -53,15 +53,15 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
             styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
               a: widget.style,
               p: widget.style,
-              blockquote: widget.style.copyWith(backgroundColor: Colors.transparent, color: Colors.black),
-              blockquoteDecoration: const BoxDecoration(
+              blockquote: widget.style.copyWith(backgroundColor: Colors.transparent, color: OmiColors.surface0),
+              blockquoteDecoration: BoxDecoration(
                 color: OmiColors.surface3,
-                borderRadius: BorderRadius.all(Radius.circular(4)),
+                borderRadius: const BorderRadius.all(Radius.circular(4)),
               ),
               code: widget.style.copyWith(
                 backgroundColor: Colors.transparent,
                 decoration: TextDecoration.none,
-                color: Colors.white,
+                color: OmiColors.accent,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -85,7 +85,7 @@ class _ExpandableTextWidgetState extends State<ExpandableTextWidget> {
                 child: Text(
                   widget.isExpanded ? collapseLabel : expandLabel,
                   style: TextStyle(
-                    color: widget.linkColor,
+                    color: widget.linkColor ?? OmiColors.textSecondary,
                     fontWeight: FontWeight.w500,
                     fontSize: widget.style.fontSize,
                   ),

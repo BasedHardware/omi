@@ -5,12 +5,14 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/http/api/announcements.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
+import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/pages/referral/referral_page.dart';
+import 'package:omi/pages/settings/appearance_page.dart';
 import 'package:omi/pages/settings/conversation_display_settings.dart';
 import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
 import 'package:omi/pages/settings/custom_vocabulary_page.dart';
@@ -63,6 +65,8 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
       await routeToPage(context, const HelpAboutGroupPage());
     case SettingsDestination.notifications:
       await routeToPage(context, const NotificationsSettingsPage());
+    case SettingsDestination.appearance:
+      await routeToPage(context, const AppearancePage());
     case SettingsDestination.planAndUsage:
       await routeToPage(context, const UsagePage());
     case SettingsDestination.offlineSync:
@@ -72,6 +76,9 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
       await routeToPage(context, const DeviceSettings());
     case SettingsDestination.integrations:
       await routeToPage(context, const IntegrationsPage());
+    case SettingsDestination.apps:
+      // Rev 3: Apps moved from the tab bar into Settings.
+      await routeToPage(context, const AppsPage(showAppBar: true));
     case SettingsDestination.permissions:
       PlatformManager.instance.analytics.permissionsSettingsOpened();
       await routeToPage(context, const PermissionsPage());
@@ -132,7 +139,7 @@ Future<void> openVoiceProfile(BuildContext context) async {
     context,
     Builder(
       builder: (routeContext) => Scaffold(
-        appBar: AppBar(leading: const OmiBackButton()),
+        appBar: const OmiAppBar(leading: OmiBackButton()),
         body: SpeechProfileWidget(
           flowSource: 'settings',
           goNext: () => Navigator.of(routeContext).pop(),

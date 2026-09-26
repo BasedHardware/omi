@@ -56,7 +56,7 @@ class _PermissionsInterstitialPageState extends State<PermissionsInterstitialPag
             child: Align(
               alignment: const Alignment(0, 0.4),
               child: ExcludeSemantics(
-                child: Image.asset(Assets.images.logoTransparent.path, width: 120, height: 120),
+                child: Image.asset(Assets.images.logoTransparent.path, width: 120, height: 120, color: OmiColors.textPrimary),
               ),
             ),
           ),

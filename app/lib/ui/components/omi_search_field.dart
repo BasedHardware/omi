@@ -4,7 +4,7 @@ import 'package:omi/ui/components/omi_icon_button.dart';
 import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// The one search field: a 48pt [OmiColors.surface1] capsule with a magnifier, the placeholder,
+/// The one search field: a 44pt [OmiColors.surface2] capsule with a magnifier, the placeholder,
 /// and a clear X that appears once there is text.
 ///
 /// The placeholder says what it searches ("Search conversations", "Search memories"), sentence
@@ -81,9 +81,9 @@ class _OmiSearchFieldState extends State<OmiSearchField> {
 
   @override
   Widget build(BuildContext context) {
-    const border = OutlineInputBorder(borderRadius: OmiRadius.xlAll, borderSide: BorderSide.none);
+    const border = OutlineInputBorder(borderRadius: OmiRadius.pillAll, borderSide: BorderSide.none);
     return SizedBox(
-      height: 48,
+      height: OmiSize.minTap,
       child: TextField(
         controller: _controller,
         focusNode: widget.focusNode,
@@ -98,12 +98,12 @@ class _OmiSearchFieldState extends State<OmiSearchField> {
           hintText: widget.placeholder,
           hintStyle: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
           filled: true,
-          fillColor: OmiColors.surface1,
+          fillColor: OmiColors.surface2,
           border: border,
           enabledBorder: border,
           focusedBorder: border,
           contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm),
-          prefixIcon: const ExcludeSemantics(child: Icon(Icons.search, color: OmiColors.textTertiary, size: 20)),
+          prefixIcon: ExcludeSemantics(child: Icon(Icons.search, color: OmiColors.textTertiary, size: 20)),
           suffixIcon: _controller.text.isEmpty
               ? null
               : OmiIconButton(

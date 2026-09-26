@@ -91,7 +91,7 @@ void main() {
     expect(spinner(), findsOneWidget);
   });
 
-  testWidgets('regular is 48pt tall and compact keeps a >=44pt target around its 36pt visual', (tester) async {
+  testWidgets('regular is a 50pt capsule and compact keeps a >=44pt target around its 36pt visual', (tester) async {
     await pumpUi(
       tester,
       const Scaffold(
@@ -104,7 +104,7 @@ void main() {
         ),
       ),
     );
-    expect(tester.getSize(find.byType(OmiButton).first).height, 48);
+    expect(tester.getSize(find.byType(OmiButton).first).height, OmiSize.primaryButton);
     expect(tester.getSize(find.byType(OmiButton).last).height, greaterThanOrEqualTo(44));
   });
 

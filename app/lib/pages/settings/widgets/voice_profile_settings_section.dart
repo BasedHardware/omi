@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Two switches that control voice learning: whether Omi asks the user to tag
@@ -29,25 +30,22 @@ class _VoiceProfileSettingsSectionState extends State<VoiceProfileSettingsSectio
     return Consumer<SpeakerTagPromptsProvider>(
       builder: (context, provider, _) {
         final enabled = provider.settingsLoaded;
-        return Column(
+        return OmiSettingsGroup(
           children: [
-            SwitchListTile(
+            OmiSettingsRow.toggle(
               key: const Key('voice_settings_ask_to_tag_switch'),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              title: Text(context.l10n.voiceSettingsAskToTag),
-              subtitle: Text(context.l10n.voiceSettingsAskToTagSubtitle),
+              title: context.l10n.voiceSettingsAskToTag,
+              subtitle: context.l10n.voiceSettingsAskToTagSubtitle,
               value: provider.speakerTagPromptsEnabled,
               onChanged: enabled ? (value) => provider.setSpeakerTagPromptsEnabled(value) : null,
             ),
-            SwitchListTile(
+            OmiSettingsRow.toggle(
               key: const Key('voice_settings_save_others_switch'),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-              title: Text(context.l10n.speakerTagPromptSaveVoicesTitle),
-              subtitle: Text(context.l10n.voiceSettingsSaveOthersSubtitle),
+              title: context.l10n.speakerTagPromptSaveVoicesTitle,
+              subtitle: context.l10n.voiceSettingsSaveOthersSubtitle,
               value: provider.saveOtherVoiceProfiles,
               onChanged: enabled ? (value) => provider.setSaveOtherVoiceProfiles(value, fromFirstPrompt: false) : null,
             ),
-            const Divider(height: 1),
           ],
         );
       },

@@ -11,6 +11,7 @@ enum BatteryWidgetKeys {
     static let isConnected = "widget_is_connected"
     static let lastUpdated = "widget_last_updated"
     static let isMuted = "widget_is_muted"
+    static let isCharging = "widget_is_charging"
 }
 
 /// Model representing the device battery state shown in the widget.
@@ -21,6 +22,7 @@ struct DeviceBatteryInfo {
     let isConnected: Bool
     let lastUpdated: Date
     let isMuted: Bool
+    var isCharging: Bool = false
 
     /// Reads the latest device battery info from the shared App Group UserDefaults.
     static func fromSharedDefaults() -> DeviceBatteryInfo {
@@ -31,13 +33,15 @@ struct DeviceBatteryInfo {
         let connected = defaults?.bool(forKey: BatteryWidgetKeys.isConnected) ?? false
         let updated = defaults?.object(forKey: BatteryWidgetKeys.lastUpdated) as? Date ?? Date.distantPast
         let muted = defaults?.bool(forKey: BatteryWidgetKeys.isMuted) ?? false
+        let charging = defaults?.bool(forKey: BatteryWidgetKeys.isCharging) ?? false
         return DeviceBatteryInfo(
             deviceName: name,
             batteryLevel: battery,
             deviceType: type,
             isConnected: connected,
             lastUpdated: updated,
-            isMuted: muted
+            isMuted: muted,
+            isCharging: charging
         )
     }
 }

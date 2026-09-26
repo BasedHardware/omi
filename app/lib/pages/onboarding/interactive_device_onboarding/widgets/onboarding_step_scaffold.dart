@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/providers/device_onboarding_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 // Persistent, self-animating progress indicator. Rendered once in the wrapper
@@ -17,21 +18,16 @@ class OnboardingProgressDots extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(DeviceOnboardingProvider.totalSteps, (index) {
-        final isActive = index == currentStep;
-        final isCompleted = index < currentStep;
+        // v2: one short bar per step, filled up to the current one (same as first-run onboarding).
         return AnimatedContainer(
-          duration: const Duration(milliseconds: 320),
-          curve: Curves.easeOutCubic,
-          margin: const EdgeInsets.symmetric(horizontal: 4),
-          width: isActive ? 24 : 8,
-          height: 8,
+          duration: OmiMotion.of(context).standard,
+          curve: OmiMotion.springCurve,
+          margin: const EdgeInsets.symmetric(horizontal: 2.5),
+          width: 16,
+          height: 3,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(4),
-            color: isActive
-                ? Colors.white
-                : isCompleted
-                    ? Colors.white.withValues(alpha: 0.5)
-                    : Colors.white.withValues(alpha: 0.2),
+            borderRadius: OmiRadius.pillAll,
+            color: index <= currentStep ? OmiColors.textPrimary : OmiColors.surface3,
           ),
         );
       }),
@@ -55,27 +51,21 @@ class OnboardingStepScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // v2: the title left-aligned at the top, the step's content, the action pinned at the bottom.
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SizedBox(height: 24),
-          Text(
-            title,
-            style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
-            textAlign: TextAlign.center,
-          ),
+          const SizedBox(height: OmiSpacing.xl),
+          Semantics(header: true, child: Text(title, style: OmiType.title1)),
           if (subtitle.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(
-              subtitle,
-              style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 16, height: 1.4),
-              textAlign: TextAlign.center,
-            ),
+            const SizedBox(height: OmiSpacing.xs),
+            Text(subtitle, style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.4)),
           ],
-          const SizedBox(height: 40),
+          const SizedBox(height: OmiSpacing.xxl),
           Expanded(child: content),
-          if (bottomAction != null) ...[bottomAction!, const SizedBox(height: 24)],
+          if (bottomAction != null) ...[bottomAction!, const SizedBox(height: OmiSpacing.xl)],
         ],
       ),
     );
@@ -90,22 +80,10 @@ class OnboardingContinueButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-          elevation: 0,
-        ),
-        child: Text(
-          label ?? context.l10n.deviceOnboardingContinue,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-      ),
+    return OmiButton(
+      label: label ?? context.l10n.deviceOnboardingContinue,
+      expand: true,
+      onPressed: onPressed,
     );
   }
 }

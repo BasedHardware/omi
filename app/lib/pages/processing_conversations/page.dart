@@ -28,16 +28,74 @@ class ProcessingConversationPage extends StatelessWidget {
       ),
       body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
-        child: hasContent
-            ? getTranscriptWidget(
-                false,
-                conversation.transcriptSegments,
-                conversation.photos,
-                null,
-                conversationId: conversation.id,
-                bottomMargin: OmiSpacing.xxl,
-              )
-            : OmiEmptyState(icon: Icons.hourglass_empty, title: context.l10n.noContentToDisplay),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _ProcessingSteps(),
+            const SizedBox(height: OmiSpacing.md),
+            Expanded(
+              child: hasContent
+                  ? getTranscriptWidget(
+                      false,
+                      conversation.transcriptSegments,
+                      conversation.photos,
+                      null,
+                      conversationId: conversation.id,
+                      bottomMargin: OmiSpacing.xxl,
+                    )
+                  : OmiEmptyState(icon: Icons.hourglass_empty, title: context.l10n.noContentToDisplay),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// v2 "Wrapping up": what is done (the transcript is saved) and what Omi is doing now.
+class _ProcessingSteps extends StatelessWidget {
+  const _ProcessingSteps();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    // "Summarizing conversation…\nThis may take a few seconds": a title and its note.
+    final summarizing = l10n.summarizingConversation.split('\n');
+    Widget step({required Widget leading, required String title, String? note}) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(width: 24, height: 24, child: Center(child: leading)),
+              const SizedBox(width: OmiSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: OmiType.headline),
+                    if (note != null && note.trim().isNotEmpty)
+                      Text(note.trim(), style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+    return Container(
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.rowAll),
+      child: Column(
+        children: [
+          step(
+            leading: Icon(Icons.check_circle_rounded, size: 22, color: OmiColors.textPrimary),
+            title: l10n.transcript,
+          ),
+          Divider(height: 0.5, thickness: 0.5, indent: OmiSpacing.md, color: OmiColors.border),
+          step(
+            leading: const OmiRingLogo(size: 18, mode: OmiRingMode.chase),
+            title: summarizing.first,
+            note: summarizing.length > 1 ? summarizing.sublist(1).join(' ') : null,
+          ),
+        ],
       ),
     );
   }

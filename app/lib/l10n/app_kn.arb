@@ -1781,10 +1781,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "whatsYourName": "ನಿಮ್ಮ ಹೆಸರು ಏನು?",
-    "@whatsYourName": {
-        "description": "Question asking for user's name"
-    },
     "@enterYourName": {
         "description": "Hint text for name input field"
     },
@@ -1807,14 +1803,6 @@
     "termsOfUse": "ಬಳಕೆ ನಿಯಮಗಳು",
     "@termsOfUse": {
         "description": "Link text for Terms of Use"
-    },
-    "omiYourAiCompanion": "Omi – ನಿಮ್ಮ AI ಸಹಾಯಕ",
-    "@omiYourAiCompanion": {
-        "description": "App title or branding on onboarding screen"
-    },
-    "captureEveryMoment": "ಪ್ರತಿಯೊಂದು ಕ್ಷಣವನ್ನು ಹಿಡಿಯಿರಿ. AI-ನ ಚಾಲಿತ\nಸಾರಾಂಶಗಳನ್ನು ಪಡೆಯಿರಿ. ಪುನಃ ಗಮನಾರ್ಹತೆಗಳನ್ನು ತೆಗೆದುಕೊಳ್ಳಬೇಡಿ.",
-    "@captureEveryMoment": {
-        "description": "App value proposition or description"
     },
     "appleWatchSetup": "Apple Watch ಸೆಟಪ್",
     "@appleWatchSetup": {
@@ -1877,27 +1865,11 @@
             }
         }
     },
-    "selectPrimaryLanguage": "ನಿಮ್ಮ ಮುಖ್ಯ ಭಾಷೆ ಆರಿಸಿ",
-    "@selectPrimaryLanguage": {
-        "description": "Title for language selection dialog"
-    },
-    "languageBenefits": "ಗಾಢ ಟ್ರಾನ್ಸ್ಕ್ರಿಪ್ಷನ್ ಮತ್ತು ವ್ಯಕ್ತಿಗತ ಅನುಭವಕ್ಕಾಗಿ ನಿಮ್ಮ ಭಾಷೆ ಹೊಂದಿಸಿ",
-    "@languageBenefits": {
-        "description": "Explanation of why language selection matters"
-    },
     "@searchLanguageHint": {
         "description": "Hint text for language search"
     },
     "@noLanguagesFound": {
         "description": "Text when search returns no results"
-    },
-    "whatsYourPrimaryLanguage": "ನಿಮ್ಮ ಮುಖ್ಯ ಭಾಷೆ ಏನು?",
-    "@whatsYourPrimaryLanguage": {
-        "description": "Question asking for primary language"
-    },
-    "selectYourLanguage": "ನಿಮ್ಮ ಭಾಷೆ ಆರಿಸಿ",
-    "@selectYourLanguage": {
-        "description": "Placeholder for selected language name"
     },
     "personalGrowthJourney": "ನಿಮ್ಮ ವ್ಯಕ್ತಿಗತ ಬೆಳವಣಿಗೆ AI ಯೊಂದಿಗೆ ಯಾತ್ರೆ ಇದು ನಿಮ್ಮ ಪ್ರತಿಯೊಂದು ಪದವನ್ನು ಕೇಳುತ್ತದೆ.",
     "@personalGrowthJourney": {
@@ -3922,10 +3894,6 @@
     "@dataProtection": {
         "description": "Section title for data protection info"
     },
-    "yourDataIsProtected": "ನಿಮ್ಮ ಡೇಟಾ ನಮ್ಮ ಸಂರಕ್ಷಣಾ ನಿಯಮಗಳಿಂದ ಸಂರಕ್ಷಿತವಾಗಿದೆ ",
-    "@yourDataIsProtected": {
-        "description": "First part of data protection text"
-    },
     "pleaseSelectYourPrimaryLanguage": "ದಯವಿಟ್ಟು ನಿಮ್ಮ ಪ್ರಾಥಮಿಕ ಭಾಷೆಯನ್ನು ಆಯ್ಕೆ ಮಾಡಿ",
     "chooseYourLanguage": "ನಿಮ್ಮ ಭಾಷೆಯನ್ನು ಆಯ್ಕೆ ಮಾಡಿ",
     "selectPreferredLanguageForBestExperience": "ಸಿ Omi ಅನುಭವಕ್ಕೆ ಸಾಮಾನ್ಯವಾಗಿ ನಿಮ್ಮ ಆದ್ಯತೆಯ ಭಾಷೆಯನ್ನು ಆಯ್ಕೆ ಮಾಡಿ",
@@ -5933,10 +5901,6 @@
     "additionalSpeechSampleRemoved": "ಹೆಚ್ಚುವರಿ ಭಾಷಣ ಮಾದರಿ ತೆಗೆದುಹಾಕಲಾಗಿದೆ",
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
-    },
-    "consentDataMessage": "ಮುಂದುವರಿಯುವ ಮೂಲಕ, ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳು, ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ವೈಯಕ್ತಿಕ ಮಾಹಿತಿಯನ್ನು ನಮ್ಮ ಸರ್ವರ್‌ಗಳಲ್ಲಿ ಸುರಕ್ಷಿತವಾಗಿ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ. ನಿಮ್ಮ ಆಡಿಯೋ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಟ್‌ಗಳನ್ನು ಮೂರನೇ ವ್ಯಕ್ತಿಯ AI ಸೇವೆಗಳಿಂದ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ (ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಷನ್‌ಗಾಗಿ Deepgram ಮತ್ತು ವಿಶ್ಲೇಷಣೆಗಾಗಿ OpenAI ಸೇರಿದಂತೆ) AI-ಚಾಲಿತ ಒಳನೋಟಗಳನ್ನು ಒದಗಿಸಲು ಮತ್ತು ಎಲ್ಲಾ ಅಪ್ಲಿಕೇಶನ್ ವೈಶಿಷ್ಟ್ಯಗಳನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಲು.",
-    "@consentDataMessage": {
-        "description": "Consent message explaining how user data will be stored and used"
     },
     "tasksEmptyStateMessage": "ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳಿಂದ ಕಾರ್ಯಗಳು ಇಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತವೆ.\nಒಂದು ಹಸ್ತಚಾಲಿತವಾಗಿ ರಚಿಸಲು + ಟ್ಯಾಪ್ ಮಾಡಿ.",
     "@tasksEmptyStateMessage": {
@@ -9501,7 +9465,6 @@
     },
     "mcpConnectionFailed": "MCP ಸರ್ವರ್‌ಗೆ ಸಂಪರ್ಕಿಸಲು ವಿಫಲ",
     "authorizingMcpServer": "ಪ್ರಮಾಣೀಕರಣ ನಡೆಯುತ್ತಿದೆ…",
-    "whereDidYouHearAboutOmi": "ಆಪ್ತಾ ನಿಮ್ಮನ್ನು ಎಲ್ಲಿಂದ ಕಂಡುಕೊಂಡಿರಿ?",
     "tiktok": "TikTok",
     "youtube": "YouTube",
     "instagram": "Instagram",
@@ -10790,7 +10753,6 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಲು ರೆಕಾರ್ಡ್ ಬಟನ್ ಟ್ಯಾಪ್ ಮಾಡಿ",
     "processingTakingLonger": "ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ — ಇದು ಸಾಮಾನ್ಯಕ್ಕಿಂತ ಹೆಚ್ಚು ಸಮಯ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದೆ.",
     "speechProfileEnrollmentPrompt": "Omi ನಿಮ್ಮ ಧ್ವನಿಯನ್ನು ಗುರುತಿಸಲು — ಯಾವುದೇ ವಿಷಯದ ಬಗ್ಗೆ ಸುಮಾರು 5 ಸೆಕೆಂಡುಗಳ ಕಾಲ ಮಾತನಾಡಿ.",
     "home": "ಮುಖಪುಟ",
@@ -10956,7 +10918,6 @@
     "batteryLevelSemantics": "ಬ್ಯಾಟರಿ {level}%",
     "updateOmiGlassFirmware": "OmiGlass ಫರ್ಮ್‌ವೇರ್ ಅಪ್‌ಡೇಟ್ ಮಾಡಿ",
     "deviceConnecting": "ಸಂಪರ್ಕಿಸಲಾಗುತ್ತಿದೆ…",
-    "recordOptionsTip": "ಸಲಹೆ: ಫೋನ್ ಕರೆ ರೆಕಾರ್ಡ್ ಮಾಡಲು ರೆಕಾರ್ಡ್ ಬಟನ್‌ನಲ್ಲಿರುವ ಬಾಣದ ಗುರುತನ್ನು ಟ್ಯಾಪ್ ಮಾಡಿ.",
     "firmwareUpdateFailedTitle": "ಅಪ್‌ಡೇಟ್ ವಿಫಲವಾಗಿದೆ",
     "firmwareUpdateFailedMessage": "ಅಪ್‌ಡೇಟ್ ಪೂರ್ಣಗೊಂಡಿಲ್ಲ. ನಿಮ್ಮ ಸಾಧನ ಈಗಲೂ ಪ್ರಸ್ತುತ ಫರ್ಮ್‌ವೇರ್‌ನಲ್ಲಿದೆ ಮತ್ತು ಬಳಸಲು ಸುರಕ್ಷಿತವಾಗಿದೆ. ಚಾರ್ಜ್ ಮಾಡಿ ಫೋನ್ ಹತ್ತಿರ ಇಡಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "firmwareDownloadFailedMessage": "ಅಪ್‌ಡೇಟ್ ಡೌನ್‌ಲೋಡ್ ಆಗಲಿಲ್ಲ, ನಿಮ್ಮ ಸಾಧನ ಬದಲಾಗಿಲ್ಲ. ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
@@ -11109,8 +11070,148 @@
     "pendantPausesUntilYouFinish": "ನೀವು ಮುಗಿಸುವವರೆಗೆ ಪೆಂಡೆಂಟ್ ವಿರಾಮದಲ್ಲಿರುತ್ತದೆ",
     "pendantPausesDuringCall": "ಕರೆಯ ಸಮಯದಲ್ಲಿ ಪೆಂಡೆಂಟ್ ವಿರಾಮದಲ್ಲಿರುತ್ತದೆ",
     "keepUsingPendant": "ಪೆಂಡೆಂಟ್ ಬಳಸುವುದನ್ನು ಮುಂದುವರಿಸಿ",
-    "recordWith": "ರೆಕಾರ್ಡ್ ಮಾಡುವ ವಿಧಾನ",
-    "moreWaysToRecord": "ರೆಕಾರ್ಡ್ ಮಾಡಲು ಇನ್ನಷ್ಟು ಮಾರ್ಗಗಳು",
     "openCall": "ಕರೆ ತೆರೆಯಿರಿ",
-    "captureRecoveryBanner": "ಪೆಂಡೆಂಟ್‌ನ ಆಡಿಯೊ ಆ್ಯಪ್‌ಗೆ ತಲುಪುತ್ತಿಲ್ಲ — ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ"
+    "captureRecoveryBanner": "ಪೆಂಡೆಂಟ್‌ನ ಆಡಿಯೊ ಆ್ಯಪ್‌ಗೆ ತಲುಪುತ್ತಿಲ್ಲ — ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ",
+    "goodMorning": "ಶುಭೋದಯ",
+    "goodAfternoon": "ಶುಭ ಮಧ್ಯಾಹ್ನ",
+    "goodEvening": "ಶುಭ ಸಂಜೆ",
+    "alreadyHaveAccount": "ಈಗಾಗಲೇ ಖಾತೆ ಇದೆಯೇ?",
+    "signInToOmi": "Omi ಗೆ ಸೈನ್ ಇನ್ ಮಾಡಿ",
+    "signInSubtitle": "ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳು ಮತ್ತು ನೆನಪುಗಳು ನಿಮ್ಮ ಖಾತೆಯೊಂದಿಗೆ ಫೋನ್, Mac ಮತ್ತು ವೆಬ್‌ನಲ್ಲಿ ಇರುತ್ತವೆ.",
+    "onboardingAllSetName": "ಎಲ್ಲವೂ ಸಿದ್ಧ, {name}.",
+    "completeHomeBody": "ನಿಮ್ಮ ದಿನ, ಕಾರ್ಯಗಳು ಮತ್ತು ಸಾರಾಂಶಗಳು ಒಂದೇ ಕಡೆ.",
+    "completeAskTitle": "ಕೇಳಿ",
+    "foundOmiOptionalHint": "ಐಚ್ಛಿಕ — ಏನು ಕೆಲಸ ಮಾಡುತ್ತಿದೆ ಎಂದು ತಿಳಿಯಲು ಸಣ್ಣ ತಂಡಕ್ಕೆ ಸಹಾಯವಾಗುತ್ತದೆ.",
+    "consentTitle": "ನಿಮ್ಮ ಡೇಟಾ, ಸರಳ ಮಾತುಗಳಲ್ಲಿ",
+    "consentSubtitle": "Omi ಕೇಳಲು ಪ್ರಾರಂಭಿಸುವ ಮೊದಲು, ಅದು ಕೇಳಿದ್ದಕ್ಕೆ ನಿಖರವಾಗಿ ಏನಾಗುತ್ತದೆ ಎಂಬುದು ಇಲ್ಲಿದೆ.",
+    "consentStoredTitle": "ಏನು ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ",
+    "consentStoredBody": "ನಿಮ್ಮ ಆಡಿಯೋ, ಪ್ರತಿಲಿಪಿಗಳು ಮತ್ತು Omi ಕಲಿಯುವ ವಿವರಗಳನ್ನು ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ ಸುರಕ್ಷಿತವಾಗಿ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ.",
+    "consentProcessorsTitle": "ಇದನ್ನು ಯಾರು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸುತ್ತಾರೆ",
+    "consentProcessorsBody": "ಸಾರಾಂಶಗಳು, ಕಾರ್ಯಗಳು ಮತ್ತು ನೆನಪುಗಳನ್ನು ಬರೆಯಲು ಮಾತನ್ನು Deepgram ಪ್ರತಿಲಿಪಿ ಮಾಡುತ್ತದೆ ಮತ್ತು OpenAI ವಿಶ್ಲೇಷಿಸುತ್ತದೆ.",
+    "consentControlTitle": "ನಿಮ್ಮ ನಿಯಂತ್ರಣದಲ್ಲಿ ಏನಿದೆ",
+    "consentControlBody": "ಯಾವುದೇ ಸಂಭಾಷಣೆ, ನೆನಪು ಅಥವಾ ನಿಮ್ಮ ಸಂಪೂರ್ಣ ಖಾತೆಯನ್ನು ಯಾವಾಗ ಬೇಕಾದರೂ ಅಳಿಸಿ.",
+    "readPrivacyPolicy": "ಗೌಪ್ಯತಾ ನೀತಿಯನ್ನು ಓದಿ",
+    "whatShouldOmiCallYou": "Omi ನಿಮ್ಮನ್ನು ಏನೆಂದು ಕರೆಯಬೇಕು?",
+    "nameUsageHint": "ಪ್ರತಿಲಿಪಿಗಳು ಮತ್ತು ರಫ್ತುಗಳಲ್ಲಿ ನಿಮ್ಮನ್ನು ಗುರುತಿಸಲು Omi ಇದನ್ನು ಬಳಸುತ್ತದೆ.",
+    "yourNamePlaceholder": "ನಿಮ್ಮ ಹೆಸರು",
+    "whatLanguageDoYouSpeakMost": "ನೀವು ಹೆಚ್ಚಾಗಿ ಯಾವ ಭಾಷೆ ಮಾತನಾಡುತ್ತೀರಿ?",
+    "languageOnboardingSubtitle": "ಭಾಷೆ ತಿಳಿದಾಗ Omi ಉತ್ತಮವಾಗಿ ಪ್ರತಿಲಿಪಿ ಮಾಡುತ್ತದೆ. ನಂತರ ಇನ್ನಷ್ಟು ಸೇರಿಸಬಹುದು.",
+    "permissionsFewTitle": "ಕೆಲವು ಅನುಮತಿಗಳು",
+    "permissionsFewSubtitle": "Omi ತಾನು ಬಳಸುವುದನ್ನು ಮಾತ್ರ ಕೇಳುತ್ತದೆ. ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಯಾವಾಗ ಬೇಕಾದರೂ ಬದಲಾಯಿಸಬಹುದು.",
+    "permissionsContinueNote": "\"ಮುಂದುವರಿಸಿ\" ಏನನ್ನೂ ಕೇಳುವುದಿಲ್ಲ. \"ಅನುಮತಿಸಿ\" ಟ್ಯಾಪ್ ಮಾಡಿದಾಗ ಮಾತ್ರ ಪ್ರತಿ ಅನುಮತಿಯನ್ನು ಕೇಳಲಾಗುತ್ತದೆ.",
+    "howDidYouHearAboutOmi": "Omi ಬಗ್ಗೆ ನಿಮಗೆ ಹೇಗೆ ತಿಳಿಯಿತು?",
+    "showOnLockScreen": "ಲಾಕ್ ಸ್ಕ್ರೀನ್‌ನಲ್ಲಿ ತೋರಿಸಿ",
+    "seeAll": "ಎಲ್ಲವನ್ನೂ ನೋಡಿ",
+    "upNext": "ಮುಂದಿನದು",
+    "allTasks": "ಎಲ್ಲಾ ಕಾರ್ಯಗಳು",
+    "thisWeek": "ಈ ವಾರ",
+    "capturedDuration": "{duration} ಸೆರೆಹಿಡಿಯಲಾಗಿದೆ",
+    "newMemoriesCount": "{count, plural, =1{1 ಹೊಸ ನೆನಪು} other{{count} ಹೊಸ ನೆನಪುಗಳು}}",
+    "syncingFromPendant": "ನಿಮ್ಮ ಪೆಂಡೆಂಟ್‌ನಿಂದ ಸಿಂಕ್ ಆಗುತ್ತಿದೆ",
+    "pendantRecordingsSynced": "ಪೆಂಡೆಂಟ್ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸಿಂಕ್ ಆಗಿವೆ",
+    "recordedOnPendantWhileAway": "ನಿಮ್ಮ ಫೋನ್ ದೂರವಿದ್ದಾಗ ಪೆಂಡೆಂಟ್‌ನಲ್ಲಿ ~{duration} ರೆಕಾರ್ಡ್ ಆಗಿದೆ",
+    "dailyRecapOn": "ದೈನಂದಿನ ಸಾರಾಂಶ · {day}",
+    "taskDueDayTime": "{day}, {time}",
+    "fromConversation": "{title} ನಿಂದ",
+    "endCapture": "ಮುಗಿಸಿ",
+    "toDo": "ಮಾಡಬೇಕಾದವು",
+    "devices": "ಸಾಧನಗಳು",
+    "devicesSubtitle": "ನಿಮ್ಮ ಪರವಾಗಿ ಕೇಳುವ ಎಲ್ಲವೂ. ಒಂದು ಬಾರಿಗೆ ಒಂದೇ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತದೆ.",
+    "addADevice": "ಸಾಧನ ಸೇರಿಸಿ",
+    "deviceReady": "ಸಿದ್ಧ",
+    "importFromOtherApps": "ಇತರ ಆ್ಯಪ್‌ಗಳಿಂದ ಆಮದು ಮಾಡಿ",
+    "whatWillYouWear": "ನೀವು ಏನನ್ನು ಧರಿಸುತ್ತೀರಿ?",
+    "pickDeviceSubtitle": "ನಂತರ ಇನ್ನಷ್ಟು ಸೇರಿಸಬಹುದು. ಒಂದು ಬಾರಿಗೆ ಒಂದೇ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತದೆ.",
+    "alreadyHaveOne": "ಈಗಾಗಲೇ ಇದೆಯೇ?",
+    "noDeviceHeader": "ಸಾಧನವಿಲ್ಲ",
+    "omiPendantName": "Omi ಪೆಂಡೆಂಟ್",
+    "allDayConversations": "ದಿನವಿಡೀ ಸಂಭಾಷಣೆಗಳು",
+    "conversationsAndPhotos": "ಸಂಭಾಷಣೆಗಳು + ಫೋಟೋಗಳು",
+    "wristMic": "ಮಣಿಕಟ್ಟಿನ ಮೈಕ್",
+    "glassesAudio": "ಕನ್ನಡಕದ ಆಡಿಯೋ",
+    "bringRecordingsIntoOmi": "ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು Omi ಗೆ ತನ್ನಿ",
+    "useThisIphone": "ಈ iPhone ಬಳಸಿ",
+    "useThisPhone": "ಈ ಫೋನ್ ಬಳಸಿ",
+    "startInSeconds": "10 ಸೆಕೆಂಡುಗಳಲ್ಲಿ ಪ್ರಾರಂಭಿಸಿ",
+    "askAboutThisConversationPlaceholder": "ಈ ಸಂಭಾಷಣೆಯ ಬಗ್ಗೆ ಕೇಳಿ",
+    "summaryStyle": "ಸಾರಾಂಶ ಶೈಲಿ",
+    "summaryStyleSubtitle": "ಈ ಸಾರಾಂಶವನ್ನು ಯಾವ ಆ್ಯಪ್ ಬರೆಯಬೇಕೆಂದು ಆರಿಸಿ",
+    "appearance": "ಗೋಚರತೆ",
+    "appearanceSystem": "ಸಿಸ್ಟಂ",
+    "appearanceLight": "ಲೈಟ್",
+    "appearanceDark": "ಡಾರ್ಕ್",
+    "feel": "ಅನುಭವ",
+    "haptics": "ಹ್ಯಾಪ್ಟಿಕ್ಸ್",
+    "hapticsSubtitle": "ಏನನ್ನಾದರೂ ಮುಗಿಸಿದಾಗ, ನಕ್ಷತ್ರ ಹಾಕಿದಾಗ ಅಥವಾ ಪೂರ್ಣಗೊಳಿಸಿದಾಗ ಹಗುರವಾದ ಟ್ಯಾಪ್",
+    "textSize": "ಪಠ್ಯದ ಗಾತ್ರ",
+    "textSizeSubtitle": "ನಿಮ್ಮ ಫೋನ್‌ನ ಪಠ್ಯದ ಗಾತ್ರವನ್ನು ಅನುಸರಿಸುತ್ತದೆ",
+    "appearanceMotionNote": "ಚಲನೆ ನಿಮ್ಮ ಫೋನ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿನ «ಚಲನೆ ಕಡಿಮೆ ಮಾಡಿ» ಅನುಸರಿಸುತ್ತದೆ — ಸಾಧನದ ಬೆಳಕು ಸೇರಿದಂತೆ ಎಲ್ಲಾ ಲೂಪ್‌ಗಳು ನಿಲ್ಲುತ್ತವೆ.",
+    "signedInWithApple": "Apple ಮೂಲಕ ಸೈನ್ ಇನ್ ಆಗಿದೆ",
+    "signedInWithGoogle": "Google ಮೂಲಕ ಸೈನ್ ಇನ್ ಆಗಿದೆ",
+    "premiumMinutesLeftThisMonth": "ಈ ತಿಂಗಳು {left}/{limit} ಪ್ರೀಮಿಯಂ ನಿಮಿಷಗಳು ಉಳಿದಿವೆ",
+    "recordingFrom": "ರೆಕಾರ್ಡಿಂಗ್ ಮೂಲ",
+    "recordingFromSubtitle": "ಒಂದೇ ಸಮಯದಲ್ಲಿ ಒಂದು ಮೂಲ ಮಾತ್ರ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತದೆ. ಬದಲಾಯಿಸಿದರೆ ಈಗಿನ ಸಂಭಾಷಣೆ ಮುಗಿಯುತ್ತದೆ.",
+    "manageDevices": "ಸಾಧನಗಳನ್ನು ನಿರ್ವಹಿಸಿ",
+    "notListeningTitle": "ಕೇಳುತ್ತಿಲ್ಲ",
+    "notListeningSubtitle": "ಈ ಫೋನ್‌ನಿಂದ ಪ್ರಾರಂಭಿಸಿ, ಅಥವಾ ದಿನವಿಡೀ ಕೇಳಲು ಸಾಧನವನ್ನು ಸಂಪರ್ಕಿಸಿ.",
+    "startListening": "ಕೇಳಲು ಪ್ರಾರಂಭಿಸಿ",
+    "searchEverything": "ಎಲ್ಲವನ್ನೂ ಹುಡುಕಿ",
+    "searchResultsCount": "ಫಲಿತಾಂಶಗಳು · {count}",
+    "nothingFound": "ಏನೂ ಸಿಗಲಿಲ್ಲ",
+    "searchNothingFoundHint": "ಬೇರೆ ಪದವನ್ನು ಪ್ರಯತ್ನಿಸಿ, ಅಥವಾ Omi ಅನ್ನು ಕೇಳಿ — ಅದು ಪದಗಳಷ್ಟೇ ಅಲ್ಲ, ಅರ್ಥವನ್ನೂ ಅರ್ಥಮಾಡಿಕೊಳ್ಳುತ್ತದೆ.",
+    "askOmiInstead": "ಬದಲಿಗೆ Omi ಅನ್ನು ಕೇಳಿ",
+    "recentSearches": "ಇತ್ತೀಚಿನವು",
+    "searchAskSuggestion": "ಈ ವಾರ ನಾನು ಏನು ಮಾಡುವುದಾಗಿ ಭರವಸೆ ನೀಡಿದ್ದೆ?",
+    "welcomeRememberTitle": "ಪ್ರತಿ ಸಂಭಾಷಣೆಯನ್ನೂ ನೆನಪಿಡಿ.",
+    "welcomeRememberSubtitle": "ನಿಮಗೆ ಇಷ್ಟವಾದುದನ್ನು ಧರಿಸಿ. ನೀವು ಕೇಳುವುದನ್ನು Omi ಟಿಪ್ಪಣಿಗಳು, ಮಾಡಬೇಕಾದವು ಮತ್ತು ನಿಮ್ಮ ದಿನದ ಸಾರಾಂಶವಾಗಿ ಮಾಡುತ್ತದೆ.",
+    "memoriesSubtitle": "Omi ಗೆ ಏನು ಗೊತ್ತು, ಅದು ಎಲ್ಲಿಂದ ಕಲಿತಿತು",
+    "memoryTierLongTerm": "ದೀರ್ಘಾವಧಿ",
+    "memoryTierShortTerm": "ಅಲ್ಪಾವಧಿ",
+    "memoriesTierNote": "ಹೊಸ ನೆನಪುಗಳು ಅಲ್ಪಾವಧಿಯಾಗಿ ಆರಂಭವಾಗುತ್ತವೆ. ಮುಖ್ಯವಾಗಿಯೇ ಉಳಿಯುವವನ್ನು Omi ತಾನಾಗಿಯೇ ದೀರ್ಘಾವಧಿಗೆ ಸರಿಸುತ್ತದೆ.",
+    "askEmptyTitle": "ನೀವು ಕೇಳಿದ ಯಾವುದರ ಬಗ್ಗೆಯೂ ಕೇಳಿ.",
+    "askEmptySubtitle": "Omi ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳು, ನೆನಪುಗಳು ಮತ್ತು ಕಾರ್ಯಗಳಿಂದ ಉತ್ತರಿಸುತ್ತದೆ.",
+    "completeListeningTitle": "ಕೇಳುವಿಕೆ",
+    "completeListeningBody": "ನೀಲಿ ಎಂದರೆ Omi ನಿಮ್ಮನ್ನು ಕೇಳುತ್ತಿದೆ — ನೀವು ಧರಿಸಿದ ಸಾಧನದಿಂದ ಅಥವಾ ಈ ಫೋನ್‌ನಿಂದ.",
+    "completeAskAnyBody": "ನೀವು ಕೇಳಿದ ಯಾವುದರ ಬಗ್ಗೆ ಕೇಳಲು ‘ಕೇಳಿ’ ಟ್ಯಾಪ್ ಮಾಡಿ.",
+    "completeDevicesBody": "ಯಾವಾಗ ಬೇಕಾದರೂ ಧರಿಸಬಹುದಾದ ಸಾಧನ ಸೇರಿಸಿ, ಅಥವಾ ಈ ಫೋನ್‌ನಿಂದ ಪ್ರಾರಂಭಿಸಿ.",
+    "conversationSourceGlasses": "ಕನ್ನಡಕ",
+    "conversationSourceImported": "ಆಮದು ಮಾಡಿದವು",
+    "conversationSourceEmptyHint": "ಈ ಮೂಲದಿಂದ ಇನ್ನೂ ಏನನ್ನೂ ರೆಕಾರ್ಡ್ ಮಾಡಿಲ್ಲ.",
+    "findMyPendant": "ನನ್ನ ಪೆಂಡೆಂಟ್ ಹುಡುಕಿ",
+    "findMyPendantHint": "ನೀವು ಹುಡುಕಲು ಶಬ್ದ ಮಾಡುತ್ತದೆ",
+    "upToDate": "ನವೀಕೃತ",
+    "updateAvailable": "ಅಪ್‌ಡೇಟ್ ಲಭ್ಯವಿದೆ",
+    "storageTitle": "ಸಂಗ್ರಹಣೆ",
+    "connectStepTurnOn": "ಆನ್ ಮಾಡಿ ಹತ್ತಿರ ಹಿಡಿಯಿರಿ",
+    "connectStepAllowBluetooth": "ಬ್ಲೂಟೂತ್‌ಗೆ ಅನುಮತಿಸಿ",
+    "connectStepTest": "ಪರೀಕ್ಷೆಗೆ ಏನಾದರೂ ಹೇಳಿ",
+    "connectStepTestHint": "ನೀವು ಮಾತನಾಡುತ್ತಿದ್ದಂತೆ ಪದಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ",
+    "setUpLater": "ನಂತರ ಹೊಂದಿಸಿ",
+    "recapPreviousDay": "ಹಿಂದಿನ ದಿನದ ಸಾರಾಂಶ: {day}",
+    "recapNextDay": "ಮುಂದಿನ ದಿನದ ಸಾರಾಂಶ: {day}",
+    "askStarterToday": "ಇಂದಿನ ಸಾರಾಂಶ ನೀಡಿ",
+    "askStarterPeople": "ನಾನು ಯಾರನ್ನು ಭೇಟಿಯಾದೆ?",
+    "askStarterOpen": "ಇನ್ನೂ ಏನು ಬಾಕಿ ಇದೆ?",
+    "peopleSubtitle": "ಪ್ರತಿಲಿಪಿಗಳಲ್ಲಿ Omi ಗುರುತಿಸುವ ಧ್ವನಿಗಳು",
+    "usageCurrentPlan": "ಪ್ರಸ್ತುತ ಯೋಜನೆ",
+    "appsExplore": "ಅನ್ವೇಷಿಸಿ",
+    "appOutOfFive": "5 ರಲ್ಲಿ",
+    "appStatUsers": "ಬಳಕೆದಾರರು",
+    "homeWelcomeName": "ಸ್ವಾಗತ, {name}",
+    "homeWelcome": "ಸ್ವಾಗತ",
+    "homeFirstDaySubtitle": "Omi ಜೊತೆ ನಿಮ್ಮ ಮೊದಲ ದಿನ",
+    "homeListeningHeroTitle": "Omi ಕೇಳುತ್ತಿದೆ",
+    "homeListeningHeroBody": "ನಿಮ್ಮ ಮೊದಲ ಸಂಭಾಷಣೆ ಮುಗಿದ ಒಂದು ನಿಮಿಷದ ನಂತರ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.",
+    "homeGettingStarted": "ಪ್ರಾರಂಭಿಸಿ",
+    "gettingStartedConnect": "ಸಾಧನವನ್ನು ಸಂಪರ್ಕಿಸಿ",
+    "gettingStartedConversation": "ಒಂದು ಸಂಭಾಷಣೆ ನಡೆಸಿ",
+    "gettingStartedAsk": "ಅದರ ಬಗ್ಗೆ Omi ಅನ್ನು ಕೇಳಿ",
+    "homeGoodToKnow": "ತಿಳಿದಿರಬೇಕಾದದ್ದು",
+    "tipFinishTitle": "ಯಾವಾಗ ಬೇಕಾದರೂ ಮುಗಿಸಿ",
+    "tipFinishBody": "ಮುಗಿಸಿ ಟ್ಯಾಪ್ ಮಾಡಿ — ಅಥವಾ ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಅನ್ನು ಎರಡು ಬಾರಿ ಒತ್ತಿ — ಸಾರಾಂಶ ತಕ್ಷಣ ಶುರುವಾಗುತ್ತದೆ.",
+    "tipStarTitle": "ಮುಖ್ಯವಾದದ್ದಕ್ಕೆ ಸ್ಟಾರ್ ನೀಡಿ",
+    "tipStarBody": "ಸ್ಟಾರ್ ನೀಡಿದ ಸಂಭಾಷಣೆಗಳನ್ನು ನಂತರ ಸುಲಭವಾಗಿ ಹುಡುಕಬಹುದು.",
+    "tipPrivateTitle": "ಡೀಫಾಲ್ಟ್ ಆಗಿ ಖಾಸಗಿ",
+    "tipPrivateBody": "ನೀವು ಹಂಚಿಕೊಳ್ಳದ ಹೊರತು ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳು ಖಾಸಗಿಯಾಗಿರುತ್ತವೆ.",
+    "homeGettingStartedProgress": "{done}/{total}"
 }

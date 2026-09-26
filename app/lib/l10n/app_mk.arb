@@ -1781,10 +1781,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "whatsYourName": "Кое е вашето име?",
-    "@whatsYourName": {
-        "description": "Question asking for user's name"
-    },
     "@enterYourName": {
         "description": "Hint text for name input field"
     },
@@ -1807,14 +1803,6 @@
     "termsOfUse": "Услови на користење",
     "@termsOfUse": {
         "description": "Link text for Terms of Use"
-    },
-    "omiYourAiCompanion": "Omi – Ваш AI сопатник",
-    "@omiYourAiCompanion": {
-        "description": "App title or branding on onboarding screen"
-    },
-    "captureEveryMoment": "Фатете секој момент. Добијте AI-напаљени\nрезимеа. Никогаш нема да пишувате белешки повторно.",
-    "@captureEveryMoment": {
-        "description": "App value proposition or description"
     },
     "appleWatchSetup": "Подесување на Apple Watch",
     "@appleWatchSetup": {
@@ -1877,27 +1865,11 @@
             }
         }
     },
-    "selectPrimaryLanguage": "Изберете го вашиот основен јазик",
-    "@selectPrimaryLanguage": {
-        "description": "Title for language selection dialog"
-    },
-    "languageBenefits": "Поставете го вашиот јазик за поостри транскрипции и персонализирано искуство",
-    "@languageBenefits": {
-        "description": "Explanation of why language selection matters"
-    },
     "@searchLanguageHint": {
         "description": "Hint text for language search"
     },
     "@noLanguagesFound": {
         "description": "Text when search returns no results"
-    },
-    "whatsYourPrimaryLanguage": "Кое е вашето основно јазик?",
-    "@whatsYourPrimaryLanguage": {
-        "description": "Question asking for primary language"
-    },
-    "selectYourLanguage": "Изберете го вашиот јазик",
-    "@selectYourLanguage": {
-        "description": "Placeholder for selected language name"
     },
     "personalGrowthJourney": "Вашите лично растење патување со AI што слуша на секое ваше слово.",
     "@personalGrowthJourney": {
@@ -3922,10 +3894,6 @@
     "@dataProtection": {
         "description": "Section title for data protection info"
     },
-    "yourDataIsProtected": "Вашите податоци се заштитени и ги регулира нашата ",
-    "@yourDataIsProtected": {
-        "description": "First part of data protection text"
-    },
     "pleaseSelectYourPrimaryLanguage": "Молам, одберете го вашиот примарен јазик",
     "chooseYourLanguage": "Одберете го вашиот јазик",
     "selectPreferredLanguageForBestExperience": "Одберете го вашиот претпочитан јазик за најдобро Omi искуство",
@@ -5933,10 +5901,6 @@
     "additionalSpeechSampleRemoved": "Дополнителен примерок на говор отстранет",
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
-    },
-    "consentDataMessage": "Со продолжување, вашите разговори, снимки и лични информации ќе бидат безбедно зачувани на нашите сервери. Вашите аудио снимки и транскрипти се обработуваат од AI услуги на трети страни (вклучувајќи Deepgram за транскрипција и OpenAI за анализа) за да ви обезбедат увиди базирани на AI и да ги овозможат сите функции на апликацијата.",
-    "@consentDataMessage": {
-        "description": "Consent message explaining how user data will be stored and used"
     },
     "tasksEmptyStateMessage": "Задачите од вашите разговори ќе се појават овде.\nОтвори + за да создадеш една ручно.",
     "@tasksEmptyStateMessage": {
@@ -9501,7 +9465,6 @@
     },
     "mcpConnectionFailed": "Неуспешна врска со MCP сервер",
     "authorizingMcpServer": "Овластување…",
-    "whereDidYouHearAboutOmi": "Како ви се натипа Omi?",
     "tiktok": "TikTok",
     "youtube": "YouTube",
     "instagram": "Instagram",
@@ -10790,7 +10753,6 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "Допрете го копчето за снимање за да започнете со снимање",
     "processingTakingLonger": "Сè уште се обработува — ова трае подолго од вообичаеното.",
     "speechProfileEnrollmentPrompt": "За Omi да знае кој глас е вашиот — зборувајте за што било околу 5 секунди.",
     "home": "Почетна",
@@ -10956,7 +10918,6 @@
     "batteryLevelSemantics": "Батерија {level}%",
     "updateOmiGlassFirmware": "Ажурирај го фирмверот на OmiGlass",
     "deviceConnecting": "Се поврзува…",
-    "recordOptionsTip": "Совет: допрете ја стрелката на копчето за снимање за да снимите телефонски повик.",
     "firmwareUpdateFailedTitle": "Ажурирањето не успеа",
     "firmwareUpdateFailedMessage": "Ажурирањето не заврши. Уредот сè уште е на тековниот фирмвер и е безбеден за користење. Држете го наполнет и блиску до телефонот, па обидете се повторно.",
     "firmwareDownloadFailedMessage": "Ажурирањето не можеше да се преземе и уредот не е променет. Проверете ја интернет-врската, па обидете се повторно.",
@@ -11109,8 +11070,148 @@
     "pendantPausesUntilYouFinish": "Приврзокот е паузиран додека не завршите",
     "pendantPausesDuringCall": "Приврзокот е паузиран за време на повикот",
     "keepUsingPendant": "Продолжи со приврзокот",
-    "recordWith": "Снимај со",
-    "moreWaysToRecord": "Повеќе начини за снимање",
     "openCall": "Отвори го повикот",
-    "captureRecoveryBanner": "Аудиото од привезокот не стигнува до апликацијата — допрете за поправка"
+    "captureRecoveryBanner": "Аудиото од привезокот не стигнува до апликацијата — допрете за поправка",
+    "goodMorning": "Добро утро",
+    "goodAfternoon": "Добар ден",
+    "goodEvening": "Добра вечер",
+    "alreadyHaveAccount": "Веќе имаш сметка?",
+    "signInToOmi": "Најави се во Omi",
+    "signInSubtitle": "Твоите разговори и спомени се во твојата сметка на телефон, Mac и веб.",
+    "onboardingAllSetName": "Сè е подготвено, {name}.",
+    "completeHomeBody": "Твојот ден, задачи и резимеа на едно место.",
+    "completeAskTitle": "Прашај",
+    "foundOmiOptionalHint": "Незадолжително — му помага на мал тим да знае што функционира.",
+    "consentTitle": "Твоите податоци, со едноставни зборови",
+    "consentSubtitle": "Пред Omi да почне да слуша, еве што точно се случува со она што го слуша.",
+    "consentStoredTitle": "Што се чува",
+    "consentStoredBody": "Твоето аудио, транскриптите и деталите што Omi ги дознава безбедно се чуваат во твојата сметка.",
+    "consentProcessorsTitle": "Кој ги обработува",
+    "consentProcessorsBody": "Говорот го транскрибира Deepgram, а го анализира OpenAI за да се напишат резимеа, задачи и спомени.",
+    "consentControlTitle": "Што контролираш ти",
+    "consentControlBody": "Избриши кој било разговор, спомен или целата сметка кога сакаш.",
+    "readPrivacyPolicy": "Прочитај ја Политиката за приватност",
+    "whatShouldOmiCallYou": "Како да те вика Omi?",
+    "nameUsageHint": "Omi го користи ова за да те означи во транскриптите и извозите.",
+    "yourNamePlaceholder": "Твоето име",
+    "whatLanguageDoYouSpeakMost": "На кој јазик зборуваш најмногу?",
+    "languageOnboardingSubtitle": "Omi најдобро транскрибира кога го знае јазикот. Повеќе можеш да додадеш подоцна.",
+    "permissionsFewTitle": "Неколку дозволи",
+    "permissionsFewSubtitle": "Omi бара само она што го користи. Можеш да ги промениш во секое време во Поставки.",
+    "permissionsContinueNote": "„Продолжи“ не бара ништо. Секоја дозвола се бара само кога ќе допреш „Дозволи“.",
+    "howDidYouHearAboutOmi": "Како дозна за Omi?",
+    "showOnLockScreen": "Прикажи на заклучениот екран",
+    "seeAll": "Види ги сите",
+    "upNext": "Следно",
+    "allTasks": "Сите задачи",
+    "thisWeek": "Оваа недела",
+    "capturedDuration": "Снимено {duration}",
+    "newMemoriesCount": "{count, plural, =1{1 нов спомен} other{{count} нови спомени}}",
+    "syncingFromPendant": "Синхронизирање од твојот приврзок",
+    "pendantRecordingsSynced": "Снимките од приврзокот се синхронизирани",
+    "recordedOnPendantWhileAway": "~{duration} снимено на приврзокот додека телефонот беше далеку",
+    "dailyRecapOn": "Дневен преглед · {day}",
+    "taskDueDayTime": "{day}, {time}",
+    "fromConversation": "Од: {title}",
+    "endCapture": "Заврши",
+    "toDo": "За правење",
+    "devices": "Уреди",
+    "devicesSubtitle": "Сè што слуша за тебе. Снима едно по едно.",
+    "addADevice": "Додај уред",
+    "deviceReady": "Подготвено",
+    "importFromOtherApps": "Увези од други апликации",
+    "whatWillYouWear": "Што ќе носиш?",
+    "pickDeviceSubtitle": "Повеќе можеш да додадеш подоцна. Снима едно по едно.",
+    "alreadyHaveOne": "Веќе имаш?",
+    "noDeviceHeader": "Без уред",
+    "omiPendantName": "Omi приврзок",
+    "allDayConversations": "Разговори цел ден",
+    "conversationsAndPhotos": "Разговори + фотографии",
+    "wristMic": "Микрофон на зглобот",
+    "glassesAudio": "Звук од очилата",
+    "bringRecordingsIntoOmi": "Пренеси ги своите снимки во Omi",
+    "useThisIphone": "Користи го овој iPhone",
+    "useThisPhone": "Користи го овој телефон",
+    "startInSeconds": "Започни за 10 секунди",
+    "askAboutThisConversationPlaceholder": "Прашај за овој разговор",
+    "summaryStyle": "Стил на резимето",
+    "summaryStyleSubtitle": "Избери која апликација го пишува ова резиме",
+    "appearance": "Изглед",
+    "appearanceSystem": "Систем",
+    "appearanceLight": "Светол",
+    "appearanceDark": "Темен",
+    "feel": "Чувство",
+    "haptics": "Хаптика",
+    "hapticsSubtitle": "Лесен допир кога ќе завршиш, означиш со ѕвезда или комплетираш нешто",
+    "textSize": "Големина на текстот",
+    "textSizeSubtitle": "Ја следи големината на текстот на телефонот",
+    "appearanceMotionNote": "Движењето го следи „Намали движење“ во поставките на телефонот — сите повторувања, вклучително и светлото на уредот, запираат.",
+    "signedInWithApple": "Најавен преку Apple",
+    "signedInWithGoogle": "Најавен преку Google",
+    "premiumMinutesLeftThisMonth": "Преостануваат {left} од {limit} премиум минути овој месец",
+    "recordingFrom": "Снима од",
+    "recordingFromSubtitle": "Во исто време снима само еден извор. Префрлањето го завршува тековниот разговор.",
+    "manageDevices": "Управувај со уредите",
+    "notListeningTitle": "Не слуша",
+    "notListeningSubtitle": "Започни со овој телефон или поврзи уред што ќе слуша цел ден.",
+    "startListening": "Почни да слуша",
+    "searchEverything": "Пребарај сè",
+    "searchResultsCount": "Резултати · {count}",
+    "nothingFound": "Ништо не е пронајдено",
+    "searchNothingFoundHint": "Пробај друг збор или прашај го Omi — го разбира значењето, не само зборовите.",
+    "askOmiInstead": "Прашај го Omi",
+    "recentSearches": "Неодамнешни",
+    "searchAskSuggestion": "Што ветив дека ќе направам оваа недела?",
+    "welcomeRememberTitle": "Запомни го секој разговор.",
+    "welcomeRememberSubtitle": "Носи што сакаш. Omi го претвора она што го слушаш во белешки, задачи и преглед на денот.",
+    "memoriesSubtitle": "Што знае Omi и од каде го научил тоа",
+    "memoryTierLongTerm": "Долгорочна",
+    "memoryTierShortTerm": "Краткорочна",
+    "memoriesTierNote": "Новите спомени почнуваат како краткорочни. Omi сам ги префрла во долгорочни оние што остануваат важни.",
+    "askEmptyTitle": "Прашај за сè што си слушнал.",
+    "askEmptySubtitle": "Omi одговара од твоите разговори, спомени и задачи.",
+    "completeListeningTitle": "Слушање",
+    "completeListeningBody": "Сино значи дека Omi те слуша — од уред што го носиш или од овој телефон.",
+    "completeAskAnyBody": "Допри Прашај за да прашаш за сè што си слушнал.",
+    "completeDevicesBody": "Додај носив уред кога сакаш или почни со овој телефон.",
+    "conversationSourceGlasses": "Очила",
+    "conversationSourceImported": "Увезени",
+    "conversationSourceEmptyHint": "Од овој извор сè уште ништо не е снимено.",
+    "findMyPendant": "Најди го мојот приврзок",
+    "findMyPendantHint": "Пушта звук за да го најдеш",
+    "upToDate": "Ажурирано",
+    "updateAvailable": "Достапно ажурирање",
+    "storageTitle": "Складирање",
+    "connectStepTurnOn": "Вклучи го и држи го блиску",
+    "connectStepAllowBluetooth": "Дозволи Bluetooth",
+    "connectStepTest": "Кажи нешто за тест",
+    "connectStepTestHint": "Зборовите се појавуваат тука додека зборуваш",
+    "setUpLater": "Постави подоцна",
+    "recapPreviousDay": "Преглед на претходниот ден: {day}",
+    "recapNextDay": "Преглед на следниот ден: {day}",
+    "askStarterToday": "Сумирај го денешниот ден",
+    "askStarterPeople": "Со кого се сретнав?",
+    "askStarterOpen": "Што е сè уште отворено?",
+    "peopleSubtitle": "Гласови што Omi ги препознава во транскриптите",
+    "usageCurrentPlan": "Тековен план",
+    "appsExplore": "Истражи",
+    "appOutOfFive": "од 5",
+    "appStatUsers": "Корисници",
+    "homeWelcomeName": "Добредојде, {name}",
+    "homeWelcome": "Добредојдовте",
+    "homeFirstDaySubtitle": "Твојот прв ден со Omi",
+    "homeListeningHeroTitle": "Omi слуша",
+    "homeListeningHeroBody": "Твојот прв разговор ќе се појави тука една минута откако ќе заврши.",
+    "homeGettingStarted": "Први чекори",
+    "gettingStartedConnect": "Поврзи уред",
+    "gettingStartedConversation": "Разговарај",
+    "gettingStartedAsk": "Прашај го Omi за тоа",
+    "homeGoodToKnow": "Добро е да се знае",
+    "tipFinishTitle": "Заврши кога сакаш",
+    "tipFinishBody": "Допри Крај — или двапати притисни го приврзокот — и прегледот почнува веднаш.",
+    "tipStarTitle": "Означи го важното со ѕвездичка",
+    "tipStarBody": "Разговорите со ѕвездичка лесно се наоѓаат подоцна.",
+    "tipPrivateTitle": "Приватно по стандард",
+    "tipPrivateBody": "Твоите разговори остануваат приватни освен ако не ги споделиш.",
+    "homeGettingStartedProgress": "{done} од {total}"
 }

@@ -153,7 +153,7 @@ class _AppsListState extends State<_AppsList> {
             Container(
               width: 32,
               height: 32,
-              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
             ),
             const SizedBox(width: 16),
             // Title and subtitle placeholders
@@ -164,15 +164,15 @@ class _AppsListState extends State<_AppsList> {
                   Container(
                     width: double.infinity,
                     height: 16,
-                    decoration: const BoxDecoration(
-                        color: OmiColors.surface1, borderRadius: BorderRadius.all(Radius.circular(4))),
+                    decoration: BoxDecoration(
+                        color: OmiColors.surface1, borderRadius: const BorderRadius.all(Radius.circular(4))),
                   ),
                   const SizedBox(height: 8),
                   Container(
                     width: 200,
                     height: 12,
-                    decoration: const BoxDecoration(
-                        color: OmiColors.surface1, borderRadius: BorderRadius.all(Radius.circular(4))),
+                    decoration: BoxDecoration(
+                        color: OmiColors.surface1, borderRadius: const BorderRadius.all(Radius.circular(4))),
                   ),
                 ],
               ),
@@ -462,7 +462,7 @@ class _AppListItemState extends State<_AppListItem> {
         gradient: LinearGradient(
           begin: isLeft ? Alignment.centerLeft : Alignment.centerRight,
           end: isLeft ? Alignment.centerRight : Alignment.centerLeft,
-          colors: const [OmiColors.surface3, Colors.transparent],
+          colors: [OmiColors.surface3, Colors.transparent],
         ),
       ),
       alignment: isLeft ? Alignment.centerLeft : Alignment.centerRight,
@@ -470,7 +470,7 @@ class _AppListItemState extends State<_AppListItem> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.star_rounded, color: Colors.amber.shade300, size: 20),
+          Icon(Icons.star_rounded, color: OmiColors.warning, size: 20),
           const SizedBox(height: 2),
           Text(
             context.l10n.defaultLabel,
@@ -497,7 +497,7 @@ class _AppListItemState extends State<_AppListItem> {
           selected: widget.isSelected,
           onTap: widget.onTap,
         ),
-        const Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
+        Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
       ],
     );
   }
@@ -511,7 +511,7 @@ class _AppListItemState extends State<_AppListItem> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.amber.shade300.withValues(alpha: 0.15),
+            color: OmiColors.warning.withValues(alpha: 0.15),
             borderRadius: OmiRadius.smAll,
           ),
           child: Center(
@@ -521,12 +521,12 @@ class _AppListItemState extends State<_AppListItem> {
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(0, 1, 0, 0),
-                  child: FaIcon(FontAwesomeIcons.solidStar, size: 7, color: Colors.amber.shade300),
+                  child: FaIcon(FontAwesomeIcons.solidStar, size: 7, color: OmiColors.warning),
                 ),
                 const SizedBox(width: 4),
                 Text(
                   context.l10n.defaultLabel,
-                  style: OmiType.caption.copyWith(color: Colors.amber.shade300, fontWeight: FontWeight.w600),
+                  style: OmiType.caption.copyWith(color: OmiColors.warning, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -540,7 +540,7 @@ class _AppListItemState extends State<_AppListItem> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.grey.shade600.withValues(alpha: 0.3),
+            color: OmiColors.surface4.withValues(alpha: 0.3),
             borderRadius: OmiRadius.smAll,
           ),
           child: Center(
@@ -550,7 +550,7 @@ class _AppListItemState extends State<_AppListItem> {
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(0, 1, 0, 0),
-                  child: FaIcon(FontAwesomeIcons.clock, size: 7, color: Colors.grey.shade400),
+                  child: FaIcon(FontAwesomeIcons.clock, size: 7, color: OmiColors.textSecondary),
                 ),
                 const SizedBox(width: 4),
                 Text(
@@ -581,7 +581,7 @@ class _AppListItemState extends State<_AppListItem> {
         widget.provider!.selectedAppForReprocessing?.id == widget.app.id;
 
     if (widget.isSelected) {
-      return const Icon(Icons.check, color: OmiColors.textPrimary, size: 20);
+      return Icon(Icons.check, color: OmiColors.textPrimary, size: 20);
     } else if (widget.isInstalling || isProcessing) {
       return const OmiSpinner(size: OmiSpinnerSize.small);
     } else {
@@ -596,16 +596,16 @@ class _AppListItemState extends State<_AppListItem> {
         return CircleAvatar(backgroundColor: Colors.white, radius: 16, backgroundImage: imageProvider);
       },
       errorWidget: (context, url, error) {
-        return const CircleAvatar(
-          backgroundColor: Colors.white,
+        return CircleAvatar(
+          backgroundColor: OmiColors.accent,
           radius: 16,
-          child: Icon(Icons.error_outline_rounded, size: 16),
+          child: const Icon(Icons.error_outline_rounded, size: 16),
         );
       },
-      progressIndicatorBuilder: (context, url, progress) => const CircleAvatar(
+      progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
         backgroundColor: OmiColors.surface2,
         radius: 16,
-        child: OmiSpinner(size: OmiSpinnerSize.small),
+        child: const OmiSpinner(size: OmiSpinnerSize.small),
       ),
     );
   }
@@ -621,16 +621,16 @@ class _CreateTemplateListItem extends StatelessWidget {
       children: [
         ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          leading: const CircleAvatar(
-            backgroundColor: Colors.white,
+          leading: CircleAvatar(
+            backgroundColor: OmiColors.accent,
             radius: 16,
-            child: FaIcon(FontAwesomeIcons.plus, color: Colors.black, size: 18),
+            child: FaIcon(FontAwesomeIcons.plus, color: OmiColors.onAccent, size: 18),
           ),
           title: Text(
             context.l10n.createCustomTemplate,
             style: OmiType.callout.copyWith(fontWeight: FontWeight.w500),
           ),
-          trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+          trailing: Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
           onTap: () {
             final conversationId = context.read<ConversationDetailProvider>().conversation.id;
             PlatformManager.instance.analytics.summarizedAppCreateTemplateClicked(conversationId: conversationId);
@@ -642,7 +642,7 @@ class _CreateTemplateListItem extends StatelessWidget {
             showCreateTemplateBottomSheet(context, conversationId: conversationId);
           },
         ),
-        const Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
+        Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
       ],
     );
   }
@@ -658,16 +658,16 @@ class _EnableAppsListItem extends StatelessWidget {
       children: [
         ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          leading: const CircleAvatar(
-            backgroundColor: Colors.white,
+          leading: CircleAvatar(
+            backgroundColor: OmiColors.accent,
             radius: 16,
-            child: FaIcon(FontAwesomeIcons.solidFolderOpen, color: Colors.black, size: 14),
+            child: FaIcon(FontAwesomeIcons.solidFolderOpen, color: OmiColors.onAccent, size: 14),
           ),
           title: Text(
             context.l10n.allTemplates,
             style: OmiType.callout.copyWith(fontWeight: FontWeight.w500),
           ),
-          trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+          trailing: Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
           onTap: () {
             Navigator.pop(context);
             final conversationId = context.read<ConversationDetailProvider>().conversation.id;
@@ -687,7 +687,7 @@ class _EnableAppsListItem extends StatelessWidget {
             PlatformManager.instance.analytics.pageOpened('Summary Apps');
           },
         ),
-        const Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
+        Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
       ],
     );
   }

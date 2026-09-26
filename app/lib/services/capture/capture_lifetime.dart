@@ -135,6 +135,15 @@ class CaptureLifetime implements CaptureScheduling {
     });
   }
 
+  CaptureOwned listenTo(Listenable source, VoidCallback listener) {
+    void guarded() {
+      if (!_closed) listener();
+    }
+
+    if (!_closed) source.addListener(guarded);
+    return own(() => source.removeListener(guarded));
+  }
+
   /// Replace [previous] with [next]. A closed lifetime cancels [next] immediately.
   StreamSubscription? takeSubscription(StreamSubscription? previous, StreamSubscription? next) {
     previous?.cancel();

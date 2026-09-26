@@ -18,21 +18,20 @@ class OnboardingKnowledgeGraphStep extends StatelessWidget {
       child: SafeArea(
         child: Padding(
           // Clear of the progress dots and back button drawn over the top of every step.
-          padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 60, OmiSpacing.xl, OmiSpacing.xl),
+          padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 56, OmiSpacing.xl, OmiSpacing.xl),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Semantics(
                 header: true,
                 child: Text(
                   context.l10n.onboardingWhatIKnowAboutYouTitle,
-                  textAlign: TextAlign.center,
                   style: OmiType.title1.copyWith(height: 1.2),
                 ),
               ),
               const SizedBox(height: 10),
               Text(
                 context.l10n.onboardingWhatIKnowAboutYouDescription,
-                textAlign: TextAlign.center,
                 style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.4),
               ),
               const SizedBox(height: OmiSpacing.lg),

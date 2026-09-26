@@ -23,7 +23,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/capture_sources.dart';
 
-const _metaColor = OmiColors.textSecondary;
+Color get _metaColor => OmiColors.textSecondary;
 
 /// The conversation page's header, shared by every tab so switching between
 /// Summary, Transcript and Action items never loses the title or the facts.
@@ -49,10 +49,7 @@ class ConversationDetailHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _titleRow(context, provider, conversation),
-          const SizedBox(height: 6),
-          _metaLine(context, conversation, isGroupedEvent: recordings.isNotEmpty),
-          const SizedBox(height: 10),
+          // v2: folder and visibility chips first, then the large title and the facts.
           Consumer<FolderProvider>(
             builder: (context, folderProvider, _) {
               final folderId = conversation.folderId;
@@ -84,20 +81,20 @@ class ConversationDetailHeader extends StatelessWidget {
               );
             },
           ),
+          const SizedBox(height: OmiSpacing.sm),
+          _titleRow(context, provider, conversation),
+          const SizedBox(height: 6),
+          _metaLine(context, conversation, isGroupedEvent: recordings.isNotEmpty),
         ],
       ),
     );
   }
 
   Widget _titleRow(BuildContext context, ConversationDetailProvider provider, ServerConversation conversation) {
-    final titleStyle = OmiType.title3.copyWith(height: 1.25);
-    // The title is one line, so the emoji centres on it.
+    // v2: the title is the page's heading (28pt bold, wraps); no emoji.
+    final titleStyle = OmiType.title1.copyWith(height: 1.2);
     return Row(
       children: [
-        if (!conversation.discarded) ...[
-          ExcludeSemantics(child: Text(conversation.structured.getEmoji(), style: titleStyle)),
-          const SizedBox(width: 10),
-        ],
         Expanded(
           child: conversation.discarded
               ? Text(context.l10n.discardedConversation, style: titleStyle)
@@ -198,7 +195,7 @@ class ConversationDetailHeader extends StatelessWidget {
 
   Widget _peopleChip(BuildContext context, ServerConversation conversation, String label) {
     final chip = _HeaderChip(
-      icon: const Icon(Icons.people_outline, size: 15, color: OmiColors.textSecondary),
+      icon: Icon(Icons.people_outline, size: 15, color: OmiColors.textSecondary),
       label: label,
       color: OmiColors.textSecondary,
     );
@@ -439,7 +436,7 @@ class _VisibilityChip extends StatelessWidget {
                   ],
                 ),
               ),
-              if (isSelected) const Icon(Icons.check_circle, color: OmiColors.textPrimary, size: 22),
+              if (isSelected) Icon(Icons.check_circle, color: OmiColors.textPrimary, size: 22),
             ],
           ),
         ),

@@ -22,7 +22,7 @@ class _HomeScreenSettingsPageState extends State<HomeScreenSettingsPage> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.homeScreen)),
+      appBar: OmiAppBar(leading: const OmiBackButton(), title: Text(l10n.homeScreen)),
       body: ListView(
         padding: const EdgeInsets.all(OmiSpacing.lg),
         children: [

@@ -43,30 +43,37 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final linkStyle = OmiType.footnote.copyWith(color: OmiColors.textPrimary, decoration: TextDecoration.underline);
+    final l10n = context.l10n;
     return OnboardingStep(
       card: OnboardingCard(
         crossAxisAlignment: CrossAxisAlignment.start,
         content: [
-          Semantics(header: true, child: Text(context.l10n.dataAndPrivacy, style: OmiType.title1)),
-          const SizedBox(height: OmiSpacing.md),
-          Text(context.l10n.consentDataMessage, style: OmiType.subhead.copyWith(height: 1.5)),
-          const SizedBox(height: OmiSpacing.md),
-          RichText(
-            text: TextSpan(
-              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.4),
+          OnboardingHeader(title: l10n.consentTitle, subtitle: l10n.consentSubtitle),
+          const SizedBox(height: OmiSpacing.lg),
+          // v2: what is stored, who processes it and what the person controls, as one grouped card.
+          Container(
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.rowAll),
+            child: Column(
               children: [
-                TextSpan(text: context.l10n.yourDataIsProtected),
-                TextSpan(text: context.l10n.privacyPolicy, style: linkStyle, recognizer: _privacyRecognizer),
-                TextSpan(text: context.l10n.and),
-                TextSpan(text: context.l10n.termsOfService, style: linkStyle, recognizer: _termsRecognizer),
-                const TextSpan(text: '.'),
+                _ConsentRow(glyph: OmiGlyphs.waveform, title: l10n.consentStoredTitle, body: l10n.consentStoredBody),
+                const _ConsentDivider(),
+                _ConsentRow(glyph: OmiGlyphs.cpu, title: l10n.consentProcessorsTitle, body: l10n.consentProcessorsBody),
+                const _ConsentDivider(),
+                _ConsentRow(glyph: OmiGlyphs.hand, title: l10n.consentControlTitle, body: l10n.consentControlBody),
               ],
             ),
           ),
+          const SizedBox(height: OmiSpacing.xs),
+          Wrap(
+            spacing: OmiSpacing.md,
+            children: [
+              _ConsentLink(label: l10n.readPrivacyPolicy, recognizer: _privacyRecognizer),
+              _ConsentLink(label: l10n.termsOfService, recognizer: _termsRecognizer),
+            ],
+          ),
         ],
         footer: [
-          const SizedBox(height: OmiSpacing.xl),
+          const SizedBox(height: OmiSpacing.md),
           OmiButton(
             key: const Key('ai_consent_agree'),
             label: context.l10n.agreeAndContinue,
@@ -84,6 +91,88 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
             onPressed: widget.onUseDifferentAccount,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ConsentRow extends StatelessWidget {
+  const _ConsentRow({required this.glyph, required this.title, required this.body});
+
+  final String glyph;
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(OmiSpacing.md),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+            child: OmiGlyph(glyph, size: 17, color: OmiColors.textPrimary),
+          ),
+          const SizedBox(width: OmiSpacing.sm),
+          Expanded(
+            child: MergeSemantics(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: OmiType.headline),
+                  const SizedBox(height: 2),
+                  Text(body, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConsentDivider extends StatelessWidget {
+  const _ConsentDivider();
+
+  @override
+  Widget build(BuildContext context) => Divider(height: 0.5, thickness: 0.5, indent: 58, color: OmiColors.border);
+}
+
+/// A "Read the Privacy Policy ›" link: a 44pt-tall text button that opens the document.
+class _ConsentLink extends StatelessWidget {
+  const _ConsentLink({required this.label, required this.recognizer});
+
+  final String label;
+  final TapGestureRecognizer recognizer;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      link: true,
+      label: label,
+      excludeSemantics: true,
+      onTap: recognizer.onTap,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: recognizer.onTap,
+        child: Container(
+          padding: OnboardingCard.textInset,
+          alignment: Alignment.centerLeft,
+          constraints: const BoxConstraints(minHeight: OmiSize.minTap),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
+              const SizedBox(width: OmiSpacing.xxs),
+              OmiGlyph(OmiGlyphs.chevronRight, size: 12, color: OmiColors.textSecondary),
+            ],
+          ),
+        ),
       ),
     );
   }

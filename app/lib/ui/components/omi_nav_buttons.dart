@@ -17,11 +17,12 @@ import 'package:omi/ui/components/omi_icon_button.dart';
 /// Scaffold(appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.dataPrivacy)))
 /// ```
 ///
-/// Use [OmiBackButton.circled] when the header floats over content (conversation detail, app
-/// detail): same glyph, drawn in a 36pt circle.
+/// v2 draws every back button as the 44pt header circle ([OmiColors.surface1] behind the glyph),
+/// in an app bar or in a header that floats over content. [OmiBackButton.circled] is the same
+/// control with a custom [fillColor].
 class OmiBackButton extends StatelessWidget {
   const OmiBackButton({super.key, this.onPressed, this.color})
-      : circled = false,
+      : circled = true,
         fillColor = null;
 
   const OmiBackButton.circled({super.key, this.onPressed, this.color, this.fillColor}) : circled = true;
@@ -29,7 +30,7 @@ class OmiBackButton extends StatelessWidget {
   /// Overrides the default `Navigator.maybePop`. Use it to step back inside a multi-step flow.
   final VoidCallback? onPressed;
 
-  /// Glyph colour; defaults to white.
+  /// Glyph colour; defaults to `OmiColors.textPrimary`.
   final Color? color;
 
   /// Circle colour for [OmiBackButton.circled].
@@ -57,11 +58,11 @@ class OmiBackButton extends StatelessWidget {
 /// The trailing X of a modal surface: bottom sheets, full-screen dialogs, media viewers.
 ///
 /// Localized "Close" label, 44pt target, `Navigator.maybePop` by default. See [OmiBackButton] for
-/// the push/modal rule. [OmiCloseButton.circled] draws it in a 36pt circle for headers that float
-/// over content (viewers).
+/// the push/modal rule. v2 draws it as the 44pt header circle, like [OmiBackButton];
+/// [OmiCloseButton.circled] is the same control with a custom [fillColor].
 class OmiCloseButton extends StatelessWidget {
   const OmiCloseButton({super.key, this.onPressed, this.color})
-      : circled = false,
+      : circled = true,
         fillColor = null;
 
   const OmiCloseButton.circled({super.key, this.onPressed, this.color, this.fillColor}) : circled = true;
@@ -69,7 +70,7 @@ class OmiCloseButton extends StatelessWidget {
   /// Overrides the default `Navigator.maybePop`.
   final VoidCallback? onPressed;
 
-  /// Glyph colour; defaults to white.
+  /// Glyph colour; defaults to `OmiColors.textPrimary`.
   final Color? color;
 
   /// Circle colour for [OmiCloseButton.circled].

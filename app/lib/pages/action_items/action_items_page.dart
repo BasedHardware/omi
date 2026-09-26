@@ -16,6 +16,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
+import 'package:omi/pages/action_items/widgets/tasks_page_chrome.dart';
 
 import 'task_categorization.dart';
 import 'task_delete_undo.dart';
@@ -189,39 +190,29 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   Widget _buildFab() {
     return Consumer<ActionItemsProvider>(
       builder: (context, provider, _) {
-        // The selection action bar is mounted at the bottom of the Stack —
-        // when selection is active we suppress the FAB so the two don't
-        // visually compete.
+        // The selection action bar replaces the quick add while selecting.
         if (provider.isSelectionMode) return const SizedBox.shrink();
         return Positioned(
-          right: 20,
-          // Rides on top of the nav bar, so it follows the bar's height and the
-          // system inset the bar reserves rather than a literal tuned to one device.
-          bottom: bottomNavBarClearance(context),
-          child: Semantics(
-            button: true,
-            label: context.l10n.newTask,
-            excludeSemantics: true,
+          left: OmiSize.screenMargin,
+          right: OmiSize.screenMargin,
+          // Follows the tab bar's height and inset rather than a literal tuned to one device.
+          bottom: bottomNavBarClearance(context) - OmiSpacing.xxs,
+          child: TasksQuickAdd(
             onTap: () => _showCreateActionItemSheet(defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today)),
-            child: FloatingActionButton(
-              heroTag: 'action_items_fab',
-              onPressed: () {
-                OmiHaptics.light();
-                _showCreateActionItemSheet(defaultDueDate: _getDefaultDueDateForCategory(TaskCategory.today));
-              },
-              backgroundColor: OmiColors.accent,
-              foregroundColor: OmiColors.onAccent,
-              child: const Icon(Icons.add),
-            ),
           ),
         );
       },
     );
   }
 
-  Widget _buildPageHeader(ActionItemsProvider provider) {
+  Widget _buildPageHeader(ActionItemsProvider provider) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [TasksPageTitle(openCount: provider.incompleteItems.length), _buildSearchRow(provider)],
+      );
+
+  Widget _buildSearchRow(ActionItemsProvider provider) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 12, 4),
+      padding: const EdgeInsets.fromLTRB(16, 0, 12, 4),
       child: Row(
         children: [
           Expanded(
@@ -521,7 +512,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       slivers: [
         const SliverPadding(padding: EdgeInsets.only(top: 16)),
         const ActionItemsShimmerList(itemCount: 7),
-        SliverPadding(padding: EdgeInsets.only(bottom: bottomNavBarClearance(context))),
+        // Clears the tab bar and the quick-add capsule above it.
+        SliverPadding(
+          padding: EdgeInsets.only(bottom: bottomNavBarClearance(context) + OmiSize.primaryButton + OmiSpacing.sm),
+        ),
       ],
     );
   }
@@ -599,7 +593,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           SliverToBoxAdapter(child: _buildGoalsRow()),
           const SliverPadding(padding: EdgeInsets.only(top: 6)),
 
-          // Build each category section (skip empty ones, skip overdue — rendered separately below)
+          // Overdue first, expanded by default (canvas Tasks), then each other non-empty section.
+          if ((categorizedItems[TaskCategory.overdue] ?? []).isNotEmpty)
+            SliverToBoxAdapter(
+              child: _buildOverdueSection(items: categorizedItems[TaskCategory.overdue]!, provider: provider),
+            ),
           for (final category in TaskCategory.values)
             if (category != TaskCategory.overdue && (categorizedItems[category] ?? []).isNotEmpty)
               SliverToBoxAdapter(
@@ -609,16 +607,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   provider: provider,
                 ),
               ),
-
-          // Overdue section — expanded by default
-          if ((categorizedItems[TaskCategory.overdue] ?? []).isNotEmpty)
-            SliverToBoxAdapter(
-              child: _buildOverdueSection(items: categorizedItems[TaskCategory.overdue]!, provider: provider),
-            ),
         ],
 
         // Bottom padding so the last row scrolls clear of the nav bar
-        SliverPadding(padding: EdgeInsets.only(bottom: bottomNavBarClearance(context))),
+        // Clears the tab bar and the quick-add capsule above it.
+        SliverPadding(
+          padding: EdgeInsets.only(bottom: bottomNavBarClearance(context) + OmiSize.primaryButton + OmiSpacing.sm),
+        ),
       ],
     );
   }
@@ -726,7 +721,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                title.toUpperCase(),
+                                title,
                                 style: _sectionLabelStyle,
                               ),
                               if (orderedItems.isNotEmpty) ...[
@@ -737,12 +732,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                           ),
                         )
                       else
+                        // The count sits beside the title ("Today 2"), as on the other sections.
                         Padding(
                           padding: _sectionHeaderLinePadding,
-                          child: Text(
-                            title.toUpperCase(),
-                            style: _sectionLabelStyle,
-                          ),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            Text(title, style: _sectionLabelStyle),
+                            if (!provider.showCompletedView && orderedItems.isNotEmpty) ...[
+                              const SizedBox(width: 8),
+                              _SectionCount(orderedItems.length),
+                            ],
+                          ]),
                         ),
                       const Spacer(),
                       if (category != TaskCategory.noDeadline) ...[
@@ -757,21 +756,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               children: [
                                 _SectionCount(orderedItems.length),
                                 const SizedBox(width: 8),
-                                const Icon(Icons.close, size: 14, color: OmiColors.textTertiary),
+                                Icon(Icons.close, size: 14, color: OmiColors.textTertiary),
                               ],
                             ),
-                          )
-                        else if (orderedItems.isNotEmpty)
-                          Padding(
-                            padding: _sectionHeaderLinePadding,
-                            child: _SectionCount(orderedItems.length),
                           ),
                       ] else if (provider.showCompletedView && orderedItems.isNotEmpty && _noDeadlineExpanded)
                         _SectionHeaderTapTarget(
                           semanticLabel: context.l10n.tasksClearCompleted,
                           reach: const EdgeInsets.only(left: 30),
                           onTap: () => _confirmClearCompleted(provider, orderedItems),
-                          child: const Icon(Icons.close, size: 14, color: OmiColors.textTertiary),
+                          child: Icon(Icons.close, size: 14, color: OmiColors.textTertiary),
                         ),
                     ],
                   ),
@@ -781,11 +775,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 if (orderedItems.isNotEmpty && (category != TaskCategory.noDeadline || _noDeadlineExpanded))
                   _buildFirstPositionDropZone(category, orderedItems, candidateData.isNotEmpty),
 
-                // Task items. Row padding alone carries the rhythm — no
-                // dividers between rows; matches Things 3 / Apple Reminders.
-                if (category != TaskCategory.noDeadline || _noDeadlineExpanded)
-                  ...orderedItems.map(
-                    (item) => _buildTaskItem(item, provider, category: category, categoryItems: orderedItems),
+                // Task items: one card per section, hairlines between rows (canvas Tasks).
+                if ((category != TaskCategory.noDeadline || _noDeadlineExpanded) && orderedItems.isNotEmpty)
+                  TaskSectionCard(
+                    children: [
+                      for (final item in orderedItems)
+                        _buildTaskItem(item, provider, category: category, categoryItems: orderedItems),
+                    ],
                   ),
 
                 // Spacing after section
@@ -823,8 +819,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                           color: OmiColors.textTertiary, size: 16),
                       const SizedBox(width: 4),
                       Text(
-                        context.l10n.tasksOverdue.toUpperCase(),
-                        style: _sectionLabelStyle,
+                        context.l10n.tasksOverdue,
+                        style: _sectionLabelStyle.copyWith(color: OmiColors.danger),
                       ),
                       const SizedBox(width: 8),
                       _SectionCount(orderedItems.length),
@@ -836,9 +832,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           ),
           if (_overdueExpanded) ...[
             _buildFirstPositionDropZone(TaskCategory.overdue, orderedItems, false),
-            ...orderedItems.map(
-              (item) => _buildTaskItem(item, provider, category: TaskCategory.overdue, categoryItems: orderedItems),
-            ),
+            if (orderedItems.isNotEmpty)
+              TaskSectionCard(
+                children: [
+                  for (final item in orderedItems)
+                    _buildTaskItem(item, provider, category: TaskCategory.overdue, categoryItems: orderedItems),
+                ],
+              ),
           ],
           const SizedBox(height: 12),
         ],
@@ -1012,7 +1012,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               Container(
                 height: 2,
                 margin: EdgeInsets.only(left: barLeft, right: 4),
-                decoration: const BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.pillAll),
+                decoration: BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.pillAll),
               ),
             _buildDraggableTaskItem(item, provider, indentLevel, indentWidth, categoryItems),
             // Drop indicator below
@@ -1020,7 +1020,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               Container(
                 height: 2,
                 margin: EdgeInsets.only(left: barLeft, right: 4),
-                decoration: const BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.pillAll),
+                decoration: BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.pillAll),
               ),
           ],
         );
@@ -1152,8 +1152,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       secondaryBackground: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20.0),
-        decoration: const BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.smAll),
-        child: const Icon(Icons.delete_outline, color: OmiColors.textPrimary),
+        decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.smAll),
+        child: Icon(Icons.delete_outline, color: OmiColors.textPrimary),
       ),
       onDismissed: (direction) {
         if (direction == DismissDirection.endToStart) {
@@ -1259,7 +1259,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: Container(
                     width: 1.5,
                     height: 20,
-                    decoration: const BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.pillAll),
+                    decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.pillAll),
                   ),
                 ),
               // Completion circle — always shown. Read-only in selection mode
@@ -1285,14 +1285,13 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     children: [
                       Text(
                         item.description,
-                        style: OmiType.callout.copyWith(
+                        style: OmiType.body.copyWith(
                           color: item.completed ? OmiColors.textTertiary : OmiColors.textPrimary,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: -0.2,
                           decoration: item.completed ? TextDecoration.lineThrough : null,
                           decorationColor: OmiColors.textTertiary,
                         ),
                       ),
+                      TaskSubline(item: item),
                       if (goalTitle != null) ...[
                         const SizedBox(height: 4),
                         Text(goalTitle, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
@@ -1301,10 +1300,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Icon(Icons.check_circle_outline, size: 12, color: OmiColors.textTertiary),
+                            Icon(Icons.check_circle_outline, size: 12, color: OmiColors.textTertiary),
                             const SizedBox(width: 4),
                             Text(
-                              context.l10n.exportedToPlatform(_exportPlatformLabel(item.exportPlatform!)),
+                              context.l10n.exportedToPlatform(taskExportPlatformLabel(item.exportPlatform!)),
                               style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
                             ),
                           ],
@@ -1327,23 +1326,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         ),
       ),
     );
-  }
-
-  String _exportPlatformLabel(String platform) {
-    switch (platform) {
-      case 'todoist':
-        return 'Todoist';
-      case 'asana':
-        return 'Asana';
-      case 'google_tasks':
-        return 'Google Tasks';
-      case 'clickup':
-        return 'ClickUp';
-      case 'apple_reminders':
-        return 'Reminders';
-      default:
-        return platform;
-    }
   }
 
   void _deleteGoal(Goal goal) {
@@ -1420,10 +1402,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       },
       background: Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
-        decoration: const BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.smAll),
+        decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.smAll),
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
-        child: const Icon(Icons.delete_outline, color: OmiColors.textPrimary),
+        child: Icon(Icons.delete_outline, color: OmiColors.textPrimary),
       ),
       child: goalContent,
     );
@@ -1451,9 +1433,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 /// and the sliver of space between it and the first task row.
 const EdgeInsets _sectionHeaderLinePadding = EdgeInsets.only(top: 16, bottom: 4);
 
-/// A section header's label ("TODAY", "OVERDUE").
-final TextStyle _sectionLabelStyle =
-    OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w600, letterSpacing: 0.8);
+/// A section header's label ("Today", "Overdue").
+/// Canvas Tasks: Title Case at 20/25 semibold ("Overdue" is the danger colour).
+TextStyle get _sectionLabelStyle => OmiType.title3;
 
 /// The count beside a section header, read out as "3 tasks" rather than a bare number.
 class _SectionCount extends StatelessWidget {
@@ -1466,7 +1448,7 @@ class _SectionCount extends StatelessWidget {
     return Text(
       '$count',
       semanticsLabel: context.l10n.tasksCountLabel(count),
-      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+      style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
     );
   }
 }

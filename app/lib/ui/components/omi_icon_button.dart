@@ -4,10 +4,11 @@ import 'package:omi/ui/omi_tokens.dart';
 
 /// Smallest comfortable touch target: Apple's HIG asks for 44x44pt, Material for 48dp. Icon
 /// controls use the smaller of the two so a row of them still fits a phone-width app bar.
-const double kOmiMinTapTarget = 44;
+const double kOmiMinTapTarget = OmiSize.minTap;
 
-/// Diameter of the circle a filled [OmiIconButton] paints by default.
-const double kOmiIconCircleDiameter = 36;
+/// Diameter of the circle a filled [OmiIconButton] paints by default (v2 `controls.navButton`): the
+/// circle and its touch target are the same 44pt.
+const double kOmiIconCircleDiameter = OmiSize.navButton;
 
 /// An icon-only control. The [label] is required: it is the tooltip on long-press and the name a
 /// screen reader announces. An icon without words is only a control for people who already know

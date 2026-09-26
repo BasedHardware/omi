@@ -1,6 +1,8 @@
+import 'dart:async';
+import 'dart:io' show Platform;
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 import 'package:omi/widgets/speaker_label.dart';
@@ -22,6 +24,7 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/services/capture/capture_voice_meter.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/widgets/conversation_photo_image.dart';
 import 'package:omi/widgets/media_viewer_page.dart';
@@ -57,10 +60,16 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   bool _mutePending = false;
 
+  /// Redraws the elapsed time in the header once a second.
+  Timer? _clock;
+
   @override
   void initState() {
     super.initState();
     ListenClientState.instance.capturePageOpened();
+    _clock = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   TranscriptScrollState _scrollStateFor(String sessionId) {
@@ -71,7 +80,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     if (_mutePending) return;
     setState(() => _mutePending = true);
     try {
-      HapticFeedback.mediumImpact();
+      OmiHaptics.medium();
       final phone = provider.liveCaptureSource == 'phone';
       if (provider.isPaused) {
         await provider.resumeCapture();
@@ -89,6 +98,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
 
   @override
   void dispose() {
+    _clock?.cancel();
     ListenClientState.instance.capturePageClosed();
     super.dispose();
   }
@@ -136,6 +146,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
           appBar: ConversationStateAppBar(
             state: _displayState(provider, capturingPhotos: provider.photos.isNotEmpty),
             bufferingFor: provider.customSttBufferingDuration,
+            elapsed: provider.liveCaptureStartedAt == null
+                ? null
+                : DateTime.now().difference(provider.liveCaptureStartedAt!),
             sourceLabel: switch (provider.liveCaptureSource) {
               null => null,
               'phone' => context.l10n.captureSourcePhoneMic,
@@ -146,6 +159,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
             children: [
               const CaptureRecoveryBanner(),
               _buildUnsyncedWalIndicator(provider),
+              _LiveHero(provider: provider, devices: deviceProvider, paused: effectivelyMuted),
               Expanded(
                 child: provider.segments.isEmpty && provider.photos.isEmpty
                     ? Center(
@@ -185,34 +199,49 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
             ],
           ),
           floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-          // Pause/Resume (a pause glyph: mics belong to Ask Omi) and Finish, the one stop.
-          floatingActionButton:
-              (provider.liveCaptureSource != null || provider.segments.isNotEmpty || provider.photos.isNotEmpty)
-                  ? Row(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (provider.liveCaptureSource != null &&
-                            LiveCaptureCard.canPause(provider.recordingDevice, source: provider.liveCaptureSource)) ...[
-                          OmiIconButton.filled(
-                            key: const Key('capture_pause_button'),
-                            icon: Icon(effectivelyMuted ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 26),
-                            label: effectivelyMuted ? context.l10n.resume : context.l10n.pause,
-                            diameter: 52,
-                            fillColor: OmiColors.surface3,
-                            onPressed: _mutePending || provider.isCallActive ? null : () => _toggleMute(provider),
+          // Rev 3 Live: two equal capsules, Pause/Resume (a pause glyph: mics belong to Ask Omi) and
+          // End, the one stop (the device keeps listening for the next conversation). The same
+          // capsules as the Today live card.
+          floatingActionButton: (provider.liveCaptureSource != null ||
+                  provider.segments.isNotEmpty ||
+                  provider.photos.isNotEmpty)
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: OmiSize.screenMargin),
+                  child: Row(
+                    children: [
+                      if (provider.liveCaptureSource != null &&
+                          LiveCaptureCard.canPause(provider.recordingDevice, source: provider.liveCaptureSource)) ...[
+                        Expanded(
+                          child: IgnorePointer(
+                            ignoring: _mutePending || provider.isCallActive,
+                            child: AnimatedOpacity(
+                              duration: OmiMotion.of(context).quick,
+                              opacity: _mutePending || provider.isCallActive ? 0.5 : 1,
+                              child: LiveCaptureAction(
+                                key: const Key('capture_pause_button'),
+                                label: effectivelyMuted ? context.l10n.resume : context.l10n.pause,
+                                icon: effectivelyMuted ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                                primary: false,
+                                onPressed: () => _toggleMute(provider),
+                              ),
+                            ),
                           ),
-                          const SizedBox(width: OmiSpacing.sm),
-                        ],
-                        OmiButton(
+                        ),
+                        const SizedBox(width: 10),
+                      ],
+                      Expanded(
+                        child: LiveCaptureAction(
                           key: const Key('process_now_button'),
-                          label: context.l10n.finish,
-                          leading: const Icon(Icons.check_rounded),
+                          label: context.l10n.endCapture,
+                          icon: Icons.stop_rounded,
+                          primary: true,
                           onPressed: () => _stopConversation(provider),
                         ),
-                      ],
-                    )
-                  : null,
+                      ),
+                    ],
+                  ),
+                )
+              : null,
         );
       },
     );
@@ -284,14 +313,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           // Camera icon avatar
-          const Column(
+          Column(
             children: [
               CircleAvatar(
                 radius: 16,
                 backgroundColor: OmiColors.surface2,
                 child: Icon(Icons.camera_alt, size: 16, color: OmiColors.textSecondary),
               ),
-              SizedBox(height: 2),
+              const SizedBox(height: 2),
             ],
           ),
           const SizedBox(width: 8),
@@ -331,7 +360,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.camera_alt, size: 12, color: OmiColors.textTertiary),
+                        Icon(Icons.camera_alt, size: 12, color: OmiColors.textTertiary),
                         const SizedBox(width: 4),
                         Text(
                           group.length > 1
@@ -457,14 +486,14 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
           onTap: () => _editSegmentSpeaker(segment, provider),
           child: GestureDetector(
             onTap: () => _editSegmentSpeaker(segment, provider),
-            child: const Column(
+            child: Column(
               children: [
                 CircleAvatar(
                   radius: 16,
                   backgroundColor: OmiColors.surface2,
                   child: Icon(Icons.person, size: 16, color: OmiColors.textSecondary),
                 ),
-                SizedBox(height: 2),
+                const SizedBox(height: 2),
               ],
             ),
           ),
@@ -611,7 +640,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
               ),
               if (!failed && !retrying && uploading) ...[
                 const SizedBox(width: 8),
-                const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textTertiary),
+                OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textTertiary),
               ],
             ],
           ),
@@ -650,4 +679,44 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       state == WalSyncDisplayState.corrupted ||
       state == WalSyncDisplayState.outsideRecoveryWindow ||
       state == WalSyncDisplayState.unsupportedAudio;
+}
+
+/// The top of Live (canvas Live, Rev 3 device-agnostic): the orb for whatever is listening, lit
+/// while audio flows, its name, and the level of what it hears — the real level where the app
+/// measures it (the iOS voice meter), the listening ripple elsewhere.
+class _LiveHero extends StatelessWidget {
+  const _LiveHero({required this.provider, required this.devices, required this.paused});
+
+  final CaptureProvider provider;
+  final DeviceProvider devices;
+  final bool paused;
+
+  @override
+  Widget build(BuildContext context) {
+    final source = provider.liveCaptureSource;
+    final phone = source == null || source == 'phone';
+    if (source == null && provider.recordingState != RecordingState.record && !provider.isPhoneMicPaused) {
+      return const SizedBox.shrink();
+    }
+    final l10n = context.l10n;
+    final name = phone
+        ? (Platform.isIOS ? l10n.memoryThisIphone : l10n.memoryThisPhone)
+        : (devices.connectedDevice?.name ?? CaptureSources.label(context, source));
+    final meter = CaptureVoiceMeter.active;
+    return Padding(
+      key: const Key('live_hero'),
+      padding: const EdgeInsets.fromLTRB(OmiSize.screenMargin, OmiSpacing.xs, OmiSize.screenMargin, OmiSpacing.md),
+      child: Column(
+        children: [
+          Hero(tag: kLiveOrbHeroTag, child: OmiOrb(size: 92, live: !paused)),
+          const SizedBox(height: OmiSpacing.sm),
+          Text(name, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+          const SizedBox(height: OmiSpacing.md),
+          meter != null && meter.hasSignal
+              ? OmiLevelStrip(key: const Key('live_level_strip'), levels: meter.levels, live: !paused)
+              : OmiListeningWave(key: const Key('live_level_strip'), live: !paused, height: 40),
+        ],
+      ),
+    );
+  }
 }

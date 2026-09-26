@@ -52,35 +52,33 @@ class _NameWidgetState extends State<NameWidget> {
     return OnboardingStep(
       card: OnboardingCard(
         content: [
-          Semantics(
-            header: true,
-            child: Text(context.l10n.whatsYourName, style: OmiType.title1, textAlign: TextAlign.center),
-          ),
-          const SizedBox(height: OmiSpacing.xxl),
+          OnboardingHeader(title: context.l10n.whatShouldOmiCallYou),
+          const SizedBox(height: OmiSpacing.lg),
+          // v2: a large field on a card, the name in 22pt bold.
           Container(
-            decoration: BoxDecoration(
-              color: OmiColors.surface1,
-              borderRadius: OmiRadius.lgAll,
-              border: Border.all(color: OmiColors.border),
-            ),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.rowAll),
             child: TextField(
               controller: nameController,
               focusNode: focusNode,
-              style: OmiType.body.copyWith(fontWeight: FontWeight.w500),
-              textAlign: TextAlign.center,
+              style: OmiType.title2,
               textCapitalization: TextCapitalization.words,
               textInputAction: TextInputAction.done,
               onSubmitted: (_) => _submit(),
               decoration: InputDecoration(
-                hintText: context.l10n.enterYourName,
-                hintStyle: OmiType.body.copyWith(color: OmiColors.textTertiary),
+                hintText: context.l10n.yourNamePlaceholder,
+                hintStyle: OmiType.title2.copyWith(color: OmiColors.textTertiary),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl, vertical: OmiSpacing.lg),
+                contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.md),
               ),
               onChanged: (value) {
                 setState(() {}); // Trigger rebuild to update button state
               },
             ),
+          ),
+          const SizedBox(height: OmiSpacing.md),
+          Padding(
+            padding: OnboardingCard.textInset,
+            child: Text(context.l10n.nameUsageHint, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
           ),
         ],
         footer: [

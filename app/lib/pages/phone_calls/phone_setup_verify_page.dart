@@ -107,7 +107,7 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton()),
+      appBar: const OmiAppBar(leading: OmiBackButton()),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
@@ -218,7 +218,7 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(OmiSpacing.md),
-      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: Row(
         children: [
           ExcludeSemantics(child: Icon(icon, color: OmiColors.textPrimary, size: 22)),
@@ -244,10 +244,10 @@ class _PhoneSetupVerifyPageState extends State<PhoneSetupVerifyPage> with Single
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(OmiSpacing.md),
-      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: Row(
         children: [
-          const ExcludeSemantics(child: Icon(Icons.dialpad, color: OmiColors.textPrimary, size: 22)),
+          ExcludeSemantics(child: Icon(Icons.dialpad, color: OmiColors.textPrimary, size: 22)),
           const SizedBox(width: OmiSpacing.md),
           Expanded(
             child: Column(

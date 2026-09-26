@@ -145,11 +145,11 @@ class _GoalFormSheetState extends State<GoalFormSheet> {
           onChanged: (_) => setState(() {}),
           style: OmiType.callout,
           cursorColor: OmiColors.accent,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             filled: true,
             fillColor: OmiColors.surface2,
-            contentPadding: EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
-            border: OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide.none),
+            contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
+            border: const OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide.none),
           ),
         ),
       ],

@@ -37,7 +37,7 @@ class AppListItem extends StatelessWidget {
               child: Container(
                 width: 60,
                 height: 60,
-                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
                 child: CachedNetworkImage(
                   imageUrl: app.getImageUrl(),
                   httpHeaders: const {
@@ -51,10 +51,10 @@ class AppListItem extends StatelessWidget {
                     child: Container(
                       width: double.infinity,
                       height: double.infinity,
-                      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+                      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
                     ),
                   ),
-                  errorWidget: (context, url, error) => const Icon(Icons.apps, size: 30, color: OmiColors.textTertiary),
+                  errorWidget: (context, url, error) => Icon(Icons.apps, size: 30, color: OmiColors.textTertiary),
                 ),
               ),
             ),
@@ -83,7 +83,7 @@ class AppListItem extends StatelessWidget {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        const Icon(Icons.star_rounded, color: Colors.white, size: 14),
+                        Icon(Icons.star_rounded, color: OmiColors.textPrimary, size: 14),
                         const SizedBox(width: 4),
                         Text(
                           app.getRatingAvg()!,

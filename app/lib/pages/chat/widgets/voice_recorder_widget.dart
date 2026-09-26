@@ -128,7 +128,7 @@ class AudioWavePainter extends CustomPainter {
     if (levels.isEmpty || size.width <= 0 || size.height <= 0) return;
 
     final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.85)
+      ..color = OmiColors.textPrimary.withValues(alpha: 0.85)
       ..strokeWidth = 2.0
       ..strokeCap = StrokeCap.round;
 

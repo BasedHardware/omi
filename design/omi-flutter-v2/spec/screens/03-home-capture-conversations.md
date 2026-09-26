@@ -513,4 +513,3 @@ Reference: `renders/{se,mini,iphone16,max}/{dark,light}/ShareCard.webp`, `specs/
 | 4 | Midnight | always | Style Midnight. | — | in place |
 | 5 | Save Image | always | Save the image to Photos (add-only Photos permission, requested now). | — | in place |
 | 6 | Share… | always | Share the image (system share sheet). | — | system |
-

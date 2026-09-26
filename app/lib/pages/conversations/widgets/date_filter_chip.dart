@@ -38,13 +38,13 @@ class ConversationDateFilterChip extends StatelessWidget {
         child: InputChip(
           key: const Key('conversation_date_filter_chip'),
           // The header's date-filter button draws the same glyph.
-          avatar: const FaIcon(FontAwesomeIcons.calendarDay, size: 14, color: OmiColors.textSecondary),
+          avatar: FaIcon(FontAwesomeIcons.calendarDay, size: 14, color: OmiColors.textSecondary),
           label: Text(label, style: OmiType.footnote),
           tooltip: l10n.filterByDate,
           backgroundColor: OmiColors.surface1,
-          side: const BorderSide(color: OmiColors.border),
+          side: BorderSide(color: OmiColors.border),
           shape: const StadiumBorder(),
-          deleteIcon: const Icon(Icons.close, size: 16, color: OmiColors.textSecondary),
+          deleteIcon: Icon(Icons.close, size: 16, color: OmiColors.textSecondary),
           deleteButtonTooltipMessage: l10n.removeFilter,
           onPressed: () => showConversationDateRangePicker(context),
           onDeleted: () async {

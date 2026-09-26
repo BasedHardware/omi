@@ -4,13 +4,15 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
+import 'package:omi/ui/ui.dart';
 
 Finder faIcon(FaIconData icon) => find.byWidgetPredicate((w) => w is FaIcon && w.icon?.codePoint == icon.codePoint);
 
-bool thumbsUpLit(WidgetTester tester) => tester.widget<FaIcon>(faIcon(FontAwesomeIcons.thumbsUp)).color == Colors.white;
+bool thumbsUpLit(WidgetTester tester) =>
+    tester.widget<FaIcon>(faIcon(FontAwesomeIcons.thumbsUp)).color == OmiColors.textPrimary;
 
 bool thumbsDownLit(WidgetTester tester) =>
-    tester.widget<FaIcon>(faIcon(FontAwesomeIcons.thumbsDown)).color == Colors.white;
+    tester.widget<FaIcon>(faIcon(FontAwesomeIcons.thumbsDown)).color == OmiColors.textPrimary;
 
 void main() {
   Future<void> pumpBar(WidgetTester tester, {int? currentNps, required bool saves}) async {

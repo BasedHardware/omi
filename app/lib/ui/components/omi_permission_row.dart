@@ -64,7 +64,12 @@ class OmiPermissionRow extends StatelessWidget {
     this.leading,
     this.onOpenSettings,
     this.serviceOffMessage,
+    this.inGroup = false,
   });
+
+  /// v2: the row sits in a shared grouped card (the caller draws the card and the hairlines), with
+  /// its icon in a 30pt tile; otherwise it is its own card.
+  final bool inGroup;
 
   final String title;
 
@@ -112,14 +117,15 @@ class OmiPermissionRow extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.check_circle, color: OmiColors.success, size: 20),
+                Icon(Icons.check_circle, color: OmiColors.success, size: 20),
                 const SizedBox(width: OmiSpacing.xxs),
                 Text(l10n.permissionAllowed, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
               ],
             ),
           ),
         ),
-      OmiPermissionStatus.askable => OmiButton(
+      // v2: a quiet capsule; the system prompt is the real decision.
+      OmiPermissionStatus.askable => OmiButton.secondary(
           key: const Key('omi_permission_allow'),
           label: l10n.allow,
           onPressed: onAllow,
@@ -136,18 +142,26 @@ class OmiPermissionRow extends StatelessWidget {
     return Container(
       constraints: const BoxConstraints(minHeight: 64),
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
-      decoration: BoxDecoration(
-        color: OmiColors.surface1,
-        borderRadius: OmiRadius.lgAll,
-        border: Border.all(color: OmiColors.border),
-      ),
+      decoration: inGroup
+          ? null
+          : BoxDecoration(
+              color: OmiColors.surface1,
+              borderRadius: OmiRadius.rowAll,
+              border: Border.all(color: OmiColors.border),
+            ),
       child: Row(
         children: [
           if (leading != null || icon != null) ...[
             ExcludeSemantics(
               child: IconTheme.merge(
-                data: const IconThemeData(color: OmiColors.textSecondary, size: 22),
-                child: SizedBox(width: 24, child: Center(child: leading ?? Icon(icon))),
+                data: IconThemeData(color: OmiColors.textPrimary, size: 15),
+                child: Container(
+                  width: 30,
+                  height: 30,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+                  child: leading ?? Icon(icon),
+                ),
               ),
             ),
             const SizedBox(width: OmiSpacing.sm),
@@ -156,7 +170,7 @@ class OmiPermissionRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: OmiType.headline.copyWith(fontSize: OmiType.callout.fontSize)),
+                Text(title, style: OmiType.headline),
                 const SizedBox(height: 2),
                 Text(reason, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
                 if (statusLine != null) ...[

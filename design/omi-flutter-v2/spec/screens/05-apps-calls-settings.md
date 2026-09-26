@@ -457,4 +457,3 @@ Reference: `renders/{se,mini,iphone16,max}/{dark,light}/DeleteAccount.webp`, `sp
 **Rules and edge cases.**
 
 - Never exercise on a real user's device account in tests.
-

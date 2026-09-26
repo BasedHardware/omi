@@ -64,6 +64,9 @@ class OmiDateFormat {
     return (value.year == today.year ? DateFormat.MMMEd(localeName) : DateFormat.yMMMEd(localeName)).format(value);
   }
 
+  /// The day in full, for a page's greeting: "Thursday, September 24" (locale order).
+  String longDay(DateTime value) => DateFormat.MMMMEEEEd(localeName).format(value);
+
   /// A date standing alone: "Sep 23, 2026".
   String date(DateTime value) => DateFormat.yMMMd(localeName).format(value);
 

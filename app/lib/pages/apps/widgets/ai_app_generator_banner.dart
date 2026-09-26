@@ -36,8 +36,8 @@ class AiAppGeneratorBanner extends StatelessWidget {
             Container(
               width: 36,
               height: 36,
-              decoration: const BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.mdAll),
-              child: const Center(
+              decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.mdAll),
+              child: Center(
                 child: FaIcon(FontAwesomeIcons.wandMagicSparkles, color: OmiColors.textPrimary, size: 16),
               ),
             ),
@@ -55,7 +55,7 @@ class AiAppGeneratorBanner extends StatelessWidget {
             // BETA badge
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: const BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
+              decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
               child: Text(
                 context.l10n.beta,
                 style: OmiType.caption.copyWith(

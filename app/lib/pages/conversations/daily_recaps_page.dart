@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/ui/ui.dart';
@@ -24,12 +23,12 @@ class _DailyRecapsPageState extends State<DailyRecapsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.dailyRecaps)),
+      appBar: OmiAppBar(leading: const OmiBackButton(), title: Text(context.l10n.dailyRecaps)),
       body: RefreshIndicator(
         color: OmiColors.onAccent,
         backgroundColor: OmiColors.accent,
         onRefresh: () async {
-          HapticFeedback.mediumImpact();
+          OmiHaptics.medium();
           await _listKey.currentState?.refresh();
         },
         child: CustomScrollView(
