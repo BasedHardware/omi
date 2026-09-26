@@ -84,8 +84,9 @@ class CaptureSystemSurface {
     // Only a user pause offers Resume. Connecting and interruptions recover on
     // their own; they freeze the clock but still offer Pause for privacy.
     final userPaused = capture.isPaused || state == RecordingState.pause;
-    // Stopped (Stop in Omi, on the Lock Screen or in the island): nothing to show until Start.
-    if (capture.isCaptureStopped) active = false;
+    // Stopped (Stop in Omi, on the Lock Screen or in the island): nothing to show until Start —
+    // from the tap, not from when the stop finishes its turn.
+    if (capture.isCaptureStopped || capture.isStopping) active = false;
     final interrupted = state == RecordingState.interrupted;
     final connecting = state == RecordingState.initialising;
     final paused = userPaused || interrupted || connecting;

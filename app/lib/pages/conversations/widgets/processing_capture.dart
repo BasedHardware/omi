@@ -144,8 +144,11 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             provider.recordingState == RecordingState.interrupted ||
             provider.recordingState == RecordingState.systemAudioRecord ||
             provider.isPhoneMicPaused;
-        // Nothing recording, or the reader pressed Stop (a stopped pendant waits for Start).
-        if ((provider.liveCaptureSource == null && !phoneLive && !batch) || (provider.isCaptureStopped && !phoneLive)) {
+        // Nothing recording, or the reader pressed Stop (a stopped pendant waits for Start; a Stop
+        // still on its way already reads as stopped).
+        if ((provider.liveCaptureSource == null && !phoneLive && !batch) ||
+            (provider.isCaptureStopped && !phoneLive) ||
+            provider.isStopping) {
           return widget.idle ?? const SizedBox.shrink();
         }
 

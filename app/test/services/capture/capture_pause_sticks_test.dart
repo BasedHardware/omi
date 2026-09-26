@@ -2,6 +2,7 @@
 // through a pendant dropping and reconnecting, an app restart, and a phone recording that borrowed
 // the capture. The real CaptureController and its coordinator over the replay world, with a
 // scripted pendant link.
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -131,6 +132,54 @@ void main() {
     expect(await pendantBytesReaching(), greaterThan(0));
     await world.elapse(const Duration(seconds: 5));
     expect(world.controller.isPaused, false, reason: 'Start sticks');
+    expect(await pendantBytesReaching(), greaterThan(0));
+  });
+
+  /// The server drops transcription and is slow to take the reconnect: the keep-alive's reconnect
+  /// holds the capture line until [slowServer] completes (IMG_1149: Stop looked dead meanwhile).
+  Future<void> reconnectHeldBy(Completer<void> slowServer) async {
+    world.holdNextSocketOpen = slowServer;
+    world.socket!.emitClose();
+    await world.settle();
+    world.scheduler.elapse(const Duration(seconds: 16));
+    await pumpEventQueue();
+  }
+
+  test('a Stop behind a slow reconnect reads as stopped at once, and a second Stop joins it', () async {
+    heard('Something worth keeping');
+    final slowServer = Completer<void>();
+    await reconnectHeldBy(slowServer);
+
+    final first = world.controller.stopCapture();
+    final second = world.controller.stopCapture();
+    expect(world.controller.isStopping, true, reason: 'every surface shows it stopped from the tap');
+    await pumpEventQueue();
+    expect(world.processCalls, 0, reason: 'it waits its turn behind the reconnect');
+
+    slowServer.complete();
+    expect(await first, true);
+    expect(await second, true);
+    await world.settle();
+    expect(world.processCalls, 1, reason: 'one stop, not two');
+    expect(world.controller.isStopping, false);
+    expect(world.controller.isCaptureStopped, true);
+    expect(await pendantBytesReaching(), 0);
+  });
+
+  test('Start pressed while a Stop is on its way listens again once the Stop lands', () async {
+    heard('Something worth keeping');
+    final slowServer = Completer<void>();
+    await reconnectHeldBy(slowServer);
+
+    final stop = world.controller.stopCapture();
+    final start = world.controller.startCapture();
+    slowServer.complete();
+    await stop;
+    await start;
+    await world.settle();
+    expect(world.processCalls, 1);
+    expect(world.controller.isCaptureStopped, false, reason: 'the later Start wins');
+    expect(world.controller.isPaused, false);
     expect(await pendantBytesReaching(), greaterThan(0));
   });
 

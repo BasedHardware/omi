@@ -57,6 +57,8 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   @override
   bool get isCaptureStopped => live == AuditLive.pendantStopped;
   @override
+  bool get isStopping => false;
+  @override
   bool get canMuteLiveSource => true;
   @override
   Duration? get captureElapsed =>

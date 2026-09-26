@@ -2681,11 +2681,36 @@ class CaptureController extends ChangeNotifier
   /// Whether the live source can be muted ([captureSourceCanMute]).
   bool get canMuteLiveSource => captureSourceCanMute(_recordingDevice?.type, source: liveCaptureSource);
 
+  /// The Stop still on its way, and whether it ends listening (the phone, or a wearable that can
+  /// pause; glasses only close the conversation and listen on).
+  Future<bool>? _stopInFlight;
+  bool _stopEndsListening = false;
+
+  /// Stop was pressed and has not finished: it waits its turn behind capture work already running
+  /// (a transcription reconnect can hold the line for seconds). Every surface shows the capture as
+  /// stopped from the tap, and Start waits for it ([startCapture]).
+  bool get isStopping => _stopInFlight != null && _stopEndsListening;
+
   /// Stop: this conversation is saved and listening stops until Start — a pendant would otherwise
   /// listen on and begin the next conversation by itself. With nothing heard there is nothing to
   /// save, so no empty conversation appears. Returns whether anything was heard, so the caller can
-  /// show where it went.
-  Future<bool> stopCapture() async {
+  /// show where it went. A second Stop while one is on its way joins it rather than stopping twice.
+  Future<bool> stopCapture() {
+    final running = _stopInFlight;
+    if (running != null) return running;
+    final source = liveCaptureSource;
+    _stopEndsListening = source == null || source == ConversationSource.phone.name || canMuteLiveSource;
+    final stop = _stopCapture();
+    _stopInFlight = stop;
+    notifyListeners();
+    unawaited(stop.then((_) {}, onError: (_) {}).whenComplete(() {
+      if (identical(_stopInFlight, stop)) _stopInFlight = null;
+      if (!_captureControllerDisposed) notifyListeners();
+    }));
+    return stop;
+  }
+
+  Future<bool> _stopCapture() async {
     final heard = segments.isNotEmpty || photos.isNotEmpty;
     final source = liveCaptureSource;
     if (source == null || source == ConversationSource.phone.name) {
@@ -2705,8 +2730,13 @@ class CaptureController extends ChangeNotifier
     return heard;
   }
 
-  /// Start after Stop: the stopped source listens again, as a new conversation from zero.
-  Future<void> startCapture() => resumeCapture();
+  /// Start after Stop: the stopped source listens again, as a new conversation from zero. A Stop
+  /// still on its way lands first, so it never undoes this Start.
+  Future<void> startCapture() async {
+    final stopping = _stopInFlight;
+    if (stopping != null) await stopping.then((_) {}, onError: (_) {});
+    await resumeCapture();
+  }
 
   Future<void> _markStopped() async {
     _clockRestartsOnStart = true;

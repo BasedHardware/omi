@@ -60,6 +60,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   final scaffoldKey = GlobalKey<ScaffoldState>();
   bool _mutePending = false;
 
+  /// Stop was tapped: the page is on its way out and ignores further taps.
+  bool _leaving = false;
+
   /// Redraws the elapsed time in the header once a second.
   Timer? _clock;
 
@@ -77,7 +80,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   }
 
   Future<void> _toggleMute(CaptureProvider provider) async {
-    if (_mutePending) return;
+    if (_mutePending || _leaving) return;
     setState(() => _mutePending = true);
     try {
       OmiHaptics.medium();
@@ -112,22 +115,34 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   /// Start ([CaptureController.stopCapture]); a pendant that a phone recording had paused still
   /// resumes when that recording ends, as its card note says. What was heard is waiting in
   /// Conversations; with nothing heard there is nothing to show, so it is back to Today.
+  ///
+  /// The page closes at once and the stop finishes on its own: it can wait its turn behind a
+  /// transcription reconnect, and a page that waited with it read as frozen, took a second tap,
+  /// and then closed twice — taking Home with it (a black screen). Only this page ever closes.
   Future<void> _stopConversation(CaptureProvider provider) async {
-    final bool heard;
-    try {
-      heard = await provider.stopCapture();
-    } catch (_) {
-      // Nothing was stopped: stay here and say so, rather than a tap that does nothing.
-      if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
-      return;
-    }
-    if (!mounted) return;
+    if (_leaving) return;
+    _leaving = true;
+    final heard = provider.segments.isNotEmpty || provider.photos.isNotEmpty;
+    final navigator = Navigator.of(context);
+    final route = ModalRoute.of(context);
     if (heard) {
       switchHomeToConversationsTab(context);
     } else {
       context.read<HomeProvider>().setIndex(0);
     }
-    Navigator.of(context).pop();
+    final stop = provider.stopCapture();
+    if (route != null && route.isCurrent) {
+      navigator.pop();
+    } else if (route != null && route.isActive) {
+      navigator.removeRoute(route);
+    }
+    try {
+      await stop;
+    } catch (_) {
+      // Nothing was stopped: say so where the reader now is, rather than a tap that did nothing.
+      final home = navigator.context;
+      if (home.mounted) OmiFeedback.error(home, home.l10n.somethingWentWrong);
+    }
   }
 
   /// The live page's state, resolved exactly as the Home capture card resolves it
