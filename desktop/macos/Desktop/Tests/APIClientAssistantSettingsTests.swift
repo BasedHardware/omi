@@ -5,20 +5,20 @@ import XCTest
 final class APIClientAssistantSettingsTests: XCTestCase {
 
   @MainActor
-  func testShippedTaskPromptExceedsBackendBoundAndIsOmittedFromSync() {
-    // The shipped default task prompt has been over the backend's 10k-code-point
-    // bound since at least June 2026, so it is deliberately omitted from sync
-    // (partial PATCH semantics) rather than truncated or sent to be 422-rejected.
-    // Raising the bound needs the backend limit deployed first: issue #11481.
-    XCTAssertGreaterThan(
+  func testShippedTaskPromptFitsBackendSyncContract() {
+    // The shipped default task prompt must fit the backend's 10k-code-point bound
+    // so it can sync. Oversized prompts are omitted (never truncated) to protect
+    // user-authored text; the shipped default is not that case (issue #11481).
+    XCTAssertLessThanOrEqual(
       TaskAssistantSettings.defaultAnalysisPrompt.unicodeScalars.count,
       TaskAssistantSettings.maximumSyncedAnalysisPromptLength)
-    XCTAssertNil(
+    XCTAssertEqual(
       SettingsSyncManager.promptForSync(
         TaskAssistantSettings.defaultAnalysisPrompt,
         assistantName: "task",
         maximumLength: TaskAssistantSettings.maximumSyncedAnalysisPromptLength,
-        shippedDefault: TaskAssistantSettings.defaultAnalysisPrompt))
+        shippedDefault: TaskAssistantSettings.defaultAnalysisPrompt),
+      TaskAssistantSettings.defaultAnalysisPrompt)
   }
 
   @MainActor
