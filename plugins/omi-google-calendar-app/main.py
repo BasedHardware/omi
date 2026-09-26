@@ -202,7 +202,7 @@ def calendar_api_request(uid: str, method: str, endpoint: str, params: dict = No
 
     except Exception as e:
         log(f"Calendar API request error: {e}")
-        return {"error": str(e)}
+        return {"error": "Google Calendar API request failed"}
 
 
 def parse_datetime(dt_str: str) -> tuple[datetime, bool]:
@@ -596,7 +596,7 @@ async def tool_list_events(request: Request):
         log(f"Error listing events: {e}")
         import traceback
         traceback.print_exc()
-        return ChatToolResponse(error=f"Failed to list events: {str(e)}")
+        return ChatToolResponse(error="Failed to list events due to an internal error.")
 
 
 @app.post("/tools/create_event", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -639,15 +639,15 @@ async def tool_create_event(request: Request):
             start_dt, is_all_day = parse_datetime(start_str)
             if all_day:
                 is_all_day = True
-        except ValueError as e:
-            return ChatToolResponse(error=str(e))
+        except ValueError:
+            return ChatToolResponse(error="Invalid start time. Could not parse datetime.")
 
         # Parse or calculate end time
         if end_str:
             try:
                 end_dt, _ = parse_datetime(end_str)
-            except ValueError as e:
-                return ChatToolResponse(error=f"Invalid end time: {e}")
+            except ValueError:
+                return ChatToolResponse(error="Invalid end time. Could not parse datetime.")
             if end_dt <= start_dt:
                 return ChatToolResponse(error="End time must be after start time")
         else:
@@ -708,7 +708,7 @@ async def tool_create_event(request: Request):
         log(f"Error creating event: {e}")
         import traceback
         traceback.print_exc()
-        return ChatToolResponse(error=f"Failed to create event: {str(e)}")
+        return ChatToolResponse(error="Failed to create event due to an internal error.")
 
 
 @app.post("/tools/get_event", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -737,7 +737,7 @@ async def tool_get_event(request: Request):
         result = calendar_api_request(uid, "GET", f"/calendars/{calendar_id}/events/{event_id}")
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Event not found: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error="Event not found.")
 
         summary = result.get("summary", "No title")
         description = result.get("description", "")
@@ -783,7 +783,7 @@ async def tool_get_event(request: Request):
 
     except Exception as e:
         log(f"Error getting event: {e}")
-        return ChatToolResponse(error=f"Failed to get event: {str(e)}")
+        return ChatToolResponse(error="Failed to get event due to an internal error.")
 
 
 @app.post("/tools/update_event", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -841,8 +841,8 @@ async def tool_update_event(request: Request):
                 else:
                     update_data["start"] = {"dateTime": start_dt.isoformat(), "timeZone": "UTC"}
                 updates.append(f"Start: {start_str}")
-            except ValueError as e:
-                return ChatToolResponse(error=f"Invalid start time: {e}")
+            except ValueError:
+                return ChatToolResponse(error="Invalid start time. Could not parse datetime.")
 
         if end_str:
             try:
@@ -852,8 +852,8 @@ async def tool_update_event(request: Request):
                 else:
                     update_data["end"] = {"dateTime": end_dt.isoformat(), "timeZone": "UTC"}
                 updates.append(f"End: {end_str}")
-            except ValueError as e:
-                return ChatToolResponse(error=f"Invalid end time: {e}")
+            except ValueError:
+                return ChatToolResponse(error="Invalid end time. Could not parse datetime.")
 
         if start_dt and end_dt and end_dt <= start_dt:
             return ChatToolResponse(error="End time must be after start time")
@@ -885,7 +885,7 @@ async def tool_update_event(request: Request):
 
     except Exception as e:
         log(f"Error updating event: {e}")
-        return ChatToolResponse(error=f"Failed to update event: {str(e)}")
+        return ChatToolResponse(error="Failed to update event due to an internal error.")
 
 
 @app.post("/tools/delete_event", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -924,7 +924,7 @@ async def tool_delete_event(request: Request):
 
     except Exception as e:
         log(f"Error deleting event: {e}")
-        return ChatToolResponse(error=f"Failed to delete event: {str(e)}")
+        return ChatToolResponse(error="Failed to delete event due to an internal error.")
 
 
 @app.post("/tools/list_calendars", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -974,7 +974,7 @@ async def tool_list_calendars(request: Request):
 
     except Exception as e:
         log(f"Error listing calendars: {e}")
-        return ChatToolResponse(error=f"Failed to list calendars: {str(e)}")
+        return ChatToolResponse(error="Failed to list calendars due to an internal error.")
 
 
 # ============================================
@@ -1109,21 +1109,25 @@ async def google_auth(uid: str = Query(...)):
     if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
         raise HTTPException(status_code=500, detail="Google OAuth credentials not configured")
 
-    state = f"{uid}:{secrets.token_urlsafe(32)}"
-    store_oauth_state(uid, state)
+    try:
+        state = f"{uid}:{secrets.token_urlsafe(32)}"
+        store_oauth_state(uid, state)
 
-    params = {
-        "client_id": GOOGLE_CLIENT_ID,
-        "redirect_uri": GOOGLE_REDIRECT_URI,
-        "response_type": "code",
-        "scope": " ".join(GOOGLE_SCOPES),
-        "access_type": "offline",
-        "prompt": "consent",
-        "state": state
-    }
+        params = {
+            "client_id": GOOGLE_CLIENT_ID,
+            "redirect_uri": GOOGLE_REDIRECT_URI,
+            "response_type": "code",
+            "scope": " ".join(GOOGLE_SCOPES),
+            "access_type": "offline",
+            "prompt": "consent",
+            "state": state
+        }
 
-    auth_url = f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
-    return RedirectResponse(url=auth_url)
+        auth_url = f"{GOOGLE_AUTH_URL}?{urlencode(params)}"
+        return RedirectResponse(url=auth_url)
+    except Exception as e:
+        log(f"Error initiating Google OAuth: {e}")
+        raise HTTPException(status_code=500, detail="OAuth initialization failed")
 
 
 @app.get("/auth/google/callback")
@@ -1169,15 +1173,15 @@ async def google_callback(
     except:
         return HTMLResponse(content="Invalid state", status_code=400)
 
-    # Verify state
-    stored_state = get_oauth_state(uid)
-    if stored_state != state:
-        return HTMLResponse(content="State mismatch", status_code=400)
-
-    delete_oauth_state(uid)
-
-    # Exchange code for tokens
     try:
+        # Verify state
+        stored_state = get_oauth_state(uid)
+        if stored_state != state:
+            return HTMLResponse(content="State mismatch", status_code=400)
+
+        delete_oauth_state(uid)
+
+        # Exchange code for tokens
         response = requests.post(
             GOOGLE_TOKEN_URL,
             data={
@@ -1240,7 +1244,19 @@ async def google_callback(
         log(f"OAuth error: {e}")
         import traceback
         traceback.print_exc()
-        return HTMLResponse(content=f"Authentication error: {str(e)}", status_code=500)
+        return HTMLResponse(content=f"""
+        <html>
+            <head><style>{get_css()}</style></head>
+            <body>
+                <div class="container">
+                    <div class="error-box">
+                        <h2>Authentication Error</h2>
+                        <p>An internal error occurred during authentication. Please try connecting again.</p>
+                    </div>
+                </div>
+            </body>
+        </html>
+        """, status_code=500)
 
 
 @app.get("/setup/google")
