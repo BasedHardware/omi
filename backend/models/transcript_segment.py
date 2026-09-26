@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Dict, Optional, List, Tuple
 import uuid
 import re
-from pydantic import BaseModel, Field, PrivateAttr, model_serializer
+from pydantic import BaseModel, Field, PrivateAttr
 from pydantic.json_schema import SkipJsonSchema
 
 from models.other import Person
@@ -85,18 +85,21 @@ class TranscriptSegment(BaseModel):
     speaker_identity_status: SkipJsonSchema[str] = SpeakerIdentityStatus.unknown
     # Only present for v2 text whose provider position could not be proven.
     # Absence keeps every v1 serialized segment byte-identical.
-    audio_alignment: SkipJsonSchema[Optional[str]] = None
+    audio_alignment: SkipJsonSchema[Optional[str]] = Field(default=None, exclude=True)
     # In-memory only: True when neither speaker nor speaker_id was in the
     # construction payload, so speaker_id is the SPEAKER_00 default rather
     # than persisted diarization. Not dumped; a stored synthesized 0 still
     # looks real after a round-trip.
     _speaker_id_synthesized: bool = PrivateAttr(default=False)
 
-    @model_serializer(mode='wrap')
-    def _serialize_alignment(self, handler: Any) -> Dict[str, Any]:
-        data: Dict[str, Any] = handler(self)
-        if data.get('audio_alignment') is None:
-            data.pop('audio_alignment', None)
+    def model_dump(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        # The ordinary model schema and every v1 dump stay unchanged. Only a
+        # v2 unplaced segment carries this internal marker into persistence
+        # and WebSocket payloads; Pydantic's model serializer would erase the
+        # public TranscriptSegment OpenAPI shape entirely.
+        data = super().model_dump(*args, **kwargs)
+        if self.audio_alignment is not None:
+            data['audio_alignment'] = self.audio_alignment
         return data
 
     def __init__(self, **data: Any):
