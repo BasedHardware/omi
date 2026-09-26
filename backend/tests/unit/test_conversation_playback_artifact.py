@@ -17,6 +17,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import database.conversations as conversations_db
 from testing.import_isolation import load_module_fresh, stub_modules
 
 BACKEND = Path(__file__).resolve().parents[2]
@@ -240,8 +241,6 @@ def test_finalize_audio_file_group_handles_explicit_none_size():
     # `None > 0` then raises TypeError and aborts the whole conversation's
     # audio finalization. Falls back to the same 5.0s estimate as a missing
     # or zero size.
-    import database.conversations as conversations_db
-
     chunk_group = [
         {'timestamp': 1000.0, 'size': 5000},
         {'timestamp': 1005.0, 'size': None},
