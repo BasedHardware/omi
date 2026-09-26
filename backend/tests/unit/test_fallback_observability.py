@@ -89,6 +89,10 @@ def test_llm_gateway_is_a_bounded_fallback_component():
     assert fallback_mod.bucket_component('llm_gateway') == 'llm_gateway'
 
 
+def test_conversation_notes_is_a_bounded_fallback_component():
+    assert fallback_mod.bucket_component('conversation_notes') == 'conversation_notes'
+
+
 def test_stt_live_session_is_a_bounded_fallback_component():
     """Mid-session hops used component=stt_live_session; without the allowlist
     they bucketed to other, so omi-stt-fallback-leg-dead (keyed on stt_selection)

@@ -135,7 +135,9 @@ struct ConversationSummarySections: View {
   }
 
   private var visibleSections: [SummarySection] {
-    sections.filter { !$0.bodyMarkdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    sections
+      .map { ConversationSummarySelection.presentableSection($0, segments: transcriptSegments) }
+      .filter { !$0.bodyMarkdown.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
   }
 
   var body: some View {
