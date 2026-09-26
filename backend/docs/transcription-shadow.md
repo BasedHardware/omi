@@ -85,10 +85,12 @@ live transcript clock is correct. `word_distance` is a bounded WER-style edit
 distance with the live words as denominator; it is null above 4,000 words or
 when the live side has no words.
 
-`segment_remap.py` tries every text-matching clock shift, including repeated
-phrases, and chooses the shift that maps the most live segments without
-ambiguous time overlap. An inferred shift also requires mapped-text
-agreement of at least 0.65. `remap_safe` requires 100% of live segments mapped,
+`segment_remap.py` aligns text in sequence and verifies an inferred clock shift
+with unique, consistently shifted phrases. Time overlap candidates come from a
+bounded interval index. Each mapped target must agree with its source text, or
+the sequential targets must exactly partition the source text; a filler target
+cannot inherit annotations through time overlap or aggregate text agreement.
+`remap_safe` requires 100% of live segments mapped,
 no ambiguous overlap, verified inferred offset, and successful annotation
 remapping. The stored first-chunk minus `started_at` scalar lets operators
 compare the physical audio origin with the text-derived shift (opposite signs

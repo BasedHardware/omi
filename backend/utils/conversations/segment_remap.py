@@ -9,11 +9,15 @@ ambiguous overlap.
 from __future__ import annotations
 
 import re
+from array import array
 from collections import Counter
 from dataclasses import dataclass
 from difflib import SequenceMatcher
+from math import isfinite
 from statistics import median
 from typing import Any, Mapping, Sequence
+
+_MAX_OVERLAPS_PER_SOURCE = 512
 
 
 def _tokens(segment: Mapping[str, Any]) -> str:
@@ -22,14 +26,14 @@ def _tokens(segment: Mapping[str, Any]) -> str:
 
 def _bounds(segment: Mapping[str, Any]) -> tuple[float, float]:
     start, end = float(segment['start']), float(segment['end'])
-    if not 0 <= start < end:
+    if not (isfinite(start) and isfinite(end) and 0 <= start < end):
         raise ValueError('invalid segment interval')
     return start, end
 
 
 def _midpoint(segment: Mapping[str, Any]) -> float:
     start, end = _bounds(segment)
-    return (start + end) / 2
+    return start + (end - start) / 2
 
 
 def _unique_offset(old: Sequence[Mapping[str, Any]], new: Sequence[Mapping[str, Any]]) -> tuple[float, bool]:
@@ -59,13 +63,13 @@ def _align(
         return [], {str(item['id']) for item in old}
     source_text = [_tokens(item) for item in old]
     target_text = [_tokens(item) for item in new]
-    scores: list[list[float | None]] = []
+    scores: list[array] = []
     for i, phrase in enumerate(source_text):
-        row = []
+        row = array('f')
         for j, other in enumerate(target_text):
             similarity = SequenceMatcher(None, phrase, other, autojunk=False).ratio() if phrase and other else 0
             if similarity < 0.65:
-                row.append(None)
+                row.append(float('-inf'))
                 continue
             duration_a = old[i]['end'] - old[i]['start']
             duration_b = new[j]['end'] - new[j]['start']
@@ -76,7 +80,7 @@ def _align(
         scores.append(row)
 
     gap = -1.0
-    forward = [[0.0] * (m + 1) for _ in range(n + 1)]
+    forward = [array('d', [0.0]) * (m + 1) for _ in range(n + 1)]
     for i in range(1, n + 1):
         forward[i][0] = i * gap
     for j in range(1, m + 1):
@@ -84,10 +88,10 @@ def _align(
     for i in range(n):
         for j in range(m):
             pair_score = scores[i][j]
-            match = forward[i][j] + pair_score if pair_score is not None else float('-inf')
+            match = forward[i][j] + pair_score
             forward[i + 1][j + 1] = max(match, forward[i][j + 1] + gap, forward[i + 1][j] + gap)
 
-    backward = [[0.0] * (m + 1) for _ in range(n + 1)]
+    backward = [array('d', [0.0]) * (m + 1) for _ in range(n + 1)]
     for i in range(n - 1, -1, -1):
         backward[i][m] = (n - i) * gap
     for j in range(m - 1, -1, -1):
@@ -95,14 +99,14 @@ def _align(
     for i in range(n - 1, -1, -1):
         for j in range(m - 1, -1, -1):
             pair_score = scores[i][j]
-            match = pair_score + backward[i + 1][j + 1] if pair_score is not None else float('-inf')
+            match = pair_score + backward[i + 1][j + 1]
             backward[i][j] = max(match, backward[i + 1][j] + gap, backward[i][j + 1] + gap)
 
     matches = []
     i, j = n, m
     while i and j:
         score = scores[i - 1][j - 1]
-        if score is not None and abs(forward[i][j] - forward[i - 1][j - 1] - score) < 1e-6:
+        if score != float('-inf') and abs(forward[i][j] - forward[i - 1][j - 1] - score) < 1e-6:
             matches.append((i - 1, j - 1))
             i -= 1
             j -= 1
@@ -117,7 +121,7 @@ def _align(
         alternatives = [
             j
             for j, score in enumerate(row)
-            if score is not None and forward[i][j] + score + backward[i + 1][j + 1] >= forward[n][m] - 0.5
+            if score != float('-inf') and forward[i][j] + score + backward[i + 1][j + 1] >= forward[n][m] - 0.5
         ]
         if len(alternatives) > 1 or (alternatives and selected.get(i) not in alternatives):
             ambiguous.add(str(old[i]['id']))
@@ -212,10 +216,67 @@ def plan_segment_remap(
     return plan
 
 
+@dataclass
+class _IntervalNode:
+    center: float
+    by_start: list[tuple[int, str, float, float, str]]
+    by_end: list[tuple[int, str, float, float, str]]
+    left: '_IntervalNode | None'
+    right: '_IntervalNode | None'
+
+
+def _interval_index(targets: list[tuple[int, str, float, float, str]]) -> _IntervalNode | None:
+    if not targets:
+        return None
+    center = sorted(start + (end - start) / 2 for _, _, start, end, _ in targets)[len(targets) // 2]
+    left = [item for item in targets if item[3] <= center]
+    right = [item for item in targets if item[2] >= center]
+    middle = [item for item in targets if item[2] < center < item[3]]
+    return _IntervalNode(
+        center,
+        sorted(middle, key=lambda item: item[2]),
+        sorted(middle, key=lambda item: item[3], reverse=True),
+        _interval_index(left),
+        _interval_index(right),
+    )
+
+
+def _overlaps(node: _IntervalNode | None, start: float, end: float):
+    """Yield only intervals intersecting the query, in index time plus output size."""
+    if node is None:
+        return
+    if end <= node.center:
+        for item in node.by_start:
+            if item[2] >= end:
+                break
+            yield item
+        yield from _overlaps(node.left, start, end)
+    elif start >= node.center:
+        for item in node.by_end:
+            if item[3] <= start:
+                break
+            yield item
+        yield from _overlaps(node.right, start, end)
+    else:
+        yield from node.by_start
+        yield from _overlaps(node.left, start, end)
+        yield from _overlaps(node.right, start, end)
+
+
+def _targets_explained(source_text: str, choices: list[tuple[int, str, float, float, str]]) -> bool:
+    """Each target must agree with the source, or all targets must partition it."""
+    if not source_text or any(not item[4] for item in choices):
+        return False
+    if all(SequenceMatcher(None, source_text, item[4], autojunk=False).ratio() >= 0.65 for item in choices):
+        return True
+    return ' '.join(item[4] for item in sorted(choices, key=lambda item: item[2])) == source_text
+
+
 def _plan_at_offset(old: Sequence[Mapping[str, Any]], new: Sequence[Mapping[str, Any]], shift: float) -> RemapPlan:
-    targets = [(str(s['id']), *_bounds(s)) for s in new]
-    if len({item[0] for item in targets}) != len(targets):
+    targets = [(index, str(s['id']), *_bounds(s), _tokens(s)) for index, s in enumerate(new)]
+    if len({item[1] for item in targets}) != len(targets):
         raise ValueError('duplicate target segment id')
+    index = _interval_index(targets)
     mapped: dict[str, tuple[str, ...]] = {}
     unresolved: list[str] = []
     ambiguous: list[str] = []
@@ -228,27 +289,36 @@ def _plan_at_offset(old: Sequence[Mapping[str, Any]], new: Sequence[Mapping[str,
         start, end = _bounds(source)
         start += shift
         end += shift
-        choices: list[str] = []
-        for tid, left, right in targets:
+        choices: list[tuple[int, str, float, float, str]] = []
+        examined = 0
+        for target in _overlaps(index, start, end):
+            examined += 1
+            if examined > _MAX_OVERLAPS_PER_SOURCE:
+                break
+            _, _, left, right, _ = target
             overlap = max(0.0, min(end, right) - max(start, left))
-            if overlap <= 0:
-                continue
             fraction = overlap / min(end - start, right - left)
             if fraction >= 0.5:
-                choices.append(tid)
+                choices.append(target)
+        if examined > _MAX_OVERLAPS_PER_SOURCE:
+            ambiguous.append(sid)
+            continue
         if not choices:
             unresolved.append(sid)
             continue
+        choices.sort(key=lambda item: item[0])
         # Sequential splits can inherit one source annotation. Concurrent
         # target intervals may be different voices; text similarity does not
         # prove which one owns the source annotation.
         if len(choices) > 1:
-            selected = set(choices)
-            intervals = sorted((left, right) for tid, left, right in targets if tid in selected)
+            intervals = sorted((left, right) for _, _, left, right, _ in choices)
             if any(next_left < left_right for (_, left_right), (next_left, _) in zip(intervals, intervals[1:])):
                 ambiguous.append(sid)
                 continue
-        mapped[sid] = tuple(choices)
+        if not _targets_explained(_tokens(source), choices):
+            unresolved.append(sid)
+            continue
+        mapped[sid] = tuple(item[1] for item in choices)
     return RemapPlan(shift, mapped, tuple(unresolved), tuple(ambiguous))
 
 
