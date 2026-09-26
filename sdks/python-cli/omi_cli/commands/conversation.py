@@ -161,7 +161,9 @@ def create_conversation(
 
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/conversations", json_body=body)
-    ctx.renderer.success(f"Conversation queued: [bold]{result.get('id')}[/bold] (status={result.get('status')})")
+    queued_id = escape(str(result.get("id") or ""))
+    queued_status = escape(str(result.get("status") or ""))
+    ctx.renderer.success(f"Conversation queued: [bold]{queued_id}[/bold] (status={queued_status})")
     ctx.renderer.emit(result)
 
 
@@ -209,7 +211,8 @@ def from_segments(
 
     with ctx.make_client() as client:
         result = client.post("/v1/dev/user/conversations/from-segments", json_body=body)
-    ctx.renderer.success(f"Conversation queued: [bold]{result.get('id')}[/bold]")
+    queued_id = escape(str(result.get("id") or ""))
+    ctx.renderer.success(f"Conversation queued: [bold]{queued_id}[/bold]")
     ctx.renderer.emit(result)
 
 
