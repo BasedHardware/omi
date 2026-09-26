@@ -3,6 +3,7 @@ Goal tracking API endpoints.
 Handles user goals with AI-powered suggestions and advice.
 """
 
+import logging
 import uuid
 from typing import Annotated, Optional, List
 
@@ -38,6 +39,7 @@ from routers.canonical_task_access import require_canonical_task_user
 from utils.task_intelligence.proactive_engine import run_goal_changed_wake
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 IdempotencyHeader = Annotated[str, Header(alias='Idempotency-Key', min_length=1, max_length=256)]
 AccountGenerationHeader = Annotated[int, Header(alias='X-Account-Generation', ge=0)]
 
@@ -76,6 +78,31 @@ def get_canonical_goals(
     return [normalize_goal_response(goal) for goal in goals]
 
 
+_KNOWN_GOAL_CONFLICTS = {
+    "focus full",
+    "account generation mismatch",
+    "ended goals cannot be focused",
+    "idempotency key was reused with different content",
+}
+
+
+def _sanitize_goal_conflict_error(exc: Exception) -> str:
+    logger.warning(f"Goal mutation conflict: {type(exc).__name__}: {exc}")
+    detail = str(exc)
+    if detail in _KNOWN_GOAL_CONFLICTS:
+        return detail
+    return "Goal conflict encountered. Please verify goal state and retry."
+
+
+def _raise_goal_store_error(exc: Exception) -> None:
+    if isinstance(exc, goals_db.GoalNotFoundError):
+        raise HTTPException(status_code=404, detail="Goal not found") from exc
+    if isinstance(exc, goals_db.GoalConflictError):
+        raise HTTPException(status_code=409, detail=_sanitize_goal_conflict_error(exc)) from exc
+    logger.error(f"Unexpected goal store error: {type(exc).__name__}: {exc}")
+    raise HTTPException(status_code=500, detail="Failed to process goal operation") from exc
+
+
 @router.post('/v1/goals', tags=['goals'], response_model=GoalResponse)
 def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid)) -> dict:
     """Create a durable goal without changing any other goal's focus or lifecycle."""
@@ -85,7 +112,7 @@ def create_goal(goal: GoalCreate, uid: str = Depends(auth.get_current_user_uid))
     try:
         created_goal = goals_db.create_goal(uid, goal_data)
     except goals_db.GoalConflictError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_sanitize_goal_conflict_error(exc)) from exc
 
     _wake_goal_change(uid, created_goal['id'], created_goal.get('updated_at'))
     return normalize_goal_response(created_goal)
@@ -112,14 +139,6 @@ def create_canonical_goal(
         raise AssertionError('unreachable')
     _wake_goal_change(uid, created_goal['id'], created_goal.get('updated_at'))
     return normalize_goal_response(created_goal)
-
-
-def _raise_goal_store_error(exc: Exception) -> None:
-    if isinstance(exc, goals_db.GoalNotFoundError):
-        raise HTTPException(status_code=404, detail='Goal not found') from exc
-    if isinstance(exc, goals_db.GoalConflictError):
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    raise exc
 
 
 @router.post('/v1/goals/{goal_id}/focus', tags=['goals'], response_model=GoalResponse)
