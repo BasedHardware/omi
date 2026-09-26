@@ -956,7 +956,7 @@ At conversation completion (`process_conversation`, and `_finalize_sync_audio_fi
 
 Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher batch flush after completion, offline sync, conversation merge), the stamped fingerprint no longer matches and both the call sites and the `/v1/sync/audio/{id}/urls` poll re-enqueue a rebuild under a new task name (defeating the named-task tombstone). `/urls` returns the artifact as a top-level `conversation_audio` object alongside the per-part `audio_files` list, which remains for older app versions.
 
-### Audio timeline v2 (AUDIO_TIMELINE_V2, on in dev and prod)
+### Audio timeline v2 (AUDIO_TIMELINE_V2, dev-only until promoted)
 
 `AUDIO_TIMELINE_V2` admits **new eligible recordings only**: single-channel,
 server-STT live capture on a fresh conversation. Existing sockets, resumed v1
