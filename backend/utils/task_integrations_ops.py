@@ -150,8 +150,8 @@ async def refresh_oauth_token(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f'{app_key}: Error refreshing token: {e}')
-        raise HTTPException(status_code=500, detail=f"Error refreshing token: {str(e)}")
+        logger.error(f'{app_key}: Error refreshing token: {type(e).__name__}')
+        raise HTTPException(status_code=500, detail="Error refreshing token")
 
 
 async def ensure_valid_oauth_token(
@@ -397,5 +397,5 @@ async def create_task_internal(
             return {"success": False, "error": f"Unsupported integration: {app_key}", "error_code": "unsupported"}
 
     except Exception as e:
-        logger.error(f"Error creating task in {app_key}: {e}")
-        return {"success": False, "error": str(e)}
+        logger.error(f"Error creating task in {app_key}: {type(e).__name__}")
+        return {"success": False, "error": "Failed to create task", "error_code": "internal_error"}

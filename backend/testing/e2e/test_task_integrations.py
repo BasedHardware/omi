@@ -196,5 +196,5 @@ def test_todoist_timeout_returns_failure_without_real_network(client, auth_heade
     assert response.json() == {
         "success": False,
         "external_task_id": None,
-        "error": "deterministic Todoist timeout",
+        "error": "Failed to create task",
     }
