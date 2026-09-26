@@ -1180,6 +1180,11 @@ checks:
     triggers: [".github/workflows/gcp_backend_listen_helm.yml", ".github/workflows/gcp_backend_pusher.yml", ".github/workflows/gcp_llm_gateway.yml", ".github/scripts/check-direct-backend-production-admission.py", ".github/scripts/test_check_direct_backend_production_admission.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#10163 mutation-tests branch bypass and GITHUB_SHA image mislabeling"
+  - id: world-time-app-tests
+    command: ["python3", "plugins/omi-world-time-app/test_main.py"]
+    triggers: ["plugins/omi-world-time-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "World time & solar ephemeris plugin must calculate accurate time differences, DST transitions, and sunrise/sunset times with hermetic unit tests"
   - id: production-data-plane-routing
     command: ["python3", ".github/scripts/test_check_mobile_production_routing.py"]
     triggers: ["codemagic.yaml", "app/lib/env/dev_env.dart", "app/lib/env/prod_env.dart", "app/lib/main.dart", "app/lib/utils/environment_detector.dart", "desktop/macos/Desktop/Sources/AppBuild.swift", "desktop/macos/Desktop/Sources/DesktopBackendEnvironment.swift", "desktop/macos/Desktop/Sources/GoogleService-Info*.plist", "backend/charts/**", ".github/workflows/**", "backend/docs/runbooks/desktop-backend-cloud-run-ownership.md", ".github/scripts/check-mobile-production-routing.py", ".github/scripts/test_check_mobile_production_routing.py", ".github/checks-manifest.yaml"]
