@@ -154,6 +154,11 @@ checks:
     triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Graph null collections and HTTP-date Retry-After crashed mail/teams/sharepoint/calendar tools (#14247)"
+  - id: app-tools-sanitization-tests
+    command: ["python3", "backend/tests/unit/test_app_tools_sanitization.py"]
+    triggers: ["backend/utils/retrieval/tools/app_tools.py", "backend/tests/unit/test_app_tools_sanitization.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Installed app chat tools must safely handle unexpected execution exceptions without leaking internal exception traces"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
