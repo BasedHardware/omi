@@ -51,21 +51,31 @@ class OnboardingStepScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // v2: the title left-aligned at the top, the step's content, the action pinned at the bottom.
+    // v2: the title left-aligned at the top, the step's content, the action pinned at the bottom —
+    // at the first-run step layout's insets (text at 20pt, the button 16pt from the sides and 8pt
+    // above the bottom safe area), so it sits where Continue does on every step.
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: OmiSpacing.xl),
-          Semantics(header: true, child: Text(title, style: OmiType.title1)),
-          if (subtitle.isNotEmpty) ...[
-            const SizedBox(height: OmiSpacing.xs),
-            Text(subtitle, style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.4)),
-          ],
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Semantics(header: true, child: OmiBalancedText(title, style: OmiType.title1)),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: OmiSpacing.xs),
+                  OmiBalancedText(subtitle, style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.4)),
+                ],
+              ],
+            ),
+          ),
           const SizedBox(height: OmiSpacing.xxl),
           Expanded(child: content),
-          if (bottomAction != null) ...[bottomAction!, const SizedBox(height: OmiSpacing.xl)],
+          if (bottomAction != null) ...[bottomAction!, const SizedBox(height: OmiSpacing.xs)],
         ],
       ),
     );
