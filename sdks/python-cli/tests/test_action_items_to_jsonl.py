@@ -1,5 +1,6 @@
 """Hermetic unit tests for Omi action items to JSONL recipe."""
 
+import importlib.util
 import io
 import json
 from pathlib import Path
@@ -7,12 +8,16 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from examples.action_items_to_jsonl import (
-    convert_action_items,
-    format_chat_entry,
-    format_record_entry,
-    validate_and_normalize_record,
-)
+# Load action_items_to_jsonl example script dynamically
+script_path = Path(__file__).resolve().parent.parent / "examples" / "action_items_to_jsonl.py"
+spec = importlib.util.spec_from_file_location("action_items_to_jsonl", script_path)
+a2j = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(a2j)
+
+convert_action_items = a2j.convert_action_items
+format_chat_entry = a2j.format_chat_entry
+format_record_entry = a2j.format_record_entry
+validate_and_normalize_record = a2j.validate_and_normalize_record
 
 
 class TestActionItemsToJsonl(unittest.TestCase):
