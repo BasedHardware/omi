@@ -131,6 +131,32 @@ CAPTURE_RANGE_RETENTION_SECONDS = 120.0
 CAPTURE_RANGE_MAX_RUNS = 512
 
 
+class _RecordingSTTSocket:
+    """Account for direct sends while preserving the provider socket's state and API."""
+
+    def __init__(self, raw: Any, epoch: ProviderEpochTranslator):
+        self._conn = raw
+        self._epoch = epoch
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._conn, name)
+
+    def send(self, data: bytes, start_sample: Optional[int] = None) -> bool:
+        try:
+            accepted = (
+                self._conn.send(data, start_sample=start_sample) if start_sample is not None else self._conn.send(data)
+            )
+        except TypeError:
+            # Match send_live_stt_audio's legacy socket fallback. Only the raw
+            # provider decides whether the bytes were accepted.
+            if start_sample is None:
+                raise
+            accepted = self._conn.send(data)
+        if accepted is True and start_sample is not None and len(data) >= 2:
+            self._epoch.note_accepted(start_sample, len(data) // 2)
+        return accepted
+
+
 def opus_decode_capacity(sample_rate: int) -> int:
     """Samples to hand `Decoder.decode` as its output-buffer size.
 
@@ -960,8 +986,10 @@ class ListenReceiver:
 
     def _wrap_legacy_stt_socket(self, raw: Any, epoch: Optional[ProviderEpochTranslator]) -> Any:
         """Keep send accounting when VAD is disabled or fails to initialize."""
-        if getattr(raw, 'manages_vad', False) or (self.vad_gate is None and epoch is None):
+        if getattr(raw, 'manages_vad', False):
             return raw
+        if self.vad_gate is None:
+            return _RecordingSTTSocket(raw, epoch) if epoch is not None else raw
         return GatedSTTSocket(
             raw,
             gate=self.vad_gate,
@@ -975,6 +1003,8 @@ class ListenReceiver:
         if getattr(socket, 'manages_vad', False):
             path = 'managed_chain'
             vad_state = 'active' if getattr(socket, 'gate', None) is not None else 'off'
+        elif isinstance(socket, _RecordingSTTSocket):
+            path, vad_state = 'direct_recorded', 'off'
         elif isinstance(socket, GatedSTTSocket):
             if socket._gate is None:  # type: ignore[reportPrivateUsage]  # selected socket's actual path
                 path, vad_state = 'direct_recorded', 'off'

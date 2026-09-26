@@ -13,7 +13,7 @@ import pytest
 import routers.listen.receiver as receiver_module
 import utils.stt.vad_gate as vad_gate_module
 from routers.listen.contracts import ListenSessionState
-from routers.listen.receiver import ListenReceiver
+from routers.listen.receiver import ListenReceiver, _RecordingSTTSocket
 from utils.stt.socket import STTSocket
 from utils.stt.streaming import STTService, SafeModulateSocket
 from utils.stt.vad_gate import GatedSTTSocket
@@ -155,8 +155,13 @@ async def test_legacy_receiver_accounts_every_accepted_modulate_send(monkeypatch
     assert len(collected) == 10
     assert outside._value.get() - before_outside == 0
     assert mapped._value.get() - before_mapped == 10
-    assert isinstance(receiver.stt_socket, GatedSTTSocket)
-    assert (receiver.stt_socket._gate is None) == (override is not None)
+    if override is None:
+        assert isinstance(receiver.stt_socket, GatedSTTSocket)
+        assert receiver.stt_socket._gate is not None
+    else:
+        assert isinstance(receiver.stt_socket, _RecordingSTTSocket)
+        assert receiver.stt_socket.is_connection_dead is provider.is_connection_dead
+        assert receiver.stt_socket.death_reason == provider.death_reason
     assert callbacks['epoch'].send_map.last_capture_sample == 2 * sample_rate
     if v2:
         assert all(
