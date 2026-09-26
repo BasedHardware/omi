@@ -1132,12 +1132,9 @@ HOURLY_USAGE_UTC_DAY_QUERY = FirestoreQuerySpec(
         FirestoreQueryFilter('month', '==', 'month'),
         FirestoreQueryFilter('day', '==', 'day'),
     ),
-    index_fields=(
-        _asc('year'),
-        _asc('month'),
-        _asc('day'),
-        _asc('__name__'),
-    ),
+    # Equality-only filters are served by Firestore's automatic index merging;
+    # the existing today path already runs this query without a composite.
+    index_fields=(),
 )
 
 FINALIZATION_OLDEST_NONTERMINAL_QUERY = FirestoreQuerySpec(

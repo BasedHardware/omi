@@ -416,6 +416,104 @@ def test_local_period_buckets_and_totals_match(mock_db, period, now, docs, expec
     assert [(row['date'], row['words_transcribed']) for row in result['history']] == [expected[1]]
 
 
+@pytest.mark.parametrize(
+    'zone,period,now,hours,expected',
+    [
+        (
+            'Asia/Tokyo',
+            'monthly',
+            datetime(2026, 1, 20, tzinfo=timezone.utc),
+            [
+                ('2025-12-31T14:00:00', 99),
+                ('2025-12-31T15:00:00', 10),
+                ('2026-01-19T15:00:00', 20),
+                ('2026-01-31T15:00:00', 99),
+            ],
+            [('2026-01-01', 10), ('2026-01-20', 20)],
+        ),
+        (
+            'Asia/Kolkata',
+            'monthly',
+            datetime(2026, 1, 20, tzinfo=timezone.utc),
+            [
+                ('2025-12-31T18:00:00', 99),
+                ('2025-12-31T19:00:00', 10),
+                ('2026-01-19T19:00:00', 20),
+                ('2026-01-31T19:00:00', 99),
+            ],
+            [('2026-01-01', 10), ('2026-01-20', 20)],
+        ),
+        (
+            'Asia/Tokyo',
+            'yearly',
+            datetime(2026, 6, 1, tzinfo=timezone.utc),
+            [
+                ('2025-12-31T14:00:00', 99),
+                ('2025-12-31T15:00:00', 10),
+                ('2026-12-31T14:00:00', 20),
+                ('2026-12-31T15:00:00', 99),
+            ],
+            [('2026-01-01', 10), ('2026-12-01', 20)],
+        ),
+        (
+            'Asia/Kolkata',
+            'yearly',
+            datetime(2026, 6, 1, tzinfo=timezone.utc),
+            [
+                ('2025-12-31T18:00:00', 99),
+                ('2025-12-31T19:00:00', 10),
+                ('2026-12-31T18:00:00', 20),
+                ('2026-12-31T19:00:00', 99),
+            ],
+            [('2026-01-01', 10), ('2026-12-01', 20)],
+        ),
+        (
+            'America/Los_Angeles',
+            'monthly',
+            datetime(2026, 3, 20, tzinfo=timezone.utc),
+            [
+                ('2026-03-01T07:00:00', 99),
+                ('2026-03-01T08:00:00', 10),
+                ('2026-03-08T09:00:00', 20),
+                ('2026-03-08T10:00:00', 30),
+                ('2026-04-01T06:00:00', 40),
+                ('2026-04-01T07:00:00', 99),
+            ],
+            [('2026-03-01', 10), ('2026-03-08', 50), ('2026-03-31', 40)],
+        ),
+        (
+            'America/Los_Angeles',
+            'monthly',
+            datetime(2026, 11, 20, tzinfo=timezone.utc),
+            [
+                ('2026-11-01T06:00:00', 99),
+                ('2026-11-01T07:00:00', 10),
+                ('2026-11-01T08:00:00', 20),
+                ('2026-11-01T09:00:00', 30),
+                ('2026-12-01T07:00:00', 40),
+                ('2026-12-01T08:00:00', 99),
+            ],
+            [('2026-11-01', 60), ('2026-11-30', 40)],
+        ),
+    ],
+)
+def test_local_period_edges_and_dst_are_counted_once(mock_db, zone, period, now, hours, expected):
+    docs = []
+    for timestamp, words in hours:
+        hour = datetime.fromisoformat(timestamp)
+        docs.append(
+            {'year': hour.year, 'month': hour.month, 'day': hour.day, 'hour': hour.hour, 'words_transcribed': words}
+        )
+    _setup_hourly_docs(mock_db, docs)
+
+    result = user_usage.get_current_user_usage('uid', period, tz_name=zone, now=now)
+
+    actual = [(row['date'], row['words_transcribed']) for row in result['history']]
+    assert actual == expected
+    assert result[period]['words_transcribed'] == sum(value for _, value in expected)
+    assert result[period]['words_transcribed'] == sum(value for _, value in actual)
+
+
 @pytest.mark.parametrize('period', ['monthly', 'yearly'])
 def test_invalid_timezone_keeps_utc_period_buckets(mock_db, period):
     _setup_hourly_docs(mock_db, _LA_HOURLY_DOCS)
@@ -452,6 +550,26 @@ def test_usage_endpoint_serves_the_users_local_day_not_the_utc_day(mock_db, monk
     # 600 (7am local, filed under the previous UTC date) + 300 (6pm local, filed under today's
     # UTC date). Serving the UTC day alone finds only the 300.
     assert result['today']['transcription_seconds'] == 900, result['today']
+
+
+@pytest.mark.parametrize(
+    'device,stored,expected',
+    [
+        ('Asia/Tokyo', 'America/Los_Angeles', 'Asia/Tokyo'),
+        ('Asia/Kolkata', None, 'Asia/Kolkata'),
+        ('Not/AZone', 'America/Los_Angeles', 'America/Los_Angeles'),
+        (None, 'Not/AZone', 'UTC'),
+        ('Not/AZone', None, 'UTC'),
+    ],
+)
+def test_usage_endpoint_prefers_valid_device_timezone(monkeypatch, device, stored, expected):
+    monkeypatch.setattr(users_router.notification_db, 'get_user_time_zone', lambda uid: stored)
+    get_usage = MagicMock(return_value={'today': {}, 'history': []})
+    monkeypatch.setattr(users_router.user_usage_db, 'get_current_user_usage', get_usage)
+
+    users_router.get_user_usage_stats_endpoint(uid='uid', time_zone=device)
+
+    get_usage.assert_called_once_with('uid', 'today', tz_name=expected)
 
 
 def test_all_time_usage_builds_totals_and_history_from_one_stream(mock_db, monkeypatch):

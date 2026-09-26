@@ -309,7 +309,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   }
 
   Widget _periodSegment(String label) => SizedBox(
-        height: 38,
+        height: 44,
         child: Center(child: Text(label, maxLines: 1, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600))),
       );
 
@@ -329,7 +329,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           ),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(54),
+          preferredSize: const Size.fromHeight(60),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 2, OmiSpacing.md, 8),
             child: SizedBox(
@@ -665,11 +665,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                       debugTooltipIndex: widget.debugTooltipIndex,
                       onMetricChanged: (value) => setState(() => _selectedMetric = value)),
                 ],
-                ..._buildFreeMeters(provider.subscription),
-                if (provider.chatQuotaUnit != null && period == 'monthly') ...[
-                  const SizedBox(height: OmiSpacing.sm),
-                  _buildChatQuotaLine(context, provider),
-                ],
+              ],
+              if (stats != null) ..._buildFreeMeters(provider.subscription),
+              if (stats != null && provider.chatQuotaUnit != null && period == 'monthly') ...[
+                const SizedBox(height: OmiSpacing.sm),
+                _buildChatQuotaLine(context, provider),
               ],
             ],
           ),

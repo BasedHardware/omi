@@ -52,9 +52,12 @@ UsageBuckets usageBuckets(List<UsageHistoryPoint> history, String period, DateTi
     return UsageBuckets([for (final date in dates) byYear[date.year]], dates, List.filled(dates.length, false));
   }
 
+  // Month/year history uses the server's calendar. Anchor slots to that
+  // calendar even when the stored timezone fallback differs from this device.
+  final anchor = history.isEmpty || period == 'today' ? now : decode(history.first);
   final count = switch (period) {
     'today' => 24,
-    'monthly' => DateTime(now.year, now.month + 1, 0).day,
+    'monthly' => DateTime(anchor.year, anchor.month + 1, 0).day,
     _ => 12,
   };
   int index(DateTime date) => switch (period) {
@@ -64,41 +67,46 @@ UsageBuckets usageBuckets(List<UsageHistoryPoint> history, String period, DateTi
       };
   final byIndex = {
     for (final p in history)
-      if (period != 'today' || (decode(p).year == now.year && decode(p).month == now.month && decode(p).day == now.day))
+      if (period == 'today'
+          ? (decode(p).year == now.year && decode(p).month == now.month && decode(p).day == now.day)
+          : (decode(p).year == anchor.year && (period != 'monthly' || decode(p).month == anchor.month)))
         index(decode(p)): p,
   };
   final dates = [
     for (var i = 0; i < count; i++)
       switch (period) {
         'today' => DateTime(now.year, now.month, now.day, i),
-        'monthly' => DateTime(now.year, now.month, i + 1),
-        _ => DateTime(now.year, i + 1),
+        'monthly' => DateTime(anchor.year, anchor.month, i + 1),
+        _ => DateTime(anchor.year, i + 1),
       },
   ];
   return UsageBuckets(
     [for (var i = 0; i < count; i++) byIndex[i]],
     dates,
-    [
-      for (final date in dates)
-        period == 'today'
-            ? date.hour > now.hour
-            : period == 'monthly'
-                ? date.day > now.day
-                : date.month > now.month
-    ],
+    [for (final date in dates) date.isAfter(now)],
   );
 }
 
-/// Returns a 1/2/5 × 10^n step with no more than three intervals above zero.
+/// Pick the lowest axis cap from 2–3 intervals of 1/2/5 × 10^n.
 (double, double) niceUsageScale(double peak) {
-  if (peak <= 0) return (1, 3);
-  final target = peak / 3;
-  final magnitude = math.pow(10, (math.log(target) / math.ln10).floor()).toDouble();
-  for (final multiple in [1.0, 2.0, 5.0, 10.0]) {
-    final step = multiple * magnitude;
-    if (step >= target) return (step, step * 3);
+  if (peak <= 0) return (1, 2);
+  final exponent = (math.log(peak) / math.ln10).floor();
+  var bestStep = double.infinity;
+  var bestMax = double.infinity;
+  for (var power = exponent - 3; power <= exponent + 1; power++) {
+    final magnitude = math.pow(10, power).toDouble();
+    for (final multiple in [1.0, 2.0, 5.0]) {
+      final step = multiple * magnitude;
+      for (final intervals in [2, 3]) {
+        final max = step * intervals;
+        if (max >= peak && (max < bestMax || (max == bestMax && step > bestStep))) {
+          bestStep = step;
+          bestMax = max;
+        }
+      }
+    }
   }
-  return (magnitude * 10, magnitude * 30);
+  return (bestStep, bestMax);
 }
 
 String formatUsageDuration(int seconds) {
@@ -198,12 +206,27 @@ class UsageChart extends StatelessWidget {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                           decoration: BoxDecoration(
-                              color: metric == choice ? OmiColors.surface3 : OmiColors.surface2,
+                              color:
+                                  metric == choice ? colors[choice.index].withValues(alpha: .16) : OmiColors.surface2,
+                              border: Border.all(
+                                  color: metric == choice
+                                      ? colors[choice.index].withValues(alpha: .55)
+                                      : Colors.transparent),
                               borderRadius: OmiRadius.pillAll),
-                          child: Text(labels[choice.index],
-                              style: OmiType.caption.copyWith(
-                                  color: metric == choice ? OmiColors.textPrimary : OmiColors.textSecondary,
-                                  fontWeight: FontWeight.w600)),
+                          child: Row(mainAxisSize: MainAxisSize.min, children: [
+                            if (metric == choice) ...[
+                              Container(
+                                  key: const Key('selected_metric_dot'),
+                                  width: 7,
+                                  height: 7,
+                                  decoration: BoxDecoration(color: colors[choice.index], shape: BoxShape.circle)),
+                              const SizedBox(width: 5),
+                            ],
+                            Text(labels[choice.index],
+                                style: OmiType.caption.copyWith(
+                                    color: metric == choice ? colors[choice.index] : OmiColors.textSecondary,
+                                    fontWeight: FontWeight.w600)),
+                          ]),
                         )),
                   ),
                 ),
@@ -238,6 +261,9 @@ class UsageChart extends StatelessWidget {
                       drawVerticalLine: false,
                       getDrawingHorizontalLine: (_) =>
                           FlLine(color: OmiColors.border.withValues(alpha: .5), strokeWidth: .5)),
+                  extraLinesData: ExtraLinesData(horizontalLines: [
+                    HorizontalLine(y: maxY, color: OmiColors.border.withValues(alpha: .5), strokeWidth: .5),
+                  ]),
                   borderData: FlBorderData(show: false),
                   barTouchData: BarTouchData(
                     touchTooltipData: BarTouchTooltipData(

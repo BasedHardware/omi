@@ -62890,6 +62890,22 @@
             }
           },
           {
+            "in": "query",
+            "name": "time_zone",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Time Zone"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,

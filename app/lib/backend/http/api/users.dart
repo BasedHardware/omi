@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
@@ -549,8 +550,18 @@ Future<bool> setPreferredSummarizationAppServer(String appId) async {
 }
 
 Future<UserUsageResponse?> getUserUsage({required String period}) async {
+  String? deviceTimeZone;
+  try {
+    deviceTimeZone = (await FlutterTimezone.getLocalTimezone()).identifier;
+  } catch (_) {
+    // The server falls back to the stored timezone, then UTC.
+  }
+  final url = Uri.parse('${Env.apiBaseUrl}v1/users/me/usage').replace(queryParameters: {
+    'period': period,
+    if (deviceTimeZone != null) 'time_zone': deviceTimeZone,
+  });
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/me/usage?period=$period',
+    url: url.toString(),
     headers: {},
     method: 'GET',
     body: '',

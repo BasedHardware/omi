@@ -1,4 +1,5 @@
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -48,13 +49,26 @@ void main() {
     expect(formatUsageDuration(806400), '224 h');
     expect(formatUsageDuration(805740), '224 h');
     expect(formatUsageCount(44910, 'en'), '44.9K');
-    expect(niceUsageScale(9600), (5000.0, 15000.0));
-    expect(niceUsageScale(0), (1.0, 3.0));
+    expect(niceUsageScale(9600), (5000.0, 10000.0));
+    expect(niceUsageScale(0), (1.0, 2.0));
   });
 
   test('all-time buckets have no padding years', () {
     final buckets = usageBuckets([point('2025-01-01'), point('2026-01-01')], 'all_time', DateTime(2026));
     expect(buckets.dates.map((d) => d.year), [2025, 2026]);
+  });
+
+  test('month and year slots follow returned history across a device date boundary', () {
+    final month = usageBuckets([point('2026-12-31', words: 8)], 'monthly', DateTime(2027, 1, 1));
+    expect(month.dates.length, 31);
+    expect(month.dates.first, DateTime(2026, 12, 1));
+    expect(month.points.last!.wordsTranscribed, 8);
+    expect(month.future.last, isFalse);
+
+    final year = usageBuckets([point('2026-12-01', words: 9)], 'yearly', DateTime(2027, 1, 1));
+    expect(year.dates.first, DateTime(2026, 1, 1));
+    expect(year.points.last!.wordsTranscribed, 9);
+    expect(year.future.last, isFalse);
   });
 
   testWidgets('chart switches its only metric; future slots are faint nonzero outlines', (tester) async {
@@ -76,6 +90,10 @@ void main() {
     expect(chart.data.barGroups[7].barRods.single.toY, 9600);
     expect(chart.data.barGroups[26].barRods.single.toY, greaterThan(0));
     expect(chart.data.barGroups[26].barRods.single.color, Colors.transparent);
+    expect(chart.data.maxY, 10000);
+    expect(chart.data.extraLinesData.horizontalLines.single.y, chart.data.maxY);
+    expect(find.byKey(const Key('selected_metric_dot')), findsOneWidget);
+    expect(tester.getSize(find.byKey(const Key('metric_words'))).height, greaterThanOrEqualTo(44));
     expect(chart.data.barTouchData.touchTooltipData.fitInsideVertically, isTrue);
     expect(chart.data.barTouchData.touchTooltipData.fitInsideHorizontally, isTrue);
     await tester.tap(find.byKey(const Key('metric_minutes')));
@@ -124,5 +142,40 @@ void main() {
     expect(find.textContaining('of 600 min used this month', skipOffstage: false), findsOneWidget);
     expect(find.textContaining('of 60,000 words used this month', skipOffstage: false), findsOneWidget);
     expect(find.textContaining('of 1,000 insights gained this month', skipOffstage: false), findsOneWidget);
+  });
+
+  testWidgets('zero activity still shows free meters and monthly chat quota', (tester) async {
+    final provider = UsageProvider();
+    provider.debugSetSubscription(UserSubscriptionResponse(
+      subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.active),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 36000,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 60000,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 1000,
+      chatQuotaUsed: 2,
+      chatQuotaUnit: 'questions',
+    ));
+    final zero = UsageStats(
+      transcriptionSeconds: 0,
+      speechSeconds: 0,
+      wordsTranscribed: 0,
+      insightsGained: 0,
+      memoriesCreated: 0,
+    );
+    provider.debugSetUsage('today', zero, []);
+    provider.debugSetUsage('monthly', zero, []);
+    await tester.pumpWidget(app(const UsagePage(debugSkipFetch: true), provider: provider));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const Key('usage_stat_grid')), findsNothing);
+    expect(find.textContaining('of 600 min used this month', skipOffstage: false), findsOneWidget);
+    expect(find.textContaining('of 60,000 words used this month', skipOffstage: false), findsOneWidget);
+    expect(find.textContaining('of 1,000 insights gained this month', skipOffstage: false), findsOneWidget);
+    expect(tester.getSize(find.byType(CupertinoSlidingSegmentedControl<int>)).height, greaterThanOrEqualTo(44));
+    await tester.tap(find.text('Month').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Chat this month', skipOffstage: false), findsOneWidget);
   });
 }
