@@ -1,7 +1,7 @@
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {tokens} from './tokens';
+import {type KitTokens, useKitStyleSheets} from '../desktop/DesktopTheme';
 
 export function PageShell({
   children,
@@ -14,6 +14,7 @@ export function PageShell({
   macDesktop: boolean;
   workspaceMaterial?: boolean;
 }) {
+  const styles = useKitStyleSheets(createStyles);
   const content = macDesktop ? (
     <View style={[styles.safe, styles.macSafe]}>{children}</View>
   ) : (
@@ -37,15 +38,16 @@ export function PageShell({
   );
 }
 
-const styles = StyleSheet.create({
-  safe: {backgroundColor: tokens.color.canvas, flex: 1},
-  macSafe: {backgroundColor: tokens.color.transparent},
-  macRoot: {flex: 1, position: 'relative'},
-  glass: {
-    bottom: tokens.space.none,
-    left: tokens.space.none,
-    position: 'absolute',
-    right: tokens.space.none,
-    top: tokens.space.none,
-  },
-});
+const createStyles = (tokens: KitTokens) =>
+  StyleSheet.create({
+    safe: {backgroundColor: tokens.color.canvas, flex: 1},
+    macSafe: {backgroundColor: tokens.color.transparent},
+    macRoot: {flex: 1, position: 'relative'},
+    glass: {
+      bottom: tokens.space.none,
+      left: tokens.space.none,
+      position: 'absolute',
+      right: tokens.space.none,
+      top: tokens.space.none,
+    },
+  });

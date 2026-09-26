@@ -230,6 +230,11 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
   }];
   [self installDesktopSearchCommand];
   [self installOmiWindowDragMonitor];
+  self.omiAppearanceObserver =
+      [NSNotificationCenter.defaultCenter addObserverForName:OmiDesktopAppearanceDidChangeNotification
+          object:nil queue:NSOperationQueue.mainQueue usingBlock:^(__unused NSNotification *note) {
+    [weakSelf dressOmiWindow];
+  }];
 }
 
 - (void)applicationWillTerminate:(NSNotification *)notification
@@ -245,9 +250,17 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
     [NSNotificationCenter.defaultCenter removeObserver:self.omiWindowUpdateObserver];
     self.omiWindowUpdateObserver = nil;
   }
+  if (self.omiAppearanceObserver != nil) {
+    [NSNotificationCenter.defaultCenter removeObserver:self.omiAppearanceObserver];
+    self.omiAppearanceObserver = nil;
+  }
   if (self.omiWindowDragMonitor != nil) {
     [NSEvent removeMonitor:self.omiWindowDragMonitor];
     self.omiWindowDragMonitor = nil;
+  }
+  if (self.omiTitlebarLayoutObserver != nil) {
+    [NSNotificationCenter.defaultCenter removeObserver:self.omiTitlebarLayoutObserver];
+    self.omiTitlebarLayoutObserver = nil;
   }
   [super applicationWillTerminate:notification];
 }
@@ -410,11 +423,11 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
     return;
   }
 
-  window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+  window.appearance = [NSAppearance appearanceNamed:OmiPreferredDesktopAppearance()];
   window.opaque = NO;
   window.backgroundColor = NSColor.clearColor;
   RCTUIView *rootView = (RCTUIView *)window.contentViewController.view;
-  rootView.appearance = [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+  rootView.appearance = [NSAppearance appearanceNamed:OmiPreferredDesktopAppearance()];
   rootView.backgroundColor = NSColor.clearColor;
   window.hasShadow = YES;
   window.styleMask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable |
@@ -457,6 +470,36 @@ static BOOL OmiViewBlocksWindowDrag(NSView *view)
   [window standardWindowButton:NSWindowMiniaturizeButton].hidden = NO;
   [window standardWindowButton:NSWindowZoomButton].hidden = NO;
   [self positionOmiTrafficLights];
+  [self observeOmiTitlebarLayout];
+}
+
+// AppKit re-centers the traffic lights inside the accessory-grown titlebar
+// whenever it relays out the titlebar container (accessory install, window
+// resize, appearance change). Re-apply our row-aligned frames whenever the
+// titlebar container moves or resizes, and once on the next layout pass.
+- (void)observeOmiTitlebarLayout
+{
+  if (self.omiTitlebarLayoutObserver != nil) {
+    return;
+  }
+  NSButton *closeButton = [self.window standardWindowButton:NSWindowCloseButton];
+  NSView *titlebar = closeButton.superview;
+  if (titlebar == nil) {
+    return;
+  }
+  titlebar.postsFrameChangedNotifications = YES;
+  titlebar.superview.postsFrameChangedNotifications = YES;
+  __weak AppDelegate *weakSelf = self;
+  self.omiTitlebarLayoutObserver = [[NSNotificationCenter defaultCenter]
+      addObserverForName:NSViewFrameDidChangeNotification
+                  object:titlebar
+                   queue:nil
+              usingBlock:^(NSNotification *) {
+                [weakSelf positionOmiTrafficLights];
+              }];
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [weakSelf positionOmiTrafficLights];
+  });
 }
 
 - (void)positionOmiTrafficLights

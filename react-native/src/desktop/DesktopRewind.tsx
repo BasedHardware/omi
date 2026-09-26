@@ -11,7 +11,11 @@ import {
 import {FocusPressable} from '../ui/Pressable';
 import Monitor from 'lucide-react-native/icons/monitor';
 import {DesktopEmptyState, PageHeading} from './DesktopRows';
-import {desktopTokens as token} from './tokens';
+import {
+  type DesktopTokens,
+  useDesktopTheme,
+  useDesktopStyleSheets,
+} from './DesktopTheme';
 import {ScrollFade, useScrollFade} from './ScrollFade';
 import {createRewindTimeline} from './rewindTimeline';
 
@@ -29,9 +33,12 @@ type Rewind = {
     cursor: string | null;
     limit: number;
   }): Promise<Page>;
-  readFrame(
-    id: string,
-  ): Promise<{id: string; mimeType: 'image/jpeg'; base64: string}>;
+  readFrame(id: string): Promise<{
+    id: string;
+    mimeType: 'image/jpeg';
+    base64: string;
+    fileUrl?: string | null;
+  }>;
 };
 
 function errorCopy(error: unknown) {
@@ -52,6 +59,8 @@ export function DesktopRewind({
   captureRevision?: number;
   query?: string;
 }) {
+  const styles = useDesktopStyleSheets(createStyles);
+  const {tokens: token} = useDesktopTheme();
   const fade = useScrollFade();
   const seenRevision = useRef(captureRevision);
   const lastQuery = useRef(query);
@@ -174,8 +183,10 @@ export function DesktopRewind({
   useEffect(() => {
     let active = true;
     const currentImage = ++imageEpoch.current;
-    setImage(null);
     setImageError(null);
+    // Keep the previous frame on screen while the next one loads: swapping
+    // through null remounts the Image and cancels loads mid-flight, which
+    // trips a react-native-macOS request-token assert in dev.
     if (selected !== null && bridge !== undefined) {
       bridge.readFrame(selected.id).then(
         result => {
@@ -185,12 +196,12 @@ export function DesktopRewind({
           if (
             result.id !== selected.id ||
             result.mimeType !== 'image/jpeg' ||
-            !result.base64
+            (!result.base64 && !result.fileUrl)
           ) {
             setImageError('This captured frame could not be opened.');
             return;
           }
-          setImage(`data:image/jpeg;base64,${result.base64}`);
+          setImage(result.fileUrl ?? `data:image/jpeg;base64,${result.base64}`);
         },
         failure => {
           if (active && imageEpoch.current === currentImage) {
@@ -358,40 +369,41 @@ export function DesktopRewind({
   );
 }
 
-const styles = StyleSheet.create({
-  root: {flex: 1, paddingHorizontal: 24, paddingTop: 8, paddingBottom: 12},
-  toolbar: {flexDirection: 'row', gap: 8, alignItems: 'center'},
-  button: {
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: token.color.glassQuiet,
-  },
-  text: {color: token.color.ink, fontSize: 14, lineHeight: 21},
-  meta: {color: token.color.inkMuted, fontSize: 12, lineHeight: 19},
-  status: {flex: 1},
-  content: {flex: 1, flexDirection: 'row', gap: 16},
-  list: {width: 280, flexBasis: 280, flexGrow: 0, flexShrink: 1},
-  rows: {gap: 8, paddingBottom: 12},
-  row: {
-    padding: 16,
-    gap: 6,
-    borderRadius: 12,
-    backgroundColor: token.color.glassStrong,
-    borderWidth: 1,
-    borderColor: token.color.line,
-  },
-  selected: {backgroundColor: token.color.glassSelected},
-  preview: {
-    flex: 1,
-    minWidth: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 16,
-    backgroundColor: token.color.glassQuiet,
-    borderWidth: 1,
-    borderColor: token.color.line,
-    overflow: 'hidden',
-  },
-  previewPrompt: {alignItems: 'center', gap: 16, padding: 24},
-  image: {width: '100%', height: '100%'},
-});
+const createStyles = (token: DesktopTokens) =>
+  StyleSheet.create({
+    root: {flex: 1, paddingHorizontal: 24, paddingTop: 8, paddingBottom: 12},
+    toolbar: {flexDirection: 'row', gap: 8, alignItems: 'center'},
+    button: {
+      padding: 12,
+      borderRadius: 12,
+      backgroundColor: token.color.glassQuiet,
+    },
+    text: {color: token.color.ink, fontSize: 14, lineHeight: 21},
+    meta: {color: token.color.inkMuted, fontSize: 12, lineHeight: 19},
+    status: {flex: 1},
+    content: {flex: 1, flexDirection: 'row', gap: 16},
+    list: {width: 280, flexBasis: 280, flexGrow: 0, flexShrink: 1},
+    rows: {gap: 8, paddingBottom: 12},
+    row: {
+      padding: 16,
+      gap: 6,
+      borderRadius: 12,
+      backgroundColor: token.color.glassStrong,
+      borderWidth: 1,
+      borderColor: token.color.line,
+    },
+    selected: {backgroundColor: token.color.glassSelected},
+    preview: {
+      flex: 1,
+      minWidth: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 16,
+      backgroundColor: token.color.glassQuiet,
+      borderWidth: 1,
+      borderColor: token.color.line,
+      overflow: 'hidden',
+    },
+    previewPrompt: {alignItems: 'center', gap: 16, padding: 24},
+    image: {width: '100%', height: '100%'},
+  });

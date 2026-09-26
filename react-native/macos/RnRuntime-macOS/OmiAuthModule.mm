@@ -195,11 +195,26 @@ static BOOL OmiAuthPeerIsLoopback(int client) {
   return NO;
 }
 
-// Aside cannot close a tab it did not open. After a valid code, replace
-// the leftover callback tab with about:blank and try close; the app then
-// comes forward.
+// Aside cannot close a tab it did not open. After a valid code, show a
+// logged-in confirmation so the leftover callback tab never flashes
+// about:blank, then replace and try to close; the app comes forward.
 static NSString *OmiAuthBlankCallbackHTML(void) {
-  return @"<!doctype html><html><head><meta charset='utf-8'><script>location.replace('about:blank');try{window.close();}catch(e){}</script></head><body></body></html>";
+  return @"<!doctype html><html><head><meta charset='utf-8'>"
+      @"<meta name='viewport' content='width=device-width,initial-scale=1'>"
+      @"<style>html,body{margin:0;height:100%;background:#101210;color:#f2f4ef;"
+      @"font-family:-apple-system,'SF Pro Text',system-ui,sans-serif}"
+      @".wrap{height:100%;display:flex;align-items:center;justify-content:center}"
+      @".card{text-align:center;padding:0 24px}"
+      @".mark{width:44px;height:44px;margin:0 auto 14px;border-radius:14px;"
+      @"background:linear-gradient(160deg,#2ee6c4,#7aa2ff);"
+      @"box-shadow:0 6px 24px rgba(46,230,196,.35)}"
+      @"h1{font-size:19px;margin:0 0 6px;font-weight:600}"
+      @"p{font-size:13px;margin:0;color:rgba(242,244,239,.6)}"
+      @"</style></head><body><div class='wrap'><div class='card'>"
+      @"<div class='mark'></div><h1>Logged in successfully</h1>"
+      @"<p>You can close this tab and return to Omi.</p></div></div>"
+      @"<script>setTimeout(function(){location.replace('about:blank');"
+      @"try{window.close();}catch(e){}},1500);</script></body></html>";
 }
 
 static NSURL *OmiAuthValidatedCallbackURL(NSString *request, NSString *expectedState, uint16_t port) {

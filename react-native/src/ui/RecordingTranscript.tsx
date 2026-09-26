@@ -3,7 +3,7 @@ import {ActivityIndicator, Text, View} from 'react-native';
 import {useRecordingTranscript} from '../recordingTranscript';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
-import {desktopTokens} from '../desktop/tokens';
+import {useDesktopTheme} from '../desktop/DesktopTheme';
 
 export function RecordingTranscript({
   sessionId,
@@ -14,6 +14,7 @@ export function RecordingTranscript({
   revision?: string;
   desktop?: boolean;
 }) {
+  const {tokens: desktopTokens} = useDesktopTheme();
   const {result, reload} = useRecordingTranscript(sessionId, revision);
   const ink = desktop ? {color: desktopTokens.color.ink} : undefined;
   return (

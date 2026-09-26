@@ -1,5 +1,6 @@
 #import "OmiGlassPanelView.h"
 
+#import "OmiDesktopCommandsModule.h"
 #import <React/RCTViewManager.h>
 #import <QuartzCore/QuartzCore.h>
 
@@ -12,12 +13,24 @@ static const CGFloat OmiGlassScrimAlpha = 0.25;
 static const CGFloat OmiGlassEdgeAlpha = 0.10;
 static const CGFloat OmiGlassSheenAlpha = 0.4;
 static const CGFloat OmiGlassSheenHeight = 1.0;
+// Light appearance: the material flips to a light behind-window vibrancy and
+// the ink flips dark, so the scrim/edge/sheen invert to keep the glass legible
+// over both bright and dark backdrops.
+static const CGFloat OmiGlassLightScrimAlpha = 0.32;
+static const CGFloat OmiGlassLightEdgeAlpha = 0.10;
+static const CGFloat OmiGlassLightSheenAlpha = 0.08;
 
 static NSAppearance *OmiInkGlassAppearance(void)
 {
   // Dark chrome: the HUD material must be evaluated in a dark appearance or
   // Aqua renders it light, which starves the light React ink of contrast.
   return [NSAppearance appearanceNamed:NSAppearanceNameDarkAqua];
+}
+
+static BOOL OmiGlassLightMode(void)
+{
+  return [NSUserDefaults.standardUserDefaults stringForKey:@"omi.appearance"] != nil &&
+      [[NSUserDefaults.standardUserDefaults stringForKey:@"omi.appearance"] isEqual:@"light"];
 }
 
 @interface OmiGlassPanelView ()
@@ -31,6 +44,7 @@ static NSAppearance *OmiInkGlassAppearance(void)
 @property (nonatomic, strong) CALayer *scrim;
 @property (nonatomic, strong) CALayer *sheen;
 @property (nonatomic, strong, nullable) id accessibilityObserver;
+@property (nonatomic, strong, nullable) id appearanceObserver;
 
 @end
 
@@ -133,6 +147,14 @@ RCT_EXPORT_VIEW_PROPERTY(fadeVisible, BOOL)
                    usingBlock:^(__unused NSNotification *note) {
     [weakSelf applyAccessibilityAppearance];
   }];
+  self.appearanceObserver =
+      [NSNotificationCenter.defaultCenter
+          addObserverForName:OmiDesktopAppearanceDidChangeNotification
+                      object:nil
+                       queue:NSOperationQueue.mainQueue
+                   usingBlock:^(__unused NSNotification *note) {
+    [weakSelf applyAccessibilityAppearance];
+  }];
   self.glassCornerRadius = defaultCornerRadius;
   [self applyAccessibilityAppearance];
   return self;
@@ -142,6 +164,9 @@ RCT_EXPORT_VIEW_PROPERTY(fadeVisible, BOOL)
 {
   if (self.accessibilityObserver != nil) {
     [NSWorkspace.sharedWorkspace.notificationCenter removeObserver:self.accessibilityObserver];
+  }
+  if (self.appearanceObserver != nil) {
+    [NSNotificationCenter.defaultCenter removeObserver:self.appearanceObserver];
   }
 }
 
@@ -186,17 +211,32 @@ RCT_EXPORT_VIEW_PROPERTY(fadeVisible, BOOL)
 - (void)applyAccessibilityAppearance
 {
   BOOL reduceTransparency = NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceTransparency;
+  BOOL light = OmiGlassLightMode();
   self.material.hidden = reduceTransparency;
   self.fallback.hidden = !reduceTransparency;
-  self.appearance = OmiInkGlassAppearance();
+  NSAppearance *appearance = OmiInkGlassAppearance();
+  if (light) {
+    appearance = [NSAppearance appearanceNamed:NSAppearanceNameVibrantLight];
+    if (appearance == nil) {
+      appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+    }
+  }
+  self.appearance = appearance;
+  // The HUD material is inherently dark; the light mode switches to the
+  // under-window background material so the vibrancy base is light.
+  self.material.material = light ? NSVisualEffectMaterialUnderWindowBackground
+                                 : NSVisualEffectMaterialHUDWindow;
   [self.appearance performAsCurrentDrawingAppearance:^{
     self.fallback.layer.backgroundColor =
-        [NSColor colorWithCalibratedWhite:0.11 alpha:1.0].CGColor;
-    CGFloat alpha = reduceTransparency ? 1.0 : OmiGlassScrimAlpha;
-    self.scrim.backgroundColor = [NSColor.blackColor colorWithAlphaComponent:alpha].CGColor;
+        [NSColor colorWithCalibratedWhite:(light ? 0.96 : 0.11) alpha:1.0].CGColor;
+    CGFloat alpha = reduceTransparency ? 1.0 : (light ? OmiGlassLightScrimAlpha : OmiGlassScrimAlpha);
+    NSColor *scrimBase = light ? NSColor.whiteColor : NSColor.blackColor;
+    self.scrim.backgroundColor = [scrimBase colorWithAlphaComponent:alpha].CGColor;
     self.sheen.hidden = reduceTransparency;
-    self.sheen.backgroundColor = [NSColor.whiteColor colorWithAlphaComponent:OmiGlassSheenAlpha].CGColor;
-    self.layer.borderColor = [NSColor.whiteColor colorWithAlphaComponent:OmiGlassEdgeAlpha].CGColor;
+    self.sheen.backgroundColor = [(light ? NSColor.blackColor : NSColor.whiteColor)
+        colorWithAlphaComponent:(light ? OmiGlassLightSheenAlpha : OmiGlassSheenAlpha)].CGColor;
+    self.layer.borderColor = [(light ? NSColor.blackColor : NSColor.whiteColor)
+        colorWithAlphaComponent:(light ? OmiGlassLightEdgeAlpha : OmiGlassEdgeAlpha)].CGColor;
   }];
 }
 

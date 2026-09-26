@@ -59,8 +59,8 @@ test('static guard: session probe stays independent of signed-in device controls
   expect(onboarding).not.toContain('CBCentral');
   expect(onboarding).not.toContain('startScan');
   const desktopMount = orchestrator.slice(
-    orchestrator.indexOf('<DesktopApp'),
-    orchestrator.indexOf('</PageShell>', orchestrator.indexOf('<DesktopApp')),
+    orchestrator.indexOf('<DesktopApp\n'),
+    orchestrator.indexOf('</PageShell>', orchestrator.indexOf('<DesktopApp\n')),
   );
   expect(desktopMount).toContain('onboardingRequired');
   expect(desktopMount).toContain("? 'probing'");

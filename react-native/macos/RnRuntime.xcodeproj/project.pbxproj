@@ -30,6 +30,7 @@
 		A10510000000000000000001 /* OmiRewindModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10510000000000000000002 /* OmiRewindModule.mm */; };
 		A10510000000000000000003 /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = A10510000000000000000004 /* libsqlite3.tbd */; };
 		A10511000000000000000001 /* OmiRewindCapture.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10511000000000000000002 /* OmiRewindCapture.mm */; };
+		A10513000000000000000001 /* OmiAudioCapture.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10513000000000000000002 /* OmiAudioCapture.mm */; };
 		A10512000000000000000001 /* ScreenCaptureKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10512000000000000000002 /* ScreenCaptureKit.framework */; };
 		A10512010000000000000001 /* Vision.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10512010000000000000002 /* Vision.framework */; };
 		A10512020000000000000001 /* ImageIO.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10512020000000000000002 /* ImageIO.framework */; };
@@ -76,6 +77,7 @@
 		A10510000000000000000002 /* OmiRewindModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiRewindModule.mm; sourceTree = "<group>"; };
 		A10510000000000000000004 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 		A10511000000000000000002 /* OmiRewindCapture.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../../apple/OmiRewindCapture.mm; sourceTree = "<group>"; };
+		A10513000000000000000002 /* OmiAudioCapture.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../../apple/OmiAudioCapture.mm; sourceTree = "<group>"; };
 		A10512000000000000000002 /* ScreenCaptureKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ScreenCaptureKit.framework; path = System/Library/Frameworks/ScreenCaptureKit.framework; sourceTree = SDKROOT; };
 		A10512010000000000000002 /* Vision.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Vision.framework; path = System/Library/Frameworks/Vision.framework; sourceTree = SDKROOT; };
 		A10512020000000000000002 /* ImageIO.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ImageIO.framework; path = System/Library/Frameworks/ImageIO.framework; sourceTree = SDKROOT; };
@@ -170,6 +172,7 @@
 				A10402000000000000000002 /* OmiDesktopCommandsModule.mm */,
 				A10510000000000000000002 /* OmiRewindModule.mm */,
 				A10511000000000000000002 /* OmiRewindCapture.mm */,
+				A10513000000000000000002 /* OmiAudioCapture.mm */,
 				A10403000000000000000003 /* OmiGlassPanelView.h */,
 				A10403000000000000000002 /* OmiGlassPanelView.mm */,
 				A10404000000000000000003 /* OmiSFSymbolView.h */,
@@ -417,6 +420,7 @@
 				A10402000000000000000001 /* OmiDesktopCommandsModule.mm in Sources */,
 				A10510000000000000000001 /* OmiRewindModule.mm in Sources */,
 				A10511000000000000000001 /* OmiRewindCapture.mm in Sources */,
+				A10513000000000000000001 /* OmiAudioCapture.mm in Sources */,
 				A10403000000000000000001 /* OmiGlassPanelView.mm in Sources */,
 				A10404000000000000000001 /* OmiSFSymbolView.mm in Sources */,
 				A10405000000000000000001 /* OmiAuthModule.mm in Sources */,

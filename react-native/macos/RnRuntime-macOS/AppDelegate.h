@@ -4,7 +4,9 @@
 @interface AppDelegate : RCTAppDelegate
 
 @property (nonatomic, strong, nullable) id omiWindowUpdateObserver;
+@property (nonatomic, strong, nullable) id omiAppearanceObserver;
 @property (nonatomic, strong, nullable) id omiWindowPresentationObserver;
+@property (nonatomic, strong, nullable) id omiTitlebarLayoutObserver;
 @property (nonatomic, strong, nullable) id omiWorkspaceObserver;
 @property (nonatomic, copy, nullable) NSString *omiWindowPresentation;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSValue *> *omiWindowFrames;

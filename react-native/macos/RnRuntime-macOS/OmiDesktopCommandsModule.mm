@@ -6,6 +6,12 @@
 #import <UserNotifications/UserNotifications.h>
 
 NSString *const OmiDesktopSearchCommandNotification = @"OmiDesktopSearchCommandNotification";
+NSString *const OmiDesktopAppearanceDidChangeNotification = @"OmiDesktopAppearanceDidChangeNotification";
+
+NSAppearanceName OmiPreferredDesktopAppearance(void) {
+  NSString *preference = [NSUserDefaults.standardUserDefaults stringForKey:@"omi.appearance"];
+  return [preference isEqual:@"light"] ? NSAppearanceNameAqua : NSAppearanceNameDarkAqua;
+}
 
 static void OmiOpenPermissionSettings(NSString *pane, RCTPromiseResolveBlock resolve,
                                      RCTPromiseRejectBlock reject) {
@@ -39,6 +45,7 @@ static NSString *OmiDesktopDefaultsKey(NSString *preference) {
       @"openOmiShortcut" : @"shortcut_askOmiEnabled",
       @"pushToTalk" : @"shortcut_pttEnabled",
       @"liveVoiceProvider" : @"omi.live.voiceProvider",
+      @"appearance" : @"omi.appearance",
     };
   });
   return keys[preference];
@@ -49,6 +56,8 @@ static NSDictionary *OmiDesktopPreferenceSnapshot(void) {
   NSString *audioMode = [defaults stringForKey:@"audioRecordingMode"] ?: @"off";
   NSString *softwarePlane = [defaults stringForKey:@"omi.backend.softwarePlane"];
   NSString *liveVoiceProvider = [defaults stringForKey:@"omi.live.voiceProvider"] ?: @"gpt_live";
+  NSString *appearance = [defaults stringForKey:@"omi.appearance"];
+  if (![appearance isKindOfClass:NSString.class] || ![@[@"dark", @"light"] containsObject:appearance]) appearance = @"dark";
   NSString *stampedV5Origin = NSProcessInfo.processInfo.environment[@"OMI_V5_BACKEND_URL"];
   return @{
     @"softwarePlane" : softwarePlane ?: NSNull.null,
@@ -73,6 +82,7 @@ static NSDictionary *OmiDesktopPreferenceSnapshot(void) {
     @"pushToTalk" : @([defaults objectForKey:@"shortcut_pttEnabled"] == nil
         ? YES : [defaults boolForKey:@"shortcut_pttEnabled"]),
     @"liveVoiceProvider" : liveVoiceProvider,
+    @"appearance" : appearance,
   };
 }
 
@@ -135,6 +145,13 @@ RCT_REMAP_METHOD(setDesktopPreference,
     return;
   }
   [NSUserDefaults.standardUserDefaults setObject:value forKey:defaultsKey];
+  if ([key isEqual:@"appearance"]) {
+    // The AppKit surfaces (window dressing, glass panels) refresh by
+    // observing this notification on the main queue.
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [NSNotificationCenter.defaultCenter postNotificationName:OmiDesktopAppearanceDidChangeNotification object:nil];
+    });
+  }
   resolve(OmiDesktopPreferenceSnapshot());
 }
 

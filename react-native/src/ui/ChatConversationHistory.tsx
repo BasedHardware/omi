@@ -3,13 +3,14 @@ import {ActivityIndicator, Text, View} from 'react-native';
 import {useChatConversationHistory} from '../chatConversationHistory';
 import {FocusPressable} from './Pressable';
 import {styles} from './styles';
-import {desktopTokens} from '../desktop/tokens';
+import {useDesktopTheme} from '../desktop/DesktopTheme';
 
 export function ChatConversationHistory({
   desktop = false,
 }: {
   desktop?: boolean;
 }) {
+  const {tokens: desktopTokens} = useDesktopTheme();
   const {result, reload} = useChatConversationHistory(true);
   const ink = desktop ? {color: desktopTokens.color.ink} : undefined;
   return (

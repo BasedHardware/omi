@@ -4,7 +4,6 @@ export const desktopNavItems = [
   'Conversations',
   'Rewind',
   'Tasks',
-  'Apps',
 ] as const;
 
 export type DesktopNavItem = (typeof desktopNavItems)[number];
@@ -16,6 +15,7 @@ export const desktopSettingsPanes = [
   'Rewind',
   'Alerts & Privacy',
   'AI & Automation',
+  'Apps',
   'About',
 ] as const;
 

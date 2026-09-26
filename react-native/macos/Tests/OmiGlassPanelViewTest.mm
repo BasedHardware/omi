@@ -2,6 +2,11 @@
 #import <objc/runtime.h>
 #include <cassert>
 
+// The panel observes this name; the app target defines it in
+// OmiDesktopCommandsModule.mm, which this standalone TU does not link.
+NSString *const OmiDesktopAppearanceDidChangeNotification =
+    @"OmiDesktopAppearanceDidChangeNotification";
+
 @implementation RCTView
 @end
 @implementation RCTViewManager

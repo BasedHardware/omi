@@ -75,8 +75,11 @@ import {Composer} from '../ui/Composer';
 import {LiveVoiceButton} from '../ui/LiveVoiceButton';
 import {
   loadDesktopPreferences,
+  type AudioRecordingMode,
+  type DesktopAppearance,
   type LiveVoiceProvider,
 } from '../desktopSettingsClient';
+import {useAmbientAudio} from './useAmbientAudio';
 import {DesktopApp, DesktopSessionProbe} from '../desktop/DesktopApp';
 import {MobileChat} from '../mobile/MobileChat';
 import {MobileOmnibar, type MobileOmnibarMode} from '../mobile/MobileOmnibar';
@@ -252,6 +255,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const [composerFocused, setComposerFocused] = useState(false);
   const [liveVoiceProvider, setLiveVoiceProvider] =
     useState<LiveVoiceProvider>('gpt_live');
+  const [audioMode, setAudioMode] = useState<AudioRecordingMode>('off');
+  const [appearance, setAppearance] = useState<DesktopAppearance>('dark');
+  const [screenCaptureEnabled, setScreenCaptureEnabled] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -259,6 +265,9 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       .then(prefs => {
         if (!cancelled) {
           setLiveVoiceProvider(prefs.liveVoiceProvider);
+          setAudioMode(prefs.audioMode);
+          setAppearance(prefs.appearance);
+          setScreenCaptureEnabled(prefs.screenCapture);
         }
       })
       .catch(() => undefined);
@@ -266,6 +275,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       cancelled = true;
     };
   }, []);
+  const ambient = useAmbientAudio(audioMode, onboardingRequired === false);
   const {
     deviceBusy,
     deviceScanMessage,
@@ -900,20 +910,25 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   );
   const currentItems = reads.slice(0, 2);
 
-  // Shared DeviceSession element: every surface passes the same device props
-  // and only varies the variant. Only the compact affordance takes the
-  // Bluetooth status color; the overview header never did.
+  // Shared DeviceSession props: every surface passes the same device wiring
+  // and only varies the variant (plus the compact-only Bluetooth status
+  // color; the overview header never took it). The DesktopApp mount spells
+  // nativeSnapshot out literally because the static session-probe guard in
+  // App.test.tsx pins that wiring inside the DesktopApp slice.
+  const deviceSessionCoreProps = {
+    rememberedDevice,
+    rememberedBusy,
+    onForgetRemembered: forgetRememberedDevice,
+    deviceBusy,
+    deviceScanMessage,
+    onScan: scanForOmi,
+    onToggle: toggleDevice,
+  };
   const renderDeviceSession = (variant: DeviceSessionVariant) => (
     <DeviceSession
-      rememberedDevice={rememberedDevice}
-      rememberedBusy={rememberedBusy}
-      onForgetRemembered={forgetRememberedDevice}
+      {...deviceSessionCoreProps}
       {...(variant === 'compact' ? {bluetoothStatusColor} : {})}
-      deviceBusy={deviceBusy}
-      deviceScanMessage={deviceScanMessage}
       nativeSnapshot={nativeSnapshot}
-      onScan={scanForOmi}
-      onToggle={toggleDevice}
       variant={variant}
     />
   );
@@ -1063,18 +1078,14 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           chatBusy={chatBusy}
           chatError={chatError}
           deviceContent={
-            // Kept explicit: the static session-probe guard in App.test.tsx
-            // pins the literal device wiring inside the DesktopApp mount.
+            // Kept spelled out (not via renderDeviceSession) because the
+            // static session-probe guard in App.test.tsx pins the literal
+            // nativeSnapshot wiring inside the DesktopApp slice; the rest of
+            // the props are shared through deviceSessionCoreProps.
             <DeviceSession
-              rememberedDevice={rememberedDevice}
-              rememberedBusy={rememberedBusy}
-              onForgetRemembered={forgetRememberedDevice}
+              {...deviceSessionCoreProps}
               bluetoothStatusColor={bluetoothStatusColor}
-              deviceBusy={deviceBusy}
-              deviceScanMessage={deviceScanMessage}
               nativeSnapshot={nativeSnapshot}
-              onScan={scanForOmi}
-              onToggle={toggleDevice}
               variant="compact"
             />
           }
@@ -1083,6 +1094,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           loadingOlderChat={loadingOlderChat}
           loadingHistory={!chatHistorySettled}
           liveVoiceControl={desktopLiveControl}
+          ambient={ambient}
           messages={messages}
           onDraftChange={setDraft}
           onLoadOlderChat={() => {
@@ -1108,7 +1120,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           }}
           onPreferencesChange={prefs => {
             setLiveVoiceProvider(prefs.liveVoiceProvider);
+            setAudioMode(prefs.audioMode);
+            setAppearance(prefs.appearance);
+            setScreenCaptureEnabled(prefs.screenCapture);
           }}
+          initialAppearance={appearance}
+          onAppearanceChange={setAppearance}
+          captureAutoStart={screenCaptureEnabled}
           onWorkspaceReload={retireWorkspace}
           outcomes={readOutcomes}
           reads={reads}

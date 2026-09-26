@@ -15,9 +15,26 @@ import {DesktopChat} from './DesktopChat';
 import {TaskPagination} from '../ui/TaskPagination';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
 
+// Set by the desktopCommands mock; holds the ⌘F handler so tests can enter
+// search-on-Home the way the real command does. var (not let) because the
+// hoisted jest.mock factory assigns it during module import.
+var mockSearchCommandHandler: (() => void) | undefined;
+
+function runSearchCommand() {
+  expect(mockSearchCommandHandler).toBeInstanceOf(Function);
+  mockSearchCommandHandler?.();
+}
+
 jest.mock('../desktopCommands', () => ({
-  subscribeDesktopSearchCommand: jest.fn(() => ({remove: jest.fn()})),
+  subscribeDesktopSearchCommand: jest.fn((handler: () => void) => {
+    mockSearchCommandHandler = handler;
+    return {remove: jest.fn()};
+  }),
 }));
+
+// The at-a-glance Home suite covers the flag-off variant; the unified
+// timeline variant has its own tests below.
+jest.mock('./timeline/flag', () => ({unifiedTimelineEnabled: false}));
 
 jest.mock('../app/useReduceMotion', () => ({
   useReduceMotion: () => true,
@@ -335,7 +352,7 @@ test('renders the shipping search-first desktop hierarchy', () => {
   expect(tree).toContain('Home');
   expect(tree).toContain('Conversations');
   expect(tree).toContain('Tasks');
-  expect(tree).toContain('Apps');
+  expect(tree).not.toContain('Apps');
   expect(tree).toContain('Product review');
   expect(tree).toContain('Ship the desktop chrome');
   expect(tree).not.toContain("I'm ready.");
@@ -428,7 +445,7 @@ test('persistent capture toggle uses the existing owner across Home, Recall and 
     capture.capturing = true;
     await act(async () =>
       renderer.root
-        .find(node => node.props.accessibilityLabel === 'Use Recall mode')
+        .find(node => node.props.accessibilityLabel === 'Use Search mode')
         .props.onPress(),
     );
     expect(toggle().props.value).toBe(true);
@@ -468,38 +485,35 @@ test('keyboard search from Chat focuses the persistent omnibar', () => {
     .mock.calls.at(-1)![0];
   act(() => command());
   expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
-    'Search history',
+    'Search Recall',
   );
   expect(focus).toHaveBeenCalledTimes(1);
   act(() => command());
   expect(focus).toHaveBeenCalledTimes(2);
 });
 
-test.each(['Search', 'Recall'])(
-  '%s click remains a search while a chat generation is active',
-  async mode => {
-    const onSend = jest.fn();
-    const onStop = jest.fn();
-    const renderer = renderDesktop({
-      activeGenerationId: 'active',
-      draft: 'query',
-      onSend,
-      onStop,
-    });
-    await act(async () =>
-      renderer.root
-        .find(node => node.props.accessibilityLabel === `Use ${mode} mode`)
-        .props.onPress(),
-    );
-    await act(async () =>
-      renderer.root
-        .find(node => node.props.accessibilityLabel === 'Search')
-        .props.onPress(),
-    );
-    expect(onSend).not.toHaveBeenCalled();
-    expect(onStop).not.toHaveBeenCalled();
-  },
-);
+test('Recall click remains a search while a chat generation is active', async () => {
+  const onSend = jest.fn();
+  const onStop = jest.fn();
+  const renderer = renderDesktop({
+    activeGenerationId: 'active',
+    draft: 'query',
+    onSend,
+    onStop,
+  });
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Search mode')
+      .props.onPress(),
+  );
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Search')
+      .props.onPress(),
+  );
+  expect(onSend).not.toHaveBeenCalled();
+  expect(onStop).not.toHaveBeenCalled();
+});
 
 test('Chat shows disabled Sending until there is an actual cancellable request', () => {
   const onStop = jest.fn();
@@ -537,11 +551,7 @@ test('Chat shows disabled Sending until there is an actual cancellable request',
 
 test('a task search with no matches does not claim there are no tasks', () => {
   const renderer = renderDesktop({draft: 'unmatched query'});
-  act(() =>
-    renderer.root
-      .find(node => node.props.accessibilityLabel === 'Use Search mode')
-      .props.onPress(),
-  );
+  act(() => runSearchCommand());
   expect(renderedText(renderer)).toContain('No tasks match this search.');
   expect(renderedText(renderer)).not.toContain('No tasks yet');
 });
@@ -594,11 +604,7 @@ test.each(['initial-loading', 'refreshing', 'unavailable'] as const)(
 
 test('Home empty results have no more action and matching searches explicitly open the unfiltered page', () => {
   const renderer = renderDesktop({draft: 'product'});
-  act(() =>
-    renderer.root
-      .find(node => node.props.accessibilityLabel === 'Use Search mode')
-      .props.onPress(),
-  );
+  act(() => runSearchCommand());
   expect(
     renderer.root.findAll(
       node =>
@@ -650,11 +656,7 @@ test('Home pre-admission sending disables Ask while Search remains usable', () =
   act(() => renderer.root.findByType(TextInput).props.onSubmitEditing());
   expect(onSend).not.toHaveBeenCalled();
   expect(onStop).not.toHaveBeenCalled();
-  act(() =>
-    renderer.root
-      .find(node => node.props.accessibilityLabel === 'Use Search mode')
-      .props.onPress(),
-  );
+  act(() => runSearchCommand());
   const search = renderer.root.find(
     node => node.props.accessibilityLabel === 'Search',
   );
@@ -664,12 +666,12 @@ test('Home pre-admission sending disables Ask while Search remains usable', () =
   expect(onStop).not.toHaveBeenCalled();
 });
 
-test('Chat has its own selected destination, keeps one omnibar, and closes to the previous route and mode', async () => {
+test('Chat has its own selected destination, keeps one omnibar, and navigation leaves Chat without a leftover surface', async () => {
   const onSend = jest.fn();
   const renderer = renderDesktop({draft: 'question', onSend});
   await act(async () =>
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Use Recall mode')
+      .find(node => node.props.accessibilityLabel === 'Use Search mode')
       .props.onPress(),
   );
   await act(async () =>
@@ -689,7 +691,7 @@ test('Chat has its own selected destination, keeps one omnibar, and closes to th
   expect(onSend).toHaveBeenCalledTimes(1);
   await act(async () =>
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Close chat')
+      .find(node => node.props.accessibilityLabel === 'Recall')
       .props.onPress(),
   );
   expect(renderer.root.findByType(TextInput).props.accessibilityLabel).toBe(
@@ -957,28 +959,25 @@ test('Chat destination opens full loaded history with one persistent omnibar', (
   ).toEqual(['Ask about your day…']);
 });
 
-test.each(['Search', 'Recall'])(
-  '%s submits without sending chat',
-  async mode => {
-    const onSend = jest.fn();
-    const renderer = renderDesktop({draft: 'a saved moment', onSend});
-    await act(async () =>
-      renderer.root
-        .find(node => node.props.accessibilityLabel === `Use ${mode} mode`)
-        .props.onPress(),
-    );
-    expect(renderer.root.findAllByType(TextInput)).toHaveLength(1);
-    await act(async () =>
-      renderer.root.findByType(TextInput).props.onSubmitEditing(),
-    );
-    expect(onSend).not.toHaveBeenCalled();
-    expect(
-      renderer.root.findAll(
-        node => node.props.accessibilityLabel === 'Chat with Omi',
-      ),
-    ).toHaveLength(0);
-  },
-);
+test('Recall submits without sending chat', async () => {
+  const onSend = jest.fn();
+  const renderer = renderDesktop({draft: 'a saved moment', onSend});
+  await act(async () =>
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Use Search mode')
+      .props.onPress(),
+  );
+  expect(renderer.root.findAllByType(TextInput)).toHaveLength(1);
+  await act(async () =>
+    renderer.root.findByType(TextInput).props.onSubmitEditing(),
+  );
+  expect(onSend).not.toHaveBeenCalled();
+  expect(
+    renderer.root.findAll(
+      node => node.props.accessibilityLabel === 'Chat with Omi',
+    ),
+  ).toHaveLength(0);
+});
 
 test('Recall typing debounces the shared input into actual timeline reads', async () => {
   jest.useFakeTimers();
@@ -990,7 +989,7 @@ test('Recall typing debounces the shared input into actual timeline reads', asyn
     const renderer = renderDesktop({onDraftChange});
     await act(async () =>
       renderer.root
-        .find(node => node.props.accessibilityLabel === 'Use Recall mode')
+        .find(node => node.props.accessibilityLabel === 'Use Search mode')
         .props.onPress(),
     );
     listFrames.mockClear();
@@ -1059,7 +1058,7 @@ test('signed-out Mac sees only the Welcome, never product chrome', () => {
   expect(
     renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
   ).not.toContain('Ask about your day…');
-  for (const nav of ['Home', 'Conversations', 'Tasks', 'Apps']) {
+  for (const nav of ['Home', 'Conversations', 'Tasks']) {
     expect(
       renderer.root.findAll(node => node.props.accessibilityLabel === nav),
     ).toHaveLength(0);
@@ -1107,7 +1106,7 @@ test('the session probe holds an empty window with no product copy', () => {
   expect(
     renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
   ).not.toContain('Ask about your day…');
-  for (const nav of ['Home', 'Conversations', 'Tasks', 'Apps', 'Settings']) {
+  for (const nav of ['Home', 'Conversations', 'Tasks', 'Settings']) {
     expect(
       renderer.root.findAll(node => node.props.accessibilityLabel === nav),
     ).toHaveLength(0);
@@ -1134,7 +1133,7 @@ test('the session probe holds an empty window with no product copy', () => {
   expect(renderer.root.findAllByType(Text)).toHaveLength(0);
 });
 
-test('post-setup prove-it cue shows only after reads settle ready', () => {
+test('post-setup prove-it cue shows only after reads settle ready', async () => {
   const renderer = renderDesktop({
     postSetupHomeCue: 'proven',
     readsPhase: 'ready',
@@ -1153,6 +1152,10 @@ test('post-setup prove-it cue shows only after reads settle ready', () => {
     renderer.root
       .findAll(node => node.props.accessibilityLabel === 'Continue')[0]
       .props.onPress();
+  });
+  // Continue fires the confetti burst, then closes after a short beat.
+  await act(async () => {
+    await new Promise(resolve => setTimeout(resolve, 720));
   });
   expect(
     renderer.root.findAll(
@@ -1395,11 +1398,7 @@ test('searches real projections instead of a fake timeline', () => {
   const renderer = renderDesktop({
     draft: 'product',
   });
-  act(() =>
-    renderer.root
-      .find(node => node.props.accessibilityLabel === 'Use Search mode')
-      .props.onPress(),
-  );
+  act(() => runSearchCommand());
   const tree = renderedText(renderer);
   expect(tree).toContain('Product review');
   expect(tree).not.toContain('Ship the desktop chrome');
@@ -1628,6 +1627,12 @@ test('Apps is a wrapped gallery that does not invent catalog entries', async () 
   const renderer = renderDesktop();
   await act(async () => {
     renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    renderer.root
       .find(node => node.props.accessibilityLabel === 'Apps')
       .props.onPress();
     await Promise.resolve();
@@ -1671,6 +1676,12 @@ test('Apps reports a catalog failure instead of showing invented data', async ()
   };
   loadConnectors.mockRejectedValueOnce(new Error('offline'));
   const renderer = renderDesktop();
+  await act(async () => {
+    renderer.root
+      .find(node => node.props.accessibilityLabel === 'Settings')
+      .props.onPress();
+    await Promise.resolve();
+  });
   await act(async () => {
     renderer.root
       .find(node => node.props.accessibilityLabel === 'Apps')

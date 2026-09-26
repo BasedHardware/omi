@@ -4,7 +4,11 @@ import {isStreamingAssistant, type ChatMessage} from '../chatClient';
 import {OmiAvatar} from './OmiAvatar';
 import {ChatMessageContent} from './ChatMessageContent';
 import {styles} from './styles';
-import {desktopTokens as token} from '../desktop/tokens';
+import {
+  type DesktopTokens,
+  useDesktopTheme,
+  useDesktopStyleSheets,
+} from '../desktop/DesktopTheme';
 
 function formatChatTime(createdAt: number): string {
   const milliseconds =
@@ -28,6 +32,9 @@ const ChatMessageRow = memo(function ChatMessageRow({
   message: ChatMessage;
   reduceMotion: boolean;
 }) {
+  const {tokens: token} = useDesktopTheme();
+  const desktopStyles = useDesktopStyleSheets(createDesktopStyles);
+  const transcriptStyles = useDesktopStyleSheets(createTranscriptStyles);
   const opacity = useRef(new Animated.Value(animate ? 0 : 1)).current;
   const translateY = useRef(
     new Animated.Value(animate && !reduceMotion ? 10 : 0),
@@ -165,6 +172,9 @@ function ChatThinking({
   reduceMotion: boolean;
   desktop?: boolean;
 }) {
+  const {tokens: token} = useDesktopTheme();
+  const desktopStyles = useDesktopStyleSheets(createDesktopStyles);
+  const transcriptStyles = useDesktopStyleSheets(createTranscriptStyles);
   const opacity = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     if (reduceMotion) {
@@ -227,35 +237,37 @@ function ChatThinking({
 
 export {ChatMessageRow, ChatThinking};
 
-const desktopStyles = StyleSheet.create({
-  column: {maxWidth: '82%'},
-  // Mirrors the shipped Omi app: your words sit in a quiet bubble on the
-  // right; Omi answers as flat text beside its avatar, with no bubble.
-  human: {
-    backgroundColor: token.color.glassStrong,
-    borderWidth: 0,
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  ai: {backgroundColor: 'transparent', borderWidth: 0},
-  text: {color: token.color.ink, fontSize: 15, lineHeight: 24},
-  time: {color: token.color.inkFaint, fontSize: 11},
-});
+const createDesktopStyles = (token: DesktopTokens) =>
+  StyleSheet.create({
+    column: {maxWidth: '82%'},
+    // Mirrors the shipped Omi app: your words sit in a quiet bubble on the
+    // right; Omi answers as flat text beside its avatar, with no bubble.
+    human: {
+      backgroundColor: token.color.glassStrong,
+      borderWidth: 0,
+      borderRadius: 18,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    ai: {backgroundColor: 'transparent', borderWidth: 0},
+    text: {color: token.color.ink, fontSize: 15, lineHeight: 24},
+    time: {color: token.color.inkFaint, fontSize: 11},
+  });
 
-const transcriptStyles = StyleSheet.create({
-  mobileColumn: {flexShrink: 1, maxWidth: '85%'},
-  human: {
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    paddingHorizontal: 0,
-    paddingVertical: 4,
-  },
-  skeleton: {width: 260, maxWidth: '80%', gap: 10},
-  line: {
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-  },
-  desktopLine: {backgroundColor: token.color.glassSelected},
-});
+const createTranscriptStyles = (token: DesktopTokens) =>
+  StyleSheet.create({
+    mobileColumn: {flexShrink: 1, maxWidth: '85%'},
+    human: {
+      backgroundColor: 'transparent',
+      borderWidth: 0,
+      paddingHorizontal: 0,
+      paddingVertical: 4,
+    },
+    skeleton: {width: 260, maxWidth: '80%', gap: 10},
+    line: {
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: 'rgba(255,255,255,0.18)',
+    },
+    desktopLine: {backgroundColor: token.color.glassSelected},
+  });

@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import {requireNativeComponent} from '../native-component';
 import {tokens} from './tokens';
+import {useDesktopTheme} from '../desktop/DesktopTheme';
 
 type OmiSFSymbolProps = ViewProps & {
   symbolColor?: string;
@@ -40,7 +41,7 @@ const OmiSFSymbol = requireNativeComponent<OmiSFSymbolProps>('OmiSFSymbol');
 export function Icon({
   accessibilityLabel,
   accessible = accessibilityLabel !== undefined,
-  color = tokens.color.text,
+  color,
   fallback: Fallback,
   size = tokens.size.icon,
   strokeWidth = tokens.icon.strokeWidth,
@@ -48,7 +49,8 @@ export function Icon({
   symbolColor,
   symbolName,
 }: IconProps) {
-  const resolvedColor = symbolColor ?? color;
+  const {kit} = useDesktopTheme();
+  const resolvedColor = symbolColor ?? color ?? kit.text;
   if (Platform.OS === 'macos') {
     return (
       <OmiSFSymbol

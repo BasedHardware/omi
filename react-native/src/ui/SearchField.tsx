@@ -5,7 +5,11 @@ import Search from 'lucide-react-native/icons/search';
 import {FocusPressable} from './Pressable';
 import {Icon} from './Icon';
 import {Input} from './Field';
-import {tokens} from './tokens';
+import {
+  type KitTokens,
+  useDesktopThemeKit,
+  useKitStyleSheets,
+} from '../desktop/DesktopTheme';
 
 export function HomeSearchField({
   compact,
@@ -32,6 +36,8 @@ export function HomeSearchField({
   searchFocused: boolean;
   searchArmed: boolean;
 }) {
+  const styles = useKitStyleSheets(createStyles);
+  const {tokens} = useDesktopThemeKit();
   return (
     <View
       accessibilityLabel="Home search dock"
@@ -92,88 +98,89 @@ export function HomeSearchField({
   );
 }
 
-const styles = StyleSheet.create({
-  dock: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    backgroundColor: '#292929',
-    borderColor: '#4a4a4a',
-    borderRadius: tokens.space.xl,
-    borderWidth: tokens.border.width,
-    flexDirection: 'row',
-    gap: tokens.space.sm,
-    marginBottom: tokens.space.sm,
-    marginTop: 'auto',
-    maxWidth: tokens.size.searchMax,
-    minHeight: tokens.size.searchDock,
-    paddingLeft: 15,
-    paddingRight: tokens.radius.sm,
-    width: '100%',
-  },
-  desktopDock: {
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    backgroundColor: tokens.color.input,
-    borderColor: tokens.color.transparent,
-    borderRadius: tokens.space.md,
-    borderWidth: tokens.space.none,
-    flex: tokens.layout.grow,
-    flexGrow: tokens.layout.grow,
-    gap: 10,
-    marginBottom: tokens.space.none,
-    marginTop: tokens.space.none,
-    maxWidth: '100%',
-    minHeight: tokens.size.controlCompact,
-    paddingHorizontal: tokens.space.md,
-    width: 'auto',
-  },
-  compactDock: {
-    backgroundColor: '#222621',
-    borderColor: '#515a53',
-    borderRadius: 28,
-    marginBottom: tokens.space.md,
-    minHeight: tokens.size.searchDockCompact,
-  },
-  wideDock: {
-    marginBottom: tokens.space.xl,
-    marginTop: 22,
-    maxWidth: tokens.size.content,
-  },
-  focused: {
-    borderColor: tokens.color.focus,
-    borderWidth: tokens.border.width,
-  },
-  inputFrame: {
-    backgroundColor: tokens.color.transparent,
-    borderColor: tokens.color.transparent,
-    borderWidth: tokens.space.none,
-    flex: tokens.layout.grow,
-    minHeight: 28,
-    paddingHorizontal: tokens.space.none,
-  },
-  input: {
-    color: tokens.color.primary,
-    flex: tokens.layout.grow,
-    fontSize: 15,
-    minHeight: tokens.size.controlLarge,
-  },
-  desktopInput: {
-    color: tokens.color.text,
-    minHeight: 28,
-    paddingVertical: tokens.space.xs,
-  },
-  askButton: {
-    alignItems: 'center',
-    backgroundColor: tokens.color.primary,
-    borderRadius: 19,
-    height: tokens.size.ask,
-    justifyContent: 'center',
-    width: tokens.size.ask,
-  },
-  desktopAskButton: {
-    borderRadius: tokens.radius.lg,
-    height: tokens.size.askCompact,
-    width: tokens.size.askCompact,
-  },
-  pressed: {opacity: tokens.opacity.pressed},
-});
+const createStyles = (tokens: KitTokens) =>
+  StyleSheet.create({
+    dock: {
+      alignItems: 'center',
+      alignSelf: 'center',
+      backgroundColor: '#292929',
+      borderColor: '#4a4a4a',
+      borderRadius: tokens.space.xl,
+      borderWidth: tokens.border.width,
+      flexDirection: 'row',
+      gap: tokens.space.sm,
+      marginBottom: tokens.space.sm,
+      marginTop: 'auto',
+      maxWidth: tokens.size.searchMax,
+      minHeight: tokens.size.searchDock,
+      paddingLeft: 15,
+      paddingRight: tokens.radius.sm,
+      width: '100%',
+    },
+    desktopDock: {
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      backgroundColor: tokens.color.input,
+      borderColor: tokens.color.transparent,
+      borderRadius: tokens.space.md,
+      borderWidth: tokens.space.none,
+      flex: tokens.layout.grow,
+      flexGrow: tokens.layout.grow,
+      gap: 10,
+      marginBottom: tokens.space.none,
+      marginTop: tokens.space.none,
+      maxWidth: '100%',
+      minHeight: tokens.size.controlCompact,
+      paddingHorizontal: tokens.space.md,
+      width: 'auto',
+    },
+    compactDock: {
+      backgroundColor: '#222621',
+      borderColor: '#515a53',
+      borderRadius: 28,
+      marginBottom: tokens.space.md,
+      minHeight: tokens.size.searchDockCompact,
+    },
+    wideDock: {
+      marginBottom: tokens.space.xl,
+      marginTop: 22,
+      maxWidth: tokens.size.content,
+    },
+    focused: {
+      borderColor: tokens.color.focus,
+      borderWidth: tokens.border.width,
+    },
+    inputFrame: {
+      backgroundColor: tokens.color.transparent,
+      borderColor: tokens.color.transparent,
+      borderWidth: tokens.space.none,
+      flex: tokens.layout.grow,
+      minHeight: 28,
+      paddingHorizontal: tokens.space.none,
+    },
+    input: {
+      color: tokens.color.primary,
+      flex: tokens.layout.grow,
+      fontSize: 15,
+      minHeight: tokens.size.controlLarge,
+    },
+    desktopInput: {
+      color: tokens.color.text,
+      minHeight: 28,
+      paddingVertical: tokens.space.xs,
+    },
+    askButton: {
+      alignItems: 'center',
+      backgroundColor: tokens.color.primary,
+      borderRadius: 19,
+      height: tokens.size.ask,
+      justifyContent: 'center',
+      width: tokens.size.ask,
+    },
+    desktopAskButton: {
+      borderRadius: tokens.radius.lg,
+      height: tokens.size.askCompact,
+      width: tokens.size.askCompact,
+    },
+    pressed: {opacity: tokens.opacity.pressed},
+  });

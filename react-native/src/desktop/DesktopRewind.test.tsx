@@ -469,7 +469,10 @@ test('Settings Screen Capture switch operates the shared producer instead of cha
       view.root.findAllByType(Switch)[0]!.props.onValueChange(true),
     );
     expect(capture.start).toHaveBeenCalledTimes(1);
-    expect(setDesktopPreference).not.toHaveBeenCalled();
+    // The switch also persists intent so capture auto-starts on next launch
+    // and re-arms after sleep/lock.
+    expect(setDesktopPreference).toHaveBeenCalledWith('screenCapture', false);
+    expect(setDesktopPreference).toHaveBeenCalledWith('screenCapture', true);
   } finally {
     if (view !== undefined) {
       await act(async () => view.unmount());

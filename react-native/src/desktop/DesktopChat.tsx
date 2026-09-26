@@ -1,6 +1,5 @@
 import React, {useCallback, useLayoutEffect, useRef, useState} from 'react';
 import {Platform, ScrollView, StyleSheet, Text, View} from 'react-native';
-import X from 'lucide-react-native/icons/x';
 import ArrowUpRight from 'lucide-react-native/icons/arrow-up-right';
 import {isStreamingAssistant, type ChatMessage} from '../chatClient';
 import {ChatMessageRow, ChatThinking} from '../ui/ChatTranscript';
@@ -9,7 +8,11 @@ import {OmiAvatar} from '../ui/OmiAvatar';
 import {ShippingPressable} from './ShippingPressable';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {ScrollFade, useScrollFade} from './ScrollFade';
-import {desktopTokens as token} from './tokens';
+import {
+  type DesktopTokens,
+  useDesktopTheme,
+  useDesktopStyleSheets,
+} from './DesktopTheme';
 
 type Props = {
   submission: number;
@@ -19,9 +22,7 @@ type Props = {
   hasOlder: boolean;
   loadingOlder: boolean;
   loadingHistory?: boolean;
-  liveControl?: React.ReactNode;
   onLoadOlder: () => void;
-  onClose: () => void;
   onSuggest?: (prompt: string) => void;
 };
 export function DesktopChat({
@@ -32,11 +33,11 @@ export function DesktopChat({
   hasOlder,
   loadingOlder,
   loadingHistory = false,
-  liveControl,
   onLoadOlder,
-  onClose,
   onSuggest,
 }: Props) {
+  const styles = useDesktopStyleSheets(createStyles);
+  const {tokens: token} = useDesktopTheme();
   const list = useRef<ScrollView>(null);
   const follow = useRef(true);
   const userScrolling = useRef(false);
@@ -165,20 +166,6 @@ export function DesktopChat({
     ) : null;
   return (
     <View style={styles.root} accessibilityLabel="Chat with Omi">
-      <View style={styles.header}>
-        <View style={styles.headerLabel}>
-          <OmiAvatar tone="ink" inkColor={token.color.inkMuted} size={22} />
-          <Text style={styles.headerTitle}>Conversation</Text>
-        </View>
-        {liveControl}
-        <FocusPressable
-          accessibilityRole="button"
-          accessibilityLabel="Close chat"
-          onPress={onClose}
-          style={styles.close}>
-          <X size={18} color={token.color.ink} />
-        </FocusPressable>
-      </View>
       <ScrollFade visible style={styles.history}>
         <ScrollView
           ref={list}
@@ -258,89 +245,61 @@ export function DesktopChat({
     </View>
   );
 }
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    width: '100%',
-    maxWidth: 992,
-    alignSelf: 'center',
-    backgroundColor: token.color.glassStrong,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: token.color.line,
-    overflow: 'hidden',
-  },
-  history: {flex: 1},
-  messages: {padding: 20, gap: 20, flexGrow: 1},
-  empty: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 12,
-    padding: 24,
-  },
-  title: {
-    fontSize: 28,
-    letterSpacing: -0.6,
-    color: token.color.ink,
-    fontWeight: '500',
-    marginTop: 10,
-    textAlign: 'center',
-  },
-  emptyCopy: {textAlign: 'center', maxWidth: 400},
-  suggestions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 20,
-    alignSelf: 'stretch',
-  },
-  suggestion: {
-    flex: 1,
-    flexBasis: 180,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 16,
-    minHeight: 76,
-    borderRadius: 14,
-    borderColor: token.color.line,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  suggestionText: {
-    flex: 1,
-    fontSize: 12,
-    lineHeight: 19,
-    color: token.color.inkMuted,
-  },
-  muted: {fontSize: 13, lineHeight: 20, color: token.color.inkMuted},
-  earlier: {alignSelf: 'center', padding: 10},
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 18,
-    borderBottomWidth: 1,
-    borderColor: token.color.line,
-  },
-  headerLabel: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10},
-  headerTitle: {fontSize: 13, color: token.color.ink, fontWeight: '500'},
-  close: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-    backgroundColor: token.color.glassQuiet,
-  },
-  error: {
-    color: token.color.ink,
-    padding: 18,
-    fontSize: 13,
-    lineHeight: 21,
-    borderTopWidth: 1,
-    borderColor: token.color.line,
-  },
-});
+const createStyles = (token: DesktopTokens) =>
+  StyleSheet.create({
+    root: {flex: 1, width: '100%'},
+    history: {flex: 1},
+    messages: {padding: 20, gap: 20, flexGrow: 1},
+    empty: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 12,
+      padding: 24,
+    },
+    title: {
+      fontSize: 28,
+      letterSpacing: -0.6,
+      color: token.color.ink,
+      fontWeight: '500',
+      marginTop: 10,
+      textAlign: 'center',
+    },
+    emptyCopy: {textAlign: 'center', maxWidth: 400},
+    suggestions: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 10,
+      marginTop: 20,
+      alignSelf: 'stretch',
+    },
+    suggestion: {
+      flex: 1,
+      flexBasis: 180,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      padding: 16,
+      minHeight: 76,
+      borderRadius: 14,
+      borderColor: token.color.line,
+      borderWidth: 1,
+      overflow: 'hidden',
+    },
+    suggestionText: {
+      flex: 1,
+      fontSize: 12,
+      lineHeight: 19,
+      color: token.color.inkMuted,
+    },
+    muted: {fontSize: 13, lineHeight: 20, color: token.color.inkMuted},
+    earlier: {alignSelf: 'center', padding: 10},
+    error: {
+      color: token.color.ink,
+      padding: 18,
+      fontSize: 13,
+      lineHeight: 21,
+      borderTopWidth: 1,
+      borderColor: token.color.line,
+    },
+  });

@@ -4,12 +4,13 @@ import {
   type PressableProps,
   StyleSheet,
 } from 'react-native';
-import {tokens} from './tokens';
+import {type KitTokens, useKitStyleSheets} from '../desktop/DesktopTheme';
 
 export const FocusPressable = forwardRef<
   React.ElementRef<typeof NativePressable>,
   PressableProps
 >(function FocusPressable({onBlur, onFocus, style, ...props}, ref) {
+  const styles = useKitStyleSheets(createStyles);
   const [focused, setFocused] = useState(false);
 
   return (
@@ -47,9 +48,10 @@ export const FocusPressable = forwardRef<
 
 export const Pressable = FocusPressable;
 
-const styles = StyleSheet.create({
-  focusRing: {
-    borderColor: tokens.color.focus,
-    borderWidth: tokens.border.width,
-  },
-});
+const createStyles = (tokens: KitTokens) =>
+  StyleSheet.create({
+    focusRing: {
+      borderColor: tokens.color.focus,
+      borderWidth: tokens.border.width,
+    },
+  });

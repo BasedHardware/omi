@@ -2,12 +2,14 @@
 #import "OmiAuthModule.h"
 #import "OmiRewindStore.h"
 #import "../../apple/OmiRewindCapture.h"
+#import "../../apple/OmiAudioCapture.h"
 
 @interface OmiRewindModule : NSObject <RCTBridgeModule>
 @property(nonatomic, strong) OmiRewindStore *shipping;
 @property(nonatomic, strong) OmiRewindStore *captured;
 @property(atomic) BOOL disposed;
 @property(nonatomic, strong) OmiRewindCapture *capture;
+@property(nonatomic, strong) OmiAudioCapture *audio;
 @property(nonatomic, strong) dispatch_queue_t ioQueue;
 @end
 @implementation OmiRewindModule
@@ -29,11 +31,13 @@ RCT_EXPORT_MODULE(OmiRewind)
       NSString *own = [[[support stringByAppendingPathComponent:bundle] stringByAppendingPathComponent:@"Rewind"] stringByAppendingPathComponent:@"users"];
       _captured = [[OmiRewindStore alloc] initWithRoot:own identity:^{ return OmiAuthLocalHistoryIdentity(); }];
       _capture = [[OmiRewindCapture alloc] initWithIdentity:^{ return OmiAuthLocalHistoryIdentity(); } root:[NSURL fileURLWithPath:own.stringByDeletingLastPathComponent] authorityLock:OmiAuthKeychainLock()];
+      NSString *audioRoot = [[[support stringByAppendingPathComponent:bundle] stringByAppendingPathComponent:@"AmbientAudio"] copy];
+      _audio = [[OmiAudioCapture alloc] initWithIdentity:^{ return OmiAuthLocalHistoryIdentity(); } root:[NSURL fileURLWithPath:audioRoot]];
     }
   }
   return self;
 }
-- (void)invalidate { [self.capture invalidate]; self.disposed = YES; self.shipping.disposed = YES; self.captured.disposed = YES; }
+- (void)invalidate { [self.capture invalidate]; [self.audio invalidate]; self.disposed = YES; self.shipping.disposed = YES; self.captured.disposed = YES; }
 RCT_REMAP_METHOD(requestCapturePermission,
                  requestCapturePermissionWithResolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
@@ -119,7 +123,33 @@ RCT_REMAP_METHOD(readFrame,
   NSDictionary *result = [store read:[identifier substringFromIndex:9] error:&error];
   if (self.disposed || ![identity isEqual:OmiAuthLocalHistoryIdentity()]) { reject(@"OMI_REWIND_OWNER_CHANGED", @"Rewind account changed", nil); return; }
   if (result == nil) { reject(error.domain ?: @"OMI_REWIND_FRAME_UNAVAILABLE", @"Rewind frame could not be loaded", nil); return; }
-  NSMutableDictionary *value = [result mutableCopy]; value[@"id"] = identifier; resolve(value);
+    NSMutableDictionary *value = [result mutableCopy]; value[@"id"] = identifier; resolve(value);
   });
+}
+RCT_REMAP_METHOD(requestMicrophonePermission,
+                 requestMicrophonePermissionWithResolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  if (self.disposed || self.audio == nil) { reject(@"OMI_REWIND_UNAVAILABLE", @"Ambient audio is unavailable", nil); return; }
+  [self.audio requestMicrophonePermission:^(NSString *state) { resolve(state); }];
+}
+RCT_REMAP_METHOD(startAmbientAudio,
+                 startAmbientAudioWithResolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    NSError *error = nil;
+    if (self.disposed || self.audio == nil || ![self.audio startCapture:&error]) { reject(error.domain ?: @"OMI_CAPTURE_UNAVAILABLE", @"Ambient audio could not start", nil); return; }
+    resolve(nil);
+  });
+}
+RCT_REMAP_METHOD(stopAmbientAudio,
+                 stopAmbientAudioWithResolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  [self.audio stopCapture]; resolve(nil);
+}
+RCT_REMAP_METHOD(ambientAudioStatus,
+                 ambientAudioStatusWithResolver:(RCTPromiseResolveBlock)resolve
+                 rejecter:(RCTPromiseRejectBlock)reject) {
+  if (self.disposed || self.audio == nil) { reject(@"OMI_REWIND_UNAVAILABLE", @"Ambient audio is unavailable", nil); return; }
+  resolve([self.audio status]);
 }
 @end

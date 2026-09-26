@@ -25,7 +25,11 @@ import {
   SectionTitle,
   TaskRow,
 } from './DesktopRows';
-import {desktopTokens as token} from './tokens';
+import {
+  type DesktopTokens,
+  useDesktopTheme,
+  useDesktopStyleSheets,
+} from './DesktopTheme';
 
 type Props = {
   draft: string;
@@ -45,6 +49,8 @@ export function DesktopReadBanner({
   onRefresh: () => void;
   readsPhase: ReadsPhase;
 }) {
+  const styles = useDesktopStyleSheets(createStyles);
+  const {tokens: token} = useDesktopTheme();
   if (readsPhase === 'initial-loading' || readsPhase === 'refreshing') {
     return (
       <View accessibilityLabel="Reading your day" style={styles.banner}>
@@ -83,6 +89,8 @@ export function DesktopHome({
   reads,
   readsPhase,
 }: Props) {
+  const styles = useDesktopStyleSheets(createStyles);
+  const {tokens: token} = useDesktopTheme();
   const [wide, setWide] = useState(false);
   const query = draft.trim();
   const currents = useMemo(() => {
@@ -255,73 +263,74 @@ export function DesktopHome({
   );
 }
 
-const styles = StyleSheet.create({
-  scroll: {flex: 1},
-  home: {flex: 1, gap: 12},
-  columns: {gap: 16, marginBottom: 16},
-  columnsWide: {flexDirection: 'row'},
-  column: {flex: 1, minWidth: 0},
-  recallRow: {flexDirection: 'row', alignItems: 'center', gap: 14},
-  recallIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: token.color.glassQuiet,
-  },
-  recallCopy: {
-    fontSize: 12,
-    lineHeight: 19,
-    marginTop: 5,
-    color: token.color.inkMuted,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  banner: {
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    flexDirection: 'row',
-    gap: 12,
-    minHeight: 32,
-    width: '100%',
-    paddingHorizontal: 24,
-    paddingVertical: 6,
-  },
-  bannerText: {
-    color: token.color.inkMuted,
-    flex: 1,
-    flexShrink: 1,
-    fontFamily: token.font,
-    fontSize: token.type.meta,
-    minWidth: 0,
-  },
-  bannerAction: {
-    color: token.color.ink,
-    fontFamily: token.font,
-    fontSize: token.type.meta,
-    fontWeight: '600',
-  },
-  pressed: {opacity: 0.78},
-  list: {flex: 1},
-  section: {
-    backgroundColor: token.color.glassStrong,
-    borderWidth: 1,
-    borderColor: token.color.line,
-    borderRadius: 18,
-    gap: 12,
-    padding: 24,
-  },
-  listContent: {
-    paddingTop: 8,
-    paddingBottom: 32,
-    paddingHorizontal: 24,
-    maxWidth: 1040,
-    width: '100%',
-    alignSelf: 'center',
-  },
-});
+const createStyles = (token: DesktopTokens) =>
+  StyleSheet.create({
+    scroll: {flex: 1},
+    home: {flex: 1, gap: 12},
+    columns: {gap: 16, marginBottom: 16},
+    columnsWide: {flexDirection: 'row'},
+    column: {flex: 1, minWidth: 0},
+    recallRow: {flexDirection: 'row', alignItems: 'center', gap: 14},
+    recallIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: token.color.glassQuiet,
+    },
+    recallCopy: {
+      fontSize: 12,
+      lineHeight: 19,
+      marginTop: 5,
+      color: token.color.inkMuted,
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    banner: {
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      flexDirection: 'row',
+      gap: 12,
+      minHeight: 32,
+      width: '100%',
+      paddingHorizontal: 24,
+      paddingVertical: 6,
+    },
+    bannerText: {
+      color: token.color.inkMuted,
+      flex: 1,
+      flexShrink: 1,
+      fontFamily: token.font,
+      fontSize: token.type.meta,
+      minWidth: 0,
+    },
+    bannerAction: {
+      color: token.color.ink,
+      fontFamily: token.font,
+      fontSize: token.type.meta,
+      fontWeight: '600',
+    },
+    pressed: {opacity: 0.78},
+    list: {flex: 1},
+    section: {
+      backgroundColor: token.color.glassStrong,
+      borderWidth: 1,
+      borderColor: token.color.line,
+      borderRadius: 18,
+      gap: 12,
+      padding: 24,
+    },
+    listContent: {
+      paddingTop: 8,
+      paddingBottom: 32,
+      paddingHorizontal: 24,
+      maxWidth: 1040,
+      width: '100%',
+      alignSelf: 'center',
+    },
+  });
