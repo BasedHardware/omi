@@ -1,5 +1,7 @@
 # omi-cli examples
 
+* [`goals_html.md`](goals_html.md) — export goals to a self-contained, searchable, printable offline HTML dashboard.
+
 * [`agent_quickstart.md`](agent_quickstart.md) — how an LLM/agent should drive
   the CLI.
 * [`agent_quickstart.zh-CN.md`](agent_quickstart.zh-CN.md) — 面向 Agent 的
