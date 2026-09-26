@@ -3,6 +3,7 @@
 No third-party runtime dependencies required. Runs deterministically under
 both standard library `python3 -S` and `pytest`.
 """
+import asyncio
 import importlib.util
 import json
 from pathlib import Path
@@ -57,10 +58,14 @@ if "fastapi" not in sys.modules:
         responses = types.ModuleType("fastapi.responses")
 
         class HTMLResponse:
-            pass
+            def __init__(self, content="", status_code=200, **kwargs):
+                self.content = content
+                self.status_code = status_code
 
         class JSONResponse:
-            pass
+            def __init__(self, content=None, status_code=200, **kwargs):
+                self.content = content
+                self.status_code = status_code
 
         responses.HTMLResponse = HTMLResponse
         responses.JSONResponse = JSONResponse
@@ -344,6 +349,49 @@ class IQRatingCalculateAITests(unittest.TestCase):
             (isinstance(scores["alice"], dict) and 70 <= scores["alice"]["iq"] <= 160)
             or (isinstance(scores["alice"], (int, float)) and 70 <= scores["alice"] <= 160)
         )
+
+
+class TestIqRatingEndpointExceptionSanitization(unittest.TestCase):
+    """Hermetic verification: GET /iq and GET /iq/api must never leak raw exceptions or reflect XSS."""
+
+    def test_iq_rating_page_exception_sanitization(self):
+        with patch.object(main, "get_people_for_user", side_effect=RuntimeError("disk image malformed /secret/path <script>alert(1)</script>")):
+            resp = asyncio.run(main.iq_rating_page("test_uid"))
+            self.assertIn("Failed to generate IQ ratings due to an internal error.", resp.content)
+            self.assertNotIn("disk image malformed", resp.content)
+            self.assertNotIn("/secret/path", resp.content)
+            self.assertNotIn("<script>", resp.content)
+
+    def test_iq_rating_api_exception_sanitization(self):
+        with patch.object(main, "get_people_for_user", side_effect=RuntimeError("internal postgres connection lost at 10.0.0.1")):
+            with self.assertRaises(main.HTTPException) as ctx:
+                asyncio.run(main.iq_rating_api("test_uid"))
+            self.assertEqual(ctx.exception.status_code, 500)
+            self.assertEqual(ctx.exception.detail, "Failed to get IQ ratings due to an internal error.")
+            self.assertNotIn("internal postgres connection lost", ctx.exception.detail)
+            self.assertNotIn("10.0.0.1", ctx.exception.detail)
+
+    def test_iq_rating_page_empty_and_success_states(self):
+        with patch.object(main, "get_people_for_user", return_value={}):
+            resp = asyncio.run(main.iq_rating_page("test_uid"))
+            self.assertIn("No names found in your memories yet", resp.content)
+
+        sample_people = {"alice": {"name": "Alice", "iq": 125}}
+        with patch.object(main, "get_people_for_user", return_value=sample_people):
+            resp = asyncio.run(main.iq_rating_page("test_uid"))
+            self.assertIn("Alice", resp.content)
+
+    def test_iq_rating_api_loading_and_ready_states(self):
+        with patch.object(main, "get_people_for_user", return_value=None), \
+             patch.object(main, "is_loading", return_value=True):
+            resp = asyncio.run(main.iq_rating_api("test_uid"))
+            self.assertEqual(resp.content["status"], "loading")
+
+        sample_people = {"alice": {"name": "Alice", "iq": 125}}
+        with patch.object(main, "get_people_for_user", return_value=sample_people):
+            resp = asyncio.run(main.iq_rating_api("test_uid"))
+            self.assertEqual(resp.content["status"], "ready")
+            self.assertEqual(resp.content["total_people"], 1)
 
 
 if __name__ == "__main__":
