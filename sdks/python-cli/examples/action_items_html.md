@@ -1,79 +1,59 @@
-# Recipe: Action Items → HTML Dashboard Report
+# Recipe: Export action items to HTML
 
-Export your Omi action items to a self-contained, printable HTML dashboard — zero third-party dependencies, pure Python standard library.
-
-## What you get
-
-- A single `.html` file you can open in any browser or print to PDF
-- Summary cards: **Total**, **Pending**, **Overdue**, **Completed**
-- Color-coded status badges per task
-- Due date normalization with optional timezone offset
-- Automatic deduplication across multi-page JSON exports
-- `@media print` rules for clean hard-copy output
-- Safe atomic write (`xb` mode) — refuses to overwrite an existing file
+Convert the JSON output of `omi action-item list` into a self-contained,
+browser-ready HTML table — no external dependencies, no network access.
 
 ## Prerequisites
 
-```bash
-pipx install omi-cli   # or: pip install omi-cli
-export OMI_API_KEY="your_api_key"
-```
+- Python 3.8 or later (stdlib only)
+- Omi CLI authenticated: `omi auth login`
 
-## Step 1 — Export action items to JSON
-
-Fetch your action items and save them as JSON:
+## Usage
 
 ```bash
-# All items (open + completed)
-omi --json action-item list > action_items_all.json
+# Pipe directly from the CLI
+omi --json action-item list | python action_items_html.py
 
-# If pagination is needed, repeat with --page:
-omi --json action-item list --page 2 > action_items_page2.json
+# Save the JSON first, then convert
+omi --json action-item list > items.json
+python action_items_html.py --input items.json --output action_items.html
+
+# Overwrite an existing output file
+python action_items_html.py --input items.json --overwrite
 ```
 
-## Step 2 — Save the script
+The script writes `action_items.html` (configurable via `--output`) and prints
+a summary line, e.g. `Written 42 item(s) → action_items.html`.
 
-Download [`action_items_html.py`](action_items_html.py) from this directory, or copy it alongside your JSON exports.
+## How it works
 
-## Step 3 — Run it
-
-```bash
-# Single file, UTC
-python action_items_html.py action_items_all.json --output dashboard.html
-
-# Multi-page export, Tokyo timezone
-python action_items_html.py \
-    action_items_page1.json \
-    action_items_page2.json \
-    --utc-offset +09:00 \
-    --output dashboard_jp.html
-
-# Eastern US
-python action_items_html.py action_items_all.json \
-    --utc-offset -05:00 \
-    --output dashboard_et.html
-```
-
-Open the resulting file in any browser — or print / save as PDF via the browser's built-in print dialog.
+| Step | Detail |
+|------|--------|
+| Parse | Reads a JSON array or `{"items": […]}` wrapper from stdin or a file |
+| Deduplicate | Drops items with the same `conversation_id` + `description` pair |
+| Render | Builds an escaped, self-contained HTML table (no external CSS/JS) |
+| Write | Opens the output file with mode `'x'` to prevent silent overwrites |
 
 ## Output
 
-The generated file is fully self-contained (no CDN, no external fonts, no tracking).
+The generated page contains four columns:
 
-| Section | Details |
-|---|---|
-| Summary cards | Total · Pending · Overdue · Completed counts |
-| Task table | Done mark · Task text · Status badge · Due date · Created date · Conversation ID |
-| Print CSS | Clean hard-copy via browser Print → Save as PDF |
+| Column | Source field |
+|--------|--------------|
+| Task | `description` (falls back to `text` / `content`) |
+| Conversation ID | `conversation_id` / `memory_id` |
+| Created | `created_at` / `timestamp` |
+| Status | `completed` / `done` / `status` |
 
-## Notes
+## Options
 
-- **Deduplication**: if the same task ID appears in multiple input files, it is counted once.
-- **Due date detection**: reads `due_date` and `due_at` fields; items with no due date and not yet completed are treated as `pending`.
-- **Overwrite protection**: uses Python's `'xb'` open mode — exits with a clear error rather than silently clobbering an existing report.
-- **No network access**: all CSS is embedded inline; no external resources are referenced.
+```
+-i FILE, --input FILE    JSON source file (default: stdin)
+-o FILE, --output FILE   HTML destination (default: action_items.html)
+--overwrite              Replace output file if it already exists
+```
 
 ## Related recipes
 
-- [Agent Quickstart](agent_quickstart.md) — run an Omi agent from the CLI
-- [README](README.md) — full example index
+See the [full example index](README.md) for more recipes (ICS calendar export,
+todo.txt, CSV, xlsx, SQLite, Atom feed, Org-mode, Markdown, and others).
