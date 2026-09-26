@@ -77,7 +77,7 @@ def chunk_span_bounds(item: object) -> Optional[Tuple[float, float]]:
     elif hasattr(item, 'start') and hasattr(item, 'end'):
         # Pydantic v2 BaseModel et al: not a Mapping, but carries .start/.end.
         # Downstream bool/float/span_valid checks still fail closed on bad values.
-        raw_start, raw_end = item.start, item.end
+        raw_start, raw_end = getattr(item, 'start'), getattr(item, 'end')
     elif isinstance(item, (list, tuple)) and len(item) == 2:
         raw_start, raw_end = item[0], item[1]
     else:

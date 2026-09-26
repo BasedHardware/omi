@@ -116,6 +116,16 @@ envFrom:
 runtimeConfigMapName: dev-omi-backend-config
 
 env:
+  - name: TRANSCRIPTION_SHADOW_ENABLED
+    value: "false"
+  - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
+    value: "false"
+  - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
+    value: ""
+  - name: TRANSCRIPTION_SHADOW_PERCENT
+    value: "0"
+  - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS
+    value: "0"
   - name: FREE_TIER_LOCAL_PROCESSING
     value: "true"
   - name: FREE_TIER_EMERGENCY_STOP
