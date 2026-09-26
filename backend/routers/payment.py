@@ -930,19 +930,21 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 raise HTTPException(status_code=400, detail="Invalid client")
             uid = uid[4:]
 
+            current_period_end = None
             if session.get("subscription"):
                 subscription_id = session["subscription"]
-                await run_blocking(
+                subscription = await run_blocking(
                     stripe_executor,
                     stripe_utils.modify_subscription,
                     subscription_id,
                     metadata={"uid": uid, "app_id": app_id},
                 )
+                current_period_end = subscription.get('current_period_end') if subscription else None
                 # Store the customer ID for app subscription so that it is easy to cancel the subscription
                 customer_id = session.get("customer")
                 if customer_id:
                     await run_blocking(db_executor, set_user_app_sub_customer_id, app_id, uid, customer_id)
-            await run_blocking(db_executor, paid_app, app_id, uid)
+            await run_blocking(db_executor, paid_app, app_id, uid, current_period_end)
 
         # Regular user subscription - check for sub_type metadata or client_reference_id
         elif client_reference_id or session.get('metadata', {}).get('sub_type'):
@@ -1268,7 +1270,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 app_id = metadata.get('app_id')
                 uid = metadata.get('uid')
                 if app_id and uid:
-                    await run_blocking(db_executor, paid_app, app_id, uid)
+                    await run_blocking(db_executor, paid_app, app_id, uid, subscription.get('current_period_end'))
                     logger.info(f"Paid app entitlement renewed for user {uid}. App: {app_id}")
             except Exception as e:
                 logger.error(f"Error renewing paid app entitlement for subscription {subscription_id}: {e}")
