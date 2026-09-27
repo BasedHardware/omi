@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.403",
+      "date": "2026-09-27",
+      "changes": [
+        "Fixed conversation summaries to show compact Sources controls instead of internal transcript identifiers"
+      ]
+    },
+    {
       "version": "0.12.402",
       "date": "2026-09-26",
       "changes": [
