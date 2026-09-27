@@ -560,7 +560,8 @@ void main() {
         ),
       ];
 
-      await sync.stampConversationId(now - 100, 'conv-live', recordingSessionId: 'recording-live');
+      sync.prepareConversationStamp('recording-live');
+      await sync.stampConversationId(now - 100, 'conv-live');
 
       expect(sync.testWals[0].conversationId, 'conv-live');
       expect(sync.testWals[1].conversationId, isNull);

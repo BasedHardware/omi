@@ -156,10 +156,18 @@ class LocalWalSyncImpl implements LocalWalSync {
   Geolocation? _sessionGeolocation;
   int? _sessionGeolocationSetAt;
   String? _activeRecordingSessionId;
+  String? _conversationStampRecordingId;
 
   void setActiveRecordingSessionId(String? recordingSessionId) {
     final trimmed = recordingSessionId?.trim();
     _activeRecordingSessionId = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+  }
+
+  /// Recording id captured before a flush. [stampConversationId] keeps its
+  /// original signature so session spies do not have to learn a new argument.
+  void prepareConversationStamp(String? recordingSessionId) {
+    final trimmed = recordingSessionId?.trim();
+    _conversationStampRecordingId = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
   }
 
   bool _isCancelled = false;
@@ -755,18 +763,16 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// Stamp all session WALs with the given conversationId and persist to disk.
   /// This makes WAL→conversation linkage survive app kill.
   ///
-  /// A WAL created for [recordingSessionId] is stamped even when its backdated
-  /// [Wal.timerStart] is earlier than [sessionStartSeconds]. A WAL that already
-  /// belongs to a different recording is left alone, so a session roll during
-  /// the flush cannot attach the next recording to this conversation.
-  Future<void> stampConversationId(
-    int sessionStartSeconds,
-    String conversationId, {
-    String? recordingSessionId,
-  }) async {
+  /// A WAL created for the recording passed to [prepareConversationStamp] is
+  /// stamped even when its backdated [Wal.timerStart] is earlier than
+  /// [sessionStartSeconds]. A WAL that already belongs to a different recording
+  /// is left alone, so a session roll during the flush cannot attach the next
+  /// recording to this conversation.
+  Future<void> stampConversationId(int sessionStartSeconds, String conversationId) async {
     final generation = _sessionGeneration;
     final now = _now().millisecondsSinceEpoch ~/ 1000;
-    final recordingId = recordingSessionId?.trim();
+    final recordingId = _conversationStampRecordingId;
+    _conversationStampRecordingId = null;
     final matchRecording = recordingId != null && recordingId.isNotEmpty;
     int stamped = 0;
     for (final wal in _wals) {

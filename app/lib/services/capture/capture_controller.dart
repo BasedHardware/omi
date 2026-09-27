@@ -3316,7 +3316,10 @@ class CaptureController extends ChangeNotifier
         onCreated: _processConversationCreated,
       );
       if (sessionStart > 0 && conversationId != null) {
-        await phoneSync.stampConversationId(sessionStart, conversationId, recordingSessionId: recordingSessionId);
+        if (phoneSync is LocalWalSyncImpl) {
+          phoneSync.prepareConversationStamp(recordingSessionId);
+        }
+        await phoneSync.stampConversationId(sessionStart, conversationId);
         _autoSyncSessionWals();
       }
     });
@@ -3342,11 +3345,10 @@ class CaptureController extends ChangeNotifier
       final phoneSync = _wal.getSyncs().phone;
       await phoneSync.finalizeCurrentSession();
       if (sessionStartSeconds > 0) {
-        await phoneSync.stampConversationId(
-          sessionStartSeconds,
-          conversationId,
-          recordingSessionId: recordingSessionId,
-        );
+        if (phoneSync is LocalWalSyncImpl) {
+          phoneSync.prepareConversationStamp(recordingSessionId);
+        }
+        await phoneSync.stampConversationId(sessionStartSeconds, conversationId);
       }
     } catch (e) {
       Logger.debug('_finalizeAndStampSession error: $e');
