@@ -134,6 +134,23 @@ async def test_metric_labels_and_ephemeral_language_metadata(monkeypatch):
     assert observations.counts['out_of_profile'] == 2
 
 
+@pytest.mark.asyncio
+async def test_invalid_provider_code_uses_the_off_loop_detector(monkeypatch):
+    monkeypatch.setattr('utils.stt.language_policy.detect_langs', lambda _: [SimpleNamespace(lang='it', prob=0.99)])
+    observations = LiveLanguageObservations(LiveLanguageProfile.create('pt', multi=True, uid='u'))
+    spawned = []
+
+    def spawn(coro, name):
+        spawned.append(name)
+        return asyncio.create_task(coro, name=name)
+
+    segment = {'text': 'a' * 24, '_provider_language': 'unbounded-provider-value'}
+    observations.observe(segment, 'soniox', spawn)
+    await observations.summarize()
+    assert spawned == ['stt_language_detect']
+    assert observations.counts['out_of_profile'] == 1
+
+
 def test_client_provider_label_cannot_expand_metric_cardinality():
     observations = LiveLanguageObservations(LiveLanguageProfile.create('pt', multi=True, uid='u'))
     host = SimpleNamespace(

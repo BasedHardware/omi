@@ -146,6 +146,8 @@ class LiveLanguageObservations:
     def observe(self, segment: dict[str, Any], provider: str, spawn: Any) -> None:
         # Provider metadata is ephemeral; never persist it with transcript text.
         language = segment.pop('_provider_language', None)
+        code = normalized_stt_language(language if isinstance(language, str) else None)
+        language = code if re.fullmatch(r'[a-z]{2,3}', code) else None
         text = str(segment.get('text') or '')
         if language or not self.profile.expected or sum(c.isalpha() for c in text) < MIN_LETTERS:
             self._record(provider, classify_output(text, self.profile, language))
