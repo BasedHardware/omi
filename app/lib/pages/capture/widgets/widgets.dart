@@ -188,6 +188,7 @@ getTranscriptWidget(
   bool topMargin = true,
   bool canDisplaySeconds = true,
   bool isConversationDetail = false,
+  bool unresolvedSpeakers = false,
   double bottomMargin = 100.0,
   Function(String, int)? editSegment,
   List<String> taggingSegmentIds = const [],
@@ -222,6 +223,7 @@ getTranscriptWidget(
     return TranscriptWidget(
       key: transcriptKey,
       segments: segments,
+      unresolvedSpeakers: unresolvedSpeakers,
       horizontalMargin: horizontalMargin,
       topMargin: topMargin,
       canDisplaySeconds: canDisplaySeconds,

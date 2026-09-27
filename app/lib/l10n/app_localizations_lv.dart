@@ -11433,4 +11433,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'Atmest';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Nesadzirdēju — mēģiniet vēlreiz';
 }

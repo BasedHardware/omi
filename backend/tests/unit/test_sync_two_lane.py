@@ -238,7 +238,7 @@ def test_sync_backfill_lifecycle_alerts_on_scheduler_failure_and_missing_sweep()
     assert 'AttemptFinished' in action
     assert 'action=sweep_summary outcome=done' in action
     assert "CONDITION='absent'" in action
-    assert "DURATION='10min'" in action
+    assert "DURATION='600s'" in action
 
 
 def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():

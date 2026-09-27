@@ -11197,4 +11197,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => '放弃';
+
+  @override
+  String get voiceQuestionNoSpeech => '没听清楚 — 请再试一次';
 }

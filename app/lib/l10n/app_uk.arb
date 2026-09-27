@@ -3598,5 +3598,6 @@
     "appearanceSystem": "Система",
     "appearanceLight": "Світла",
     "appearanceDark": "Темна",
-    "chatDiscardRecording": "Скасувати"
+    "chatDiscardRecording": "Скасувати",
+    "voiceQuestionNoSpeech": "Не вдалося розчути — спробуйте ще раз"
 }

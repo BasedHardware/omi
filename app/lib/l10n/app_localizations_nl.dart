@@ -11444,4 +11444,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'Verwerpen';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Dat heb ik niet verstaan — probeer het opnieuw';
 }

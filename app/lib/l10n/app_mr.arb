@@ -11158,5 +11158,6 @@
     "appearanceSystem": "सिस्टम",
     "appearanceLight": "हलका",
     "appearanceDark": "गडद",
-    "chatDiscardRecording": "टाकून द्या"
+    "chatDiscardRecording": "टाकून द्या",
+    "voiceQuestionNoSpeech": "ऐकू आले नाही — पुन्हा प्रयत्न करा"
 }

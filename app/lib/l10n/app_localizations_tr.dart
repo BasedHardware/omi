@@ -11420,4 +11420,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'Vazgeç';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Anlayamadım — tekrar deneyin';
 }

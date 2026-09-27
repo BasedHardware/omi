@@ -3694,5 +3694,6 @@
     "appearanceSystem": "Rendszer",
     "appearanceLight": "Világos",
     "appearanceDark": "Sötét",
-    "chatDiscardRecording": "Elvetés"
+    "chatDiscardRecording": "Elvetés",
+    "voiceQuestionNoSpeech": "Nem értettem — próbáld újra"
 }

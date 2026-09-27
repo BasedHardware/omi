@@ -3598,5 +3598,6 @@
     "appearanceSystem": "Systeem",
     "appearanceLight": "Licht",
     "appearanceDark": "Donker",
-    "chatDiscardRecording": "Verwerpen"
+    "chatDiscardRecording": "Verwerpen",
+    "voiceQuestionNoSpeech": "Dat heb ik niet verstaan — probeer het opnieuw"
 }

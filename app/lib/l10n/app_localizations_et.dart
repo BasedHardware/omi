@@ -11404,4 +11404,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'Loobu';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Ma ei saanud aru — proovige uuesti';
 }

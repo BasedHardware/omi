@@ -11223,4 +11223,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => '삭제';
+
+  @override
+  String get voiceQuestionNoSpeech => '잘 듣지 못했어요 — 다시 시도해 주세요';
 }

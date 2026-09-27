@@ -11158,5 +11158,6 @@
     "appearanceSystem": "سسٹم",
     "appearanceLight": "روشن",
     "appearanceDark": "گہرا",
-    "chatDiscardRecording": "رد کریں"
+    "chatDiscardRecording": "رد کریں",
+    "voiceQuestionNoSpeech": "سمجھ نہیں آیا — دوبارہ کوشش کریں"
 }

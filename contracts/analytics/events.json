@@ -2472,6 +2472,35 @@
         "mobile-instrumentation-presence"
       ],
       "correlation": null
+    },
+    {
+      "id": "pendantVoiceQuestionDropped",
+      "wire_name": "Pendant Voice Question Dropped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "invalid_button_payload",
+            "actions_disabled",
+            "empty_frames",
+            "no_device",
+            "cancelled",
+            "send_in_flight",
+            "audio_save_failed",
+            "auto_end_grace",
+            "codec_lookup_failed"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
     }
   ]
 }

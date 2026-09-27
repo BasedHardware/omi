@@ -11317,4 +11317,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'מחיקה';
+
+  @override
+  String get voiceQuestionNoSpeech => 'לא הבנתי — נסה שוב';
 }

@@ -3633,5 +3633,6 @@
     "appearanceSystem": "Sistem",
     "appearanceLight": "Terang",
     "appearanceDark": "Gelap",
-    "chatDiscardRecording": "Buang"
+    "chatDiscardRecording": "Buang",
+    "voiceQuestionNoSpeech": "Tidak terdengar — coba lagi"
 }

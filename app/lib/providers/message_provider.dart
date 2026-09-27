@@ -19,6 +19,7 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
@@ -37,6 +38,8 @@ typedef ChatReplyStreamer = Stream<ServerMessageChunk> Function(
   List<String>? filesId,
   ChatPageContext? context,
 });
+typedef VoiceReplyStreamer = Stream<ServerMessageChunk> Function(List<File> files, {String? language});
+typedef VoiceAudioFileSaver = Future<File> Function(List<List<int>> bytes, int startTime, int frameSize);
 
 class _ChatTelemetryAttempt {
   _ChatTelemetryAttempt(this.attempt);
@@ -64,9 +67,20 @@ class _FailedReply {
 }
 
 class MessageProvider extends ChangeNotifier {
-  MessageProvider({ChatFilesUploader? filesUploader}) : _filesUploader = filesUploader ?? uploadFilesServer;
+  MessageProvider({
+    ChatFilesUploader? filesUploader,
+    VoiceReplyStreamer? voiceReplyStreamer,
+    VoiceAudioFileSaver? voiceAudioFileSaver,
+    Duration voiceReplyTimeout = const Duration(seconds: 60),
+  })  : _filesUploader = filesUploader ?? uploadFilesServer,
+        _voiceReplyStreamer = voiceReplyStreamer ?? sendVoiceMessageStreamServer,
+        _voiceAudioFileSaver = voiceAudioFileSaver ?? FileUtils.saveAudioBytesToTempFile,
+        _voiceReplyTimeout = voiceReplyTimeout;
 
   final ChatFilesUploader _filesUploader;
+  final VoiceReplyStreamer _voiceReplyStreamer;
+  final VoiceAudioFileSaver _voiceAudioFileSaver;
+  final Duration _voiceReplyTimeout;
 
   /// Test seam — replaces [sendMessageStreamServer] for typed messages.
   @visibleForTesting
@@ -584,16 +598,28 @@ class MessageProvider extends ChangeNotifier {
 
   bool _voiceSendInFlight = false;
 
+  void _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason reason) {
+    Logger.warning('Pendant voice question dropped: ${reason.wireName}');
+    const TypedEvents().emit(PendantVoiceQuestionDropped(reason: reason));
+  }
+
   Future sendVoiceMessageStreamToServer(
     List<List<int>> audioBytes, {
     Function? onFirstChunkRecived,
+    Future<void> Function()? onNoSpeech,
     BleAudioCodec? codec,
     bool playResponseAudio = false,
   }) async {
     // Re-entry guard so a duplicated end-of-session signal from the device
     // button can't kick off two parallel voice replies.
-    if (_voiceSendInFlight) return;
-    if (audioBytes.isEmpty) return;
+    if (_voiceSendInFlight) {
+      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.sendInFlight);
+      return;
+    }
+    if (audioBytes.isEmpty) {
+      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.emptyFrames);
+      return;
+    }
     _voiceSendInFlight = true;
     final chatAttempt = ProductTelemetry.instance.start(
       ProductJourney.chatVoice,
@@ -610,13 +636,14 @@ class MessageProvider extends ChangeNotifier {
     _chatQuotaExceeded = false; // Clear stale quota state from previous sends
     late final File file;
     try {
-      file = await FileUtils.saveAudioBytesToTempFile(
+      file = await _voiceAudioFileSaver(
         audioBytes,
         DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
         codec?.getFrameSize() ?? 160,
       );
     } catch (_) {
       _voiceSendInFlight = false;
+      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.audioSaveFailed);
       chatAttempt.complete(ProductOutcome.failure, failure: ProductFailure.unknown);
       return;
     }
@@ -642,13 +669,12 @@ class MessageProvider extends ChangeNotifier {
     // path (capture_provider). The chat-screen mic input does not pass
     // playResponseAudio=true.
     final String playbackMessageId = message.id;
-    if (playResponseAudio) {
-      await OmiVoicePlaybackService.instance.beginResponse(messageId: playbackMessageId);
-    }
-
     try {
+      if (playResponseAudio) {
+        await OmiVoicePlaybackService.instance.beginResponse(messageId: playbackMessageId);
+      }
       bool firstChunkRecieved = false;
-      await for (var chunk in sendVoiceMessageStreamServer([file])) {
+      await for (var chunk in _voiceReplyStreamer([file]).timeout(_voiceReplyTimeout)) {
         if (!firstChunkRecieved &&
             [
               MessageChunkType.message,
@@ -713,6 +739,19 @@ class MessageProvider extends ChangeNotifier {
         }
 
         if (chunk.type == MessageChunkType.error) {
+          if (chunk.errorCode == 'no_speech') {
+            final l10n = globalNavigatorKey.currentContext?.l10n;
+            message.text = l10n?.voiceQuestionNoSpeech ?? "Didn't catch that — try again";
+            if (playResponseAudio) {
+              await OmiVoicePlaybackService.instance.interrupt(
+                source: VoiceReplyPlaybackInterruptSource.streamError,
+              );
+            }
+            if (onNoSpeech != null) await onNoSpeech();
+            completeChat(ProductOutcome.empty);
+            notifyListeners();
+            return;
+          }
           if (_tryParseQuotaError(chunk.text)) {
             final l10n = globalNavigatorKey.currentContext?.l10n;
             message.text = l10n?.chatQuotaExceededReply ??
@@ -750,9 +789,9 @@ class MessageProvider extends ChangeNotifier {
       notifyListeners();
     } finally {
       _voiceSendInFlight = false;
+      setShowTypingIndicator(false);
     }
 
-    setShowTypingIndicator(false);
     if (!chatAttemptCompleted) {
       if (playResponseAudio) {
         await OmiVoicePlaybackService.instance.interrupt(

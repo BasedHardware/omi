@@ -3598,5 +3598,6 @@
     "appearanceSystem": "Sistem",
     "appearanceLight": "Luminos",
     "appearanceDark": "Întunecat",
-    "chatDiscardRecording": "Renunță"
+    "chatDiscardRecording": "Renunță",
+    "voiceQuestionNoSpeech": "Nu am înțeles — încearcă din nou"
 }

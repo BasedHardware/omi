@@ -3633,5 +3633,6 @@
     "appearanceSystem": "Sistema",
     "appearanceLight": "Claro",
     "appearanceDark": "Escuro",
-    "chatDiscardRecording": "Descartar"
+    "chatDiscardRecording": "Descartar",
+    "voiceQuestionNoSpeech": "Não entendi — tente novamente"
 }

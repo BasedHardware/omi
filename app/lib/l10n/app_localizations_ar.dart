@@ -11338,4 +11338,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'تجاهل';
+
+  @override
+  String get voiceQuestionNoSpeech => 'لم ألتقط ذلك — حاول مرة أخرى';
 }

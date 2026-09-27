@@ -167,8 +167,14 @@ ServerMessageChunk? parseVoiceMessageStreamChunk(String line, String messageId) 
 
       final message = payload['message'];
       if (message is! String || message.trim().isEmpty) return ServerMessageChunk.failedMessage();
+      final errorCode = payload['error'];
 
-      return ServerMessageChunk(messageId, message, MessageChunkType.error);
+      return ServerMessageChunk(
+        messageId,
+        message,
+        MessageChunkType.error,
+        errorCode: errorCode is String ? errorCode : null,
+      );
     } on FormatException {
       return ServerMessageChunk.failedMessage();
     }

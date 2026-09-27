@@ -11411,4 +11411,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'Hylkää';
+
+  @override
+  String get voiceQuestionNoSpeech => 'En saanut selvää — yritä uudelleen';
 }

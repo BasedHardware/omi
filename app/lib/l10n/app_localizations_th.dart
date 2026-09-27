@@ -11342,4 +11342,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'ละทิ้ง';
+
+  @override
+  String get voiceQuestionNoSpeech => 'ฟังไม่ชัด — ลองอีกครั้ง';
 }

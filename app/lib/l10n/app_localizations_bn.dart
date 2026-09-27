@@ -11408,4 +11408,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'বাতিল করুন';
+
+  @override
+  String get voiceQuestionNoSpeech => 'শুনতে পাইনি — আবার চেষ্টা করুন';
 }

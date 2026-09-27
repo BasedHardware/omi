@@ -77,6 +77,22 @@ def test_independent_chunk_speakers_survive_merge_and_retry(reverse):
     assert all(s['speaker'] == 'SPEAKER_00' for s in result['transcript_segments'])
 
 
+def test_legacy_sync_survivor_gains_audio_aligned_scope_without_renumbering():
+    store = StrictFirestore()
+    first = chunk('old', 1000)
+    first['transcript_segments'][0].update(id='old-segment', speaker='SPEAKER_04', speaker_id=4)
+    intake(store, first)
+    second = chunk('new', 1060)
+    second['transcript_segments'][0].update(id='new-segment', speaker='SPEAKER_00', speaker_id_scope='sync:new')
+
+    result, _, _ = intake(store, second)
+
+    old = next(s for s in result['transcript_segments'] if s['id'] == 'old-segment')
+    assert old['speaker_id'] == 4
+    assert old['speaker_id_scope'] == 'legacy-conversation:old:4'
+    assert {s['speaker_id'] for s in result['transcript_segments']} == {4, 5}
+
+
 def test_sync_appended_to_live_target_does_not_reuse_live_speaker_id():
     store = StrictFirestore()
     live = chunk('live', 1000)
@@ -358,9 +374,11 @@ def test_bridge_allocates_donor_clusters_without_colliding_with_survivor():
     }
     assert mapped['sync:a'] != mapped['sync:b']
     replay, _, _ = intake(store, b)
-    assert {
+    replay_mapped = {
         s.get('speaker_id_scope'): s['speaker_id'] for s in replay['transcript_segments'] if s.get('speaker_id_scope')
-    } == mapped
+    }
+    assert all(replay_mapped[key] == value for key, value in mapped.items())
+    assert replay_mapped['legacy-conversation:a:0'] == mapped['sync:a']
 
 
 def test_labeled_sync_row_receives_later_same_capture_chunk_without_becoming_a_donor():

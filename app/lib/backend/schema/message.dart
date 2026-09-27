@@ -640,8 +640,9 @@ class ServerMessageChunk {
   MessageChunkType type;
   String text;
   ServerMessage? message;
+  String? errorCode;
 
-  ServerMessageChunk(this.messageId, this.text, this.type, {this.message});
+  ServerMessageChunk(this.messageId, this.text, this.type, {this.message, this.errorCode});
 
   static ServerMessageChunk failedMessage() {
     return ServerMessageChunk(

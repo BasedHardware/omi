@@ -3598,5 +3598,6 @@
     "appearanceSystem": "システム",
     "appearanceLight": "ライト",
     "appearanceDark": "ダーク",
-    "chatDiscardRecording": "破棄"
+    "chatDiscardRecording": "破棄",
+    "voiceQuestionNoSpeech": "聞き取れませんでした — もう一度お試しください"
 }

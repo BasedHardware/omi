@@ -3598,5 +3598,6 @@
     "appearanceSystem": "Süsteem",
     "appearanceLight": "Hele",
     "appearanceDark": "Tume",
-    "chatDiscardRecording": "Loobu"
+    "chatDiscardRecording": "Loobu",
+    "voiceQuestionNoSpeech": "Ma ei saanud aru — proovige uuesti"
 }

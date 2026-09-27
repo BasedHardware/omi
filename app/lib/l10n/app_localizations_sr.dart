@@ -11422,4 +11422,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'Одбаци';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Нисам разумео — покушајте поново';
 }

@@ -11406,4 +11406,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'Zahodit';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Nerozuměl jsem — zkuste to znovu';
 }

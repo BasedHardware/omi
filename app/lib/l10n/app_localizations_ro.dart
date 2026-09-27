@@ -11462,4 +11462,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'Renunță';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Nu am înțeles — încearcă din nou';
 }

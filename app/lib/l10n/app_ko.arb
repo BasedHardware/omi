@@ -3598,5 +3598,6 @@
     "appearanceSystem": "시스템",
     "appearanceLight": "라이트",
     "appearanceDark": "다크",
-    "chatDiscardRecording": "삭제"
+    "chatDiscardRecording": "삭제",
+    "voiceQuestionNoSpeech": "잘 듣지 못했어요 — 다시 시도해 주세요"
 }

@@ -11444,4 +11444,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'Odrzuć';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Nie udało się usłyszeć — spróbuj ponownie';
 }

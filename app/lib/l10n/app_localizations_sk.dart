@@ -11399,4 +11399,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'Zahodiť';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Nerozumel som — skúste to znova';
 }

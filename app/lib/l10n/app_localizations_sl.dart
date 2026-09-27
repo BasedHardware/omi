@@ -11438,4 +11438,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'Zavrzi';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Nisem razumel — poskusite znova';
 }

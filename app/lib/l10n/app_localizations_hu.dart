@@ -11452,4 +11452,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'Elvetés';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Nem értettem — próbáld újra';
 }

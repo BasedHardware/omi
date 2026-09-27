@@ -3598,5 +3598,6 @@
     "appearanceSystem": "Järjestelmä",
     "appearanceLight": "Vaalea",
     "appearanceDark": "Tumma",
-    "chatDiscardRecording": "Hylkää"
+    "chatDiscardRecording": "Hylkää",
+    "voiceQuestionNoSpeech": "En saanut selvää — yritä uudelleen"
 }

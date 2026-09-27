@@ -11158,5 +11158,6 @@
     "appearanceSystem": "Sistem",
     "appearanceLight": "Svetlo",
     "appearanceDark": "Tamno",
-    "chatDiscardRecording": "Одбаци"
+    "chatDiscardRecording": "Одбаци",
+    "voiceQuestionNoSpeech": "Нисам разумео — покушајте поново"
 }

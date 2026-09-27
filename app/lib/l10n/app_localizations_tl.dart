@@ -11509,4 +11509,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'Itapon';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Hindi ko narinig iyon — subukan ulit';
 }

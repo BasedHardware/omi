@@ -11470,4 +11470,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'Отфрли';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Не разбрав — обидете се повторно';
 }

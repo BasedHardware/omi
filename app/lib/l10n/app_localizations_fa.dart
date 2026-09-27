@@ -11404,4 +11404,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get chatDiscardRecording => 'دور انداختن';
+
+  @override
+  String get voiceQuestionNoSpeech => 'متوجه نشدم — دوباره تلاش کنید';
 }
