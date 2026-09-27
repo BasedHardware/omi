@@ -780,16 +780,13 @@ def get_stt_service_for_language(
         multi_lang_enabled=multi_lang_enabled,
         surface=surface,
     )
-    if (
-        surface == STTServingSurface.STREAMING
-        and (preferred_service or '').strip().lower() != STTService.parakeet.value
-        and prefer_hintable_soniox(
-            language_profile,
-            stt_service_models,
-            exclude,
-            lambda: _circuit_for_primary(STTService.soniox).cooldown_elapsed()
-            and _circuit_for_primary(STTService.soniox).account_cooldown_elapsed(),
-        )
+    if surface == STTServingSurface.STREAMING and prefer_hintable_soniox(
+        language_profile,
+        stt_service_models,
+        exclude,
+        lambda: _circuit_for_primary(STTService.soniox).cooldown_elapsed()
+        and _circuit_for_primary(STTService.soniox).account_cooldown_elapsed(),
+        preferred_service=preferred_service,
     ):
         return STTService.soniox, requested_language, 'soniox'
 
@@ -836,7 +833,6 @@ def get_stt_service_for_language(
             ):
                 return (STTService.modulate, requested_language, 'velma-2'), parakeet_fallback_reason
             if model == 'soniox' and provider_is_enabled(SONIOX_PROVIDER, surface) and os.getenv('SONIOX_API_KEY'):
-                # Soniox identifies every requested language, including multi.
                 return (STTService.soniox, requested_language, 'soniox'), parakeet_fallback_reason
         return None, parakeet_fallback_reason
 

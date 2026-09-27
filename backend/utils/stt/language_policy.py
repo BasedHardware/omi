@@ -69,12 +69,14 @@ def prefer_hintable_soniox(
     models: Collection[str],
     exclude: Collection[str],
     circuit_ready: Callable[[], bool],
+    preferred_service: str | None = None,
 ) -> bool:
     """Read-only admission; the actual connect still owns its breaker probe."""
     return bool(
         profile
         and profile.in_scope
         and profile.arm == 'hintable'
+        and (preferred_service or '').strip().lower() != 'parakeet'
         and 'soniox' in (model.strip() for model in models)
         and SONIOX_PROVIDER not in exclude
         and provider_is_enabled(SONIOX_PROVIDER, STTServingSurface.STREAMING)
