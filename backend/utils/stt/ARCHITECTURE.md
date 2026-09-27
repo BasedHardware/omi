@@ -45,6 +45,8 @@ primary language and the account's single-language setting. Multilingual
 non-English sessions expect the primary plus English. A stable UID hash can
 prefer Soniox ahead of the normal configured chain; the percentage defaults
 to zero in production. The profile and arm survive mid-session failover.
+Multichannel, custom STT, and BYOK sessions stay outside routing and hints;
+an explicit client Parakeet preference retains its existing priority.
 `STT_MULTI_LANGUAGE_HINTS=false` restores Soniox's former unhinted `multi`
 request. Soniox always keeps language identification enabled. Other providers
 retain their existing language parameters and order.
@@ -57,7 +59,8 @@ presence has not been verified against a provider connection. When no provider
 code is available, `langdetect` runs off the listen loop. At least 24 letters
 avoid short-phrase guesses, and a 0.95 top-probability floor avoids calling
 close-language guesses a mismatch. A 32-task per-session cap makes overflow
-undetermined. A local 200-call warm benchmark measured 1.2 ms median and
+undetermined; each detector sees at most 512 characters to bound CPU time.
+A local 200-call warm benchmark measured 1.2 ms median and
 1.36 ms p95, with a 125 ms cold maximum, which is why detection runs off-loop.
 Only normalized codes and bounded conformance labels reach metrics and logs;
 the private provider-language field is removed before transcript persistence.

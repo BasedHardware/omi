@@ -431,6 +431,7 @@ async def process_audio_soniox(
     rejected = (
         profile.primary
         if profile
+        and profile.in_scope
         and profile.multi
         and profile.primary_group == 'non_en'
         and os.getenv('STT_MULTI_LANGUAGE_HINTS', 'true').lower() == 'true'

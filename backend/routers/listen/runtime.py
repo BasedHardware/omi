@@ -471,7 +471,10 @@ class ListenSessionRuntime:
         # Retained so a mid-session failover reselects under the same language policy.
         self.multi_lang_enabled = not single_language_mode
         self.language_profile = LiveLanguageProfile.create(
-            self.language, multi=self.multi_lang_enabled, uid=request.uid
+            self.language,
+            multi=self.multi_lang_enabled,
+            uid=request.uid,
+            in_scope=not (self.is_multi_channel or self.use_custom_stt or get_byok_keys()),
         )
         self.language_observations = LiveLanguageObservations(self.language_profile)
         self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(

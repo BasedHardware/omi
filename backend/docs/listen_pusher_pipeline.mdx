@@ -73,8 +73,9 @@ Listen retains a normalized primary-language profile across failover. For a
 non-English multilingual session, Soniox gets filtered primary-plus-English
 `language_hints` while language identification remains enabled. A separately
 allocated routing arm may try Soniox first; it falls through to the normal
-provider chain on a failed connect. Neither control changes push-to-talk or
-batch transcription. The Soniox adapter carries the agreed language of final
+provider chain on a failed connect. Push-to-talk, batch transcription,
+multichannel, custom STT, and BYOK routing retain their existing behavior.
+The Soniox adapter carries the agreed language of final
 tokens as private metadata; the listen receiver removes it before persistence.
 
 Audio-timeline v2 retains at most the configured segment-buffer limit in each
@@ -441,8 +442,8 @@ mode at each adopted live connection. `omi_stt_output_language_segments_total`
 counts in-profile, out-of-profile and undetermined finalized segments by
 provider, bounded primary group and routing arm. Soniox final-token language
 and an optional Velma final-utterance language take priority; otherwise the
-receiver detects from segment text off-loop with a 24-letter minimum and 0.95
-confidence floor. It logs one `live_stt_language_summary` at session close
+receiver detects from at most 512 characters of segment text off-loop with a
+24-letter minimum and 0.95 confidence floor. It logs one `live_stt_language_summary` at session close
 with codes and counts only. No transcript text reaches these metrics or logs.
 
 Session-level headline SLI (2026-09-26): teardown also emits exactly one

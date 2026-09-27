@@ -8,6 +8,8 @@ import pytest
 from config.stt_provider_policy import SONIOX_PROVIDER
 from utils.stt import streaming as st
 from utils.stt.language_policy import (
+    MAX_DETECTION_CHARS,
+    MAX_PENDING_DETECTIONS,
     LiveLanguageObservations,
     LiveLanguageProfile,
     classify_output,
@@ -17,6 +19,7 @@ from utils.stt.language_policy import (
     soniox_hints,
 )
 from utils.stt.live_metrics import LANGUAGE_CONSTRAINT, OUTPUT_LANGUAGE_SEGMENTS
+from utils.stt.live_rollout import window_allocation
 from utils.stt.provider_resilience import ProviderCircuitBreaker
 
 
@@ -45,6 +48,24 @@ def test_hash_allocation_is_stable_and_dark_by_default(monkeypatch):
     assert allocation == [hintable_allocation(str(i)) for i in range(1000)]
     assert 200 < sum(allocation) < 300
     assert not hintable_allocation(None)
+
+
+def test_hintable_bucket_has_an_independent_salt(monkeypatch):
+    monkeypatch.setenv('STT_CONNECT_ORDER_FROM_CONFIG', 'true')
+    monkeypatch.setenv('STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT', '50')
+    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '50')
+    assert any(hintable_allocation(str(uid)) != window_allocation(str(uid)) for uid in range(100))
+
+
+@pytest.mark.parametrize('surface', ['multi_channel', 'custom_stt', 'byok'])
+def test_out_of_scope_sessions_keep_the_existing_selection_and_hints(monkeypatch, surface):
+    monkeypatch.setenv('STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT', '100')
+    monkeypatch.setenv('SONIOX_API_KEY', 'local-test-key')
+    monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox'])
+    profile = LiveLanguageProfile.create('pt', multi=True, uid=surface, in_scope=False)
+    assert profile.arm == 'na'
+    assert st.get_stt_service_for_language('pt', language_profile=profile)[0] == st.STTService.modulate
+    assert soniox_hints('multi', profile) == []
 
 
 def test_hint_vocabulary_filters_each_code_and_preserves_identification(monkeypatch):
@@ -92,6 +113,20 @@ def test_hintable_arm_respects_provider_enablement(monkeypatch):
     assert st.get_stt_service_for_language('pt', language_profile=profile)[0] == st.STTService.modulate
 
 
+def test_explicit_parakeet_preference_keeps_existing_fallback_order(monkeypatch):
+    monkeypatch.setenv('STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT', '100')
+    monkeypatch.setenv('SONIOX_API_KEY', 'local-test-key')
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://local-test.invalid')
+    monkeypatch.setattr(st, 'stt_service_models', ['modulate-velma-2', 'soniox', 'parakeet'])
+    profile = LiveLanguageProfile.create('pt', multi=True, uid='u')
+    # This auto-detect request is outside Parakeet's vocabulary, so the
+    # existing preference path falls through to Velma rather than Soniox.
+    assert (
+        st.get_stt_service_for_language('pt', language_profile=profile, preferred_service='parakeet')[0]
+        == st.STTService.modulate
+    )
+
+
 @pytest.mark.parametrize('configured_order', [True, False])
 @pytest.mark.asyncio
 async def test_failed_preferred_soniox_falls_into_normal_chain(monkeypatch, configured_order):
@@ -122,11 +157,21 @@ def test_classification_prefers_provider_language_and_keeps_short_segments_unkno
     profile = LiveLanguageProfile.create('pt', multi=True, uid='u')
     assert classify_output('a', profile, 'pt') == ('in_profile', 'pt')
     assert classify_output('a', profile, 'it') == ('out_of_profile', 'it')
+    assert classify_output('a', profile, 'pt-BR') == ('in_profile', 'pt')
+    zh = LiveLanguageProfile.create('zh-CN', multi=True, uid='u')
+    assert classify_output('a', zh, 'zh-cn') == ('in_profile', 'zh')
     assert classify_output('a', profile) == ('undetermined', None)
     monkeypatch.setattr('utils.stt.language_policy.detect_langs', lambda _: [SimpleNamespace(lang='it', prob=0.99)])
     assert classify_output('a' * 24, profile) == ('out_of_profile', 'it')
     monkeypatch.setattr('utils.stt.language_policy.detect_langs', lambda _: [SimpleNamespace(lang='it', prob=0.80)])
     assert classify_output('a' * 24, profile) == ('undetermined', None)
+    seen = []
+    monkeypatch.setattr(
+        'utils.stt.language_policy.detect_langs',
+        lambda value: (seen.append(value), [SimpleNamespace(lang='pt-br', prob=0.99)])[1],
+    )
+    assert classify_output('a' * 1000, profile) == ('in_profile', 'pt')
+    assert len(seen[0]) == MAX_DETECTION_CHARS
     unknown = LiveLanguageProfile.create('multi', multi=True, uid='u')
     assert classify_output('a' * 30, unknown, 'it') == ('undetermined', None)
 
@@ -182,3 +227,24 @@ def test_client_provider_label_cannot_expand_metric_cardinality():
     host.use_custom_stt = True
     observe_live_segments(host, [{'text': 'a', '_provider_language': 'it'}], 'arbitrary-client-string')
     assert observations.counts['out_of_profile'] == 1
+
+
+def test_telemetry_failure_cannot_abort_segment_delivery():
+    observations = LiveLanguageObservations(LiveLanguageProfile.create('pt', multi=True, uid='u'))
+    host = SimpleNamespace(
+        use_custom_stt=False,
+        language_observations=observations,
+        stt_language='multi',
+        spawn=lambda _coro, name: (_ for _ in ()).throw(RuntimeError(name)),
+    )
+    segment = {'text': 'a' * 24, '_provider_language': 'invalid-code'}
+    observe_live_segments(host, [segment], 'soniox')
+    assert segment == {'text': 'a' * 24}
+
+
+def test_full_detector_queue_records_one_undetermined_segment():
+    observations = LiveLanguageObservations(LiveLanguageProfile.create('pt', multi=True, uid='u'))
+    observations.pending.update(object() for _ in range(MAX_PENDING_DETECTIONS))
+    segment = {'text': 'a' * 24}
+    observations.observe(segment, 'soniox', lambda _coro, name: pytest.fail(f'unexpected spawn: {name}'))
+    assert observations.counts == {'undetermined': 1}

@@ -780,12 +780,16 @@ def get_stt_service_for_language(
         multi_lang_enabled=multi_lang_enabled,
         surface=surface,
     )
-    if surface == STTServingSurface.STREAMING and prefer_hintable_soniox(
-        language_profile,
-        stt_service_models,
-        exclude,
-        lambda: _circuit_for_primary(STTService.soniox).cooldown_elapsed()
-        and _circuit_for_primary(STTService.soniox).account_cooldown_elapsed(),
+    if (
+        surface == STTServingSurface.STREAMING
+        and (preferred_service or '').strip().lower() != STTService.parakeet.value
+        and prefer_hintable_soniox(
+            language_profile,
+            stt_service_models,
+            exclude,
+            lambda: _circuit_for_primary(STTService.soniox).cooldown_elapsed()
+            and _circuit_for_primary(STTService.soniox).account_cooldown_elapsed(),
+        )
     ):
         return STTService.soniox, requested_language, 'soniox'
 

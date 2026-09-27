@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 MIN_LETTERS = 24
 MIN_PROBABILITY = 0.95
 MAX_PENDING_DETECTIONS = 32
+MAX_DETECTION_CHARS = 512
 LIVE_PROVIDERS = frozenset({'soniox', 'modulate', 'deepgram', 'parakeet'})
 
 
@@ -36,17 +37,20 @@ class LiveLanguageProfile:
     primary_group: str
     arm: str
     multi: bool
+    in_scope: bool = True
 
     @classmethod
-    def create(cls, language: str | None, *, multi: bool, uid: str | None) -> LiveLanguageProfile:
+    def create(
+        cls, language: str | None, *, multi: bool, uid: str | None, in_scope: bool = True
+    ) -> LiveLanguageProfile:
         primary = normalized_stt_language(language)
         if not re.fullmatch(r'[a-z]{2,3}', primary):
             primary = ''
         expected = (primary, 'en') if multi and primary not in ('', 'en') else ((primary,) if primary else ())
         group = 'unknown' if not primary else ('en' if primary == 'en' else 'non_en')
-        eligible = multi and group == 'non_en'
+        eligible = in_scope and multi and group == 'non_en'
         arm = 'hintable' if eligible and hintable_allocation(uid) else ('control' if eligible else 'na')
-        return cls(primary, expected, group, arm, multi)
+        return cls(primary, expected, group, arm, multi, in_scope)
 
 
 def hintable_allocation(uid: str | None) -> bool:
@@ -69,6 +73,7 @@ def prefer_hintable_soniox(
     """Read-only admission; the actual connect still owns its breaker probe."""
     return bool(
         profile
+        and profile.in_scope
         and profile.arm == 'hintable'
         and 'soniox' in (model.strip() for model in models)
         and SONIOX_PROVIDER not in exclude
@@ -83,6 +88,7 @@ def soniox_hints(language: str, profile: LiveLanguageProfile | None = None) -> l
     candidates = (
         profile.expected
         if profile
+        and profile.in_scope
         and profile.multi
         and profile.primary_group == 'non_en'
         and os.getenv('STT_MULTI_LANGUAGE_HINTS', 'true').lower() == 'true'
@@ -107,6 +113,7 @@ def classify_output(
     if not re.fullmatch(r'[a-z]{2,3}', language):
         language = ''
     if not language:
+        text = text[:MAX_DETECTION_CHARS]
         if sum(letter.isalpha() for letter in text) < MIN_LETTERS:
             return 'undetermined', None
         try:
@@ -130,6 +137,12 @@ class LiveLanguageObservations:
     counts: Counter[str] = field(default_factory=Counter)
     out_codes: Counter[str] = field(default_factory=Counter)
     pending: set[asyncio.Task[Any]] = field(default_factory=set)
+    telemetry_failure_logged: bool = False
+
+    def warn_once(self) -> None:
+        if not self.telemetry_failure_logged:
+            self.telemetry_failure_logged = True
+            logger.warning('Live STT language telemetry failed')
 
     def connected(self, provider: str, language: str) -> None:
         constraint = connection_constraint(provider, language, self.profile)
@@ -149,7 +162,7 @@ class LiveLanguageObservations:
         language = segment.pop('_provider_language', None)
         code = normalized_stt_language(language if isinstance(language, str) else None)
         language = code if re.fullmatch(r'[a-z]{2,3}', code) else None
-        text = str(segment.get('text') or '')
+        text = str(segment.get('text') or '')[:MAX_DETECTION_CHARS]
         if language or not self.profile.expected or sum(c.isalpha() for c in text) < MIN_LETTERS:
             self._record(provider, classify_output(text, self.profile, language))
             return
@@ -164,7 +177,12 @@ class LiveLanguageObservations:
                 result = ('undetermined', None)
             self._record(provider, result)
 
-        task = spawn(detect(), name='stt_language_detect')
+        coroutine = detect()
+        try:
+            task = spawn(coroutine, name='stt_language_detect')
+        except Exception:
+            coroutine.close()
+            raise
         self.pending.add(task)
         task.add_done_callback(self.pending.discard)
 
@@ -192,10 +210,18 @@ def observe_live_segments(host: Any, segments: list[dict[str, Any]], provider: s
     observations = getattr(host, 'language_observations', None)
     if isinstance(observations, LiveLanguageObservations):
         for segment in segments:
-            observations.observe(segment, provider if provider in LIVE_PROVIDERS else 'other', host.spawn)
+            try:
+                observations.observe(segment, provider if provider in LIVE_PROVIDERS else 'other', host.spawn)
+            except Exception:
+                # Telemetry must never interrupt a provider callback or transcript delivery.
+                segment.pop('_provider_language', None)
+                observations.warn_once()
 
 
 def record_live_connection(host: Any, provider: str) -> None:
     observations = getattr(host, 'language_observations', None)
     if isinstance(observations, LiveLanguageObservations):
-        observations.connected(provider if provider in LIVE_PROVIDERS else 'other', host.stt_language)
+        try:
+            observations.connected(provider if provider in LIVE_PROVIDERS else 'other', host.stt_language)
+        except Exception:
+            observations.warn_once()
