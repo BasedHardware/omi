@@ -655,6 +655,9 @@ def _sync_job_finalization_updates(
             'failed_segments': failed,
             'processed_segments': total,
             'error': error,
+            'reason_code': (
+                'stt_invalid_input' if status == 'failed' and result.get('reason_code') == 'stt_invalid_input' else None
+            ),
         },
     )
 
