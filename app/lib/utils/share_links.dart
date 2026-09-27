@@ -45,9 +45,17 @@ String shareBaseUrl([String? raw]) {
 /// Join [shareBaseUrl] with a path (leading slash optional).
 String buildShareUrl(String path, {String? raw, String? source, String? sid}) {
   final normalized = path.startsWith('/') ? path : '/$path';
-  return Uri.parse(
-    '${shareBaseUrl(raw)}$normalized',
-  ).replace(queryParameters: {'s': source ?? mobileShareSource(), 'sid': sid ?? newShareId()}).toString();
+  return tagShareUrl('${shareBaseUrl(raw)}$normalized', source: source, sid: sid);
+}
+
+/// Tag a backend-issued public URL without losing existing query parameters.
+String tagShareUrl(String url, {String? source, String? sid}) {
+  final uri = Uri.parse(url);
+  return uri.replace(queryParameters: {
+    ...uri.queryParameters,
+    's': source ?? mobileShareSource(),
+    'sid': sid ?? newShareId(),
+  }).toString();
 }
 
 String mobileShareSource() => switch (defaultTargetPlatform) {

@@ -13,6 +13,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:omi/utils/share_sheet.dart';
+import 'package:omi/utils/share_links.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/models/subscription.dart';
@@ -79,6 +81,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     final l10n = context.l10n;
     final provider = context.read<UsageProvider>();
     final localeName = l10n.localeName;
+    final sharePeriod = _getPeriodForIndex(_tabController.index);
 
     final captureContext = _screenshotKeys[_tabController.index].currentContext;
     if (captureContext == null || !mounted) return;
@@ -216,7 +219,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       shareText = baseText;
     }
 
-    await SharePlus.instance.share(
+    final outcome = await SharePlus.instance.share(
       ShareParams(
         files: [XFile(file.path)],
         subject: periodTitle.isEmpty ? null : periodTitle,
@@ -224,6 +227,12 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
         sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
       ),
     );
+    final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
+    PlatformManager.instance.analytics.track('Usage Stats Shared', properties: {
+      'period': sharePeriod,
+      'share_status': outcome.status.name,
+      if (targetApp != null) 'target_app': targetApp,
+    });
   }
 
   String _getPeriodForIndex(int index) {
