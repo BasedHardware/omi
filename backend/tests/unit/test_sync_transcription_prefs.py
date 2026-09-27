@@ -1041,9 +1041,13 @@ class TestIdentifySpeakersForSegments:
             _make_transcript_segment(speaker_id=2, start=6.0, end=11.0, text='hello', seg_id='s2'),
         ]
         sync_module.identify_speakers_for_segments(segments, _make_wav_bytes(duration_sec=12.0), cache, 'uid1')
-        assert segments[0].is_user
+        # Equal owner claims are now jointly rejected, rather than reserving
+        # the owner for whichever voice had the longest clip.
+        assert segments[0].is_user is (second_distances[0] != 0.10)
         assert not segments[1].is_user
         assert segments[1].person_id is None
+        if second_distances[0] == 0.10:
+            assert all(s.speaker_identity_status == 'ambiguous' for s in segments)
 
     @patch('utils.sync.pipeline.extract_embedding_from_bytes')
     def test_voice_match_assigns_person(self, mock_extract):

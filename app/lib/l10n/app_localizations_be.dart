@@ -11435,4 +11435,10 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Цёмны';
+
+  @override
+  String get chatDiscardRecording => 'Адхіліць';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Не ўдалося распазнаць — паспрабуйце яшчэ раз';
 }

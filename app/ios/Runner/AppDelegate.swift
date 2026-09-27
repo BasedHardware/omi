@@ -361,11 +361,36 @@ final class QuickActionsIconPatcher: NSObject {
         if #available(iOS 14.0, *) {
           WidgetCenter.shared.reloadTimelines(ofKind: "OmiBatteryWidget")
         }
+      case "updateChargingState":
+        let isCharging = (args["isCharging"] as? Bool) ?? (args["isCharging"] as? NSNumber)?.boolValue ?? false
+        defaults?.set(isCharging, forKey: "widget_is_charging")
+        if #available(iOS 14.0, *) {
+          WidgetCenter.shared.reloadTimelines(ofKind: "OmiBatteryWidget")
+        }
       case "updateMuteState":
         let isMuted = (args["isMuted"] as? Bool) ?? (args["isMuted"] as? NSNumber)?.boolValue ?? false
         defaults?.set(isMuted, forKey: "widget_is_muted")
         if #available(iOS 14.0, *) {
           WidgetCenter.shared.reloadAllTimelines()
+        }
+      case "updateWidgetData":
+        // A JSON document for a Home Screen widget (Devices, Up next, Latest); a missing one clears it.
+        let kinds = [
+          "widget_devices": "OmiBatteryWidget",
+          "widget_up_next": "OmiUpNextWidget",
+          "widget_latest": "OmiLatestWidget",
+        ]
+        guard let key = args["key"] as? String, let kind = kinds[key] else {
+          result(FlutterError(code: "UNKNOWN_WIDGET_KEY", message: "No widget reads this key", details: args["key"]))
+          return
+        }
+        if let json = args["json"] as? String {
+          defaults?.set(json, forKey: key)
+        } else {
+          defaults?.removeObject(forKey: key)
+        }
+        if #available(iOS 14.0, *) {
+          WidgetCenter.shared.reloadTimelines(ofKind: kind)
         }
       default:
         result(FlutterMethodNotImplemented)

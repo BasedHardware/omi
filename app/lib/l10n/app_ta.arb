@@ -11157,5 +11157,7 @@
     "appearance": "தோற்றம்",
     "appearanceSystem": "சிஸ்டம்",
     "appearanceLight": "ஒளி",
-    "appearanceDark": "இருள்"
+    "appearanceDark": "இருள்",
+    "chatDiscardRecording": "நிராகரி",
+    "voiceQuestionNoSpeech": "கேட்கவில்லை — மீண்டும் முயற்சிக்கவும்"
 }

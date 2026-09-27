@@ -3597,5 +3597,7 @@
     "appearance": "Aspect",
     "appearanceSystem": "Sistem",
     "appearanceLight": "Luminos",
-    "appearanceDark": "Întunecat"
+    "appearanceDark": "Întunecat",
+    "chatDiscardRecording": "Renunță",
+    "voiceQuestionNoSpeech": "Nu am înțeles — încearcă din nou"
 }

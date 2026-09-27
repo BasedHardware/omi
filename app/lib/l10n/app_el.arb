@@ -3597,5 +3597,7 @@
     "appearance": "Εμφάνιση",
     "appearanceSystem": "Σύστημα",
     "appearanceLight": "Φωτεινό",
-    "appearanceDark": "Σκοτεινό"
+    "appearanceDark": "Σκοτεινό",
+    "chatDiscardRecording": "Απόρριψη",
+    "voiceQuestionNoSpeech": "Δεν το κατάλαβα — δοκιμάστε ξανά"
 }

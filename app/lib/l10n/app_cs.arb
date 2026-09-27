@@ -3597,5 +3597,7 @@
     "appearance": "Vzhled",
     "appearanceSystem": "Systém",
     "appearanceLight": "Světlý",
-    "appearanceDark": "Tmavý"
+    "appearanceDark": "Tmavý",
+    "chatDiscardRecording": "Zahodit",
+    "voiceQuestionNoSpeech": "Nerozuměl jsem — zkuste to znovu"
 }

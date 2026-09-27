@@ -428,7 +428,7 @@ runs:
             LOG_FILTER='resource.type="cloud_run_revision" AND resource.labels.service_name="backend-sync" AND "event=sync_uid_sequencer action=sweep_summary outcome=done"'
             CONDITION_FILTER="metric.type=\"logging.googleapis.com/user/${METRIC}\" AND resource.type=\"cloud_run_revision\""
             CONDITION='absent'
-            DURATION='10min'
+            DURATION='600s'
           fi
           if gcloud logging metrics describe "$METRIC" --project=${{ inputs.project_id }} >/dev/null 2>&1; then
             gcloud logging metrics update "$METRIC" --project=${{ inputs.project_id }} --description="$DISPLAY_NAME" --log-filter="$LOG_FILTER"

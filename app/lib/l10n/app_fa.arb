@@ -11157,5 +11157,7 @@
     "appearance": "ظاهر",
     "appearanceSystem": "سیستم",
     "appearanceLight": "روشن",
-    "appearanceDark": "تیره"
+    "appearanceDark": "تیره",
+    "chatDiscardRecording": "دور انداختن",
+    "voiceQuestionNoSpeech": "متوجه نشدم — دوباره تلاش کنید"
 }

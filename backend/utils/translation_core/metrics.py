@@ -27,6 +27,8 @@ class TranslationMetrics(Protocol):
 
     def skip(self, target_language: str, reason: str) -> None: ...
 
+    def decision(self, target_language: str, decision: str, reason: str) -> None: ...
+
 
 class NoopTranslationMetrics:
     def cache(self, layer: str, result: str) -> None:
@@ -50,6 +52,9 @@ class NoopTranslationMetrics:
         return None
 
     def skip(self, target_language: str, reason: str) -> None:
+        return None
+
+    def decision(self, target_language: str, decision: str, reason: str) -> None:
         return None
 
 
@@ -92,6 +97,11 @@ class PrometheusTranslationMetrics:
             ['provider'],
             [1, 2, 5, 10, 20, 50, 100, 200],
         )
+        self._decisions = _counter(
+            'omi_translation_decisions_total',
+            'Translation admission and output decisions (not rendered badges)',
+            ['target_lang', 'decision', 'reason'],
+        )
         self._skips = _counter(
             'omi_translation_skip_total',
             'Translations skipped',
@@ -125,6 +135,14 @@ class PrometheusTranslationMetrics:
 
     def skip(self, target_language: str, reason: str) -> None:
         self._skips.labels(target_lang=_bounded_language(target_language), reason=_bounded_reason(reason)).inc()
+
+    def decision(self, target_language: str, decision: str, reason: str) -> None:
+        decision = decision if decision in {'translate', 'skip', 'defer', 'rejected_by_guard'} else 'other'
+        self._decisions.labels(
+            target_lang=_bounded_language(target_language), decision=decision, reason=_bounded_reason(reason)
+        ).inc()
+        if decision in {'skip', 'defer', 'rejected_by_guard'}:
+            self.skip(target_language, reason)
 
 
 _default_metrics: TranslationMetrics | None = None
@@ -182,4 +200,19 @@ def _bounded_error(value: str) -> str:
 
 def _bounded_reason(value: str) -> str:
     normalized = _bounded(value)
-    return normalized if normalized in {'empty', 'target_language', 'cached'} else 'other'
+    return (
+        normalized
+        if normalized
+        in {
+            'empty',
+            'target_language',
+            'cached',
+            'unchanged',
+            'near_copy',
+            'out_of_profile',
+            'uncertain',
+            'eligible',
+            'output_guard',
+        }
+        else 'other'
+    )

@@ -103,6 +103,7 @@ class ListenSessionState:
     speaker_id_enabled: bool = False
     speaker_id_done: asyncio.Event = field(default_factory=asyncio.Event)
     speaker_map_dirty: bool = False
+    speaker_map_version: int = 0
     first_audio_byte_timestamp: Optional[float] = None
     # Capture sample clock (single-channel server-STT sessions): the per-socket
     # sample cursor, per-conversation pinned first-audio origins (wall seconds),

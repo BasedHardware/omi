@@ -11385,4 +11385,10 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get appearanceDark => 'डार्क';
+
+  @override
+  String get chatDiscardRecording => 'रद्द करें';
+
+  @override
+  String get voiceQuestionNoSpeech => 'समझ नहीं आया — फिर से कोशिश करें';
 }
