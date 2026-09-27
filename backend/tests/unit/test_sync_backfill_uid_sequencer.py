@@ -252,7 +252,7 @@ def test_cutover_guard_blocks_first_on_dispatch_and_off_on_again(db, monkeypatch
     wakes = []
     monkeypatch.setattr(uid_sequencer, '_dispatch', lambda claim: dispatched.append(claim))
     monkeypatch.setattr(
-        uid_sequencer, 'enqueue_sync_uid_wake', lambda uid, uid_hash, deadline: wakes.append((uid, uid_hash, deadline))
+        uid_sequencer, '_enqueue_wake', lambda uid, uid_hash, deadline: wakes.append((uid, uid_hash, deadline))
     )
     assert not uid_sequencer.kick('heavy')
     assert not dispatched
@@ -288,7 +288,7 @@ def test_flag_off_drain_waits_for_new_direct_work_of_same_uid(db, monkeypatch):
     backfill_cutover.refresh_direct_run('heavy', 'direct-job')
     assert backfill_cutover.direct_remaining_for_uid('heavy')[0] > 1700
     wakes = []
-    monkeypatch.setattr(uid_sequencer, 'enqueue_sync_uid_wake', lambda *args: wakes.append(args))
+    monkeypatch.setattr(uid_sequencer, '_enqueue_wake', lambda *args: wakes.append(args))
     assert not uid_sequencer.kick('heavy')
     assert wakes and wakes[0][0] == 'heavy'
     assert registry.get_owner('heavy', firestore_client=db) == {}

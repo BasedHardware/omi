@@ -9,7 +9,7 @@ from typing import Any
 
 from database import sync_backfill_sequencer as registry
 from database.sync_jobs import TERMINAL_STATUSES, get_raw_sync_job, sync_job_run_lock_present
-from utils.cloud_tasks import enqueue_sync_job, enqueue_sync_uid_wake
+from utils.cloud_tasks import enqueue_sync_job
 from utils.sync import backfill_cutover
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,14 @@ def _dispatch(claim: dict[str, Any]) -> None:
     logger.info('event=sync_uid_sequencer action=dispatch outcome=enqueued latency_seconds=%.1f', latency)
 
 
+def _enqueue_wake(uid: str, uid_hash: str, deadline: int) -> None:
+    # Import at dispatch time: isolated legacy sync tests stub only the task
+    # functions they exercise, but never execute this cutover path.
+    from utils.cloud_tasks import enqueue_sync_uid_wake
+
+    enqueue_sync_uid_wake(uid, uid_hash, deadline)
+
+
 def kick(uid: str) -> bool:
     """Select one pending job and enqueue it; a persisted reservation survives uncertainty."""
     remaining, direct_job_id = (
@@ -38,7 +46,7 @@ def kick(uid: str) -> bool:
         deadline = int(time.time()) + remaining + 1
         if backfill_cutover.claim_wake(uid, deadline):
             try:
-                enqueue_sync_uid_wake(uid, backfill_cutover.uid_hash(uid), deadline)
+                _enqueue_wake(uid, backfill_cutover.uid_hash(uid), deadline)
             except Exception:
                 backfill_cutover.release_wake(uid, deadline)
                 raise
