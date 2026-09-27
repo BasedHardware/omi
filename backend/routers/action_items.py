@@ -1090,8 +1090,10 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
     if not accepted:
         raise HTTPException(status_code=409, detail="You have already accepted this share")
 
-    # Copy each eligible task to recipient's list
-    created_ids = []
+    # Resolve every copy before writing, then commit the bounded share as one batch.
+    # A per-item write loop can consume the acceptance after only a prefix is saved,
+    # permanently preventing the recipient from retrying the missing tasks.
+    items_to_create = []
     try:
         for task_id in eligible_ids:
             original = action_items_db.get_action_item(sender_uid, task_id)
@@ -1109,21 +1111,24 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
                     'original_task_id': task_id,
                 },
             }
-            new_id = action_items_db.create_action_item(uid, new_item)
-            created_ids.append(new_id)
-            upsert_action_item_vector(uid, new_id, new_item['description'])
-            if isinstance(new_item['due_at'], datetime):
-                _schedule_action_item_reminder(uid, new_id, new_item['description'], new_item['due_at'])
+            items_to_create.append(new_item)
+
+        created_ids = action_items_db.create_action_items_batch(uid, items_to_create) if items_to_create else []
     except Exception:
-        # If an unhandled error occurred before creating any tasks, undo token acceptance so client can retry
-        if not created_ids:
-            redis_db.undo_accept_task_share(request.token, uid)
+        # Reads/preparation and rejected transactions leave no copied prefix.
+        redis_db.undo_accept_task_share(request.token, uid)
         raise
 
     # If race condition caused all items to become locked after pre-check, rollback token
     if not created_ids:
         redis_db.undo_accept_task_share(request.token, uid)
         raise HTTPException(status_code=402, detail="Shared tasks are no longer available.")
+
+    # Derived delivery must not interrupt persistence of the remaining shared tasks.
+    for new_id, new_item in zip(created_ids, items_to_create):
+        upsert_action_item_vector(uid, new_id, new_item['description'])
+        if isinstance(new_item['due_at'], datetime):
+            _schedule_action_item_reminder(uid, new_id, new_item['description'], new_item['due_at'])
 
     _wake_task_changes(uid, created_ids, datetime.now(timezone.utc))
 
