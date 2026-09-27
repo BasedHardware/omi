@@ -295,6 +295,10 @@ runs:
             )"
           fi
           test -n "$POLICY"
+          python3 "$DEPLOY_CONTROL_SCRIPTS/reconcile_sync_backfill_alert_policy.py" \
+            --project='${{ inputs.project_id }}' --policy="$POLICY" \
+            --display-name="$DISPLAY_NAME" --condition=threshold \
+            --filter="$CONDITION_FILTER" --duration-seconds=0 --channels="$ALERT_CHANNELS"
           gcloud monitoring policies describe "$POLICY" \
             --project=${{ inputs.project_id }} \
             --format=json | python3 "$DEPLOY_CONTROL_SCRIPTS/verify_sync_backfill_alert_policy.py" \
@@ -352,6 +356,10 @@ runs:
           )"
         fi
         test -n "$POLICY"
+        python3 "$DEPLOY_CONTROL_SCRIPTS/reconcile_sync_backfill_alert_policy.py" \
+          --project='${{ inputs.project_id }}' --policy="$POLICY" \
+          --display-name="$DISPLAY_NAME" --condition=threshold \
+          --filter="$CONDITION_FILTER" --duration-seconds=0 --channels="$ALERT_CHANNELS"
         gcloud monitoring policies describe "$POLICY" \
           --project=${{ inputs.project_id }} \
           --format=json | python3 "$DEPLOY_CONTROL_SCRIPTS/verify_sync_backfill_alert_policy.py" \
@@ -391,6 +399,10 @@ runs:
             --format='value(name)')"
         fi
         test -n "$POLICY"
+        python3 "$DEPLOY_CONTROL_SCRIPTS/reconcile_sync_backfill_alert_policy.py" \
+          --project='${{ inputs.project_id }}' --policy="$POLICY" \
+          --display-name="$DISPLAY_NAME" --condition=threshold \
+          --filter="$CONDITION_FILTER" --duration-seconds=0 --channels="$ALERT_CHANNELS"
         gcloud monitoring policies describe "$POLICY" --project=${{ inputs.project_id }} --format=json \
           | python3 "$DEPLOY_CONTROL_SCRIPTS/verify_sync_backfill_alert_policy.py" \
               --condition=threshold --filter="$CONDITION_FILTER" --duration-seconds=0 --channels="$ALERT_CHANNELS"
@@ -449,6 +461,11 @@ runs:
             CONDITION_KIND=threshold
             DURATION_SECONDS=0
           fi
+          python3 "$DEPLOY_CONTROL_SCRIPTS/reconcile_sync_backfill_alert_policy.py" \
+            --project='${{ inputs.project_id }}' --policy="$POLICY" \
+            --display-name="$DISPLAY_NAME" --condition="$CONDITION_KIND" \
+            --filter="$CONDITION_FILTER" --duration-seconds="$DURATION_SECONDS" \
+            --channels="$ALERT_CHANNELS"
           gcloud monitoring policies describe "$POLICY" --project=${{ inputs.project_id }} --format=json \
             | python3 "$DEPLOY_CONTROL_SCRIPTS/verify_sync_backfill_alert_policy.py" \
                 --condition="$CONDITION_KIND" --filter="$CONDITION_FILTER" \

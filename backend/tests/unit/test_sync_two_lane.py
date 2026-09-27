@@ -224,6 +224,7 @@ def test_deploy_contract_routes_both_backfill_budget_alerts():
     assert 'provision_budget_alerts: ${{ inputs.sync_backfill_budget_alerts }}' in composite
     assert 'for THRESHOLD in 70 90' in action
     assert '.github/scripts/ensure_monitoring_metric_alert_policy.py' in action
+    assert 'reconcile_sync_backfill_alert_policy.py' in action
     assert 'verify_sync_backfill_alert_policy.py' in action
     assert '--notification-channels="$ALERT_CHANNELS"' in action
     assert 'METRIC="sync_backfill_dispatch_abort"' in action
