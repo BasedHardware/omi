@@ -3,16 +3,16 @@ Convert Omi goals JSON exports to clean Markdown progress reports and task board
 
 Usage:
     # Pipe directly from omi CLI (includes inactive/completed goals via --include-inactive)
-    omi --json goal list --limit 100 --include-inactive | python goals_to_markdown.py -
+    omi --json goal list --limit 100 --include-inactive | python3 goals_to_markdown.py -
 
     # Export to a specific Markdown file
-    omi --json goal list --limit 100 --include-inactive | python goals_to_markdown.py - --output ~/vault/Goals.md
+    omi --json goal list --limit 100 --include-inactive | python3 goals_to_markdown.py - --output ~/vault/Goals.md
 
     # Export into type-grouped notes in a directory
-    python goals_to_markdown.py goals.json --output-dir ./vault/goals/ --group-by type
+    python3 goals_to_markdown.py goals.json --output-dir ./vault/goals/ --group-by type
 
     # Filter only active or completed goals (note: --include-inactive is required to fetch completed goals from CLI)
-    omi --json goal list --limit 100 --include-inactive | python goals_to_markdown.py - --status completed
+    omi --json goal list --limit 100 --include-inactive | python3 goals_to_markdown.py - --status completed
 """
 
 import argparse
@@ -46,11 +46,23 @@ def parse_datetime(iso_str: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def format_progress_bar(current: Optional[float], target: Optional[float], length: int = 10) -> str:
+def _safe_float(val: Any) -> Optional[float]:
+    """Safely cast value to float or return None."""
+    if val is None or isinstance(val, (bool, list, dict)):
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
+
+
+def format_progress_bar(current: Any, target: Any, length: int = 10) -> str:
     """Render a text-based progress bar and completion percentage."""
-    if target is None or target <= 0 or current is None:
+    curr_f = _safe_float(current)
+    targ_f = _safe_float(target)
+    if curr_f is None or targ_f is None or targ_f <= 0:
         return ""
-    ratio = min(max(current / target, 0.0), 1.0)
+    ratio = min(max(curr_f / targ_f, 0.0), 1.0)
     filled = int(round(ratio * length))
     bar = "█" * filled + "░" * (length - filled)
     percent = int(ratio * 100)
@@ -60,7 +72,7 @@ def format_progress_bar(current: Optional[float], target: Optional[float], lengt
 def format_goal(goal: Dict[str, Any], include_metadata: bool = True) -> str:
     """Format a single goal dictionary into Markdown."""
     title = str(goal.get("title") or "Untitled Goal").strip()
-    goal_type = str(goal.get("goal_type") or "scale").lower()
+    goal_type = str(goal.get("goal_type") or "scale").strip().lower()
     is_active = bool(goal.get("is_active", True))
 
     type_info = GOAL_TYPE_META.get(
@@ -79,16 +91,23 @@ def format_goal(goal: Dict[str, Any], include_metadata: bool = True) -> str:
 
     metrics: List[str] = [f"**Status:** {status_tag}", f"**Type:** {type_info['label']}"]
 
-    # Only include progress metrics if target_val is present and numeric (qualitative goals omit target)
-    if target_val is not None:
+    curr_f = _safe_float(current_val)
+    targ_f = _safe_float(target_val)
+
+    # Only include progress metrics if target_val is present
+    if targ_f is not None:
         unit_str = f" {unit}" if unit else ""
-        curr_str = f"{current_val:g}" if isinstance(current_val, (int, float)) else str(current_val if current_val is not None else 0)
-        targ_str = f"{target_val:g}" if isinstance(target_val, (int, float)) else str(target_val)
+        curr_str = f"{curr_f:g}" if curr_f is not None else str(current_val if current_val is not None else 0)
+        targ_str = f"{targ_f:g}"
         metrics.append(f"**Progress:** {curr_str} / {targ_str}{unit_str}")
 
-        progress_bar = format_progress_bar(current_val, target_val)
+        progress_bar = format_progress_bar(curr_f, targ_f)
         if progress_bar:
             metrics.append(f"`{progress_bar}`")
+    elif target_val is not None and str(target_val).strip():
+        unit_str = f" {unit}" if unit else ""
+        curr_str = str(current_val).strip() if current_val is not None else "0"
+        metrics.append(f"**Progress:** {curr_str} / {str(target_val).strip()}{unit_str}")
 
     lines.append(" • ".join(metrics))
 

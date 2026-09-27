@@ -19,7 +19,7 @@ Verify you can list your tracked goals:
 omi goal list
 ```
 
-> **Note on `--include-inactive`:** By default, `omi goal list` fetches only currently active goals (up to `--limit 100`). To export both active and completed/archived goals, or to generate reports containing completed milestones, always pass `--include-inactive`.
+> **Note on `--include-inactive`:** By default, `omi goal list` fetches only currently active goals (`--status active` is the default when `--include-inactive` is omitted). To export both active and completed/archived goals, or to filter for completed goals (`--status completed`), always pass `--include-inactive`.
 
 ---
 
@@ -30,7 +30,7 @@ omi goal list
 Generate Markdown directly from the CLI output stream including completed/archived goals:
 
 ```sh
-omi --json goal list --limit 100 --include-inactive | python goals_to_markdown.py -
+omi --json goal list --limit 100 --include-inactive | python3 goals_to_markdown.py -
 ```
 
 ### 2. Export to a Dedicated Goals Vault Note
@@ -38,21 +38,21 @@ omi --json goal list --limit 100 --include-inactive | python goals_to_markdown.p
 Export all tracked goals into a single Markdown note (e.g. for an Obsidian vault or Notion import):
 
 ```sh
-omi --json goal list --limit 100 --include-inactive | python goals_to_markdown.py - --output ~/vault/Goals.md
+omi --json goal list --limit 100 --include-inactive | python3 goals_to_markdown.py - --output ~/vault/Goals.md
 ```
 
 ### 3. Filter by Status (Completed or Active Goals)
 
-Export only completed milestones:
+Export only completed milestones (requires `--include-inactive` to fetch completed goals from the API):
 
 ```sh
-omi --json goal list --limit 100 --include-inactive | python goals_to_markdown.py - --status completed --output ~/vault/Completed_Goals.md
+omi --json goal list --limit 100 --include-inactive | python3 goals_to_markdown.py - --status completed --output ~/vault/Completed_Goals.md
 ```
 
-Export only open, active goals:
+Export only open, active goals (default behavior when `--include-inactive` is omitted):
 
 ```sh
-omi --json goal list --limit 100 | python goals_to_markdown.py - --status active --output ~/vault/Active_Goals.md
+omi --json goal list --limit 100 | python3 goals_to_markdown.py - --status active --output ~/vault/Active_Goals.md
 ```
 
 ### 4. Group by Goal Type into Separate Notes
@@ -60,7 +60,7 @@ omi --json goal list --limit 100 | python goals_to_markdown.py - --status active
 Split goals across dedicated category notes (`Goals_Numeric.md`, `Goals_Scale.md`, `Goals_Boolean.md`):
 
 ```sh
-omi --json goal list --limit 100 --include-inactive | python goals_to_markdown.py - --output-dir ~/vault/goals/ --group-by type
+omi --json goal list --limit 100 --include-inactive | python3 goals_to_markdown.py - --output-dir ~/vault/goals/ --group-by type
 ```
 
 ---
@@ -71,8 +71,8 @@ omi --json goal list --limit 100 --include-inactive | python goals_to_markdown.p
 # Omi Tracked Goals
 
 ---
-**Generated:** `2026-09-27 12:00 UTC`  
-**Total Goals:** `2` (`1 active`, `1 completed`)  
+**Generated:** `2026-09-27 12:00 UTC`
+**Total Goals:** `3` (`2 active`, `1 completed`)
 ---
 
 ## Active Goals
@@ -83,6 +83,12 @@ omi --json goal list --limit 100 --include-inactive | python goals_to_markdown.p
 Complete nonfiction tech and engineering reading list.
 > *Created: 2026-01-01 | Updated: 2026-09-27 | ID: `goal_001`*
 
+### ✅ Daily Morning Stretch
+**Status:** 🟢 Active • **Type:** Yes/No Check • **Progress:** 1 / 1 • `[██████████] 100%`
+
+15-minute daily mobility habit.
+> *Created: 2026-02-01 | Updated: 2026-09-27 | ID: `goal_002`*
+
 ---
 
 ## Completed / Inactive Goals
@@ -91,7 +97,7 @@ Complete nonfiction tech and engineering reading list.
 **Status:** ⚪ Completed • **Type:** Scale (1-10) • **Progress:** 10 / 10 • `[██████████] 100%`
 
 Daily 30-minute deep work routine.
-> *Created: 2026-01-01 | Updated: 2026-09-20 | ID: `goal_002`*
+> *Created: 2026-01-01 | Updated: 2026-09-20 | ID: `goal_003`*
 ```
 
 ---
@@ -102,5 +108,8 @@ To keep your personal knowledge base continuously synchronized with your Omi goa
 
 ```sh
 # Run every night at midnight UTC to refresh goals
-0 0 * * * omi --json goal list --limit 100 --include-inactive | python /path/to/goals_to_markdown.py - --output ~/vault/Goals.md
+0 0 * * * omi --json goal list --limit 100 --include-inactive | python3 /path/to/goals_to_markdown.py - --output ~/vault/Goals.md
+
+# Periodic export of completed milestones
+0 0 * * 0 omi --json goal list --limit 100 --include-inactive | python3 /path/to/goals_to_markdown.py - --status completed --output ~/vault/Completed_Goals.md
 ```
