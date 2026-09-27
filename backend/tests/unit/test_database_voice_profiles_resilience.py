@@ -15,6 +15,14 @@ def _make_mock_snapshot(data: dict | None = None, exists: bool = True):
     return snap
 
 
+@pytest.fixture(autouse=True)
+def hermetic_firestore(monkeypatch):
+    """Enforce hermetic test isolation by replacing Firestore client getter."""
+    fake_client = MagicMock()
+    monkeypatch.setattr(vp_db, "_client", lambda firestore_client=None: firestore_client or fake_client)
+    return fake_client
+
+
 # ---------------------------------------------------------------------------
 # Input validation: uid rejection across all functions
 # ---------------------------------------------------------------------------
