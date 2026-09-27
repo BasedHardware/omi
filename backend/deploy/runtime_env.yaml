@@ -833,6 +833,10 @@ environments:
               provisional: true
               value: 'true'
               category: rollout
+            SYNC_BACKFILL_INFLIGHT_LIMIT:
+              provisional: true
+              value: 'false'
+              category: rollout
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -1032,6 +1036,10 @@ environments:
             SYNC_BACKFILL_ENABLED:
               provisional: true
               value: 'true'
+              category: rollout
+            SYNC_BACKFILL_INFLIGHT_LIMIT:
+              provisional: true
+              value: 'false'
               category: rollout
             USE_VERTEX_AI:
               value: 'true'
@@ -2340,6 +2348,10 @@ environments:
               provisional: true
               value: 'true'
               category: rollout
+            SYNC_BACKFILL_INFLIGHT_LIMIT:
+              provisional: true
+              value: 'false'
+              category: rollout
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -2522,6 +2534,10 @@ environments:
             SYNC_BACKFILL_ENABLED:
               provisional: true
               value: 'true'
+              category: rollout
+            SYNC_BACKFILL_INFLIGHT_LIMIT:
+              provisional: true
+              value: 'false'
               category: rollout
             USE_VERTEX_AI:
               value: 'true'
