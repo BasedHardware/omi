@@ -3,6 +3,8 @@ import hashlib
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 
+from google.api_core.exceptions import NotFound
+
 from database._client import db
 from database.helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 from utils import encryption
@@ -17,6 +19,8 @@ phone_numbers_collection = 'phone_numbers'
 
 def _hash_phone_number(phone_number: str) -> str:
     """Create a deterministic hash of a phone number for queryable lookup."""
+    if not isinstance(phone_number, str):
+        raise ValueError('phone_number must be a string')
     return hashlib.sha256(phone_number.encode('utf-8')).hexdigest()
 
 
@@ -51,15 +55,26 @@ def _prepare_phone_number_for_read(data: Dict[str, Any], uid: str) -> Dict[str, 
 @prepare_for_write(data_arg_name='phone_number_data', prepare_func=_prepare_phone_number_for_write)
 def upsert_phone_number(uid: str, phone_number_data: Dict[str, Any]) -> None:
     """Create or update a verified phone number for a user."""
-    user_ref = db.collection('users').document(uid)
-    phone_ref = user_ref.collection(phone_numbers_collection).document(phone_number_data['id'])
-    phone_ref.set(phone_number_data)
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        raise ValueError('uid must be a non-empty string')
+    if not isinstance(phone_number_data, dict):
+        raise ValueError('phone_number_data must be a dictionary')
+    phone_id = phone_number_data.get('id')
+    if not phone_id or not isinstance(phone_id, str) or not phone_id.strip():
+        raise ValueError('phone_number_data must contain a non-empty string id')
+    clean_uid = uid.strip()
+    clean_id = phone_id.strip()
+    user_ref = db.collection('users').document(clean_uid)
+    phone_ref = user_ref.collection(phone_numbers_collection).document(clean_id)
+    phone_ref.set(phone_number_data, merge=True)
 
 
 @prepare_for_read(decrypt_func=_prepare_phone_number_for_read)
 def get_phone_numbers(uid: str) -> List[Dict[str, Any]]:
     """Get all verified phone numbers for a user."""
-    user_ref = db.collection('users').document(uid)
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return []
+    user_ref = db.collection('users').document(uid.strip())
     phone_refs = user_ref.collection(phone_numbers_collection).stream()
     out: List[Dict[str, Any]] = []
     for doc in phone_refs:
@@ -72,8 +87,12 @@ def get_phone_numbers(uid: str) -> List[Dict[str, Any]]:
 @prepare_for_read(decrypt_func=_prepare_phone_number_for_read)
 def get_phone_number(uid: str, phone_number_id: str) -> Optional[Dict[str, Any]]:
     """Get a specific verified phone number."""
-    user_ref = db.collection('users').document(uid)
-    phone_ref = user_ref.collection(phone_numbers_collection).document(phone_number_id)
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return None
+    if not phone_number_id or not isinstance(phone_number_id, str) or not phone_number_id.strip():
+        return None
+    user_ref = db.collection('users').document(uid.strip())
+    phone_ref = user_ref.collection(phone_numbers_collection).document(phone_number_id.strip())
     doc = phone_ref.get()
     if getattr(doc, "exists", False):
         raw: object = doc.to_dict()
@@ -87,8 +106,14 @@ def get_phone_number_by_number(uid: str, phone_number: str) -> Optional[Dict[str
     For enhanced protection, queries by hash since the phone_number field is encrypted.
     Falls back to plaintext query for standard protection (backward compatibility).
     """
-    user_ref = db.collection('users').document(uid)
-    phone_hash = _hash_phone_number(phone_number)
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return None
+    if not phone_number or not isinstance(phone_number, str) or not phone_number.strip():
+        return None
+    clean_uid = uid.strip()
+    clean_phone = phone_number.strip()
+    user_ref = db.collection('users').document(clean_uid)
+    phone_hash = _hash_phone_number(clean_phone)
 
     # Try hash-based lookup first (encrypted records)
     query = user_ref.collection(phone_numbers_collection).where('phone_number_hash', '==', phone_hash).limit(1)
@@ -96,10 +121,10 @@ def get_phone_number_by_number(uid: str, phone_number: str) -> Optional[Dict[str
     if docs:
         raw: object = docs[0].to_dict()
         data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-        return _prepare_phone_number_for_read(data, uid)
+        return _prepare_phone_number_for_read(data, clean_uid)
 
     # Fallback: plaintext query for records written before encryption was enabled
-    query = user_ref.collection(phone_numbers_collection).where('phone_number', '==', phone_number).limit(1)
+    query = user_ref.collection(phone_numbers_collection).where('phone_number', '==', clean_phone).limit(1)
     docs = list(query.stream())
     if docs:
         raw = docs[0].to_dict()
@@ -110,22 +135,32 @@ def get_phone_number_by_number(uid: str, phone_number: str) -> Optional[Dict[str
 
 def delete_phone_number(uid: str, phone_number_id: str) -> None:
     """Delete a verified phone number."""
-    user_ref = db.collection('users').document(uid)
-    phone_ref = user_ref.collection(phone_numbers_collection).document(phone_number_id)
-    phone_ref.delete()
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        raise ValueError('uid must be a non-empty string')
+    if not phone_number_id or not isinstance(phone_number_id, str) or not phone_number_id.strip():
+        raise ValueError('phone_number_id must be a non-empty string')
+    user_ref = db.collection('users').document(uid.strip())
+    phone_ref = user_ref.collection(phone_numbers_collection).document(phone_number_id.strip())
+    try:
+        phone_ref.delete()
+    except NotFound:
+        pass
 
 
 @prepare_for_read(decrypt_func=_prepare_phone_number_for_read)
 def get_primary_phone_number(uid: str) -> Optional[Dict[str, Any]]:
     """Get the user's primary verified phone number."""
-    user_ref = db.collection('users').document(uid)
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        return None
+    clean_uid = uid.strip()
+    user_ref = db.collection('users').document(clean_uid)
     query = user_ref.collection(phone_numbers_collection).where('is_primary', '==', True).limit(1)
     docs = list(query.stream())
     if docs:
         raw: object = docs[0].to_dict()
         return cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
     # Fallback to first available number
-    all_numbers = get_phone_numbers(uid)
+    all_numbers = get_phone_numbers(clean_uid)
     if all_numbers:
         return all_numbers[0]
     return None
@@ -143,10 +178,16 @@ def set_pending_verification(uid: str, phone_number: str) -> None:
 
     Uses a hash of the phone number as the document ID for efficient lookup.
     """
-    doc_id = _hash_phone_number(phone_number)
+    if not uid or not isinstance(uid, str) or not uid.strip():
+        raise ValueError('uid must be a non-empty string')
+    if not phone_number or not isinstance(phone_number, str) or not phone_number.strip():
+        raise ValueError('phone_number must be a non-empty string')
+    clean_uid = uid.strip()
+    clean_phone = phone_number.strip()
+    doc_id = _hash_phone_number(clean_phone)
     db.collection('pending_verifications').document(doc_id).set(
         {
-            'uid': uid,
+            'uid': clean_uid,
             'phone_number_hash': doc_id,
             'created_at': datetime.now(timezone.utc).isoformat(),
         }
@@ -158,7 +199,9 @@ def get_pending_verification_uid(phone_number: str) -> Optional[str]:
 
     Returns None if no pending verification exists or if it has expired.
     """
-    doc_id = _hash_phone_number(phone_number)
+    if not phone_number or not isinstance(phone_number, str) or not phone_number.strip():
+        return None
+    doc_id = _hash_phone_number(phone_number.strip())
     doc = db.collection('pending_verifications').document(doc_id).get()
     if not getattr(doc, "exists", False):
         return None
@@ -173,7 +216,10 @@ def get_pending_verification_uid(phone_number: str) -> Optional[str]:
         )
     except (TypeError, ValueError):
         # Malformed/legacy pending verification (missing or non-ISO created_at); treat as expired.
-        db.collection('pending_verifications').document(doc_id).delete()
+        try:
+            db.collection('pending_verifications').document(doc_id).delete()
+        except NotFound:
+            pass
         return None
     # A stored created_at without a timezone (legacy/naive value) would raise on the aware/naive
     # subtraction below; normalize it to UTC so the elapsed-time check never 500s.
@@ -181,7 +227,10 @@ def get_pending_verification_uid(phone_number: str) -> Optional[str]:
         created_at = created_at.replace(tzinfo=timezone.utc)
     elapsed = (datetime.now(timezone.utc) - created_at).total_seconds()
     if elapsed > PENDING_VERIFICATION_TTL_SECONDS:
-        db.collection('pending_verifications').document(doc_id).delete()
+        try:
+            db.collection('pending_verifications').document(doc_id).delete()
+        except NotFound:
+            pass
         return None
     uid_value = data.get('uid')
     return str(uid_value) if uid_value is not None else None
@@ -189,5 +238,10 @@ def get_pending_verification_uid(phone_number: str) -> Optional[str]:
 
 def delete_pending_verification(phone_number: str) -> None:
     """Delete a pending verification record after it has been processed."""
-    doc_id = _hash_phone_number(phone_number)
-    db.collection('pending_verifications').document(doc_id).delete()
+    if not phone_number or not isinstance(phone_number, str) or not phone_number.strip():
+        return
+    doc_id = _hash_phone_number(phone_number.strip())
+    try:
+        db.collection('pending_verifications').document(doc_id).delete()
+    except NotFound:
+        pass
