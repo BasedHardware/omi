@@ -11157,5 +11157,6 @@
     "appearance": "Izgled",
     "appearanceSystem": "Sustav",
     "appearanceLight": "Svijetlo",
-    "appearanceDark": "Tamno"
+    "appearanceDark": "Tamno",
+    "voiceQuestionNoSpeech": "Nisam razumio — pokušajte ponovno"
 }

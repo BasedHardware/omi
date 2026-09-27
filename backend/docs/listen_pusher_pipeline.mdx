@@ -185,6 +185,14 @@ model and exposes that key through the transcript comparison API. The former
 `fal_whisperx` collection is a legacy read path only and is not the active
 post-processing output.
 
+The mobile `/v2/voice-messages` route uses the same pre-recorded decode and VAD
+boundary before it starts chat generation. If strict VAD finds no speech, the
+SSE response ends with a typed `error:` frame whose error is `no_speech` and
+whose outcome is `expected_silence`; it never completes as an empty HTTP 200.
+The frame keeps the existing released-client-compatible prefix, uses a bounded
+provider label, and does not record a chat-quota question because no visible
+human message was created.
+
 Every `/v4/listen` stream receives a durable, user-scoped `recording_session`
 resource before it creates or resumes a conversation. A client-generated
 `client_conversation_id` remains that resource's ID when present; legacy
@@ -1481,3 +1489,31 @@ remain visually stale until the client reloads, a socket wake occurs, or an
 accepted update covers that segment. The 30-second cache refresh alone does not
 force a historical segment to be delivered again. The transactional merge remains protected
 through that interval; the stale cache never authorizes changing labeled spans.
+
+### Translation admission and output truthfulness
+
+After connect preferences load, `TranscriptProcessor` construction binds the
+existing `LiveLanguageProfile.expected` to the coordinator. These are spoken-language
+priors, not reading preferences. `TRANSLATION_PROFILE_GATE_ENABLED=true` defers short
+out-of-profile detections locally. Expected foreign detections require agreement
+between raw and filler-cleaned local reads; expected foreign clauses can still
+override an English-dominant mixed turn. A >=40-letter, >=0.95-confidence sample
+on both reads establishes an unlisted language for that conversation. Without a
+profile, short Latin-script guesses defer until substantial evidence arrives; a
+clear non-Latin script can establish its language sooner. This may delay genuine
+short Latin-script speech without a profile. Deferrals never poison shared negative
+caches. Provider-echoed target codes alone cannot write a negative cache entry for
+unchanged foreign source text. Conversation changes discard queued work and prior evidence.
+The phone-call interpreter bypasses the profile admission gate to preserve short
+foreign replies; it still applies the output guard before writing a badge.
+
+`TRANSLATION_OUTPUT_GUARD_ENABLED=true` rejects empty/case-only rewrites and conservative
+near-copies before cache publication and segment persistence, including legacy cache hits.
+Token-multiset Dice >=0.80 requires independent target-output evidence and either English
+grammatical edits or separately confirmed target-language lexical edit spans. Foreign
+edits in mostly English text remain translatable. This is a bounded heuristic, not a
+semantic guarantee; either flag can be disabled independently for recall rollback.
+`omi_translation_decisions_total{target_lang,decision,reason}` records admission/guard
+decisions; `omi_translation_skip_total` counts skip, defer and rejection reasons. Neither
+counter measures shown badges or fleet correctness. No user text enters labels or logs.
+Historical translations, client rendering, STT routing and billing are unchanged.

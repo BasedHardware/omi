@@ -13,6 +13,7 @@ import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
 import 'package:omi/pages/settings/clickup_settings_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -62,7 +63,16 @@ class _AppShellState extends State<AppShell> {
     });
   }
 
+  /// The places Omi's own links open (see [openAppLink]).
+  static const Set<String> _appLinkRoutes = {'action-items', 'conversation', 'conversations', 'settings'};
+
   void openAppLink(Uri uri) async {
+    // Omi's own links (the Home Screen widgets): <scheme>://app/<route> opens that place in Home —
+    // To do, a conversation, the Conversations tab, device settings.
+    if (uri.host == 'app' && _appLinkRoutes.contains(uri.pathSegments.firstOrNull)) {
+      await HomeNavigation.openRoute(uri.hasQuery ? '${uri.path}?${uri.query}' : uri.path);
+      return;
+    }
     if (uri.pathSegments.isEmpty) {
       Logger.debug('No path segments in URI: $uri');
       return;

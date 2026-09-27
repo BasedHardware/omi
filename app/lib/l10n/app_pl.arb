@@ -3632,5 +3632,6 @@
     "appearance": "Wygląd",
     "appearanceSystem": "System",
     "appearanceLight": "Jasny",
-    "appearanceDark": "Ciemny"
+    "appearanceDark": "Ciemny",
+    "voiceQuestionNoSpeech": "Nie udało się usłyszeć — spróbuj ponownie"
 }

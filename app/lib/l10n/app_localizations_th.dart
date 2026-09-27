@@ -11339,4 +11339,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get appearanceDark => 'มืด';
+
+  @override
+  String get voiceQuestionNoSpeech => 'ฟังไม่ชัด — ลองอีกครั้ง';
 }

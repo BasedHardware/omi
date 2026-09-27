@@ -3597,5 +3597,6 @@
     "appearance": "Ulkoasu",
     "appearanceSystem": "Järjestelmä",
     "appearanceLight": "Vaalea",
-    "appearanceDark": "Tumma"
+    "appearanceDark": "Tumma",
+    "voiceQuestionNoSpeech": "En saanut selvää — yritä uudelleen"
 }

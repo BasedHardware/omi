@@ -282,7 +282,14 @@ def test_desktop_meeting_adapter_uses_stored_role_and_skips_non_meeting_or_rotat
         'discarded': False,
         'started_at': NOW,
         'finished_at': NOW + timedelta(seconds=MIN_MEETING_DURATION_SECONDS),
-        'transcript_segments': [{'text': 'A substantive exchange', 'start': 0, 'end': MIN_TRANSCRIBED_SPEECH_SECONDS}],
+        'transcript_segments': [
+            {'text': 'Opening exchange', 'start': 0, 'end': 30},
+            {
+                'text': 'Closing exchange',
+                'start': MIN_MEETING_DURATION_SECONDS - 30,
+                'end': MIN_MEETING_DURATION_SECONDS,
+            },
+        ],
         'structured': {'title': 'Ambient capture'},
         'external_data': {'conversation_role': 'ambient'},
     }
@@ -347,12 +354,22 @@ def test_meeting_treatment_requires_five_minutes_and_deduplicated_speech():
         'external_data': {'conversation_role': 'meeting'},
         'transcript_segments': [
             {'text': 'first exchange', 'start': 0, 'end': 35},
-            {'text': 'second exchange', 'start': 35, 'end': MIN_TRANSCRIBED_SPEECH_SECONDS},
+            {
+                'text': 'second exchange',
+                'start': MIN_MEETING_DURATION_SECONDS - 25,
+                'end': MIN_MEETING_DURATION_SECONDS,
+            },
         ],
     }
     assert is_meeting_treatment_eligible(eligible) is True
 
-    short_call = {**eligible, 'finished_at': NOW + timedelta(seconds=MIN_MEETING_DURATION_SECONDS - 1)}
+    short_call = {
+        **eligible,
+        'transcript_segments': [
+            *eligible['transcript_segments'][:-1],
+            {**eligible['transcript_segments'][-1], 'end': MIN_MEETING_DURATION_SECONDS - 1},
+        ],
+    }
     assert is_meeting_treatment_eligible(short_call) is False
 
     duplicate_streams = {

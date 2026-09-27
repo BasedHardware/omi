@@ -8403,6 +8403,17 @@
             "title": "Revision",
             "type": "integer"
           },
+          "selection_fingerprint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selection Fingerprint"
+          },
           "strip": {
             "items": {
               "$ref": "#/components/schemas/ConversationScreenFrame"

@@ -11408,4 +11408,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Tumma';
+
+  @override
+  String get voiceQuestionNoSpeech => 'En saanut selvää — yritä uudelleen';
 }

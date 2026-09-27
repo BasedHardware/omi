@@ -3693,5 +3693,6 @@
     "appearance": "Megjelenés",
     "appearanceSystem": "Rendszer",
     "appearanceLight": "Világos",
-    "appearanceDark": "Sötét"
+    "appearanceDark": "Sötét",
+    "voiceQuestionNoSpeech": "Nem értettem — próbáld újra"
 }

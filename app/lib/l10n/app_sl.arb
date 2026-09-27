@@ -11157,5 +11157,6 @@
     "appearance": "Videz",
     "appearanceSystem": "Sistem",
     "appearanceLight": "Svetlo",
-    "appearanceDark": "Temno"
+    "appearanceDark": "Temno",
+    "voiceQuestionNoSpeech": "Nisem razumel — poskusite znova"
 }

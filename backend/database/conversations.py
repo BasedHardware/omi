@@ -2606,6 +2606,7 @@ def update_conversation_segments(
         'person_id',
         'is_user',
         'speaker_identity_status',
+        'speaker_match_source',
     }:
         raise ValueError('Field-only writers cannot change segment identity or speech boundaries')
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -2640,7 +2641,7 @@ def update_conversation_segments(
                         s,
                         **{
                             k: identities[s.get('id')][k]
-                            for k in ('person_id', 'is_user', 'speaker_identity_status')
+                            for k in ('person_id', 'is_user', 'speaker_identity_status', 'speaker_match_source')
                             if k in identities[s.get('id')]
                         },
                     )

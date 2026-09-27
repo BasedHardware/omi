@@ -3597,5 +3597,6 @@
     "appearance": "Giao diện",
     "appearanceSystem": "Hệ thống",
     "appearanceLight": "Sáng",
-    "appearanceDark": "Tối"
+    "appearanceDark": "Tối",
+    "voiceQuestionNoSpeech": "Không nghe rõ — hãy thử lại"
 }

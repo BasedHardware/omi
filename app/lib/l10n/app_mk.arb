@@ -11157,5 +11157,6 @@
     "appearance": "Изглед",
     "appearanceSystem": "Систем",
     "appearanceLight": "Светло",
-    "appearanceDark": "Темно"
+    "appearanceDark": "Темно",
+    "voiceQuestionNoSpeech": "Не разбрав — обидете се повторно"
 }

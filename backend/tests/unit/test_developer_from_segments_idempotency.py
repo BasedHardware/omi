@@ -214,15 +214,8 @@ def _eligible_meeting_request(**overrides):
                 'speaker': 'SPEAKER_00',
                 'is_user': True,
                 'start': 0.0,
-                'end': 60.0,
-            },
-            {
-                'text': 'A closing comment after the meeting discussion',
-                'speaker': 'SPEAKER_00',
-                'is_user': True,
-                'start': 299.0,
                 'end': 300.0,
-            },
+            }
         ],
         'started_at': NOW,
         'finished_at': NOW + timedelta(minutes=5),
@@ -475,8 +468,8 @@ def test_completed_desktop_meeting_retry_repairs_missing_arrival(monkeypatch):
                 'started_at': NOW,
                 'finished_at': NOW + timedelta(minutes=5),
                 'transcript_segments': [
-                    {'text': 'substantive meeting discussion', 'start': 0.0, 'end': 60.0},
-                    {'text': 'A closing comment after the meeting discussion', 'start': 299.0, 'end': 300.0},
+                    {'text': 'opening discussion', 'start': 0.0, 'end': 30.0},
+                    {'text': 'closing discussion', 'start': 270.0, 'end': 300.0},
                 ],
                 'structured': {'title': 'Design review'},
                 'external_data': {'conversation_role': 'meeting'},
