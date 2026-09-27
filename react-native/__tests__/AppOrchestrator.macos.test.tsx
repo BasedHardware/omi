@@ -136,12 +136,17 @@ function textOf(renderer: ReactTestRenderer.ReactTestRenderer): string {
 }
 
 async function openSignIn(renderer: ReactTestRenderer.ReactTestRenderer) {
-  for (const label of ['Get started', 'Continue']) {
-    await act(async () =>
-      renderer.root
-        .find(node => node.props.accessibilityLabel === label)
-        .props.onPress(),
-    );
+  // First-run shows "Get started" → "Continue"; a returning user (completed
+  // onboarding, no session) lands straight on "Sign in".
+  for (const label of ['Get started', 'Sign in', 'Continue']) {
+    const node = renderer.root.findAll(
+      node => node.props.accessibilityLabel === label,
+    )[0];
+    if (node !== undefined) {
+      await act(async () => {
+        node.props.onPress();
+      });
+    }
   }
 }
 async function openChat(renderer: ReactTestRenderer.ReactTestRenderer) {
@@ -456,9 +461,6 @@ test('a send still in flight when the session dies never seeds the next session'
   nextSession = true;
   await openSignIn(renderer);
   await act(async () => {
-    renderer.root
-      .find(node => node.props.accessibilityLabel === 'Sign in')
-      .props.onPress();
     await flushAsyncQueue();
   });
   expect(labelsOf(renderer)).toContain('Omi desktop chrome');
@@ -508,7 +510,9 @@ test('a mid-run 401 leaves the product shell once the session is gone', async ()
   // keeping nav, omnibar, and recovery banners up on dead credentials.
   expect(labelsOf(renderer)).not.toContain('Omi desktop chrome');
   expect(labelsOf(renderer)).toContain('First-run onboarding');
-  expect(mockAuth.hasCloudSession).toHaveBeenCalledTimes(2);
+  // Initial probe + the 401-triggered gate re-probe + the chat-history
+  // effect's revalidation once sessionReady drops.
+  expect(mockAuth.hasCloudSession).toHaveBeenCalledTimes(3);
 });
 
 test('the previous session transcript never survives a sign-out', async () => {
@@ -537,11 +541,6 @@ test('the previous session transcript never survives a sign-out', async () => {
 
   const renderer = await renderApp();
   await openSignIn(renderer);
-  await act(async () => {
-    renderer.root
-      .find(node => node.props.accessibilityLabel === 'Sign in')
-      .props.onPress();
-  });
   await act(async () => {
     await Promise.resolve();
   });
@@ -574,11 +573,6 @@ test('the previous session transcript never survives a sign-out', async () => {
   // The next sign-in starts from an empty transcript even when history
   // cannot load: the prior account's bubbles must never flash back in.
   await openSignIn(renderer);
-  await act(async () => {
-    renderer.root
-      .find(node => node.props.accessibilityLabel === 'Sign in')
-      .props.onPress();
-  });
   await act(async () => {
     await Promise.resolve();
   });

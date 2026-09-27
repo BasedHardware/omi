@@ -52,7 +52,7 @@ static BOOL OmiIsAllowedV5Host(NSString *host) {
 
 static NSURL *OmiValidatedV5URL(NSString *value);
 
-static BOOL OmiSoftwarePlaneIsNew(void) {
+BOOL OmiSoftwarePlaneIsNew(void) {
   NSString *stored = [NSUserDefaults.standardUserDefaults stringForKey:OmiSoftwarePlaneDefaultsKey];
   BOOL stamped = OmiValidatedV5BackendURLFromEnvironment() != nil;
   return omi_backend_software_plane_is_new(

@@ -177,20 +177,9 @@ static NSString *OmiRewindContained(NSString *root, NSString *relative) {
   CGImageRelease(image);
   if (![self current:owner]) { if (error) *error = OmiRewindError(@"OMI_REWIND_OWNER_CHANGED"); return nil; }
   if (!success || jpeg.length > 3 * 1024 * 1024) { if (error) *error = OmiRewindError(@"OMI_REWIND_FRAME_UNAVAILABLE"); return nil; }
-  // Serve frames as a file URL when possible: react-native-macOS routes
-  // data: URIs through RCTNetworking, whose data handler hits a dev-mode
-  // request-token assert when an image load is cancelled mid-flight.
-  NSString *fileUrl = nil;
-  NSString *cacheName = [[identifier componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@":/"]] componentsJoinedByString:@"-"];
-  if (cacheName.length > 0) {
-    NSString *cacheDirectory = [ownerRoot stringByAppendingPathComponent:@"Cache"];
-    if ([NSFileManager.defaultManager createDirectoryAtPath:cacheDirectory withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions:@(0700)} error:nil]) {
-      NSString *cachePath = [cacheDirectory stringByAppendingPathComponent:[NSString stringWithFormat:@"frame-%@.jpg", cacheName]];
-      if ([jpeg writeToFile:cachePath options:NSDataWritingAtomic error:nil]) {
-        fileUrl = [NSURL fileURLWithPath:cachePath].absoluteString;
-      }
-    }
-  }
-  return @{@"id":identifier,@"mimeType":@"image/jpeg",@"base64":[jpeg base64EncodedStringWithOptions:0],@"fileUrl":fileUrl ?: NSNull.null};
+  // The frame is returned as an inline base64 JPEG: the desktop renders it
+  // through the native OmiRewindFrame view, deliberately outside RN's URL
+  // image pipeline (whose data:/file: handlers trip a request-token assert).
+  return @{@"id":identifier,@"mimeType":@"image/jpeg",@"base64":[jpeg base64EncodedStringWithOptions:0]};
 }
 @end

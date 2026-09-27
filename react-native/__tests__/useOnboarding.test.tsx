@@ -136,7 +136,8 @@ test('a native 401 invalidation re-probes and leaves the ready shell', async () 
     await Promise.resolve();
   });
 
-  expect(hook.latest().onboardingRequired).toBe(true);
+  expect(hook.latest().onboardingRequired).toBe(false);
+  expect(hook.latest().returningUser).toBe(true);
 });
 
 test('completed onboarding without a cloud session still requires Sign in', async () => {
@@ -145,7 +146,8 @@ test('completed onboarding without a cloud session still requires Sign in', asyn
 
   const hook = await renderOnboarding(true);
 
-  expect(hook.latest().onboardingRequired).toBe(true);
+  expect(hook.latest().onboardingRequired).toBe(false);
+  expect(hook.latest().returningUser).toBe(true);
   expect(mockAuth.markOnboardingComplete).not.toHaveBeenCalled();
 });
 
@@ -295,7 +297,8 @@ test('sign-out returns the desktop to Welcome without firing cloud reads', async
   });
 
   expect(mockAuth.signOut).toHaveBeenCalledTimes(1);
-  expect(hook.latest().onboardingRequired).toBe(true);
+  expect(hook.latest().onboardingRequired).toBe(false);
+  expect(hook.latest().returningUser).toBe(true);
   // A signed-out Mac must not hit the cloud; a late refresh could otherwise
   // overwrite the next session's fresh load.
   expect(refreshReads).not.toHaveBeenCalled();
@@ -315,7 +318,8 @@ test('revalidateSession falls back to Welcome once the keychain session is gone'
   await ReactTestRenderer.act(async () => {
     await hook.latest().revalidateSession();
   });
-  expect(hook.latest().onboardingRequired).toBe(true);
+  expect(hook.latest().onboardingRequired).toBe(false);
+  expect(hook.latest().returningUser).toBe(true);
 });
 
 test('revalidateSession keeps a live session in the shell', async () => {
@@ -351,7 +355,8 @@ test('a late revalidation cannot eject a newer signed-in session', async () => {
   await ReactTestRenderer.act(async () => {
     await hook.latest().revalidateSession();
   });
-  expect(hook.latest().onboardingRequired).toBe(true);
+  expect(hook.latest().onboardingRequired).toBe(false);
+  expect(hook.latest().returningUser).toBe(true);
 
   await ReactTestRenderer.act(async () => {
     await hook.latest().signInAndRefresh();
@@ -412,7 +417,8 @@ test('sign-out retires a pending sign-in without leaving Welcome busy', async ()
     await pending;
   });
   expect(hook.latest().signingIn).toBe(false);
-  expect(hook.latest().onboardingRequired).toBe(true);
+  expect(hook.latest().onboardingRequired).toBe(false);
+  expect(hook.latest().returningUser).toBe(true);
 });
 
 test('a Mac without the native auth module stays on Welcome instead of faking ready', async () => {

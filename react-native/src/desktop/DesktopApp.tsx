@@ -83,6 +83,8 @@ type Props = TaskMutationProps & {
   readsPhase: ReadsPhase;
   postSetupHomeCue?: PostSetupHomeCue;
   session: DesktopSession;
+  /** Onboarding already finished before; signed-out card says Welcome back. */
+  returning?: boolean;
   signingIn: boolean;
   draft: string;
   messages: ChatMessage[];
@@ -140,6 +142,7 @@ export function DesktopApp({
   reads,
   readsPhase,
   session,
+  returning = false,
   signingIn,
   ...taskMutations
 }: Props) {
@@ -265,14 +268,19 @@ export function DesktopApp({
   // cards, Settings, or empty-state lists.
   if (session === 'signed-out') {
     return (
-      <View accessibilityLabel="Omi desktop" style={styles.root}>
-        <DesktopOnboarding
-          error={authError}
-          onSignIn={onSignIn}
-          onCancelSignIn={onCancelSignIn}
-          signingIn={signingIn}
-        />
-      </View>
+      <DesktopThemeProvider
+        initialName={initialAppearance}
+        onSetName={onAppearanceChange}>
+        <View accessibilityLabel="Omi desktop" style={styles.root}>
+          <DesktopOnboarding
+            error={authError}
+            onSignIn={onSignIn}
+            onCancelSignIn={onCancelSignIn}
+            returning={returning}
+            signingIn={signingIn}
+          />
+        </View>
+      </DesktopThemeProvider>
     );
   }
   if (session === 'probing') {
@@ -310,6 +318,20 @@ export function DesktopApp({
           }}
           onNavigate={navigate}
           guideTarget={guideTarget}
+          captureActive={capture.capturing}
+          captureAvailable={capture.available}
+          captureBusy={capture.busy}
+          onToggleCapture={
+            capture.available
+              ? () => {
+                  if (capture.capturing) {
+                    void capture.stop();
+                  } else {
+                    void capture.start();
+                  }
+                }
+              : null
+          }
           onSend={() => {
             if (mode === 'Ask') {
               setChatSubmission(value => value + 1);

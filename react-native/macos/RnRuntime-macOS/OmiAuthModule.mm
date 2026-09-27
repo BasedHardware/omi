@@ -843,8 +843,9 @@ RCT_EXPORT_MODULE(OmiAuth)
 
 - (void)finishWithFirebaseCustomToken:(NSString *)customToken
                               attempt:(NSUInteger)attempt
-                              resolve:(RCTPromiseResolveBlock)resolve
-                               reject:(RCTPromiseRejectBlock)reject {
+                        pinPlane:(NSString *)pinPlane
+                             resolve:(RCTPromiseResolveBlock)resolve
+                              reject:(RCTPromiseRejectBlock)reject {
   NSString *firebaseKey = OmiAuthResolvedFirebaseApiKey();
   NSURLComponents *components = [NSURLComponents componentsWithString:
       @"https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken"];
@@ -876,6 +877,15 @@ RCT_EXPORT_MODULE(OmiAuth)
     }
     [self finishSignInAttempt:attempt value:@{@"signedIn" : @YES} code:nil message:nil error:nil
                       resolve:resolve reject:reject];
+    // A session is only valid against the backend that minted it. Pin the
+    // plane NOW — after the store succeeded — so a failed redemption can
+    // never flip the user's chosen plane, and a stored v5/legacy session is
+    // never routed to the opposite origin (a 401 there erases the session).
+    if (pinPlane.length > 0) {
+      [NSUserDefaults.standardUserDefaults setObject:pinPlane
+                                              forKey:@"omi.backend.softwarePlane"];
+      OmiAuthLog([NSString stringWithFormat:@"plane pinned %@ after session store", pinPlane]);
+    }
     OmiAuthLog(@"customToken redemption stored session");
     });
   }];
@@ -898,7 +908,11 @@ RCT_EXPORT_MODULE(OmiAuth)
                       resolve:resolve reject:reject];
     return;
   }
-  [self finishWithFirebaseCustomToken:customToken attempt:attempt resolve:resolve reject:reject];
+  // Legacy chain: the session is minted by the old cloud, so on success the
+  // plane pins to "old" — a lingering "new" plane would route this session
+  // to a stamped v5 origin and 401 it.
+  [self finishWithFirebaseCustomToken:customToken attempt:attempt pinPlane:@"old"
+                               resolve:resolve reject:reject];
 }
 
 - (void)completeSignInWithCallback:(NSURL *)callbackURL
@@ -1143,11 +1157,11 @@ RCT_REMAP_METHOD(cancelSignIn,
           self.signInCompleting = YES;
         }
         // A session minted by the v5 desktop handoff is only valid against the
-        // stamped v5 origin. Pin the plane to "new" so a stale "old" plane can
-        // never route this session to api.omi.me, draw a 401, and erase it.
-        [NSUserDefaults.standardUserDefaults setObject:@"new" forKey:@"omi.backend.softwarePlane"];
-        OmiAuthLog(@"plane pinned new after v5 handoff redemption");
-        [self finishWithFirebaseCustomToken:customToken attempt:attempt resolve:resolve reject:reject];
+        // stamped v5 origin; finishWithFirebaseCustomToken pins the plane to
+        // "new" once the session actually stores, so a failed redemption can
+        // no longer overwrite a user-chosen "old" plane.
+        [self finishWithFirebaseCustomToken:customToken attempt:attempt pinPlane:@"new"
+                                   resolve:resolve reject:reject];
         return;
       }
       NSInteger status = [error.domain isEqualToString:@"OmiAuth"] ? error.code : 0;
@@ -1184,9 +1198,11 @@ RCT_REMAP_METHOD(signIn,
     #if TARGET_OS_OSX
     // A validated OMI_V5_BACKEND_URL switches sign-in to the desktop-auth
     // handoff: browser page + confirmation code + polling exchange, then the
-    // same Firebase custom-token finisher as the legacy chain.
+    // same Firebase custom-token finisher as the legacy chain. The Old/New
+    // plane preference gates it: a user-chosen "old" plane must keep the
+    // legacy chain even when a stamped origin is configured.
     NSURL *v5Backend = OmiValidatedV5BackendURLFromEnvironment();
-    if (v5Backend != nil) {
+    if (v5Backend != nil && OmiSoftwarePlaneIsNew()) {
       self.settled = NO;
       self.signInCompleting = NO;
       self.pendingSignInReject = [reject copy];

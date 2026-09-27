@@ -20,80 +20,66 @@ type ConfettiPiece = {
 };
 
 // Trajectory sampling density for the Animated interpolations.
-const PATH_SAMPLES = 26;
+const PATH_SAMPLES = 30;
 
 /**
- * One physics step of the canvas-confetti model: ballistic motion with linear
- * drag, integrated forward in time.
+ * canvas-confetti's own integration model, run at its 60fps timestep: each
+ * frame the velocity is multiplied by `decay` (0.9 default), `gravity`
+ * (0.1 default, +y) is added, then the position advances by the velocity.
+ * startVelocity (45 default) is in px-per-frame, which is why the library's
+ * bursts read as a fast pop that decays into a gentle drift — the exact feel
+ * this component ports, since the DOM-only library itself cannot run here.
  */
-function stepPhysics(
-  state: {vx: number; vy: number; x: number; y: number},
-  gravity: number,
-  drag: number,
-  dt: number,
-) {
-  state.vx *= Math.exp(-drag * dt);
-  state.vy = state.vy * Math.exp(-drag * dt) + gravity * dt;
-  state.x += state.vx * dt;
-  state.y += state.vy * dt;
-}
+const CONFETTI_FPS = 60;
 
-function samplePath(
+function sampleCanvasConfettiPath(
   origin: {vx: number; vy: number},
-  duration: number,
-  gravity: number,
-  drag: number,
-): {x: number; y: number}[] {
+  gravityPerFrame: number,
+  decayPerFrame: number,
+): {path: {x: number; y: number}[]; duration: number} {
   const state = {vx: origin.vx, vy: origin.vy, x: 0, y: 0};
-  const dt = duration / (PATH_SAMPLES - 1);
   const path = [{x: 0, y: 0}];
-  for (let sample = 1; sample < PATH_SAMPLES; sample += 1) {
-    stepPhysics(state, gravity, drag, dt);
+  // The library removes a particle once it falls past the canvas edge below
+  // its bottom-corner origin; ~80px past the start is that moment here.
+  let frames = 0;
+  while (frames < CONFETTI_FPS * 4 && (frames < 12 || state.y < 80)) {
+    state.vx *= decayPerFrame;
+    state.vy = state.vy * decayPerFrame + gravityPerFrame;
+    state.x += state.vx;
+    state.y += state.vy;
+    frames += 1;
     path.push({x: state.x, y: state.y});
   }
-  return path;
+  return {path, duration: frames / CONFETTI_FPS};
 }
 
+/** One cannon of the library's "school pride" preset, parameterized. */
 function cannonPiece(
   angleDegrees: number,
   spreadDegrees: number,
 ): ConfettiPiece {
+  // confetti({ particleCount: 60, angle, spread, origin: bottom corner })
+  // randomizes the launch angle inside the spread and the speed around
+  // startVelocity; gravity 0.1 and decay 0.9 are the library defaults.
   const angle =
     ((angleDegrees + (Math.random() - 0.5) * spreadDegrees) * Math.PI) / 180;
-  const speed = 880 + Math.random() * 320;
-  const duration = 1.9 + Math.random() * 0.7;
-  return {
-    color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
-    duration,
-    height: 9 + Math.random() * 6,
-    path: samplePath(
-      {vx: Math.sin(angle) * speed, vy: -Math.cos(angle) * speed},
-      duration,
-      1350,
-      1.1,
-    ),
-    rotation: (Math.random() - 0.5) * 1440,
-    wobblePhase: Math.random() * Math.PI * 2,
-    wobbleWidth: 18 + Math.random() * 26,
-    width: 5 + Math.random() * 4,
-  };
-}
-
-function drizzlePiece(): ConfettiPiece {
-  const duration = 2.1 + Math.random() * 0.9;
+  const speedPerFrame = 45 * (0.75 + Math.random() * 0.5);
+  const {path, duration} = sampleCanvasConfettiPath(
+    {
+      vx: Math.cos(angle) * speedPerFrame,
+      vy: -Math.sin(angle) * speedPerFrame,
+    },
+    0.1,
+    0.9,
+  );
   return {
     color: CONFETTI_COLORS[Math.floor(Math.random() * CONFETTI_COLORS.length)],
     duration,
     height: 8 + Math.random() * 5,
-    path: samplePath(
-      {vx: (Math.random() - 0.5) * 60, vy: 120 + Math.random() * 160},
-      duration,
-      210,
-      0.25,
-    ),
-    rotation: (Math.random() - 0.5) * 900,
+    path,
+    rotation: (Math.random() - 0.5) * 1080,
     wobblePhase: Math.random() * Math.PI * 2,
-    wobbleWidth: 26 + Math.random() * 30,
+    wobbleWidth: 14 + Math.random() * 18,
     width: 5 + Math.random() * 3,
   };
 }
@@ -184,10 +170,9 @@ function ConfettiPieceView({
 }
 
 /**
- * Confetti that outlives the post-setup overlay: two side cannons fire the
- * canvas-confetti "school pride" burst while a light drizzle keeps falling
- * from the top over the app UI after the overlay has faded away. Renders
- * nothing under reduce motion.
+ * Confetti that outlives the post-setup overlay: the two bottom-corner
+ * cannons of canvas-confetti's "school pride" preset. Renders nothing under
+ * reduce motion.
  */
 export function PostSetupConfetti({onDone}: {onDone: () => void}) {
   const reduceMotion = useReduceMotion();
@@ -195,24 +180,26 @@ export function PostSetupConfetti({onDone}: {onDone: () => void}) {
     [] as (ConfettiPiece & {left: `${number}%`; top: `${number}%`})[],
   ).current;
   if (pieces.length === 0) {
-    for (let index = 0; index < 44; index += 1) {
-      pieces.push({...cannonPiece(52, 44), left: '2%', top: '96%'});
+    // school pride: 60 particles, angle 60 and 120, spread 60, from the
+    // bottom corners.
+    for (let index = 0; index < 60; index += 1) {
+      pieces.push({...cannonPiece(60, 60), left: '2%', top: '96%'});
     }
-    for (let index = 0; index < 44; index += 1) {
-      pieces.push({...cannonPiece(128, 44), left: '98%', top: '96%'});
-    }
-    for (let index = 0; index < 36; index += 1) {
-      pieces.push({
-        ...drizzlePiece(),
-        left: `${4 + ((index * 97) % 92)}%`,
-        top: '-2%',
-      });
+    for (let index = 0; index < 60; index += 1) {
+      pieces.push({...cannonPiece(120, 60), left: '98%', top: '96%'});
     }
   }
+  const longestFlight = pieces.reduce(
+    (longest, piece) => Math.max(longest, piece.duration),
+    0,
+  );
   useEffect(() => {
-    const timer = setTimeout(onDone, reduceMotion ? 200 : 3000);
+    const timer = setTimeout(
+      onDone,
+      reduceMotion ? 200 : Math.ceil((longestFlight + 0.3) * 1000),
+    );
     return () => clearTimeout(timer);
-  }, [onDone, reduceMotion]);
+  }, [longestFlight, onDone, reduceMotion]);
   if (reduceMotion) {
     return null;
   }

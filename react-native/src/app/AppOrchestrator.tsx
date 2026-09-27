@@ -82,6 +82,7 @@ import {
 } from '../desktopSettingsClient';
 import {useAmbientAudio} from './useAmbientAudio';
 import {DesktopApp, DesktopSessionProbe} from '../desktop/DesktopApp';
+import {DesktopThemeProvider} from '../desktop/DesktopTheme';
 import {MobileChat} from '../mobile/MobileChat';
 import {MobileOmnibar, type MobileOmnibarMode} from '../mobile/MobileOmnibar';
 import {
@@ -199,11 +200,15 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     desktopHandoff,
     setupRequired,
     onboardingRequired,
+    returningUser,
     revalidateSession,
     signInAndRefresh,
     signOutAndRefresh,
     signingIn,
   } = useOnboarding(nativeSessionRequired, refreshReadsViaRef);
+  // Cloud reads/chat need a live session: onboarding done AND signed in. A
+  // returning signed-out user sits in the shell's Welcome-back card instead.
+  const sessionReady = onboardingRequired === false && !returningUser;
   const {
     allHomeReadsUnavailable,
     tasksLoadingMore,
@@ -220,12 +225,12 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     conversationNotice,
     loadMoreConversations,
   } = useDesktopReads({
-    enabled: onboardingRequired === false,
+    enabled: sessionReady,
   });
   const postSetupHomeCue = usePostSetupHomeCue(onboardingRequired, readsPhase);
 
   const taskMutations = useTaskMutations({
-    enabled: onboardingRequired === false,
+    enabled: sessionReady,
     outcome: readOutcomes?.tasks ?? null,
     refreshTasks,
     revalidateSession,
@@ -276,7 +281,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       cancelled = true;
     };
   }, []);
-  const ambient = useAmbientAudio(audioMode, onboardingRequired === false);
+  const ambient = useAmbientAudio(audioMode, sessionReady);
   const {
     deviceBusy,
     deviceScanMessage,
@@ -328,7 +333,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     setActiveOmiRequestId(null);
     if (retiredRequest !== null)
       void omiBackend?.cancelOmiChat?.(retiredRequest).catch(() => undefined);
-    if (onboardingRequired !== false) {
+    if (!sessionReady) {
       resetChatSession();
       return () => {
         active = false;
@@ -389,6 +394,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     onboardingRequired,
     resetChatSession,
     revalidateSession,
+    sessionReady,
     stableChatMessageIds,
   ]);
 
@@ -578,7 +584,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     ) {
       return;
     }
-    if (nativeSessionRequired && onboardingRequired !== false) {
+    if (nativeSessionRequired && !sessionReady) {
       return;
     }
     const sendToken = {};
@@ -727,7 +733,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       backend === null ||
       cursor === null ||
       loadingOlderChat ||
-      (nativeSessionRequired && onboardingRequired !== false)
+      (nativeSessionRequired && !sessionReady)
     ) {
       return;
     }
@@ -1054,14 +1060,21 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     // and a signed-out Mac sees Welcome, so no signed-in IA leaks before
     // OmiAuth establishes a real session. DesktopApp enforces the same gate.
     if (onboardingRequired !== false) {
+      // First-run onboarding and the session probe render before the product
+      // shell, but the window material already follows the appearance pref —
+      // they must read the same theme or light mode shows dark ink on glass.
       return (
-        <PageShell macDesktop workspaceMaterial>
-          {onboardingRequired === true ? (
-            firstRunOnboarding
-          ) : (
-            <DesktopSessionProbe />
-          )}
-        </PageShell>
+        <DesktopThemeProvider
+          initialName={appearance}
+          onSetName={setAppearance}>
+          <PageShell macDesktop workspaceMaterial>
+            {onboardingRequired === true ? (
+              firstRunOnboarding
+            ) : (
+              <DesktopSessionProbe />
+            )}
+          </PageShell>
+        </DesktopThemeProvider>
       );
     }
     return (
@@ -1136,10 +1149,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           session={
             onboardingRequired === null
               ? 'probing'
-              : onboardingRequired
+              : onboardingRequired || returningUser
               ? 'signed-out'
               : 'ready'
           }
+          returning={returningUser}
           signingIn={signingIn}
         />
       </PageShell>
@@ -1176,6 +1190,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     !macDesktop &&
     compact &&
     onboardingRequired === false &&
+    !returningUser &&
     (route === 'Home' ||
       route === 'Conversations' ||
       route === 'Tasks' ||
@@ -1408,7 +1423,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                       <Text style={styles.backButtonText}>Home</Text>
                     </FocusPressable>
                   )}
-                {onboardingRequired === true ? (
+                {onboardingRequired === true || returningUser ? (
                   firstRunOnboarding
                 ) : onboardingRequired !== false ? (
                   <View

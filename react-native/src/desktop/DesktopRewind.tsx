@@ -1,7 +1,6 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   AppState,
-  Image,
   NativeModules,
   ScrollView,
   StyleSheet,
@@ -12,6 +11,7 @@ import {FocusPressable} from '../ui/Pressable';
 import {MaterialIcon} from '../ui/MaterialIcon';
 
 import {DesktopEmptyState} from './DesktopRows';
+import {RewindFrameView} from './RewindFrameView';
 import {
   type DesktopTokens,
   useDesktopTheme,
@@ -37,7 +37,6 @@ type Rewind = {
     id: string;
     mimeType: 'image/jpeg';
     base64: string;
-    fileUrl?: string | null;
   }>;
 };
 
@@ -222,12 +221,17 @@ export function DesktopRewind({
           if (
             result.id !== selected.id ||
             result.mimeType !== 'image/jpeg' ||
-            (!result.base64 && !result.fileUrl)
+            !result.base64
           ) {
             setImageError('This captured frame could not be opened.');
             return;
           }
-          setImage(result.fileUrl ?? `data:image/jpeg;base64,${result.base64}`);
+          // The base64 payload renders through the native RewindFrameView:
+          // URI-based <Image> loads go through RCTNetworking on
+          // react-native-macOS, whose data:/file: handlers pass a nil
+          // request token (upstream bug) and fatal dev builds with
+          // "Unrecognized request token".
+          setImage(result.base64);
         },
         failure => {
           if (active && imageEpoch.current === currentImage) {
@@ -386,16 +390,11 @@ export function DesktopRewind({
             ) : image === null ? (
               <Text style={styles.meta}>Loading captured frame…</Text>
             ) : (
-              <Image
+              <RewindFrameView
                 key={selected.id}
                 accessibilityLabel={`Captured screen from ${selected.appName}`}
-                source={{uri: image}}
-                resizeMode="contain"
+                imageBase64={image}
                 style={styles.image}
-                onError={() => {
-                  setImage(null);
-                  setImageError('This captured frame could not be opened.');
-                }}
               />
             )}
           </View>

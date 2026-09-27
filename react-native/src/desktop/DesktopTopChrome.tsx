@@ -51,6 +51,11 @@ type Props = {
   activeGenerationId: string | null;
   route: DesktopRoute;
   onNavigate: (route: DesktopRoute) => void;
+  // Screen-capture toggle shown in the nav row when capture is available.
+  captureActive?: boolean;
+  captureAvailable?: boolean;
+  captureBusy?: boolean;
+  onToggleCapture?: (() => void) | null;
   draft: string;
   onDraftChange: (value: string) => void;
   onSend: () => void;
@@ -76,6 +81,10 @@ export function DesktopChrome({
   onSend,
   onStop,
   route,
+  captureActive = false,
+  captureAvailable = false,
+  captureBusy = false,
+  onToggleCapture = null,
   guideTarget = null,
 }: Props) {
   const styles = useDesktopStyleSheets(createStyles);
@@ -397,6 +406,30 @@ export function DesktopChrome({
             );
           })}
         </View>
+        {onToggleCapture !== null && captureAvailable ? (
+          <ShippingPressable
+            accessibilityLabel={
+              captureActive ? 'Stop screen capture' : 'Start screen capture'
+            }
+            accessibilityRole="button"
+            accessibilityState={{
+              busy: captureBusy,
+              selected: captureActive,
+            }}
+            active={captureActive}
+            disabled={captureBusy}
+            onPress={onToggleCapture}
+            style={[
+              styles.settingsButton,
+              captureActive && styles.settingsButtonActive,
+            ]}>
+            <MaterialIcon
+              color={captureActive ? token.color.red : token.color.ink}
+              name="monitor"
+              size={17}
+            />
+          </ShippingPressable>
+        ) : null}
         <ShippingPressable
           accessibilityLabel="Settings"
           accessibilityRole="button"
@@ -411,7 +444,7 @@ export function DesktopChrome({
             styles.settingsButton,
             route === 'Settings' && styles.settingsButtonActive,
           ]}>
-          <MaterialIcon name="settings" color={token.color.ink} size={15} />
+          <MaterialIcon name="settings" color={token.color.ink} size={17} />
         </ShippingPressable>
       </View>
       <View style={styles.omnibar}>
@@ -513,15 +546,15 @@ export function DesktopChrome({
             pressed && styles.pressed,
           ]}>
           {canStop ? (
-            <MaterialIcon name="stop" size={13} color={token.color.dark} />
+            <MaterialIcon name="stop" size={14} color={token.color.dark} />
           ) : mode === 'Ask' ? (
             <MaterialIcon
               name="arrow_upward"
-              size={17}
+              size={18}
               color={token.color.dark}
             />
           ) : (
-            <MaterialIcon name="search" size={16} color={token.color.dark} />
+            <MaterialIcon name="search" size={17} color={token.color.dark} />
           )}
         </FocusPressable>
       </View>
@@ -557,8 +590,9 @@ export function DesktopChrome({
                 },
               ],
             },
-          ]}
-        />
+          ]}>
+          <View pointerEvents="none" style={styles.guideHighlightRing} />
+        </Animated.View>
       ) : null}
       {guideTarget !== null && guidePoint !== null ? (
         <Animated.View
@@ -624,19 +658,25 @@ const createStyles = (token: DesktopTokens) =>
     guideCursor: {
       position: 'absolute',
       zIndex: 4,
-      elevation: 4,
     },
+    // RN macOS view shadows are unusable here: RCTView's didUpdateShadow runs
+    // on any shadow prop change and calls colorWithCGColor: with a NULL color
+    // whenever shadowColor did not land first, which throws inside the UI
+    // batch and kills every later view update (settings stops opening). The
+    // glow is a translucent border ring instead.
     guideHighlight: {
       position: 'absolute',
       zIndex: 3,
-      elevation: 3,
       borderRadius: 10,
       borderWidth: 2,
       borderColor: token.color.ink,
-      shadowColor: token.color.ink,
-      shadowOpacity: 0.35,
-      shadowRadius: 12,
-      shadowOffset: {width: 0, height: 0},
+    },
+    guideHighlightRing: {
+      ...StyleSheet.absoluteFillObject,
+      borderRadius: 12,
+      borderWidth: 4,
+      borderColor: token.color.ink,
+      opacity: 0.22,
     },
     row: {
       alignItems: 'center',

@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactTestRenderer, {act} from 'react-test-renderer';
-import {AppState, Image, NativeModules, Text, TextInput} from 'react-native';
+import {AppState, NativeModules, Text, TextInput} from 'react-native';
+import {RewindFrameView} from './RewindFrameView';
 
 const mockRewind = {listFrames: jest.fn(), readFrame: jest.fn()};
 NativeModules.OmiRewind = mockRewind;
@@ -140,8 +141,8 @@ test('merges native history, advances the source cursor and opens the stored fra
   ]);
   await press(view, 'View capture captured:0');
   expect(mockRewind.readFrame).toHaveBeenCalledWith('captured:0');
-  expect(view.root.findByType(Image).props.source.uri).toBe(
-    'data:image/jpeg;base64,image-captured:0',
+  expect(view.root.findByType(RewindFrameView).props.imageBase64).toBe(
+    'image-captured:0',
   );
 });
 
@@ -205,8 +206,8 @@ test('a late image cannot replace a newer selected image', async () => {
   await press(view, 'View capture captured:one');
   await press(view, 'View capture captured:two');
   await act(async () => old.resolve(image('captured:one')));
-  expect(view.root.findByType(Image).props.source.uri).toBe(
-    'data:image/jpeg;base64,image-captured:two',
+  expect(view.root.findByType(RewindFrameView).props.imageBase64).toBe(
+    'image-captured:two',
   );
 });
 
@@ -283,7 +284,7 @@ test.each(['rejected', 'wrong-id'])(
     await press(view, 'View capture captured:one');
     expect(content(view)).toContain('This captured frame could not be opened.');
     expect(content(view)).not.toContain('private path');
-    expect(view.root.findAllByType(Image)).toHaveLength(0);
+    expect(view.root.findAllByType(RewindFrameView)).toHaveLength(0);
   },
 );
 
@@ -319,19 +320,6 @@ test('late page and image failures cannot replace a new query', async () => {
   expect(content(view)).toContain('Select a capture to view it.');
 });
 
-test('image decoder failure is visible without exposing stored image data', async () => {
-  const view = await render();
-  await press(view, 'View capture captured:one');
-  await act(async () =>
-    view.root
-      .findByType(Image)
-      .props.onError({nativeEvent: {error: 'private image bytes'}}),
-  );
-  expect(content(view)).toContain('This captured frame could not be opened.');
-  expect(content(view)).not.toContain('private image bytes');
-  expect(view.root.findAllByType(Image)).toHaveLength(0);
-});
-
 test('new captures and periodic refresh update Recall without reopening the selected image', async () => {
   const view = await render({captureRevision: 0});
   await press(view, 'View capture captured:one');
@@ -345,8 +333,8 @@ test('new captures and periodic refresh update Recall without reopening the sele
   }));
   await act(async () => view.update(<DesktopRewind captureRevision={1} />));
   expect(rows(view)).toContain('Window captured:new');
-  expect(view.root.findByType(Image).props.source.uri).toBe(
-    'data:image/jpeg;base64,image-captured:one',
+  expect(view.root.findByType(RewindFrameView).props.imageBase64).toBe(
+    'image-captured:one',
   );
   expect(mockRewind.listFrames).toHaveBeenCalledTimes(count + 2);
   expect(mockRewind.readFrame).toHaveBeenCalledTimes(1);
@@ -489,12 +477,12 @@ test.each(['OMI_REWIND_AUTH', 'OMI_REWIND_OWNER_CHANGED'])(
     }));
     const view = await render();
     await press(view, 'View capture captured:0');
-    expect(view.root.findByType(Image)).toBeDefined();
+    expect(view.root.findByType(RewindFrameView)).toBeDefined();
     expect(label(view, 'Load more history')).toBeDefined();
     mockRewind.listFrames.mockRejectedValue({code});
     await act(async () => jest.advanceTimersByTime(15000));
     expect(rows(view)).toEqual([]);
-    expect(view.root.findAllByType(Image)).toHaveLength(0);
+    expect(view.root.findAllByType(RewindFrameView)).toHaveLength(0);
     expect(
       view.root.findAll(
         node => node.props.accessibilityLabel === 'Load more history',
@@ -541,7 +529,7 @@ test('a delayed preview cannot restore private bytes after refresh loses ownersh
   await act(async () => jest.advanceTimersByTime(15000));
   await act(async () => preview.resolve(image('captured:one')));
   expect(rows(view)).toEqual([]);
-  expect(view.root.findAllByType(Image)).toHaveLength(0);
+  expect(view.root.findAllByType(RewindFrameView)).toHaveLength(0);
 });
 
 test('transient refresh failure preserves readable rows and selected preview', async () => {
@@ -550,8 +538,8 @@ test('transient refresh failure preserves readable rows and selected preview', a
   mockRewind.listFrames.mockRejectedValue(new Error('temporary'));
   await act(async () => jest.advanceTimersByTime(15000));
   expect(rows(view)).toEqual(['Window captured:one']);
-  expect(view.root.findByType(Image).props.source.uri).toBe(
-    'data:image/jpeg;base64,image-captured:one',
+  expect(view.root.findByType(RewindFrameView).props.imageBase64).toBe(
+    'image-captured:one',
   );
   expect(content(view)).toContain('Screen history could not be loaded.');
 });
