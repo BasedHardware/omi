@@ -24,6 +24,7 @@ from google.auth.transport import requests as google_auth_requests
 from google.cloud import tasks_v2
 from google.oauth2 import id_token
 from google.protobuf import duration_pb2
+from google.protobuf import timestamp_pb2
 
 from utils.log_sanitizer import sanitize
 
@@ -234,6 +235,7 @@ def _enqueue_named_task(
     *,
     audience: Optional[str] = None,
     invoker_sa: Optional[str] = None,
+    schedule_at: Optional[int] = None,
 ) -> None:
     """Enqueue one named HTTP task. Duplicate names are treated as success —
     Cloud Tasks deduplicates named tasks. Any other failure raises."""
@@ -258,6 +260,7 @@ def _enqueue_named_task(
             ),
         ),
         dispatch_deadline=duration_pb2.Duration(seconds=DISPATCH_DEADLINE_SECONDS),
+        schedule_time=timestamp_pb2.Timestamp(seconds=schedule_at) if schedule_at is not None else None,
     )
     try:
         client.create_task(parent=parent, task=task)  # type: ignore[reportUnknownMemberType]  # google.cloud.tasks_v2 partially untyped
@@ -306,6 +309,22 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
             )
             return
     _enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), task_id, payload)
+
+
+def enqueue_sync_uid_wake(uid: str, uid_hash: str, deadline: int) -> None:
+    """Wake a cutover-delayed UID without occupying a worker during the wait."""
+    handler = _handler_url()
+    if not handler.endswith('/v2/sync-jobs/run'):
+        raise RuntimeError('sync task handler URL is not the expected v2 route')
+    wake_url = handler.removesuffix('/v2/sync-jobs/run') + '/v2/sync-backfill-sequencer/wake'
+    _enqueue_named_task(
+        os.getenv('SYNC_TASKS_QUEUE', ''),
+        wake_url,
+        f'sbu-{uid_hash}-{deadline}',
+        {'uid': uid},
+        audience=_oidc_audience(),
+        schedule_at=deadline,
+    )
 
 
 def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:

@@ -8,6 +8,29 @@ service: backend-main
 routes:
   - route_type: http
     method: POST
+    path: /v2/sync-backfill-sequencer/wake
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - service_oidc
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: default_method
+      surface: internal_task
+      visibility: internal
+      data_domain: sync_audio
+      deprecation:
+        state: active
+      owner: backend
+  - route_type: http
+    method: POST
     path: /v2/sync-backfill-sequencer/sweep
     policy:
       review_status: reviewed

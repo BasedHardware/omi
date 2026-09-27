@@ -13,12 +13,14 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from google.cloud import firestore
+from google.api_core.exceptions import NotFound
 
 from database._client import get_firestore_client
 
 logger = logging.getLogger(__name__)
 
 COLLECTION = 'sync_backfill_sequencer'
+PENDING_COLLECTION = 'sync_backfill_pending'
 LEASE_SECONDS = 30 * 60  # Longer than a Cloud Task dispatch deadline (25 minutes).
 HEARTBEAT_SECONDS = 120
 DISPATCH_RETRY_SECONDS = 5 * 60
@@ -39,7 +41,11 @@ def _root(client: Any, uid: str) -> Any:
 
 
 def _pending_ref(client: Any, uid: str, job_id: str) -> Any:
-    return _root(client, uid).collection('pending').document(job_id)
+    return client.collection(PENDING_COLLECTION).document(job_id)
+
+
+def _pending_for_uid(client: Any, uid: str) -> Any:
+    return client.collection(PENDING_COLLECTION).where('uid', '==', uid)
 
 
 def _data(snapshot: Any) -> dict[str, Any]:
@@ -83,16 +89,14 @@ def register_job(
             return False
         transaction.set(
             pending,
-            {'job_id': job_id, 'uid': uid, 'payload': payload, 'sort_at': sort_at, 'accepted_at': accepted_at},
-        )
-        transaction.set(
-            root,
             {
-                'pending_count': int(owner.get('pending_count') or 0) + 1,
-                'reconcile_at': accepted_at,
-                'updated_at': accepted_at,
+                'job_id': job_id,
+                'uid': uid,
+                'payload': payload,
+                'sort_at': sort_at,
+                'accepted_at': accepted_at,
+                'reconcile_at': accepted_at + timedelta(seconds=HEARTBEAT_SECONDS),
             },
-            merge=True,
         )
         return True
 
@@ -103,17 +107,46 @@ def register_job(
 
 
 def _first_pending(client: Any, uid: str) -> Optional[dict[str, Any]]:
-    docs = list(_root(client, uid).collection('pending').order_by('sort_at').limit(1).stream())
+    docs = list(_pending_for_uid(client, uid).order_by('sort_at').limit(1).stream())
     return {'id': docs[0].id, **_data(docs[0])} if docs else None
 
 
-def oldest_waiting_age_seconds(uid: str, *, firestore_client: Any = None, now: Optional[datetime] = None) -> float:
+def has_pending(uid: str, *, firestore_client: Any = None) -> bool:
     client = firestore_client or get_firestore_client()
-    docs = list(_root(client, uid).collection('pending').order_by('accepted_at').limit(1).stream())
+    return _first_pending(client, uid) is not None
+
+
+def waiting_sample(uid: str, *, firestore_client: Any = None, now: Optional[datetime] = None) -> dict[str, Any]:
+    client = firestore_client or get_firestore_client()
+    docs = list(_pending_for_uid(client, uid).order_by('accepted_at').limit(100).stream())
     if not docs:
-        return 0.0
+        return {'depth': 0, 'age_seconds': 0.0, 'job_id': ''}
     accepted_at = _data(docs[0]).get('accepted_at')
-    return max(0.0, ((now or _now()) - accepted_at).total_seconds()) if isinstance(accepted_at, datetime) else 0.0
+    age = max(0.0, ((now or _now()) - accepted_at).total_seconds()) if isinstance(accepted_at, datetime) else 0.0
+    return {'depth': len(docs), 'age_seconds': age, 'job_id': docs[0].id}
+
+
+def due_pending(
+    *, limit: int = 100, firestore_client: Any = None, now: Optional[datetime] = None
+) -> list[dict[str, Any]]:
+    client = firestore_client or get_firestore_client()
+    docs = (
+        client.collection(PENDING_COLLECTION)
+        .where('reconcile_at', '<=', now or _now())
+        .limit(max(1, min(limit, 500)))
+        .stream()
+    )
+    return [{'id': doc.id, **_data(doc)} for doc in docs]
+
+
+def defer_pending(job_id: str, *, firestore_client: Any = None, now: Optional[datetime] = None) -> None:
+    client = firestore_client or get_firestore_client()
+    try:
+        client.collection(PENDING_COLLECTION).document(job_id).update(
+            {'reconcile_at': (now or _now()) + timedelta(minutes=5)}
+        )
+    except NotFound:
+        pass  # Another dispatcher already claimed this pending document.
 
 
 def claim_next(uid: str, *, firestore_client: Any = None, now: Optional[datetime] = None) -> Optional[dict[str, Any]]:
@@ -142,7 +175,6 @@ def claim_next(uid: str, *, firestore_client: Any = None, now: Optional[datetime
             'active_since': current,
             'lease_expires_at': current + timedelta(seconds=LEASE_SECONDS),
             'dispatch_retry_at': current + timedelta(seconds=DISPATCH_RETRY_SECONDS),
-            'pending_count': max(0, int(owner.get('pending_count') or 0) - 1),
             'reconcile_at': current + timedelta(seconds=HEARTBEAT_SECONDS),
             'updated_at': current,
         }
@@ -217,31 +249,13 @@ def finish_job(
     """Only the current epoch releases the UID; duplicate completion is inert."""
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
-    current = now or _now()
 
     @firestore.transactional
     def commit(transaction: Any) -> bool:
         owner = _data(root.get(transaction=transaction))
         if owner.get('active_job_id') != job_id or owner.get('active_epoch') != epoch:
             return False
-        if int(owner.get('pending_count') or 0) <= 0:
-            transaction.delete(root)
-        else:
-            transaction.update(
-                root,
-                {
-                    'active_job_id': firestore.DELETE_FIELD,
-                    'active_payload': firestore.DELETE_FIELD,
-                    'active_epoch': firestore.DELETE_FIELD,
-                    'active_state': firestore.DELETE_FIELD,
-                    'active_accepted_at': firestore.DELETE_FIELD,
-                    'active_since': firestore.DELETE_FIELD,
-                    'lease_expires_at': firestore.DELETE_FIELD,
-                    'dispatch_retry_at': firestore.DELETE_FIELD,
-                    'reconcile_at': current,
-                    'updated_at': current,
-                },
-            )
+        transaction.delete(root)
         return True
 
     released = commit(client.transaction())

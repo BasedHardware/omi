@@ -1174,6 +1174,7 @@ def _load_sync_router_for_fast_path():
         'utils.sync.playback',
         'utils.sync.backfill',
         'utils.sync.uid_sequencer',
+        'utils.sync.backfill_cutover',
         'utils.sync.content_id',
         'utils.sync.capture_manifest',
         'utils.speaker_assignment',
@@ -2975,6 +2976,7 @@ async def test_backfill_uid_sequencer_accepts_202_without_redis_slot():
 
     module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
     module.uid_sequencer.enabled.return_value = True
+    module.sync_backfill_sequencer.get_owner = MagicMock(return_value={})
     module.sync_backfill_sequencer.register_job = MagicMock(return_value=True)
     module.uid_sequencer.kick = MagicMock(return_value=True)
     module.try_acquire_backfill_slot = MagicMock(side_effect=AssertionError('old admission slot used'))
@@ -3097,6 +3099,8 @@ async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off():
     request.json = AsyncMock(return_value=payload)
     module.get_raw_sync_job = MagicMock(return_value={'status': 'queued'})
     module.uid_sequencer.enabled.return_value = True
+    module.sync_backfill_sequencer.get_owner = MagicMock(return_value={})
+    module.sync_backfill_sequencer.has_pending = MagicMock(return_value=False)
     module.sync_backfill_sequencer.register_job = MagicMock(return_value=True)
     module.uid_sequencer.kick = MagicMock(return_value=True)
     module._run_sync_job_body = AsyncMock(return_value=module.JSONResponse(status_code=200, content={'status': 'done'}))
@@ -3110,6 +3114,46 @@ async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off():
         direct = await module.run_sync_job(request, task_retry_count=0)
         assert direct.status_code == 200
         module._run_sync_job_body.assert_awaited_once()
+        module.sync_backfill_sequencer.get_owner.return_value = {'active_job_id': 'older-sequenced-job'}
+        migrated_during_rollback = await module.run_sync_job(request, task_retry_count=0)
+        assert migrated_during_rollback.status_code == 200
+        assert module.sync_backfill_sequencer.register_job.call_count == 2
+        module._run_sync_job_body.assert_awaited_once()
+        module.sync_backfill_sequencer.get_owner.return_value = {}
+        module.sync_backfill_sequencer.has_pending.return_value = True
+        migrated_from_pending = await module.run_sync_job(request, task_retry_count=0)
+        assert migrated_from_pending.status_code == 200
+        assert module.sync_backfill_sequencer.register_job.call_count == 3
+        module._run_sync_job_body.assert_awaited_once()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_old_processing_backfill_emits_cutover_overlap_log(caplog):
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    request = MagicMock()
+    request.json = AsyncMock(return_value={'uid': 'test-uid', 'job_id': 'job-1', 'lane': 'backfill'})
+    module.get_raw_sync_job = MagicMock(return_value={'status': 'processing'})
+    module.sync_backfill_sequencer.get_owner = MagicMock(return_value={'active_job_id': 'sequenced-job'})
+    module.uid_sequencer.enabled.return_value = True
+    module.backfill_cutover.uid_hash = MagicMock(return_value='private-hash')
+    module._run_sync_job_body = AsyncMock(return_value=module.JSONResponse(status_code=200, content={'status': 'done'}))
+    try:
+        with caplog.at_level(logging.ERROR):
+            response = await module.run_sync_job(request, task_retry_count=0)
+        assert response.status_code == 200
+        assert (
+            'action=cutover_overlap outcome=direct_and_sequenced job_id=job-1 sequenced_job_id=sequenced-job uid_hash=private-hash'
+            in caplog.text
+        )
+        assert 'test-uid' not in caplog.text
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)

@@ -157,6 +157,7 @@ from utils.sync.capture_manifest import (
 )
 from utils.sync.lanes import SyncLane, classify_sync_lane
 from utils.sync import uid_sequencer
+from utils.sync import backfill_cutover
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
 logger = logging.getLogger(__name__)
@@ -1272,6 +1273,10 @@ async def sync_local_files_v2(
                     )
                 dispatched = True
             enqueue_error = None
+            if lane_decision.lane == SyncLane.BACKFILL and not dispatched:
+                # Register the direct path before its task can run. A later
+                # flag-on revision waits for this bounded direct-work window.
+                await run_blocking(db_executor, backfill_cutover.note_direct_admission, uid, job_id)
             for enqueue_attempt in range(0 if dispatched else 2):
                 try:
                     await run_blocking(db_executor, enqueue_sync_job, enqueue_payload)
@@ -1675,6 +1680,24 @@ async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud
     return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})
 
 
+@router.post('/v2/sync-backfill-sequencer/wake', include_in_schema=False)
+async def wake_sync_backfill_uid(request: Request, _retry_count: int = Depends(verify_cloud_tasks_oidc)):
+    payload = await request.json()
+    uid = payload.get('uid') if isinstance(payload, dict) else None
+    if not isinstance(uid, str) or not uid:
+        return JSONResponse(status_code=400, content={'status': 'invalid_uid'})
+    try:
+        dispatched = await run_blocking(db_executor, uid_sequencer.kick, uid)
+    except Exception as error:
+        logger.error(
+            'event=sync_uid_sequencer action=wake outcome=error uid_hash=%s exception_type=%s',
+            backfill_cutover.uid_hash(uid),
+            type(error).__name__,
+        )
+        return JSONResponse(status_code=500, content={'status': 'retry'})
+    return JSONResponse(status_code=200, content={'status': 'dispatched' if dispatched else 'deferred'})
+
+
 @router.post("/v2/sync-jobs/run", include_in_schema=False)
 async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Persisted sequencer epochs survive the kill switch; old tasks keep their legacy path."""
@@ -1687,14 +1710,41 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
     epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None
     if epoch is None:
         if (
-            uid_sequencer.enabled()
-            and isinstance(payload, dict)
+            isinstance(payload, dict)
             and payload.get('lane') == SyncLane.BACKFILL.value
             and isinstance(payload.get('uid'), str)
             and isinstance(payload.get('job_id'), str)
         ):
             legacy_job = await run_blocking(db_executor, get_raw_sync_job, payload['job_id'])
-            if legacy_job and legacy_job.get('status') == 'queued':
+            sequencer_on = uid_sequencer.enabled()
+            owner = (
+                await run_blocking(db_executor, sync_backfill_sequencer.get_owner, payload['uid'])
+                if legacy_job and legacy_job.get('status') == 'queued' and not sequencer_on
+                else {}
+            )
+            pending = (
+                await run_blocking(db_executor, sync_backfill_sequencer.has_pending, payload['uid'])
+                if legacy_job and legacy_job.get('status') == 'queued' and not sequencer_on and not owner
+                else False
+            )
+            if legacy_job and legacy_job.get('status') == 'processing':
+                active_owner = await run_blocking(db_executor, sync_backfill_sequencer.get_owner, payload['uid'])
+                if active_owner.get('active_job_id'):
+                    logger.error(
+                        'event=sync_uid_sequencer action=cutover_overlap outcome=direct_and_sequenced '
+                        'job_id=%s sequenced_job_id=%s uid_hash=%s',
+                        payload['job_id'],
+                        active_owner['active_job_id'],
+                        backfill_cutover.uid_hash(payload['uid']),
+                    )
+                elif sequencer_on:
+                    logger.info(
+                        'event=sync_uid_sequencer action=cutover_direct_active outcome=observed '
+                        'job_id=%s uid_hash=%s',
+                        payload['job_id'],
+                        backfill_cutover.uid_hash(payload['uid']),
+                    )
+            if legacy_job and legacy_job.get('status') == 'queued' and (sequencer_on or owner or pending):
                 # Polling's direct-task stale detector must stop once the
                 # durable UID registry owns a waiting legacy task.
                 marked = await run_blocking(
@@ -1725,6 +1775,8 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                     )
                 logger.info('event=sync_uid_sequencer action=legacy_migration outcome=registered')
                 return JSONResponse(status_code=200, content={'status': 'sequenced_legacy_job'})
+            if legacy_job and legacy_job.get('status') in ('queued', 'processing'):
+                await run_blocking(db_executor, backfill_cutover.refresh_direct_run, payload['uid'], payload['job_id'])
         return await _run_sync_job_body(request, task_retry_count)
     uid = payload.get('uid')
     job_id = payload.get('job_id')

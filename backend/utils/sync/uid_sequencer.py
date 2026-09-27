@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any
 
 from database import sync_backfill_sequencer as registry
 from database.sync_jobs import TERMINAL_STATUSES, get_raw_sync_job, sync_job_run_lock_present
-from utils.cloud_tasks import enqueue_sync_job
+from utils.cloud_tasks import enqueue_sync_job, enqueue_sync_uid_wake
+from utils.sync import backfill_cutover
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +29,30 @@ def _dispatch(claim: dict[str, Any]) -> None:
 
 def kick(uid: str) -> bool:
     """Select one pending job and enqueue it; a persisted reservation survives uncertainty."""
+    remaining, direct_job_id = (
+        backfill_cutover.quiet_remaining(uid) if enabled() else backfill_cutover.direct_remaining_for_uid(uid)
+    )
+    if remaining:
+        if not registry.has_pending(uid):
+            return False
+        deadline = int(time.time()) + remaining + 1
+        if backfill_cutover.claim_wake(uid, deadline):
+            try:
+                enqueue_sync_uid_wake(uid, backfill_cutover.uid_hash(uid), deadline)
+            except Exception:
+                backfill_cutover.release_wake(uid, deadline)
+                raise
+        if backfill_cutover.should_log_wait(uid):
+            sample = registry.waiting_sample(uid)
+            logger.warning(
+                'event=sync_uid_sequencer action=cutover_wait outcome=deferred '
+                'job_id=%s uid_hash=%s direct_job_id=%s wait_seconds=%d',
+                sample['job_id'],
+                backfill_cutover.uid_hash(uid),
+                direct_job_id or 'unknown',
+                remaining,
+            )
+        return False
     claim = registry.claim_next(uid)
     if claim is None:
         return False
@@ -43,8 +69,8 @@ def kick(uid: str) -> bool:
 
 def reconcile_uid(uid: str, owner: dict[str, Any], *, now: datetime | None = None) -> str:
     current = now or datetime.now(timezone.utc)
-    waiting = int(owner.get('pending_count') or 0)
-    oldest_age = registry.oldest_waiting_age_seconds(uid, now=current) if waiting else 0.0
+    sample = registry.waiting_sample(uid, now=current)
+    waiting, oldest_age = sample['depth'], sample['age_seconds']
     logger.info(
         'event=sync_uid_sequencer action=sample outcome=ok queued_depth=%d oldest_waiting_seconds=%.0f active_leases=%d',
         waiting,
@@ -53,7 +79,10 @@ def reconcile_uid(uid: str, owner: dict[str, Any], *, now: datetime | None = Non
     )
     if oldest_age >= registry.WAIT_ALERT_SECONDS:
         logger.error(
-            'event=sync_uid_sequencer action=wait_alert outcome=over_12h queued_depth=%d oldest_waiting_seconds=%.0f',
+            'event=sync_uid_sequencer action=wait_alert outcome=over_12h '
+            'job_id=%s uid_hash=%s queued_depth=%d oldest_waiting_seconds=%.0f',
+            sample['job_id'],
+            backfill_cutover.uid_hash(uid),
             waiting,
             oldest_age,
         )
@@ -65,7 +94,11 @@ def reconcile_uid(uid: str, owner: dict[str, Any], *, now: datetime | None = Non
 
     epoch = owner.get('active_epoch')
     if not isinstance(epoch, int):
-        logger.error('event=sync_uid_sequencer action=sweep outcome=invalid_epoch')
+        logger.error(
+            'event=sync_uid_sequencer action=sweep outcome=invalid_epoch job_id=%s uid_hash=%s',
+            job_id,
+            backfill_cutover.uid_hash(uid),
+        )
         registry.defer_owner(uid, registry.HEARTBEAT_SECONDS, now=current)
         return 'invalid'
     state = owner.get('active_state')
@@ -77,7 +110,11 @@ def reconcile_uid(uid: str, owner: dict[str, Any], *, now: datetime | None = Non
     # A live run lock is stronger evidence than a stale Firestore timestamp.
     # In particular a Cloud Run cancellation can leave an executor leaf alive.
     if sync_job_run_lock_present(job_id):
-        logger.warning('event=sync_uid_sequencer action=sweep outcome=run_lock_held')
+        logger.warning(
+            'event=sync_uid_sequencer action=sweep outcome=run_lock_held job_id=%s uid_hash=%s',
+            job_id,
+            backfill_cutover.uid_hash(uid),
+        )
         registry.defer_owner(uid, registry.HEARTBEAT_SECONDS, now=current)
         return 'lock_held'
     job = get_raw_sync_job(job_id)
@@ -90,7 +127,12 @@ def reconcile_uid(uid: str, owner: dict[str, Any], *, now: datetime | None = Non
     replacement = registry.redrive_job(uid, job_id, epoch, now=current)
     if replacement is None:
         return 'raced'
-    logger.warning('event=sync_uid_sequencer action=sweep outcome=%s', outcome)
+    logger.warning(
+        'event=sync_uid_sequencer action=sweep outcome=%s job_id=%s uid_hash=%s',
+        outcome,
+        job_id,
+        backfill_cutover.uid_hash(uid),
+    )
     try:
         _dispatch(replacement)
     except Exception as error:
@@ -110,14 +152,48 @@ def sweep(*, limit: int = 100) -> dict[str, int]:
             outcome = reconcile_uid(owner['uid'], owner, now=now)
         except Exception as error:
             outcome = 'error'
-            logger.error('event=sync_uid_sequencer action=sweep outcome=error exception_type=%s', type(error).__name__)
+            logger.error(
+                'event=sync_uid_sequencer action=sweep outcome=error job_id=%s uid_hash=%s exception_type=%s',
+                owner.get('active_job_id') or 'unknown',
+                backfill_cutover.uid_hash(owner['uid']),
+                type(error).__name__,
+            )
         outcomes[outcome] = outcomes.get(outcome, 0) + 1
+    pending = registry.due_pending(limit=limit, now=now)
+    seen_uids: set[str] = set()
+    for job in pending:
+        try:
+            registry.defer_pending(job['id'], now=now)
+            if job['uid'] in seen_uids:
+                continue
+            seen_uids.add(job['uid'])
+            sample = registry.waiting_sample(job['uid'], now=now)
+            if sample['age_seconds'] >= registry.WAIT_ALERT_SECONDS:
+                logger.error(
+                    'event=sync_uid_sequencer action=wait_alert outcome=over_12h '
+                    'job_id=%s uid_hash=%s queued_depth=%d oldest_waiting_seconds=%.0f',
+                    sample['job_id'],
+                    backfill_cutover.uid_hash(job['uid']),
+                    sample['depth'],
+                    sample['age_seconds'],
+                )
+            if kick(job['uid']):
+                outcomes['pending_dispatched'] = outcomes.get('pending_dispatched', 0) + 1
+        except Exception as error:
+            outcomes['error'] = outcomes.get('error', 0) + 1
+            logger.error(
+                'event=sync_uid_sequencer action=sweep outcome=error job_id=%s uid_hash=%s exception_type=%s',
+                job['id'],
+                backfill_cutover.uid_hash(job['uid']),
+                type(error).__name__,
+            )
     logger.info(
         'event=sync_uid_sequencer action=sweep_summary outcome=done '
-        'scanned=%d queued_depth=%d active_leases=%d dispatched=%d lease_expired=%d '
+        'scanned=%d pending_scanned=%d queued_depth=%d active_leases=%d dispatched=%d lease_expired=%d '
         'terminal_cleanup=%d expired_job_cleanup=%d lock_held=%d errors=%d',
         len(owners),
-        sum(int(owner.get('pending_count') or 0) for owner in owners),
+        len(pending),
+        len(pending),
         sum(bool(owner.get('active_job_id')) for owner in owners),
         outcomes.get('dispatched', 0),
         outcomes.get('lease_expired', 0),

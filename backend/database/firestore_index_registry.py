@@ -118,6 +118,18 @@ def _contains(field_path: str) -> FirestoreIndexField:
 # callers migrate one compound serving query at a time into QUERY_SPECS.
 INDEX_ONLY_REQUIREMENTS = (
     FirestoreIndexRequirement(
+        'sync_backfill_pending_uid_sort',
+        'sync_backfill_pending',
+        'COLLECTION',
+        (_asc('uid'), _asc('sort_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'sync_backfill_pending_uid_accepted',
+        'sync_backfill_pending',
+        'COLLECTION',
+        (_asc('uid'), _asc('accepted_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
         'memory_items_collection_group_uid_generation_updated',
         'memory_items',
         'COLLECTION_GROUP',
@@ -1555,6 +1567,8 @@ INDEX_REQUIREMENTS = (
 # Exempting a field only removes single-field indexes — composite indexes declared above are
 # unaffected, so a field named in a composite index can still appear here.
 FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
+    ('sync_backfill_pending', 'payload'),
+    ('sync_backfill_sequencer', 'active_payload'),
     ('screen_activity', 'ocrText'),
     ('screen_activity', 'windowTitle'),
 )
