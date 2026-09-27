@@ -1522,7 +1522,7 @@ class CaptureController extends ChangeNotifier
     // Cut off any in-flight voice playback from a prior reply so the new
     // recording starts clean.
     if (OmiVoicePlaybackService.instance.isSpeaking) {
-      OmiVoicePlaybackService.instance.interrupt();
+      OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.newVoiceQuery);
     }
     _voiceCommandSession = DateTime.now();
     _voiceSessionEndsOnRelease = endsOnRelease;
