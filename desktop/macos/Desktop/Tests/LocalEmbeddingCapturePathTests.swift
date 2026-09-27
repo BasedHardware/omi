@@ -71,10 +71,23 @@ private struct HangingEmbeddingEngine: LocalEmbeddingService {
 final class LocalEmbeddingCapturePathTests: XCTestCase {
   private var userDir: URL?
   private var hangingEngine: HangingEmbeddingEngine?
+  private var siriIndexingOriginalValue: Bool?
 
   override func setUp() async throws {
-    let fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "local-embedding-capture")
-    userDir = fixture.userDir
+    // These tests exercise the local embedding queue, not Spotlight. A sync
+    // otherwise starts a second, detached database reader that can outlive
+    // the fixture's close/reopen boundary on a slow CI runner.
+    let defaults = UserDefaults.standard
+    siriIndexingOriginalValue = defaults.object(forKey: SiriIntegrationSettings.key) as? Bool
+    // omi-test-quality: shared-defaults -- integration: isolate the process-wide Siri setting from embedding fixtures
+    defaults.set(false, forKey: SiriIntegrationSettings.key)
+    do {
+      let fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "local-embedding-capture")
+      userDir = fixture.userDir
+    } catch {
+      restoreSiriIndexingPreference()
+      throw error
+    }
   }
 
   override func tearDown() async throws {
@@ -82,6 +95,17 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
     hangingEngine = nil
     await LocalEmbeddingIndexer.shared.setRuntimeForTesting(.makeDefault())
     await RewindStorageTestIsolation.tearDown(userDir: userDir)
+    restoreSiriIndexingPreference()
+  }
+
+  private func restoreSiriIndexingPreference() {
+    if let siriIndexingOriginalValue {
+      // omi-test-quality: shared-defaults -- integration: restore the process-wide Siri setting after this fixture
+      UserDefaults.standard.set(siriIndexingOriginalValue, forKey: SiriIntegrationSettings.key)
+    } else {
+      // omi-test-quality: shared-defaults -- integration: restore the process-wide Siri setting after this fixture
+      UserDefaults.standard.removeObject(forKey: SiriIntegrationSettings.key)
+    }
   }
 
   func testSessionAndMemoryCompletionDoNotWaitForEmbedding() async throws {
@@ -132,6 +156,7 @@ final class LocalEmbeddingCapturePathTests: XCTestCase {
   }
 
   func testBatchMemorySyncSchedulesDetachedIndexing() async throws {
+    XCTAssertFalse(SiriIntegrationSettings.isEnabled, "embedding tests must not start a Spotlight writer")
     let engine = HangingEmbeddingEngine()
     hangingEngine = engine
     var runtime = LocalEmbeddingRuntime(

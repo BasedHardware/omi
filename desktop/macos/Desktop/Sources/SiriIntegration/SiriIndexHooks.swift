@@ -71,7 +71,7 @@ enum SiriIndexHooks {
   }
 
   static func memoriesChanged(_ ids: [String]) {
-    guard #available(macOS 27, *) else { return }
+    guard #available(macOS 27, *), SiriIntegrationSettings.isEnabled else { return }
     guard let owner = RuntimeOwnerIdentity.currentOwnerId() else { return }
     Task { await batcher.enqueue(owner: owner, kind: .memory, ids: ids) }
   }
@@ -108,7 +108,7 @@ enum SiriIndexHooks {
   }
 
   static func conversationsChanged(_ ids: [String]) {
-    guard #available(macOS 27, *) else { return }
+    guard #available(macOS 27, *), SiriIntegrationSettings.isEnabled else { return }
     guard let owner = RuntimeOwnerIdentity.currentOwnerId() else { return }
     Task { await batcher.enqueue(owner: owner, kind: .conversation, ids: ids) }
   }
@@ -122,7 +122,7 @@ enum SiriIndexHooks {
   }
 
   static func tasksChanged(_ ids: [String]) {
-    guard #available(macOS 27, *) else { return }
+    guard #available(macOS 27, *), SiriIntegrationSettings.isEnabled else { return }
     guard let owner = RuntimeOwnerIdentity.currentOwnerId() else { return }
     Task { await batcher.enqueue(owner: owner, kind: .task, ids: ids) }
   }
