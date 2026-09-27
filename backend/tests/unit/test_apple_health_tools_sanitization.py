@@ -95,6 +95,7 @@ aht = _load(
 
 class FailingIntegration:
     """Mock integration object that raises when health_data or its properties are accessed."""
+
     def __init__(self, exc: Exception):
         self.exc = exc
 
