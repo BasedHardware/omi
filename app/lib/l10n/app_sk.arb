@@ -3598,6 +3598,7 @@
     "appearanceSystem": "Systém",
     "appearanceLight": "Svetlý",
     "appearanceDark": "Tmavý",
+    "chatDiscardRecording": "Zahodiť",
     "voiceQuestionNoSpeech": "Nerozumel som — skúste to znova",
     "sendToSupport": "Send to support",
     "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",

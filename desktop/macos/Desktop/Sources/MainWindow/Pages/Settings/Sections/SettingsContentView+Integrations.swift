@@ -126,17 +126,20 @@ extension SettingsContentView {
                   .scaledFont(size: OmiType.body, weight: .medium)
                   .foregroundColor(Ink.primary)
                   .lineLimit(1)
+                  .help(email.subject)
 
                 Text(email.from)
                   .scaledFont(size: OmiType.caption)
                   .foregroundColor(Ink.secondary)
                   .lineLimit(1)
+                  .help(email.from)
 
                 if !email.snippet.isEmpty {
                   Text(email.snippet)
                     .scaledFont(size: OmiType.caption)
                     .foregroundColor(Ink.secondary)
                     .lineLimit(2)
+                    .help(email.snippet)
                 }
               }
             }
@@ -298,13 +301,16 @@ extension SettingsContentView {
               VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text(event.summary).scaledFont(size: OmiType.body, weight: .medium).foregroundColor(
                   Ink.primary
-                ).lineLimit(1)
+                ).lineLimit(1).help(event.summary)
                 Text(event.startTime).scaledFont(size: OmiType.caption).foregroundColor(Ink.secondary)
                   .lineLimit(1)
+                  .help(event.startTime)
                 if !event.attendees.isEmpty {
                   Text("With: \(event.attendees.prefix(3).joined(separator: ", "))").scaledFont(
                     size: 12
-                  ).foregroundColor(Ink.secondary).lineLimit(1)
+                  ).foregroundColor(Ink.secondary).lineLimit(1).help(
+                    "With: \(event.attendees.joined(separator: ", "))"
+                  )
                 }
               }
             }

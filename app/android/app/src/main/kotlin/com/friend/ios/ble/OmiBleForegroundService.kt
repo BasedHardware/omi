@@ -727,11 +727,7 @@ class OmiBleForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE).let { prefs ->
-            if (prefs.getBoolean("run_open", false)) lifecycle("previous_run_unclean")
-            prefs.edit().putBoolean("run_open", true).apply()
-        }
-        lifecycle("app_launch")
+        lifecycle("service_start")
         recordPermissionStates()
         // Transition guard: old builds used START_STICKY, so Android may re-deliver
         // a pending intent after process death before MainActivity initializes OmiBleManager.
@@ -818,7 +814,6 @@ class OmiBleForegroundService : Service() {
     }
 
     override fun onDestroy() {
-        getSharedPreferences(PREFS_DIAGNOSTICS, MODE_PRIVATE).edit().putBoolean("run_open", false).apply()
         Log.d(TAG, "Service destroying")
         isDestroying = true
         backgroundAudioStreamer.stop("service_destroyed")

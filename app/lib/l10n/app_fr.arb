@@ -3633,6 +3633,7 @@
     "appearanceSystem": "Système",
     "appearanceLight": "Clair",
     "appearanceDark": "Sombre",
+    "chatDiscardRecording": "Ignorer",
     "voiceQuestionNoSpeech": "Je n’ai pas compris — réessayez",
     "sendToSupport": "Envoyer au support",
     "deviceDiagnosticsUploadDescription": "Vérifiez les données de diagnostic JSON ci-dessous. Elles incluent l’identifiant de l’appareil, les connexions, la batterie, le micrologiciel et les événements Bluetooth. Aucun audio ni transcription.",

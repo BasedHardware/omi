@@ -11455,6 +11455,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get appearanceDark => 'డార్క్';
 
   @override
+  String get chatDiscardRecording => 'విస్మరించు';
+
+  @override
   String get voiceQuestionNoSpeech => 'వినిపించలేదు — మళ్లీ ప్రయత్నించండి';
 
   @override

@@ -11461,6 +11461,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get appearanceDark => 'Întunecat';
 
   @override
+  String get chatDiscardRecording => 'Renunță';
+
+  @override
   String get voiceQuestionNoSpeech => 'Nu am înțeles — încearcă din nou';
 
   @override

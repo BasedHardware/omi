@@ -162,8 +162,15 @@ class MainActivity: FlutterActivity() {
             // Background Mode and Transcribe Later both need the foreground service to keep
             // the device connected/capturing after a task close. With both off (default),
             // tear it down so the device disconnects when the app is closed.
-            if (!OmiBleForegroundService.isPersistentModeEnabled(this)) {
+            val bleServiceMustPersist = OmiBleForegroundService.isPersistentModeEnabled(this)
+            if (!bleServiceMustPersist) {
                 OmiBleForegroundService.stopService(this)
+            }
+            if (DeviceDiagnosticsLifecyclePolicy.shouldMarkRunClosed(isFinishing, bleServiceMustPersist)) {
+                getSharedPreferences("ble_diagnostics", MODE_PRIVATE)
+                    .edit()
+                    .putBoolean("run_open", false)
+                    .apply()
             }
         }
         super.onDestroy()

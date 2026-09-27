@@ -32,6 +32,7 @@ void main() {
     });
 
     test('selects the parent tab before the page', () {
+      expect(HomeDeepLink.parse('/conversations')!.tabIndex, 1, reason: 'the Latest widget with nothing yet');
       expect(HomeDeepLink.parse('/action-items')!.tabIndex, 2);
       expect(HomeDeepLink.parse('/apps/xyz')!.tabIndex, 3);
       expect(HomeDeepLink.parse('/memories')!.tabIndex, 0);

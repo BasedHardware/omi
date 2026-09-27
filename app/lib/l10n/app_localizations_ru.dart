@@ -11446,6 +11446,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get appearanceDark => 'Тёмная';
 
   @override
+  String get chatDiscardRecording => 'Отменить';
+
+  @override
   String get voiceQuestionNoSpeech => 'Не удалось расслышать — попробуйте ещё раз';
 
   @override

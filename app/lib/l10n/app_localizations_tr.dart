@@ -11419,6 +11419,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get appearanceDark => 'Koyu';
 
   @override
+  String get chatDiscardRecording => 'Vazgeç';
+
+  @override
   String get voiceQuestionNoSpeech => 'Anlayamadım — tekrar deneyin';
 
   @override

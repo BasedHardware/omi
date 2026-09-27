@@ -3694,6 +3694,7 @@
     "appearanceSystem": "Rendszer",
     "appearanceLight": "Világos",
     "appearanceDark": "Sötét",
+    "chatDiscardRecording": "Elvetés",
     "voiceQuestionNoSpeech": "Nem értettem — próbáld újra",
     "sendToSupport": "Send to support",
     "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",

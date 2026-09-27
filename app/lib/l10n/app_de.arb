@@ -3598,6 +3598,7 @@
     "appearanceSystem": "System",
     "appearanceLight": "Hell",
     "appearanceDark": "Dunkel",
+    "chatDiscardRecording": "Verwerfen",
     "voiceQuestionNoSpeech": "Das habe ich nicht verstanden — versuche es erneut",
     "sendToSupport": "An Support senden",
     "deviceDiagnosticsUploadDescription": "Prüfe die Diagnosedaten im JSON unten. Sie enthalten Gerätekennung, Verbindungen, Akkuwerte, Firmwarediagnose und Bluetooth-Ereignisse. Audio und Transkripte sind nicht enthalten.",

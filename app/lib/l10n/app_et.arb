@@ -3598,6 +3598,7 @@
     "appearanceSystem": "Süsteem",
     "appearanceLight": "Hele",
     "appearanceDark": "Tume",
+    "chatDiscardRecording": "Loobu",
     "voiceQuestionNoSpeech": "Ma ei saanud aru — proovige uuesti",
     "sendToSupport": "Send to support",
     "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",

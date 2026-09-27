@@ -3598,6 +3598,7 @@
     "appearanceSystem": "System",
     "appearanceLight": "Lys",
     "appearanceDark": "Mørk",
+    "chatDiscardRecording": "Forkast",
     "voiceQuestionNoSpeech": "Jeg fikk ikke med meg det — prøv igjen",
     "sendToSupport": "Send to support",
     "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",

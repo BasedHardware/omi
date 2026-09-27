@@ -13558,6 +13558,10 @@
     "appearanceSystem": "System",
     "appearanceLight": "Light",
     "appearanceDark": "Dark",
+    "chatDiscardRecording": "Discard",
+    "@chatDiscardRecording": {
+        "description": "Discard the current chat voice recording without transcription"
+    },
     "voiceQuestionNoSpeech": "Didn't catch that — try again",
     "@voiceQuestionNoSpeech": {
         "description": "Shown in chat when a pendant voice question contains no detectable speech."

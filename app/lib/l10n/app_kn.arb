@@ -11158,6 +11158,7 @@
     "appearanceSystem": "ಸಿಸ್ಟಮ್",
     "appearanceLight": "ಬೆಳಕು",
     "appearanceDark": "ಕತ್ತಲೆ",
+    "chatDiscardRecording": "ತ್ಯಜಿಸಿ",
     "voiceQuestionNoSpeech": "ಕೇಳಿಸಲಿಲ್ಲ — ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ",
     "sendToSupport": "Send to support",
     "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",

@@ -11450,6 +11450,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get appearanceDark => 'Тъмна';
 
   @override
+  String get chatDiscardRecording => 'Отхвърляне';
+
+  @override
   String get voiceQuestionNoSpeech => 'Не разбрах — опитайте отново';
 
   @override

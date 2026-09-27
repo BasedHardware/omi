@@ -3598,6 +3598,7 @@
     "appearanceSystem": "Σύστημα",
     "appearanceLight": "Φωτεινό",
     "appearanceDark": "Σκοτεινό",
+    "chatDiscardRecording": "Απόρριψη",
     "voiceQuestionNoSpeech": "Δεν το κατάλαβα — δοκιμάστε ξανά",
     "sendToSupport": "Send to support",
     "deviceDiagnosticsUploadDescription": "Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.",

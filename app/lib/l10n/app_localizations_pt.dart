@@ -11425,6 +11425,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get appearanceDark => 'Escuro';
 
   @override
+  String get chatDiscardRecording => 'Descartar';
+
+  @override
   String get voiceQuestionNoSpeech => 'Não entendi — tente novamente';
 
   @override
