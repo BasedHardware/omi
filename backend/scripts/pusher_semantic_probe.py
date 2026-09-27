@@ -357,11 +357,17 @@ def _alignment_word_count_ok(observed: int, expected: int) -> bool:
 def _base_word_count_ok(observed: int, expected: int, fixture_words: int) -> bool:
     """Allow a rollover to own trailing sends, but reject excess duplication.
 
-    The durable phrase check separately proves at least one full fixture pass
-    belongs to this conversation. Its share of eight sends is not knowable
-    from this conversation's readback alone.
+    The durable phrase check separately proves a full fixture pass belongs to
+    this conversation. test_release_probe_discard_gate.py:3-6 records about
+    six of eight passes in the client conversation before a rollover. Require
+    four passes, leaving two passes of headroom for that observed split while
+    rejecting a readback that lost most of the eight sends.
     """
-    return fixture_words > 0 and expected >= fixture_words and fixture_words * 0.8 <= observed <= expected * 1.2
+    return (
+        fixture_words > 0
+        and expected >= fixture_words
+        and fixture_words * (DISCARD_KEEP_AUDIO_PASSES // 2) <= observed <= expected * 1.2
+    )
 
 
 def _http_json_method(url: str, token: str, method: str = "GET") -> tuple[int, dict[str, Any] | None]:

@@ -38,20 +38,20 @@ def test_alignment_probe_rejects_repeated_live_fixture(probe):
 def test_qualification_probe_bounds_one_conversation_with_eight_fixture_sends(probe):
     phrase = probe.load_fixture().expected_phrase
     fixture_words = len(phrase.split())
-    for passes in (1, 2, 4, 8):
+    for passes, passed in ((1, False), (4, True), (6, True), (8, True)):
         observed, expected = probe._alignment_word_counts(
             [{'text': phrase}] * passes, phrase, probe.DISCARD_KEEP_AUDIO_PASSES
         )
         assert expected == 136
-        assert probe._base_word_count_ok(observed, expected, fixture_words)
-    # The readback's phrase check proves one pass. This upper bound still
-    # rejects two transcripts for each of the eight physical sends.
+        assert probe._base_word_count_ok(observed, expected, fixture_words) is passed
+    # The readback's phrase check proves one pass; the word-count floor
+    # requires four. The upper bound rejects duplicate transcripts.
     assert not probe._base_word_count_ok(0, expected, fixture_words)
     assert not probe._base_word_count_ok(272, expected, fixture_words)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(('passes', 'passed'), [(1, True), (10, False)])
+@pytest.mark.parametrize(('passes', 'passed'), [(1, False), (4, True), (6, True), (10, False)])
 async def test_base_probe_records_counts_when_rollover_or_duplication_changes_the_readback(
     monkeypatch, probe, tmp_path, passes, passed
 ):
