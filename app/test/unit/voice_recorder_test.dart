@@ -592,5 +592,33 @@ void main() {
       expect(transcriptCallbackCalled, isFalse);
       expect(wavFile.existsSync(), isFalse);
     });
+
+    test('discard during WAV preparation prevents retry transcription from starting', () async {
+      final wavFile = await createPendingWav('discard_during_split.wav');
+      final splitStarted = Completer<void>();
+      final splitResult = Completer<List<File>>();
+      var calls = 0;
+      final provider = VoiceRecorderProvider(
+        splitter: (_, __, ___) {
+          splitStarted.complete();
+          return splitResult.future;
+        },
+        transcriber: (_) async {
+          calls++;
+          return 'unexpected';
+        },
+      );
+      await provider.checkPendingRecording();
+
+      final retry = provider.retry();
+      await splitStarted.future;
+      await provider.discardRecording();
+      splitResult.complete([wavFile]);
+      await retry;
+
+      expect(calls, 0);
+      expect(provider.state, VoiceRecorderState.idle);
+      expect(wavFile.existsSync(), isFalse);
+    });
   });
 }

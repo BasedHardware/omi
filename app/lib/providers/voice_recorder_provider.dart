@@ -21,6 +21,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 enum VoiceRecorderState { idle, recording, transcribing, transcribeSuccess, transcribeFailed, pendingRecovery }
 
 typedef VoiceMessageTranscriber = Future<String> Function(List<File> audioFiles);
+typedef VoiceWavSplitter = Future<List<File>> Function(File wavFile, int sampleRate, int channels);
 
 class VoiceRecorderProvider extends ChangeNotifier {
   static const _wavPathKey = 'voice_recorder_pending_wav_path';
@@ -61,13 +62,15 @@ class VoiceRecorderProvider extends ChangeNotifier {
   }
 
   final VoiceMessageTranscriber _transcribeVoiceMessage;
+  final VoiceWavSplitter _splitWavFile;
 
   // Injected only by tests — ServiceManager is a singleton initialised from
   // native plumbing, so the mic is resolved lazily at call time otherwise.
   final IMicRecorderService? _micOverride;
 
-  VoiceRecorderProvider({VoiceMessageTranscriber? transcriber, IMicRecorderService? mic})
+  VoiceRecorderProvider({VoiceMessageTranscriber? transcriber, VoiceWavSplitter? splitter, IMicRecorderService? mic})
       : _transcribeVoiceMessage = transcriber ?? transcribeVoiceMessage,
+        _splitWavFile = splitter ?? splitWavFileIfNeeded,
         _micOverride = mic;
 
   IMicRecorderService get _mic => _micOverride ?? ServiceManager.instance().mic;
@@ -305,7 +308,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
       await _cleanupPcmFile();
 
       // Split into chunks if the WAV is large, then transcribe
-      final chunks = await splitWavFileIfNeeded(_wavFile!, 16000, 1);
+      final chunks = await _splitWavFile(_wavFile!, 16000, 1);
       try {
         if (generation != _recordingGeneration) return;
         final transcript = await _transcribeVoiceMessage(chunks);
@@ -363,8 +366,9 @@ class VoiceRecorderProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final chunks = await splitWavFileIfNeeded(_wavFile!, 16000, 1);
+      final chunks = await _splitWavFile(_wavFile!, 16000, 1);
       try {
+        if (generation != _recordingGeneration) return;
         final transcript = await _transcribeVoiceMessage(chunks);
         if (generation != _recordingGeneration) return;
         if (transcript.trim().isNotEmpty) {

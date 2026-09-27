@@ -257,7 +257,8 @@ def test_preference_tool_uses_strict_compatibility_writer_in_default_mode(
     assert "ledger_schema_version" not in captured_memory
 
 
-def test_user_stated_ledger_preference_keeps_existing_ledger_writer(preference_tools_module, monkeypatch):
+@pytest.mark.parametrize("user_stated", [False, True])
+def test_ledger_preference_preserves_chat_assertion_attribution(preference_tools_module, monkeypatch, user_stated):
     module = preference_tools_module
     writes = MagicMock(return_value='mem-ledger')
     monkeypatch.setattr(module, 'get_data_plane_firestore_client', lambda: object())
@@ -272,12 +273,13 @@ def test_user_stated_ledger_preference_keeps_existing_ledger_writer(preference_t
 
     result = module.save_user_preference_tool(
         'Likes hot pot',
-        user_stated=True,
+        user_stated=user_stated,
         config={'configurable': {'user_id': 'user-1', 'chat_session_id': 'chat-1'}},
     )
 
     assert result == 'Preference saved (memory_id=mem-ledger): Likes hot pot'
     assert writes.call_args.kwargs['write_reason'] == module.LedgerWriteReason.agent_reusable_conclusion
+    assert writes.call_args.kwargs['user_asserted'] is user_stated
     assert '_direct_user_authority' not in writes.call_args.kwargs
 
 
@@ -371,6 +373,32 @@ def test_preference_correction_updates_preledger_canonical_item(preference_tools
         operation='correct_user_preference',
     )
     module.amend_fact.assert_not_called()
+
+
+def test_preference_correction_fails_closed_when_id_is_not_owned_or_missing(preference_tools_module, monkeypatch):
+    module = preference_tools_module
+    read = MagicMock(return_value=None)
+    save_fact = MagicMock()
+    amend_fact = MagicMock()
+    monkeypatch.setattr(module, 'get_data_plane_firestore_client', lambda: object())
+    monkeypatch.setattr(module, 'read_canonical_memory_item', read)
+    monkeypatch.setattr(module, 'save_fact', save_fact)
+    monkeypatch.setattr(module, 'amend_fact', amend_fact)
+    config = {'configurable': {'user_id': 'owner-uid'}}
+
+    result = module.save_user_preference_tool(
+        'Likes Szechuan Mala',
+        replace_memory_id='another-users-memory',
+        user_stated=True,
+        config=config,
+    )
+
+    assert result == 'Error updating preference: memory is unavailable or historical'
+    read.assert_called_once()
+    assert read.call_args.args == ('owner-uid', 'another-users-memory')
+    assert read.call_args.kwargs['db_client'] is not None
+    save_fact.assert_not_called()
+    amend_fact.assert_not_called()
 
 
 def test_preference_tool_fails_closed_during_writer_transition(preference_tools_module, monkeypatch):

@@ -230,6 +230,7 @@ def save_user_preference_tool(
                     subject_entity_id=prior.subject_entity_id,
                     curation_weight=prior.curation_weight,
                     visibility=prior.visibility,
+                    user_asserted=user_stated,
                     db_client=firestore_client,
                 )
             else:
@@ -278,6 +279,7 @@ def save_user_preference_tool(
                 provenance=provenance,
                 write_reason=LedgerWriteReason.agent_reusable_conclusion,
                 slot=resolved_slot,
+                user_asserted=user_stated,
                 db_client=firestore_client,
             )
             capture_memory_write(
