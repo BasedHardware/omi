@@ -3,6 +3,10 @@ import Foundation
 
 @MainActor
 enum SiriNavigator {
+  nonisolated static func taskIsOpenable(_ record: ActionItemRecord, now: Date) -> Bool {
+    SiriIndexScope.task(record, now: now)
+  }
+
   static func openConversation(_ id: String) {
     ConversationDetailAutomationState.shared.requestOpen(conversationId: id, showTranscript: false)
     NotificationCenter.default.post(name: .desktopAutomationOpenConversationRequested, object: nil)
@@ -73,11 +77,14 @@ struct OmiOpenTaskIntent: OpenIntent {
   func perform() async throws -> some IntentResult {
     try await SiriIntentTelemetry.perform("open") {
       guard let owner = RuntimeOwnerIdentity.currentOwnerId(),
-        let task = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: target.id),
-        RuntimeOwnerIdentity.currentOwnerId() == owner, !task.isRetired
+        let record = try await ActionItemStorage.shared.getActionItemByBackendId(target.id),
+        SiriNavigator.taskIsOpenable(record, now: Date()),
+        RuntimeOwnerIdentity.currentOwnerId() == owner
       else {
         throw SiriFailure.unsupported
       }
+      let task = record.toTaskActionItem()
+      guard !task.isRetired else { throw SiriFailure.unsupported }
       SiriNavigator.openTask(task)
     }
     return .result()

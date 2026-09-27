@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/backend/http/api/action_items.dart' as api;
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/gen/siri_pigeon.g.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/services/siri_integration.dart';
@@ -11,6 +13,13 @@ import 'package:omi/services/siri_integration.dart';
 class _SiriTaskHost extends SiriIndexApi {
   final indexed = <String, SiriTask>{};
   final deleted = <String>[];
+
+  @override
+  Future<void> reconcileTasks(String uid, List<SiriTask> rows, bool includeCompleted) async {
+    final ids = rows.map((row) => row.id).toSet();
+    indexed.removeWhere((id, row) => (includeCompleted || !row.completed) && !ids.contains(id));
+    await upsertTasks(uid, rows);
+  }
 
   @override
   Future<void> upsertTasks(String uid, List<SiriTask> rows) async {
@@ -23,6 +32,24 @@ class _SiriTaskHost extends SiriIndexApi {
   Future<void> deleteEntities(String uid, String type, List<String> ids) async {
     if (type == 'task') deleted.addAll(ids);
   }
+}
+
+class _TypedTaskApi extends api.ActionItemsApi {
+  _TypedTaskApi(this.result) : super(baseUrl: 'http://localhost/');
+  ApiResult<ActionItemsResponse> result;
+
+  @override
+  Future<ApiResult<ActionItemsResponse>> list({
+    int limit = 50,
+    int offset = 0,
+    bool? completed,
+    String? conversationId,
+    DateTime? startDate,
+    DateTime? endDate,
+    DateTime? dueStartDate,
+    DateTime? dueEndDate,
+  }) async =>
+      result;
 }
 
 ActionItemWithMetadata _item(String id, {String title = 'Original', bool completed = false, DateTime? dueAt}) =>
@@ -109,6 +136,94 @@ void main() {
     provider.selectItem('b');
     expect(await provider.deleteSelectedItems(), isTrue);
     expect(host.deleted.toSet(), {'a', 'b'});
+  });
+
+  test('a staged task remains indexed across a complete refresh and Undo restores it', () async {
+    final item = _item('staged');
+    final (provider, host) = await makeProvider(rows: [item]);
+    expect(host.indexed.keys, contains('staged'));
+    provider.stageDeleteActionItem(item);
+    await provider.fetchActionItems();
+    expect(host.indexed.keys, contains('staged'));
+    expect(await provider.undoStagedDelete('staged'), isTrue);
+    expect(host.indexed.keys, contains('staged'));
+  });
+
+  test('partial bulk failure preserves an unrelated pending delete tombstone', () async {
+    final rows = [_item('unrelated'), _item('bulk-a'), _item('bulk-b')];
+    final (provider, _) = await makeProvider(rows: rows, bulkDeleted: ['bulk-a']);
+    provider.stageDeleteActionItem(rows.first);
+    provider.startSelectionWithItem('bulk-a');
+    provider.selectItem('bulk-b');
+    expect(await provider.deleteSelectedItems(), isFalse);
+    await provider.fetchActionItems();
+    expect(provider.actionItems.map((item) => item.id), isNot(contains('unrelated')));
+  });
+
+  test('a typed page with rejected rows cannot prune an unseen valid task', () async {
+    final host = _SiriTaskHost();
+    host.indexed['unseen'] = SiriTask(
+        id: 'unseen', title: 'Still valid', completed: false, createdAtMs: DateTime.now().millisecondsSinceEpoch);
+    SiriIntegration.testInstance = SiriIntegration.forTest(host, 'owner-a');
+    addTearDown(() => SiriIntegration.testInstance = null);
+    final typed = _TypedTaskApi(ApiSuccess(ActionItemsResponse(actionItems: [_item('visible')]), rejectedRows: 1));
+    final provider = ActionItemsProvider(actionItemsApi: typed);
+    addTearDown(provider.dispose);
+    expect(await provider.fetchActionItems(), isTrue);
+    expect(host.indexed.keys, contains('unseen'));
+    expect(host.indexed.keys, contains('visible'));
+  });
+
+  test('a rejected staged row keeps its tombstone until a complete server page', () async {
+    final staged = _item('staged');
+    final visible = _item('visible');
+    final host = _SiriTaskHost();
+    SiriIntegration.testInstance = SiriIntegration.forTest(host, 'owner-a');
+    addTearDown(() => SiriIntegration.testInstance = null);
+    final typed = _TypedTaskApi(ApiSuccess(ActionItemsResponse(actionItems: [staged, visible])));
+    final provider = ActionItemsProvider(actionItemsApi: typed);
+    addTearDown(provider.dispose);
+    await provider.fetchActionItems();
+    provider.stageDeleteActionItem(staged);
+    typed.result = ApiSuccess(ActionItemsResponse(actionItems: [visible]), rejectedRows: 1);
+    await provider.fetchActionItems();
+    typed.result = ApiSuccess(ActionItemsResponse(actionItems: [staged, visible]));
+    await provider.fetchActionItems();
+    expect(provider.actionItems.map((row) => row.id), isNot(contains('staged')));
+    expect(host.indexed.keys, contains('staged'));
+  });
+
+  test('a later clean page cannot make an earlier rejected page authoritative', () async {
+    final host = _SiriTaskHost();
+    host.indexed['rejected'] = SiriTask(
+        id: 'rejected', title: 'Still valid', completed: false, createdAtMs: DateTime.now().millisecondsSinceEpoch);
+    SiriIntegration.testInstance = SiriIntegration.forTest(host, 'owner-a');
+    addTearDown(() => SiriIntegration.testInstance = null);
+    final typed =
+        _TypedTaskApi(ApiSuccess(ActionItemsResponse(actionItems: [_item('first')], hasMore: true), rejectedRows: 1));
+    final provider = ActionItemsProvider(actionItemsApi: typed);
+    addTearDown(provider.dispose);
+    await provider.fetchActionItems();
+    typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_item('last')], hasMore: false));
+    await provider.loadMoreActionItems();
+    expect(host.indexed.keys, contains('rejected'));
+  });
+
+  test('a staged task stays masked until Undo or commit even if a refresh omits it', () async {
+    final staged = _item('staged');
+    final host = _SiriTaskHost();
+    SiriIntegration.testInstance = SiriIntegration.forTest(host, 'owner-a');
+    addTearDown(() => SiriIntegration.testInstance = null);
+    final typed = _TypedTaskApi(ApiSuccess(ActionItemsResponse(actionItems: [staged])));
+    final provider = ActionItemsProvider(actionItemsApi: typed);
+    addTearDown(provider.dispose);
+    await provider.fetchActionItems();
+    provider.stageDeleteActionItem(staged);
+    typed.result = const ApiSuccess(ActionItemsResponse(actionItems: []));
+    await provider.fetchActionItems();
+    typed.result = ApiSuccess(ActionItemsResponse(actionItems: [staged]));
+    await provider.fetchActionItems();
+    expect(provider.actionItems.map((row) => row.id), isNot(contains('staged')));
   });
 
   test('a task mutation finishing after account clear cannot index into the next owner', () async {

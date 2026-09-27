@@ -87,6 +87,7 @@ class ActionItemsProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool _isFetching = false;
   bool _hasMore = false;
+  bool _loadedPageSetComplete = false;
 
   bool _includeCompleted = true;
 
@@ -371,6 +372,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
   Future<bool> fetchActionItems({bool showShimmer = false}) async {
     final generation = _sessionGeneration;
+    var decodedPageIsComplete = true;
     var loaded = false;
     if (showShimmer) {
       setLoading(true);
@@ -385,10 +387,16 @@ class ActionItemsProvider extends ChangeNotifier {
         completed: _includeCompleted ? null : false,
         startDate: _startDate,
         endDate: _endDate,
-        onTyped: _projectTypedList,
+        onTyped: (result) {
+          _projectTypedList(result);
+          if (result case ApiSuccess(:final rejectedRows, :final truncated)) {
+            decodedPageIsComplete = rejectedRows == 0 && !truncated;
+          }
+        },
       );
       if (response != null && generation == _sessionGeneration) {
-        await _applyFetchedActionItems(response);
+        _loadedPageSetComplete = decodedPageIsComplete && !response.truncated && _pendingDeletionIds.isEmpty;
+        await _applyFetchedActionItems(response, decodedPageIsComplete: decodedPageIsComplete);
         loaded = true;
       }
     } catch (e) {
@@ -417,7 +425,7 @@ class ActionItemsProvider extends ChangeNotifier {
     );
   }
 
-  Future<void> _applyFetchedActionItems(ActionItemsResponse response) async {
+  Future<void> _applyFetchedActionItems(ActionItemsResponse response, {required bool decodedPageIsComplete}) async {
     // Snapshot server IDs before filtering so tombstone retirement is
     // based on the full server response, not the filtered subset.
     final serverIds = response.actionItems.map((e) => e.id).toSet();
@@ -432,11 +440,18 @@ class ActionItemsProvider extends ChangeNotifier {
     // any ID still tracked as pending-deletion that did not appear in the
     // fresh server response can be cleared, because subsequent refreshes
     // will no longer see it.
-    if (_pendingDeletionIds.isNotEmpty) {
-      _pendingDeletionIds.removeWhere((id) => !serverIds.contains(id));
+    if (_pendingDeletionIds.isNotEmpty &&
+        !response.hasMore &&
+        !hasActiveFilter &&
+        _includeCompleted &&
+        decodedPageIsComplete &&
+        !response.truncated) {
+      _pendingDeletionIds.removeWhere((id) => !_stagedDeletes.containsKey(id) && !serverIds.contains(id));
     }
     _hasMore = response.hasMore;
-    if (!_hasMore && !hasActiveFilter) {
+    // A rejected wire row or a staged delete is still present on the server.
+    // Neither can be interpreted as an authoritative absence in Spotlight.
+    if (!_hasMore && !hasActiveFilter && _loadedPageSetComplete && !response.truncated && _pendingDeletionIds.isEmpty) {
       await SiriIntegration.current.reconcileTasks(_actionItems, includeCompleted: _includeCompleted);
     } else {
       await SiriIntegration.current.upsertTasks(_actionItems);
@@ -454,19 +469,31 @@ class ActionItemsProvider extends ChangeNotifier {
     setFetching(true);
 
     try {
+      var decodedPageIsComplete = true;
       final response = await _fetchActionItemsPage(
         limit: 50,
         offset: _actionItems.length,
         completed: _includeCompleted ? null : false,
         startDate: _startDate,
         endDate: _endDate,
+        onTyped: (result) {
+          if (result case ApiSuccess(:final rejectedRows, :final truncated)) {
+            decodedPageIsComplete = rejectedRows == 0 && !truncated;
+          }
+        },
       );
 
       if (response != null && generation == _sessionGeneration) {
+        _loadedPageSetComplete =
+            _loadedPageSetComplete && decodedPageIsComplete && !response.truncated && _pendingDeletionIds.isEmpty;
         final filtered = response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
         _actionItems.addAll(filtered);
         _hasMore = response.hasMore;
-        if (!_hasMore && !hasActiveFilter) {
+        if (!_hasMore &&
+            !hasActiveFilter &&
+            _loadedPageSetComplete &&
+            !response.truncated &&
+            _pendingDeletionIds.isEmpty) {
           await SiriIntegration.current.reconcileTasks(_actionItems, includeCompleted: _includeCompleted);
         } else {
           await SiriIntegration.current.upsertTasks(filtered);
@@ -763,7 +790,7 @@ class ActionItemsProvider extends ChangeNotifier {
 
   /// Restores a task hidden by [stageDeleteActionItem]. False when it was not staged (already
   /// committed or restored).
-  bool undoStagedDelete(String id) {
+  Future<bool> undoStagedDelete(String id) async {
     final staged = _stagedDeletes.remove(id);
     if (staged == null) return false;
     _pendingDeletionIds.remove(id);
@@ -774,6 +801,7 @@ class ActionItemsProvider extends ChangeNotifier {
       _homeDayItems.insert(staged.homeIndex.clamp(0, _homeDayItems.length), staged.item);
     }
     notifyListeners();
+    await SiriIntegration.current.upsertTasks([staged.item]);
     return true;
   }
 
@@ -1125,6 +1153,7 @@ class ActionItemsProvider extends ChangeNotifier {
   void clearUserData() {
     _sessionGeneration++;
     _actionItems = [];
+    _loadedPageSetComplete = false;
     _homeDayItems = [];
     _homeDayLoaded = false;
     _homeTodayLoad = null;
@@ -1193,7 +1222,7 @@ class ActionItemsProvider extends ChangeNotifier {
       await SiriIntegration.current.delete('task', id);
     }
     if (deletedIDs.length != ids.length) {
-      _pendingDeletionIds.removeWhere((id) => !deletedIDs.contains(id));
+      _pendingDeletionIds.removeAll(ids.where((id) => !deletedIDs.contains(id)));
       final entries = snapshot.entries.where((entry) => !deletedIDs.contains(entry.value.id)).toList()
         ..sort((a, b) => a.key.compareTo(b.key));
       for (final entry in entries) {

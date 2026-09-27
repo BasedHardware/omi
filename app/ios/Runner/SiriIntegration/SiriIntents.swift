@@ -7,6 +7,16 @@ private func cleanedMemory(_ text: String) -> String {
     return result.trimmingCharacters(in: .whitespacesAndNewlines)
 }
 
+private func persistConfirmedWrite(owner: SiriSession.Config,
+                                   _ operation: () async throws -> Void) async {
+    do { try await operation() }
+    catch {
+        NSLog("[SiriIndex] Backend write confirmed; local snapshot repair scheduled")
+        SiriTelemetry.index(outcome: "server", started: Date(), count: 0)
+        SiriSnapshotStore.shared.scheduleConfirmedRepair(owner: owner)
+    }
+}
+
 /// Schema intents must return an entity on success. A typed LocalizedError
 /// gives Siri a truthful spoken failure instead of returning a fake entity.
 struct SiriSpokenError: LocalizedError {
@@ -62,8 +72,10 @@ struct RememberIntent: AppIntent {
                 "content": value, "category": "manual", "visibility": "private", "tags": ["siri"]
             ], owner: owner)
             guard let id = response["id"] as? String, !id.isEmpty else { throw SiriSession.Failure.server }
-            try await SiriSnapshotStore.shared.applyConfirmedMemory(
-                id: id, content: response["content"] as? String ?? value, owner: owner)
+            await persistConfirmedWrite(owner: owner) {
+                try await SiriSnapshotStore.shared.applyConfirmedMemory(
+                    id: id, content: response["content"] as? String ?? value, owner: owner)
+            }
             SiriBridge.shared.memoryCreated(id)
             outcome = "ok"
             return .result(dialog: "Saved to Omi")
@@ -108,8 +120,10 @@ struct OmiCreateNoteIntent {
             "content": value, "category": "manual", "visibility": "private", "tags": ["siri"]
         ], owner: owner)
         guard let id = response["id"] as? String, !id.isEmpty else { throw SiriSession.Failure.server }
-        try await SiriSnapshotStore.shared.applyConfirmedMemory(
-            id: id, content: response["content"] as? String ?? value, owner: owner)
+        await persistConfirmedWrite(owner: owner) {
+            try await SiriSnapshotStore.shared.applyConfirmedMemory(
+                id: id, content: response["content"] as? String ?? value, owner: owner)
+        }
         SiriBridge.shared.memoryCreated(id)
         SiriTelemetry.intent("createNote", outcome: "ok", started: started)
         return .result(value: ConversationEntity(memoryId: id, content: value, creationDate: Date()), dialog: "Saved to Omi")
@@ -254,9 +268,11 @@ struct CompleteOmiTaskIntent {
         let response = try await OmiNativeAPI().request(method: "PATCH", path: "/v1/action-items/\(id)",
             body: ["completed": true], owner: owner)
         guard let returnedId = response["id"] as? String, returnedId == target.id else { throw SiriSession.Failure.server }
-        try await SiriSnapshotStore.shared.applyConfirmedTask(id: target.id,
-            title: response["description"] as? String ?? target.title,
-            completed: true, dueAt: target.dueDate.flatMap { Calendar.current.date(from: $0) }, owner: owner)
+        await persistConfirmedWrite(owner: owner) {
+            try await SiriSnapshotStore.shared.applyConfirmedTask(id: target.id,
+                title: response["description"] as? String ?? target.title,
+                completed: true, dueAt: target.dueDate.flatMap { Calendar.current.date(from: $0) }, owner: owner)
+        }
         SiriBridge.shared.taskChanged(target.id)
         let entity = TaskEntity(id: target.id, title: target.title, isCompleted: true,
                                 creationDate: target.creationDate ?? Date(),
@@ -313,9 +329,11 @@ struct CreateOmiTaskIntent {
         let response = try await OmiNativeAPI().request(method: "POST", path: "/v1/action-items",
             body: body, owner: owner)
         guard let id = response["id"] as? String, !id.isEmpty else { throw SiriSession.Failure.server }
-        try await SiriSnapshotStore.shared.applyConfirmedTask(id: id,
-            title: response["description"] as? String ?? value,
-            completed: false, dueAt: due, owner: owner)
+        await persistConfirmedWrite(owner: owner) {
+            try await SiriSnapshotStore.shared.applyConfirmedTask(id: id,
+                title: response["description"] as? String ?? value,
+                completed: false, dueAt: due, owner: owner)
+        }
         SiriBridge.shared.taskChanged(id)
         let entity = TaskEntity(id: id, title: value, isCompleted: false, creationDate: Date(),
                                 dueDate: due, completionDate: nil)

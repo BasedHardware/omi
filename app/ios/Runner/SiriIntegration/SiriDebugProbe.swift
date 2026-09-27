@@ -124,6 +124,36 @@ enum SiriDebugProbe {
                     _ = try await complete.perform()
                     NSLog("[SiriProbe] engineFreeCompleteIndexed=%@",
                           SiriSnapshotStore.shared.tasks(ids: ["native-task-1"]).first?.isCompleted == true ? "PASS" : "FAIL")
+                    SiriSnapshotStore.shared.simulateSnapshotPersistFailureOnce = true
+                    var cacheFailedRemember = RememberIntent()
+                    cacheFailedRemember.content = "confirmed despite cache failure"
+                    _ = try await cacheFailedRemember.perform()
+                    NSLog("[SiriProbe] confirmedRememberCacheFailure=%@",
+                          SiriTelemetry.take().last(where: { $0.intent == "remember" })?.outcome == "ok" ? "PASS" : "FAIL")
+                    SiriSnapshotStore.shared.simulateSnapshotPersistFailureOnce = true
+                    var cacheFailedNote = OmiCreateNoteIntent()
+                    cacheFailedNote.name = "confirmed despite cache failure"
+                    do {
+                        _ = try await cacheFailedNote.perform()
+                        NSLog("[SiriProbe] confirmedNoteCacheFailure=PASS")
+                    } catch { NSLog("[SiriProbe] confirmedNoteCacheFailure=FAIL") }
+                    SiriSnapshotStore.shared.simulateSnapshotPersistFailureOnce = true
+                    SiriProbeURLProtocol.payload = "{\"id\":\"native-task-2\"}"
+                    var cacheFailedCreate = CreateOmiTaskIntent()
+                    cacheFailedCreate.title = "confirmed despite cache failure"
+                    do {
+                        _ = try await cacheFailedCreate.perform()
+                        NSLog("[SiriProbe] confirmedCreateCacheFailure=PASS")
+                    } catch { NSLog("[SiriProbe] confirmedCreateCacheFailure=FAIL") }
+                    SiriSnapshotStore.shared.simulateSnapshotPersistFailureOnce = true
+                    SiriProbeURLProtocol.payload = "{\"id\":\"native-task-1\"}"
+                    do {
+                        _ = try await complete.perform()
+                        NSLog("[SiriProbe] confirmedCompleteCacheFailure=PASS")
+                    } catch { NSLog("[SiriProbe] confirmedCompleteCacheFailure=FAIL") }
+                    try await Task.sleep(nanoseconds: 31_000_000_000)
+                    NSLog("[SiriProbe] confirmedCacheRepair=%@",
+                          SiriSnapshotStore.shared.probePersistedEntity(type: "task", id: "native-task-2") ? "PASS" : "FAIL")
                     OmiNativeAPI.testSession = nil
                     SiriProbeURLProtocol.payload = "[]"
                     let rebuildsBeforeSingleUpsert = SiriSnapshotStore.shared.probeFullRebuildCount
@@ -171,6 +201,26 @@ enum SiriDebugProbe {
                         NSLog("[SiriProbe] staleMemoryOpen=FAIL success")
                     } catch {
                         NSLog("[SiriProbe] staleMemoryOpen=%@",
+                              SiriSnapshotStore.shared.pendingRoute() == nil ? "PASS" : "FAIL routed")
+                    }
+                    var staleConversation = OpenOmiIntent()
+                    staleConversation.target = ConversationEntity(id: "missing-conversation", name: "Gone",
+                        content: "Private", creationDate: Date(), modificationDate: Date())
+                    do {
+                        _ = try await staleConversation.perform()
+                        NSLog("[SiriProbe] staleConversationOpen=FAIL success")
+                    } catch {
+                        NSLog("[SiriProbe] staleConversationOpen=%@",
+                              SiriSnapshotStore.shared.pendingRoute() == nil ? "PASS" : "FAIL routed")
+                    }
+                    var staleTask = OpenOmiTaskIntent()
+                    staleTask.target = TaskEntity(id: "missing-task", title: "Gone", isCompleted: false,
+                        creationDate: Date(), dueDate: nil, completionDate: nil)
+                    do {
+                        _ = try await staleTask.perform()
+                        NSLog("[SiriProbe] staleTaskOpen=FAIL success")
+                    } catch {
+                        NSLog("[SiriProbe] staleTaskOpen=%@",
                               SiriSnapshotStore.shared.pendingRoute() == nil ? "PASS" : "FAIL routed")
                     }
                     SiriBridge.shared.routeDeliveryProbe = { _, completion in completion(true) }

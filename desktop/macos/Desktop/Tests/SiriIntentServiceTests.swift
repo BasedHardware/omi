@@ -4,6 +4,20 @@ import XCTest
 @testable import Omi_Computer
 
 final class SiriIntentServiceTests: XCTestCase {
+  func testOpenTaskRechecksTheCurrentIndexedScope() {
+    let now = Date()
+    var task = ActionItemRecord(backendId: "open-task", backendSynced: true, description: "Task")
+    XCTAssertTrue(SiriNavigator.taskIsOpenable(task, now: now))
+    task.taskStatus = "cancelled"
+    XCTAssertFalse(SiriNavigator.taskIsOpenable(task, now: now))
+    task.taskStatus = "active"
+    task.completed = true
+    task.completedAt = now.addingTimeInterval(-SiriIndexScope.completedTaskAge - 1)
+    XCTAssertFalse(SiriNavigator.taskIsOpenable(task, now: now))
+    task.completed = false
+    task.isLocked = true
+    XCTAssertFalse(SiriNavigator.taskIsOpenable(task, now: now))
+  }
   func testSpotlightIndexingStartsAtMacOS27() {
     guard #available(macOS 15.4, *) else { return }
     XCTAssertFalse(

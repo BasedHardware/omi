@@ -58,6 +58,7 @@ final class SiriSnapshotStore {
     private var expiryTask: _Concurrency.Task<Void, Never>?
     #if OMI_SIRI_PROBE
     var simulateIndexDeleteFailure = false
+    var simulateSnapshotPersistFailureOnce = false
     private(set) var probeFullRebuildCount = 0
     #endif
     private var file: URL { container.appendingPathComponent(namespace.snapshotFileName) }
@@ -131,6 +132,12 @@ final class SiriSnapshotStore {
         }
     }
     private func persist() throws {
+        #if OMI_SIRI_PROBE
+        if simulateSnapshotPersistFailureOnce {
+            simulateSnapshotPersistFailureOnce = false
+            throw CocoaError(.fileWriteUnknown)
+        }
+        #endif
         try JSONEncoder().encode(snapshot).write(to: file, options: .atomic)
         try FileManager.default.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: file.path)
     }
@@ -205,6 +212,16 @@ final class SiriSnapshotStore {
         default: return false
         }
     }
+    func probePersistedEntity(type: String, id: String) -> Bool {
+        guard let data = try? Data(contentsOf: file),
+              let stored = try? JSONDecoder().decode(Snapshot.self, from: data) else { return false }
+        switch type {
+        case "memory": return stored.memories[id] != nil
+        case "task": return stored.tasks[id] != nil
+        case "conversation": return stored.conversations[id] != nil
+        default: return false
+        }
+    }
     #endif
     /// Keep a live Runner's index fresh at the next expiry. A 24 hour cap also
     /// checks long-lived records without retaining an unbounded sleep.
@@ -238,6 +255,12 @@ final class SiriSnapshotStore {
             guard !_Concurrency.Task.isCancelled else { return }
             await self?.rebuildAfterTimer()
         }
+    }
+    /// A backend-confirmed intent must succeed even when the local cache write
+    /// fails. Retry only while the same account generation still owns it.
+    func scheduleConfirmedRepair(owner: SiriSession.Config) {
+        guard generationForOwner(owner.uid) == (owner.generation ?? 0) else { return }
+        scheduleIndexRetry()
     }
 
     func bind(uid: String, generation: Int64? = nil) async throws {
