@@ -972,17 +972,21 @@ def test_public_shared_chat_route_policy_and_openapi_contract_are_explicit():
     assert '/v1/conversations/shared/chat' not in app.openapi()['paths']
 
 
-def test_public_shared_chat_runtime_mode_is_dev_only_on_every_backend_surface():
+def test_public_shared_chat_runtime_mode_per_backend_surface():
+    # Dev enables every surface. Prod enables the Cloud Run services only: the
+    # prod load balancer sends /v1/conversations/shared/chat to Cloud Run
+    # `backend`, never to GKE backend-listen, which stays off (no Helm roll).
     with (BACKEND_DIR / 'deploy/runtime_env.yaml').open(encoding='utf-8') as handle:
         manifest = yaml.safe_load(handle)
 
     for environment in ('dev', 'prod'):
-        expected = 'gateway' if environment == 'dev' else 'off'
         listener_env = manifest['environments'][environment]['gke']['backend-listen']['env']
-        assert listener_env['PUBLIC_SHARED_CONVERSATION_CHAT_MODE']['value'] == expected
+        assert listener_env['PUBLIC_SHARED_CONVERSATION_CHAT_MODE']['value'] == (
+            'gateway' if environment == 'dev' else 'off'
+        )
         services = manifest['environments'][environment]['cloud_run']['services']
         for service in services.values():
-            assert service['env']['PUBLIC_SHARED_CONVERSATION_CHAT_MODE']['value'] == expected
+            assert service['env']['PUBLIC_SHARED_CONVERSATION_CHAT_MODE']['value'] == 'gateway'
         backend_env = services['backend']['env']
         assert backend_env['PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE']['env_var'] == (
             'PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE'
