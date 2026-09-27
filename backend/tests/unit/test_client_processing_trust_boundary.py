@@ -1495,6 +1495,7 @@ PINNED_INTENT_TXN_CALLEES: FrozenSet[str] = frozenset(
     {
         'conversation_ref.get',
         '_conversation_has_finalization_content',
+        '_has_active_recording_session_lease',
         'existing_ref.get',
         'job_ref.get',
         'transaction.set',

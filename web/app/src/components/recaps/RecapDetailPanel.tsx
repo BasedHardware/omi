@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from '@tschk/moonshine-next/navigation';
 import { motion } from 'framer-motion';
 import {
+  ArrowLeft,
   Calendar,
   Sparkles,
   CheckSquare,
@@ -442,9 +443,20 @@ export function RecapDetailPanel({
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header - always visible */}
         <div className="flex-shrink-0 bg-bg-secondary border-b border-bg-tertiary z-10">
-          <div className="p-6">
+          <div className="p-4 lg:p-6">
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-4">
+                {/* Back button (mobile only). Below `lg` the pane covers the
+                    whole screen, so without this the list is unreachable. */}
+                {onBack && (
+                  <button
+                    onClick={onBack}
+                    className="-ml-2 rounded-lg p-2 transition-colors hover:bg-bg-tertiary lg:hidden"
+                    aria-label="Back to list"
+                  >
+                    <ArrowLeft className="h-5 w-5 text-text-secondary" />
+                  </button>
+                )}
                 {/* Day emoji */}
                 <div className="flex-shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br from-white/20 to-white/5 flex items-center justify-center text-3xl">
                   {recap.day_emoji || '📅'}

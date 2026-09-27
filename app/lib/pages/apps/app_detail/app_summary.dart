@@ -75,7 +75,7 @@ class AppDetailSummary extends StatelessWidget {
                     ],
                     if (installs > 0)
                       Text(
-                        context.l10n.appUsersCount((installs / 10).round() * 10),
+                        context.l10n.appUsersCount(installs),
                         style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
                       ),
                   ],

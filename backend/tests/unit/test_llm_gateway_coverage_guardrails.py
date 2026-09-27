@@ -71,6 +71,7 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('utils/llm/clients.py', 'ChatOpenAI'),
     DirectUse('utils/llm/clients.py', 'GEMINI_API_KEY'),
     DirectUse('utils/llm/clients.py', 'OpenAIEmbeddings'),
+    DirectUse('utils/tts.py', 'GEMINI_API_KEY'),
     DirectUse('utils/memory_ingestion/export_runner.py', 'OPENAI_API_KEY'),
     DirectUse('utils/other/chat_file.py', 'AsyncOpenAI'),
     DirectUse('utils/other/chat_file.py', 'openai.chat.completions'),

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from config.stt_provider_policy import STTServingSurface, model_is_enabled, provider_for_service
-from utils.stt import provider_resilience as resilience, streaming as st
+from utils.stt import connect_metrics, provider_resilience as resilience, streaming as st
 from utils.stt.live_rollout import managed_chain_enabled, window_allocation
 from utils.stt.soniox import soniox_death_reason
 from utils.stt.stream_close import PROVIDER_AUTH_REJECTED, PROVIDER_BUDGET_EXHAUSTED
@@ -311,6 +311,39 @@ async def test_soniox_accepted_upgrade_account_refusal_feeds_breaker(monkeypatch
     assert service == st.STTService.modulate
     assert st._soniox_circuit.state == 'open'
     assert closed == [1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'typed_reason,error_class',
+    [(PROVIDER_BUDGET_EXHAUSTED, 'budget'), (PROVIDER_AUTH_REJECTED, 'auth')],
+)
+async def test_chain_account_death_labels_error_class_by_typed_reason(monkeypatch, typed_reason, error_class):
+    # The connect counter must carry the typed token so a 402 reads
+    # error_class=budget on the dashboard and leg-error alert; 'auth' is
+    # reserved for actual authentication refusals. The account bench still
+    # arms either way, and omi_fallback_total keeps its bounded vocabulary.
+    from utils.stt import live_chain
+
+    monkeypatch.setattr(st, 'stt_service_models', ['soniox', 'modulate-velma-2'])
+    connects, fallbacks = [], []
+    monkeypatch.setattr(live_chain, 'record_stt_provider_connect', lambda **kw: connects.append(kw))
+    monkeypatch.setattr(live_chain, 'record_fallback', lambda **kw: fallbacks.append(kw))
+    dead = SimpleNamespace(is_connection_dead=True, typed_death_reason=typed_reason, finish=lambda: None)
+    _, service = await st.connect_stt_socket_with_fallback(
+        primary_service=st.STTService.soniox,
+        connect_primary=AsyncMock(return_value=dead),
+        connect_modulate=AsyncMock(return_value=socket()),
+    )
+    assert service == st.STTService.modulate
+    failures = [call for call in connects if call['outcome'] == 'failure']
+    assert len(failures) == 1
+    assert failures[0]['provider'] == 'soniox'
+    assert failures[0]['reason'] == typed_reason
+    assert connect_metrics.connect_error_class(failures[0]['reason']) == error_class
+    assert st._soniox_circuit.state == 'open'  # account bench armed, unchanged
+    assert fallbacks, 'the bounded fallback vocabulary is still recorded'
+    assert all(event['reason'] in ('quota', 'auth', 'other') for event in fallbacks)
 
 
 def test_mid_session_metrics_retain_their_bounded_vocabulary():

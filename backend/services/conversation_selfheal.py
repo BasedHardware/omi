@@ -241,6 +241,7 @@ def run_selfheal_tick(
     mode: str | None = None,
     dry_run: bool | None = None,
     uid_allowlist: frozenset[str] | None = None,
+    use_configured_uid_allowlist: bool = True,
     scan_fn: Callable[..., dict[str, Any]] = jobs_db.scan_in_progress_conversations,
     cursor_getter: Callable[..., dict[str, Any]] = jobs_db.get_in_progress_content_sweep_cursor,
     cursor_advancer: Callable[..., bool] = jobs_db.advance_in_progress_content_sweep_cursor,
@@ -253,7 +254,7 @@ def run_selfheal_tick(
     now = now or datetime.now(timezone.utc)
     mode = mode if mode is not None else selfheal_mode()
     dry_run = selfheal_dry_run() if dry_run is None else dry_run
-    allowlist = selfheal_uid_allowlist() if uid_allowlist is None else uid_allowlist
+    allowlist = selfheal_uid_allowlist() if uid_allowlist is None and use_configured_uid_allowlist else uid_allowlist
     wedge = wedge_runner or run_capture_wedge_check
     reader = conversation_reader or (
         lambda uid, cid: conversations_db.get_conversation_raw_snapshot(uid, cid, firestore_client=firestore_client)

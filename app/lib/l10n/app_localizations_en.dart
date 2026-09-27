@@ -11283,4 +11283,130 @@ class AppLocalizationsEn extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name + others';
   }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Hear Omi\'s Answers';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'I\'ve got it. Your next meeting starts in twenty minutes.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'You\'re All Set';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Tap a row to review or change it.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'When you ask with the button, Omi can read its answer out loud.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Hear your last answer';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'Playing your last answer...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'Through $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'Through the phone speaker';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'Through the current audio output';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Answers stay on screen. Nothing is spoken.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Private. Speaks only through AirPods, Bluetooth or wired headphones.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'Uses the phone speaker when no headphones are connected.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi will stay silent. Answers still appear in the app.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device connected. Omi will speak here.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'No headphones connected. Omi stays silent until you connect some.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Plays through $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'Plays out loud through the phone speaker.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'You can change this anytime in $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Replay this tour anytime in $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Headphones';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'Minutes';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Tasks';
+
+  @override
+  String get usageMonth => 'Month';
+
+  @override
+  String get usageYear => 'Year';
+
+  @override
+  String get usageAll => 'All time';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
 }

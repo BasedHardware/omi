@@ -1572,6 +1572,12 @@ def delete_conversation(uid, conversation_id):
     for sub in conversation_ref.collections():
         delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
+    # A shadow metric writer can have read the parent just before deletion and
+    # committed a child after our first enumeration. Its transaction prevents
+    # writes once the parent is gone; this second sweep catches that narrow
+    # pre-delete commit without leaving an orphan under a missing parent.
+    for sub in conversation_ref.collections():
+        delete_collection_recursive(sub, client=db)
     _delete_conversation_search_index(uid, conversation_id)
 
 

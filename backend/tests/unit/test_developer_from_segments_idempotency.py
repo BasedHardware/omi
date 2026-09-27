@@ -736,6 +736,33 @@ def _request_data():
     }
 
 
+@pytest.mark.parametrize(
+    'reason',
+    [
+        'recording_disabled',
+        'system_sleep',
+        'app_terminated',
+        'paywall',
+        'microphone_unavailable',
+        'device_unavailable',
+        'silent_mic_exhausted',
+        'rotation_failed',
+        'stt_fallback',
+        'settings_change',
+    ],
+)
+def test_from_segments_accepts_newer_desktop_finalization_reasons(reason):
+    """GH #19328: the desktop client's TranscriptionFinalizationReason enum grew
+    these ten cases without the backend's Literal being updated, so every
+    local_segments upload carrying one of them 422'd silently and the recording
+    was lost. The field is opaque client metadata (only 'max_duration_rotation'
+    is ever compared downstream), so it must accept any string, not a closed set."""
+    request = developer.CreateConversationFromTranscriptRequest.model_validate(
+        {**_request_data(), 'conversation_finalization_reason': reason}
+    )
+    assert request.conversation_finalization_reason == reason
+
+
 def test_dev_from_segments_route_uses_the_dedicated_rate_limited_dependency():
     """GH #13505: the developer from-segments route must not ride the bare
     conversations:write dependency — it needs the dedicated

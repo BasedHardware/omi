@@ -6,22 +6,35 @@ and persisted segment offsets are projections of it. Provider timestamps are
 translated through the *actual accepted provider-send spans*, never by
 subtracting a wall-clock delta or extrapolating from the last callback.
 
-Everything in this module is pure: no IO, no clocks, no env. Callers pass
-arrival observations in. ``project(sample)`` is piecewise sample-linear with an
+Timeline projections use caller-supplied arrival observations; the optional
+translator reads its mode and reports bounded shadow failures. ``project(sample)``
+is piecewise sample-linear with an
 arrival-time anchor at the first accepted decoded frame and at each explicitly
 observed inter-arrival hiatus; anchors are never stored as a second playback
 index (stored segment and blob offsets are already projected).
+
+Known shadow-validation limits: an interval beginning exactly at the latest
+accepted send's end may receive a one-sample tail before a later send reveals
+a capture gap, so its placement can depend on callback order. Speech labels
+come from chunk-level approximations of buffered VAD windows; a window that
+straddles chunks or only covers part of a chunk can differ from the label of
+the candidate's exact samples.
 """
 
 from __future__ import annotations
 
+import logging
 import math
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, cast
 
 # Pure span helpers live in the database-layer module (stdlib only) so
 # database/ can share them without importing utils/.
 from database.audio_timeline import COVERAGE_TOLERANCE_SECONDS, chunk_span_bounds
+
+logger = logging.getLogger(__name__)
+_last_shadow_error_log = float('-inf')
 
 # Measured inter-arrival gap beyond which a new anchor is set. This is a jitter
 # guard, not a semantic silence boundary: a client still sending PCM silence
@@ -45,6 +58,9 @@ PROVIDER_EDGE_TOLERANCE_SECONDS = 0.25
 MAX_SEND_SPANS = 4096
 
 AUDIO_TIMELINE_V2 = 2
+# V2 audio spans start at offset zero or later. A negative offset cannot be
+# resolved by released clients which only inspect segment.start when seeking.
+UNPLACED_SEGMENT_OFFSET = -1.0
 
 CoverageOutcome = str  # 'covered' | 'missing' | 'pending_upload' | 'no_audio' | 'unsupported'
 
@@ -296,6 +312,39 @@ class SendMap:
     def span_count(self) -> int:
         return len(self._spans)
 
+    @property
+    def last_capture_sample(self) -> Optional[int]:
+        """Last accepted capture boundary, for text-only fallback placement."""
+        if not self._spans:
+            return None
+        return self._spans[-1][1] + self._spans[-1][2]
+
+    @property
+    def last_provider_sample(self) -> Optional[int]:
+        if not self._spans:
+            return None
+        return self._spans[-1][0] + self._spans[-1][2]
+
+    def point_interval(self, provider_sample: int) -> Optional[Tuple[int, int]]:
+        """A one-sample interval for an in-span zero-duration provider point.
+
+        Some adapters emit a final word with equal endpoints. The provider
+        point still identifies an accepted sample; keep its text and a real
+        capture window without extending it into unaccepted audio.
+        """
+        if any(first + length == provider_sample for first, _, length in self._spans):
+            return None
+        span = self._locate(provider_sample)
+        if span is None:
+            return None
+        provider_first, capture_first, length = span
+        # The exact end may precede a later send that has not been recorded.
+        # Never borrow the preceding sample for an ambiguous point.
+        if provider_sample < provider_first or provider_sample >= provider_first + length:
+            return None
+        capture = capture_first + provider_sample - provider_first
+        return (capture, capture + 1)
+
     def add_accepted(self, provider_first_sample: int, capture_first_sample: int, length_samples: int) -> None:
         if length_samples <= 0:
             return
@@ -332,6 +381,10 @@ class SendMap:
         index = low - 1
         if 0 <= index < len(self._spans):
             provider_first, capture_first, length = self._spans[index]
+            # Interior holes represent gated-out audio on an elapsed provider
+            # axis. Edge tolerance applies only after the latest accepted send.
+            if index + 1 < len(self._spans) and provider_sample >= provider_first + length:
+                return None
             if provider_sample <= provider_first + length + tolerance:
                 return (provider_first, capture_first, length)
         # Slightly before the first span (provider timing jitter): clamp.
@@ -355,6 +408,11 @@ class SendMap:
         provider_from, capture_from, length = span
         return capture_from + min(max(provider_sample - provider_from, 0), length)
 
+    def capture_run_start(self, provider_sample: int) -> Optional[int]:
+        """Stable start of the accepted capture run containing this point."""
+        span = self._locate(provider_sample)
+        return span[1] if span is not None else None
+
     def map_interval(self, provider_first_sample: int, provider_last_sample: int) -> Optional[Tuple[int, int]]:
         """Translate a provider interval to capture samples.
 
@@ -374,6 +432,19 @@ class SendMap:
         end_capture = self.map_sample(provider_last_sample)
         if end_capture is None:
             return None
+        # Provider time is continuous across VAD-skipped capture audio. The
+        # endpoints alone can therefore enclose a capture gap which was never
+        # sent. Keep the whole text unplaced instead of inventing that window.
+        previous: Optional[List[int]] = None
+        for span in self._spans:
+            provider_from, _, length = span
+            if provider_from >= provider_last_sample:
+                break
+            if provider_from + length < provider_first_sample:
+                continue
+            if previous is not None and previous[1] + previous[2] != span[1]:
+                return None
+            previous = span
         if provider_last_sample > provider_first_sample and end_capture <= start_capture:
             return None
         return (start_capture, end_capture)
@@ -396,6 +467,8 @@ class SendMap:
             return None
         provider_from, capture_from, length = span
         if provider_first_sample != provider_from + length:
+            return None
+        if self.map_sample(provider_last_sample) != capture_from + length:
             return None
         tolerance = int(PROVIDER_EDGE_TOLERANCE_SECONDS * self.provider_sample_rate)
         if provider_last_sample > provider_from + length + tolerance:
@@ -428,6 +501,11 @@ class ProviderEpochTranslator:
         provider_sample_rate: int,
         *,
         on_reject: Optional[Callable[[str], None]] = None,
+        on_mapped: Optional[Callable[[], None]] = None,
+        on_recover: Optional[Callable[[str], None]] = None,
+        on_past_send: Optional[Callable[[Optional[float]], None]] = None,
+        on_validation: Optional[Callable[[str, Optional[Tuple[int, int]]], None]] = None,
+        owner_at_send: Optional[Callable[[int, int], Optional[str]]] = None,
         project_times: bool = True,
     ):
         self.timeline = timeline
@@ -435,11 +513,32 @@ class ProviderEpochTranslator:
         self.send_map = SendMap(provider_sample_rate)
         self.rejected_segments = 0
         self._on_reject = on_reject
+        self._on_mapped = on_mapped
+        self._on_recover = on_recover
+        self._on_past_send = on_past_send
+        self._on_validation = on_validation
+        self._owner_at_send = owner_at_send
         self._project_times = project_times
+        self.provider_label = 'unknown'
+        self.send_path = 'unknown'
+        self._last_accepted_wall_end: Optional[float] = None
+        # The elapsed Soniox axis is unverified. Shadow computes it without
+        # changing the compact map used for placement or owner resolution.
+        from config.audio_timeline import soniox_elapsed_axis_mode
+
+        self.soniox_elapsed_mode = soniox_elapsed_axis_mode()
+        self._elapsed_send_map = SendMap(provider_sample_rate)
+        self._shadow_elapsed_healthy = True
+        self._send_owners: List[Tuple[int, int, Optional[str]]] = []
+        self._only_send_owner: Optional[str] = None
+        self._send_owner_ambiguous = False
+
+    def set_validation_callback(self, callback: Callable[[str, Optional[Tuple[int, int]]], None]) -> None:
+        self._on_validation = callback
 
     def note_accepted(self, capture_start_sample: int, length_samples: int) -> None:
         """Record one accepted send of contiguous capture audio."""
-        self.send_map.add_accepted_spans([(capture_start_sample, length_samples)])
+        self.note_accepted_spans([(capture_start_sample, length_samples)])
 
     @property
     def project_times(self) -> bool:
@@ -447,7 +546,77 @@ class ProviderEpochTranslator:
         return self._project_times
 
     def note_accepted_spans(self, spans: Sequence[Tuple[int, int]]) -> None:
-        self.send_map.add_accepted_spans(spans)
+        for capture_start, length in spans:
+            if length <= 0:
+                continue
+            start = self.send_map.last_provider_sample or 0
+            if self.provider_label == 'soniox' and self.soniox_elapsed_mode == 'on':
+                start = self._note_elapsed_span(capture_start, length)
+            self.send_map.add_accepted(start, capture_start, length)
+            end = start + length
+            owner = self._owner_at_send(capture_start, length) if self._owner_at_send is not None else None
+            if self._only_send_owner is None and not self._send_owner_ambiguous:
+                self._only_send_owner = owner
+            if owner is None or owner != self._only_send_owner:
+                self._send_owner_ambiguous = True
+            if self._send_owners and self._send_owners[-1][1] == start and self._send_owners[-1][2] == owner:
+                first, _, _ = self._send_owners[-1]
+                self._send_owners[-1] = (first, end, owner)
+            else:
+                self._send_owners.append((start, end, owner))
+            # Keep owner history bounded even if a session switches recording
+            # generations pathologically often. Evicted ownership is unknown.
+            if len(self._send_owners) > MAX_SEND_SPANS:
+                self._send_owners.pop(0)
+            # Shadow is validation-only. Its entire path follows the compact
+            # map and owner update, and a broken candidate map stays disabled.
+            if (
+                self.provider_label == 'soniox'
+                and self.soniox_elapsed_mode == 'shadow'
+                and self._shadow_elapsed_healthy
+            ):
+                try:
+                    self._note_elapsed_span(capture_start, length)
+                except Exception as error:
+                    self._shadow_elapsed_error(error)
+
+    def _note_elapsed_span(self, capture_start: int, length: int) -> int:
+        elapsed_start = self._elapsed_send_map.last_provider_sample or 0
+        wall_start = self.timeline.wall_strict(capture_start)
+        if wall_start is not None and self._last_accepted_wall_end is not None:
+            # Keepalives/finalize send no PCM, but observed Soniox token
+            # offsets continue along elapsed stream time. A withheld
+            # interval gets axis space, never a send span.
+            elapsed = max(0.0, wall_start - self._last_accepted_wall_end)
+            elapsed_start += round(elapsed * self.provider_sample_rate)
+        wall_end = self.timeline.wall_strict(capture_start + length)
+        self._elapsed_send_map.add_accepted(elapsed_start, capture_start, length)
+        self._last_accepted_wall_end = wall_end
+        return elapsed_start
+
+    def _shadow_elapsed_error(self, error: Exception) -> None:
+        global _last_shadow_error_log
+        self._shadow_elapsed_healthy = False
+        # At most one metric per epoch and one log per minute per process.
+        # Telemetry itself cannot affect sends.
+        try:
+            from utils.metrics import OMI_AUDIO_TIMELINE_ELAPSED_SHADOW_ERRORS_TOTAL
+
+            OMI_AUDIO_TIMELINE_ELAPSED_SHADOW_ERRORS_TOTAL.inc()
+            now = time.monotonic()
+            if now - _last_shadow_error_log >= 60.0:
+                _last_shadow_error_log = now
+                logger.warning('Soniox elapsed shadow disabled after %s', type(error).__name__)
+        except Exception:
+            pass
+
+    def owner_for_provider_sample(self, sample: int) -> Optional[str]:
+        for first, end, owner in reversed(self._send_owners):
+            if first <= sample < end:
+                return owner
+        # A final beyond recorded sends can be attributed only when this
+        # provider epoch sent audio for one and only one proven owner.
+        return None if self._send_owner_ambiguous else self._only_send_owner
 
     def translate(self, segments: List[Dict]) -> List[Dict]:
         """Map provider-relative segment times onto absolute wall seconds.
@@ -460,21 +629,19 @@ class ProviderEpochTranslator:
         was the dev 2026-09-26 collapse.
 
         Segments whose provider timestamps cannot be proven to fall inside
-        accepted send spans are dropped (fail closed), never clamped onto a
-        neighboring epoch; so are degenerate provider intervals (start >= end)
-        and intervals whose two different provider times would clamp onto one
-        capture sample — mapping those would fabricate a zero-length segment
-        at a span edge (the dev 2026-09-26 v2 collapse). Two exceptions keep
-        intentional provider text: a positive-duration interval that begins
+        accepted send spans keep their text at a zero-duration capture anchor,
+        marked unplaced, never clamped onto a neighboring epoch. The same
+        applies to reversed intervals and intervals whose two different
+        provider times would collapse onto one capture sample. Two bounded
+        recoveries retain a provable audio position: an interval that begins
         exactly at a span end and ends inside the edge tolerance (the
         provider's own tail accounting) keeps a minimal one-sample window,
-        and zero-length points are still rejected here but Modulate's
-        ``_flush_partial`` now emits its tail with the provider clock's
-        smallest positive duration. With ``project_times`` off, persistence
-        must stay byte-identical to the legacy behavior, so a rejected
-        segment keeps its provider-native times and simply carries no
-        capture interval — only its speaker-ID window falls back, never its
-        transcript.
+        and zero-length points inside a send span use one real sample.
+        With ``project_times`` off, persistence
+        must stay byte-identical to the legacy behavior: zero-length and
+        out-of-range segments keep provider-native times with no capture
+        interval; non-numeric and non-finite segments follow the existing
+        drop policy.
         """
         translated: List[Dict] = []
         for original in segments:
@@ -483,29 +650,76 @@ class ProviderEpochTranslator:
                 start, end = float(cast(Any, segment.get('start'))), float(cast(Any, segment.get('end')))
             except (TypeError, ValueError):
                 self._reject(segment, 'non_numeric')
+                if self._project_times:
+                    self._append_unplaced(translated, segment)
                 continue
             if not (math.isfinite(start) and math.isfinite(end)):
                 self._reject(segment, 'non_finite')
+                if self._project_times:
+                    self._append_unplaced(translated, segment)
                 continue
             rate = self.provider_sample_rate
             first_sample, last_sample = int(start * rate), int(end * rate)
+            if self._on_validation is not None:
+                is_shadow = self.provider_label == 'soniox' and self.soniox_elapsed_mode == 'shadow'
+                validation_map = (
+                    self._elapsed_send_map
+                    if self.provider_label == 'soniox' and self.soniox_elapsed_mode != 'off'
+                    else self.send_map if self.provider_label == 'modulate' else None
+                )
+                if validation_map is not None and (not is_shadow or self._shadow_elapsed_healthy):
+                    try:
+                        candidate = (
+                            validation_map.point_interval(first_sample)
+                            if first_sample == last_sample
+                            else validation_map.map_interval(first_sample, last_sample)
+                        )
+                        self._on_validation(self.provider_label, candidate)
+                    except Exception as error:
+                        if is_shadow:
+                            self._shadow_elapsed_error(error)
+            if self._project_times:
+                segment['_provider_send_owner'] = self.owner_for_provider_sample(first_sample)
+            interval: Optional[Tuple[int, int]] = None
             if last_sample <= first_sample:
-                # A zero-length provider interval (e.g. Modulate partials)
-                # cannot locate audio; v2 must not persist it as a segment.
-                self._reject(segment, 'zero_length')
-                if not self._project_times:
-                    translated.append(segment)
-                continue
-            interval = self.send_map.map_interval(first_sample, last_sample)
+                if self._project_times and last_sample == first_sample:
+                    interval = self.send_map.point_interval(first_sample)
+                if interval is None:
+                    self._reject(segment, 'zero_length')
+                    if self._project_times:
+                        self._append_unplaced(translated, segment)
+                    else:
+                        translated.append(segment)
+                    continue
+                if self._on_recover is not None:
+                    try:
+                        self._on_recover('zero_length')
+                    except Exception:
+                        pass
+            else:
+                interval = self.send_map.map_interval(first_sample, last_sample)
             if interval is None:
                 if self.send_map.map_sample(first_sample) is None or self.send_map.map_sample(last_sample) is None:
                     reason = 'outside_accepted_sends'
                 else:
                     interval = self.send_map.minimal_tail_interval(first_sample, last_sample)
-                    reason = 'collapsed_interval'
+                    reason = (
+                        'discontinuous_interval'
+                        if interval is None
+                        and self.send_map.map_sample(last_sample) != self.send_map.map_sample(first_sample)
+                        else 'collapsed_interval'
+                    )
                 if interval is None:
                     self._reject(segment, reason)
-                    if not self._project_times:
+                    if reason == 'outside_accepted_sends' and self._on_past_send is not None:
+                        end = self.send_map.last_provider_sample
+                        try:
+                            self._on_past_send(None if end is None else (last_sample - end) / rate)
+                        except Exception:
+                            pass
+                    if self._project_times:
+                        self._append_unplaced(translated, segment)
+                    else:
                         translated.append(segment)
                     continue
             if self._project_times:
@@ -515,6 +729,7 @@ class ProviderEpochTranslator:
                     # The anchors describing this sample range were compacted
                     # away; projecting would invent a position. Fail closed.
                     self._reject(segment, 'evicted_interval')
+                    self._append_unplaced(translated, segment)
                     continue
                 segment['start'] = start_wall
                 segment['end'] = max(segment['start'], end_wall)
@@ -522,8 +737,29 @@ class ProviderEpochTranslator:
             # these keys before the segment enters any buffer.
             segment['_capture_start_sample'] = interval[0]
             segment['_capture_end_sample'] = interval[1]
+            if self._project_times:
+                segment['audio_capture_run'] = self.send_map.capture_run_start(first_sample)
             translated.append(segment)
+            if self._on_mapped is not None:
+                try:
+                    self._on_mapped()
+                except Exception:
+                    pass
         return translated
+
+    def _append_unplaced(self, translated: List[Dict], segment: Dict) -> None:
+        """Retain text without claiming audio coverage or a speaker window."""
+        epoch_end = self.send_map.last_capture_sample
+        anchor_sample = epoch_end if epoch_end is not None else self.timeline.next_sample
+        anchor = self.timeline.wall_strict(anchor_sample) if self.timeline.anchors else 0.0
+        if anchor is None:
+            anchor = self.timeline.wall(self.timeline.next_sample)
+        segment['start'] = anchor
+        segment['end'] = anchor
+        segment['_capture_unplaced'] = True
+        segment['_provider_send_owner'] = segment.get('_provider_send_owner')
+        segment['audio_alignment'] = 'unplaced'
+        translated.append(segment)
 
     def _reject(self, segment: Dict, reason: str) -> None:
         self.rejected_segments += 1

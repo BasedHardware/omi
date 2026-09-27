@@ -67,7 +67,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "HOSTED_SPEAKER_EMBEDDING_API_URL", "value": "http://diarizer.omiapi.com:80"},
         {"name": "OMI_LLM_GATEWAY_FEATURE_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
-        {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "off"},
+        {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE", "value": "1.0"},
@@ -325,6 +325,19 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         )
     )
     payload = with_screen_frame_egress_env(payload)
+    # The final-pass shadow is dark by default on the dev finalization worker.
+    # Its deployed-state fixture must carry every explicit runtime binding.
+    payload = re.sub(
+        r'("backend-sync":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "TRANSCRIPTION_SHADOW_ENABLED", "value": "false"},'
+        r'\n        {"name": "TRANSCRIPTION_SHADOW_KILL_SWITCH", "value": "false"},'
+        r'\n        {"name": "TRANSCRIPTION_SHADOW_UID_ALLOWLIST", "value": ""},'
+        r'\n        {"name": "TRANSCRIPTION_SHADOW_PERCENT", "value": "0"},'
+        r'\n        {"name": "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS", "value": "0"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
     payload = re.sub(
         r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
         r'\1,\n' + GOOGLE_OAUTH_SECRETS.rstrip(','),
@@ -1519,6 +1532,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
+        {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
@@ -1536,6 +1550,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
@@ -1551,6 +1566,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
@@ -1752,6 +1768,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                                     'OMI_ENV_STAGE': {'value': 'dev'},
                                     'OMI_LLM_GATEWAY_URL': {'value': 'http://custom-manifest-gateway'},
                                     'OMI_LLM_GATEWAY_FEATURE_MODE': {'value': 'gateway'},
+                                    'PUBLIC_SHARED_CONVERSATION_CHAT_MODE': {'value': 'gateway'},
                                     'OMI_LLM_CHAT_AGENT_ROUTE': {'value': 'gateway'},
                                     'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION': {'value': 'true'},
                                     'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED': {'value': 'false'},
@@ -1799,6 +1816,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "FIREBASE_SIGNER_SERVICE_ACCOUNT", "value": "dev-auth-token-signer@based-hardware.iam.gserviceaccount.com"},
         {"name": "PROMETHEUS_SIDECAR_PORT", "value": "9090"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
@@ -1816,6 +1834,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
@@ -1831,6 +1850,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_CUSTOMER_DATA_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
+        {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE", "value": "1.0"},
@@ -2867,6 +2887,69 @@ _JEV_PROCESS_CONVERSATION_HOSTS = {
     'cloud_run/backend',
     'cloud_run/backend-sync',
 }
+
+
+def test_transcription_shadow_dev_scope_matches_generated_manifest_and_charts():
+    controls = {
+        'TRANSCRIPTION_SHADOW_ENABLED': 'true',
+        'TRANSCRIPTION_SHADOW_KILL_SWITCH': 'false',
+        'TRANSCRIPTION_SHADOW_UID_ALLOWLIST': 'omi-release-probe',
+        'TRANSCRIPTION_SHADOW_PERCENT': '0',
+        'TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS': '1',
+    }
+    dark = {
+        **controls,
+        'TRANSCRIPTION_SHADOW_ENABLED': 'false',
+        'TRANSCRIPTION_SHADOW_UID_ALLOWLIST': '',
+        'TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS': '0',
+    }
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    dev = validator._get_env_config(manifest, 'dev')
+    overlay = validator._load_yaml(ROOT / 'deploy/runtime_env/dev.overlay.yaml')['overlay']
+
+    for source in (dev, overlay):
+        for scope, expected in (('pusher', controls), ('backend-listen', dark)):
+            env = source['gke'][scope]['env']
+            assert {key: env[key]['value'] for key in controls} == expected
+        sync = source['cloud_run']['services']['backend-sync']['env']
+        assert {key: sync[key]['value'] for key in controls} == dark
+
+    for scope, expected in (('pusher', controls), ('backend-listen', dark)):
+        chart = (
+            ROOT / f'charts/{scope}/dev_omi_backend_listen_values.yaml'
+            if scope == 'backend-listen'
+            else ROOT / 'charts/pusher/dev_omi_pusher_values.yaml'
+        )
+        entries = parse_env_entries(chart.read_text(encoding='utf-8'))
+        assert {key: entries[key].value for key in controls} == expected
+
+
+def test_transcription_shadow_prod_scope_matches_generated_manifest_overlay_and_chart():
+    controls = {
+        'TRANSCRIPTION_SHADOW_ENABLED': 'true',
+        'TRANSCRIPTION_SHADOW_KILL_SWITCH': 'false',
+        'TRANSCRIPTION_SHADOW_UID_ALLOWLIST': 'vi7SA9ckQCe4ccobWNxlbdcNdC23',
+        'TRANSCRIPTION_SHADOW_PERCENT': '0',
+        'TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS': '1',
+    }
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    prod = validator._get_env_config(manifest, 'prod')
+    overlay = validator._load_yaml(ROOT / 'deploy/runtime_env/prod.overlay.yaml')['overlay']
+    for source in (prod, overlay):
+        pusher = source['gke']['pusher']['env']
+        assert {key: pusher[key]['value'] for key in controls} == controls
+        for scope, env in _manifest_env_blocks(source):
+            if scope != 'gke/pusher':
+                assert all(key not in env for key in controls), scope
+
+    pusher_chart = ROOT / 'charts/pusher/prod_omi_pusher_values.yaml'
+    pusher_entries = parse_env_entries(pusher_chart.read_text(encoding='utf-8'))
+    assert {key: pusher_entries[key].value for key in controls} == controls
+    listen_chart = ROOT / 'charts/backend-listen/prod_omi_backend_listen_values.yaml'
+    listen_entries = parse_env_entries(listen_chart.read_text(encoding='utf-8'))
+    assert all(key not in listen_entries for key in controls)
 
 
 def _manifest_env_blocks(env_config: dict) -> list[tuple[str, dict]]:

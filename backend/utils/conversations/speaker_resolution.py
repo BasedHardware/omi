@@ -21,7 +21,7 @@ import logging
 import os
 import struct
 import time
-from datetime import datetime
+from datetime import timezone
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import httpx
@@ -99,28 +99,33 @@ def encode_cache(entries: CacheEntries) -> bytes:
 def decode_cache(data: Optional[bytes]) -> CacheEntries:
     if not data or len(data) < 4:
         return {}
-    (length,) = struct.unpack('>I', data[:4])
-    header = json.loads(data[4 : 4 + length])
-    if header.get('v') != CACHE_FORMAT_VERSION or not header.get('ids'):
+    try:
+        (length,) = struct.unpack('>I', data[:4])
+        header = json.loads(data[4 : 4 + length])
+        if header.get('v') != CACHE_FORMAT_VERSION or not header.get('ids'):
+            return {}
+        dim = int(header['dim'])
+        matrix = np.frombuffer(data[4 + length :], dtype='<f2').astype(np.float32).reshape(len(header['ids']), dim)
+        return {sid: (float(d), matrix[i]) for i, (sid, d) in enumerate(zip(header['ids'], header['durations']))}
+    except (json.JSONDecodeError, ValueError, struct.error, KeyError, TypeError):
         return {}
-    dim = int(header['dim'])
-    matrix = np.frombuffer(data[4 + length :], dtype='<f2').astype(np.float32).reshape(len(header['ids']), dim)
-    return {sid: (float(d), matrix[i]) for i, (sid, d) in enumerate(zip(header['ids'], header['durations']))}
 
 
 # --- inputs ------------------------------------------------------------------
 
 
 def _started_at(conversation: Conversation) -> Optional[float]:
-    moment: Optional[datetime] = conversation.started_at or conversation.created_at
-    return moment.timestamp() if moment else None
+    moment = conversation.started_at or conversation.created_at
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.timestamp()
 
 
 def _duration(segment: TranscriptSegment) -> float:
     return max(0.0, float(segment.end) - float(segment.start))
 
 
-def _load_voiceprints(uid: str) -> Dict[str, np.ndarray]:
+def load_voiceprints_for_resolution(uid: str) -> Dict[str, np.ndarray]:
     prints: Dict[str, np.ndarray] = {}
     owner = users_db.get_user_speaker_embedding(uid)
     if owner:
@@ -255,7 +260,9 @@ def _without_resolution(conversation: Conversation, outcome: str) -> None:
     OMI_CONVERSATION_SPEAKER_RESOLUTION_TOTAL.labels(outcome=outcome).inc()
 
 
-def _apply(conversation: Conversation, speaker_ids: Mapping[str, int], identities: Mapping[int, Identity]) -> None:
+def apply_speaker_resolution(
+    conversation: Conversation, speaker_ids: Mapping[str, int], identities: Mapping[int, Identity]
+) -> None:
     scope = f'conversation:{conversation.id}'
     for segment in conversation.transcript_segments:
         new_id = speaker_ids.get(segment.id) if segment.id else None
@@ -335,13 +342,13 @@ def _resolve(uid: str, conversation: Conversation, *, deadline: float) -> None:
         segments,
         {sid: vector for sid, (_, vector) in cache.items()},
         manual_speakers=_manual_speakers(receipt),
-        voiceprints=_load_voiceprints(uid),
+        voiceprints=load_voiceprints_for_resolution(uid),
     )
     if resolution is None:
         _without_resolution(conversation, 'no_embeddings')
         return
 
-    _apply(conversation, resolution.speaker_ids, resolution.voice_identities)
+    apply_speaker_resolution(conversation, resolution.speaker_ids, resolution.voice_identities)
     if resolution.coverage >= MIN_RESOLVED_COVERAGE:
         conversation.speaker_resolution = ConversationSpeakers(
             status='resolved', version=RESOLUTION_VERSION, participant_speaker_ids=resolution.significant_speaker_ids
