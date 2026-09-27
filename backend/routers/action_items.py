@@ -359,22 +359,24 @@ def create_action_item(
 
     if not action_item:
         raise HTTPException(status_code=500, detail="Failed to create action item")
+    response = ActionItemResponse(**action_item)
     _wake_task_changes(uid, [action_item_id], action_item.get('updated_at'))
 
-    # Schedule a reminder only for an open task with a due date — an already-completed item must
-    # not arm a reminder (#5085).
-    if request.due_at and not request.completed:
-        _schedule_action_item_reminder(uid, action_item_id, request.description, request.due_at)
+    # A keyed retry can return a task edited or completed since the original POST.
+    # Project its saved state, never re-arm reminders or export the stale request.
+    if response.due_at and not response.completed:
+        _schedule_action_item_reminder(uid, action_item_id, response.description, response.due_at)
 
-    upsert_action_item_vector(uid, action_item_id, request.description)
+    upsert_action_item_vector(uid, action_item_id, response.description)
 
     def _run_auto_sync():
-        asyncio.run(auto_sync_action_item(uid, {"id": action_item_id, **action_item_data}, skip_apple_reminders=True))
+        asyncio.run(auto_sync_action_item(uid, action_item, skip_apple_reminders=True))
 
-    submit_with_context(postprocess_executor, _run_auto_sync)
+    if not response.completed:
+        submit_with_context(postprocess_executor, _run_auto_sync)
 
     record_product_event('action_item_created', request=http_request)
-    return ActionItemResponse(**action_item)
+    return response
 
 
 def _ensure_aware(value: datetime) -> datetime:

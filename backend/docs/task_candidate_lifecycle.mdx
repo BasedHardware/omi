@@ -8,6 +8,14 @@ The backend owns canonical tasks in `users/{uid}/action_items/{task_id}` and rev
 and the other compatibility fields while the same response also carries typed status, owner, source,
 provenance, goal/workstream links, due confidence, priority, and recurrence fields.
 
+Direct `POST /v1/action-items` retries use the caller's optional `Idempotency-Key`, not task text.
+A matching non-deleted task in the current account generation retains its identity after completion;
+the response and derived search/reminder/integration payloads use its saved state, not the old create
+request. Completed tasks do not schedule reminders or enqueue an open-task export. Unkeyed creates
+remain distinct, and the existing policy permits recreation after deletion or an account-generation reset.
+This is not a permanent create receipt or an exactly-once external-delivery guarantee. Local real-database
+replay evidence lives in `backend/tests/integration/test_action_item_replay_emulator.py`.
+
 Candidate payloads are discriminated by `subject_kind`. A task Candidate has either a typed create payload or
 a typed mutation payload. A workstream Candidate has only a workstream proposal with an anchor-task payload.
 Goal links, evidence, source surface, and confidence remain on the Candidate envelope and are never duplicated

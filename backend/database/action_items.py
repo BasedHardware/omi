@@ -337,9 +337,9 @@ def create_action_item(
         control = typed_doc(control_snapshot) if control_snapshot.exists else {}
         account_generation = int(control.get('account_generation', 0))
         if idempotency_key:
-            existing_query = action_items_ref.where(filter=FieldFilter('idempotency_key', '==', idempotency_key)).where(
-                filter=FieldFilter('completed', '==', False)
-            )
+            # Completion does not turn a retry into a new create. In particular,
+            # a delayed retry must not resurrect a task the user already finished.
+            existing_query = action_items_ref.where(filter=FieldFilter('idempotency_key', '==', idempotency_key))
             if account_generation > 0:
                 existing_query = existing_query.where(
                     filter=FieldFilter('account_generation', '==', account_generation)
