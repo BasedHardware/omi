@@ -198,9 +198,9 @@ def main() -> int:
         print(f"allowed compiler gate: {finding.describe(args.root)}")
     if violations:
         print(
-            "FAIL: compiler-version gates compile Apple SDK APIs out of the pinned ship "
-            "toolchain (the #12867/#13548 class). Gate OS availability at runtime with "
-            "`if #available(macOS X, *)` plus a working fallback instead:",
+            "FAIL: unreviewed compiler-version gates hide Apple SDK APIs from "
+            "required CI (the #12867/#13548 class). Outside the documented Siri "
+            "exception, gate OS availability at runtime with `if #available`:",
             file=sys.stderr,
         )
         for finding in violations:

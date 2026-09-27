@@ -8,9 +8,10 @@ execution required by SwiftPM's shared build-directory lock. This is the Rung-0
 guard from #9843: every downstream strictness claim depends on knowing which
 compiler the flags run against.
 
-The pinned Xcode version/build/app path are read from desktop/macos/ci/xcode-pin.json
-(the single source of truth); this test fails if the workflow, the canonical
-runner script, or the two Codemagic desktop Swift workflows drift from that file.
+Required Xcode 26.6 version/build/app path are read from
+desktop/macos/ci/xcode-pin.json. This test also locks the intentional Xcode 27
+advisory and Codemagic release split so required CI never depends on preview
+runner capacity while shipping Siri metadata remains mandatory.
 """
 
 from __future__ import annotations
@@ -42,9 +43,8 @@ assert _PLANNER_SPEC and _PLANNER_SPEC.loader
 planner = importlib.util.module_from_spec(_PLANNER_SPEC)
 _PLANNER_SPEC.loader.exec_module(planner)
 
-# Single source of truth: desktop/macos/ci/xcode-pin.json. Every consumer
-# (run-swift-ci.sh, desktop-swift-ci.yml, codemagic.yaml desktop workflows)
-# is asserted against these values; none of them may carry their own literal.
+# Required CI toolchain source of truth. Codemagic release and advisory Xcode
+# 27 are independently asserted below.
 PIN = json.loads(PIN_PATH.read_text(encoding="utf-8"))
 EXPECTED_XCODE_VERSION = PIN["version"]
 EXPECTED_XCODE_BUILD = PIN["build"]
