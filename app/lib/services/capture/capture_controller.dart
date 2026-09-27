@@ -366,7 +366,8 @@ class CaptureController extends ChangeNotifier
         _recordingTelemetry.observeAudio(bytes.length);
         final frames = _activeSource?.processBytes(bytes) ?? [];
         for (final frame in frames) {
-          _wal.getSyncs().phone.onFrameCaptured(frame);
+          _wal.getSyncs().phone.onFrameCaptured(frame,
+              captureRoot: const bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE') ? activeRecordingId : null);
           if (_socket?.state == SocketServiceState.connected) {
             _socket?.send(frame.payload);
             _recordingTelemetry.observeSent(frame.payload.length);
@@ -1804,7 +1805,8 @@ class CaptureController extends ChangeNotifier
         final frames = _activeSource?.processBytes(snapshot) ?? [];
         if (_isWalSupported) {
           for (final frame in frames) {
-            _wal.getSyncs().phone.onFrameCaptured(frame);
+            _wal.getSyncs().phone.onFrameCaptured(frame,
+                captureRoot: const bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE') ? activeRecordingId : null);
           }
         }
 
@@ -2441,7 +2443,8 @@ class CaptureController extends ChangeNotifier
           final frames = _activeSource?.processBytes(bytes) ?? [];
 
           for (final frame in frames) {
-            _wal.getSyncs().phone.onFrameCaptured(frame);
+            _wal.getSyncs().phone.onFrameCaptured(frame,
+                captureRoot: const bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE') ? activeRecordingId : null);
 
             if (_socket?.state == SocketServiceState.connected) {
               _socket?.send(frame.payload);
@@ -3635,7 +3638,8 @@ class CaptureController extends ChangeNotifier
   /// Writes the phone source's buffered tail to the WAL and, when connected, the socket.
   void _flushPhoneFrames() {
     for (final frame in _activeSource?.flush() ?? const []) {
-      _wal.getSyncs().phone.onFrameCaptured(frame);
+      _wal.getSyncs().phone.onFrameCaptured(frame,
+          captureRoot: const bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE') ? activeRecordingId : null);
       if (_socket?.state == SocketServiceState.connected) {
         _socket?.send(frame.payload);
         _recordingTelemetry.observeSent(frame.payload.length);

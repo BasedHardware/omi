@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-09-27 (live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
+> Last updated: 2026-09-27 (S1 capture-evidence exploratory dark write; live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -1447,3 +1447,20 @@ remain visually stale until the client reloads, a socket wake occurs, or an
 accepted update covers that segment. The 30-second cache refresh alone does not
 force a historical segment to be delivered again. The transactional merge remains protected
 through that interval; the stale cache never authorizes changing labeled spans.
+
+### S1 capture evidence dark write (exploratory)
+
+`CAPTURE_EVIDENCE_V1_DARK_WRITE` defaults off on backend, mobile and macOS. When
+on, listen piggybacks an `unknown` source-coverage receipt on its existing
+transcript transaction. Sync piggybacks an `unknown` receipt on the existing
+pre-VAD job stage update and assigned conversation write: current sync file
+paths and VAD derivatives do not carry an authenticated source frame map.
+From-segments accepts a bounded list of original desktop local segment IDs and
+millisecond-relative positions before the client merges/compacts them. This is
+stable local-artifact lineage, not proof of source-audio or cross-device clock
+alignment. Mobile WALs locally serialize a recording root, frame ordinal and
+codec epoch; the existing sync upload does not transport that map to the backend.
+Overflow or missing lineage records incomplete/unknown status, and fixed-label
+counters report receipt attempts. Flag-off omits all new wire and stored fields.
+No new Firestore operations, replay suppression, scene grouping or effects are
+introduced by this stage.

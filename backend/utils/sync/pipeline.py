@@ -68,6 +68,9 @@ from database.sync_ledger import (
     release_sync_content_claim_after_job_retired,
     release_sync_content_claim,
 )
+from config.capture_evidence import capture_evidence_dark_write_enabled
+from utils.capture_evidence import unknown_envelope
+from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
 from models.geolocation import Geolocation
@@ -1218,6 +1221,9 @@ def process_segment(
             **create_memory.model_dump(),
         ).model_dump()
         incoming['data_protection_level'] = data_protection_level
+        if capture_evidence_dark_write_enabled():
+            # The VAD derivative path no longer carries an authenticated source-unit map.
+            incoming['capture_evidence'] = unknown_envelope('missing_source_position', origin='sync_vad')
         phase = 'persistence'
         from utils.conversations.lifecycle import ingest_sync_conversation
 
@@ -1227,6 +1233,8 @@ def process_segment(
             candidate_id=closest_memory['id'] if closest_memory else None,
             target_id=target_conversation_id,
         )
+        if capture_evidence_dark_write_enabled():
+            OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(path='sync', status='unknown').inc()
         conversation_id = assigned['id']
         with lock:
             response['new_memories' if created else 'updated_memories'].add(conversation_id)
@@ -1875,7 +1883,20 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
 
             # --- Phase 2: VAD ---
             job_phase = 'vad'
-            await run_blocking(db_executor, _update_sync_job_for_run, job_id, active_run_lock_token, {'stage': 'vad'})
+            await run_blocking(
+                db_executor,
+                _update_sync_job_for_run,
+                job_id,
+                active_run_lock_token,
+                {
+                    'stage': 'vad',
+                    **(
+                        {'capture_evidence': unknown_envelope('missing_source_position', origin='sync_pre_vad')}
+                        if capture_evidence_dark_write_enabled()
+                        else {}
+                    ),
+                },
+            )
             vad_errors, vad_ms = await _run_sync_vad_phase(wav_paths, segmented_paths)
             stage_timings['vad_ms'] = vad_ms
             wav_paths = []
