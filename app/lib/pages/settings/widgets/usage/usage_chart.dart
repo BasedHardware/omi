@@ -36,10 +36,11 @@ class UsageBuckets {
   }
 }
 
-UsageBuckets usageBuckets(List<UsageHistoryPoint> history, String period, DateTime now) {
+UsageBuckets usageBuckets(List<UsageHistoryPoint> history, String period, DateTime now,
+    {DateTime Function(DateTime)? localize}) {
   DateTime decode(UsageHistoryPoint point) {
     final parsed = DateTime.parse(point.date);
-    return period == 'today' ? parsed.toLocal() : parsed;
+    return period == 'today' ? (localize?.call(parsed) ?? parsed.toLocal()) : parsed;
   }
 
   if (period == 'all_time') {
@@ -65,13 +66,26 @@ UsageBuckets usageBuckets(List<UsageHistoryPoint> history, String period, DateTi
         'monthly' => date.day - 1,
         _ => date.month - 1,
       };
-  final byIndex = {
-    for (final p in history)
-      if (period == 'today'
-          ? (decode(p).year == now.year && decode(p).month == now.month && decode(p).day == now.day)
-          : (decode(p).year == anchor.year && (period != 'monthly' || decode(p).month == anchor.month)))
-        index(decode(p)): p,
-  };
+  final byIndex = <int, UsageHistoryPoint>{};
+  for (final point in history) {
+    final date = decode(point);
+    final inPeriod = period == 'today'
+        ? date.year == now.year && date.month == now.month && date.day == now.day
+        : date.year == anchor.year && (period != 'monthly' || date.month == anchor.month);
+    if (!inPeriod) continue;
+    final slot = index(date);
+    final previous = byIndex[slot];
+    byIndex[slot] = previous == null
+        ? point
+        : UsageHistoryPoint(
+            date: previous.date,
+            transcriptionSeconds: previous.transcriptionSeconds + point.transcriptionSeconds,
+            speechSeconds: previous.speechSeconds + point.speechSeconds,
+            wordsTranscribed: previous.wordsTranscribed + point.wordsTranscribed,
+            insightsGained: previous.insightsGained + point.insightsGained,
+            memoriesCreated: previous.memoriesCreated + point.memoriesCreated,
+          );
+  }
   final dates = [
     for (var i = 0; i < count; i++)
       switch (period) {
@@ -148,6 +162,17 @@ class UsageChart extends StatelessWidget {
     final peakValue = peak == null ? 0.0 : metric.value(buckets.points[peak]!);
     final (tick, maxY) = niceUsageScale(peakValue);
     final unit = labels[metric.index].toLowerCase();
+    String displayAmount(double amount, {bool compact = false, bool axis = false}) {
+      if (metric == UsageMetric.minutes && amount > 0 && amount < 1) {
+        final seconds = math.max(1, (amount * 60).round());
+        return axis ? context.l10n.timeCompactSecs(seconds) : context.l10n.secondsCount(seconds);
+      }
+      final number = compact
+          ? formatUsageCount(amount.round(), locale)
+          : NumberFormat.decimalPattern(locale).format(amount.round());
+      return axis ? number : '$number $unit';
+    }
+
     final peakLabel = switch (period) {
       'today' => context.l10n.usagePeakHour,
       'monthly' => context.l10n.usageBestDay,
@@ -237,7 +262,7 @@ class UsageChart extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(8, 5, 0, 12),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(peakLabel, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-            Text(peak == null ? '—' : '${dateLabel(peak)} · ${formatUsageCount(peakValue.round(), locale)} $unit',
+            Text(peak == null ? '—' : '${dateLabel(peak)} · ${displayAmount(peakValue, compact: true)}',
                 style: OmiType.headline, maxLines: 1, overflow: TextOverflow.ellipsis),
           ]),
         ),
@@ -245,7 +270,7 @@ class UsageChart extends StatelessWidget {
           label: '${labels[metric.index]}: ${[
             for (var i = 0; i < buckets.points.length; i++)
               if (!buckets.future[i])
-                '${dateLabel(i)}, ${NumberFormat.decimalPattern(locale).format(buckets.points[i] == null ? 0 : metric.value(buckets.points[i]!).round())} $unit'
+                '${dateLabel(i)}, ${displayAmount(buckets.points[i] == null ? 0.0 : metric.value(buckets.points[i]!))}'
           ].join('; ')}',
           child: SizedBox(
               height: 165,
@@ -272,10 +297,8 @@ class UsageChart extends StatelessWidget {
                       getTooltipColor: (_) => OmiColors.surface3,
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         if (buckets.future[group.x]) return null;
-                        final amount = buckets.points[group.x] == null ? 0 : metric.value(buckets.points[group.x]!);
-                        return BarTooltipItem(
-                            '${dateLabel(group.x)}\n${NumberFormat.decimalPattern(locale).format(amount.round())} $unit',
-                            OmiType.footnote);
+                        final amount = buckets.points[group.x] == null ? 0.0 : metric.value(buckets.points[group.x]!);
+                        return BarTooltipItem('${dateLabel(group.x)}\n${displayAmount(amount)}', OmiType.footnote);
                       },
                     ),
                   ),
@@ -287,7 +310,7 @@ class UsageChart extends StatelessWidget {
                             showTitles: true,
                             reservedSize: 38,
                             interval: tick,
-                            getTitlesWidget: (value, meta) => Text(formatUsageCount(value.round(), locale),
+                            getTitlesWidget: (value, meta) => Text(displayAmount(value, compact: true, axis: true),
                                 style: OmiType.caption.copyWith(color: OmiColors.textTertiary)))),
                     bottomTitles: AxisTitles(
                         sideTitles: SideTitles(

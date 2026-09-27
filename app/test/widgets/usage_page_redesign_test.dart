@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -44,6 +46,26 @@ UsageHistoryPoint point(String date, {int words = 10}) => UsageHistoryPoint(
     );
 
 void main() {
+  test('overlapping first timezone lookups send the resolved zone', () async {
+    final zoneReady = Completer<String?>();
+    final sentZones = <String?>[];
+    final provider = UsageProvider(
+      deviceTimeZone: () => zoneReady.future,
+      usageRequest: ({required String period, required String? timeZone}) async {
+        sentZones.add(timeZone);
+        return UserUsageResponse(monthly: stats(), history: []);
+      },
+    );
+
+    final fetch = provider.fetchUsageStats(period: 'monthly');
+    final overlappingLookup = provider.refreshUsageTimeZone();
+    zoneReady.complete('Asia/Tokyo');
+    await Future.wait([fetch, overlappingLookup]);
+
+    expect(sentZones, ['Asia/Tokyo']);
+    expect(provider.monthlyUsage, isNotNull);
+  });
+
   test('duration, compact number and nice scale', () {
     expect(formatUsageDuration(30720), '8h 32m');
     expect(formatUsageDuration(806400), '224 h');
@@ -69,6 +91,18 @@ void main() {
     expect(year.dates.first, DateTime(2026, 1, 1));
     expect(year.points.last!.wordsTranscribed, 9);
     expect(year.future.last, isFalse);
+  });
+
+  test('fall-back UTC hours add into the same local chart hour', () {
+    final buckets = usageBuckets(
+      [point('2026-11-01T08:00:00Z', words: 10), point('2026-11-01T09:00:00Z', words: 20)],
+      'today',
+      DateTime(2026, 11, 1, 12),
+      localize: (_) => DateTime(2026, 11, 1, 1),
+    );
+    expect(buckets.points[1]!.wordsTranscribed, 30);
+    expect(buckets.points[1]!.transcriptionSeconds, 240);
+    expect(buckets.peakIndex(UsageMetric.words), 1);
   });
 
   testWidgets('chart switches its only metric; future slots are faint nonzero outlines', (tester) async {
@@ -101,6 +135,38 @@ void main() {
     expect(selected, UsageMetric.minutes);
     final switched = tester.widget<BarChart>(find.byType(BarChart));
     expect(switched.data.barGroups[7].barRods.single.toY, 2);
+  });
+
+  testWidgets('sub-minute peak and axis use seconds', (tester) async {
+    final history = [
+      UsageHistoryPoint(
+        date: '2026-09-01',
+        transcriptionSeconds: 30,
+        speechSeconds: 0,
+        wordsTranscribed: 0,
+        insightsGained: 0,
+        memoriesCreated: 0,
+      ),
+    ];
+    await tester.pumpWidget(app(Scaffold(
+      body: UsageChart(
+        history: history,
+        period: 'monthly',
+        metric: UsageMetric.minutes,
+        now: DateTime(2026, 9, 26),
+        onMetricChanged: (_) {},
+      ),
+    )));
+    expect(find.textContaining('30 seconds'), findsOneWidget);
+    expect(find.text('12s'), findsOneWidget);
+    final chart = tester.widget<BarChart>(find.byType(BarChart));
+    final tooltip = chart.data.barTouchData.touchTooltipData.getTooltipItem(
+      chart.data.barGroups.first,
+      0,
+      chart.data.barGroups.first.barRods.first,
+      0,
+    );
+    expect(tooltip!.text, contains('30 seconds'));
   });
 
   testWidgets('plan card is a child of the period scroll view', (tester) async {
@@ -234,5 +300,46 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(requests.last, ('monthly', zone));
+  });
+
+  testWidgets('calendar rollover expires cached day, month, and year on resume and tab select', (tester) async {
+    var now = DateTime(2026, 9, 30, 23, 59);
+    final requests = <String>[];
+    final provider = UsageProvider(
+      now: () => now,
+      deviceTimeZone: () async => 'Asia/Tokyo',
+      usageRequest: ({required String period, required String? timeZone}) async {
+        requests.add(period);
+        return UserUsageResponse(today: stats(), monthly: stats(), yearly: stats(), history: []);
+      },
+    );
+    await provider.fetchUsageStats(period: 'today');
+    await provider.fetchUsageStats(period: 'monthly');
+    await provider.fetchUsageStats(period: 'yearly');
+    await tester.pumpWidget(app(const UsagePage(debugSkipFetch: true), provider: provider));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('Month').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(requests, ['today', 'monthly', 'yearly']);
+
+    now = DateTime(2026, 10, 1);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(requests.last, 'monthly');
+    expect(requests.length, 4);
+    await tester.tap(find.text('Today').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(requests.last, 'today');
+    expect(requests.length, 5);
+
+    now = DateTime(2027, 1, 1);
+    await tester.tap(find.text('Year').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(requests.last, 'yearly');
+    expect(requests.length, 6);
   });
 }

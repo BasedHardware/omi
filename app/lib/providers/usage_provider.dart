@@ -11,16 +11,19 @@ import 'package:omi/utils/logger.dart';
 typedef UsageRequest = Future<UserUsageResponse?> Function({required String period, required String? timeZone});
 
 class UsageProvider with ChangeNotifier {
-  UsageProvider({Future<String?> Function()? deviceTimeZone, UsageRequest? usageRequest})
+  UsageProvider({Future<String?> Function()? deviceTimeZone, UsageRequest? usageRequest, DateTime Function()? now})
       : _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
-        _usageRequest = usageRequest ?? getUserUsage;
+        _usageRequest = usageRequest ?? getUserUsage,
+        _now = now ?? DateTime.now;
 
   final Future<String?> Function() _deviceTimeZone;
   final UsageRequest _usageRequest;
+  final DateTime Function() _now;
   String? _usageTimeZone;
   bool _usageTimeZoneResolved = false;
   int _timeZoneLookupGeneration = 0;
   int _usageTimeZoneGeneration = 0;
+  Future<bool>? _timeZoneLookupInFlight;
   Future<void>? _usageFetchInFlight;
 
   UserSubscriptionResponse? _subscription;
@@ -30,12 +33,15 @@ class UsageProvider with ChangeNotifier {
   /// network blip doesn't silently hide paid surfaces from real users.
   bool get showSubscriptionUI => _subscription?.showSubscriptionUi ?? true;
   UsageStats? _todayUsage;
+  int? _todayCacheKey;
   UsageStats? get todayUsage => _todayUsage;
 
   UsageStats? _monthlyUsage;
+  int? _monthlyCacheKey;
   UsageStats? get monthlyUsage => _monthlyUsage;
 
   UsageStats? _yearlyUsage;
+  int? _yearlyCacheKey;
   UsageStats? get yearlyUsage => _yearlyUsage;
 
   UsageStats? _allTimeUsage;
@@ -130,12 +136,15 @@ class UsageProvider with ChangeNotifier {
     switch (period) {
       case 'today':
         _todayUsage = stats;
+        _todayCacheKey = _periodKey(period);
         _todayHistory = history;
       case 'monthly':
         _monthlyUsage = stats;
+        _monthlyCacheKey = _periodKey(period);
         _monthlyHistory = history;
       case 'yearly':
         _yearlyUsage = stats;
+        _yearlyCacheKey = _periodKey(period);
         _yearlyHistory = history;
       case 'all_time':
         _allTimeUsage = stats;
@@ -150,8 +159,11 @@ class UsageProvider with ChangeNotifier {
     TranscriptionAllowanceCache.clear();
     _subscription = null;
     _todayUsage = null;
+    _todayCacheKey = null;
     _monthlyUsage = null;
+    _monthlyCacheKey = null;
     _yearlyUsage = null;
+    _yearlyCacheKey = null;
     _allTimeUsage = null;
     _todayHistory = null;
     _monthlyHistory = null;
@@ -161,6 +173,7 @@ class UsageProvider with ChangeNotifier {
     _usageTimeZoneResolved = false;
     _timeZoneLookupGeneration++;
     _usageTimeZoneGeneration++;
+    _timeZoneLookupInFlight = null;
     _usageFetchInFlight = null;
     _availablePlans = null;
     _forceOutOfCredits = false;
@@ -215,9 +228,53 @@ class UsageProvider with ChangeNotifier {
   /// Alias for fetchSubscription - refreshes subscription data from backend
   Future<void> refreshSubscription() => fetchSubscription();
 
-  /// Drop local-calendar periods when the device zone used by the API changes.
+  int _periodKey(String period) {
+    final date = _now();
+    return switch (period) {
+      'today' => date.year * 10000 + date.month * 100 + date.day,
+      'monthly' => date.year * 100 + date.month,
+      'yearly' => date.year,
+      _ => 0,
+    };
+  }
+
+  bool _expireCalendarCaches() {
+    var expired = false;
+    if (_todayUsage != null && _todayCacheKey != _periodKey('today')) {
+      _todayUsage = null;
+      _todayHistory = null;
+      _todayCacheKey = null;
+      expired = true;
+    }
+    if (_monthlyUsage != null && _monthlyCacheKey != _periodKey('monthly')) {
+      _monthlyUsage = null;
+      _monthlyHistory = null;
+      _monthlyCacheKey = null;
+      expired = true;
+    }
+    if (_yearlyUsage != null && _yearlyCacheKey != _periodKey('yearly')) {
+      _yearlyUsage = null;
+      _yearlyHistory = null;
+      _yearlyCacheKey = null;
+      expired = true;
+    }
+    if (expired) notifyListeners();
+    return expired;
+  }
+
+  /// Drop local-calendar periods when the device zone or calendar period changes.
   /// All-time usage has no local period boundary and remains reusable.
-  Future<bool> refreshUsageTimeZone() async {
+  Future<bool> refreshUsageTimeZone() {
+    final pending = _timeZoneLookupInFlight;
+    if (pending != null) return pending;
+    late final Future<bool> lookup;
+    lookup = _refreshUsageTimeZone().whenComplete(() {
+      if (identical(_timeZoneLookupInFlight, lookup)) _timeZoneLookupInFlight = null;
+    });
+    return _timeZoneLookupInFlight = lookup;
+  }
+
+  Future<bool> _refreshUsageTimeZone() async {
     final session = _sessionGeneration;
     final lookup = ++_timeZoneLookupGeneration;
     String? zone;
@@ -230,14 +287,17 @@ class UsageProvider with ChangeNotifier {
     if (!_usageTimeZoneResolved) {
       _usageTimeZone = zone;
       _usageTimeZoneResolved = true;
-      return false;
+      return _expireCalendarCaches();
     }
-    if (_usageTimeZone == zone) return false;
+    if (_usageTimeZone == zone) return _expireCalendarCaches();
     _usageTimeZone = zone;
     _usageTimeZoneGeneration++;
     _todayUsage = null;
+    _todayCacheKey = null;
     _monthlyUsage = null;
+    _monthlyCacheKey = null;
     _yearlyUsage = null;
+    _yearlyCacheKey = null;
     _todayHistory = null;
     _monthlyHistory = null;
     _yearlyHistory = null;
@@ -263,6 +323,7 @@ class UsageProvider with ChangeNotifier {
     await refreshUsageTimeZone();
     if (generation != _sessionGeneration) return;
     final timeZoneGeneration = _usageTimeZoneGeneration;
+    final cacheKey = _periodKey(period);
     _isUsageLoading = true;
     _error = null;
     notifyListeners();
@@ -274,14 +335,17 @@ class UsageProvider with ChangeNotifier {
         switch (period) {
           case 'today':
             _todayUsage = response.today;
+            _todayCacheKey = cacheKey;
             _todayHistory = response.history;
             break;
           case 'monthly':
             _monthlyUsage = response.monthly;
+            _monthlyCacheKey = cacheKey;
             _monthlyHistory = response.history;
             break;
           case 'yearly':
             _yearlyUsage = response.yearly;
+            _yearlyCacheKey = cacheKey;
             _yearlyHistory = response.history;
             break;
           case 'all_time':
