@@ -3,7 +3,7 @@
 
 Usage:
     # From direct Desktop SQL export:
-    omi --json local sql "SELECT id, title, description, completed, created_at, updated_at, due_at, category FROM tasks" | python local_tasks_to_sqlite.py - -o tasks.db
+    omi --json local sql "SELECT id, description, completed, created_at, due_at FROM action_items WHERE deleted = 0" | python local_tasks_to_sqlite.py - -o tasks.db
 
     # From semantic task search export (up to 10 top results):
     omi --json local task search "meeting" --include-completed | python local_tasks_to_sqlite.py - -o tasks.db
