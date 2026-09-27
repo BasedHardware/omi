@@ -7,6 +7,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/connectivity_service.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -49,6 +50,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   final Future<void> Function() _startRecovery;
   final Future<void> Function(WakeTrigger trigger) _wakeTransfer;
   final SyncTransferKeepAlive _keepAlive;
+  final CaptureWedgeMonitor _captureWedgeMonitor;
 
   /// Completes after WAL loading and startup fair-use reconciliation finish.
   @visibleForTesting
@@ -83,7 +85,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   // terminal: retain it in All and Needs Attention, never present it as work
   // that sync can still complete.
   bool _isPending(Wal w) =>
-      w.status != WalStatus.corrupted && (w.status == WalStatus.miss || w.status == WalStatus.uploaded || w.isSyncing);
+      w.status != WalStatus.corrupted &&
+      w.status != WalStatus.uploadRejected &&
+      (w.status == WalStatus.miss || w.status == WalStatus.uploaded || w.isSyncing);
 
   // Memoized status-filtered partitions of _allWals. Returning a stable
   // List<Wal> reference between rebuilds is load-bearing — downstream the
@@ -119,7 +123,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         synced.add(w);
       } else if (w.status == WalStatus.corrupted ||
           w.status == WalStatus.outsideRecoveryWindow ||
-          w.status == WalStatus.unsupportedAudio) {
+          w.status == WalStatus.unsupportedAudio ||
+          w.status == WalStatus.uploadRejected) {
         corrupted.add(w);
       } else if (_isPending(w)) {
         pending.add(w);
@@ -230,8 +235,15 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
             s == WalSyncDisplayState.failed ||
             s == WalSyncDisplayState.corrupted ||
             s == WalSyncDisplayState.outsideRecoveryWindow ||
-            s == WalSyncDisplayState.unsupportedAudio,
+            s == WalSyncDisplayState.unsupportedAudio ||
+            s == WalSyncDisplayState.uploadRejected,
       );
+
+  /// Durable HTTP refusals that automatic connectivity wakes must never retry.
+  /// The Auto Sync Needs Attention chip renders this count through
+  /// [needsAttentionWalsCount]; this narrower accessor keeps the terminal-HTTP
+  /// incident observable in tests and diagnostics.
+  int get terminallyFailedWalsCount => _allWals.where((w) => w.status == WalStatus.uploadRejected).length;
 
   int get retryingWalsCount => _countWhere((s) => s == WalSyncDisplayState.retrying);
 
@@ -245,6 +257,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
           return w.status != WalStatus.corrupted &&
               w.status != WalStatus.outsideRecoveryWindow &&
               w.status != WalStatus.unsupportedAudio &&
+              w.status != WalStatus.uploadRejected &&
               w.syncDisplayState != WalSyncDisplayState.synced;
         case WalDisplayFilter.synced:
           return w.syncDisplayState == WalSyncDisplayState.synced;
@@ -373,13 +386,15 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     @visibleForTesting Future<void> Function()? startRecovery,
     @visibleForTesting Future<void> Function(WakeTrigger trigger)? wakeTransfer,
     @visibleForTesting SyncTransferKeepAlive? keepAlive,
+    @visibleForTesting CaptureWedgeMonitor? captureWedgeMonitor,
   })  : _walServiceOverride = walService,
         _uploadGate = uploadGate ?? SyncUploadGate.instance,
         _startBackgroundSync = startBackgroundSync,
         _waitForWalReady = waitForWalReady ?? ((phone) => phone.walReady),
         _startRecovery = startRecovery ?? (() => RecordingTransferCoordinator.instance.wake(WakeTrigger.startup)),
         _wakeTransfer = wakeTransfer ?? ((trigger) => RecordingTransferCoordinator.instance.wake(trigger)),
-        _keepAlive = keepAlive ?? SyncTransferKeepAlive.instance {
+        _keepAlive = keepAlive ?? SyncTransferKeepAlive.instance,
+        _captureWedgeMonitor = captureWedgeMonitor ?? CaptureWedgeMonitor.instance {
     _walService.subscribe(this, this);
     _audioPlayerUtils.addListener(_onAudioPlayerStateChanged);
     _rateLimitWasActive = SyncRateLimiter.instance.isLimited;
@@ -451,12 +466,14 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         discover: _discoverPendingWals,
         refreshPending: () => _refreshWals(_admittedWorkGeneration),
         drain: _drainEligibleWals,
+        drainLiveCapture: _drainLiveCaptureWals,
         autoUploadEnabled: () =>
             !SharedPreferencesUtil().useCustomStt && SharedPreferencesUtil().autoSyncOfflineRecordings,
         connectivityChanges: ConnectivityService().onConnectionChange,
         initiallyConnected: ConnectivityService().isConnected,
         onTransferStarted: _keepAlive.acquire,
         onTransferFinished: _keepAlive.release,
+        onConnectivityRestored: _walService.getSyncs().phone.resetExhaustedAutoRetries,
       );
       unawaited(_startRecovery());
     } catch (e) {
@@ -494,6 +511,14 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<RecordingTransferDrainResult> _drainEligibleWals() async {
+    return _drainWals(liveCaptureOnly: false);
+  }
+
+  Future<RecordingTransferDrainResult> _drainLiveCaptureWals() async {
+    return _drainWals(liveCaptureOnly: true);
+  }
+
+  Future<RecordingTransferDrainResult> _drainWals({required bool liveCaptureOnly}) async {
     final generation = _sessionGeneration;
     if (!_isCurrent(generation) || _syncState.isProcessing) {
       return const RecordingTransferDrainResult.contended();
@@ -502,7 +527,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       return const RecordingTransferDrainResult.contended();
     }
 
-    final hadEligibleWals = missingWals.isNotEmpty;
+    final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final eligibleWals = missingWals.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, nowSeconds)).toList();
+    final hadEligibleWals = eligibleWals.isNotEmpty;
     if (!hadEligibleWals) return const RecordingTransferDrainResult.skipped();
 
     // Reconciles a persisted fair-use cooldown the server may already have
@@ -514,11 +541,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
     _admittedWorkGeneration = generation;
     _updateSyncState(_syncState.toIdle(), generation);
-    _totalWalsToProcess = missingWals.length;
+    _totalWalsToProcess = eligibleWals.length;
     _walsProcessedCount = 0;
     final result = await _performSync(
-      operation: () => _walService.getSyncs().syncAll(progress: this),
-      context: 'coordinated recording transfer',
+      operation: () => liveCaptureOnly
+          ? _walService.getSyncs().syncLiveCaptureOnly(progress: this)
+          : _walService.getSyncs().syncAll(progress: this),
+      context: liveCaptureOnly ? 'background live-capture transfer' : 'coordinated recording transfer',
       rethrowOnError: true,
       generation: generation,
     );
@@ -552,6 +581,27 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     if (!_isCurrent(generation)) return;
     _allWals = wals;
     Logger.debug('SyncProvider: Loaded ${_allWals.length} WALs (${missingWals.length} missing)');
+    final pendingLocal =
+        _allWals.where((wal) => wal.storage == WalStorage.disk && wal.status == WalStatus.miss).toList();
+    DateTime? oldestPendingAt;
+    if (pendingLocal.isNotEmpty) {
+      final oldestSeconds = pendingLocal.map((wal) => wal.timerStart).reduce((a, b) => a < b ? a : b);
+      oldestPendingAt = DateTime.fromMillisecondsSinceEpoch(oldestSeconds * 1000);
+    }
+    _captureWedgeMonitor.observeWalBacklog(pendingCount: pendingLocal.length, oldestPendingAt: oldestPendingAt);
+    try {
+      final risk = _walService.getSyncs().phone.retentionRisk as WalRetentionRisk?;
+      if (risk != null) {
+        _captureWedgeMonitor.observeStorageAtRisk(
+          engagedAt: risk.engagedAt,
+          evictedCount: risk.evictedCount,
+          retainedCount: risk.retainedCount,
+        );
+      }
+    } catch (_) {
+      // Test doubles and older alternate WAL implementations need not expose
+      // the phone-local retention diagnostic.
+    }
 
     _isLoadingWals = false;
     notifyListeners();
@@ -984,6 +1034,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
     if (wal.status == WalStatus.synced) {
       _trackedServerJobWalIds.remove(wal.id);
+    }
+    if (wal.status == WalStatus.uploaded || wal.status == WalStatus.synced) {
+      _captureWedgeMonitor.onUploadCompleted();
     }
 
     // Update progress based on WALs synced if we're currently syncing

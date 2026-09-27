@@ -36,7 +36,7 @@ class DailySummaryCard extends StatelessWidget {
           width: width,
           height: height,
           margin: const EdgeInsets.only(right: 12),
-          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: _cardRadius),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: _cardRadius),
           child: ClipRRect(
             borderRadius: _cardRadius,
             child: Stack(

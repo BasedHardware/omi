@@ -96,8 +96,8 @@ def test_mcp_oauth_template_uses_client_display_name():
     html = _render_mcp_template_for_client("Claude")
 
     assert "Connect Claude" in html
-    assert "Claude will be able to" in html
-    assert "<strong>Claude</strong>" in html
+    assert "Claude</span> will be able to" in html
+    assert '<strong dir="ltr">Claude</strong>' in html
     assert "ChatGPT will be able to" not in html
 
 

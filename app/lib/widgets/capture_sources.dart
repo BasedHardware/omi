@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 /// The device vocabulary shared by the conversation list and the detail
 /// header: one icon and one name per capture surface (wire source string).
@@ -21,6 +22,9 @@ abstract final class CaptureSources {
         return Icons.phone_iphone;
       case 'apple_watch':
         return Icons.watch_outlined;
+      case 'openglass':
+      case 'rayban_meta':
+        return Icons.camera_alt_outlined;
       default:
         return Icons.mic_none;
     }
@@ -113,11 +117,11 @@ class CaptureSourceStack extends StatelessWidget {
                 width: _diameter,
                 height: _diameter,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2A2A31),
+                  color: OmiColors.sourceBadgeSurface,
                   shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFF1F1F25), width: 1.5),
+                  border: Border.all(color: OmiColors.conversationCard, width: 1.5),
                 ),
-                child: Icon(CaptureSources.icon(source), size: 12, color: Colors.white),
+                child: Icon(CaptureSources.icon(source), size: 12, color: OmiColors.textPrimary),
               ),
             ),
         ],

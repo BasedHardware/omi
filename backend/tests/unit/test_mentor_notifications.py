@@ -1083,7 +1083,9 @@ def test_app_proactive_notification_increments_shared_budget():
     result = app_int._process_proactive_notification("uid_send", app, {"prompt": "hello", "params": []})
 
     assert result == "Here is a useful nudge."
-    redis_mod.incr_daily_notification_count.assert_called_once_with("uid_send")
+    # The count is bucketed by the user's own calendar day, so the resolved zone rides along.
+    redis_mod.incr_daily_notification_count.assert_called_once()
+    assert redis_mod.incr_daily_notification_count.call_args.args[0] == "uid_send"
 
 
 def test_frequency_guidance_all_levels():

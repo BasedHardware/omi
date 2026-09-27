@@ -939,9 +939,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Afegir a claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Copiar configuració';
 
   @override
@@ -2491,13 +2488,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Esborra tots els nodes i connexions';
 
   @override
-  String get addToClaudeDesktopConfig => 'Afegeix a claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Connecta assistents d\'IA a les teves dades';
-
-  @override
-  String get useYourMcpApiKey => 'Utilitza la teva clau API MCP';
 
   @override
   String get realTimeTranscript => 'Transcripció en Temps Real';
@@ -2510,12 +2501,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get detailedDiagnosticMessages => 'Missatges de diagnòstic detallats';
-
-  @override
-  String get autoCreateSpeakers => 'Crea Parlants Automàticament';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Crea automàticament quan es detecti un nom';
 
   @override
   String get followUpQuestions => 'Preguntes de Seguiment';
@@ -10025,7 +10010,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get transcriptionNoAudio => 'La transcripció no rep àudio';
 
   @override
-  String get tapPlusToStartRecording => 'Toca + per començar a gravar';
+  String get tapPlusToStartRecording => 'Toca el botó de gravació per començar a gravar';
 
   @override
   String get chatBlockTask => 'Tasca';
@@ -10268,7 +10253,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Les converses que graves apareixen aquí. Toca + a l\'Inici per gravar la primera.';
+      'Les converses que graves apareixen aquí. Toca el botó de gravació a l\'Inici per gravar la primera.';
 
   @override
   String get conversationMap => 'Mapa de converses';
@@ -10748,7 +10733,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get deviceConnecting => 'S\'està connectant…';
 
   @override
-  String get recordOptionsTip => 'Consell: mantén premut el botó de gravació per gravar una trucada.';
+  String get recordOptionsTip => 'Consell: toca la fletxa del botó de gravació per gravar una trucada.';
 
   @override
   String get firmwareUpdateFailedTitle => 'L\'actualització ha fallat';
@@ -11224,11 +11209,25 @@ class AppLocalizationsCa extends AppLocalizations {
       'Quan anomenes algú, l’Omi guarda una mostra de veu breu per reconèixer-lo la propera vegada';
 
   @override
-  String get transcriptionUnavailableRecordingContinues =>
-      'Les transcripcions no estan disponibles, l\'enregistrament continua al dispositiu i es processarà més tard';
+  String get leaveBlank => 'Deixa-ho en blanc';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transcripció no disponible · s\'està desant al dispositiu';
+  String get mcpOAuthSetup =>
+      'A claude.ai, afegeix un connector personalitzat i enganxa l\'URL del servidor. Si Claude demana un Client ID d\'OAuth avançat, utilitza el valor següent i deixa el secret en blanc — mai utilitzis la teva clau d\'API MCP com a secret d\'OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Afegeix a ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'A Claude Desktop → Settings → Connectors, afegeix un connector personalitzat i enganxa l\'URL del servidor. Si Claude demana un Client ID d\'OAuth avançat, utilitza el valor següent i deixa el secret en blanc — mai utilitzis la teva clau d\'API MCP com a secret d\'OAuth.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Les transcripcions no estan disponibles, l\'enregistrament continua al dispositiu i es processarà més tard';
 
   @override
   String transcriptionsPendingFraction(int pending, int total) {
@@ -11239,4 +11238,238 @@ class AppLocalizationsCa extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transcripcions pendents $count';
   }
+
+  @override
+  String get captureSourceCall => 'Trucada';
+
+  @override
+  String get captureSourcePhoneMic => 'Micròfon del telèfon';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Reprèn';
+
+  @override
+  String get finish => 'Finalitza';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Penjoll en pausa · es reprèn quan acabis';
+
+  @override
+  String get pendantIsListeningTitle => 'El teu penjoll està escoltant';
+
+  @override
+  String get oneSourceAtATime => 'Omi grava des d\'una sola font alhora.';
+
+  @override
+  String get recordWithPhoneInstead => 'Grava amb el telèfon en lloc seu';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'El penjoll es posa en pausa fins que acabis';
+
+  @override
+  String get pendantPausesDuringCall => 'El penjoll es posa en pausa durant la trucada';
+
+  @override
+  String get keepUsingPendant => 'Continua amb el penjoll';
+
+  @override
+  String get recordWith => 'Grava amb';
+
+  @override
+  String get moreWaysToRecord => 'Més maneres de gravar';
+
+  @override
+  String get openCall => 'Obre la trucada';
+
+  @override
+  String get captureRecoveryBanner => 'L\'àudio del penjoll no arriba a l\'aplicació — toca\'l per reparar';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Atura Transcribe Later al penjoll abans d\'enregistrar amb el telèfon.';
+
+  @override
+  String get captureNotTranscribing => 'Sense transcripció';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Àudio desat, es transcriurà més tard';
+
+  @override
+  String get captureStillRecording => 'Encara s\'està gravant';
+
+  @override
+  String get captureMicInUseElsewhere => 'Una altra app fa servir el micròfon';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Una trucada o una altra app ha agafat el micròfon, així que ara Omi no pot escoltar. Omi es reprendrà sol quan el micròfon estigui lliure. Tot el que s\'ha gravat abans és segur.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'No es pot accedir al teu servei personalitzat de veu a text. Omi guarda l\'àudio en aquest telèfon i l\'enviarà quan el servei torni. No es perd res.';
+
+  @override
+  String get captureStarting => 'S\'està iniciant…';
+
+  @override
+  String get capturePhoneStorageFull => 'Emmagatzematge del telèfon ple';
+
+  @override
+  String get captureStorageAlmostFull => 'Emmagatzematge gairebé ple';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'El penjoll ha perdut la connexió amb aquest telèfon. Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop. Tot el que s\'ha gravat abans és segur.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name i altres';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'Escolta les respostes d\'Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'Entesos. La teva pròxima reunió comença d\'aquí a vint minuts.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'Ja ho tens tot a punt';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'Toca una fila per revisar-la o canviar-la.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle =>
+      'Quan pregunteu amb el botó, Omi pot llegir la seva resposta en veu alta.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'Escolta la teva última resposta';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'S\'està reproduint la teva última resposta...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'A través del $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'A través de l\'altaveu del telèfon';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'A través de la sortida d\'àudio actual';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'Les respostes es mantenen a la pantalla. No es parla res.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Privat. Parla només a través del AirPods, Bluetooth o auriculars amb cable.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription =>
+      'Utilitza l\'altaveu del telèfon quan no hi ha cap auricular connectat.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff =>
+      'Omi romandrà en silenci. Les respostes encara apareixen a l\'aplicació.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device connectat. Omi parlarà aquí.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'No hi ha auriculars connectats. Omi roman en silenci fins que en connecteu algun.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'Reproducció al $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker =>
+      'Es reprodueix en veu alta a través de l\'altaveu del telèfon.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'Podeu canviar-ho en qualsevol moment al $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'Repetiu aquesta gira en qualsevol moment a $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'Auriculars';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minuts';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Tasques';
+
+  @override
+  String get usageMonth => 'Aquest mes';
+
+  @override
+  String get usageYear => 'Enguany';
+
+  @override
+  String get usageAll => 'Des de sempre';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Aparença';
+
+  @override
+  String get appearanceSystem => 'Sistema';
+
+  @override
+  String get appearanceLight => 'Clar';
+
+  @override
+  String get appearanceDark => 'Fosc';
 }

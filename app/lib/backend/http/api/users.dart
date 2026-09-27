@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
@@ -292,8 +293,6 @@ Future<bool> deletePermissionAndRecordings() async {
   return data.status == 'ok';
 }
 
-/**/
-
 Future<bool> setPrivateCloudSyncEnabled(bool value) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/private-cloud-sync?value=$value',
@@ -548,9 +547,22 @@ Future<bool> setPreferredSummarizationAppServer(String appId) async {
   return data.status == 'ok';
 }
 
-Future<UserUsageResponse?> getUserUsage({required String period}) async {
+Future<String?> getUsageDeviceTimeZone() async {
+  try {
+    return (await FlutterTimezone.getLocalTimezone()).identifier;
+  } catch (_) {
+    // The server falls back to the stored timezone, then UTC.
+    return null;
+  }
+}
+
+Future<UserUsageResponse?> getUserUsage({required String period, required String? timeZone}) async {
+  final url = Uri.parse('${Env.apiBaseUrl}v1/users/me/usage').replace(queryParameters: {
+    'period': period,
+    if (timeZone != null) 'time_zone': timeZone,
+  });
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/me/usage?period=$period',
+    url: url.toString(),
     headers: {},
     method: 'GET',
     body: '',
@@ -840,9 +852,8 @@ Future<String?> generateDailySummary({String? date}) async {
 // Onboarding State
 
 Future<Map<String, dynamic>?> getUserOnboardingState() async {
-  print('DEBUG getUserOnboardingState: calling ${Env.apiBaseUrl}v1/users/onboarding');
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/users/onboarding', headers: {}, method: 'GET', body: '');
-  print('DEBUG getUserOnboardingState: response=${response?.statusCode}, body=${response?.body}');
+  Logger.debug('getUserOnboardingState status: ${response?.statusCode}');
   if (response == null) return null;
   if (response.statusCode == 200) {
     return wire.GeneratedOnboardingStateResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();

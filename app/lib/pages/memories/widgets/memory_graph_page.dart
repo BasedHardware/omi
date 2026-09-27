@@ -226,6 +226,8 @@ class MemoryGraphPage extends StatefulWidget {
   final bool showShareButton;
   final bool trackOpenEvent;
   final double initialZoom;
+  @visibleForTesting
+  final Future<Map<String, dynamic>> Function() loadGraph;
 
   const MemoryGraphPage({
     super.key,
@@ -234,6 +236,7 @@ class MemoryGraphPage extends StatefulWidget {
     this.showShareButton = true,
     this.trackOpenEvent = true,
     this.initialZoom = 1.0,
+    this.loadGraph = KnowledgeGraphApi.getKnowledgeGraph,
   });
 
   @override
@@ -318,7 +321,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
 
     try {
-      final data = await KnowledgeGraphApi.getKnowledgeGraph();
+      final data = await widget.loadGraph();
       if (!mounted) return;
 
       final newNodes = data['nodes'] as List<dynamic>? ?? [];
@@ -423,7 +426,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         id: nodeId,
         label: label,
         nodeType: nodeType,
-        baseColor: isUser ? Colors.white : _colorForType(nodeType),
+        baseColor: isUser ? OmiColors.accent : _colorForType(nodeType),
         initialPosition: isUser ? v.Vector3.zero() : _randomPos3D(),
         isFixed: isUser,
       );
@@ -438,7 +441,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         id: primaryUserId,
         label: userLabel,
         nodeType: 'person',
-        baseColor: Colors.white,
+        baseColor: OmiColors.accent,
         initialPosition: v.Vector3.zero(),
         isFixed: true,
       );
@@ -583,7 +586,9 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
 
     if (_error != null) {
-      return SingleChildScrollView(child: OmiErrorState(message: _error!, onRetry: _loadGraph));
+      return SafeArea(
+        child: SingleChildScrollView(child: OmiErrorState(message: _error!, onRetry: _loadGraph)),
+      );
     }
 
     // Check if graph is effectively empty (only has user node or truly empty)
@@ -591,13 +596,21 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         simulation.nodes.isEmpty || (simulation.nodes.length == 1 && simulation.nodes.first.id == 'user-node');
 
     if (isEmpty) {
+      final emptyState = OmiEmptyState(
+        icon: Icons.hub_outlined,
+        title: context.l10n.noKnowledgeGraphYet,
+        message: context.l10n.knowledgeGraphWillBuildAutomatically,
+      );
+      if (!widget.embedded) {
+        return SafeArea(child: emptyState);
+      }
       // Scaled down to fit when embedded in the small Home card.
-      return FittedBox(
-        fit: BoxFit.scaleDown,
-        child: OmiEmptyState(
-          icon: Icons.hub_outlined,
-          title: context.l10n.noKnowledgeGraphYet,
-          message: context.l10n.knowledgeGraphWillBuildAutomatically,
+      return LayoutBuilder(
+        builder: (context, constraints) => Center(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: SizedBox(width: constraints.maxWidth, child: emptyState),
+          ),
         ),
       );
     }
@@ -863,7 +876,8 @@ class GraphPainter3D extends CustomPainter {
       final alpha = ((p1.alpha + p2.alpha) / 2.0 * 0.10).clamp(0.0, 1.0);
       if (alpha < 0.05) continue;
 
-      _edgePaint.color = Colors.white.withValues(alpha: alpha);
+      final light = OmiColors.active == OmiPalette.light;
+      _edgePaint.color = (light ? OmiColors.border : Colors.white).withValues(alpha: alpha);
       _edgePaint.strokeWidth = 0.8 * ((p1.scale + p2.scale) / 2);
 
       // Drawn above with logic
@@ -878,7 +892,7 @@ class GraphPainter3D extends CustomPainter {
       if (isDimmed) {
         _edgePaint.color = _edgePaint.color.withValues(alpha: alpha * 0.1);
       } else if (isHighlightedEdge) {
-        _edgePaint.color = Colors.white.withValues(alpha: max(alpha, 0.8)); // Pop
+        _edgePaint.color = (light ? OmiColors.accent : Colors.white).withValues(alpha: max(alpha, 0.8)); // Pop
       }
 
       canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), _edgePaint);
@@ -889,12 +903,19 @@ class GraphPainter3D extends CustomPainter {
         final textSpan = TextSpan(
           text: edge.label,
           style: TextStyle(
-            color: Colors.white54.withValues(alpha: alpha * 2),
+            color: (light ? OmiColors.textPrimary : Colors.white54).withValues(alpha: alpha * 2),
             fontSize: (9 * avgScale).clamp(7, 11),
           ),
         );
         final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
         tp.layout();
+        if (light) {
+          final labelRect = Rect.fromCenter(center: Offset(midX, midY - 8), width: tp.width + 8, height: tp.height + 4);
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(labelRect, const Radius.circular(4)),
+            Paint()..color = OmiColors.surface1.withValues(alpha: 0.88),
+          );
+        }
         tp.paint(canvas, Offset(midX - tp.width / 2, midY - tp.height / 2 - 8));
       }
     }
@@ -920,8 +941,9 @@ class GraphPainter3D extends CustomPainter {
         centerOffset + Offset(-radius * 0.25, -radius * 0.25),
         radius * 1.2,
         [
-          Colors.white.withValues(alpha: p.alpha * 0.9),
-          Color.lerp(Colors.white, node.baseColor, 0.5)!.withValues(alpha: p.alpha),
+          (OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white).withValues(alpha: p.alpha * 0.9),
+          Color.lerp(OmiColors.active == OmiPalette.light ? node.baseColor : Colors.white, node.baseColor, 0.5)!
+              .withValues(alpha: p.alpha),
           node.baseColor.withValues(alpha: p.alpha),
         ],
         [0.0, 0.3, 1.0],
@@ -935,13 +957,22 @@ class GraphPainter3D extends CustomPainter {
         final textSpan = TextSpan(
           text: node.label,
           style: TextStyle(
-            color: Colors.white.withValues(alpha: screenshotMode ? 0.95 : p.alpha * 0.9),
+            color: (OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.white)
+                .withValues(alpha: screenshotMode ? 0.95 : p.alpha * 0.9),
             fontSize: screenshotMode ? 11.0 : (10 * p.scale).clamp(8, 14),
             fontWeight: FontWeight.w600,
           ),
         );
         final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
         tp.layout();
+        if (OmiColors.active == OmiPalette.light) {
+          final labelRect =
+              Rect.fromLTWH(centerOffset.dx - tp.width / 2 - 4, centerOffset.dy + radius, tp.width + 8, tp.height + 6);
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(labelRect, const Radius.circular(4)),
+            Paint()..color = OmiColors.surface1.withValues(alpha: 0.88),
+          );
+        }
         tp.paint(canvas, centerOffset + Offset(-tp.width / 2, radius + 3));
       }
     }

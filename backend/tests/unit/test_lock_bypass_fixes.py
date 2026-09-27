@@ -969,17 +969,24 @@ class TestMcpSseLockRedaction:
             _make_conversation(locked=True),
             _make_conversation(locked=False, conversation_id='conv-2'),
         ]
-        with patch.object(mcp_sse.conversations_db, 'get_mcp_conversation_cards', return_value=conversations) as fetch:
+        from utils.mcp_server.handlers import conversations as _conv_handler
+
+        with patch.object(
+            _conv_handler.mcp_conversation_pages,
+            'get_mcp_conversation_cards_page',
+            return_value=(conversations, None),
+        ) as fetch:
             result = mcp_sse.execute_tool('test-uid', 'get_conversations', {})
         convs = result['conversations']
 
         fetch.assert_called_once_with(
             'test-uid',
             20,
-            0,
+            after=None,
             start_date=None,
             end_date=None,
             categories=[],
+            extra_field_paths=None,
         )
         assert 'action_items' not in convs[0]['structured']
         assert 'events' not in convs[0]['structured']
@@ -992,13 +999,14 @@ class TestMcpSseLockRedaction:
 
         from routers import mcp_sse
         from routers.mcp_sse import execute_tool
+        from utils.mcp_server.handlers import memories as sse_memories
 
-        _allow_memory_product_auth(mcp_sse)
+        _allow_memory_product_auth(sse_memories)
         visible = [
             {'id': 'visible-1', 'content': 'visible one', 'category': 'interesting', 'relevance_score': 0.7},
             {'id': 'visible-2', 'content': 'visible two', 'category': 'interesting', 'relevance_score': 0.6},
         ]
-        with patch.object(mcp_sse, 'MemoryService') as memory_service:
+        with patch.object(sse_memories, 'MemoryService') as memory_service:
             memory_service.return_value.search_mcp.return_value = visible
             result = execute_tool(
                 'test-uid',
@@ -1142,14 +1150,14 @@ class TestMcpRestLockRedaction:
 
     def test_mcp_rest_redacts_locked(self):
         """GET /v1/mcp/conversations calls real router and redacts locked fields."""
-        import database.conversations as conversations_db
+        import database.mcp_conversation_pages as mcp_conversation_pages
 
         conversations = [_make_conversation(locked=True), _make_conversation(locked=False, conversation_id='conv-2')]
-        conversations_db.get_conversations = MagicMock(return_value=conversations)
+        mcp_conversation_pages.get_mcp_conversation_cards_page = MagicMock(return_value=(conversations, None))
 
         from routers.mcp import get_conversations
 
-        result = get_conversations(uid='test-uid')
+        result = get_conversations(SimpleNamespace(headers={}), uid='test-uid')
 
         assert conversations[0]['structured']['action_items'] == []
         assert conversations[0]['structured']['events'] == []
@@ -1760,10 +1768,12 @@ class TestMcpMemoryLockEnforcement:
     def test_mcp_delete_memory_rejects_locked(self):
         from routers import mcp
         from routers.mcp import delete_memory
+        from utils.mcp_server.handlers import memories as sse_memories
         from fastapi import HTTPException
 
         _allow_memory_product_auth(mcp)
-        with patch.object(mcp, 'MemoryService') as memory_service:
+        _allow_memory_product_auth(sse_memories)
+        with patch.object(sse_memories, 'MemoryService') as memory_service:
             memory_service.return_value.delete_external_memory.side_effect = HTTPException(
                 status_code=402, detail='A paid plan is required to access this memory.'
             )
@@ -1774,9 +1784,11 @@ class TestMcpMemoryLockEnforcement:
     def test_mcp_delete_memory_allows_unlocked(self):
         from routers import mcp
         from routers.mcp import delete_memory
+        from utils.mcp_server.handlers import memories as sse_memories
 
         _allow_memory_product_auth(mcp)
-        with patch.object(mcp, 'MemoryService') as memory_service:
+        _allow_memory_product_auth(sse_memories)
+        with patch.object(sse_memories, 'MemoryService') as memory_service:
             result = delete_memory(memory_id='mem-1', auth_context=_memory_auth_context())
         assert result == {"status": "ok"}
         memory_service.return_value.delete_external_memory.assert_called_once()
@@ -1784,10 +1796,12 @@ class TestMcpMemoryLockEnforcement:
     def test_mcp_delete_memory_404_missing(self):
         from routers import mcp
         from routers.mcp import delete_memory
+        from utils.mcp_server.handlers import memories as sse_memories
         from fastapi import HTTPException
 
         _allow_memory_product_auth(mcp)
-        with patch.object(mcp, 'MemoryService') as memory_service:
+        _allow_memory_product_auth(sse_memories)
+        with patch.object(sse_memories, 'MemoryService') as memory_service:
             memory_service.return_value.delete_external_memory.side_effect = HTTPException(
                 status_code=404, detail='Memory not found'
             )
@@ -1798,11 +1812,13 @@ class TestMcpMemoryLockEnforcement:
     def test_mcp_edit_memory_rejects_locked(self):
         from routers import mcp
         from routers.mcp import edit_memory
+        from utils.mcp_server.handlers import memories as sse_memories
         from fastapi import HTTPException
 
         _allow_memory_product_auth(mcp)
+        _allow_memory_product_auth(sse_memories)
         with patch.object(mcp, '_validate_mcp_memory', side_effect=HTTPException(status_code=402, detail='locked')):
-            with patch.object(mcp, 'MemoryService') as memory_service:
+            with patch.object(sse_memories, 'MemoryService') as memory_service:
                 with pytest.raises(HTTPException) as exc_info:
                     edit_memory(memory_id='mem-1', value='new content', auth_context=_memory_auth_context())
         assert exc_info.value.status_code == 402
@@ -1811,10 +1827,12 @@ class TestMcpMemoryLockEnforcement:
     def test_mcp_edit_memory_allows_unlocked(self):
         from routers import mcp
         from routers.mcp import edit_memory
+        from utils.mcp_server.handlers import memories as sse_memories
 
         _allow_memory_product_auth(mcp)
+        _allow_memory_product_auth(sse_memories)
         with patch.object(mcp, '_validate_mcp_memory', return_value=_make_memory(locked=False)):
-            with patch.object(mcp, 'MemoryService') as memory_service:
+            with patch.object(sse_memories, 'MemoryService') as memory_service:
                 result = edit_memory(memory_id='mem-1', value='new content', auth_context=_memory_auth_context())
         assert result == {"status": "ok"}
         memory_service.return_value.update_external_memory_content.assert_called_once()
@@ -1831,10 +1849,11 @@ class TestMcpSseMemoryLockEnforcement:
     def test_mcp_sse_delete_memory_rejects_locked(self):
         from routers import mcp_sse
         from routers.mcp_sse import execute_tool, ToolExecutionError
+        from utils.mcp_server.handlers import memories as sse_memories
         from fastapi import HTTPException
 
-        _allow_memory_product_auth(mcp_sse)
-        with patch.object(mcp_sse, 'MemoryService') as memory_service:
+        _allow_memory_product_auth(sse_memories)
+        with patch.object(sse_memories, 'MemoryService') as memory_service:
             memory_service.return_value.delete_external_memory.side_effect = HTTPException(
                 status_code=402, detail='A paid plan is required to access this memory.'
             )
@@ -1846,9 +1865,10 @@ class TestMcpSseMemoryLockEnforcement:
     def test_mcp_sse_delete_memory_allows_unlocked(self):
         from routers import mcp_sse
         from routers.mcp_sse import execute_tool
+        from utils.mcp_server.handlers import memories as sse_memories
 
-        _allow_memory_product_auth(mcp_sse)
-        with patch.object(mcp_sse, 'MemoryService') as memory_service:
+        _allow_memory_product_auth(sse_memories)
+        with patch.object(sse_memories, 'MemoryService') as memory_service:
             result = execute_tool(
                 'test-uid', 'delete_memory', {'memory_id': 'mem-1'}, auth_context=_memory_auth_context()
             )
@@ -1858,10 +1878,11 @@ class TestMcpSseMemoryLockEnforcement:
     def test_mcp_sse_delete_memory_404_missing(self):
         from routers import mcp_sse
         from routers.mcp_sse import execute_tool, ToolExecutionError
+        from utils.mcp_server.handlers import memories as sse_memories
         from fastapi import HTTPException
 
-        _allow_memory_product_auth(mcp_sse)
-        with patch.object(mcp_sse, 'MemoryService') as memory_service:
+        _allow_memory_product_auth(sse_memories)
+        with patch.object(sse_memories, 'MemoryService') as memory_service:
             memory_service.return_value.delete_external_memory.side_effect = HTTPException(
                 status_code=404, detail='Memory not found'
             )
@@ -1874,10 +1895,11 @@ class TestMcpSseMemoryLockEnforcement:
     def test_mcp_sse_edit_memory_rejects_locked(self):
         from routers import mcp_sse
         from routers.mcp_sse import execute_tool, ToolExecutionError
+        from utils.mcp_server.handlers import memories as sse_memories
         from fastapi import HTTPException
 
-        _allow_memory_product_auth(mcp_sse)
-        with patch.object(mcp_sse, 'MemoryService') as memory_service:
+        _allow_memory_product_auth(sse_memories)
+        with patch.object(sse_memories, 'MemoryService') as memory_service:
             memory_service.return_value.update_external_memory_content.side_effect = HTTPException(
                 status_code=402, detail='A paid plan is required to access this memory.'
             )
@@ -1893,9 +1915,10 @@ class TestMcpSseMemoryLockEnforcement:
     def test_mcp_sse_edit_memory_allows_unlocked(self):
         from routers import mcp_sse
         from routers.mcp_sse import execute_tool
+        from utils.mcp_server.handlers import memories as sse_memories
 
-        _allow_memory_product_auth(mcp_sse)
-        with patch.object(mcp_sse, 'MemoryService') as memory_service:
+        _allow_memory_product_auth(sse_memories)
+        with patch.object(sse_memories, 'MemoryService') as memory_service:
             result = execute_tool(
                 'test-uid', 'edit_memory', {'memory_id': 'mem-1', 'content': 'new'}, auth_context=_memory_auth_context()
             )

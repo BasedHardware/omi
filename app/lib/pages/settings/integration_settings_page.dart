@@ -108,7 +108,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.check_circle, color: OmiColors.success, size: 16),
+                    Icon(Icons.check_circle, color: OmiColors.success, size: 16),
                     const SizedBox(width: OmiSpacing.xs),
                     Expanded(
                       child: Text(

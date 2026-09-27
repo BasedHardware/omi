@@ -1114,7 +1114,6 @@
     "daySummary": "రోజు సారాంశం",
     "summaryGenerated": "సారాంశం రూపొందించబడింది",
     "claudeDesktop": "Claude డెస్క్‌టాప్",
-    "addToClaudeConfig": "claude_desktop_config.json కు జోడించండి",
     "copyConfig": "కాన్ఫిగ్ కాపీ చేయండి",
     "configCopied": "కాన్ఫిగ్ క్లిప్‌బోర్డ్‌కు కాపీ చేయబడింది",
     "listeningMins": "వినుట (నిమిషాలు)",
@@ -2636,10 +2635,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "claude_desktop_config.json కు జోడించండి",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2673,10 +2668,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "మీ MCP API కీని ఉపయోగించండి",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -2720,14 +2711,6 @@
     "detailedDiagnosticMessages": "వివరణాత్మక నిర్ధారణ సందేశాలు",
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
-    },
-    "autoCreateSpeakers": "స్పీకర్‌లను స్వయంచాలకంగా సృష్టించండి",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "పేరు కనుగొనబడినప్పుడు స్వయంచాలకంగా సృష్టించండి",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
     },
     "followUpQuestions": "అనుసరణ ప్రశ్నలు",
     "@followUpQuestions": {
@@ -10799,7 +10782,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "రికార్డింగ్ ప్రారంభించడానికి + నొక్కండి",
+    "tapPlusToStartRecording": "రికార్డింగ్ ప్రారంభించడానికి రికార్డ్ బటన్ నొక్కండి",
     "processingTakingLonger": "ఇంకా పని జరుగుతోంది — ఇది సాధారణం కంటే ఎక్కువ సమయం తీసుకుంటోంది.",
     "speechProfileEnrollmentPrompt": "Omi మీ గొంతును గుర్తించడానికి — ఏదైనా విషయం గురించి సుమారు 5 సెకన్లు మాట్లాడండి.",
     "home": "హోమ్",
@@ -10842,7 +10825,7 @@
     "conversationsMovedCount": "{count, plural, =1{1 సంభాషణ తరలించబడింది} other{{count} సంభాషణలు తరలించబడ్డాయి}}",
     "failedToMoveConversations": "సంభాషణలను తరలించలేకపోయాము",
     "discardedConversationTitle": "విస్మరించబడింది · {duration}",
-    "noConversationsHeroMessage": "మీరు రికార్డ్ చేసిన సంభాషణలు ఇక్కడ కనిపిస్తాయి. మొదటిదాన్ని రికార్డ్ చేయడానికి హోమ్‌లో + నొక్కండి.",
+    "noConversationsHeroMessage": "మీరు రికార్డ్ చేసిన సంభాషణలు ఇక్కడ కనిపిస్తాయి. మొదటిదాన్ని రికార్డ్ చేయడానికి హోమ్‌లో రికార్డ్ బటన్ నొక్కండి.",
     "conversationMap": "సంభాషణల మ్యాప్",
     "conversationCount": "{count, plural, =1{1 సంభాషణ} other{{count} సంభాషణలు}}",
     "taskCount": "{count, plural, =1{1 పని} other{{count} పనులు}}",
@@ -10965,7 +10948,7 @@
     "batteryLevelSemantics": "బ్యాటరీ {level}%",
     "updateOmiGlassFirmware": "OmiGlass ఫర్మ్‌వేర్‌ను అప్‌డేట్ చేయండి",
     "deviceConnecting": "కనెక్ట్ అవుతోంది…",
-    "recordOptionsTip": "చిట్కా: ఫోన్ కాల్ రికార్డ్ చేయడానికి రికార్డ్ బటన్‌ను నొక్కి పట్టుకోండి.",
+    "recordOptionsTip": "చిట్కా: ఫోన్ కాల్ రికార్డ్ చేయడానికి రికార్డ్ బటన్‌పై ఉన్న బాణం గుర్తును నొక్కండి.",
     "firmwareUpdateFailedTitle": "అప్‌డేట్ విఫలమైంది",
     "firmwareUpdateFailedMessage": "అప్‌డేట్ పూర్తి కాలేదు. మీ పరికరం ఇప్పటికీ ప్రస్తుత ఫర్మ్‌వేర్‌లోనే ఉంది, ఉపయోగించడం సురక్షితం. ఛార్జ్ చేసి ఫోన్ దగ్గర ఉంచి మళ్లీ ప్రయత్నించండి.",
     "firmwareDownloadFailedMessage": "అప్‌డేట్‌ను డౌన్‌లోడ్ చేయలేకపోయాం, మీ పరికరం మారలేదు. ఇంటర్నెట్ కనెక్షన్ తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
@@ -11097,8 +11080,82 @@
     "voiceSettingsAskToTag": "గొంతులను ట్యాగ్ చేయమని నన్ను అడగండి",
     "voiceSettingsAskToTagSubtitle": "అప్పుడప్పుడు, మీ ఇటీవలి సంభాషణల్లో ఎవరు మాట్లాడారో Omi అడుగుతుంది",
     "voiceSettingsSaveOthersSubtitle": "మీరు ఎవరికైనా పేరు పెట్టినప్పుడు, తదుపరిసారి గుర్తించడానికి Omi ఒక చిన్న గొంతు నమూనాను ఉంచుకుంటుంది",
+    "leaveBlank": "ఖాళీగా ఉంచండి",
+    "mcpOAuthSetup": "claude.ai లో కస్టమ్ కనెక్టర్‌ను జోడించి, సర్వర్ URL ను పేస్ట్ చేయండి. Claude అడ్వాన్స్డ్ OAuth Client ID అడిగితే, కింది విలువను ఉపయోగించి, సీక్రెట్‌ను ఖాళీగా ఉంచండి — మీ MCP API కీని OAuth సీక్రెట్‌గా ఎప్పుడూ ఉపయోగించకండి.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "~/.claude.json కు జోడించండి",
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors లో కస్టమ్ కనెక్టర్‌ను జోడించి, సర్వర్ URL ను పేస్ట్ చేయండి. Claude అడ్వాన్స్డ్ OAuth Client ID అడిగితే, కింది విలువను ఉపయోగించి, సీక్రెట్‌ను ఖాళీగా ఉంచండి — మీ MCP API కీని OAuth సీక్రెట్‌గా ఎప్పుడూ ఉపయోగించకండి.",
     "transcriptionUnavailableRecordingContinues": "ట్రాన్స్‌క్రిప్షన్‌లు అందుబాటులో లేవు, రికార్డింగ్ పరికరంలో కొనసాగుతుంది మరియు తర్వాత ప్రాసెస్ చేయబడుతుంది",
-    "transcriptionUnavailableSavingOnDevice": "ట్రాన్స్‌క్రిప్షన్ అందుబాటులో లేదు · పరికరంలో సేవ్ చేయబడుతోంది",
     "transcriptionsPendingFraction": "పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు {pending}/{total}",
-    "transcriptionsPendingCount": "పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు {count}"
+    "transcriptionsPendingCount": "పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు {count}",
+    "captureSourceCall": "కాల్",
+    "captureSourcePhoneMic": "ఫోన్ మైక్",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "కొనసాగించు",
+    "finish": "ముగించు",
+    "pendantPausedResumesWhenYouFinish": "పెండెంట్ పాజ్‌లో ఉంది · మీరు ముగించాక కొనసాగుతుంది",
+    "pendantIsListeningTitle": "మీ పెండెంట్ వింటోంది",
+    "oneSourceAtATime": "Omi ఒకేసారి ఒక మూలం నుండి మాత్రమే రికార్డ్ చేస్తుంది.",
+    "recordWithPhoneInstead": "బదులుగా ఫోన్‌తో రికార్డ్ చేయండి",
+    "pendantPausesUntilYouFinish": "మీరు ముగించే వరకు పెండెంట్ పాజ్‌లో ఉంటుంది",
+    "pendantPausesDuringCall": "కాల్ సమయంలో పెండెంట్ పాజ్‌లో ఉంటుంది",
+    "keepUsingPendant": "పెండెంట్‌నే ఉపయోగించండి",
+    "recordWith": "రికార్డ్ చేసే విధానం",
+    "moreWaysToRecord": "రికార్డ్ చేయడానికి మరిన్ని మార్గాలు",
+    "openCall": "కాల్‌ను తెరవండి",
+    "captureRecoveryBanner": "పెండెంట్ ఆడియో యాప్‌కు చేరడం లేదు — రిపేర్ చేయడానికి ట్యాప్ చేయండి",
+    "phoneRecordingBlockedByPendantBatch": "మీ ఫోన్‌తో రికార్డ్ చేయడానికి ముందు మీ పెండెంట్‌లో Transcribe Later ఆపండి.",
+    "captureNotTranscribing": "ట్రాన్స్‌క్రిప్షన్ లేదు",
+    "captureAudioSavedTranscribesLater": "ఆడియో సేవ్ అయింది, తర్వాత ట్రాన్స్‌క్రైబ్ అవుతుంది",
+    "captureStillRecording": "ఇంకా రికార్డ్ అవుతోంది",
+    "captureMicInUseElsewhere": "మైక్‌ను వేరే యాప్ ఉపయోగిస్తోంది",
+    "captureMicInterruptedDetail": "ఒక కాల్ లేదా వేరే యాప్ మైక్రోఫోన్‌ను తీసుకుంది, కాబట్టి Omi ఇప్పుడు వినలేదు. మైక్రోఫోన్ ఖాళీ అయినప్పుడు Omi తనంతట తానే కొనసాగుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.",
+    "captureCustomSttUnreachableDetail": "మీ కస్టమ్ స్పీచ్-టు-టెక్స్ట్ సేవను చేరుకోలేకపోతున్నాం. Omi ఆడియోను ఈ ఫోన్‌లో ఉంచి, సేవ తిరిగి వచ్చినప్పుడు పంపుతుంది. ఏదీ కోల్పోదు.",
+    "captureStarting": "ప్రారంభమవుతోంది…",
+    "capturePhoneStorageFull": "ఫోన్ స్టోరేజ్ నిండింది",
+    "captureStorageAlmostFull": "స్టోరేజ్ దాదాపు నిండింది",
+    "capturePendantDisconnectedDetail": "మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.",
+    "participantsSummaryUncounted": "{name} మరియు ఇతరులు",
+    "deviceOnboardingVoiceReplyTitle": "Omi సమాధానాలను వినండి",
+    "deviceOnboardingVoiceReplySample": "అర్థమైంది. మీ తదుపరి సమావేశం ఇరవై నిమిషాల్లో ప్రారంభమవుతుంది.",
+    "deviceOnboardingAllSetTitle": "అన్నీ సిద్ధంగా ఉన్నాయి",
+    "deviceOnboardingAllSetSubtitle": "సమీక్షించడానికి లేదా మార్చడానికి వరుసను నొక్కండి.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "మీరు బటన్‌తో అడిగినప్పుడు, Omi దాని సమాధానాన్ని బిగ్గరగా చదవగలదు.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "మీ చివరి సమాధానం వినండి",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "మీ చివరి సమాధానాన్ని ప్లే చేస్తోంది...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "{device} ద్వారా",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "ఫోన్ స్పీకర్ ద్వారా",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "ప్రస్తుత ఆడియో అవుట్‌పుట్ ద్వారా",
+    "deviceOnboardingVoiceReplyOffDescription": "సమాధానాలు తెరపైనే ఉంటాయి. ఏమీ మాట్లాడలేదు.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "ప్రైవేట్. AirPods, Bluetooth లేదా వైర్డు హెడ్‌ఫోన్‌ల ద్వారా మాత్రమే మాట్లాడుతుంది.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "హెడ్‌ఫోన్‌లు కనెక్ట్ కానప్పుడు ఫోన్ స్పీకర్‌ని ఉపయోగిస్తుంది.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi మౌనంగా ఉంటుంది. సమాధానాలు ఇప్పటికీ యాప్‌లో కనిపిస్తాయి.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} కనెక్ట్ చేయబడింది. Omi ఇక్కడ మాట్లాడతారు.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "హెడ్‌ఫోన్‌లు కనెక్ట్ కాలేదు. మీరు కొన్నింటిని కనెక్ట్ చేసే వరకు Omi నిశ్శబ్దంగా ఉంటుంది.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "{device} ద్వారా ఆడుతుంది.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "ఫోన్ స్పీకర్ ద్వారా బిగ్గరగా ప్లే చేస్తుంది.",
+    "deviceOnboardingVoiceReplySettingsHint": "మీరు దీన్ని ఎప్పుడైనా {settings} › {voiceResponse}లో మార్చవచ్చు",
+    "deviceOnboardingAllSetReplayHint": "ఈ పర్యటనను ఎప్పుడైనా {settings} › {deviceSettings} › {deviceTutorial}లో మళ్లీ ప్లే చేయండి",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "హెడ్‌ఫోన్‌లు",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "నిమిషాలు",
+    "usageWords": "Words",
+    "usageTasks": "పనులు",
+    "usageMonth": "ఈ నెల",
+    "usageYear": "ఈ సంవత్సరం",
+    "usageAll": "అన్ని సమయం",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "రూపం",
+    "appearanceSystem": "సిస్టమ్",
+    "appearanceLight": "లైట్",
+    "appearanceDark": "డార్క్"
 }

@@ -44,10 +44,20 @@ def _fake_requests_module() -> types.ModuleType:
             super().__init__(*args)
             self.response = response
 
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {}
+
+        def raise_for_status(self):
+            return None
+
     def _blocked(*args, **kwargs):
         raise AssertionError("requests stub: network access is not allowed in tests")
 
     module.HTTPError = HTTPError
+    module.Response = Response
     module.get = _blocked
     module.post = _blocked
     module.delete = _blocked

@@ -81,6 +81,9 @@ class RecordingLifecycleTelemetry {
 
   String? get recordingId => _recordingId;
 
+  /// When this recording started capturing, or null before it has.
+  DateTime? get startedAt => _startedAt;
+
   static String _defaultId() => const Uuid().v4();
 
   static void _emitProductionEvent(String eventName, Map<String, dynamic> properties) {
