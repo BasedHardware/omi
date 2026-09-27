@@ -1328,6 +1328,9 @@ class TestAsyncCoordinatorBehavioral:
         prior_manual_assignments = sys.modules.get('utils.manual_speaker_assignments')
         from utils import manual_speaker_assignments as actual_manual_assignments
 
+        prior_capture_evidence = sys.modules.get('utils.capture_evidence')
+        from utils import capture_evidence as actual_capture_evidence
+
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
 
@@ -1483,6 +1486,11 @@ class TestAsyncCoordinatorBehavioral:
         # Keep receipt apply/remap real: pipeline → assignment imports the policy
         # module at scope, and a MagicMock parent for utils is not a package.
         sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
+        saved_modules['utils.capture_evidence'] = prior_capture_evidence
+        # Keep the S1 evidence envelope builder real (pure, stdlib-only): the
+        # pipeline imports unknown_envelope at module scope, and a MagicMock
+        # parent for utils is not a package.
+        sys.modules['utils.capture_evidence'] = actual_capture_evidence
         saved_modules['utils.sync.lanes'] = prior_sync_lanes
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.
@@ -3325,6 +3333,9 @@ class TestV2EndpointExecution:
         prior_manual_assignments = sys.modules.get('utils.manual_speaker_assignments')
         from utils import manual_speaker_assignments as actual_manual_assignments
 
+        prior_capture_evidence = sys.modules.get('utils.capture_evidence')
+        from utils import capture_evidence as actual_capture_evidence
+
         prior_sync_lanes = sys.modules.get('utils.sync.lanes')
         from utils.sync import lanes as actual_sync_lanes
 
@@ -3478,6 +3489,11 @@ class TestV2EndpointExecution:
         # Keep receipt apply/remap real: pipeline → assignment imports the policy
         # module at scope, and a MagicMock parent for utils is not a package.
         sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
+        saved_modules['utils.capture_evidence'] = prior_capture_evidence
+        # Keep the S1 evidence envelope builder real (pure, stdlib-only): the
+        # pipeline imports unknown_envelope at module scope, and a MagicMock
+        # parent for utils is not a package.
+        sys.modules['utils.capture_evidence'] = actual_capture_evidence
         saved_modules['utils.sync.lanes'] = prior_sync_lanes
         # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
         # MagicMock lane fails response validation. lanes.py is stdlib-only.
