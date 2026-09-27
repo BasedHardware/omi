@@ -50,13 +50,15 @@ from utils.durable_queue_policy import ProcessOutcome
 from utils.log_sanitizer import sanitize_pii
 from utils.memory.memory_service import fetch_memory_dict
 from utils.other import endpoints as auth
-from utils.task_intelligence.chat_first_eligibility import resolve_chat_first_eligibility
+from utils.task_intelligence.chat_first_eligibility import (
+    resolve_chat_first_eligibility,
+    resolve_task_intelligence_for_user,
+)
 from utils.task_intelligence.proactive_engine import (
     classify_cold_start_profile,
     persist_cold_start_intent,
     persist_daily_opener_intent,
 )
-from utils.task_intelligence.rollout import resolve_task_intelligence_for_user
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

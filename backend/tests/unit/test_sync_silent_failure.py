@@ -741,6 +741,7 @@ _STUB_MODULES = [
     'database.user_usage',
     'database.conversations',
     'database.sync_ledger',
+    'database.sync_dead_letters',
     'firebase_admin',
     'firebase_admin.messaging',
     'opuslib',
@@ -858,6 +859,9 @@ class TestProcessSegmentReal:
         sys.modules['utils.cloud_tasks'].verify_audio_merge_cloud_tasks_oidc = MagicMock()
         sys.modules['utils.cloud_tasks'].verify_cloud_tasks_oidc = MagicMock()
         sys.modules['database.sync_ledger'].add_processed_sync_segment_id = MagicMock(return_value=True)
+        sys.modules['database.sync_dead_letters'].record_dead_letter_pending = MagicMock()
+        sys.modules['database.sync_dead_letters'].confirm_dead_letter = MagicMock()
+        sys.modules['database.sync_dead_letters'].dead_letter_failure_code = MagicMock(return_value='unknown')
         sys.modules['database.sync_ledger'].bind_sync_content_run_token = MagicMock()
         sys.modules['database.sync_ledger'].checkpoint_sync_content_partial_result = MagicMock()
         sys.modules['database.sync_ledger'].get_processed_sync_segment_ids = MagicMock(return_value=set())

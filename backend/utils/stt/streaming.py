@@ -32,6 +32,7 @@ from config.stt_provider_policy import (
     supports_live_multilingual_mode,
 )
 from utils.stt.live_rollout import configured_chain_enabled, window_allocation, window_language_supported
+from utils.stt.language_policy import LiveLanguageProfile, prefer_hintable_soniox
 from utils.async_tasks import create_named_task
 from utils.byok import get_byok_key
 from utils.executors import sync_executor, run_blocking
@@ -58,6 +59,12 @@ from utils.stt.stream_close import (
     PROVIDER_AUTH_REJECTED,
     PROVIDER_BUDGET_EXHAUSTED,
     record_stt_stream_close,
+)
+from utils.stt.connect_metrics import (
+    CONNECT_FAILURE,
+    CONNECT_SUCCESS,
+    initialize_stt_provider_connect_children,
+    record_stt_provider_connect,
 )
 from utils.other.backoff import calculate_backoff_with_jitter
 import logging
@@ -134,11 +141,13 @@ def deepgram_rejection_status(error: BaseException) -> Optional[int]:
 _parakeet_circuit = ProviderCircuitBreaker(
     failure_threshold=int(os.getenv('PARAKEET_CIRCUIT_FAILURE_THRESHOLD', '3')),
     cooldown_seconds=float(os.getenv('PARAKEET_CIRCUIT_COOLDOWN_SECONDS', '30')),
+    provider_label='parakeet',
 )
 
 _deepgram_circuit = ProviderCircuitBreaker(
     failure_threshold=int(os.getenv('DEEPGRAM_CIRCUIT_FAILURE_THRESHOLD', '3')),
     cooldown_seconds=float(os.getenv('DEEPGRAM_CIRCUIT_COOLDOWN_SECONDS', '30')),
+    provider_label='deepgram',
 )
 
 
@@ -147,8 +156,13 @@ _modulate_circuit = ProviderCircuitBreaker(
     cooldown_seconds=float(os.getenv('MODULATE_CIRCUIT_COOLDOWN_SECONDS', '30')),
     serve_error_cooldown_seconds=float(os.getenv('MODULATE_SERVE_ERROR_CIRCUIT_COOLDOWN_SECONDS', '180')),
     serve_error_successes_to_close=int(os.getenv('MODULATE_SERVE_ERROR_SUCCESSES_TO_CLOSE', '3')),
+    provider_label='modulate',
 )
 _soniox_circuit = soniox_circuit_from_env()
+
+# Pre-create the always-emitted connect series so absence of a provider's
+# failures is queryable (and a dead emitter visible) from process start.
+initialize_stt_provider_connect_children()
 
 
 def _circuit_for_primary(primary_service: STTService) -> ProviderCircuitBreaker:
@@ -300,11 +314,31 @@ async def _connect_serving_fallback(
     connect: Callable[[], Awaitable[Optional[STTSocket]]], service: STTService
 ) -> STTSocket:
     """Connect a fallback provider and prove it is actually serving before adopting it."""
-    socket = await connect()
+
+    def _record_failure(reason: str) -> None:
+        record_stt_provider_connect(provider=service.value, outcome=CONNECT_FAILURE, reason=reason)
+
+    try:
+        socket = await connect()
+    except ProviderAccountRejection:
+        _record_failure('quota')
+        raise
+    except (asyncio.TimeoutError, TimeoutError):
+        _record_failure('timeout')
+        raise
+    except ParakeetConnectionError as error:
+        _record_failure(error.reason)
+        raise
+    except Exception as error:
+        _record_failure(_fallback_failure_reason(error))
+        raise
     if socket is None:
+        _record_failure('config_incomplete')
         raise RuntimeError(f'{service.value} returned no socket')
     if not await fallback_socket_is_serving(socket):
         detail = getattr(socket, 'death_reason', None) or 'stream rejected'
+        typed = getattr(socket, 'typed_death_reason', None)
+        _record_failure(typed if isinstance(typed, str) else _fallback_failure_reason(RuntimeError(detail)))
         close_rejected_socket(socket)
         raise RuntimeError(f'{service.value} rejected the stream: {detail}')
     # A serving leg is positive evidence about the provider: let its own
@@ -313,6 +347,7 @@ async def _connect_serving_fallback(
     # only reaches here after proving the socket actually serves — evidence
     # strong enough to close even a serve-death bench.
     _circuit_for_primary(service).record_success(serving=True)
+    record_stt_provider_connect(provider=service.value, outcome=CONNECT_SUCCESS)
     return socket
 
 
@@ -346,6 +381,7 @@ async def connect_stt_socket_with_fallback(
     circuit = _circuit_for_primary(primary_service)
 
     reason = 'circuit_open'
+    typed_connect_reason: Optional[str] = None
     if circuit.allow_request():
         try:
             socket = await connect_primary()
@@ -366,20 +402,28 @@ async def connect_stt_socket_with_fallback(
                     attach(on_serving, _on_released)
                 if await _primary_is_serving(primary_service, socket):
                     circuit.record_success()
+                    record_stt_provider_connect(provider=primary_service.value, outcome=CONNECT_SUCCESS)
                     return socket, primary_service
                 # The grace observed the probe dying: the same rejected-stream
                 # handling as the healthy path below.
                 detail = getattr(socket, 'death_reason', None) or 'stream rejected'
+                typed_probe_death = getattr(socket, 'typed_death_reason', None)
+                if isinstance(typed_probe_death, str):
+                    typed_connect_reason = typed_probe_death
                 close_rejected_socket(socket)
                 reason = _fallback_failure_reason(RuntimeError(detail))
                 circuit.record_failure()
             elif await _primary_is_serving(primary_service, socket):
                 circuit.record_success()
+                record_stt_provider_connect(provider=primary_service.value, outcome=CONNECT_SUCCESS)
                 return socket, primary_service
             else:
                 # The primary took the session and then refused it. Release the
                 # socket and walk the chain instead of serving a dead stream.
                 detail = getattr(socket, 'death_reason', None) or 'stream rejected'
+                typed_death = getattr(socket, 'typed_death_reason', None)
+                if isinstance(typed_death, str):
+                    typed_connect_reason = typed_death
                 close_rejected_socket(socket)
                 reason = _fallback_failure_reason(RuntimeError(detail))
                 circuit.record_failure()
@@ -414,6 +458,12 @@ async def connect_stt_socket_with_fallback(
         except Exception:
             reason = 'provider_5xx'
             circuit.record_failure()
+        # One attempt, one increment: the not-serving branches left their typed
+        # death reason in typed_connect_reason, everything else lands here with
+        # the bounded `reason` the except chain already computed.
+        record_stt_provider_connect(
+            provider=primary_service.value, outcome=CONNECT_FAILURE, reason=typed_connect_reason or reason
+        )
 
     # Legacy order is retained while the configured chain is dark.
     ordered: List[Tuple[STTService, Optional[Callable[[], Awaitable[Optional[STTSocket]]]]]] = [
@@ -689,12 +739,7 @@ def _stt_selection_from_mode(_language: str, base_lang: str) -> str:
 def _requested_stt_language(
     language: Optional[str], base_lang: str, *, multi_lang_enabled: bool, surface: STTServingSurface
 ) -> str:
-    """Resolve the provider language while retaining PTT's explicit input language.
-
-    Live sessions with multi-language enabled must select a provider's auto-detect
-    mode. PTT does not load the user's transcription preference, so it keeps its
-    explicit language unless the client itself sends the ``multi`` sentinel.
-    """
+    """Use auto-detect for live multi sessions; keep PTT's explicit language."""
     if base_lang == 'multi' or (
         surface == STTServingSurface.STREAMING
         and multi_lang_enabled
@@ -725,10 +770,9 @@ def get_stt_service_for_language(
     preferred_service: Optional[str] = None,
     exclude: frozenset[str] = frozenset(),
     window_uid: Optional[str] = None,
+    language_profile: LiveLanguageProfile | None = None,
 ) -> Tuple[Optional[STTService], Optional[str], Optional[str]]:
     """Select a surface-compatible provider; see ARCHITECTURE.md (incident history)."""
-    # Missing language metadata historically meant English. Preserve that
-    # behavior without opening a retired-provider fallback for unknown values.
     base_lang = normalized_stt_language(language) or 'en'
     requested_language = _requested_stt_language(
         language,
@@ -736,6 +780,15 @@ def get_stt_service_for_language(
         multi_lang_enabled=multi_lang_enabled,
         surface=surface,
     )
+    if surface == STTServingSurface.STREAMING and prefer_hintable_soniox(
+        language_profile,
+        stt_service_models,
+        exclude,
+        lambda: _circuit_for_primary(STTService.soniox).cooldown_elapsed()
+        and _circuit_for_primary(STTService.soniox).account_cooldown_elapsed(),
+        preferred_service=preferred_service,
+    ):
+        return STTService.soniox, requested_language, 'soniox'
 
     def select(
         models: List[str] | Tuple[str, ...],
@@ -780,8 +833,6 @@ def get_stt_service_for_language(
             ):
                 return (STTService.modulate, requested_language, 'velma-2'), parakeet_fallback_reason
             if model == 'soniox' and provider_is_enabled(SONIOX_PROVIDER, surface) and os.getenv('SONIOX_API_KEY'):
-                # Soniox identifies the language itself, so every requested language
-                # including 'multi' is serviceable.
                 return (STTService.soniox, requested_language, 'soniox'), parakeet_fallback_reason
         return None, parakeet_fallback_reason
 
@@ -838,11 +889,7 @@ def get_stt_service_for_language(
 
 
 def should_preserve_filler_words(language: str) -> bool:
-    """Return True if filler words should be preserved for the given Deepgram language.
-
-    English filler sounds ("um", "uh") are safe to strip. But in other languages
-    those sounds are real words — e.g. Portuguese "um" means "a/one" (#6575).
-    """
+    """Keep non-English fillers: Portuguese "um" is a word (#6575)."""
     return not language.startswith('en')
 
 
@@ -1539,11 +1586,17 @@ class SafeModulateSocket(STTSocket):
         start = start_ms / 1000.0
         if self._preseconds and start < self._preseconds:
             return
+        # This dict is the only copy of the unfinalized tail (done/error with
+        # no utterance): the provider gives it no duration, but a zero-length
+        # interval is dropped by v2 translation. Give it the provider clock's
+        # smallest positive duration — 1 ms, a minimal capture window at any
+        # rate — so the text survives both persistence modes.
+        end = (start_ms + 1) / 1000.0
         segments = [
             {
                 'speaker': 'SPEAKER_00',
                 'start': start,
-                'end': start,
+                'end': end,
                 'text': text,
                 'is_user': False,
                 'person_id': None,
@@ -1585,6 +1638,8 @@ class SafeModulateSocket(STTSocket):
                 'person_id': None,
             }
         ]
+        if msg.get('language'):
+            segments[0]['_provider_language'] = msg['language']
         self._stream_transcript(segments)
 
 

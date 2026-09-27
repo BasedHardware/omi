@@ -67,7 +67,7 @@ def scan(monkeypatch):
         db = MagicMock()
         db.collection.return_value.document.return_value.collection.return_value = _Query(docs, counter)
         monkeypatch.setattr(conversations_db, 'db', db)
-        monkeypatch.setattr(conversations_db, '_prepare_conversation_for_read', lambda data, _uid: data)
+        monkeypatch.setattr(conversations_db, 'prepare_conversation_for_read', lambda data, _uid: data)
         return counter
 
     return _install

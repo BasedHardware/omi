@@ -160,6 +160,40 @@ final class ConversationSummarySelectionTests: XCTestCase {
     XCTAssertEqual(ConversationSummarySelection.resolvableSourceIDs(["backend"], segments: []), [])
   }
 
+  func testPresentableSectionRecoversLegacyInlineSourceLinksWithoutRewritingUnknownIDs() {
+    let segment = TranscriptSegment(
+      id: "local", backendId: "443191dc-8b75-4451-9d72-27c449b9ea45", text: "Evidence.",
+      speaker: "SPEAKER_00", isUser: false, personId: nil, start: 0, end: 1)
+    let section = SummarySection(
+      heading: "Dinner",
+      bodyMarkdown: "- Shared hot pot. ([443191dc-8b75-4451-9d72-27c449b9ea45](source); local)\n"
+        + "- Standalone [local](source)\n"
+        + "First line  \nSecond line\n"
+        + "- Keep aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.",
+      sourceSegmentIDs: [])
+
+    let presented = ConversationSummarySelection.presentableSection(section, segments: [segment])
+
+    XCTAssertEqual(
+      presented.bodyMarkdown,
+      "- Shared hot pot.\n- Standalone\nFirst line  \nSecond line\n"
+        + "- Keep aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.")
+    XCTAssertEqual(presented.sourceSegmentIDs, ["443191dc-8b75-4451-9d72-27c449b9ea45", "local"])
+    XCTAssertEqual(section.sourceSegmentIDs, [])
+  }
+
+  func testPresentableSectionPreservesMarkdownExactlyWhenThereIsNoInlineCitation() {
+    let segment = TranscriptSegment(
+      id: "local", backendId: nil, text: "Evidence.", speaker: nil, isUser: false, personId: nil,
+      start: 0, end: 1)
+    let markdown = "- Parent\n  - Nested\n\n```python\n  indented = True\n```"
+    let section = SummarySection(heading: "Formatting", bodyMarkdown: markdown, sourceSegmentIDs: ["local"])
+
+    XCTAssertEqual(
+      ConversationSummarySelection.presentableSection(section, segments: [segment]),
+      section)
+  }
+
   func testEvidenceInvalidationChangesDetailRevisionWithoutChangingSummaryText() {
     let sourced = SummarySection(heading: "Decision", bodyMarkdown: "Approved.", sourceSegmentIDs: ["old-source"])
     let cleared = SummarySection(heading: "Decision", bodyMarkdown: "Approved.", sourceSegmentIDs: [])

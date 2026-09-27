@@ -921,9 +921,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get claudeDesktop => 'Claude 桌面版';
 
   @override
-  String get addToClaudeConfig => '添加到 claude_desktop_config.json';
-
-  @override
   String get copyConfig => '复制配置';
 
   @override
@@ -2431,13 +2428,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clearAllNodesAndConnections => '清除所有节点和连接';
 
   @override
-  String get addToClaudeDesktopConfig => '添加到 claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => '将 AI 助手连接到您的数据';
-
-  @override
-  String get useYourMcpApiKey => '使用您的 MCP API 密钥';
 
   @override
   String get realTimeTranscript => '实时转录';
@@ -2450,12 +2441,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get detailedDiagnosticMessages => '详细诊断消息';
-
-  @override
-  String get autoCreateSpeakers => '自动创建说话者';
-
-  @override
-  String get autoCreateWhenNameDetected => '检测到名称时自动创建';
 
   @override
   String get followUpQuestions => '后续问题';
@@ -9778,7 +9763,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcriptionNoAudio => '转录未接收到音频';
 
   @override
-  String get tapPlusToStartRecording => '点击 + 开始录音';
+  String get tapPlusToStartRecording => '点击录音按钮开始录音';
 
   @override
   String get chatBlockTask => '任务';
@@ -10018,7 +10003,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get noConversationsHeroMessage => '你录制的对话会显示在这里。在首页点按 + 录制第一个对话。';
+  String get noConversationsHeroMessage => '你录制的对话会显示在这里。在首页点按录音按钮录制第一个对话。';
 
   @override
   String get conversationMap => '对话地图';
@@ -10491,7 +10476,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceConnecting => '正在连接…';
 
   @override
-  String get recordOptionsTip => '提示：长按录音按钮即可录制电话通话。';
+  String get recordOptionsTip => '提示：点按录音按钮上的箭头即可录制电话通话。';
 
   @override
   String get firmwareUpdateFailedTitle => '更新失败';
@@ -10957,10 +10942,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get voiceSettingsSaveOthersSubtitle => '当你为某人命名时，Omi 会保留一小段声音样本，以便下次认出对方';
 
   @override
-  String get transcriptionUnavailableRecordingContinues => '转录暂不可用，录音仍在设备上继续，稍后会进行处理';
+  String get leaveBlank => '留空';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => '转录不可用 · 正在设备上保存';
+  String get mcpOAuthSetup =>
+      '在 claude.ai 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => '添加到 ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      '在 Claude Desktop → Settings → Connectors 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues => '转录暂不可用，录音仍在设备上继续，稍后会进行处理';
 
   @override
   String transcriptionsPendingFraction(int pending, int total) {
@@ -10971,4 +10970,228 @@ class AppLocalizationsZh extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return '待处理转录 $count';
   }
+
+  @override
+  String get captureSourceCall => '通话';
+
+  @override
+  String get captureSourcePhoneMic => '手机麦克风';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => '继续';
+
+  @override
+  String get finish => '结束';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => '吊坠已暂停 · 结束后恢复';
+
+  @override
+  String get pendantIsListeningTitle => '你的吊坠正在聆听';
+
+  @override
+  String get oneSourceAtATime => 'Omi 一次只能从一个来源录音。';
+
+  @override
+  String get recordWithPhoneInstead => '改用手机录音';
+
+  @override
+  String get pendantPausesUntilYouFinish => '录音结束前吊坠将暂停';
+
+  @override
+  String get pendantPausesDuringCall => '通话期间吊坠将暂停';
+
+  @override
+  String get keepUsingPendant => '继续使用吊坠';
+
+  @override
+  String get recordWith => '录音方式';
+
+  @override
+  String get moreWaysToRecord => '更多录音方式';
+
+  @override
+  String get openCall => '打开通话';
+
+  @override
+  String get captureRecoveryBanner => '吊坠音频未送达应用 — 轻点以修复';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => '在用手机录音之前，请先停止吊坠上的“稍后转录”。';
+
+  @override
+  String get captureNotTranscribing => '未在转录';
+
+  @override
+  String get captureAudioSavedTranscribesLater => '音频已保存，稍后转录';
+
+  @override
+  String get captureStillRecording => '仍在录音';
+
+  @override
+  String get captureMicInUseElsewhere => '麦克风被其他应用占用';
+
+  @override
+  String get captureMicInterruptedDetail => '通话或其他应用占用了麦克风，因此 Omi 现在无法收音。麦克风空闲后 Omi 会自动继续。此前录下的内容都已保存。';
+
+  @override
+  String get captureCustomSttUnreachableDetail => '无法连接到你的自定义语音转文字服务。Omi 会把音频保存在这部手机上，服务恢复后再发送。不会丢失任何内容。';
+
+  @override
+  String get captureStarting => '正在启动…';
+
+  @override
+  String get capturePhoneStorageFull => '手机存储空间已满';
+
+  @override
+  String get captureStorageAlmostFull => '存储空间即将用完';
+
+  @override
+  String get capturePendantDisconnectedDetail => '吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name等人';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => '聆听 Omi 的回答';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => '明白了。你的下一场会议将在二十分钟后开始。';
+
+  @override
+  String get deviceOnboardingAllSetTitle => '一切准备就绪';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => '轻点一行即可查看或更改。';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => '当您使用按钮询问时，Omi 可以大声读出答案。';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => '听听你最后的回答';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => '正在播放您的最后一个答案...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return '通过$device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => '通过手机扬声器';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => '通过当前音频输出';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => '答案保留在屏幕上。什么也没说。';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription => '私人的。仅通过 AirPods、Bluetooth 或有线耳机通话。';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => '未连接耳机时使用手机扬声器。';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi将保持沉默。答案仍然出现在应用程序中。';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device已连接。 Omi 在此发言。';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected => '未连接耳机。 Omi 保持沉默，直到您接通一些。';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return '播放至 $device。';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => '通过手机扬声器大声播放。';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return '您可以随时在 $settings › $voiceResponse 中更改此设置';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return '随时重播此导览 $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => '耳机';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => '分钟';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => '任务';
+
+  @override
+  String get usageMonth => '本月';
+
+  @override
+  String get usageYear => '今年';
+
+  @override
+  String get usageAll => '全部时间';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => '外观';
+
+  @override
+  String get appearanceSystem => '系统';
+
+  @override
+  String get appearanceLight => '浅色';
+
+  @override
+  String get appearanceDark => '深色';
 }

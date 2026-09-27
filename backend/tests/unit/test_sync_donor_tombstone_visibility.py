@@ -201,7 +201,7 @@ def _install_listing(monkeypatch: pytest.MonkeyPatch, rows: dict[str, dict[str, 
     from database import conversations as conversations_db
 
     monkeypatch.setattr(conversations_db, 'db', _ListingDb(rows))
-    monkeypatch.setattr(conversations_db, '_document_data_with_revision', lambda doc: doc.to_dict())
+    monkeypatch.setattr(conversations_db, 'document_data_with_revision', lambda doc: doc.to_dict())
 
 
 @pytest.fixture(scope='module', autouse=True)

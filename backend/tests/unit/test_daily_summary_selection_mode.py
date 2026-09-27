@@ -1,8 +1,8 @@
-"""Selection-mode dispatch and notifications-job run lock (#13210).
+"""Indexed recipient selection and notifications-job run lock (#13210).
 
 ``utils.other.notifications`` pulls heavy deps at import, so this file loads it
 through the sanctioned ``stub_modules`` + ``load_module_fresh`` seam (same
-fixture approach as ``test_daily_summary_job_resilience.py``). Selectors are
+fixture approach as ``test_daily_summary_job_resilience.py``). The selector is
 stubbed on the ``notification_db`` module object; ``get_users_for_daily_summary_indexed``
 is called by attribute name and does not have to exist on the real database module.
 """
@@ -49,7 +49,6 @@ def _loaded_notifications() -> Iterator[Tuple[ModuleType, ModuleType, ModuleType
 
     notification_db = _module(
         'database.notifications',
-        get_users_for_daily_summary=no_db_work,
         get_users_for_daily_summary_indexed=no_db_work,
         get_users_token_in_timezones=no_db_work,
         get_users_id_in_timezones=no_db_work,
@@ -123,74 +122,12 @@ def _recording_selector(label: str, rows_by_chunk0: dict[str, List[UserRow]], ca
     return selector
 
 
-# --------------------------------------------------------------- env mode
-
-
-def test_selection_mode_unset_defaults_to_legacy(monkeypatch) -> None:
-    with _loaded_notifications() as (notifications, _db, _redis):
-        monkeypatch.delenv('DAILY_SUMMARY_SELECTION_MODE', raising=False)
-        assert notifications._selection_mode_from_env() == 'legacy'
-
-
-def test_selection_mode_normalizes_indexed(monkeypatch) -> None:
-    with _loaded_notifications() as (notifications, _db, _redis):
-        monkeypatch.setenv('DAILY_SUMMARY_SELECTION_MODE', 'INDEXED')
-        assert notifications._selection_mode_from_env() == 'indexed'
-        monkeypatch.setenv('DAILY_SUMMARY_SELECTION_MODE', ' indexed ')
-        assert notifications._selection_mode_from_env() == 'indexed'
-
-
-def test_selection_mode_shadow(monkeypatch) -> None:
-    with _loaded_notifications() as (notifications, _db, _redis):
-        monkeypatch.setenv('DAILY_SUMMARY_SELECTION_MODE', 'shadow')
-        assert notifications._selection_mode_from_env() == 'shadow'
-
-
-def test_selection_mode_garbage_falls_back_to_legacy_with_warning(monkeypatch, caplog) -> None:
-    with _loaded_notifications() as (notifications, _db, _redis):
-        monkeypatch.setenv('DAILY_SUMMARY_SELECTION_MODE', 'not-a-mode')
-        with caplog.at_level(logging.WARNING):
-            assert notifications._selection_mode_from_env() == 'legacy'
-        assert 'daily_summary_selection_mode_unknown' in caplog.text
-        assert 'not-a-mode' in caplog.text
-
-
 # --------------------------------------------------------------- selector dispatch
 
 
-def test_legacy_mode_calls_only_legacy_selector() -> None:
+def test_indexed_selector_is_the_only_recipient_query() -> None:
     with _loaded_notifications() as (notifications, notification_db, _redis):
-        notifications.DAILY_SUMMARY_SELECTION_MODE = 'legacy'
         calls: list = []
-        indexed_calls: list = []
-
-        def indexed(_chunk: List[str], _hour: int) -> List[UserRow]:
-            indexed_calls.append(_chunk)
-            raise AssertionError('indexed selector must not run in legacy mode')
-
-        notification_db.get_users_for_daily_summary = _recording_selector('legacy', {'UTC': _rows('uid-legacy')}, calls)
-        notification_db.get_users_for_daily_summary_indexed = indexed
-
-        users, error, every = asyncio.run(notifications._get_users_for_daily_summary(['UTC'], 22))
-
-        assert users == _rows('uid-legacy')
-        assert error is None
-        assert every is True
-        assert calls == [('legacy', ('UTC',), 22)]
-        assert indexed_calls == []
-
-
-def test_indexed_mode_calls_only_indexed_selector() -> None:
-    with _loaded_notifications() as (notifications, notification_db, _redis):
-        notifications.DAILY_SUMMARY_SELECTION_MODE = 'indexed'
-        calls: list = []
-        legacy_calls: list = []
-
-        def legacy(_chunk: List[str], _hour: int) -> List[UserRow]:
-            legacy_calls.append(_chunk)
-            raise AssertionError('legacy selector must not run in indexed mode')
-
-        notification_db.get_users_for_daily_summary = legacy
         notification_db.get_users_for_daily_summary_indexed = _recording_selector(
             'indexed', {'UTC': _rows('uid-indexed')}, calls
         )
@@ -201,82 +138,10 @@ def test_indexed_mode_calls_only_indexed_selector() -> None:
         assert error is None
         assert every is True
         assert calls == [('indexed', ('UTC',), 22)]
-        assert legacy_calls == []
 
 
-def test_shadow_mode_returns_legacy_and_logs_set_diff(caplog) -> None:
+def test_partial_read_reports_first_error() -> None:
     with _loaded_notifications() as (notifications, notification_db, _redis):
-        notifications.DAILY_SUMMARY_SELECTION_MODE = 'shadow'
-        calls: list = []
-        notification_db.get_users_for_daily_summary = _recording_selector(
-            'legacy', {'UTC': _rows('uid-a', 'uid-b', 'uid-c')}, calls
-        )
-        notification_db.get_users_for_daily_summary_indexed = _recording_selector(
-            'indexed', {'UTC': _rows('uid-b', 'uid-c', 'uid-d')}, calls
-        )
-
-        with caplog.at_level(logging.INFO):
-            users, error, every = asyncio.run(notifications._get_users_for_daily_summary(['UTC'], 22))
-
-        assert users == _rows('uid-a', 'uid-b', 'uid-c')
-        assert error is None
-        assert every is True
-        assert [label for label, _chunk, _hour in calls] == ['legacy', 'indexed']
-        assert 'daily_summary_selection_shadow hour=22 legacy=3 indexed=3 only_legacy=1 only_indexed=1' in caplog.text
-        assert "sample_only_legacy=['uid-a']" in caplog.text
-        assert "sample_only_indexed=['uid-d']" in caplog.text
-
-
-def test_shadow_mode_indexed_exception_does_not_change_legacy_result(caplog) -> None:
-    with _loaded_notifications() as (notifications, notification_db, _redis):
-        notifications.DAILY_SUMMARY_SELECTION_MODE = 'shadow'
-        legacy_rows = _rows('uid-legacy')
-
-        notification_db.get_users_for_daily_summary = lambda _chunk, _hour: list(legacy_rows)
-
-        def indexed(_chunk: List[str], _hour: int) -> List[UserRow]:
-            raise RuntimeError('indexed down')
-
-        notification_db.get_users_for_daily_summary_indexed = indexed
-
-        with caplog.at_level(logging.WARNING):
-            users, error, every = asyncio.run(notifications._get_users_for_daily_summary(['UTC'], 22))
-
-        assert users == legacy_rows
-        assert error is None
-        assert every is True
-        assert 'daily_summary_selection_shadow_failed hour=22' in caplog.text
-        assert 'indexed down' in caplog.text
-        assert 'daily_summary_selection_shadow hour=' not in caplog.text
-
-
-def test_partial_read_reports_first_error_in_legacy_mode() -> None:
-    with _loaded_notifications() as (notifications, notification_db, _redis):
-        notifications.DAILY_SUMMARY_SELECTION_MODE = 'legacy'
-        zones = [f'tz{i:02d}' for i in range(31)]
-
-        def legacy(chunk: List[str], _hour: int) -> List[UserRow]:
-            if 'tz30' in chunk:
-                raise RuntimeError('legacy chunk failed')
-            return _rows('uid-ok')
-
-        def indexed(_chunk: List[str], _hour: int) -> List[UserRow]:
-            raise AssertionError('indexed selector must not run in legacy mode')
-
-        notification_db.get_users_for_daily_summary = legacy
-        notification_db.get_users_for_daily_summary_indexed = indexed
-
-        users, error, every = asyncio.run(notifications._get_users_for_daily_summary(zones, 22))
-
-        assert users == _rows('uid-ok')
-        assert every is False
-        assert isinstance(error, RuntimeError)
-        assert str(error) == 'legacy chunk failed'
-
-
-def test_partial_read_reports_first_error_in_indexed_mode() -> None:
-    with _loaded_notifications() as (notifications, notification_db, _redis):
-        notifications.DAILY_SUMMARY_SELECTION_MODE = 'indexed'
         zones = [f'tz{i:02d}' for i in range(31)]
 
         def indexed(chunk: List[str], _hour: int) -> List[UserRow]:
@@ -284,10 +149,6 @@ def test_partial_read_reports_first_error_in_indexed_mode() -> None:
                 raise RuntimeError('indexed chunk failed')
             return _rows('uid-ok')
 
-        def legacy(_chunk: List[str], _hour: int) -> List[UserRow]:
-            raise AssertionError('legacy selector must not run in indexed mode')
-
-        notification_db.get_users_for_daily_summary = legacy
         notification_db.get_users_for_daily_summary_indexed = indexed
 
         users, error, every = asyncio.run(notifications._get_users_for_daily_summary(zones, 22))

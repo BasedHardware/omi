@@ -51,6 +51,7 @@ def _deletion_teardown_runtime(request, persistence_call):
     runtime.persistence = SimpleNamespace(call=persistence_call)
     runtime.conversations = SimpleNamespace(process_conversation=AsyncMock())
     runtime.is_multi_channel = False
+    runtime.language_observations = None
     runtime.pusher_close = None
     runtime.onboarding_handler = None
     runtime.parity_capture = SimpleNamespace(persist=MagicMock())
@@ -215,7 +216,7 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     )
     selected_multi_language_options = []
 
-    def select_stt(language, *, multi_lang_enabled, preferred_service=None):
+    def select_stt(language, *, multi_lang_enabled, preferred_service=None, language_profile=None):
         selected_multi_language_options.append((language, multi_lang_enabled, preferred_service))
         return 'test-stt', 'es', 'test-model'
 
@@ -578,7 +579,7 @@ async def test_bootstrap_passes_explicit_parakeet_through_capability_aware_selec
         fair_use_dg_budget_exhausted=False,
     )
 
-    def select_stt(language, *, multi_lang_enabled, preferred_service=None):
+    def select_stt(language, *, multi_lang_enabled, preferred_service=None, language_profile=None):
         assert (language, multi_lang_enabled, preferred_service) == ('es', True, 'parakeet')
         return STTService.modulate, 'multi', 'velma-2'
 
@@ -845,6 +846,8 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
     processor = object.__new__(TranscriptProcessor)
     processor.host = host
     processor.segment_buffer = deque([{'id': 'segment-1', 'text': 'Hello', 'start': 0.0, 'end': 0.5}])
+    processor._v2_legacy_fallback = deque()
+    processor._v2_legacy_fallback_ids = set()
     processor.photo_buffer = deque()
     processor.cache = SimpleNamespace(get=cache_get)
     processor.current_session_segments = {}
@@ -909,6 +912,121 @@ async def test_transcript_delivery_marks_live_transcription_success_only_after_a
     assert websocket.sent == [[{'id': 'segment-1', 'text': 'Hello'}]]
     assert delivered == [True]
     assert flushed == ['conversation-1']
+
+
+@pytest.mark.anyio
+async def test_transcript_delivery_survives_a_non_string_started_at_on_a_resumed_conversation(monkeypatch):
+    """A resumed row with a float/None `started_at` must not crash process_loop with an AttributeError."""
+
+    class WebSocket:
+        def __init__(self):
+            self.sent = []
+
+        async def send_json(self, payload):
+            self.sent.append(payload)
+
+    async def cache_get(_conversation_id):
+        return {'transcript_segments': ['existing'], 'started_at': 100.0}
+
+    websocket = WebSocket()
+    processor, delivered, flushed = _transcript_processor_for_delivery(monkeypatch, websocket)
+    processor.cache = SimpleNamespace(get=cache_get)
+
+    await processor.process_loop()
+
+    assert websocket.sent == [[{'id': 'segment-1', 'text': 'Hello'}]]
+    assert delivered == [True]
+    assert flushed == ['conversation-1']
+
+
+@pytest.mark.anyio
+async def test_transcript_delivery_does_not_read_a_boolean_started_at_as_a_1970_offset(monkeypatch):
+    """`bool` is an `int` subclass, so `started_at=True` must not be coerced to a numeric
+    timestamp (1.0s past epoch): it must fail closed to the first_audio_byte_timestamp
+    fallback, same as an unparseable value, instead of shifting segments by ~decades."""
+
+    class WebSocket:
+        def __init__(self):
+            self.sent = []
+
+        async def send_json(self, payload):
+            self.sent.append(payload)
+
+    captured_segments = []
+
+    async def cache_get(_conversation_id):
+        return {'transcript_segments': ['existing'], 'started_at': True}
+
+    async def update(_conversation, segments, _photos, _finished_at, _started_at):
+        captured_segments.extend(segments)
+        return SimpleNamespace(id='conversation-1'), segments, []
+
+    websocket = WebSocket()
+    processor, delivered, flushed = _transcript_processor_for_delivery(monkeypatch, websocket)
+    processor.cache = SimpleNamespace(get=cache_get)
+    processor._update_live_conversation = update
+
+    await processor.process_loop()
+
+    assert captured_segments[0].start == 0.0
+    assert captured_segments[0].end == 0.5
+    assert delivered == [True]
+    assert flushed == ['conversation-1']
+
+
+@pytest.mark.anyio
+async def test_process_loop_dispatches_v2_batches_before_the_first_audio_guard():
+    """Pre-audio segments/photos must reach `_process_v2_batches`, which has its own
+    re-queue and photo-only-drain handling, instead of being silently dropped by the
+    legacy `first_audio_byte_timestamp` guard running first."""
+    calls = []
+
+    async def fake_process_v2_batches(segments, photos, _diarized):
+        calls.append((list(segments), list(photos)))
+
+    call_count = 0
+
+    async def wait(_seconds):
+        nonlocal call_count
+        call_count += 1
+        if call_count >= 2:
+            state.active = False
+        return False
+
+    async def no_op(*_args, **_kwargs):
+        return None
+
+    state = SimpleNamespace(
+        active=True,
+        capture_timeline_v2=True,
+        first_audio_byte_timestamp=None,
+        speaker_map_dirty=False,
+        current_conversation_id='conversation-1',
+    )
+    host = SimpleNamespace(
+        state=state,
+        wait=wait,
+        request=SimpleNamespace(uid='user-1'),
+        speakers=SimpleNamespace(tasks=set(), drain=no_op),
+    )
+    processor = object.__new__(TranscriptProcessor)
+    processor.host = host
+    processor.segment_buffer = deque([{'id': 'segment-1', 'text': 'Hello', 'start': 0.0, 'end': 0.5}])
+    processor.photo_buffer = deque(['photo-1'])
+    processor._v2_retry_counts = {}
+    processor._v2_legacy_fallback = deque()
+    processor._v2_legacy_fallback_ids = set()
+    processor._v2_retry_until = 0.0
+    processor._v2_committed_ids = set()
+    processor._v2_photos_committed = False
+    processor._v2_photos_requeued = False
+    processor._v2_photo_failures = 0
+    processor._process_v2_batches = fake_process_v2_batches
+    processor.flush_speaker_assignments = AsyncMock()
+
+    await asyncio.wait_for(processor.process_loop(), timeout=1.0)
+
+    assert calls == [([{'id': 'segment-1', 'text': 'Hello', 'start': 0.0, 'end': 0.5}], ['photo-1'])]
 
 
 @pytest.mark.anyio

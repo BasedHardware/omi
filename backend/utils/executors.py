@@ -15,6 +15,13 @@ Provides shared executors with strict separation (bulkhead pattern):
   Firestore subcollections). Bulkheaded so bursts of account deletions cannot
   starve normal post-processing.
 - storage_executor: audio file precaching, GCS operations.
+- cimd_executor: hosted-MCP OAuth client-metadata (CIMD) lookups — DNS,
+  connect, and body reads to arbitrary unauthenticated-supplied hosts, all
+  inside one hard monotonic deadline. Bulkheaded so hostile client_id floods
+  cannot starve Firestore or any shared pool.
+- cimd_dns (module-local in database/mcp_client_metadata.py): the getaddrinfo
+  hop inside a CIMD lookup, split out so a
+  stalled resolver cannot hold a fetch worker hostage.
 
 These replace ad-hoc ThreadPoolExecutor creation throughout the codebase,
 preventing thread proliferation and providing bounded concurrency.
@@ -102,6 +109,17 @@ sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_
 postprocess_executor = MonitoredThreadPoolExecutor(name="postprocess", max_workers=24, thread_name_prefix="postproc")
 cleanup_executor = MonitoredThreadPoolExecutor(name="cleanup", max_workers=4, thread_name_prefix="cleanup")
 storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=128, thread_name_prefix="storage")
+# Prompt-list verification may outlive its caller while a provider finishes.
+# Keep both the clip cut and inline STT away from shared feature pools.
+speaker_tag_verify_executor = MonitoredThreadPoolExecutor(
+    name="speaker_tag_verify", max_workers=2, max_queue_size=2, thread_name_prefix="tagverify"
+)
+# URL-form OAuth client_ids let an unauthenticated caller name an arbitrary
+# host to fetch. The pool stays tiny and strictly queued so a flood fails
+# fast with ExecutorSaturatedError instead of holding shared workers. The DNS
+# hop inside a lookup lives on a module-local pool in
+# database/mcp_client_metadata.py — database must not import this module.
+cimd_executor = MonitoredThreadPoolExecutor(name="cimd", max_workers=4, max_queue_size=8, thread_name_prefix="cimd")
 
 _ALL_EXECUTORS = [
     critical_executor,
@@ -112,6 +130,8 @@ _ALL_EXECUTORS = [
     postprocess_executor,
     cleanup_executor,
     storage_executor,
+    speaker_tag_verify_executor,
+    cimd_executor,
 ]
 
 

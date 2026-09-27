@@ -6,7 +6,6 @@ import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/ui/ui.dart';
-import 'package:omi/utils/ui_guidelines.dart';
 
 class MemoryManagementSheet extends StatelessWidget {
   final MemoriesProvider provider;
@@ -23,7 +22,7 @@ class MemoryManagementSheet extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildFilterSection(context),
-              const Divider(height: 1, color: OmiColors.border),
+              Divider(height: 1, color: OmiColors.border),
               _buildMemoryCount(context),
               _buildActionButtons(context),
             ],
@@ -45,9 +44,9 @@ class MemoryManagementSheet extends StatelessWidget {
         _buildCategoryFilterOption(context, context.l10n.filterSystem, MemoryCategory.system),
         _buildCategoryFilterOption(context, context.l10n.filterInteresting, MemoryCategory.interesting),
         _buildCategoryFilterOption(context, context.l10n.filterManual, MemoryCategory.manual),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          child: Divider(height: 1, color: Colors.white10),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          child: Divider(height: 1, color: OmiColors.border),
         ),
         if (provider.memoryBeliefEnabled) ...[
           _buildFilterOption(
@@ -68,9 +67,9 @@ class MemoryManagementSheet extends StatelessWidget {
             isSelected: provider.collectionView == MemoryCollectionView.all,
             onTap: () => provider.setCollectionView(MemoryCollectionView.all),
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Divider(height: 1, color: Colors.white10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Divider(height: 1, color: OmiColors.border),
           ),
         ],
         _buildFilterOption(
@@ -132,7 +131,7 @@ class MemoryManagementSheet extends StatelessWidget {
                     style: OmiType.callout.copyWith(fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400),
                   ),
                 ),
-                if (isSelected) const Icon(Icons.check, color: OmiColors.accent, size: 20),
+                if (isSelected) Icon(Icons.check, color: OmiColors.accent, size: 20),
               ],
             ),
           ),
@@ -152,7 +151,7 @@ class MemoryManagementSheet extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(context.l10n.totalMemoriesCount(totalMemories), style: AppStyles.body),
+          Text(context.l10n.totalMemoriesCount(totalMemories), style: OmiType.subhead.copyWith(height: 1.4)),
           const SizedBox(height: 8),
           _buildMemoryCountRow(Icons.public, context.l10n.publicMemories, publicMemories),
           const SizedBox(height: 4),
@@ -167,9 +166,12 @@ class MemoryManagementSheet extends StatelessWidget {
       children: [
         Icon(icon, size: 16, color: OmiColors.textSecondary),
         const SizedBox(width: 8),
-        Text(label, style: AppStyles.caption),
+        Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textPrimary.withValues(alpha: 0.7))),
         const Spacer(),
-        Text(count.toString(), style: AppStyles.caption.copyWith(fontWeight: FontWeight.w600)),
+        Text(count.toString(),
+            style: OmiType.footnote
+                .copyWith(color: OmiColors.textPrimary.withValues(alpha: 0.7))
+                .copyWith(fontWeight: FontWeight.w600)),
       ],
     );
   }
@@ -198,7 +200,7 @@ class MemoryManagementSheet extends StatelessWidget {
             },
           ),
           const SizedBox(height: 24),
-          const Divider(height: 1, color: OmiColors.border),
+          Divider(height: 1, color: OmiColors.border),
           const SizedBox(height: 24),
           OmiButton.destructive(
             label: context.l10n.deleteAllMemories,

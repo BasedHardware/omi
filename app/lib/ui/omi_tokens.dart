@@ -1,72 +1,145 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Omi's colour tokens. The app is dark-only; these are the only colours new UI should name.
+/// Omi colour tokens resolve to the selected light or dark appearance.
 ///
-/// Surfaces step up from the black page: [surface0] page, [surface1] cards, grouped settings and
-/// sheets, [surface2] controls and elevated rows sitting on a card, [surface3] pressed or selected
-/// fills. They are the iOS dark system greys, which are also the near-blacks this app already
-/// used most (`0xFF1C1C1E` for settings cards and sheets, `0xFF2C2C2E`/`0xFF2A2A2E` for chips and
-/// elevated rows). `0xFF35343B` and `0xFF1F1F25` were dropped because they carry a blue-violet
-/// tint that the neutral palette (INV-UI-1) does not want.
+/// Surfaces step up from the page: surface0 is the page, surface1 holds cards and sheets,
+/// surface2 holds controls on cards, and surface3 is the selected or pressed fill. The dark
+/// palette retains the original iOS dark greys exactly. The light palette uses the iOS grouped
+/// background (#F2F2F7), white cards, and neutral light greys.
 ///
-/// Accents and primary actions are neutral: [accent] is white with [onAccent] black text.
-/// Status colours ([success], [warning], [danger]) are the iOS dark-mode system colours, chosen so
-/// that each is legible as text on [surface0] and [surface1] (danger is 6.2:1 on black, 5.0:1 on
-/// [surface1]).
+/// Accents and primary actions are neutral: white on black in dark mode, black on white in light mode.
+/// Status colours use the corresponding iOS light and dark system variants.
 ///
-/// `AppStyles` (utils/ui_guidelines.dart) and the `ResponsiveHelper` palette predate these tokens.
-/// Do not add new uses of them; migrate a file to [OmiColors] when you touch it.
+/// `AppStyles` and `ResponsiveHelper` predate these tokens. Do not add new uses of them.
+///
+/// Resolved values for one appearance. The dark values are the original Omi tokens.
+@immutable
+class OmiPalette {
+  const OmiPalette(
+      {required this.surface0,
+      required this.surface1,
+      required this.surface2,
+      required this.surface3,
+      required this.chipSurface,
+      required this.messageSurface,
+      required this.categorySurface,
+      required this.conversationCard,
+      required this.sourceBadgeSurface,
+      required this.border,
+      required this.textPrimary,
+      required this.textSecondary,
+      required this.textTertiary,
+      required this.textDisabled,
+      required this.accent,
+      required this.onAccent,
+      required this.success,
+      required this.successSurface,
+      required this.warning,
+      required this.danger,
+      required this.dangerSurface});
+
+  final Color surface0;
+  final Color surface1;
+  final Color surface2;
+  final Color surface3;
+
+  /// Controls on the page, which need a stronger light fill than [surface2].
+  final Color chipSurface;
+  final Color messageSurface;
+  final Color categorySurface;
+  final Color conversationCard;
+  final Color sourceBadgeSurface;
+  final Color border;
+  final Color textPrimary;
+  final Color textSecondary;
+  final Color textTertiary;
+  final Color textDisabled;
+  final Color accent;
+  final Color onAccent;
+  final Color success;
+  final Color successSurface;
+  final Color warning;
+  final Color danger;
+  final Color dangerSurface;
+
+  static const dark = OmiPalette(
+    surface0: Color(0xFF000000),
+    surface1: Color(0xFF1C1C1E),
+    surface2: Color(0xFF2C2C2E),
+    surface3: Color(0xFF3A3A3C),
+    chipSurface: Color(0xFF2C2C2E),
+    messageSurface: Color(0xFF1C1C1E),
+    categorySurface: Color(0xFF35343B),
+    conversationCard: Color(0xFF1F1F25),
+    sourceBadgeSurface: Color(0xFF2A2A31),
+    border: Color(0xFF3C3C43),
+    textPrimary: Color(0xFFFFFFFF),
+    textSecondary: Color(0xFFAEAEB2),
+    textTertiary: Color(0xFF8E8E93),
+    textDisabled: Color(0xFF636366),
+    accent: Color(0xFFFFFFFF),
+    onAccent: Color(0xFF000000),
+    success: Color(0xFF30D158),
+    successSurface: Color(0x2630D158),
+    warning: Color(0xFFFF9F0A),
+    danger: Color(0xFFFF453A),
+    dangerSurface: Color(0x26FF453A),
+  );
+
+  static const light = OmiPalette(
+    surface0: Color(0xFFF2F2F7),
+    surface1: Color(0xFFFFFFFF),
+    surface2: Color(0xFFE5E5EA),
+    surface3: Color(0xFFD1D1D6),
+    chipSurface: Color(0xFFE5E5EA),
+    messageSurface: Color(0xFFE5E5EA),
+    categorySurface: Color(0xFFF2F2F7),
+    conversationCard: Color(0xFFFFFFFF),
+    sourceBadgeSurface: Color(0xFFE5E5EA),
+    border: Color(0xFFC6C6C8),
+    textPrimary: Color(0xFF000000),
+    textSecondary: Color(0x993C3C43),
+    textTertiary: Color(0xFF636366),
+    textDisabled: Color(0xFFAEAEB2),
+    accent: Color(0xFF000000),
+    onAccent: Color(0xFFFFFFFF),
+    success: Color(0xFF34C759),
+    successSurface: Color(0x2634C759),
+    warning: Color(0xFFFF9500),
+    danger: Color(0xFFFF3B30),
+    dangerSurface: Color(0x26FF3B30),
+  );
+}
+
+/// Colors for the resolved appearance. Read during build, after the root updates [active].
 abstract final class OmiColors {
-  /// Page background.
-  static const Color surface0 = Color(0xFF000000);
+  static OmiPalette active = OmiPalette.dark;
 
-  /// Cards, grouped settings, sheets, dialogs, search fields.
-  static const Color surface1 = Color(0xFF1C1C1E);
+  static OmiPalette forBrightness(Brightness brightness) =>
+      brightness == Brightness.dark ? OmiPalette.dark : OmiPalette.light;
 
-  /// Controls and rows that sit on a [surface1] card; secondary buttons; snack bars.
-  static const Color surface2 = Color(0xFF2C2C2E);
-
-  /// Pressed and selected fills; the highest step.
-  static const Color surface3 = Color(0xFF3A3A3C);
-
-  /// Hairline dividers and card outlines.
-  static const Color border = Color(0xFF3C3C43);
-
-  /// Titles and body text.
-  static const Color textPrimary = Color(0xFFFFFFFF);
-
-  /// Descriptions and supporting text (7.7:1 on [surface1]).
-  static const Color textSecondary = Color(0xFFAEAEB2);
-
-  /// Metadata, placeholders, leading icons (5.2:1 on [surface1], 6.5:1 on black). Never darker:
-  /// greys below this fail WCAG AA on the app's cards.
-  static const Color textTertiary = Color(0xFF8E8E93);
-
-  /// Labels of disabled controls only. Exempt from contrast rules because it marks "unavailable";
-  /// never use it for text a reader needs.
-  static const Color textDisabled = Color(0xFF636366);
-
-  /// The accent: primary buttons, selected state, switches, spinners. Neutral per INV-UI-1.
-  static const Color accent = Color(0xFFFFFFFF);
-
-  /// Text and icons drawn on [accent].
-  static const Color onAccent = Color(0xFF000000);
-
-  /// Success status, as text or icon.
-  static const Color success = Color(0xFF30D158);
-
-  /// Tinted background behind [success] content (e.g. a "Connected" banner).
-  static const Color successSurface = Color(0x2630D158);
-
-  /// Warning status, as text or icon.
-  static const Color warning = Color(0xFFFF9F0A);
-
-  /// Destructive actions and errors, as text or icon.
-  static const Color danger = Color(0xFFFF453A);
-
-  /// Tinted background behind [danger] content (destructive buttons, error banners).
-  static const Color dangerSurface = Color(0x26FF453A);
+  static Color get surface0 => active.surface0;
+  static Color get surface1 => active.surface1;
+  static Color get surface2 => active.surface2;
+  static Color get surface3 => active.surface3;
+  static Color get chipSurface => active.chipSurface;
+  static Color get messageSurface => active.messageSurface;
+  static Color get categorySurface => active.categorySurface;
+  static Color get conversationCard => active.conversationCard;
+  static Color get sourceBadgeSurface => active.sourceBadgeSurface;
+  static Color get border => active.border;
+  static Color get textPrimary => active.textPrimary;
+  static Color get textSecondary => active.textSecondary;
+  static Color get textTertiary => active.textTertiary;
+  static Color get textDisabled => active.textDisabled;
+  static Color get accent => active.accent;
+  static Color get onAccent => active.onAccent;
+  static Color get success => active.success;
+  static Color get successSurface => active.successSurface;
+  static Color get warning => active.warning;
+  static Color get danger => active.danger;
+  static Color get dangerSurface => active.dangerSurface;
 }
 
 /// Omi's type ramp, modelled on iOS text styles so that sizes land where the app's text already
@@ -75,35 +148,34 @@ abstract final class OmiColors {
 /// Every style carries [OmiColors.textPrimary]; override with `copyWith(color: ...)`.
 abstract final class OmiType {
   /// 11 — badges, timestamps in dense rows.
-  static const TextStyle caption = TextStyle(fontSize: 11, fontWeight: FontWeight.w400, color: OmiColors.textPrimary);
+  static TextStyle get caption => TextStyle(fontSize: 11, fontWeight: FontWeight.w400, color: OmiColors.textPrimary);
 
   /// 13 — secondary lines under a row title, footers, hints.
-  static const TextStyle footnote = TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: OmiColors.textPrimary);
+  static TextStyle get footnote => TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: OmiColors.textPrimary);
 
   /// 15 — descriptions, compact button labels, search text.
-  static const TextStyle subhead = TextStyle(fontSize: 15, fontWeight: FontWeight.w400, color: OmiColors.textPrimary);
+  static TextStyle get subhead => TextStyle(fontSize: 15, fontWeight: FontWeight.w400, color: OmiColors.textPrimary);
 
   /// 16 — button labels, snack bars, dense body copy.
-  static const TextStyle callout = TextStyle(fontSize: 16, fontWeight: FontWeight.w400, color: OmiColors.textPrimary);
+  static TextStyle get callout => TextStyle(fontSize: 16, fontWeight: FontWeight.w400, color: OmiColors.textPrimary);
 
   /// 17 — row titles and reading text.
-  static const TextStyle body = TextStyle(fontSize: 17, fontWeight: FontWeight.w400, color: OmiColors.textPrimary);
+  static TextStyle get body => TextStyle(fontSize: 17, fontWeight: FontWeight.w400, color: OmiColors.textPrimary);
 
   /// 17 semibold — app bar titles, sheet titles, emphasised row titles.
-  static const TextStyle headline = TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: OmiColors.textPrimary);
+  static TextStyle get headline => TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: OmiColors.textPrimary);
 
   /// 20 semibold — section headers.
-  static const TextStyle title3 = TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: OmiColors.textPrimary);
+  static TextStyle get title3 => TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: OmiColors.textPrimary);
 
   /// 24 semibold — in-body page headings (tab roots).
-  static const TextStyle title2 = TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: OmiColors.textPrimary);
+  static TextStyle get title2 => TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: OmiColors.textPrimary);
 
   /// 28 bold — hero headings (onboarding, empty hero).
-  static const TextStyle title1 = TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: OmiColors.textPrimary);
+  static TextStyle get title1 => TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: OmiColors.textPrimary);
 
   /// 34 bold — the largest display text; one per screen at most.
-  static const TextStyle largeTitle =
-      TextStyle(fontSize: 34, fontWeight: FontWeight.w700, color: OmiColors.textPrimary);
+  static TextStyle get largeTitle => TextStyle(fontSize: 34, fontWeight: FontWeight.w700, color: OmiColors.textPrimary);
 }
 
 /// Corner radii. Pick by the size of the thing being rounded, not by taste.

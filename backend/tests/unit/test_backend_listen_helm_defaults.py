@@ -168,7 +168,10 @@ def test_windowed_live_rollout_is_dev_only_and_bounded():
     """July overload: changing order must never silently turn on unbounded TDT."""
     prod = _load_values(ENV_IDENTITY_DEFAULTS['prod']['values_file'])
     dev = _load_values(ENV_IDENTITY_DEFAULTS['dev']['values_file'])
-    assert _env_value(prod, 'STT_CONNECT_ORDER_FROM_CONFIG') == 'false'
+    # Prod connects in configured order since the 2026-09-26 Modulate incident
+    # (#19069) so Soniox backs Modulate; the guard that matters is that the
+    # windowed TDT leg stays at zero allocation there.
+    assert _env_value(prod, 'STT_CONNECT_ORDER_FROM_CONFIG') == 'true'
     assert _env_value(prod, 'PARAKEET_WINDOW_ALLOCATION_PERCENT') == '0'
     assert _env_value(dev, 'STT_CONNECT_ORDER_FROM_CONFIG') == 'true'
     assert _env_value(dev, 'PARAKEET_WINDOW_ALLOCATION_PERCENT') == '100'

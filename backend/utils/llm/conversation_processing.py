@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, cast
@@ -33,7 +33,9 @@ from utils.conversations.relevance_rules import KEEP_WORD_COUNT, transcript_word
 from utils.conversations.summary_selection import render_sections_markdown
 from utils.llm.gateway_client import record_chat_extraction_gateway_result
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
+from utils.llm.action_item_normalization import normalize_action_item_due_dates as _normalize_action_item_due_dates
 from utils.llm.meeting_notes_rich_prompts import rich_static_instructions, rich_volatile_instructions
+from utils.llm.meeting_notes_presentation import enforce_conversation_note_presentation
 from utils.llm.meeting_notes_validation import (
     sanitize_structured_speaker_placeholders,
     strip_speaker_placeholders,
@@ -143,29 +145,6 @@ def _coerce_structured(response: Structured | StructuredExtraction) -> Structure
     if isinstance(response, StructuredExtraction):
         return response.to_structured()
     return response
-
-
-def _normalize_action_item_due_dates(
-    action_items: List[ActionItem],
-    *,
-    user_tz: Any,
-    now: datetime,
-    log_past_due_clears: bool,
-) -> List[ActionItem]:
-    for action_item in action_items:
-        if action_item.due_at is None:
-            continue
-        if action_item.due_at.tzinfo is None:
-            action_item.due_at = action_item.due_at.replace(tzinfo=user_tz).astimezone(timezone.utc)
-        else:
-            action_item.due_at = action_item.due_at.astimezone(timezone.utc)
-        if action_item.due_at < now - timedelta(days=1):
-            if log_past_due_clears:
-                logger.warning(
-                    f'Clearing past due_at {action_item.due_at.isoformat()} for action item: {action_item.description}'
-                )
-            action_item.due_at = None
-    return action_items
 
 
 def _record_chat_extraction_comparison(*, feature: str, field: str, outcome: str) -> None:
@@ -1380,9 +1359,9 @@ def get_conversation_notes(
         prompt_cache_options=cache_options,
         request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS,
     )
-    response = extraction_parser.parse(_content_str(model.invoke(messages)))
+    raw_response = _content_str(model.invoke(messages))
+    response = extraction_parser.parse(raw_response)
     structured = response.to_structured()
-    validate_structured_source_segment_ids(structured, prefix.transcript_segment_ids)
     if rich_mode:
         validate_rich_meeting_notes(
             structured,
@@ -1391,6 +1370,28 @@ def get_conversation_notes(
             has_background_context=bool(meeting_context and meeting_context.strip()),
             background_body=meeting_context or '',
         )
+
+    structured = enforce_conversation_note_presentation(
+        structured,
+        raw_response=raw_response,
+        model=model,
+        messages=messages,
+        extraction_parser=extraction_parser,
+        transcript_segment_ids=prefix.transcript_segment_ids,
+        post_parse_validator=(
+            lambda value: (
+                validate_rich_meeting_notes(
+                    value,
+                    transcript_body=prefix.context.split('FULL TRANSCRIPT\n', 1)[-1],
+                    roster=roster,
+                    has_background_context=bool(meeting_context and meeting_context.strip()),
+                    background_body=meeting_context or '',
+                )
+                if rich_mode
+                else None
+            )
+        ),
+    )
 
     for action_item in structured.action_items:
         if action_item.created_at is None:
@@ -1407,7 +1408,6 @@ def get_conversation_notes(
     projected_overview = render_sections_markdown(structured.sections)
     if projected_overview:
         structured.overview = projected_overview
-    sanitize_structured_speaker_placeholders(structured)
     return structured
 
 

@@ -17,6 +17,30 @@ enum ConversationDetailRequestGate {
   }
 }
 
+@MainActor enum SpeakerAssignmentSnapshot {
+  static func rollback(
+    current: ServerConversation, original: ServerConversation, targets: [String],
+    assignedPersonId: String?, assignedIsUser: Bool,
+    generation: Int, currentGeneration: Int
+  ) -> ServerConversation? {
+    guard generation == currentGeneration,
+      current.id == original.id,
+      current.updatedAt == original.updatedAt,
+      current.transcriptSegments.count == original.transcriptSegments.count
+    else { return nil }
+    let expected = AppState.assigningSpeaker(
+      original, targets: targets, personId: assignedPersonId, isUser: assignedIsUser)
+    for index in expected.transcriptSegments.indices {
+      let actual = current.transcriptSegments[index]
+      let assigned = expected.transcriptSegments[index]
+      guard actual.id == assigned.id, actual.isUser == assigned.isUser,
+        actual.personId == assigned.personId
+      else { return nil }
+    }
+    return original
+  }
+}
+
 struct ConversationDetailProcessingLayout<Banner: View, Content: View>: View {
   let isProcessing: Bool
   let banner: Banner
@@ -140,6 +164,8 @@ struct ConversationDetailView: View {
 
   // Speaker naming state
   @State private var selectedSegmentForNaming: TranscriptSegment? = nil
+  @State private var retrySpeakerAssignment: (() -> Void)?
+  @State private var speakerAssignmentTail: Task<Void, Never>?
 
   static func assignmentMetadata(
     for segmentIndices: [Int],
@@ -199,6 +225,17 @@ struct ConversationDetailView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       pageHeader
+      if let retrySpeakerAssignment {
+        HStack {
+          Text("Couldn't assign this speaker")
+            .foregroundColor(Ink.errorRed)
+          Spacer()
+          Button("Retry", action: retrySpeakerAssignment)
+            .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+        }
+        .padding(.horizontal, OmiSpacing.xl)
+        .padding(.vertical, OmiSpacing.sm)
+      }
 
       switch Self.visiblePane(transcriptOpen: showTranscriptDrawer) {
       case .summary:
@@ -259,6 +296,8 @@ struct ConversationDetailView: View {
     }
     .onChange(of: detailRequestToken) { previous, current in
       detailLoadGeneration &+= 1
+      retrySpeakerAssignment = nil
+      speakerAssignmentTail = nil
       detailReadyConversationID = nil
       isLoadingConversation = false
       isEnrichingDeferred = false
@@ -281,6 +320,8 @@ struct ConversationDetailView: View {
     }
     .onDisappear {
       detailLoadGeneration &+= 1
+      retrySpeakerAssignment = nil
+      speakerAssignmentTail = nil
       captureFocusGeneration &+= 1
       detailReadyConversationID = nil
       ConversationDetailAutomationState.shared.clear(conversationId: conversation.id)
@@ -424,27 +465,9 @@ struct ConversationDetailView: View {
         segment: segment,
         allSegments: displayConversation.transcriptSegments,
         people: people,
-        onSave: { personId, isUser, segmentIndices in
-          guard let appState = AppState.current else { return false }
-
-          let assignment = Self.assignmentMetadata(
-            for: segmentIndices,
-            in: displayConversation.transcriptSegments
-          )
-          let success = await appState.assignSpeakerToSegments(
-            conversationId: conversation.id,
-            segmentIds: assignment.targets,
-            personId: personId,
-            isUser: isUser
-          )
-          guard success else { return false }
-
-          // assignSpeakerToSegments already persisted the assignment (backend
-          // and/or awaited local SQLite) — only the displayed copy needs updating.
-          updateDisplayedConversation(segmentIndices: segmentIndices, isUser: isUser, personId: personId)
-          return true
+        onSave: { personId, isUser, segmentIndices, newName in
+          beginSpeakerAssignment(personId: personId, isUser: isUser, segmentIndices: segmentIndices, newName: newName)
         },
-        onCreatePerson: { name in await AppState.current?.createPerson(name: name) },
         onDismiss: {
           selectedSegmentForNaming = nil
         }
@@ -1084,23 +1107,89 @@ struct ConversationDetailView: View {
   }
 
   @MainActor
-  private func updateDisplayedConversation(segmentIndices: [Int], isUser: Bool, personId: String?) {
-    var updatedConversation = displayConversation
-    for index in segmentIndices where updatedConversation.transcriptSegments.indices.contains(index) {
-      let oldSegment = updatedConversation.transcriptSegments[index]
-      updatedConversation.transcriptSegments[index] = TranscriptSegment(
-        id: oldSegment.id,
-        backendId: oldSegment.backendId,
-        text: oldSegment.text,
-        speaker: oldSegment.speaker,
-        isUser: isUser,
-        personId: isUser ? nil : personId,
-        start: oldSegment.start,
-        end: oldSegment.end,
-        translations: oldSegment.translations
-      )
+  private func beginSpeakerAssignment(
+    personId: String?, isUser: Bool, segmentIndices: [Int], newName: String?
+  ) -> Bool {
+    guard let appState = AppState.current else { return false }
+    let targetID = conversation.id
+    let targets = Self.assignmentMetadata(for: segmentIndices, in: displayConversation.transcriptSegments).targets
+    guard !targets.isEmpty else { return false }
+    let displayedBefore = displayConversation
+    let listIndex = appState.conversations.firstIndex { $0.id == targetID }
+    let listBefore = listIndex.map { appState.conversations[$0] }
+    let temporaryID = newName.map { _ in "optimistic-person:\(UUID().uuidString)" }
+    if let temporaryID, let newName {
+      appState.people.append(Person(id: temporaryID, name: newName))
     }
-    loadedConversation = updatedConversation
+    let optimisticID = temporaryID ?? personId
+    detailLoadGeneration &+= 1
+    let generation = detailLoadGeneration
+    retrySpeakerAssignment = nil
+    loadedConversation = AppState.assigningSpeaker(
+      displayedBefore, targets: targets, personId: optimisticID, isUser: isUser)
+    if let listIndex {
+      appState.conversations[listIndex] = AppState.assigningSpeaker(
+        appState.conversations[listIndex], targets: targets, personId: optimisticID, isUser: isUser)
+    }
+    let previousAssignment = speakerAssignmentTail
+    let assignmentTask = Task { @MainActor in
+      await previousAssignment?.value
+      guard generation == detailLoadGeneration, conversation.id == targetID else {
+        if let temporaryID { appState.people.removeAll { $0.id == temporaryID } }
+        return
+      }
+      var finalID = personId
+      if let newName {
+        finalID = await appState.createPerson(name: newName)?.id
+      }
+      if let temporaryID {
+        appState.people.removeAll { $0.id == temporaryID }
+      }
+      guard generation == detailLoadGeneration, conversation.id == targetID else { return }
+      if let finalID, temporaryID != nil {
+        loadedConversation = AppState.assigningSpeaker(
+          displayConversation, targets: targets, personId: finalID, isUser: false)
+        if let index = appState.conversations.firstIndex(where: { $0.id == targetID }) {
+          appState.conversations[index] = AppState.assigningSpeaker(
+            appState.conversations[index], targets: targets, personId: finalID, isUser: false)
+        }
+      }
+      let success =
+        newName == nil || finalID != nil
+        ? await appState.assignSpeakerToSegments(
+          conversationId: targetID, segmentIds: targets, personId: finalID, isUser: isUser,
+          isCurrent: { generation == detailLoadGeneration && conversation.id == targetID })
+        : false
+      guard generation == detailLoadGeneration, conversation.id == targetID else { return }
+      if !success {
+        let assignedID = finalID ?? temporaryID ?? personId
+        if let restored = SpeakerAssignmentSnapshot.rollback(
+          current: displayConversation, original: displayedBefore, targets: targets,
+          assignedPersonId: assignedID, assignedIsUser: isUser,
+          generation: generation, currentGeneration: detailLoadGeneration)
+        {
+          loadedConversation = restored
+        }
+        if let listBefore, let index = appState.conversations.firstIndex(where: { $0.id == targetID }) {
+          if let restored = SpeakerAssignmentSnapshot.rollback(
+            current: appState.conversations[index], original: listBefore, targets: targets,
+            assignedPersonId: assignedID, assignedIsUser: isUser,
+            generation: generation, currentGeneration: detailLoadGeneration)
+          {
+            appState.conversations[index] = restored
+          }
+        }
+        let retryID = finalID
+        let retryName = finalID == nil ? newName : nil
+        retrySpeakerAssignment = {
+          _ = beginSpeakerAssignment(
+            personId: retryID, isUser: isUser, segmentIndices: segmentIndices, newName: retryName)
+        }
+        OmiToastCenter.shared.notice("Couldn't assign this speaker", systemImage: "exclamationmark.triangle")
+      }
+    }
+    speakerAssignmentTail = assignmentTask
+    return true
   }
 
   // MARK: - Deferred Processing Loader

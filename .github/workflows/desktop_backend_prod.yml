@@ -338,6 +338,7 @@ jobs:
           env_vars: |
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             USE_VERTEX_AI=true
+            TTS_PROVIDER=gemini
             GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}
             GCP_LOCATION=us-central1
             OMI_FIRESTORE_DATA_PLANE_PROJECT=${{ vars.GCP_PROJECT_ID }}

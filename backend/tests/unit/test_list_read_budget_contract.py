@@ -574,8 +574,8 @@ def conv_mod(monkeypatch):
     import database.conversations as conv
 
     # Skip the decrypt decorator's data-protection backfill network calls.
-    monkeypatch.setattr(conv, '_prepare_conversation_for_read', lambda data, uid: data)
-    monkeypatch.setattr(conv, '_document_data_with_revision', lambda doc: doc.to_dict() | {'id': doc.id})
+    monkeypatch.setattr(conv, 'prepare_conversation_for_read', lambda data, uid: data)
+    monkeypatch.setattr(conv, 'document_data_with_revision', lambda doc: doc.to_dict() | {'id': doc.id})
     return conv
 
 
@@ -686,7 +686,7 @@ def test_conversations_offset_beyond_allowance_truncates_without_querying(conv_m
 
 @pytest.fixture
 def service_mod(monkeypatch):
-    monkeypatch.setenv("MEMORY_MODE", "read")
+    monkeypatch.setenv("MEMORY_ENABLED", "on")
     monkeypatch.setenv("MEMORY_V3_CURSOR_SECRET", "unit-test-list-budget-secret")
     from tests.unit.test_memory_service_parity import _load_memory_service
 
