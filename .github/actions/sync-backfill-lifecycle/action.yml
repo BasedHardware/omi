@@ -249,11 +249,13 @@ runs:
       env:
         ALERT_CHANNELS: ${{ inputs.alert_notification_channels }}
       run: |
+        set -euo pipefail
         test -n "$ALERT_CHANNELS"
         for THRESHOLD in 70 90; do
           METRIC="sync_backfill_budget_${THRESHOLD}"
           DISPLAY_NAME="Sync backfill daily budget ${THRESHOLD}%"
           LOG_FILTER="resource.type=\"cloud_run_revision\" resource.labels.service_name=\"backend-sync-backfill\" \"sync_backfill_budget_threshold threshold=${THRESHOLD}\""
+          CONDITION_FILTER="metric.type=\"logging.googleapis.com/user/${METRIC}\" AND resource.type=\"cloud_run_revision\""
           if gcloud logging metrics describe "$METRIC" --project=${{ inputs.project_id }} >/dev/null 2>&1; then
             gcloud logging metrics update "$METRIC" \
               --project=${{ inputs.project_id }} \
@@ -270,16 +272,19 @@ runs:
             gcloud monitoring policies list \
               --project=${{ inputs.project_id }} \
               --filter="displayName=\"${DISPLAY_NAME}\"" \
-              --format='value(name)' \
-              --limit=1
+              --format='value(name)'
           )"
+          if [[ "$POLICY" == *$'\n'* ]]; then
+            echo "Duplicate ${DISPLAY_NAME} alert policies; reconcile manually" >&2
+            exit 1
+          fi
           if [[ -z "$POLICY" ]]; then
             POLICY="$(
               gcloud monitoring policies create \
                 --project=${{ inputs.project_id }} \
                 --display-name="$DISPLAY_NAME" \
                 --condition-display-name="$DISPLAY_NAME" \
-                --condition-filter="metric.type=\"logging.googleapis.com/user/${METRIC}\" AND resource.type=\"cloud_run_revision\"" \
+                --condition-filter="$CONDITION_FILTER" \
                 --duration=0s \
                 --if='> 0' \
                 --trigger-count=1 \
@@ -292,7 +297,8 @@ runs:
           test -n "$POLICY"
           gcloud monitoring policies describe "$POLICY" \
             --project=${{ inputs.project_id }} \
-            --format='value(notificationChannels)' | grep -q .
+            --format=json | python3 backend/scripts/verify_sync_backfill_alert_policy.py \
+              --condition=threshold --filter="$CONDITION_FILTER" --duration-seconds=0 --channels="$ALERT_CHANNELS"
         done
 
     - name: Provision sync-backfill dispatch-abort alert
@@ -301,10 +307,12 @@ runs:
       env:
         ALERT_CHANNELS: ${{ inputs.alert_notification_channels }}
       run: |
+        set -euo pipefail
         test -n "$ALERT_CHANNELS"
         METRIC="sync_backfill_dispatch_abort"
         DISPLAY_NAME="Sync backfill dispatch abort"
         LOG_FILTER="resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"backend-sync-backfill\" AND \"The request was aborted because there was no available instance\""
+        CONDITION_FILTER="metric.type=\"logging.googleapis.com/user/${METRIC}\" AND resource.type=\"cloud_run_revision\""
         if gcloud logging metrics describe "$METRIC" --project=${{ inputs.project_id }} >/dev/null 2>&1; then
           gcloud logging metrics update "$METRIC" \
             --project=${{ inputs.project_id }} \
@@ -321,16 +329,19 @@ runs:
           gcloud monitoring policies list \
             --project=${{ inputs.project_id }} \
             --filter="displayName=\"${DISPLAY_NAME}\"" \
-            --format='value(name)' \
-            --limit=1
+            --format='value(name)'
         )"
+        if [[ "$POLICY" == *$'\n'* ]]; then
+          echo "Duplicate ${DISPLAY_NAME} alert policies; reconcile manually" >&2
+          exit 1
+        fi
         if [[ -z "$POLICY" ]]; then
           POLICY="$(
             gcloud monitoring policies create \
               --project=${{ inputs.project_id }} \
               --display-name="$DISPLAY_NAME" \
               --condition-display-name="$DISPLAY_NAME" \
-              --condition-filter="metric.type=\"logging.googleapis.com/user/${METRIC}\" AND resource.type=\"cloud_run_revision\"" \
+              --condition-filter="$CONDITION_FILTER" \
               --duration=0s \
               --if='> 0' \
               --trigger-count=1 \
@@ -343,7 +354,8 @@ runs:
         test -n "$POLICY"
         gcloud monitoring policies describe "$POLICY" \
           --project=${{ inputs.project_id }} \
-          --format='value(notificationChannels)' | grep -q .
+          --format=json | python3 backend/scripts/verify_sync_backfill_alert_policy.py \
+            --condition=threshold --filter="$CONDITION_FILTER" --duration-seconds=0 --channels="$ALERT_CHANNELS"
 
     - name: Provision routed backfill sequencer stall alert
       if: ${{ (inputs.mode == 'platform' || inputs.mode == 'dispatch') && inputs.provision_budget_alerts == 'true' }}
@@ -351,29 +363,37 @@ runs:
       env:
         ALERT_CHANNELS: ${{ inputs.alert_notification_channels }}
       run: |
+        set -euo pipefail
         test -n "$ALERT_CHANNELS"
         METRIC='sync_backfill_uid_sequencer_stall'
         DISPLAY_NAME='Sync backfill UID sequencer stalled'
         LOG_FILTER='resource.type="cloud_run_revision" AND (resource.labels.service_name="backend-sync" OR resource.labels.service_name="backend-sync-backfill") AND ("event=sync_uid_sequencer action=wait_alert" OR "event=sync_uid_sequencer action=sweep outcome=error")'
+        CONDITION_FILTER="metric.type=\"logging.googleapis.com/user/${METRIC}\" AND resource.type=\"cloud_run_revision\""
         if gcloud logging metrics describe "$METRIC" --project=${{ inputs.project_id }} >/dev/null 2>&1; then
           gcloud logging metrics update "$METRIC" --project=${{ inputs.project_id }} --description="$DISPLAY_NAME" --log-filter="$LOG_FILTER"
         else
           gcloud logging metrics create "$METRIC" --project=${{ inputs.project_id }} --description="$DISPLAY_NAME" --log-filter="$LOG_FILTER"
         fi
-        POLICY="$(gcloud monitoring policies list --project=${{ inputs.project_id }} --filter="displayName=\"${DISPLAY_NAME}\"" --format='value(name)' --limit=1)"
+        POLICY="$(gcloud monitoring policies list --project=${{ inputs.project_id }} --filter="displayName=\"${DISPLAY_NAME}\"" --format='value(name)')"
+        if [[ "$POLICY" == *$'\n'* ]]; then
+          echo "Duplicate ${DISPLAY_NAME} alert policies; reconcile manually" >&2
+          exit 1
+        fi
         if [[ -z "$POLICY" ]]; then
           POLICY="$(gcloud monitoring policies create \
             --project=${{ inputs.project_id }} \
             --display-name="$DISPLAY_NAME" \
             --condition-display-name="$DISPLAY_NAME" \
-            --condition-filter="metric.type=\"logging.googleapis.com/user/${METRIC}\" AND resource.type=\"cloud_run_revision\"" \
+            --condition-filter="$CONDITION_FILTER" \
             --duration=0s --if='> 0' --trigger-count=1 --combiner=OR \
             --notification-channels="$ALERT_CHANNELS" \
             --documentation='A backfill job has waited 12 hours, or the UID reconciler failed; investigate before the 24-hour Redis job and staged-audio expiry.' \
             --format='value(name)')"
         fi
         test -n "$POLICY"
-        gcloud monitoring policies describe "$POLICY" --project=${{ inputs.project_id }} --format='value(notificationChannels)' | grep -q .
+        gcloud monitoring policies describe "$POLICY" --project=${{ inputs.project_id }} --format=json \
+          | python3 backend/scripts/verify_sync_backfill_alert_policy.py \
+              --condition=threshold --filter="$CONDITION_FILTER" --duration-seconds=0 --channels="$ALERT_CHANNELS"
 
     - name: Provision backfill sequencer Scheduler execution alerts
       if: ${{ (inputs.mode == 'platform' || inputs.mode == 'dispatch') && inputs.provision_budget_alerts == 'true' }}
@@ -403,7 +423,11 @@ runs:
           else
             gcloud logging metrics create "$METRIC" --project=${{ inputs.project_id }} --description="$DISPLAY_NAME" --log-filter="$LOG_FILTER"
           fi
-          POLICY="$(gcloud monitoring policies list --project=${{ inputs.project_id }} --filter="displayName=\"${DISPLAY_NAME}\"" --format='value(name)' --limit=1)"
+          POLICY="$(gcloud monitoring policies list --project=${{ inputs.project_id }} --filter="displayName=\"${DISPLAY_NAME}\"" --format='value(name)')"
+          if [[ "$POLICY" == *$'\n'* ]]; then
+            echo "Duplicate ${DISPLAY_NAME} alert policies; reconcile manually" >&2
+            exit 1
+          fi
           if [[ -z "$POLICY" ]]; then
             POLICY="$(gcloud monitoring policies create \
               --project=${{ inputs.project_id }} --display-name="$DISPLAY_NAME" \
@@ -414,5 +438,15 @@ runs:
               --format='value(name)')"
           fi
           test -n "$POLICY"
-          gcloud monitoring policies describe "$POLICY" --project=${{ inputs.project_id }} --format='value(notificationChannels)' | grep -q .
+          if [[ "$KIND" == heartbeat ]]; then
+            CONDITION_KIND=absent
+            DURATION_SECONDS=600
+          else
+            CONDITION_KIND=threshold
+            DURATION_SECONDS=0
+          fi
+          gcloud monitoring policies describe "$POLICY" --project=${{ inputs.project_id }} --format=json \
+            | python3 backend/scripts/verify_sync_backfill_alert_policy.py \
+                --condition="$CONDITION_KIND" --filter="$CONDITION_FILTER" \
+                --duration-seconds="$DURATION_SECONDS" --channels="$ALERT_CHANNELS"
         done

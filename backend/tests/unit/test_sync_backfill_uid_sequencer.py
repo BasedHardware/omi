@@ -62,7 +62,7 @@ class _Query:
     def limit(self, count):
         return _Query(self.client, self.path, self.field, self.maximum, self.order, count, self.equals)
 
-    def stream(self):
+    def stream(self, transaction=None):
         rows = [(path, value) for path, value in self.client.docs.items() if path[:-1] == self.path]
         if self.field:
             rows = [(path, value) for path, value in rows if value.get(self.field) <= self.maximum]
@@ -157,6 +157,33 @@ def test_waiting_jobs_run_oldest_first_and_terminal_failure_releases(db):
     second = registry.claim_next('a', firestore_client=db, now=NOW)
     assert second['job_id'] == 'middle'
     assert registry.is_registered('a', 'middle', firestore_client=db)
+
+
+def test_claim_sees_earlier_capture_admitted_before_transaction(db, monkeypatch):
+    _register('a', 'newer', 300, db=db)
+    original_transactional = registry.firestore.transactional
+
+    def insert_before_claim(fn):
+        wrapped = original_transactional(fn)
+
+        def run(transaction):
+            db.write(
+                (registry.PENDING_COLLECTION, 'older'),
+                {
+                    'job_id': 'older',
+                    'uid': 'a',
+                    'payload': {'uid': 'a', 'job_id': 'older'},
+                    'sort_at': NOW + timedelta(seconds=100),
+                    'accepted_at': NOW,
+                },
+                merge=False,
+            )
+            return wrapped(transaction)
+
+        return run
+
+    monkeypatch.setattr(registry.firestore, 'transactional', insert_before_claim)
+    assert registry.claim_next('a', firestore_client=db, now=NOW)['job_id'] == 'older'
 
 
 def test_contention_only_one_active_and_other_uid_can_dispatch(db):

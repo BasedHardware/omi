@@ -2957,6 +2957,11 @@ async def test_backfill_enqueue_failure_never_falls_back_inline(monkeypatch):
         assert response.status_code == 202
         assert json.loads(response.body)['status'] == 'queued'
         assert module.enqueue_sync_job.call_count == 2
+        module.backfill_cutover.note_direct_admission.assert_called_once()
+        assert module.backfill_cutover.note_direct_admission.call_args.args == (
+            'test-uid',
+            module.enqueue_sync_job.call_args.args[0]['job_id'],
+        )
         module.start_background_task.assert_not_called()
         module._delete_staged_blobs_async.assert_not_awaited()
         assert not fallback_calls
@@ -3114,6 +3119,7 @@ async def test_old_backfill_task_migrates_on_flag_on_and_runs_direct_when_off():
         direct = await module.run_sync_job(request, task_retry_count=0)
         assert direct.status_code == 200
         module._run_sync_job_body.assert_awaited_once()
+        module.backfill_cutover.refresh_direct_run.assert_called_once_with('test-uid', 'job-1')
         module.sync_backfill_sequencer.get_owner.return_value = {'active_job_id': 'older-sequenced-job'}
         migrated_during_rollback = await module.run_sync_job(request, task_retry_count=0)
         assert migrated_during_rollback.status_code == 200

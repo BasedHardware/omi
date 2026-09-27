@@ -28,7 +28,7 @@ WAIT_ALERT_SECONDS = 12 * 60 * 60  # Well before Redis job / staged blob expiry.
 
 
 def enabled() -> bool:
-    """An absent setting is safe for local tools; dev/prod manifests turn it on."""
+    """An absent setting and phase-one dev/prod manifests keep direct dispatch."""
     return os.getenv('SYNC_BACKFILL_UID_SEQUENCER', 'off').strip().lower() == 'on'
 
 
@@ -106,8 +106,8 @@ def register_job(
     return created
 
 
-def _first_pending(client: Any, uid: str) -> Optional[dict[str, Any]]:
-    docs = list(_pending_for_uid(client, uid).order_by('sort_at').limit(1).stream())
+def _first_pending(client: Any, uid: str, *, transaction: Any = None) -> Optional[dict[str, Any]]:
+    docs = list(_pending_for_uid(client, uid).order_by('sort_at').limit(1).stream(transaction=transaction))
     return {'id': docs[0].id, **_data(docs[0])} if docs else None
 
 
@@ -153,17 +153,22 @@ def claim_next(uid: str, *, firestore_client: Any = None, now: Optional[datetime
     """Promote the oldest waiting capture into a fenced dispatch reservation."""
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
-    candidate = _first_pending(client, uid)
-    if candidate is None:
-        return None
-    pending = _pending_ref(client, uid, candidate['id'])
     current = now or _now()
 
     @firestore.transactional
     def commit(transaction: Any) -> Optional[dict[str, Any]]:
         owner = _data(root.get(transaction=transaction))
+        if owner.get('active_job_id'):
+            return None
+        # Read the ordered query inside the same transaction as the owner
+        # claim. A separate preselection can miss an earlier capture admitted
+        # just before the claim commits.
+        candidate = _first_pending(client, uid, transaction=transaction)
+        if candidate is None:
+            return None
+        pending = _pending_ref(client, uid, candidate['id'])
         job = _data(pending.get(transaction=transaction))
-        if owner.get('active_job_id') or not job:
+        if not job:
             return None
         epoch = int(owner.get('epoch') or 0) + 1
         active = {
