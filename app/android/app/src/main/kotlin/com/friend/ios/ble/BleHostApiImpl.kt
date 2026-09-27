@@ -190,10 +190,14 @@ class BleHostApiImpl(private val getActivity: () -> Activity?) : BleHostApi {
         fun array(key: String): JSONArray = try { JSONArray(prefs?.getString(key, "[]")) } catch (_: Exception) { JSONArray() }
         val battery = context?.getSharedPreferences("battery_history", Context.MODE_PRIVATE)
         val batteryHistory = try { JSONArray(battery?.getString("battery_history_$addr", "[]")) } catch (_: Exception) { JSONArray() }
+        val samples = JSONArray()
+        bleManager.rssiHistory[addr]?.let { deque -> synchronized(deque) {
+            deque.forEach { (ts, rssi) -> samples.put(JSONObject().put("ts", ts).put("rssi", rssi)) }
+        } }
         callback(Result.success(JSONObject()
             .put("disconnect_history_v2", array("disconnect_history_$addr"))
             .put("battery_history_v2", batteryHistory)
-            .put("rssi_samples", JSONArray())
+            .put("rssi_samples", samples)
             .put("firmware_diagnostics", array("firmware_$addr"))
             .put("lifecycle_events", array("lifecycle"))
             .put("ble_log", array("log_$addr"))

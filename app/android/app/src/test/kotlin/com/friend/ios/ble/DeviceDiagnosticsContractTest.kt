@@ -33,7 +33,10 @@ class DeviceDiagnosticsContractTest {
         assertFalse(counter.record(packet(1)))
         assertEquals(2L, counter.received)
         assertEquals(4L, counter.expected)
-        assertFalse(counter.record(packet(10000)))
+        assertTrue(counter.record(packet(10000)))
+        assertTrue(counter.record(packet(10001)))
+        assertEquals(4L, counter.received)
+        assertEquals(6L, counter.expected)
     }
 
     @Test fun `rssi trend and sample age use the disconnect window`() {

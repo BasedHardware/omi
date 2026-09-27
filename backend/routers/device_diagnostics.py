@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 from typing import Any
@@ -18,6 +20,7 @@ from utils.other import device_diagnostics_storage
 from utils.other import endpoints as auth
 
 router = APIRouter(tags=['device-diagnostics'])
+logger = logging.getLogger(__name__)
 MAX_BUNDLE_BYTES = 4 * 1024 * 1024
 TICKET_PATTERN = re.compile(r'^[0-9A-F]{12}$')
 upload_uid = auth.with_rate_limit(auth.get_current_user_uid, 'memories:modify')
@@ -35,11 +38,15 @@ class DiagnosticsBundle(BaseModel):
     bundle: dict[str, Any]
 
 
-def _admin_key(x_admin_key: str = Header(..., alias='X-Admin-Key')) -> str:
+def _admin_key(
+    x_admin_key: str = Header(..., alias='X-Admin-Key'),
+    x_admin_user: str | None = Header(None, alias='X-Admin-User'),
+) -> str:
     expected = os.getenv('ADMIN_KEY', '')
     if not expected or not hmac.compare_digest(x_admin_key, expected):
         raise HTTPException(status_code=403, detail='Invalid admin key')
-    return x_admin_key
+    key_id = hashlib.sha256(x_admin_key.encode()).hexdigest()[:8]
+    return f'admin:{key_id}/{x_admin_user[:64] if x_admin_user else "unattributed"}'
 
 
 @router.post('/v1/mobile/device-diagnostics', response_model=DiagnosticsReceipt, status_code=201)
@@ -69,4 +76,5 @@ async def read_device_diagnostics(ticket: str, admin: str = Depends(_admin_key))
     bundle = await run_blocking(storage_executor, device_diagnostics_storage.read_bundle, ticket)
     if bundle is None:
         raise HTTPException(status_code=404, detail='Ticket not found')
+    logger.info('%s read device diagnostics ticket_hash=%s', admin, hashlib.sha256(ticket.encode()).hexdigest()[:12])
     return DiagnosticsBundle(bundle=bundle)

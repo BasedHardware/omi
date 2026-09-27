@@ -458,9 +458,9 @@ final class OmiBleManager: NSObject {
         let index = Int(value[0]) | (Int(value[1]) << 8)
         let previous = lastPacketIndex[uuid]
         let delta = previous.map { (index - $0 + 65_536) % 65_536 } ?? 1
-        if delta == 0 || delta > 4096 { return } // Duplicate or stream restart.
+        if delta == 0 { return } // Duplicate packet.
         audioReceived[uuid, default: 0] += 1
-        audioExpected[uuid, default: 0] += Int64(delta)
+        audioExpected[uuid, default: 0] += Int64(delta > 4096 ? 1 : delta) // Stream restart becomes a new baseline.
         lastPacketIndex[uuid] = index
         if let marker = pendingAudioRecovery.removeValue(forKey: uuid) {
             let key = Self.historyKey(uuid)
