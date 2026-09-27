@@ -1,7 +1,7 @@
 # EXP-003 — Jev capture shadow
 
 **Owner:** David. **Registered:** 2026-09-27. **Decision deadline:** 2026-10-18T00:00:00Z.
-**State:** code only, default off. Production vendor use requires David's explicit privacy decision.
+**State:** allowlist-only in dev and prod. David approved vendor use for one UID on 2026-09-27. Percentage stays 0. The code default remains off, and the hard auto-off is still 2026-10-18T00:00:00Z.
 
 ## Hypotheses and fixed treatment
 

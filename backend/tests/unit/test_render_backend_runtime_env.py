@@ -224,13 +224,25 @@ def test_memory_maintenance_entrypoint_does_not_invoke_daily_sweep_job():
     assert 'memory_maintenance_job.py' in dockerfile
 
 
+def _without_named_env(node, name: str):
+    if isinstance(node, dict):
+        return {key: _without_named_env(value, name) for key, value in node.items() if key != name}
+    if isinstance(node, list):
+        return [_without_named_env(item, name) for item in node]
+    return node
+
+
 def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admission():
     dev = deepcopy(_MANIFEST['environments']['dev'])
     # The dev-only ledger drain has an explicit operational fence for the two
     # owner test accounts. Product/runtime surfaces must still contain no
-    # first-user or capture admission lists.
+    # first-user or capture admission lists. EXP-003 is the one approved
+    # allowlist-only vendor shadow for this UID.
     dev['cloud_run']['jobs'].pop('knowledge-ledger-drain-job', None)
-    serialized = json.dumps(dev, sort_keys=True)
+    serialized = json.dumps(
+        _without_named_env(dev, 'CAPTURE_JEV_SHADOW_UID_ALLOWLIST'),
+        sort_keys=True,
+    )
     assert 'vi7SA9ckQCe4ccobWNxlbdcNdC23' not in serialized
 
     cloud_run = _MANIFEST['environments']['dev']['cloud_run']
