@@ -2,6 +2,7 @@ import { ImageResponse } from 'next/og';
 import envConfig from '@/src/constants/envConfig';
 import { DEFAULT_TITLE_MEMORY } from '@/src/constants/memory';
 import { sharedApiUrl } from '@/src/lib/shared-api-url.mjs';
+import { capturePreviewRequest } from '@/src/lib/share-preview-analytics.mjs';
 import {
   durationMinutes,
   formatDuration,
@@ -61,8 +62,13 @@ async function loadFont(family: string, weight: number, text: string) {
   }
 }
 
-export async function GET(_request: Request, props: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
   const { id } = await props.params;
+  await capturePreviewRequest(
+    request.headers.get('user-agent') || '',
+    'og_image',
+    new URL(request.url).searchParams,
+  );
   const note = await fetchSharedNote(id);
 
   const title = note ? note.structured?.title || DEFAULT_TITLE_MEMORY : 'Notes from Omi';

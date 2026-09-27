@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-09-27 (S1 capture-evidence exploratory dark write; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
+> Last updated: 2026-09-27 (S1 capture-evidence exploratory dark write; live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -69,6 +69,14 @@ the provider's `<end>`/`<fin>` marker establishes a boundary. A 4,096-character
 limit bounds accumulation; non-final and translated tokens do not enter the
 spoken transcript. Segment times use the provider's `start_ms` and `end_ms`,
 minus speech-profile preroll, rather than extending to the next token's start.
+Listen retains a normalized primary-language profile across failover. For a
+non-English multilingual session, Soniox gets filtered primary-plus-English
+`language_hints` while language identification remains enabled. A separately
+allocated routing arm may try Soniox first; it falls through to the normal
+provider chain on a failed connect. Push-to-talk, batch transcription,
+multichannel, custom STT, and BYOK routing retain their existing behavior.
+The Soniox adapter carries the agreed language of final
+tokens as private metadata; the listen receiver removes it before persistence.
 
 Audio-timeline v2 retains at most the configured segment-buffer limit in each
 of its pending and unplaced fallback queues. If pending text fills the first
@@ -428,6 +436,15 @@ environment, outcome, and phase labels. They do not include transcript content,
 user IDs, model revisions, or other high-cardinality request data. Custom-STT
 sessions are excluded because the backend does not own their provider socket or
 provider attempt lifecycle.
+
+`omi_stt_language_constraint_total` counts the actual forced, hinted or auto
+mode at each adopted live connection. `omi_stt_output_language_segments_total`
+counts in-profile, out-of-profile and undetermined finalized segments by
+provider, bounded primary group and routing arm. Soniox final-token language
+and an optional Velma final-utterance language take priority; otherwise the
+receiver detects from at most 512 characters of segment text off-loop with a
+24-letter minimum and 0.95 confidence floor. It logs one `live_stt_language_summary` at session close
+with codes and counts only. No transcript text reaches these metrics or logs.
 
 Session-level headline SLI (2026-09-26): teardown also emits exactly one
 `omi_live_session_transcript_outcome_total{outcome}` per backend-STT session —
