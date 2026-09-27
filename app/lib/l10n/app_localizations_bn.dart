@@ -11350,6 +11350,51 @@ class AppLocalizationsBn extends AppLocalizations {
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'হেডফোন';
 
   @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'মিনিট';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'কাজ';
+
+  @override
+  String get usageMonth => 'এই মাস';
+
+  @override
+  String get usageYear => 'এই বছর';
+
+  @override
+  String get usageAll => 'সর্বকাল';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

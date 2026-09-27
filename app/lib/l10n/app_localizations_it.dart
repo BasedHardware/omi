@@ -11416,6 +11416,51 @@ class AppLocalizationsIt extends AppLocalizations {
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Cuffie';
 
   @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minuti';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Attività';
+
+  @override
+  String get usageMonth => 'Questo Mese';
+
+  @override
+  String get usageYear => 'Quest\'Anno';
+
+  @override
+  String get usageAll => 'Sempre';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

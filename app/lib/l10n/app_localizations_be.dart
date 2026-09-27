@@ -11380,6 +11380,51 @@ class AppLocalizationsBe extends AppLocalizations {
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Навушнікі';
 
   @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'хвіліны';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Задачы';
+
+  @override
+  String get usageMonth => 'Гэты месяц';
+
+  @override
+  String get usageYear => 'Гэты год';
+
+  @override
+  String get usageAll => 'Ўсё час';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

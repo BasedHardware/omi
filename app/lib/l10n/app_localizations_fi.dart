@@ -11353,6 +11353,51 @@ class AppLocalizationsFi extends AppLocalizations {
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Kuulokkeet';
 
   @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minuuttia';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Tehtävät';
+
+  @override
+  String get usageMonth => 'Tässä kuussa';
+
+  @override
+  String get usageYear => 'Tänä vuonna';
+
+  @override
+  String get usageAll => 'Kaikki aika';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

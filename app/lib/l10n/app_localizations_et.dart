@@ -11346,6 +11346,51 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Kõrvaklapid';
 
   @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minutit';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Ülesanded';
+
+  @override
+  String get usageMonth => 'See kuu';
+
+  @override
+  String get usageYear => 'See aasta';
+
+  @override
+  String get usageAll => 'Kogu aeg';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

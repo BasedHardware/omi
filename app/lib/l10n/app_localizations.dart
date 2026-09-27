@@ -20661,6 +20661,96 @@ abstract class AppLocalizations {
   /// **'Headphones'**
   String get deviceOnboardingVoiceReplyGenericHeadphones;
 
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Listened'**
+  String get usageListened;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Words heard'**
+  String get usageWordsHeard;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks & notes'**
+  String get usageTasksNotes;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Peak hour'**
+  String get usagePeakHour;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Best day'**
+  String get usageBestDay;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Best month'**
+  String get usageBestMonth;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Best year'**
+  String get usageBestYear;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Minutes'**
+  String get usageMinutes;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Words'**
+  String get usageWords;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks'**
+  String get usageTasks;
+
+  /// Plan and Usage period selector
+  ///
+  /// In en, this message translates to:
+  /// **'Month'**
+  String get usageMonth;
+
+  /// Plan and Usage period selector
+  ///
+  /// In en, this message translates to:
+  /// **'Year'**
+  String get usageYear;
+
+  /// Plan and Usage period selector
+  ///
+  /// In en, this message translates to:
+  /// **'All time'**
+  String get usageAll;
+
+  /// Current hour marker on Plan and Usage chart
+  ///
+  /// In en, this message translates to:
+  /// **'now'**
+  String get usageNow;
+
+  /// Label for monthly chat usage meter
+  ///
+  /// In en, this message translates to:
+  /// **'Chat this month'**
+  String get usageChatThisMonth;
+
   /// No description provided for @siriIndexSetting.
   ///
   /// In en, this message translates to:
