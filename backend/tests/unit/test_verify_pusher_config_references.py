@@ -183,6 +183,9 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "CONVERSATION_NOTES_V2_ENABLED": "true",
         "CONVERSATION_OCR_CONTEXT_ENABLED": "true",
         "CONVERSATION_RELEVANCE_JEV_ENABLED": "true",
+        "CAPTURE_JEV_SHADOW_ENABLED": "true",
+        "CAPTURE_JEV_SHADOW_PERCENT": "0",
+        "CAPTURE_JEV_SHADOW_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
         "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED": "true",
         "FREE_TIER_LOCAL_PROCESSING": "true",
         "FREE_TIER_EMERGENCY_STOP": "false",
@@ -204,6 +207,11 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "OMI_LLM_GATEWAY_URL": "http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080",
         "STT_PRERECORDED_MODEL": "parakeet,modulate-velma-2",
         "STT_SERVICE_MODELS": "modulate-velma-2,soniox,dg-nova-3,parakeet",
+        "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": "1",
+        "TRANSCRIPTION_SHADOW_ENABLED": "true",
+        "TRANSCRIPTION_SHADOW_KILL_SWITCH": "false",
+        "TRANSCRIPTION_SHADOW_PERCENT": "0",
+        "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": "omi-release-probe",
     }
     assert clear_historical_secret == {"REDIS_DB_HOST", "GOOGLE_CLIENT_ID", "TYPESENSE_HOST"}
     assert preflight.validate_dev_pusher_binding_contract(deployment) == []

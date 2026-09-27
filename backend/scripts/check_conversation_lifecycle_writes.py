@@ -169,7 +169,7 @@ def _transcript_writer_violations(tree: ast.Module, relative_path: str) -> list[
         'update_conversation_segments': 'apply_manual_assignments',
         'assign_conversation_speaker': 'manual_assignment',
         # These rewrite current transactional content rather than caller snapshots.
-        'update_conversation_segment_text': '_prepare_conversation_for_read',
+        'update_conversation_segment_text': 'prepare_conversation_for_read',
         'migrate_conversations_level_batch': 'decode_manual_speaker_assignments',
         'create_conversation_if_absent_with_lifecycle': None,
     }

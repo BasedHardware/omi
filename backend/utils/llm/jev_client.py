@@ -22,7 +22,7 @@ import os
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Optional, cast
+from typing import Any, Callable, Optional, cast
 
 import httpx
 
@@ -88,6 +88,7 @@ def ask_jev(
     lane: str,
     timeout_seconds: float = JEV_CLIENT_TIMEOUT_SECONDS,
     max_attempts: int = JEV_CLIENT_MAX_ATTEMPTS,
+    outcome_observer: Callable[[str], None] | None = None,
 ) -> Optional[JevAnswers]:
     """Ask Jev ``questions`` about ``state``. ``None`` on any failure.
 
@@ -122,6 +123,11 @@ def ask_jev(
         logger.warning('jev decision failed lane=%s reason=%s', lane, type(exc).__name__)
         return None
     finally:
+        if outcome_observer is not None:
+            try:
+                outcome_observer(outcome)
+            except Exception:
+                logger.warning('jev outcome observer failed lane=%s', lane)
         if outcome != 'success':
             logger.info('jev decision unavailable lane=%s outcome=%s', lane, outcome)
         record_jev_decision(lane=lane, outcome=outcome, latency_seconds=time.monotonic() - started)

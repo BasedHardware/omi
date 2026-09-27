@@ -227,6 +227,30 @@ def filter_memories(
     return filtered
 
 
+def extract_memories(data: Any) -> List[Dict[str, Any]]:
+    """Unwrap memory records from bare arrays, wrapped envelopes, or single objects.
+
+    Supports:
+    - Bare arrays: [ {...}, {...} ]
+    - Wrapped dicts: {"memories": [...]}, {"items": [...]}, {"data": [...]}
+    - Single memory dict: { "id": "...", "content": "..." }
+
+    Ensures that empty envelopes like {"memories": []} return an empty list
+    instead of falling through and creating phantom untitled memories.
+    """
+    if isinstance(data, list):
+        return [item for item in data if isinstance(item, dict)]
+    if isinstance(data, dict):
+        for key in ("memories", "items", "data"):
+            val = data.get(key)
+            if isinstance(val, list):
+                return [item for item in val if isinstance(item, dict)]
+        if any(key in data for key in ("content", "category", "id", "created_at")):
+            return [data]
+        return []
+    return []
+
+
 def _sanitize_group_key(group_key: str) -> str:
     """Turn a group key (category or date) into a filesystem-safe slug."""
     return re.sub(r"[^\w-]", "_", group_key).strip("_") or "memories"
@@ -397,13 +421,11 @@ def main() -> int:
         sys.stderr.write(f"Error reading input: {exc}\n")
         return 1
 
-    if isinstance(payload, list):
-        raw_items = payload
-    elif isinstance(payload, dict):
-        raw_items = payload.get("memories") or payload.get("items") or [payload]
-    else:
+    if not isinstance(payload, (list, dict)):
         sys.stderr.write("Error: Expected a JSON array of memories or object containing 'memories'.\n")
         return 1
+
+    raw_items = extract_memories(payload)
 
     items = filter_memories(
         raw_items,

@@ -928,9 +928,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'أضف إلى claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'نسخ التكوين';
 
   @override
@@ -2457,13 +2454,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get clearAllNodesAndConnections => 'مسح جميع العقد والاتصالات';
 
   @override
-  String get addToClaudeDesktopConfig => 'أضف إلى claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'اربط مساعدي الذكاء الاصطناعي ببياناتك';
-
-  @override
-  String get useYourMcpApiKey => 'استخدم مفتاح MCP API الخاص بك';
 
   @override
   String get realTimeTranscript => 'نسخ في الوقت الفعلي';
@@ -2476,12 +2467,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get detailedDiagnosticMessages => 'رسائل تشخيصية مفصلة';
-
-  @override
-  String get autoCreateSpeakers => 'إنشاء المتحدثين تلقائيًا';
-
-  @override
-  String get autoCreateWhenNameDetected => 'إنشاء تلقائي عند اكتشاف الاسم';
 
   @override
   String get followUpQuestions => 'أسئلة المتابعة';
@@ -9904,7 +9889,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get transcriptionNoAudio => 'النسخ لا يستلم الصوت';
 
   @override
-  String get tapPlusToStartRecording => 'اضغط على + لبدء التسجيل';
+  String get tapPlusToStartRecording => 'اضغط على زر التسجيل لبدء التسجيل';
 
   @override
   String get chatBlockTask => 'مهمة';
@@ -10146,7 +10131,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'تظهر هنا المحادثات التي تسجّلها. اضغط + في الصفحة الرئيسية لتسجيل أول محادثة.';
+      'تظهر هنا المحادثات التي تسجّلها. اضغط على زر التسجيل في الصفحة الرئيسية لتسجيل أول محادثة.';
 
   @override
   String get conversationMap => 'خريطة المحادثات';
@@ -10621,7 +10606,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deviceConnecting => 'جارٍ الاتصال…';
 
   @override
-  String get recordOptionsTip => 'نصيحة: اضغط مع الاستمرار على زر التسجيل لتسجيل مكالمة هاتفية.';
+  String get recordOptionsTip => 'نصيحة: اضغط على السهم في زر التسجيل لتسجيل مكالمة هاتفية.';
 
   @override
   String get firmwareUpdateFailedTitle => 'فشل التحديث';
@@ -11090,4 +11075,264 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'عندما تسمّي شخصًا، يحتفظ Omi بعيّنة صوتية قصيرة ليتعرّف عليه في المرة القادمة';
+
+  @override
+  String get leaveBlank => 'اتركه فارغًا';
+
+  @override
+  String get mcpOAuthSetup =>
+      'في claude.ai، أضف موصلًا مخصصًا والصق عنوان الخادم. إذا طلب Claude معرّف عميل OAuth متقدمًا، فاستخدم القيمة أدناه واترك السر فارغًا — لا تستخدم أبدًا مفتاح MCP API الخاص بك كسر OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'أضف إلى ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'في Claude Desktop → Settings → Connectors، أضف موصلًا مخصصًا والصق عنوان الخادم. إذا طلب Claude معرّف عميل OAuth متقدمًا، فاستخدم القيمة أدناه واترك السر فارغًا — لا تستخدم أبدًا مفتاح MCP API الخاص بك كسر OAuth.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'النسخ غير متوفر حاليًا، يستمر التسجيل على الجهاز وستتم المعالجة لاحقًا';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'نسخ معلّق $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'نسخ معلّق $count';
+  }
+
+  @override
+  String get captureSourceCall => 'مكالمة';
+
+  @override
+  String get captureSourcePhoneMic => 'ميكروفون الهاتف';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'استئناف';
+
+  @override
+  String get finish => 'إنهاء';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'القلادة متوقفة مؤقتاً · تُستأنف عند الانتهاء';
+
+  @override
+  String get pendantIsListeningTitle => 'قلادتك تستمع';
+
+  @override
+  String get oneSourceAtATime => 'يسجّل Omi من مصدر واحد فقط في كل مرة.';
+
+  @override
+  String get recordWithPhoneInstead => 'التسجيل بالهاتف بدلاً من ذلك';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'تتوقف القلادة مؤقتاً حتى تنتهي';
+
+  @override
+  String get pendantPausesDuringCall => 'تتوقف القلادة مؤقتاً أثناء المكالمة';
+
+  @override
+  String get keepUsingPendant => 'متابعة استخدام القلادة';
+
+  @override
+  String get recordWith => 'التسجيل باستخدام';
+
+  @override
+  String get moreWaysToRecord => 'طرق أخرى للتسجيل';
+
+  @override
+  String get openCall => 'فتح المكالمة';
+
+  @override
+  String get captureRecoveryBanner => 'صوت القلادة لا يصل إلى التطبيق — انقر للإصلاح';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => 'أوقف «النسخ لاحقًا» على قلادتك قبل التسجيل بهاتفك.';
+
+  @override
+  String get captureNotTranscribing => 'لا يتم النسخ';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'تم حفظ الصوت، وسيُنسخ لاحقًا';
+
+  @override
+  String get captureStillRecording => 'لا يزال التسجيل جاريًا';
+
+  @override
+  String get captureMicInUseElsewhere => 'الميكروفون قيد الاستخدام في تطبيق آخر';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'أخذت مكالمة أو تطبيق آخر الميكروفون، لذلك لا يستطيع Omi السماع الآن. سيستأنف Omi تلقائيًا عندما يصبح الميكروفون متاحًا. كل ما سُجّل قبل ذلك محفوظ.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'تعذّر الوصول إلى خدمة تحويل الكلام إلى نص المخصصة. يحتفظ Omi بالصوت على هذا الهاتف ويرسله عند عودة الخدمة. لن يضيع شيء.';
+
+  @override
+  String get captureStarting => 'جارٍ البدء…';
+
+  @override
+  String get capturePhoneStorageFull => 'مساحة الهاتف ممتلئة';
+
+  @override
+  String get captureStorageAlmostFull => 'المساحة ممتلئة تقريبًا';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'فقد القلادة اتصالها بهذا الهاتف. سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة. كل ما سُجّل قبل ذلك محفوظ.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name وآخرون';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyTitle => 'استمع إلى إجابات Omi';
+
+  @override
+  String get deviceOnboardingVoiceReplySample => 'تم. يبدأ اجتماعك التالي بعد عشرين دقيقة.';
+
+  @override
+  String get deviceOnboardingAllSetTitle => 'أصبحت جاهزًا';
+
+  @override
+  String get deviceOnboardingAllSetSubtitle => 'اضغط على صف لمراجعته أو تغييره.';
+
+  @override
+  String get deviceOnboardingAllSetSinglePressBadge => '1×';
+
+  @override
+  String get deviceOnboardingAllSetDoublePressBadge => '2×';
+
+  @override
+  String get deviceOnboardingVoiceReplySubtitle => 'عندما تسأل باستخدام الزر، يستطيع Omi قراءة إجابته بصوت عالٍ.';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewIdle => 'اسمع إجابتك الأخيرة';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewPlaying => 'جارٍ تشغيل إجابتك الأخيرة...';
+
+  @override
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device) {
+    return 'من خلال $device';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker => 'من خلال مكبر صوت الهاتف';
+
+  @override
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput => 'من خلال إخراج الصوت الحالي';
+
+  @override
+  String get deviceOnboardingVoiceReplyOffDescription => 'تبقى الإجابات على الشاشة. لا شيء يتحدث.';
+
+  @override
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'خاص. يتحدث فقط من خلال AirPods أو Bluetooth أو سماعات الرأس السلكية.';
+
+  @override
+  String get deviceOnboardingVoiceReplyAlwaysDescription => 'يستخدم مكبر صوت الهاتف في حالة عدم توصيل سماعات الرأس.';
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusOff => 'Omi سيبقى صامتاً. لا تزال الإجابات تظهر في التطبيق.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device) {
+    return '$device متصل. Omi سيتحدث هنا.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'لا توجد سماعات متصلة. Omi يظل صامتًا حتى تقوم بتوصيل البعض.';
+
+  @override
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
+    return 'يلعب من خلال $device.';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker => 'يتم تشغيله بصوت عالٍ من خلال مكبر صوت الهاتف.';
+
+  @override
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse) {
+    return 'يمكنك تغيير هذا في أي وقت في $settings › $voiceResponse';
+  }
+
+  @override
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial) {
+    return 'أعد تشغيل هذه الجولة في أي وقت على $settings › $deviceSettings › $deviceTutorial';
+  }
+
+  @override
+  String get deviceOnboardingVoiceReplyGenericHeadphones => 'سماعات الرأس';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'دقائق';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'المهام';
+
+  @override
+  String get usageMonth => 'هذا الشهر';
+
+  @override
+  String get usageYear => 'هذا العام';
+
+  @override
+  String get usageAll => 'كل الأوقات';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'المظهر';
+
+  @override
+  String get appearanceSystem => 'النظام';
+
+  @override
+  String get appearanceLight => 'فاتح';
+
+  @override
+  String get appearanceDark => 'داكن';
 }

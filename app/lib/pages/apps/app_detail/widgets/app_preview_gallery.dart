@@ -70,7 +70,7 @@ class AppPreviewGallery extends StatelessWidget {
                         errorWidget: (context, url, error) => Container(
                           width: 150,
                           color: OmiColors.surface1,
-                          child: const Center(
+                          child: Center(
                             child: FaIcon(FontAwesomeIcons.circleExclamation, color: OmiColors.textTertiary),
                           ),
                         ),

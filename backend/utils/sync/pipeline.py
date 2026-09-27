@@ -24,6 +24,7 @@ from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 import httpx
 import numpy as np
+from google.api_core import exceptions as google_exceptions
 from fastapi import HTTPException, UploadFile
 from pydub import AudioSegment
 
@@ -114,6 +115,7 @@ from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_transcription_outcome
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
+from utils.stt.voiceprints import usable_person_voiceprint
 from utils.stt.pre_recorded import get_prerecorded_service, postprocess_words, prerecorded
 from utils.stt.outcomes import (
     TranscriptionFailure,
@@ -135,6 +137,7 @@ from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_w
 from utils.sync.capture import chunk_identity
 from utils.sync.bridge import finish_sync_segment
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
+from config.sync_telemetry import SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
 from utils.sync.lanes import SyncLane
@@ -147,6 +150,9 @@ from utils.sync.telemetry import bounded_sync_phase as _bounded_sync_phase
 from utils.sync.telemetry import new_attempt_ref as _new_attempt_ref
 from utils.sync.merge_audio import store_partial_merge_survivor_audio
 from utils.sync.assignment import fragment_rule, needs_fragment_review
+from utils.sync.speaker_identity import SpeakerIdentityDependencies, USER_SELF_PERSON_ID
+from utils.sync.speaker_identity import build_person_embeddings_cache as _build_person_embeddings_cache
+from utils.sync.speaker_identity import identify_speakers_for_segments as _identify_speakers_for_segments
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL, record_conversation_relevance
 
@@ -178,6 +184,54 @@ _SYNC_FAILURE_REASON_CODES = {
     'sync_vad_failed',
     'sync_worker_stale',
 }
+
+
+def _persistence_failure_fingerprint(error: BaseException, phase: str) -> str | None:
+    """Identify a bounded persistence data-shape failure, never an unknown error.
+
+    Inspect the full cause chain so an apparent data-shape error wrapping a
+    transient transport or Firestore failure cannot record a strike.
+    """
+    if phase != 'persistence':
+        return None
+    subtype = bounded_exception_class(error)
+    if subtype not in SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS:
+        return None
+    chain: list[BaseException] = []
+    current: BaseException | None = error
+    while current is not None and all(current is not item for item in chain):
+        chain.append(current)
+        current = current.__cause__ or current.__context__
+    if any(
+        type(item).__name__ == 'FirestoreContentionExhausted'
+        or isinstance(
+            item,
+            (
+                google_exceptions.Aborted,
+                google_exceptions.GoogleAPICallError,
+                google_exceptions.DeadlineExceeded,
+                google_exceptions.ServiceUnavailable,
+                google_exceptions.ResourceExhausted,
+                google_exceptions.RetryError,
+                TimeoutError,
+                ConnectionError,
+                httpx.TimeoutException,
+                httpx.TransportError,
+                httpx.HTTPStatusError,
+            ),
+        )
+        for item in chain
+    ):
+        return None
+    return f'persistence:{subtype}'
+
+
+def _whole_job_persistence_fingerprint(
+    failed_segments: int, total_segments: int, fingerprints: list[str]
+) -> str | None:
+    if failed_segments > 0 and failed_segments == total_segments == len(fingerprints) and len(set(fingerprints)) == 1:
+        return fingerprints[0]
+    return None
 
 
 async def _resolve_fair_use_soft_cap_plan(uid: str):
@@ -691,6 +745,8 @@ async def _finalize_sync_job_failure(
     attempt_ref: str | None = None,
     failure_phase: str | None = None,
     failure_class: str | None = None,
+    failure_key: str | None = None,
+    failure_fingerprint: str | None = None,
 ) -> None:
     """Offload the atomic failure publication boundary to the DB executor."""
     finalized = await run_blocking(
@@ -710,6 +766,8 @@ async def _finalize_sync_job_failure(
         attempt_ref=attempt_ref,
         failure_phase=failure_phase,
         failure_class=failure_class,
+        failure_key=failure_key,
+        failure_fingerprint=failure_fingerprint,
     )
     if finalized is None:
         # The epoch-fenced path lost its lease; the compatibility path saw an
@@ -734,6 +792,8 @@ def finalize_sync_job_failure_now(
     attempt_ref: str | None = None,
     failure_phase: str | None = None,
     failure_class: str | None = None,
+    failure_key: str | None = None,
+    failure_fingerprint: str | None = None,
 ) -> Optional[Dict]:
     """Publish one truthful failure and then make its retry claim available.
 
@@ -762,16 +822,19 @@ def finalize_sync_job_failure_now(
     if finalized is None:
         return None
     if content_id:
+        failure_kwargs = {'failure_key': failure_key} if failure_key else {}
+        if failure_fingerprint:
+            failure_kwargs['failure_fingerprint'] = failure_fingerprint
         if run_lock_token is None:
             # The pre-cutover protocol has no epoch binding. Keep all ledger
             # operations tokenless while legacy revisions may still exist.
-            release_sync_content_claim(uid, content_id, job_id)
+            release_sync_content_claim(uid, content_id, job_id, **failure_kwargs)
         else:
             # The fenced Redis terminal transition already succeeded. A lease
             # can expire between that CAS and Firestore release, so use the
             # deliberately retired-job transaction rather than treating this
             # as a live write.
-            release_sync_content_claim_after_job_retired(uid, content_id, job_id)
+            release_sync_content_claim_after_job_retired(uid, content_id, job_id, **failure_kwargs)
     if run_lock_token is not None:
         delete_sync_job_run_lock_epoch(job_id)
     logger.error(
@@ -906,36 +969,26 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
 
 
-USER_SELF_PERSON_ID = 'user'
+def _speaker_identity_dependencies() -> SpeakerIdentityDependencies:
+    return SpeakerIdentityDependencies(
+        users_db=users_db,
+        get_user_name=get_user_name,
+        usable_person_voiceprint=usable_person_voiceprint,
+        speaker_embedding_configured=speaker_embedding_configured,
+        collect_speaker_audio=collect_speaker_audio,
+        extract_embedding_from_bytes=extract_embedding_from_bytes,
+        mean_embedding=mean_embedding,
+        compare_embeddings=compare_embeddings,
+        select_speaker_match=select_speaker_match,
+        detect_speaker_from_text=detect_speaker_from_text,
+        process_speaker_assigned_segments=process_speaker_assigned_segments,
+        speaker_decisions=SYNC_SPEAKER_DECISIONS,
+        logger=logger,
+    )
 
 
 def build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
-    """Build a cache of person embeddings for speaker identification.
-
-    Loads the user's own speaker embedding and all people with stored embeddings.
-    Returns dict mapping person_id -> {embedding: np.ndarray, name: str}.
-    """
-    cache: Dict[str, dict] = {}
-
-    # Load user's own speaker embedding
-    embedding_list = users_db.get_user_speaker_embedding(uid)
-    if embedding_list:
-        user_embedding = np.array(embedding_list, dtype=np.float32).reshape(1, -1)
-        cache[USER_SELF_PERSON_ID] = {'embedding': user_embedding, 'name': get_user_name(uid)}
-
-    # Load all people with speaker embeddings
-    people = users_db.get_people(uid)
-    for person in people or []:
-        emb = person.get('speaker_embedding')
-        # Only load embedding if person has speech samples — contacts without
-        # samples may have stale embeddings from a pre-v3 model (#6238)
-        if emb and person.get('speech_samples') and person.get('speech_samples_version', 1) >= 3:
-            cache[person['id']] = {
-                'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
-                'name': person['name'],
-            }
-
-    return cache
+    return _build_person_embeddings_cache(uid, dependencies=_speaker_identity_dependencies())
 
 
 def _download_audio_bytes(url: str) -> Optional[bytes]:
@@ -956,163 +1009,14 @@ def identify_speakers_for_segments(
     uid: str,
     language: Optional[str] = None,
 ) -> None:
-    """Identify speakers in transcript segments using voice embeddings and text detection.
-
-    Modifies segments in-place by assigning person_id and is_user fields.
-
-    Steps:
-    1. Voice embedding matching (requires audio_bytes, a non-empty cache, and
-       HOSTED_SPEAKER_EMBEDDING_API_URL):
-       For each speaker, pool distinct audio into bounded clips, average their
-       embeddings, and match against person_embeddings_cache.
-    2. Text-based detection ("I am X") runs independently for all unmatched speakers.
-    3. Apply assignments via process_speaker_assigned_segments.
-    """
-    speaker_to_person_map: Dict[int, Tuple[str, str]] = {}
-    segment_person_assignment_map: Dict[str, str] = {}
-    voice_assignments: list[tuple[TranscriptSegment, str]] = []
-
-    # Group all available evidence by diarized speaker.
-    speaker_segments: Dict[int, List[TranscriptSegment]] = {}
-    for seg in transcript_segments:
-        sid = seg.speaker_id if seg.speaker_id is not None else 0
-        speaker_segments.setdefault(sid, []).append(seg)
-
-    # Voice embedding matching (only when audio and cached embeddings are available)
-    # Track matched person_ids so each person is only assigned to one speaker
-    # (diarization tells us speakers are distinct — no person can be two speakers).
-    matched_person_ids: set = set()
-
-    if audio_bytes and person_embeddings_cache and speaker_embedding_configured():
-        # Preserve existing longest-segment priority for one-person/one-speaker dedup.
-        # Pooling changes evidence, not the order in which identities are reserved.
-        # Note: matched_person_ids assumes diarization is correct (one person = one speaker).
-        # If diarization fragments one person across speaker IDs, only the best match wins.
-        sorted_speakers = sorted(
-            speaker_segments.items(),
-            key=lambda kv: max(s.end - s.start for s in kv[1]),
-            reverse=True,
-        )
-
-        for speaker_id, segments in sorted_speakers:
-            best_seg = max(segments, key=lambda s: s.end - s.start)
-            seg_duration = best_seg.end - best_seg.start
-
-            try:
-                evidence = collect_speaker_audio(audio_bytes, [(seg.start, seg.end) for seg in segments])
-            except (ValueError, EOFError, wave.Error):
-                evidence = None
-            embeddings = []
-            evidence_seconds = 0.0
-            failed_clips = 0
-            for clip_wav, seconds in evidence.clips if evidence is not None else []:
-                try:
-                    embeddings.append(extract_embedding_from_bytes(clip_wav, "sync_speaker.wav"))
-                    evidence_seconds += seconds
-                except Exception as error:
-                    failed_clips += 1
-                    logger.info(
-                        'Speaker ID: embedding failed speaker=%s type=%s uid=%s', speaker_id, type(error).__name__, uid
-                    )
-            if not embeddings:
-                outcome = (
-                    'audio_error'
-                    if evidence is None
-                    else 'embedding_error' if failed_clips else 'insufficient_evidence'
-                )
-                SYNC_SPEAKER_DECISIONS.labels(outcome=outcome).inc()
-                logger.info(
-                    'speaker_id_decision surface=sync uid=%s speaker=%s clip_seconds=%.1f '
-                    'best=None best_distance=inf runner_up_distance=inf accepted=False '
-                    'segments=%d clips=0 evidence_seconds=0 available_seconds=%.3f '
-                    'failed_clips=%d outcome=%s evidence_policy=pooled_v1',
-                    uid,
-                    speaker_id,
-                    seg_duration,
-                    len(segments),
-                    evidence.available_seconds if evidence is not None else 0.0,
-                    failed_clips,
-                    outcome,
-                )
-                continue
-            query_embedding = mean_embedding(embeddings) if len(embeddings) > 1 else embeddings[0]
-
-            # Keep assigned candidates in the ambiguity comparison. Removing the
-            # owner after a first match must not make a similar household voice
-            # look unambiguous; apply one-person/one-speaker dedup only afterward.
-            distances = {
-                person_id: compare_embeddings(query_embedding, data['embedding'])
-                for person_id, data in person_embeddings_cache.items()
-            }
-            decision = select_speaker_match(distances)
-            accepted = decision.person_id is not None and decision.person_id not in matched_person_ids
-            outcome = 'accepted' if accepted else 'duplicate_person' if decision.accepted else 'no_match'
-            SYNC_SPEAKER_DECISIONS.labels(outcome=outcome).inc()
-            logger.info(
-                'speaker_id_decision surface=sync uid=%s speaker=%s clip_seconds=%.1f '
-                'best=%s best_distance=%.3f runner_up_distance=%.3f accepted=%s '
-                'segments=%d clips=%d evidence_seconds=%.3f available_seconds=%.3f '
-                'failed_clips=%d outcome=%s evidence_policy=pooled_v1',
-                uid,
-                speaker_id,
-                seg_duration,
-                decision.best_id,
-                decision.best_distance,
-                decision.runner_up_distance,
-                accepted,
-                len(segments),
-                len(embeddings),
-                evidence_seconds,
-                evidence.available_seconds if evidence is not None else 0.0,
-                failed_clips,
-                outcome,
-            )
-            if accepted and decision.person_id is not None:
-                person_id = decision.person_id
-                speaker_to_person_map[speaker_id] = (person_id, person_embeddings_cache[person_id]['name'])
-                segment_person_assignment_map[best_seg.id] = person_id
-                matched_person_ids.add(person_id)
-                voice_assignments.extend(
-                    (segment, person_id) for segment in segments if not segment.is_user and not segment.person_id
-                )
-
-    # Text-based detection runs independently for all unmatched speakers.
-    # For speaker_id > 0 (diarized): update both speaker_to_person_map and per-segment map.
-    # For speaker_id <= 0 (undiarized): only assign per-segment (avoid mapping all speaker_id=0
-    # segments to one person when diarization is inactive).
-    for speaker_id, segments in speaker_segments.items():
-        if speaker_id in speaker_to_person_map:
-            continue
-        for seg in segments:
-            detected_name = detect_speaker_from_text(seg.text, language=language)
-            if detected_name:
-                person = users_db.get_person_by_name(uid, detected_name)
-                if person:
-                    # Per-segment assignment always applies
-                    segment_person_assignment_map[seg.id] = person['id']
-                    # Update speaker map only when diarization is active
-                    if speaker_id > 0:
-                        speaker_to_person_map[speaker_id] = (person['id'], person['name'])
-                    logger.info(
-                        f'Speaker ID (sync): text detection speaker {speaker_id} -> '
-                        f'{person["id"]} via "{detected_name}" uid={uid}'
-                    )
-                    if speaker_id > 0:
-                        break  # One match per diarized speaker is enough
-
-    # Apply all assignments to segments
-    if speaker_to_person_map or segment_person_assignment_map:
-        process_speaker_assigned_segments(
-            transcript_segments,
-            segment_person_assignment_map,
-            speaker_to_person_map,
-        )
-
-    # The assignment helper preserves pre-existing labels. Only mark labels this
-    # voice decision actually supplied, never an existing manual/provider label.
-    for segment, person_id in voice_assignments:
-        if (person_id == USER_SELF_PERSON_ID and segment.is_user) or segment.person_id == person_id:
-            segment.speaker_match_source = 'sync_embedding'
+    _identify_speakers_for_segments(
+        transcript_segments,
+        audio_bytes,
+        person_embeddings_cache,
+        uid,
+        language,
+        dependencies=_speaker_identity_dependencies(),
+    )
 
 
 ORDERED_ASSIGNMENT_WAIT_SECONDS = 600
@@ -1387,6 +1291,15 @@ def process_segment(
     except Exception as e:
         if is_destructive_operation_in_progress(e):
             raise
+        if phase == 'persistence' and bounded_exception_class(e) == 'OtherException':
+            # Preserve a bounded code-defined subtype for incident diagnosis;
+            # never log exception text, document IDs, paths, or transcript.
+            logger.error(
+                'event=sync_persistence_exception exception_type=%s job_ref=%s attempt_ref=%s',
+                _bounded_exception_type(e),
+                _bounded_correlation_ref(job_id),
+                _bounded_correlation_ref(attempt_ref),
+            )
         failure = failure_from_exception(e, provider=provider)
         _set_deferred_segment_outcome(
             deferred_outcome,
@@ -1397,6 +1310,16 @@ def process_segment(
             phase=phase,
             exception_type=bounded_exception_class(e),
         )
+        fingerprint = _persistence_failure_fingerprint(e, phase)
+        if deferred_outcome is not None and fingerprint:
+            deferred_outcome['repeat_failure_key'] = 'persistent_persistence'
+            deferred_outcome['repeat_failure_fingerprint'] = fingerprint
+        elif (
+            deferred_outcome is not None
+            and phase in ('provider_call', 'parse')
+            and failure.outcome == TranscriptionOutcome.INVALID_INPUT
+        ):
+            deferred_outcome['provider_invalid_input'] = True
         _record_sync_segment_failure(
             failure,
             model=model,
@@ -1897,6 +1820,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     attempt_ref=attempt_ref,
                     failure_phase='decode',
                     failure_class=bounded_exception_class(e),
+                    failure_key='invalid_audio',
                 )
                 return
             except Exception as e:
@@ -1945,6 +1869,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     run_lock_token=active_run_lock_token,
                     attempt_ref=attempt_ref,
                     failure_phase='decode',
+                    failure_key='invalid_audio',
                 )
                 return
 
@@ -2212,6 +2137,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             content_segment_count = [0]
             segment_lock = threading.Lock()
             first_segment_failure: list = []
+            persistence_failure_fingerprints: list[str] = []
+            provider_invalid_failures = [0]
 
             # Segments that fully landed in a prior Cloud Tasks attempt are skipped
             already_processed = set()
@@ -2343,6 +2270,12 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         attempt_ref=attempt_ref,
                     )
                 elif ok is False:
+                    if deferred_outcome.get('repeat_failure_key') == 'persistent_persistence':
+                        with segment_lock:
+                            persistence_failure_fingerprints.append(deferred_outcome['repeat_failure_fingerprint'])
+                    elif deferred_outcome.get('provider_invalid_input'):
+                        with segment_lock:
+                            provider_invalid_failures[0] += 1
                     (
                         outcome,
                         outcome_provider,
@@ -2518,6 +2451,17 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 'model': _bounded_sync_model(sync_model),
                 'lane': sync_lane,
             }
+            repeat_failure_fingerprint = _whole_job_persistence_fingerprint(
+                failed_segments, total_segments, persistence_failure_fingerprints
+            )
+            repeat_failure_key = 'persistent_persistence' if repeat_failure_fingerprint else None
+            if repeat_failure_key:
+                # A polling cleanup or duplicate task may release the retired
+                # claim before this worker. Carry the strike through Redis.
+                final_result['repeat_failure_key'] = repeat_failure_key
+                final_result['repeat_failure_fingerprint'] = repeat_failure_fingerprint
+            if failed_segments == total_segments == provider_invalid_failures[0] and failed_segments > 0:
+                final_result['reason_code'] = 'stt_invalid_input'
             if content_id and failed_segments == 0:
                 # The durable content ledger proves every successful segment
                 # before the WAL-visible completed status is published.
@@ -2548,6 +2492,11 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 failure_class=failure_class,
             )
             if content_id and failed_segments > 0:
+                failure_kwargs = (
+                    {'failure_key': repeat_failure_key, 'failure_fingerprint': repeat_failure_fingerprint}
+                    if repeat_failure_key
+                    else {}
+                )
                 if ledger_fence_active:
                     await run_blocking(
                         db_executor,
@@ -2555,9 +2504,12 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         uid,
                         content_id,
                         job_id,
+                        **failure_kwargs,
                     )
                 else:
-                    await run_blocking(db_executor, release_sync_content_claim, uid, content_id, job_id)
+                    await run_blocking(
+                        db_executor, release_sync_content_claim, uid, content_id, job_id, **failure_kwargs
+                    )
             if ledger_fence_active:
                 await run_blocking(db_executor, delete_sync_job_run_lock_epoch, job_id)
             await _record_sync_job_outcome_async(

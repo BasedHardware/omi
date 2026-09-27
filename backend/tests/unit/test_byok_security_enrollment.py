@@ -220,12 +220,14 @@ class TestBYOKSubscriptionEntitlements:
         assert response.subscription.plan == PlanType.basic
         assert response.transcription_seconds_limit == 37
 
-    def test_usage_quota_requires_validated_llm_capability(self, monkeypatch):
+    def test_usage_quota_requires_validated_desktop_provider_capability(self, monkeypatch):
         from models.users import PlanType
         from routers import users
 
-        monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
-        monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: False)
+        customer_client = object()
+        monkeypatch.setattr(users, 'get_customer_firestore_client', lambda: customer_client)
+        monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid, **_kwargs: True)
+        monkeypatch.setattr(users, 'request_has_byok_provider', lambda provider: False)
         monkeypatch.setattr(
             users,
             'get_chat_quota_snapshot',
@@ -243,8 +245,8 @@ class TestBYOKSubscriptionEntitlements:
         assert response.plan_type == PlanType.basic.value
         assert response.limit == 30
 
-        monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: True)
-        response = users.get_user_chat_usage_quota(uid='llm-byok-user')
+        monkeypatch.setattr(users, 'request_has_byok_provider', lambda provider: provider == 'anthropic')
+        response = users.get_user_chat_usage_quota(uid='anthropic-byok-user')
         assert response.plan_type == PlanType.unlimited.value
         assert response.limit is None
         assert response.allowed is True

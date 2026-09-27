@@ -1114,7 +1114,6 @@
     "daySummary": "Sažetak dana",
     "summaryGenerated": "Sažetak generiran",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Dodaj u claude_desktop_config.json",
     "copyConfig": "Kopiraj konfiguraciju",
     "configCopied": "Konfiguracija kopirana u međuspremnik",
     "listeningMins": "Slušanje (min)",
@@ -2636,10 +2635,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "Dodaj u claude_desktop_config.json",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2673,10 +2668,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "Koristi svoj MCP API ključ",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -2720,14 +2711,6 @@
     "detailedDiagnosticMessages": "Detaljne dijagnostičke poruke",
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
-    },
-    "autoCreateSpeakers": "Automatski kreiraj govornika",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "Automatski kreiraj kada je ime detektirano",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
     },
     "followUpQuestions": "Pitanja za praćenje",
     "@followUpQuestions": {
@@ -10799,7 +10782,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "Dodirnite + za početak snimanja",
+    "tapPlusToStartRecording": "Dodirnite gumb za snimanje za početak snimanja",
     "processingTakingLonger": "Još traje — ovo traje duže nego inače.",
     "speechProfileEnrollmentPrompt": "Kako bi Omi znao koji je vaš glas — govorite oko 5 sekundi o bilo čemu.",
     "home": "Početna",
@@ -10842,7 +10825,7 @@
     "conversationsMovedCount": "{count, plural, =1{Premješten 1 razgovor} other{Premješteno razgovora: {count}}}",
     "failedToMoveConversations": "Premještanje razgovora nije uspjelo",
     "discardedConversationTitle": "Odbačeno · {duration}",
-    "noConversationsHeroMessage": "Razgovori koje snimite pojavljuju se ovdje. Dodirnite + na početnoj za snimanje prvog.",
+    "noConversationsHeroMessage": "Razgovori koje snimite pojavljuju se ovdje. Dodirnite gumb za snimanje na početnoj za snimanje prvog.",
     "conversationMap": "Karta razgovora",
     "conversationCount": "{count, plural, =1{1 razgovor} other{Razgovora: {count}}}",
     "taskCount": "{count, plural, =1{1 zadatak} other{Zadataka: {count}}}",
@@ -10965,7 +10948,7 @@
     "batteryLevelSemantics": "Baterija {level} %",
     "updateOmiGlassFirmware": "Ažuriraj OmiGlass firmver",
     "deviceConnecting": "Povezivanje…",
-    "recordOptionsTip": "Savjet: pritisnite i držite gumb za snimanje da biste snimili telefonski poziv.",
+    "recordOptionsTip": "Savjet: dodirnite strelicu na gumbu za snimanje da biste snimili telefonski poziv.",
     "firmwareUpdateFailedTitle": "Ažuriranje nije uspjelo",
     "firmwareUpdateFailedMessage": "Ažuriranje nije dovršeno. Uređaj je i dalje na trenutačnom firmveru i siguran je za upotrebu. Držite ga napunjenim i blizu telefona pa pokušajte ponovno.",
     "firmwareDownloadFailedMessage": "Ažuriranje se nije moglo preuzeti i uređaj nije promijenjen. Provjerite internetsku vezu pa pokušajte ponovno.",
@@ -11096,5 +11079,83 @@
     "speakerTagPromptAnswerFailed": "Spremanje nije uspjelo. Pokušajte ponovno.",
     "voiceSettingsAskToTag": "Traži od mene da označim glasove",
     "voiceSettingsAskToTagSubtitle": "Povremeno Omi pita tko je govorio u vašim nedavnim razgovorima",
-    "voiceSettingsSaveOthersSubtitle": "Kada nekoga imenujete, Omi čuva kratak uzorak glasa kako bi ga sljedeći put prepoznao"
+    "voiceSettingsSaveOthersSubtitle": "Kada nekoga imenujete, Omi čuva kratak uzorak glasa kako bi ga sljedeći put prepoznao",
+    "leaveBlank": "Ostavite prazno",
+    "mcpOAuthSetup": "Na claude.ai dodajte prilagođeni konektor i zalijepite URL poslužitelja. Ako Claude zatraži napredni OAuth Client ID, koristite vrijednost ispod i ostavite tajnu praznom — nikada nemojte koristiti svoj MCP API ključ kao OAuth tajnu.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Dodaj u ~/.claude.json",
+    "claudeDesktopConnectorSetup": "Na Claude Desktop → Settings → Connectors dodajte prilagođeni konektor i zalijepite URL poslužitelja. Ako Claude zatraži napredni OAuth Client ID, koristite vrijednost ispod i ostavite tajnu praznom — nikada nemojte koristiti svoj MCP API ključ kao OAuth tajnu.",
+    "transcriptionUnavailableRecordingContinues": "Transkripcije nisu dostupne, snimanje se nastavlja na uređaju i obradit će se kasnije",
+    "transcriptionsPendingFraction": "Transkripcije na čekanju {pending}/{total}",
+    "transcriptionsPendingCount": "Transkripcije na čekanju {count}",
+    "captureSourceCall": "Poziv",
+    "captureSourcePhoneMic": "Mikrofon telefona",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "Nastavi",
+    "finish": "Završi",
+    "pendantPausedResumesWhenYouFinish": "Privjesak pauziran · nastavlja kad završite",
+    "pendantIsListeningTitle": "Vaš privjesak sluša",
+    "oneSourceAtATime": "Omi snima samo iz jednog izvora odjednom.",
+    "recordWithPhoneInstead": "Umjesto toga snimaj telefonom",
+    "pendantPausesUntilYouFinish": "Privjesak je pauziran dok ne završite",
+    "pendantPausesDuringCall": "Privjesak je pauziran tijekom poziva",
+    "keepUsingPendant": "Nastavi s privjeskom",
+    "recordWith": "Snimaj pomoću",
+    "moreWaysToRecord": "Više načina snimanja",
+    "openCall": "Otvori poziv",
+    "captureRecoveryBanner": "Zvuk privjeska ne stiže do aplikacije — dodirnite za popravak",
+    "phoneRecordingBlockedByPendantBatch": "Zaustavite Transcribe Later na privjesku prije snimanja telefonom.",
+    "captureNotTranscribing": "Nema transkripcije",
+    "captureAudioSavedTranscribesLater": "Zvuk je spremljen, transkripcija kasnije",
+    "captureStillRecording": "Snimanje se nastavlja",
+    "captureMicInUseElsewhere": "Mikrofon koristi druga aplikacija",
+    "captureMicInterruptedDetail": "Poziv ili druga aplikacija preuzela je mikrofon, pa Omi trenutačno ne čuje. Omi će sam nastaviti kad mikrofon bude slobodan. Sve dosad snimljeno je sigurno.",
+    "captureCustomSttUnreachableDetail": "Vaša prilagođena usluga pretvorbe govora u tekst nije dostupna. Omi čuva zvuk na ovom telefonu i poslat će ga kad se usluga vrati. Ništa se ne gubi.",
+    "captureStarting": "Pokretanje…",
+    "capturePhoneStorageFull": "Pohrana telefona je puna",
+    "captureStorageAlmostFull": "Pohrana je gotovo puna",
+    "capturePendantDisconnectedDetail": "Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovno povezati kad je privjesak uključen i u blizini. Sve dosad snimljeno je sigurno.",
+    "participantsSummaryUncounted": "{name} i drugi",
+    "deviceOnboardingVoiceReplyTitle": "Poslušajte Omijeve odgovore",
+    "deviceOnboardingVoiceReplySample": "U redu. Vaš sljedeći sastanak počinje za dvadeset minuta.",
+    "deviceOnboardingAllSetTitle": "Sve je spremno",
+    "deviceOnboardingAllSetSubtitle": "Dodirnite redak da biste ga pregledali ili promijenili.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "Kada pitate pomoću gumba, Omi može pročitati svoj odgovor naglas.",
+    "deviceOnboardingVoiceReplyPreviewIdle": "Čuj svoj posljednji odgovor",
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Reprodukcija vašeg posljednjeg odgovora...",
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "Preko {device}",
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Preko zvučnika telefona",
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Kroz trenutni audio izlaz",
+    "deviceOnboardingVoiceReplyOffDescription": "Odgovori ostaju na ekranu. Ništa se ne govori.",
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Privatno. Razgovara samo putem AirPods, Bluetooth ili žičnih slušalica.",
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Koristi zvučnik telefona kada nisu spojene slušalice.",
+    "deviceOnboardingVoiceReplyStatusOff": "Omi će šutjeti. Odgovori se i dalje pojavljuju u aplikaciji.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} povezan. Ovdje će govoriti Omi.",
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "Nisu spojene slušalice. Omi ostaje tih dok ne povežete neke.",
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Igra preko {device}.",
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Reproducira se naglas preko zvučnika telefona.",
+    "deviceOnboardingVoiceReplySettingsHint": "Ovo možete promijeniti bilo kada u {settings} › {voiceResponse}",
+    "deviceOnboardingAllSetReplayHint": "Ponovite ovaj obilazak bilo kada u {settings} › {deviceSettings} › {deviceTutorial}",
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Slušalice",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "minuta",
+    "usageWords": "Words",
+    "usageTasks": "Zadaci",
+    "usageMonth": "Ovaj mjesec",
+    "usageYear": "Ova godina",
+    "usageAll": "Sve vrijeme",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "Izgled",
+    "appearanceSystem": "Sustav",
+    "appearanceLight": "Svijetlo",
+    "appearanceDark": "Tamno"
 }

@@ -47,4 +47,50 @@ void main() {
       'Offline, buffering · 3 min',
     );
   });
+
+  test('the transcription outage says recording continues', () {
+    expect(
+      captureStateLabel(l10n, CaptureDisplayState.transcriptionUnavailable),
+      'Transcriptions are unavailable, recording continues on device and will process later',
+    );
+  });
+
+  test('the Home card: a short status, the consequence, and an explanation for problems only', () {
+    final outage = captureCardCopy(l10n, CaptureDisplayState.transcriptionUnavailable);
+    expect(outage.status, 'Not transcribing');
+    expect(outage.detail, 'Audio saved, transcribes later');
+    expect(outage.explanation, l10n.transcriptionUnavailableRecordingContinues);
+    expect(outage.warning, isTrue);
+
+    final reconnecting = captureCardCopy(l10n, CaptureDisplayState.reconnecting);
+    expect(reconnecting.status, 'Reconnecting…');
+    expect(reconnecting.detail, 'Still recording');
+    expect(reconnecting.warning, isTrue);
+
+    expect(captureCardCopy(l10n, CaptureDisplayState.bufferingOffline).status, 'Offline');
+
+    // A pause the reader chose is not a problem; one the OS forced is explained.
+    final userPause = captureCardCopy(l10n, CaptureDisplayState.paused);
+    expect(userPause.status, 'Paused');
+    expect(userPause.warning, isFalse);
+    final micTaken = captureCardCopy(l10n, CaptureDisplayState.paused, micTaken: true);
+    expect(micTaken.status, 'Paused');
+    expect(micTaken.detail, 'Mic in use by another app');
+    expect(micTaken.warning, isTrue);
+
+    expect(captureCardCopy(l10n, CaptureDisplayState.listening).warning, isFalse);
+
+    // Reconnecting with the socket up is the microphone restarting: no "Still recording" claim.
+    final stall = captureCardCopy(l10n, CaptureDisplayState.reconnecting, socketDown: false);
+    expect(stall.detail, isNull);
+    expect(stall.warning, isFalse);
+  });
+
+  test('interrupted: the OS holding the mic, capture recovering, or a reader pause that wins', () {
+    expect(captureInterruption(interrupted: true, readerPaused: false, osHoldsMic: true), CaptureInterruption.micTaken);
+    expect(
+        captureInterruption(interrupted: true, readerPaused: false, osHoldsMic: false), CaptureInterruption.recovering);
+    expect(captureInterruption(interrupted: true, readerPaused: true, osHoldsMic: true), CaptureInterruption.none);
+    expect(captureInterruption(interrupted: false, readerPaused: false, osHoldsMic: true), CaptureInterruption.none);
+  });
 }

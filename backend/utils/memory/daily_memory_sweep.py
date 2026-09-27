@@ -4422,8 +4422,8 @@ def _read_completed_day_conversation_sources(
                 return _incomplete_day_read("eligibility_scan_over_budget")
     page_capped = len(eligible_snapshots) > fetch_limit
 
-    from database.conversations import (  # pyright: ignore[reportPrivateUsage]
-        _prepare_conversation_for_read as prepare_conversation_for_read,  # pyright: ignore[reportPrivateUsage]
+    from database.conversations import (
+        prepare_conversation_for_read,
     )
     from models.conversation import Conversation
 
@@ -4957,8 +4957,8 @@ def _produce_onboarding_sources(
         for key, value in raw_progress.items()
         if isinstance(key, str) and key.startswith("onboarding:") and isinstance(value, int) and value >= 0
     }
-    from database.conversations import (  # pyright: ignore[reportPrivateUsage]
-        _prepare_conversation_for_read as prepare_conversation_for_read,  # pyright: ignore[reportPrivateUsage]
+    from database.conversations import (
+        prepare_conversation_for_read,
     )
     from models.conversation import Conversation
 
@@ -4994,7 +4994,7 @@ def _produce_onboarding_sources(
             continue
         source_keys.append(source_key)
         try:
-            prepared = prepare_conversation_for_read(raw, uid)  # pyright: ignore[reportPrivateUsage]
+            prepared = prepare_conversation_for_read(raw, uid)
             conversation = Conversation(**(prepared or {}))
             text = (conversation.get_transcript(include_timestamps=False) or "").strip()
         except Exception:

@@ -167,11 +167,11 @@ final class AgentContinuityGauntletTests: XCTestCase {
     let registry = DesktopAutomationActionRegistry.shared
     registry.register(
       name: "__metadata_contract_test__",
+      effects: [],
       summary: "Read test-only metadata",
       params: ["limit"],
       category: "read",
       surfaces: ["test_surface"],
-      safety: "read_only",
       sideEffects: [],
       examples: ["./scripts/omi-ctl action __metadata_contract_test__ limit=1"]
     ) { _ in
@@ -191,9 +191,10 @@ final class AgentContinuityGauntletTests: XCTestCase {
     XCTAssertTrue(descriptor.preferSemantic)
   }
 
-  func testAutomationActionDescriptorInfersUsefulMetadataForBuiltins() throws {
+  func testAutomationActionDescriptorUsesDeclaredEffectsAndInfersSurfaceHints() throws {
     let snapshot = DesktopAutomationActionDescriptor(
       name: "main_chat_snapshot",
+      effects: [],
       summary: "Export main-chat state",
       params: ["limit"]
     )
@@ -204,6 +205,7 @@ final class AgentContinuityGauntletTests: XCTestCase {
 
     let capture = DesktopAutomationActionDescriptor(
       name: "capture_floating_bar_png",
+      effects: [.localArtifact],
       summary: "Capture the floating bar",
       params: ["path"]
     )

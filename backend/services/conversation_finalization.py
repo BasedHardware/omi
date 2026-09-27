@@ -17,6 +17,7 @@ from google.api_core.exceptions import InvalidArgument
 
 from database import conversation_finalization_jobs as jobs_db
 from database._client import is_document_size_limit_error
+from services.conversation_selfheal import run_selfheal_tick
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
     get_listen_finalization_tasks_max_attempts,
@@ -43,6 +44,33 @@ from utils.observability.journeys import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _skip_capture_wedge(**_: Any) -> dict[str, int]:
+    """The API reconciler owns conversation GC, not user-notification nudges."""
+
+    return {'nudged': 0, 'undeliverable': 0, 'errors': 0}
+
+
+def reconcile_stale_in_progress_conversations(*, firestore_client: Any = None) -> dict[str, Any]:
+    """Admit stale content-bearing ``in_progress`` rows to durable finalization.
+
+    This is the always-on owner for the recovery primitive otherwise exposed by
+    the optional conversation-selfheal job. It deliberately reuses that
+    primitive's bounded scan, persisted CAS cursor, SERVER_RECOVERY admission
+    fences, per-tick cap, and next-tick verification. Capture-wedge notification
+    work remains owned by the dedicated job and is skipped here.
+    """
+
+    if not is_listen_finalization_dispatch_enabled():
+        return {'scanned': 0, 'enqueued': 0, 'verified': 0, 'refused': 0, 'errors': 0, 'mode': 'off'}
+    return run_selfheal_tick(
+        firestore_client=firestore_client,
+        mode='heal',
+        dry_run=False,
+        use_configured_uid_allowlist=False,
+        wedge_runner=_skip_capture_wedge,
+    )
 
 
 def is_meeting_receipt_reconciler_enabled() -> bool:
