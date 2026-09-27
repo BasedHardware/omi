@@ -23,7 +23,6 @@ from utils.executors import run_blocking, sync_executor
 from utils.stt.live_metrics import LANGUAGE_CONSTRAINT, OUTPUT_LANGUAGE_SEGMENTS
 
 logger = logging.getLogger(__name__)
-DetectorFactory.seed = 0
 MIN_LETTERS = 24
 MIN_PROBABILITY = 0.95
 MAX_PENDING_DETECTIONS = 32
@@ -111,6 +110,7 @@ def classify_output(
         if sum(letter.isalpha() for letter in text) < MIN_LETTERS:
             return 'undetermined', None
         try:
+            DetectorFactory.seed = 0
             guesses = detect_langs(text)
         except Exception:
             return 'undetermined', None
