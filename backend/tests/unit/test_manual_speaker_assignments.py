@@ -187,6 +187,68 @@ def test_silent_flush_retries_dirty_write_and_publishes_acknowledged_identity(wo
     asyncio.run(exercise())
 
 
+def test_interleaved_flush_retries_newer_speaker_decision(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+    from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
+
+    async def exercise():
+        stored = [dict(id='s', speaker_id=1, text='Synthetic speech', start=0, end=6, is_user=False)]
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        writes = []
+
+        async def load(_conversation_id, *, force_refresh=False):
+            return {'id': 'c', 'transcript_segments': deepcopy(stored)}
+
+        async def persist(_fn, _uid, _cid, segments, **_kwargs):
+            writes.append(deepcopy(segments))
+            if len(writes) == 1:
+                entered.set()
+                await release.wait()
+            stored[:] = deepcopy(segments)
+            return deepcopy(segments)
+
+        state = SimpleNamespace(active=False, speaker_map_dirty=True, speaker_map_version=1)
+        speakers = SimpleNamespace(
+            speaker_to_person={1: ('user', 'User')},
+            segment_assignments={},
+            segment_identity_status={},
+            voice_identity_status={1: SpeakerIdentityStatus.user},
+        )
+        host = SimpleNamespace(
+            request=SimpleNamespace(uid='u'),
+            state=state,
+            speakers=speakers,
+            persistence=SimpleNamespace(call=persist),
+        )
+        processor = _flush_processor(host)
+        processor.cache = SimpleNamespace(get=load, protection_level='standard', update_segments=lambda _s: None)
+        monkeypatch.setattr(
+            transcripts,
+            'deserialize_conversation',
+            lambda data: SimpleNamespace(
+                id='c', transcript_segments=[TranscriptSegment(**raw) for raw in data['transcript_segments']]
+            ),
+        )
+        task = asyncio.create_task(processor.flush_speaker_assignments('c'))
+        await entered.wait()
+        speakers.speaker_to_person.clear()
+        speakers.voice_identity_status[1] = SpeakerIdentityStatus.ambiguous
+        state.speaker_map_version += 1
+        state.speaker_map_dirty = True
+        release.set()
+        await task
+
+        assert len(writes) == 2
+        assert writes[0][0]['is_user'] is True
+        assert writes[1][0]['is_user'] is False
+        assert stored[0]['speaker_identity_status'] == 'ambiguous'
+        assert state.speaker_map_dirty is False
+
+    asyncio.run(exercise())
+
+
 def test_silence_flush_payload_is_proportional_to_changed_identities():
     import asyncio
     from types import SimpleNamespace
