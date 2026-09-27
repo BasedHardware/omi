@@ -5,12 +5,10 @@ PR #12867 shipped a Liquid Glass tab bar that only compiled on a local Xcode 26:
 the glass APIs sat behind ``#if compiler(>=6.2)`` while desktop CI compiled with
 Xcode 16.4, so every CI lane stayed green while the shipped binary silently
 built the icon-less system Picker fallback (reverted in #13548). The desktop
-ship/CI toolchain is now pinned (``desktop/macos/ci/xcode-pin.json``); the
-policy this tripwire enforces is: every Apple SDK / SwiftUI API the app ships
-must be typechecked by that pinned toolchain. Gate OS availability at RUNTIME
-(``if #available(macOS 26, *)`` plus a working fallback, per the deployment
-floor rules in desktop AGENTS) — never at COMPILE TIME with
-``#if compiler(...)``/``#elseif compiler(...)``.
+required CI toolchain is pinned to Xcode 26.6. Siri's Xcode 27-only App Intents
+module is the narrow exception: its release code is compiled by the optional
+Xcode 27 lane and the Codemagic release path. All other Apple SDK / SwiftUI
+APIs must be typechecked by required CI and gate OS availability at runtime.
 
 This is a narrow forbidden-pattern static tripwire (the exception desktop
 AGENTS "Swift test quality" allows), not behavioral coverage; the pinned-Xcode
@@ -57,9 +55,16 @@ class AllowlistEntry:
     reason: str
 
 
-# Empty by default. Only genuine language-version exceptions belong here —
-# never a convenience escape hatch for an API the pinned SDK typechecks fine.
-ALLOWED_COMPILER_GATES: tuple[AllowlistEntry, ...] = ()
+# David's 2026-09-27 runner ruling: keep required CI on macos-26, while
+# Codemagic release compiles Siri with Swift 6.4/Xcode 27. Exact path and
+# directive review prevents this exception from masking unrelated APIs.
+ALLOWED_COMPILER_GATES: tuple[AllowlistEntry, ...] = (
+    AllowlistEntry(
+        "Sources/SiriIntegration/SiriIntegrationSettings.swift",
+        "#if !compiler(>=6.4)",
+        "Siri no-op call-site shims for required Xcode 26.6 CI",
+    ),
+)
 
 
 def _is_allowed(finding: Finding, root: Path, allowlist: tuple[AllowlistEntry, ...]) -> bool:

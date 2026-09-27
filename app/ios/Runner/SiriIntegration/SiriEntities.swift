@@ -1,3 +1,4 @@
+#if compiler(>=6.4)
 import Foundation
 import AppIntents
 import CoreSpotlight
@@ -267,3 +268,4 @@ struct TaskQuery: IndexedEntityQuery {
         try await SiriSnapshotStore.shared.rebuildIndex()
     }
 }
+#endif

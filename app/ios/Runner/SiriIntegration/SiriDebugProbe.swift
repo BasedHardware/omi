@@ -1,3 +1,4 @@
+#if compiler(>=6.4)
 #if OMI_SIRI_PROBE
 import Foundation
 import FirebaseAuth
@@ -658,4 +659,5 @@ private final class SiriProbeURLProtocol: URLProtocol {
     }
     override func stopLoading() {}
 }
+#endif
 #endif

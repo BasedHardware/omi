@@ -31,6 +31,7 @@ enum SiriStorageLocation {
 }
 
 /// Only the fields approved for Apple's on-device index are kept here.
+#if compiler(>=6.4)
 final class SiriSnapshotStore {
     static let shared = SiriSnapshotStore()
     private let lock = NSLock()
@@ -739,3 +740,4 @@ private actor SiriSpotlightGate {
         return try await operation()
     }
 }
+#endif

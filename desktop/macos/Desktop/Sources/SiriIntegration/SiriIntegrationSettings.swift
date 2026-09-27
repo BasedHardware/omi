@@ -16,3 +16,45 @@ enum SiriIntegrationSettings {
 extension Notification.Name {
   static let siriIndexPreferenceChanged = Notification.Name("siriIndexPreferenceChanged")
 }
+
+#if !compiler(>=6.4)
+  import SwiftUI
+
+  /// Xcode 26.6 builds retain store and view call sites without indexing.
+  enum SiriIndexHooks {
+    static func rebuild() {}
+    static func memoryChanged(_ id: String) {}
+    static func memoriesChanged(_ ids: [String]) {}
+    static func memoryDeleted(_ id: String) async {}
+    static func memoriesDeleted(_ ids: [String]) async {}
+    static func conversationChanged(_ id: String) {}
+    static func conversationsChanged(_ ids: [String]) {}
+    static func conversationDeleted(_ id: String) async {}
+    static func tasksChanged(_ ids: [String]) {}
+    static func taskDeleted(_ id: String) async {}
+    static func tasksDeleted(_ ids: [String]) async {}
+    static func ownerChanged() {}
+  }
+
+  @MainActor
+  final class SiriIndexLifecycle {
+    static let shared = SiriIndexLifecycle()
+    func start(launchMode: String) {}
+    static func suspendForOwnerTransition() async {
+      await RewindIndexer.shared.suspendForOwnerTransition()
+    }
+  }
+
+  enum SiriDonations {
+    static func conversationOpened(_ id: String) {}
+    static func memoryCreated(_ id: String) {}
+    static func taskCompleted(_ id: String) {}
+    static func wipe() async {}
+  }
+
+  extension View {
+    func siriConversationIdentifier(_ id: String) -> some View { self }
+    func siriMemoryIdentifier(_ id: String) -> some View { self }
+    func siriTaskIdentifier(_ id: String) -> some View { self }
+  }
+#endif

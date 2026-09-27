@@ -510,10 +510,10 @@ jobs:
 
   ios-compile-check:
     name: iOS Compile Check
-    runs-on: xcode-27
+    runs-on: macos-26
     needs: changes
     if: needs.changes.outputs.has_app_ios_compile == 'true'
-    # Local cold Xcode time was 334s on an M-series Mac. Hosted xcode-27 still
+    # Local cold Xcode time was 334s on an M-series Mac. Hosted macos-26 still
     # pays Flutter SDK, pub get, build_runner, and CocoaPods on top of that.
     # Expect ~20-30 min warm / ~35 min cold; 40 is the wedge-guard.
     timeout-minutes: 40
@@ -617,6 +617,23 @@ jobs:
         # Flavor scheme is `dev` (Debug-dev). omiWatchApp.xcscheme lacks
         # customLLDBInitFile; Flutter warns, the compile still proceeds.
         run: flutter build ios --simulator --debug --flavor dev --no-codesign -d "$IOS_SIMULATOR_UDID"
+
+      - name: Prove stable iOS compiler emits no Siri metadata
+        working-directory: app
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          bundle = Path('build/ios/iphonesimulator/Runner.app')
+          if not bundle.is_dir():
+              raise SystemExit(f'missing built Runner.app: {bundle}')
+          actions = bundle / 'Metadata.appintents/extract.actionsdata'
+          payload = json.loads(actions.read_text()) if actions.is_file() else {}
+          for kind in ('actions', 'entities'):
+              if payload.get(kind):
+                  raise SystemExit(f'Xcode 26.6 unexpectedly emitted {kind}: {sorted(payload[kind])}')
+          print('Xcode 26.6 Runner metadata: no Siri actions or entities')
+          PY
 
   dart-tests-kiritimati:
     # Parallel second pass of the hermetic Dart suite under the far timezones

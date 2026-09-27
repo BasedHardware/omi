@@ -8,7 +8,7 @@ import UserNotifications
 final class OmiSceneDelegate: FlutterSceneDelegate {
     override func scene(_ scene: UIScene, willConnectTo session: UISceneSession,
                         options connectionOptions: UIScene.ConnectionOptions) {
-        #if OMI_SIRI_PROBE
+        #if OMI_SIRI_PROBE && compiler(>=6.4)
         if ProcessInfo.processInfo.arguments.contains("-omi-siri-probe"),
            let windowScene = scene as? UIWindowScene, #available(iOS 26.0, *) {
             window = UIWindow(windowScene: windowScene)
@@ -20,7 +20,7 @@ final class OmiSceneDelegate: FlutterSceneDelegate {
         OmiSceneLinkRouter.forward(
             urls: connectionOptions.urlContexts.map(\.url),
             activities: Array(connectionOptions.userActivities))
-        #if OMI_SIRI_PROBE
+        #if OMI_SIRI_PROBE && compiler(>=6.4)
         let firstLink = Mirror(reflecting: AppLinks.shared).children
             .first(where: { $0.label == "initialLink" })?.value as? String
         NSLog("[SiriSceneProbe] coldURL=%@ coldActivity=%@ appLinksInitial=%@",
@@ -29,7 +29,7 @@ final class OmiSceneDelegate: FlutterSceneDelegate {
               firstLink ?? "nil")
         #endif
         super.scene(scene, willConnectTo: session, options: connectionOptions)
-        #if OMI_SIRI_PROBE
+        #if OMI_SIRI_PROBE && compiler(>=6.4)
         NSLog("[SiriSceneProbe] notificationDelegateAfterRegistration=%@",
               String(describing: type(of: UNUserNotificationCenter.current().delegate)))
         #endif
@@ -38,7 +38,7 @@ final class OmiSceneDelegate: FlutterSceneDelegate {
         guard FlutterLaunchEngineGuard.canRegisterPlugins(
             hasFlutterRootViewController: controller != nil, hasEngine: controller?.engine != nil
         ) else {
-            #if OMI_SIRI_PROBE
+            #if OMI_SIRI_PROBE && compiler(>=6.4)
             if #available(iOS 26.0, *) { SiriDebugProbe.runIfRequested() }
             #endif
             (UIApplication.shared.delegate as? AppDelegate)?.showFlutterEngineUnavailableNotice(in: window)

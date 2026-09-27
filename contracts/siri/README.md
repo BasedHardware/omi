@@ -2,6 +2,8 @@
 
 This is the shared contract for the macOS and iOS implementations. Both clients use backend IDs as entity IDs. Local-only rows without a backend ID are not indexed. Siri behavior is English-first. The iOS deployment floor remains 15.0 and the macOS floor remains 14.0. Classic Remember and Start/Stop listening shortcuts work on iOS 16+ and macOS 14+. Personal Spotlight entity indexing and schema intents require iOS 27+ or macOS 27+; older systems retain the custom shortcuts without those entities.
 
+**Build boundary (David's 2026-09-27 runner ruling):** required GitHub desktop Swift and iOS compile checks use the standard `macos-26` image and Xcode 26.6 (Swift 6.3). `#if compiler(>=6.4)` excludes the Xcode 27 Siri integration and its 27-only tests there; store hooks and the iOS Pigeon bridge are no-ops in that CI artifact. The advisory desktop `xcode-27` job compiles Siri tests and extracts metadata without blocking required team CI. Codemagic desktop and iOS releases use Xcode 27.0 (Swift 6.4), compile the full integration and include `Metadata.appintents`. The release packager rejects Xcode 26.6 rather than producing a Siri-less candidate. Runtime OS availability still controls which shipped Siri features appear on older macOS/iOS versions.
+
 ## Entities and index
 
 | Entity | Apple schema | ID | Indexed content | Link |

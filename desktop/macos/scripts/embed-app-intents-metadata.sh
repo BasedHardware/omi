@@ -2,14 +2,16 @@
 # Export SwiftPM App Intents metadata and install it in an assembled macOS app.
 set -euo pipefail
 
-if [[ $# -ne 4 ]]; then
-  echo "usage: $0 <Desktop package dir> <app bundle> <Debug|Release> <arm64|x86_64>" >&2
+if [[ $# -lt 4 || $# -gt 5 ]]; then
+  echo "usage: $0 <Desktop package dir> <app bundle> <Debug|Release> <arm64|x86_64> [--expect-absent]" >&2
   exit 2
 fi
 package_dir="$1"
 app_bundle="$2"
 configuration="$3"
 architecture="$4"
+mode="${5:---require-siri}"
+[[ "$mode" = --require-siri || "$mode" = --expect-absent ]] || { echo "invalid metadata mode: $mode" >&2; exit 2; }
 case "$configuration:$architecture" in
   Debug:arm64|Debug:x86_64|Release:arm64|Release:x86_64) ;;
   *) echo "invalid metadata configuration or architecture" >&2; exit 2 ;;
@@ -41,6 +43,10 @@ find "$package_dir/Sources" \
 
 xcode_build="$(xcodebuild -version | awk '/Build version/ {print $3}')"
 [[ -n "$xcode_build" ]] || { echo "Could not resolve Xcode build number" >&2; exit 1; }
+if [[ "$mode" = --require-siri ]] && [[ "$(xcodebuild -version | sed -n '1p')" != 'Xcode 27.0' ]]; then
+  echo "Siri release metadata requires Xcode 27.0; refusing to package a Siri-less app" >&2
+  exit 1
+fi
 xcrun appintentsmetadataprocessor \
   --output "$work_dir/output" \
   --toolchain-dir "$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain" \
@@ -55,6 +61,23 @@ xcrun appintentsmetadataprocessor \
   --force
 
 metadata_dir="$work_dir/output/Metadata.appintents"
+if [[ "$mode" = --expect-absent ]]; then
+  python3 - "$metadata_dir/extract.actionsdata" <<'PY'
+import json
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+payload = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+for kind in ("actions", "entities"):
+    if payload.get(kind):
+        raise SystemExit(f"Xcode 26.6 unexpectedly emitted {kind}: {sorted(payload[kind])}")
+print("Xcode 26.6 metadata extraction: no actions or entities")
+PY
+  [[ ! -e "$app_bundle/Contents/Resources/Metadata.appintents" ]] || {
+    echo "Xcode 26.6 bundle unexpectedly contains Metadata.appintents" >&2; exit 1;
+  }
+  exit 0
+fi
 [[ -s "$metadata_dir/extract.actionsdata" ]] || {
   echo "App Intents processor produced no actions data" >&2
   exit 1

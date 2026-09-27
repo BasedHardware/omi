@@ -1,3 +1,4 @@
+#if compiler(>=6.4)
 import Foundation
 import AppIntents
 
@@ -438,3 +439,4 @@ extension StartOmiListeningIntent {
 extension StopOmiListeningIntent {
     static var supportedModes: IntentModes { .foreground(.dynamic) }
 }
+#endif

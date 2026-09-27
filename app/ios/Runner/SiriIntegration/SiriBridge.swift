@@ -1,3 +1,4 @@
+#if compiler(>=6.4)
 import Foundation
 import Flutter
 import UIKit
@@ -221,3 +222,34 @@ enum SiriTelemetry {
         }
     }
 }
+
+#else
+import Flutter
+import Foundation
+
+/// Xcode 26.6 required CI keeps the Pigeon channel registered while Siri is
+/// unavailable. The Xcode 27 Codemagic build compiles the real bridge above.
+final class SiriBridge: SiriIndexApi {
+    static let shared = SiriBridge()
+    func retryPendingWipeOnLaunch() {}
+    func attach(messenger: FlutterBinaryMessenger) {
+        SiriIndexApiSetup.setUp(binaryMessenger: messenger, api: self)
+    }
+    func upsertConversations(uid: String, conversations: [SiriConversation], completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
+    func reconcileConversations(uid: String, conversations: [SiriConversation], coveredAfterMs: Int64?, completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
+    func upsertMemories(uid: String, memories: [SiriMemory], completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
+    func reconcileMemories(uid: String, memories: [SiriMemory], completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
+    func upsertTasks(uid: String, tasks: [SiriTask], completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
+    func reconcileTasks(uid: String, tasks: [SiriTask], includeCompleted: Bool, completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
+    func deleteEntities(uid: String, type: String, ids: [String], completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
+    func wipe(completion: @escaping (Result<Int64, Error>) -> Void) { completion(.success(0)) }
+    func generationForOwner(uid: String, completion: @escaping (Result<Int64?, Error>) -> Void) { completion(.success(nil)) }
+    func setEnabled(enabled: Bool, completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
+    func setCurrentScreen(route: String, entityId: String?) throws {}
+    func publishSessionConfig(config: SiriSessionConfig, completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
+    func takePendingRoute() throws -> String? { nil }
+    func isEnabled() throws -> Bool { false }
+    func takeTelemetry() throws -> [SiriTelemetryRecord] { [] }
+    func donateAction(uid: String, type: String, id: String, completion: @escaping (Result<Void, Error>) -> Void) { completion(.success(())) }
+}
+#endif

@@ -284,7 +284,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 self.assertTrue(resolve_impact([path]).includes("desktop-swift-notification-release-regression"))
-        self.assertIn("runs-on: xcode-27", job)
+        self.assertIn("runs-on: macos-26", job)
         self.assertIn("--release-notification-regression", job)
         self.assertIn("should_notification_release_regression", job)
         self.assertIn("UserNotificationCallbackBridgeTests/", _runner_text())
@@ -434,11 +434,11 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         """#12867 class: the ship toolchain must be the one CI actually compiles with."""
         for job_id in MACOS_JOBS:
             with self.subTest(job=job_id):
-                self.assertIn("runs-on: xcode-27", self.jobs[job_id])
+                self.assertIn("runs-on: macos-26", self.jobs[job_id])
         self.assertNotIn("runs-on: macos-15", _workflow_text())
 
     def test_codemagic_desktop_workflows_match_the_pin(self):
-        """Codemagic desktop Swift release/preview must build with the pinned Xcode."""
+        """Release uses Xcode 27 even though required CI uses the stable Xcode 26.6 pin."""
         text = CODEMAGIC_PATH.read_text(encoding="utf-8")
         for workflow_id in CODEMAGIC_DESKTOP_WORKFLOWS:
             with self.subTest(workflow=workflow_id):
@@ -448,26 +448,70 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
                 self.assertIsNotNone(match, f"{workflow_id} must declare an xcode: version")
                 self.assertEqual(
                     match.group(1),
-                    EXPECTED_XCODE_VERSION,
-                    f"{workflow_id} xcode must equal the pin (string compare)",
+                    "27.0",
+                    f"{workflow_id} must ship Siri using Xcode 27.0",
                 )
                 self.assertNotIn("xcode: latest", body)
                 self.assertNotIn("xcode: edge", body)
 
     def test_mobile_ios_compile_and_ship_workflows_match_the_pin(self):
-        """The iOS compiler must see the same SDK in PR CI and TestFlight builds."""
+        """Required iOS CI uses stable Xcode 26.6; TestFlight uses Xcode 27."""
         mobile = MOBILE_WORKFLOW_PATH.read_text(encoding="utf-8")
         compile_job = _job_text(mobile, "ios-compile-check")
-        self.assertIn("runs-on: xcode-27", compile_job)
+        self.assertIn("runs-on: macos-26", compile_job)
         self.assertIn("desktop/macos/scripts/run-swift-ci.sh --select-toolchain", compile_job)
+        self.assertIn("Prove stable iOS compiler emits no Siri metadata", compile_job)
+        self.assertIn("Metadata.appintents/extract.actionsdata", compile_job)
 
         codemagic = CODEMAGIC_PATH.read_text(encoding="utf-8")
         for workflow_id in CODEMAGIC_IOS_WORKFLOWS:
             with self.subTest(workflow=workflow_id):
                 body = _job_text(codemagic, workflow_id)
                 self.assertIn("instance_type: mac_mini_m2", body)
-                self.assertRegex(body, rf"(?m)^\s+xcode:\s*{re.escape(EXPECTED_XCODE_VERSION)}\s*$")
-                self.assertNotIn("xcode: edge", body)
+                self.assertRegex(body, r"(?m)^\s+xcode:\s*27\.0\s*$")
+
+    def test_optional_siri_lane_uses_xcode_27_without_gating_team_ci(self):
+        text = _workflow_text()
+        advisory = _job_text(text, "desktop-siri-xcode27-advisory")
+        self.assertIn("runs-on: xcode-27", advisory)
+        self.assertIn("continue-on-error: true", advisory)
+        self.assertIn("timeout-minutes:", advisory)
+        self.assertIn("SiriIntentServiceTests", advisory)
+        self.assertIn("Metadata.appintents", advisory)
+        self.assertNotIn("desktop-siri-xcode27-advisory", self.jobs["desktop-swift"])
+
+    def test_both_toolchains_prove_the_metadata_boundary(self):
+        release = self.jobs["desktop-swift-release-compile"]
+        advisory = _job_text(_workflow_text(), "desktop-siri-xcode27-advisory")
+        embed = (REPO_ROOT / "desktop/macos/scripts/embed-app-intents-metadata.sh").read_text()
+        self.assertIn("--expect-absent", release)
+        self.assertIn('"SiriIntegration/SiriIntents.swift" not in', release)
+        self.assertIn("--expect-absent", embed)
+        self.assertIn("-emit-const-values", _runner_text())
+        self.assertIn("Metadata.appintents", advisory)
+        self.assertIn("Siri release metadata requires Xcode 27.0", embed)
+
+    def test_mobile_27_only_sources_compile_out_on_required_ci(self):
+        root = REPO_ROOT / "app/ios/Runner/SiriIntegration"
+        for name in ("SiriBridge", "SiriDebugProbe", "SiriEntities", "SiriIntents"):
+            with self.subTest(source=name):
+                self.assertTrue((root / f"{name}.swift").read_text().startswith("#if compiler(>=6.4)\n"))
+        snapshot = (root / "SiriSnapshotStore.swift").read_text()
+        self.assertIn("#if compiler(>=6.4)\nfinal class SiriSnapshotStore", snapshot)
+        bridge = (root / "SiriBridge.swift").read_text()
+        self.assertIn("#else\nimport Flutter", bridge)
+        self.assertIn("final class SiriBridge: SiriIndexApi", bridge.split("#else", 1)[1])
+
+    def test_desktop_package_excludes_27_only_sources_under_stable_compiler(self):
+        manifest = (REPO_ROOT / "desktop/macos/Desktop/Package.swift").read_text()
+        self.assertIn("#if compiler(>=6.4)", manifest)
+        for name in ("SiriDevProbe", "SiriDonations", "SiriEntities", "SiriIndexHooks",
+                     "SiriIndexLifecycle", "SiriIndexer", "SiriIntents", "SiriNavigation",
+                     "SiriViewAnnotations", "SiriIntentService"):
+            with self.subTest(source=name):
+                self.assertIn(f'SiriIntegration/{name}.swift', manifest)
+        self.assertIn('SiriIntentServiceTests.swift', manifest)
+        self.assertIn('siriSourceExclusions', manifest)
 
     def test_release_stages_each_arch_before_swiftpm_reuses_the_products_directory(self):
         """Xcode 27 puts both --triple builds under one Products/Release directory."""

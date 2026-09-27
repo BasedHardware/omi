@@ -4,10 +4,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-# Single source of truth for the desktop Swift ship/CI toolchain: version,
-# build, and expected app path live in ci/xcode-pin.json. Never duplicate
-# those literals here; the CI contract test enforces that this script,
-# desktop-swift-ci.yml, codemagic.yaml, and the pin file all agree.
+# Required desktop Swift CI toolchain. Codemagic releases intentionally use
+# Xcode 27.0 to compile Siri and package App Intents metadata.
 PIN_FILE="$MACOS_DIR/ci/xcode-pin.json"
 
 if [ ! -f "$PIN_FILE" ]; then
@@ -23,7 +21,7 @@ EXPECTED_XCODE_VERSION="$(read_pin version)"
 EXPECTED_XCODE_BUILD="$(read_pin build)"
 XCODE_APP="${OMI_SWIFT_CI_XCODE_APP:-$(read_pin app_path)}"
 # Identical configuration and destination are required for --skip-build reuse.
-RELEASE_OPTIONS=(-c release --package-path Desktop --triple arm64-apple-macosx)
+RELEASE_OPTIONS=(-c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -emit-const-values)
 # swift build --build-tests does not enable @testable imports in release.
 RELEASE_TEST_OPTIONS=("${RELEASE_OPTIONS[@]}" -Xswiftc -enable-testing)
 
@@ -96,9 +94,7 @@ case "${1:-}" in
     # can recompile the app with testability enabled and exhaust the job budget
     # (#13481). --build-tests also compiles non-Notification tests (#13123/#13467).
     if [ "$1" = --release-test-compile ]; then
-      # The hosted xcode-27 runner has 7 GB RAM. Concurrent release frontends
-      # can exhaust it while compiling the app and test modules together.
-      xcrun swift build "${RELEASE_TEST_OPTIONS[@]}" --jobs 1 --build-tests
+      xcrun swift build "${RELEASE_TEST_OPTIONS[@]}" --build-tests
     else
       xcrun swift build "${RELEASE_OPTIONS[@]}"
     fi

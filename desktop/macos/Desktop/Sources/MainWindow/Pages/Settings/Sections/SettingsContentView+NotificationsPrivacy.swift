@@ -237,7 +237,7 @@ extension SettingsContentView {
               set: { enabled in
                 SiriIntegrationSettings.isEnabled = enabled
                 if #available(macOS 15.4, *) {
-                  Task { try? await SiriIndexer.shared.preferenceOrOwnerChanged() }
+                  SiriIndexHooks.ownerChanged()
                 }
               }
             )
