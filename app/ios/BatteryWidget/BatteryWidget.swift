@@ -190,21 +190,19 @@ struct SmallBatteryView: View {
     }
 }
 
-/// A wearable's own picture, the product photo the app shows. While not connected the Omi pendant
-/// shows its lights-off photo (as the app's device page does) and other devices are dimmed.
+/// A wearable's own picture, the product photo the app shows, as the app's device page shows it:
+/// unchanged while not connected, except that the Omi pendant shows its lights-off photo.
 struct DevicePicture: View {
     let device: WidgetDevice?
     let size: CGFloat
 
     var body: some View {
-        let connected = device?.connected ?? false
         let image = device?.image ?? "device-omi"
-        let lightsOff = image == "device-omi" && !connected
+        let lightsOff = image == "device-omi" && device?.connected != true
         Image(lightsOff ? "device-omi-off" : image)
             .resizable()
             .scaledToFit()
             .frame(width: size, height: size)
-            .opacity(connected || lightsOff ? 1 : 0.55)
             .accessibilityHidden(true)
     }
 }

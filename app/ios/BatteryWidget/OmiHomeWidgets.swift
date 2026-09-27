@@ -134,33 +134,13 @@ struct OmiUpNextWidget: Widget {
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: UpNextProvider()) { entry in
-            UpNextEntryView(entry: entry)
-        }
-        .configurationDisplayName("Up next")
-        .description("Your next tasks and reminders from Omi.")
-        .supportedFamilies([.systemMedium, .accessoryRectangular, .accessoryInline])
-    }
-}
-
-struct UpNextEntryView: View {
-    @Environment(\.widgetFamily) var family
-    let entry: UpNextEntry
-
-    var body: some View {
-        switch family {
-        case .accessoryRectangular:
-            UpNextLockScreenView(entry: entry)
-                .widgetURL(omiWidgetURL("/action-items"))
-                .widgetBackground(.clear, accessory: true)
-        case .accessoryInline:
-            UpNextInlineView(entry: entry)
-                .widgetURL(omiWidgetURL("/action-items"))
-                .widgetBackground(.clear, accessory: true)
-        default:
             UpNextMediumView(entry: entry)
                 .widgetURL(omiWidgetURL("/action-items"))
                 .widgetBackground(OmiWidgetPalette.background)
         }
+        .configurationDisplayName("Up next")
+        .description("Your next tasks and reminders from Omi.")
+        .supportedFamilies([.systemMedium])
     }
 }
 
@@ -217,53 +197,6 @@ struct UpNextMediumView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-}
-
-/// Lock Screen: Up next, then the first task and when it is due.
-struct UpNextLockScreenView: View {
-    let entry: UpNextEntry
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            HStack(spacing: 4) {
-                OmiRingMark(size: 12, color: .primary)
-                Text("Up next").font(.system(size: 13, weight: .semibold))
-            }
-            .widgetAccentable()
-            if let first = entry.data?.tasks.first {
-                Text(verbatim: first.title)
-                    .font(.system(size: 15, weight: .semibold))
-                    .lineLimit(1)
-                    .privacySensitive()
-                if let due = upNextDueText(first.dueDate, now: entry.date) {
-                    due.font(.system(size: 13)).foregroundStyle(.secondary).lineLimit(1)
-                }
-            } else {
-                Text(entry.data == nil ? "Open Omi to continue" : "All caught up")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-/// Lock Screen, above the clock: "Call Chitapa · 5:00 PM".
-struct UpNextInlineView: View {
-    let entry: UpNextEntry
-
-    var body: some View {
-        if let first = entry.data?.tasks.first {
-            if let due = upNextDueText(first.dueDate, now: entry.date) {
-                Text(verbatim: first.title) + Text(" · ") + due
-            } else {
-                Text(verbatim: first.title)
-            }
-        } else {
-            Text(entry.data == nil ? "Open Omi to continue" : "All caught up")
-        }
     }
 }
 
