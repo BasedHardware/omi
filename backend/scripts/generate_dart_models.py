@@ -38,6 +38,7 @@ SCHEMA_GROUPS = {
     'conversation': {
         'output': DEFAULT_OUTPUT_DIR / 'conversation_wire.g.dart',
         'schemas': (
+            'StatusResponse',
             'Translation',
             'TranscriptSegment',
             'ActionItem',
