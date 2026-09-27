@@ -106,6 +106,9 @@ Future<List<ServerMessage>> clearChatServer({String? appId}) async {
 }
 
 ServerMessageChunk? parseMessageChunk(String line, String messageId) {
+  if (line == 'memory: saved' || line == 'memory: updated') {
+    return ServerMessageChunk(messageId, line.substring('memory: '.length), MessageChunkType.memory);
+  }
   if (line.startsWith('error: ')) {
     final message = line.substring('error: '.length).trim();
     return ServerMessageChunk(

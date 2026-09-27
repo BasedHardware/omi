@@ -11158,5 +11158,6 @@
     "appearanceSystem": "Sistem",
     "appearanceLight": "Svetlo",
     "appearanceDark": "Temno",
+    "chatDiscardRecording": "Zavrzi",
     "voiceQuestionNoSpeech": "Nisem razumel — poskusite znova"
 }

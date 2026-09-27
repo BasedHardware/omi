@@ -11432,5 +11432,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get appearanceDark => 'Tumšs';
 
   @override
+  String get chatDiscardRecording => 'Atmest';
+
+  @override
   String get voiceQuestionNoSpeech => 'Nesadzirdēju — mēģiniet vēlreiz';
 }

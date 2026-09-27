@@ -30,10 +30,11 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
       ..repeat(reverse: true);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final provider = context.read<VoiceRecorderProvider>();
       provider.setCallbacks(onTranscriptReady: widget.onTranscriptReady, onClose: widget.onClose);
 
-      if (!provider.isRecording && !provider.hasPendingRecording) {
+      if (provider.state == VoiceRecorderState.idle) {
         provider.startRecording();
       }
     });

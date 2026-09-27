@@ -3598,5 +3598,6 @@
     "appearanceSystem": "النظام",
     "appearanceLight": "فاتح",
     "appearanceDark": "داكن",
+    "chatDiscardRecording": "تجاهل",
     "voiceQuestionNoSpeech": "لم ألتقط ذلك — حاول مرة أخرى"
 }

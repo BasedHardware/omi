@@ -11443,5 +11443,8 @@ class AppLocalizationsNl extends AppLocalizations {
   String get appearanceDark => 'Donker';
 
   @override
+  String get chatDiscardRecording => 'Verwerpen';
+
+  @override
   String get voiceQuestionNoSpeech => 'Dat heb ik niet verstaan — probeer het opnieuw';
 }

@@ -3640,5 +3640,6 @@
     "appearanceSystem": "System",
     "appearanceLight": "Lys",
     "appearanceDark": "Mørk",
+    "chatDiscardRecording": "Kassér",
     "voiceQuestionNoSpeech": "Jeg fangede det ikke — prøv igen"
 }

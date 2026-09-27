@@ -3598,5 +3598,6 @@
     "appearanceSystem": "Sistema",
     "appearanceLight": "Šviesus",
     "appearanceDark": "Tamsus",
+    "chatDiscardRecording": "Atmesti",
     "voiceQuestionNoSpeech": "Neišgirdau — bandykite dar kartą"
 }
