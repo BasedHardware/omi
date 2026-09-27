@@ -53,6 +53,13 @@ void main() {
       expect(first, isNot(second));
     });
 
+    test('tags backend-issued task URL while preserving its query', () {
+      expect(
+        tagShareUrl('https://h.omi.me/tasks/token?existing=1', source: 'ios', sid: 'sid12345'),
+        'https://h.omi.me/tasks/token?existing=1&s=ios&sid=sid12345',
+      );
+    });
+
     test('reported share-sheet target is a bounded app category', () {
       expect(shareTargetApp('com.whatsapp.WhatsApp.ShareExtension'), 'whatsapp');
       expect(shareTargetApp('com.apple.UIKit.activity.CopyToPasteboard'), 'copy');
