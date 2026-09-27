@@ -60,7 +60,7 @@ _SYNC_JOB_OUTCOMES = (
 _SYNC_LANES = ('fresh', 'backfill')
 _SYNC_PROVIDERS = ('deepgram', 'modulate', 'parakeet')
 _SYNC_MODELS = ('nova-3', 'velma-2', 'parakeet')
-_SYNC_DISPATCH_MODES = ('inline', 'cloud_tasks')
+_SYNC_DISPATCH_MODES = ('inline', 'cloud_tasks', 'sequenced')
 SYNC_LEDGER_FENCE_MODE_ENV = 'SYNC_LEDGER_FENCE_MODE'
 
 RUN_LOCK_KEY_PREFIX = 'sync_job_lock:'
@@ -205,13 +205,14 @@ def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
     """Get a sync job by ID, self-healing a dead worker on read.
 
     A job stuck in 'processing' past STALE_THRESHOLD_SECONDS is finalized to
-    'failed' here, on every read and for every dispatch mode, so the client
+    'failed' here for legacy direct dispatch, so the client
     reverts the WAL to 'miss' and re-uploads within ~10 minutes instead of
     waiting out the 24h reconcile TTL. The pipeline heartbeats 'updated_at' at
     every stage and per segment, so 600s of silence only ever means the worker
     is gone — see is_sync_job_stale. 'queued' jobs are never finalized: no
     worker has claimed them, and flipping them to 'failed' caused spurious
-    client "retrying" loops (#7469).
+    client "retrying" loops (#7469). Sequenced jobs are exempt from read-side
+    liveness mutation; the UID lease/sweeper owns their recovery.
     """
     key = f'{JOB_KEY_PREFIX}{job_id}'
     data = r.get(key)
@@ -226,7 +227,7 @@ def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
         return None
     job: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
-    if is_sync_job_stale(job):
+    if job.get('dispatch_mode') != 'sequenced' and is_sync_job_stale(job):
         updated_at = job.get('updated_at') or job.get('created_at') or time.time()
         logger.warning(
             "sync_job %s (uid=%s) stale after %.0fs in 'processing' — marking failed",
@@ -260,6 +261,11 @@ def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bo
     and that pending retry must never be flipped terminal by a poll, however
     long its backoff.
     """
+    # The UID owner/sweeper, not a polling reader, owns liveness for accepted
+    # sequenced jobs. Waiting in the per-UID queue is expected to exceed the
+    # direct Cloud Tasks dispatch-stale threshold for a heavy account.
+    if job.get('dispatch_mode') == 'sequenced':
+        return False
     status = job.get('status')
     if status == 'processing':
         threshold = STALE_THRESHOLD_SECONDS
@@ -295,6 +301,16 @@ def _read_raw_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
     except (TypeError, ValueError, json.JSONDecodeError):
         return None
     return cast(Dict[str, Any], job) if isinstance(job, dict) else None
+
+
+def get_raw_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
+    """Read without the status-poll stale mutation; sequencer recovery owns its lease check."""
+    return _read_raw_sync_job(job_id)
+
+
+def sync_job_run_lock_present(job_id: str) -> bool:
+    """Conservatively refuse a replacement dispatch while a worker still owns its run lock."""
+    return bool(r.exists(f'{RUN_LOCK_KEY_PREFIX}{job_id}'))
 
 
 def _backfill_dead_letter_pending(job_id: str, job: Optional[Dict[str, Any]], reason_code: Any) -> None:
