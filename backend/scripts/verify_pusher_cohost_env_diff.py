@@ -116,6 +116,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "RAPID_API_KEY",
             "REFERRAL_PUBLIC_BASE_URL",
             "TRANSLATION_SERVICE_MODELS",
+            # HTTP read-aloud routers mount only on backend-listen, not pusher.
+            "TTS_PROVIDER",
             "TWILIO_API_KEY_SECRET",
             "TWILIO_AUTH_TOKEN",
             "USE_VERTEX_AI",
@@ -180,6 +182,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "SYNC_TASKS_LOCATION",
             "SYNC_TASKS_PROJECT",
             "TRANSLATION_SERVICE_MODELS",
+            # HTTP read-aloud routers mount only on backend-listen, not pusher.
+            "TTS_PROVIDER",
             "TWILIO_API_KEY_SECRET",
             "TWILIO_AUTH_TOKEN",
             "USE_VERTEX_AI",

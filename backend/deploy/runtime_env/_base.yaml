@@ -31,6 +31,13 @@ environment_shared:
             key: TWILIO_TWIML_APP_SID
         USE_VERTEX_AI:
           value: 'true'
+        TTS_PROVIDER:
+          value: gemini
+          category: rollout
+        GEMINI_API_KEY:
+          secret:
+            name: '{env}-omi-backend-secrets'
+            key: GEMINI_API_KEY
         STT_PRERECORDED_MODEL:
           value: parakeet,modulate-velma-2
           category: stt_policy
@@ -329,6 +336,9 @@ environment_shared:
         category: rollout
       USE_VERTEX_AI:
         value: 'true'
+      TTS_PROVIDER:
+        value: gemini
+        category: rollout
       GOOGLE_CLOUD_PROJECT:
         value: '{compute_project}'
       GCP_LOCATION:
@@ -340,6 +350,9 @@ environment_shared:
         value: 'true'
         category: rollout
     secrets:
+      GEMINI_API_KEY:
+        secret: GEMINI_API_KEY
+        version: latest
       METRICS_SECRET:
         secret: METRICS_SECRET
         version: latest

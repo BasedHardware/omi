@@ -137,6 +137,8 @@ env:
     value: "0.01"
   - name: USE_VERTEX_AI
     value: "true"
+  - name: TTS_PROVIDER
+    value: "gemini"
   # Direct-provider surfaces (desktop_proxy, omni_relay) write their attempts
   # to the gateway ledger under this switch; the manifest declares it, this is
   # where it actually reaches the pod.
