@@ -36,7 +36,7 @@ Source fields were checked against Dart `Memory`, `ServerConversation`, `Generat
 
 The backend models are the authority for old documents that omit newer fields. Do not require a field to be explicitly present when its backend default is an indexable state. Explicit out-of-scope values remain excluded. The macOS cache may carry `nil` in columns added after the original row was stored; apply the same default there. This table covers every eligibility input above and the auxiliary fields that were audited.
 
-| Field | Absent or null in a legacy payload | Siri decision on iOS and macOS |
+| Field | Backend absence/default behavior (and null where applicable) | Siri decision on iOS and macOS |
 | --- | --- | --- |
 | Backend ID | Required by each response model; no default | Reject a missing or empty ID; local-only rows never enter the index. |
 | Account owner | Memory `uid` is required. Conversation and task responses are fetched by the signed-in account and carry no UID. | Reject a missing or mismatched memory UID; fence the account-scoped cache and index by current owner on both platforms. |
@@ -50,7 +50,7 @@ The backend models are the authority for old documents that omit newer fields. D
 | Memory / conversation / task `is_locked` | false in all three backend response models | Include omitted/nil legacy lock flags as unlocked; exclude explicit true. |
 | Memory `ledger_status` / `superseded_by` | `None` / `None` means current | Include absent status and empty supersession; exclude non-active status or a replacement ID. |
 | Memory `kind` / `intent_backed` | `None` / false | Neither is a Siri eligibility prerequisite; old ordinary memories remain eligible. |
-| Conversation `status` | `completed` in the backend and client wire adapter | Include omitted status as completed; exclude processing, in-progress, merging, and failed. |
+| Conversation `status` | Omission defaults to `completed`; explicit null is allowed by the optional backend field. | Both client adapters treat omitted/null as completed; exclude processing, in-progress, merging, and failed. |
 | Task `status` / `superseded_by` | `active` / `None` in `ActionItemResponse` | Include omitted status as active; exclude cancelled, superseded, unknown explicit status, or a replacement ID. |
 | Task `completed` / `completed_at` | `completed` is required; `completed_at=None` | Open tasks have no date requirement. A completed task without a completion date cannot prove the 30-day window and is excluded. |
 | Conversation age | `started_at` is optional; `created_at` is required | Use `started_at`, falling back to `created_at`; include only within 180 days. |
