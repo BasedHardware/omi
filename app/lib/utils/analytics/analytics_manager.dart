@@ -1904,10 +1904,7 @@ class AnalyticsManager {
 
   void conversationShared({required ServerConversation conversation, required String shareMethod, required String shareId, required String shareStatus, String? targetApp}) {
     var properties = getConversationEventProperties(conversation);
-    properties['share_method'] = shareMethod;
-    properties['share_id'] = shareId;
-    properties['share_status'] = shareStatus;
-    if (targetApp != null) properties['target_app'] = targetApp;
+    properties.addAll({'share_method': shareMethod, 'share_id': shareId, 'share_status': shareStatus, if (targetApp != null) 'target_app': targetApp});
     track('Conversation Shared', properties: properties);
   }
 
