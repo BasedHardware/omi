@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const captured: string[] = [];
 const releaseRows: [string, string, string][] = [];
+let releaseBoundaryTimestamp: string | null = null;
 
 vi.mock("@/lib/auth", () => ({
   verifyAdmin: vi.fn(async () => ({ uid: "test" })),
@@ -26,6 +27,17 @@ vi.mock("@/lib/posthog", () => ({
   posthogResults: vi.fn(
     async (_h: string, _p: string, _k: string, query: string) => {
       captured.push(query);
+      if (releaseBoundaryTimestamp && query.includes("properties.$app_build")) {
+        const timestamp = new Date(releaseBoundaryTimestamp);
+        const day = query.includes(
+          "toDate(toTimeZone(timestamp, 'America/New_York'))"
+        )
+          ? timestamp.toLocaleDateString("en-CA", {
+              timeZone: "America/New_York",
+            })
+          : timestamp.toISOString().slice(0, 10);
+        return [["iOS", "boundary-build", day]];
+      }
       return query.includes("properties.$app_build") ? releaseRows : [];
     }
   ),
@@ -76,6 +88,7 @@ function expectScoped(queries: string[], scope: "macos" | "mobile" | "all") {
 
 beforeEach(() => {
   releaseRows.length = 0;
+  releaseBoundaryTimestamp = null;
   process.env.POSTHOG_PERSONAL_API_KEY = "phx_test";
   process.env.POSTHOG_PROJECT_ID = "1";
   process.env.POSTHOG_HOST = "https://posthog.test";
@@ -281,7 +294,9 @@ describe("releases route", () => {
       expect(captured[0]).toContain(
         "properties.$os_name IN ('iOS', 'Android')"
       );
-      expect(captured[0]).toContain("min(toDate(timestamp)) AS first_seen_day");
+      expect(captured[0]).toContain(
+        "min(toDate(toTimeZone(timestamp, 'America/New_York'))) AS first_seen_day"
+      );
       expect(captured[0]).toContain("GROUP BY platform, build");
       expect(captured[0]).not.toContain("$app_version");
       expect(captured[0]).not.toContain("HAVING");
@@ -299,6 +314,28 @@ describe("releases route", () => {
       });
       await GET(request("/api/omi/stats/releases?days=3"));
       expect(captured).toHaveLength(1); // 15-minute in-process response cache
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a 01:00 UTC mobile build on the previous New York day", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-28T01:00:00Z"));
+    releaseBoundaryTimestamp = "2026-09-28T01:00:00Z";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => [] } as any))
+    );
+    try {
+      vi.resetModules();
+      const { GET } = await import("@/app/api/omi/stats/releases/route");
+      const response = await GET(request("/api/omi/stats/releases?days=1"));
+      expect(response.status).toBe(200);
+      expect((await response.json()).daily).toEqual([
+        { date: "2026-09-27", macos: 0, ios: 1, android: 0 },
+      ]);
     } finally {
       vi.unstubAllGlobals();
       vi.useRealTimers();

@@ -156,7 +156,7 @@ async function fetchMobileBuildDates(
     `
       SELECT properties.$os_name AS platform,
              properties.$app_build AS build,
-             min(toDate(timestamp)) AS first_seen_day
+             min(toDate(toTimeZone(timestamp, 'America/New_York'))) AS first_seen_day
       FROM events
       WHERE properties.$os_name IN ('iOS', 'Android')
         AND properties.$app_build IS NOT NULL
