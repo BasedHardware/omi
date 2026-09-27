@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void completeRedirectSignIn()
       .then((redirectedUser) => {
         if (redirectedUser) {
-          MixpanelManager.track('Sign In Completed', { method: 'redirect' });
+          PostHogManager.track('Sign In Completed', { method: 'redirect' });
         }
       })
       .catch((error) => {
