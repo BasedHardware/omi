@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
@@ -81,6 +82,49 @@ void main() {
       sync.onFrameCaptured(WalFrame(payload: [3], syncKey: FrameSyncKey([3])), captureRoot: 'root-b');
       expect(sync.testFrames.single.sourceFramePosition, 0);
       expect(sync.testFrames.single.sourceClockEpoch, 0);
+    });
+
+    test('socket and WAL receive the same allocated unit after reload', () async {
+      const root = '12345678-1234-4234-8234-123456789abc';
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      final first = sync.onFrameCaptured(WalFrame(payload: [1], syncKey: FrameSyncKey([1])), captureRoot: root);
+      final second = sync.onFrameCaptured(WalFrame(payload: [2], syncKey: FrameSyncKey([2])), captureRoot: root);
+      expect((first.sourceFramePosition, second.sourceFramePosition), (0, 1));
+      await sync.finalizeCurrentSession();
+      final persisted = Wal.fromJson(sync.testWals.single.toJson());
+      expect(persisted.sourceFrameStart, first.sourceFramePosition);
+
+      final restored = LocalWalSyncImpl(listener)..testWals = [persisted];
+      final next = restored.onFrameCaptured(WalFrame(payload: [3], syncKey: FrameSyncKey([3])), captureRoot: root);
+      expect(next.sourceFramePosition, 2);
+      expect(next.sourceClockEpoch, persisted.sourceClockEpoch);
+      await restored.onAudioCodecChanged(BleAudioCodec.pcm16);
+      final changed = restored.onFrameCaptured(WalFrame(payload: [4], syncKey: FrameSyncKey([4])), captureRoot: root);
+      expect(changed.sourceClockEpoch, greaterThan(next.sourceClockEpoch!));
+      expect(changed.sourceFramePosition, 0);
+    });
+
+    test('upload header is versioned and bounded only in dark-write builds', () {
+      const root = '12345678-1234-4234-8234-123456789abc';
+      final wal = Wal(
+        timerStart: 1710000000,
+        codec: BleAudioCodec.pcm16,
+        seconds: 1,
+        totalFrames: 100,
+        sampleRate: 16000,
+        captureRoot: root,
+        sourceFrameStart: 42,
+        sourceClockEpoch: 3,
+      );
+      final file = File('${Directory.systemTemp.path}/audio_phonemic_pcm16_16000_1_fs160_1710000000.bin');
+      final header = captureEvidenceUploadHeader([wal], [file]);
+      if (const bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE')) {
+        final parsed = jsonDecode(header!) as Map<String, dynamic>;
+        expect(parsed['version'], 1);
+        expect((parsed['files'] as List).single['source_frame_start'], 42);
+      } else {
+        expect(header, isNull);
+      }
     });
 
     test('preserves insertion order for multiple frames', () {

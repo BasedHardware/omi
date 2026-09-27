@@ -356,7 +356,20 @@ class TranscriptProcessor:
                 started_at=started_at,
                 audio_timeline=audio_timeline,
                 **(
-                    {'capture_evidence': unknown_envelope('missing_source_position', origin='live')}
+                    {
+                        'capture_evidence': (
+                            self.host.state.source_position_map.snapshot(
+                                (start, end)
+                                for start, end, owner in (self.host.state.conversation_sample_ranges or ())
+                                if owner == conversation.id
+                            )
+                            if self.host.state.source_position_map is not None
+                            else unknown_envelope(
+                                'multichannel_mix' if self.host.is_multi_channel else 'missing_source_position',
+                                origin='live',
+                            )
+                        )
+                    }
                     if capture_evidence_dark_write_enabled()
                     else {}
                 ),
@@ -364,7 +377,14 @@ class TranscriptProcessor:
                 invalidate_client_processing=False,
             )
             if capture_evidence_dark_write_enabled():
-                OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(path='live', status='unknown').inc()
+                OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(
+                    path='live',
+                    status=(
+                        'mapped'
+                        if self.host.state.source_position_map and self.host.state.source_position_map.runs
+                        else 'unknown'
+                    ),
+                ).inc()
             if not isinstance(written, LiveTranscriptMerge):
                 return None
             if getattr(self.host.state, 'capture_timeline_v2', False):

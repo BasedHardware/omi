@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
@@ -46,6 +47,39 @@ class WalRetentionRisk {
 /// One batch is one server-side sync job, and a job must finish inside the
 /// backend's 600s stale guard (backend/database/sync_jobs.py).
 const _syncUploadBatchLimit = 5;
+
+/// Optional S1 file-position claim. The upload remains valid when a legacy or
+/// mixed batch cannot make a single bounded claim; the server then records
+/// unknown coverage instead of inventing positions from timestamps.
+String? captureEvidenceUploadHeader(List<Wal> wals, List<File> files) {
+  if (!const bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE') || wals.length != files.length || wals.isEmpty) {
+    return null;
+  }
+  final claims = <Map<String, dynamic>>[];
+  for (var i = 0; i < wals.length; i++) {
+    final wal = wals[i];
+    if (wal.captureRoot == null ||
+        wal.sourceFrameStart == null ||
+        wal.sourceClockEpoch == null ||
+        wal.totalFrames <= 0 ||
+        wal.channel != 1 ||
+        (wal.codec != BleAudioCodec.opus && wal.codec != BleAudioCodec.pcm16)) {
+      return null;
+    }
+    claims.add({
+      'name': files[i].uri.pathSegments.last,
+      'capture_root': wal.captureRoot,
+      'clock_epoch': wal.sourceClockEpoch,
+      'source_frame_start': wal.sourceFrameStart,
+      'frame_count': wal.totalFrames,
+      'rate_hz': wal.sampleRate,
+      'codec': wal.codec.name,
+      'channel': 'mono',
+    });
+  }
+  final encoded = jsonEncode({'version': 1, 'files': claims});
+  return utf8.encode(encoded).length <= 4096 ? encoded : null;
+}
 
 enum SyncJobTerminalPolicy { wait, acknowledge, retry }
 
@@ -512,12 +546,20 @@ class LocalWalSyncImpl implements LocalWalSync {
         _wals.add(wal);
       } else {
         wal = _wals[walIdx];
+        final contiguousEvidence = stableEvidence &&
+            wal.captureRoot == evidenceRoot &&
+            wal.sourceClockEpoch == evidenceEpoch &&
+            wal.sourceFrameStart != null &&
+            wal.sourceFrameStart! + wal.totalFrames == evidenceStart;
+        final oldFrameCount = wal.totalFrames;
         wal.data.addAll(chunk);
         wal.storage = WalStorage.mem;
-        wal.totalFrames = chunkFrameCount;
-        wal.captureRoot = null;
-        wal.sourceFrameStart = null;
-        wal.sourceClockEpoch = null;
+        wal.totalFrames = contiguousEvidence ? oldFrameCount + chunkFrameCount : chunkFrameCount;
+        if (!contiguousEvidence) {
+          wal.captureRoot = null;
+          wal.sourceFrameStart = null;
+          wal.sourceClockEpoch = null;
+        }
         wal.syncedFrameOffset = syncedOffset;
         wal.status = syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss;
         _wals[walIdx] = wal;
@@ -918,20 +960,33 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   @override
-  void onFrameCaptured(WalFrame frame, {String? captureRoot}) {
+  WalFrame onFrameCaptured(WalFrame frame, {String? captureRoot}) {
     if (captureRoot != _captureEvidenceRoot) {
       _captureEvidenceRoot = captureRoot;
-      _nextSourceFramePosition = 0;
-      _sourceClockEpoch = 0;
+      // A restored WAL for the same root is the durable high-water mark.
+      // Never reuse an ordinal after an app restart or an index reload.
+      final prior = _wals.where((wal) => wal.captureRoot == captureRoot && wal.sourceFrameStart != null).toList();
+      if (captureRoot != null && prior.isNotEmpty) {
+        _sourceClockEpoch = prior.map((wal) => wal.sourceClockEpoch ?? 0).reduce(max);
+        _nextSourceFramePosition = prior
+            .where((wal) => wal.sourceClockEpoch == _sourceClockEpoch)
+            .map((wal) => wal.sourceFrameStart! + wal.totalFrames)
+            .reduce(max);
+      } else {
+        _nextSourceFramePosition = 0;
+        _sourceClockEpoch = 0;
+      }
     }
-    _frames.add(WalFrame(
+    final positioned = WalFrame(
       payload: frame.payload,
       syncKey: frame.syncKey,
       captureRoot: captureRoot,
       sourceFramePosition: captureRoot == null ? null : _nextSourceFramePosition++,
       sourceClockEpoch: captureRoot == null ? null : _sourceClockEpoch,
-    ));
+    );
+    _frames.add(positioned);
     _frameSynced.add(false);
+    return positioned;
   }
 
   @override
@@ -1104,6 +1159,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         final result = await _uploadGate.upload(
           files,
           conversationId: batchWals.first.conversationId,
+          captureEvidence: captureEvidenceUploadHeader(batchWals, files),
           claimLiveCapture: claimLiveCapture,
           geolocation: batchWals.first.geolocation,
         );
@@ -1330,6 +1386,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       final result = await _uploadGate.upload(
         [walFile],
         conversationId: walToSync.conversationId,
+        captureEvidence: captureEvidenceUploadHeader([walToSync], [walFile]),
         claimLiveCapture: claimLiveCapture,
         geolocation: walToSync.geolocation,
       );

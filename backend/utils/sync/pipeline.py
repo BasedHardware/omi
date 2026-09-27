@@ -69,7 +69,13 @@ from database.sync_ledger import (
     release_sync_content_claim,
 )
 from config.capture_evidence import capture_evidence_dark_write_enabled
-from utils.capture_evidence import unknown_envelope
+from utils.capture_evidence import (
+    bounded_envelope,
+    decoded_frame_map,
+    merge_track_receipts,
+    sync_segment_receipt,
+    unknown_envelope,
+)
 from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
@@ -882,7 +888,14 @@ def _merge_and_cap_vad_segments(voice_segments: list) -> list:
     return segments
 
 
-def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
+def retrieve_vad_segments(
+    path: str,
+    segmented_paths: set,
+    errors: list = None,
+    source_frame_map: dict | None = None,
+    segment_source_maps: dict | None = None,
+    segment_source_lock: threading.Lock | None = None,
+):
     try:
         start_timestamp = get_timestamp_from_path(path)
         voice_segments = vad_is_empty(path, return_segments=True, cache=True)
@@ -911,6 +924,16 @@ def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
             segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]
             segment_aseg.export(segment_path, format='wav')
             segmented_paths.add(segment_path)
+            if segment_source_maps is not None:
+                # Pydub's millisecond slice starts at this original WAV sample.
+                # The derivative STT clock resets to zero; retain its bridge.
+                with segment_source_lock or contextlib.nullcontext():
+                    if segment_path in segment_source_maps:
+                        segment_source_maps[segment_path] = None
+                    elif source_frame_map is not None:
+                        segment_source_maps[segment_path] = (source_frame_map, int(segment['start'] * aseg.frame_rate))
+                    else:
+                        segment_source_maps[segment_path] = None
             # Explicitly delete segment to free memory immediately
             del segment_aseg
     finally:
@@ -1083,6 +1106,7 @@ def process_segment(
     job_id: str | None = None,
     segment_key: str | None = None,
     attempt_ref: str | None = None,
+    source_position_map: tuple[dict, int] | None = None,
 ):
     conversation_id = None
     provider = 'unknown'
@@ -1222,8 +1246,25 @@ def process_segment(
         ).model_dump()
         incoming['data_protection_level'] = data_protection_level
         if capture_evidence_dark_write_enabled():
-            # The VAD derivative path no longer carries an authenticated source-unit map.
-            incoming['capture_evidence'] = unknown_envelope('missing_source_position', origin='sync_vad')
+            receipt = unknown_envelope('missing_source_position', origin='sync_vad')
+            if source_position_map is not None:
+                frame_map, derivative_start = source_position_map
+                rate = frame_map['claim']['rate_hz']
+                mapped = [
+                    sync_segment_receipt(
+                        frame_map,
+                        wav_sample_start=derivative_start + round(segment.start * rate),
+                        wav_sample_end=derivative_start + round(segment.end * rate),
+                        segment_id=str(segment.id),
+                    )
+                    for segment in transcript_segments
+                ]
+                if all(item is not None for item in mapped):
+                    receipt = merge_track_receipts([], mapped)
+                    if frame_map['incomplete'] and receipt.get('capability') == 'source_position':
+                        receipt['coverage'] = 'incomplete'
+                    receipt = bounded_envelope(receipt)
+            incoming['capture_evidence'] = receipt
         phase = 'persistence'
         from utils.conversations.lifecycle import ingest_sync_conversation
 
@@ -1234,7 +1275,10 @@ def process_segment(
             target_id=target_conversation_id,
         )
         if capture_evidence_dark_write_enabled():
-            OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(path='sync', status='unknown').inc()
+            OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(
+                path='sync',
+                status='mapped' if incoming['capture_evidence']['capability'] == 'source_position' else 'unknown',
+            ).inc()
         conversation_id = assigned['id']
         with lock:
             response['new_memories' if created else 'updated_memories'].add(conversation_id)
@@ -1647,15 +1691,31 @@ async def _record_restricted_sync_dg_usage(
             raise
 
 
-async def _run_sync_vad_phase(wav_paths: list, segmented_paths: set) -> tuple[list[str], int]:
+async def _run_sync_vad_phase(
+    wav_paths: list,
+    segmented_paths: set,
+    source_frame_maps: dict | None = None,
+    segment_source_maps: dict | None = None,
+) -> tuple[list[str], int]:
     """Finish all mutating VAD work before the coordinator advances or cleans up."""
     phase_started = time.monotonic()
     vad_errors: list[str] = []
+    segment_source_lock = threading.Lock()
 
     def _run_vad_bg(path: str):
         local_errors: list[str] = []
         try:
-            retrieve_vad_segments(path, segmented_paths, local_errors)
+            if segment_source_maps is not None:
+                retrieve_vad_segments(
+                    path,
+                    segmented_paths,
+                    local_errors,
+                    source_frame_map=(source_frame_maps or {}).get(path),
+                    segment_source_maps=segment_source_maps,
+                    segment_source_lock=segment_source_lock,
+                )
+            else:
+                retrieve_vad_segments(path, segmented_paths, local_errors)
         except Exception as error:
             if not local_errors:
                 local_errors.append(_bounded_exception_type(error))
@@ -1696,6 +1756,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     inline_run_lock_token: Optional[str] = None,
     content_run_bound: bool = False,
     ledger_fence_active: bool = True,
+    capture_evidence_claims: dict[str, dict] | None = None,
 ):
     """Async coordinator for the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
@@ -1766,6 +1827,9 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
         set_byok_uid(uid if get_byok_keys() else None)
         segmented_paths = set()
         wav_paths = []
+        decoded_frames: dict[str, list[int]] = {}
+        source_frame_maps: dict[str, dict] = {}
+        segment_source_maps: dict[str, tuple[dict, int] | None] = {}
         stage_timings = {}
         pipeline_start = time.monotonic()
         try:
@@ -1806,7 +1870,10 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             )
             t0 = time.monotonic()
             try:
-                wav_paths = await run_blocking(sync_executor, decode_files_to_wav, raw_paths)
+                if capture_evidence_dark_write_enabled() and capture_evidence_claims:
+                    wav_paths = await run_blocking(sync_executor, decode_files_to_wav, raw_paths, decoded_frames)
+                else:
+                    wav_paths = await run_blocking(sync_executor, decode_files_to_wav, raw_paths)
             except asyncio.CancelledError:
                 # Cancellation detaches only the asyncio Future; the decoder
                 # leaf may still be reading these inputs in its executor. Keep
@@ -1881,6 +1948,25 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 )
                 return
 
+            if capture_evidence_dark_write_enabled() and capture_evidence_claims:
+                for wav_path in wav_paths:
+                    claim = capture_evidence_claims.get(os.path.basename(wav_path).replace('.wav', '.bin'))
+                    if (
+                        claim is None
+                        or (claim['codec'] == 'pcm16' and '_pcm16_' not in wav_path)
+                        or (claim['codec'] == 'opus' and '_opus_' not in wav_path)
+                    ):
+                        continue
+                    with wave.open(wav_path, 'rb') as decoded_wav:
+                        mapping = decoded_frame_map(
+                            claim,
+                            decoded_frames.get(wav_path, []),
+                            wav_rate_hz=decoded_wav.getframerate(),
+                            wav_channels=decoded_wav.getnchannels(),
+                        )
+                    if mapping is not None:
+                        source_frame_maps[wav_path] = mapping
+
             # --- Phase 2: VAD ---
             job_phase = 'vad'
             await run_blocking(
@@ -1891,13 +1977,52 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 {
                     'stage': 'vad',
                     **(
-                        {'capture_evidence': unknown_envelope('missing_source_position', origin='sync_pre_vad')}
+                        {
+                            'capture_evidence': (
+                                bounded_envelope(
+                                    {
+                                        'version': 1,
+                                        'capability': 'source_position' if source_frame_maps else 'unknown',
+                                        'coverage': (
+                                            'incomplete'
+                                            if (
+                                                len(source_frame_maps) != len(wav_paths)
+                                                or any(mapping['incomplete'] for mapping in source_frame_maps.values())
+                                            )
+                                            else 'mapped'
+                                        ),
+                                        'origin': 'sync_pre_vad',
+                                        'runs': [
+                                            {
+                                                'capture_root': mapping['claim']['capture_root'],
+                                                'clock_epoch': mapping['claim']['clock_epoch'],
+                                                'source_frame_start': mapping['claim']['source_frame_start'],
+                                                'source_frame_end': mapping['claim']['source_frame_start']
+                                                + len(mapping['offsets'])
+                                                - 1,
+                                                'decoded_sample_end': mapping['offsets'][-1],
+                                                'rate_hz': mapping['claim']['rate_hz'],
+                                                'incomplete': mapping['incomplete'],
+                                            }
+                                            for mapping in source_frame_maps.values()
+                                        ],
+                                    }
+                                )
+                                if source_frame_maps
+                                else unknown_envelope('missing_source_position', origin='sync_pre_vad')
+                            )
+                        }
                         if capture_evidence_dark_write_enabled()
                         else {}
                     ),
                 },
             )
-            vad_errors, vad_ms = await _run_sync_vad_phase(wav_paths, segmented_paths)
+            if source_frame_maps:
+                vad_errors, vad_ms = await _run_sync_vad_phase(
+                    wav_paths, segmented_paths, source_frame_maps, segment_source_maps
+                )
+            else:
+                vad_errors, vad_ms = await _run_sync_vad_phase(wav_paths, segmented_paths)
             stage_timings['vad_ms'] = vad_ms
             wav_paths = []
 
@@ -2218,6 +2343,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     job_id=job_id,
                     segment_key=segment_id or path,
                     attempt_ref=attempt_ref,
+                    source_position_map=segment_source_maps.get(path),
                 )
                 if ok:
                     # Persist result contributions before the processed marker.

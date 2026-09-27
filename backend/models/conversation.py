@@ -1,6 +1,6 @@
 from datetime import datetime
 from collections.abc import Mapping
-from typing import Annotated, Dict, List, Literal, Optional, Union
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
@@ -387,7 +387,7 @@ class CaptureEvidenceMetadata(BaseModel):
 
     version: Literal[1] = 1
     capability: Literal['source_position', 'stable_artifact', 'unknown']
-    coverage: Optional[Literal['unknown', 'incomplete']] = None
+    coverage: Optional[Literal['unknown', 'incomplete', 'mapped']] = None
     origin: Optional[str] = None
     reason: Optional[str] = None
     capture_root: Optional[str] = None
@@ -395,6 +395,9 @@ class CaptureEvidenceMetadata(BaseModel):
     clock_epoch: Optional[str] = None
     source_start: Optional[int] = None
     source_end: Optional[int] = None
+    runs: Optional[List[Dict[str, Any]]] = None
+    receipts: Optional[List[Dict[str, Any]]] = None
+    conflicts: Optional[int] = None
 
 
 class Conversation(BaseModel):

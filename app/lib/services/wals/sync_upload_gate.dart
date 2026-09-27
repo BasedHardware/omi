@@ -16,6 +16,7 @@ typedef SyncFilesUploader = Future<UploadFilesResult> Function(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
+  String? captureEvidence,
   bool claimLiveCapture,
   Geolocation? geolocation,
 });
@@ -148,6 +149,7 @@ class SyncUploadGate {
     List<File> files, {
     UploadProgressCallback? onUploadProgress,
     String? conversationId,
+    String? captureEvidence,
     bool claimLiveCapture = false,
     Geolocation? geolocation,
   }) async {
@@ -191,6 +193,7 @@ class SyncUploadGate {
           files,
           onUploadProgress: onUploadProgress,
           conversationId: conversationId,
+          captureEvidence: captureEvidence,
           claimLiveCapture: claimLiveCapture,
           geolocation: geolocation,
         );

@@ -1451,16 +1451,29 @@ through that interval; the stale cache never authorizes changing labeled spans.
 ### S1 capture evidence dark write (exploratory)
 
 `CAPTURE_EVIDENCE_V1_DARK_WRITE` defaults off on backend, mobile and macOS. When
-on, listen piggybacks an `unknown` source-coverage receipt on its existing
-transcript transaction. Sync piggybacks an `unknown` receipt on the existing
-pre-VAD job stage update and assigned conversation write: current sync file
-paths and VAD derivatives do not carry an authenticated source frame map.
+on, the phone WAL allocates a frame ordinal once before either delivery. The
+client sends a `capture_evidence_frame` JSON control record immediately before
+the corresponding `/v4/listen` binary frame. Version 1 carries
+`capture_root` (UUID), `clock_epoch` (nonnegative integer), `source_frame`
+(nonnegative integer) and `byte_length`. The authenticated listen socket checks
+the next binary frame length and records a bounded frame-to-decoded-sample map
+in its existing transcript write. Unpaired, malformed and multi-channel frames
+remain unknown; wall time never becomes a source key.
+
+Safety WAL uploads may send the internal `X-Omi-Capture-Evidence` JSON header:
+`{"version":1,"files":[{"name":"...bin","capture_root":"<uuid>","clock_epoch":0,"source_frame_start":0,"frame_count":100,"rate_hz":16000,"codec":"pcm16","channel":"mono"}]}`.
+The header is optional and limited to 4 KiB/20 files. The signed-in account
+scopes the claim; the server validates file names, frame counts, decoded sample
+rate and mono channel against the uploaded bytes. Its existing pre-VAD job
+update records verified ranges. A VAD derivative retains its original WAV
+sample offset, and each STT span maps to original WAL frame plus within-frame
+offset. Assignment combines bounded receipts from every contributing track;
+overflow or an unsupported transform marks coverage incomplete or unknown.
 From-segments accepts a bounded list of original desktop local segment IDs and
 millisecond-relative positions before the client merges/compacts them. This is
 stable local-artifact lineage, not proof of source-audio or cross-device clock
-alignment. Mobile WALs locally serialize a recording root, frame ordinal and
-codec epoch; the existing sync upload does not transport that map to the backend.
-Overflow or missing lineage records incomplete/unknown status, and fixed-label
+alignment. Fixed-label
 counters report receipt attempts. Flag-off omits all new wire and stored fields.
-No new Firestore operations, replay suppression, scene grouping or effects are
-introduced by this stage.
+No new Firestore operations, authoritative replay suppression, scene grouping
+or effects are introduced by this stage. Exact mixed-channel audio and legacy
+uploads remain unsupported.

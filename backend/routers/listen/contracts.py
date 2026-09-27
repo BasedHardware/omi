@@ -113,6 +113,7 @@ class ListenSessionState:
     # admits the v2 *persistence* (projected times, started_at pin, marker,
     # pusher projection) for this recording only.
     capture_timeline: Any = None
+    source_position_map: Any = None
     capture_timeline_v2: bool = False
     conversation_capture_origins: Dict[str, 'ConversationCaptureOrigin'] = field(default_factory=dict)
     conversations_awaiting_capture_origin: set = field(default_factory=set)
