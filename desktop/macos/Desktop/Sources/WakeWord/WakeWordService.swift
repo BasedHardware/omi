@@ -14,6 +14,11 @@ final class WakeWordService {
   private let minimumCommandWords = 2
 
   var now: @MainActor () -> Date = { Date() }
+  // Read through the singleton at call time, like `now`. Tests inject values here
+  // instead of mutating UserDefaults.standard, which races between suites (#13260).
+  var isEnabled: @MainActor () -> Bool = { AssistantSettings.shared.wakeWordEnabled }
+  var wakePhrase: @MainActor () -> String = { AssistantSettings.shared.wakeWordPhrase }
+  var cooldown: @MainActor () -> TimeInterval = { AssistantSettings.shared.wakeWordCooldown }
   var onTrigger: @MainActor (String) -> Void = { command in
     log("WakeWord: submitting '\(command)' to the assistant")
     // Hands-free means the answer has to come back the same way the command went out, and
@@ -50,7 +55,7 @@ final class WakeWordService {
   ) {
     let parsed = WakeWordSegmentParser.command(
       after: segment.text,
-      wakePhrase: AssistantSettings.shared.wakeWordPhrase)
+      wakePhrase: wakePhrase())
 
     // Every rejection below used to be silent, so a wake word that never fired
     // was indistinguishable from one that was never spoken. Only segments that
@@ -59,7 +64,7 @@ final class WakeWordService {
       if parsed != nil { log("WakeWord: ignored — \(reason)") }
     }
 
-    guard AssistantSettings.shared.wakeWordEnabled else { return ignore("disabled in settings") }
+    guard isEnabled() else { return ignore("disabled in settings") }
     guard !isConversationActive else { return ignore("assistant already busy") }
     // Diarization only sets `isUser` once a speech profile is enrolled, so requiring
     // it alone makes the wake word silently dead for every user who has not enrolled
@@ -71,7 +76,7 @@ final class WakeWordService {
     guard let command = parsed else {
       // Names only the rendering, never what was said after it.
       if let rendering = WakeWordSegmentParser.openingRendering(
-        in: segment.text, wakePhrase: AssistantSettings.shared.wakeWordPhrase)
+        in: segment.text, wakePhrase: wakePhrase())
       {
         log("WakeWord: ignored — '\(rendering)' opened a sentence, but no command followed it")
       }
@@ -104,7 +109,7 @@ final class WakeWordService {
     // arrive inside one 30s window; gating on time alone silently discarded them.
     if let last = lastTriggeredAt, command == lastTriggeredCommand {
       let interval = current.timeIntervalSince(last)
-      if interval >= 0 && interval < AssistantSettings.shared.wakeWordCooldown {
+      if interval >= 0 && interval < cooldown() {
         return ignore("cooldown — repeat of '\(command)' \(Int(interval))s after the last trigger")
       }
     }

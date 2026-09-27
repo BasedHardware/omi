@@ -4,30 +4,14 @@ import XCTest
 
 @MainActor
 final class WakeWordServiceTests: XCTestCase {
-  private let enabledKey = "wakeWordEnabled"
-  private let phraseKey = "wakeWordPhrase"
-  private let cooldownKey = "wakeWordCooldown"
-
   private var service = WakeWordService()
   private var triggered: [String] = []
   private var clock: Double = 0
-
-  override func setUp() {
-    super.setUp()
-    UserDefaults.standard.removeObject(forKey: enabledKey)
-    UserDefaults.standard.removeObject(forKey: phraseKey)
-    UserDefaults.standard.removeObject(forKey: cooldownKey)
-    UserDefaults.standard.set(true, forKey: enabledKey)
-    UserDefaults.standard.set("Omi", forKey: phraseKey)
-    UserDefaults.standard.set(30.0, forKey: cooldownKey)
-  }
-
-  override func tearDown() {
-    UserDefaults.standard.removeObject(forKey: enabledKey)
-    UserDefaults.standard.removeObject(forKey: phraseKey)
-    UserDefaults.standard.removeObject(forKey: cooldownKey)
-    super.tearDown()
-  }
+  // Settings are injected into the service, never written to UserDefaults.standard:
+  // shared defaults race between suites (#13260).
+  private var enabled = true
+  private var phrase = "Omi"
+  private var cooldownSeconds: TimeInterval = 30
 
   @MainActor
   private func configureService() {
@@ -40,6 +24,9 @@ final class WakeWordServiceTests: XCTestCase {
     service.onTrigger = { [weak self] command in
       self?.triggered.append(command)
     }
+    service.isEnabled = { [weak self] in self?.enabled ?? true }
+    service.wakePhrase = { [weak self] in self?.phrase ?? "Omi" }
+    service.cooldown = { [weak self] in self?.cooldownSeconds ?? 30 }
   }
 
   private func userSegment(_ text: String, id: String? = nil) -> SpeakerSegment {
@@ -48,7 +35,7 @@ final class WakeWordServiceTests: XCTestCase {
 
   func testDisabledSettingNeverTriggers() {
     configureService()
-    UserDefaults.standard.set(false, forKey: enabledKey)
+    enabled = false
     service.observe(userSegment("Omi, let's order food", id: "a"), isConversationActive: false)
     XCTAssertTrue(triggered.isEmpty)
   }
