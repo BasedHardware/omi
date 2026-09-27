@@ -65,7 +65,7 @@ router = APIRouter(tags=['device-diagnostics'], route_class=BoundedBodyRoute)
 
 
 class DiagnosticsUpload(BaseModel):
-    bundle_base64: str = Field(max_length=MAX_REQUEST_BYTES)
+    bundle_base64: str = Field(max_length=5_600_000)
 
 
 class DiagnosticsReceipt(BaseModel):
