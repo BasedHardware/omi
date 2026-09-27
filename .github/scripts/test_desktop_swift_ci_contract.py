@@ -24,6 +24,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/desktop-swift-ci.yml"
+MOBILE_WORKFLOW_PATH = REPO_ROOT / ".github/workflows/mobile-app-checks.yml"
 RUNNER_PATH = REPO_ROOT / "desktop/macos/scripts/run-swift-ci.sh"
 SUITE_RUNNER_PATH = REPO_ROOT / "desktop/macos/scripts/swift-test-suites.sh"
 PRE_PUSH_PATH = REPO_ROOT / "scripts/pre-push"
@@ -50,6 +51,7 @@ EXPECTED_XCODE_BUILD = PIN["build"]
 EXPECTED_XCODE_APP = PIN["app_path"]
 EXPECTED_XCODE_CACHE_TOKEN = "xcode" + EXPECTED_XCODE_VERSION.replace(".", "")
 CODEMAGIC_DESKTOP_WORKFLOWS = ["omi-desktop-swift-release", "omi-desktop-swift-preview"]
+CODEMAGIC_IOS_WORKFLOWS = ["ios-internal-auto", "ios-prod-testflight", "ios-prod-patch"]
 JOBS = ["changes", "desktop-swift-verify", "desktop-swift", "desktop-swift-release-compile"]
 MACOS_JOBS = ["desktop-swift-verify", "desktop-swift-release-compile"]
 # Hosted macOS budgets are per-job: the consolidated verify lane needs a longer
@@ -282,7 +284,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 self.assertTrue(resolve_impact([path]).includes("desktop-swift-notification-release-regression"))
-        self.assertIn("runs-on: macos-26", job)
+        self.assertIn("runs-on: xcode-27", job)
         self.assertIn("--release-notification-regression", job)
         self.assertIn("should_notification_release_regression", job)
         self.assertIn("UserNotificationCallbackBridgeTests/", _runner_text())
@@ -415,7 +417,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
     def test_pin_file_is_the_only_toolchain_literal(self):
         """One source of truth: the pin file, its derived consumers, and nothing else."""
         self.assertEqual(EXPECTED_XCODE_APP, f"/Applications/Xcode_{EXPECTED_XCODE_VERSION}.app")
-        self.assertRegex(EXPECTED_XCODE_BUILD, r"^[0-9A-F]+$")
+        self.assertRegex(EXPECTED_XCODE_BUILD, r"^[0-9A-Fa-f]+$")
         workflow = _workflow_text()
         self.assertNotIn("xcode164", workflow)
         self.assertIn(EXPECTED_XCODE_CACHE_TOKEN, workflow)
@@ -432,7 +434,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         """#12867 class: the ship toolchain must be the one CI actually compiles with."""
         for job_id in MACOS_JOBS:
             with self.subTest(job=job_id):
-                self.assertIn("runs-on: macos-26", self.jobs[job_id])
+                self.assertIn("runs-on: xcode-27", self.jobs[job_id])
         self.assertNotIn("runs-on: macos-15", _workflow_text())
 
     def test_codemagic_desktop_workflows_match_the_pin(self):
@@ -451,6 +453,31 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
                 )
                 self.assertNotIn("xcode: latest", body)
                 self.assertNotIn("xcode: edge", body)
+
+    def test_mobile_ios_compile_and_ship_workflows_match_the_pin(self):
+        """The iOS compiler must see the same SDK in PR CI and TestFlight builds."""
+        mobile = MOBILE_WORKFLOW_PATH.read_text(encoding="utf-8")
+        compile_job = _job_text(mobile, "ios-compile-check")
+        self.assertIn("runs-on: xcode-27", compile_job)
+        self.assertIn("desktop/macos/scripts/run-swift-ci.sh --select-toolchain", compile_job)
+
+        codemagic = CODEMAGIC_PATH.read_text(encoding="utf-8")
+        for workflow_id in CODEMAGIC_IOS_WORKFLOWS:
+            with self.subTest(workflow=workflow_id):
+                body = _job_text(codemagic, workflow_id)
+                self.assertIn("instance_type: mac_mini_m2", body)
+                self.assertRegex(body, rf"(?m)^\s+xcode:\s*{re.escape(EXPECTED_XCODE_VERSION)}\s*$")
+                self.assertNotIn("xcode: edge", body)
+
+    def test_release_stages_each_arch_before_swiftpm_reuses_the_products_directory(self):
+        """Xcode 27 puts both --triple builds under one Products/Release directory."""
+        release = _job_text(CODEMAGIC_PATH.read_text(encoding="utf-8"), "omi-desktop-swift-release")
+        self.assertIn("--show-bin-path", release)
+        self.assertIn('cp "$ARM64_PATH" "/tmp/OmiComputer-arm64"', release)
+        self.assertIn('cp "$X86_64_PATH" "/tmp/OmiComputer-x86_64"', release)
+        self.assertIn('SWIFT_BUILD_DIR="${SWIFT_RELEASE_PRODUCTS_DIR:', release)
+        self.assertNotIn("Desktop/.build/arm64-apple-macosx/release", release)
+        self.assertNotIn("Desktop/.build/x86_64-apple-macosx/release", release)
 
     def test_canonical_runner_exports_the_selected_toolchain_for_ci_steps(self):
         runner = _runner_text()

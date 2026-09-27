@@ -510,10 +510,10 @@ jobs:
 
   ios-compile-check:
     name: iOS Compile Check
-    runs-on: macos-26
+    runs-on: xcode-27
     needs: changes
     if: needs.changes.outputs.has_app_ios_compile == 'true'
-    # Local cold Xcode time was 334s on an M-series Mac. Hosted macos-26 still
+    # Local cold Xcode time was 334s on an M-series Mac. Hosted xcode-27 still
     # pays Flutter SDK, pub get, build_runner, and CocoaPods on top of that.
     # Expect ~20-30 min warm / ~35 min cold; 40 is the wedge-guard.
     timeout-minutes: 40

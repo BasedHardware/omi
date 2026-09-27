@@ -1,10 +1,10 @@
 {
-  "version": "26.6",
-  "build": "17F113",
-  "app_path": "/Applications/Xcode_26.6.app",
+  "version": "27.0",
+  "build": "27A266a",
+  "app_path": "/Applications/Xcode_27.0.app",
   "evidence": {
-    "github_actions": "macos-26 image 20260907.0351.1: Xcode 26.6 (17F113) at /Applications/Xcode_26.6.app (default); https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md",
-    "codemagic": "mac_mini_m4 image 'Xcode 26.6.x (default)': Xcode 26.6 (17F113) at /Applications/Xcode-26.6.app; https://docs.codemagic.io/specs-macos/xcode-26-6/"
+    "github_actions": "xcode-27 image 20260921.0210.1: Xcode 27.0 (27A266a) at /Applications/Xcode_27.app (default), with /Applications/Xcode_27.0.app symlink; https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md",
+    "codemagic": "mac_mini_m2 and mac_mini_m4 image 'Xcode 27.0.x (edge)': Xcode 27.0 (27A266a) at /Applications/Xcode-27.0.app; specify xcode: 27.0; https://docs.codemagic.io/specs-macos/xcode-27-0/"
   },
-  "notes": "Single source of truth for the desktop Swift ship/CI toolchain. Consumers (desktop/macos/scripts/run-swift-ci.sh, .github/scripts/test_desktop_swift_ci_contract.py, codemagic.yaml workflows omi-desktop-swift-release and omi-desktop-swift-preview) must read this file instead of duplicating the version or build literals. Pin only versions that exist on BOTH GitHub-hosted macos-26 runners and Codemagic mac_mini_m4 images."
+  "notes": "Single source of truth for the desktop Swift ship/CI toolchain. Consumers (desktop/macos/scripts/run-swift-ci.sh, .github/scripts/test_desktop_swift_ci_contract.py, codemagic.yaml workflows omi-desktop-swift-release and omi-desktop-swift-preview) must read this file instead of duplicating the version or build literals. Pin only versions that exist on BOTH GitHub-hosted xcode-27 runners and Codemagic mac_mini_m4 images."
 }
