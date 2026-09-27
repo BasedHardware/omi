@@ -11153,5 +11153,9 @@
     "usageYear": "ఈ సంవత్సరం",
     "usageAll": "అన్ని సమయం",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "రూపం",
+    "appearanceSystem": "సిస్టమ్",
+    "appearanceLight": "లైట్",
+    "appearanceDark": "డార్క్"
 }

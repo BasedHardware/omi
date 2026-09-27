@@ -11153,5 +11153,9 @@
     "usageYear": "ಈ ವರ್ಷ",
     "usageAll": "ಎಲ್ಲಾ ಸಮಯ",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "ಗೋಚರತೆ",
+    "appearanceSystem": "ಸಿಸ್ಟಮ್",
+    "appearanceLight": "ಬೆಳಕು",
+    "appearanceDark": "ಕತ್ತಲೆ"
 }

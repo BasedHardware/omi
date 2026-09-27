@@ -3628,5 +3628,9 @@
     "usageYear": "Bu Yıl",
     "usageAll": "Tüm Zamanlar",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "Görünüm",
+    "appearanceSystem": "Sistem",
+    "appearanceLight": "Açık",
+    "appearanceDark": "Koyu"
 }

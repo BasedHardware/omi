@@ -304,7 +304,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                 constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
                 child: Row(
                   children: [
-                    const Icon(Icons.schedule_outlined, size: 20, color: OmiColors.textSecondary),
+                    Icon(Icons.schedule_outlined, size: 20, color: OmiColors.textSecondary),
                     const SizedBox(width: OmiSpacing.md),
                     Expanded(
                       child: Text(
@@ -337,7 +337,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                   onPressed: _isSaving ? null : () => _selectQuickDate(days),
                   backgroundColor: OmiColors.surface2,
                   labelStyle: OmiType.footnote,
-                  side: const BorderSide(color: OmiColors.border),
+                  side: BorderSide(color: OmiColors.border),
                 ),
             ]),
             Align(
@@ -460,12 +460,12 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: OmiColors.accent,
-              onPrimary: OmiColors.onAccent,
-              surface: OmiColors.surface1,
-              onSurface: OmiColors.textPrimary,
-            ),
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+                  primary: OmiColors.accent,
+                  onPrimary: OmiColors.onAccent,
+                  surface: OmiColors.surface1,
+                  onSurface: OmiColors.textPrimary,
+                ),
             timePickerTheme: TimePickerThemeData(
               backgroundColor: OmiColors.surface1,
               hourMinuteColor: WidgetStateColor.resolveWith(
@@ -486,7 +486,7 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
               dayPeriodTextColor: WidgetStateColor.resolveWith(
                 (states) => states.contains(WidgetState.selected) ? OmiColors.onAccent : OmiColors.textTertiary,
               ),
-              dayPeriodBorderSide: const BorderSide(color: OmiColors.textTertiary),
+              dayPeriodBorderSide: BorderSide(color: OmiColors.textTertiary),
             ),
           ),
           child: child!,
@@ -517,7 +517,7 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
       color: Colors.transparent,
       child: Container(
         height: MediaQuery.of(context).size.height * 0.65,
-        decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
         child: Column(
           children: [
             const SizedBox(height: OmiSpacing.sm),
@@ -587,7 +587,7 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
                           padding: const EdgeInsets.symmetric(horizontal: 40, vertical: OmiSpacing.sm),
                           child: Row(
                             children: [
-                              const Icon(Icons.access_time, color: OmiColors.textSecondary, size: 20),
+                              Icon(Icons.access_time, color: OmiColors.textSecondary, size: 20),
                               const SizedBox(width: OmiSpacing.sm),
                               Expanded(child: Text(context.l10n.time, style: OmiType.callout)),
                               Text(

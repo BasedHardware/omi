@@ -43,7 +43,7 @@ def task_text(value):
             word = f"{key}{ZWSP}:{rest}"  # would otherwise override due:, omi:, ...
         words.append(word)
     text = " ".join(words) or "(no description)"
-    if re.match(r"x |\([A-Z]\) |\d{4}-\d{2}-\d{2}( |$)", text):
+    if re.match(r"(?:x|\([A-Z]\)|\d{4}-\d{2}-\d{2})(?: |$)", text):
         text = ZWSP + text  # would otherwise become a completion mark, priority or date
     return text
 

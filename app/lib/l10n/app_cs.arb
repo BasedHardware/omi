@@ -3593,5 +3593,9 @@
     "usageYear": "Letos",
     "usageAll": "Vždy",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "Vzhled",
+    "appearanceSystem": "Systém",
+    "appearanceLight": "Světlý",
+    "appearanceDark": "Tmavý"
 }

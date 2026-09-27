@@ -3593,5 +3593,9 @@
     "usageYear": "Quest'Anno",
     "usageAll": "Sempre",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "Aspetto",
+    "appearanceSystem": "Sistema",
+    "appearanceLight": "Chiaro",
+    "appearanceDark": "Scuro"
 }

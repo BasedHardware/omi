@@ -3593,5 +3593,9 @@
     "usageYear": "올해",
     "usageAll": "전체 기간",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "화면 모드",
+    "appearanceSystem": "시스템",
+    "appearanceLight": "라이트",
+    "appearanceDark": "다크"
 }

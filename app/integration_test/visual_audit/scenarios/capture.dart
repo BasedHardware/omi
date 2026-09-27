@@ -176,7 +176,7 @@ class _HomeFrame extends StatelessWidget {
           HeaderCircleButton(
             semanticLabel: 'Settings',
             onTap: () {},
-            icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
+            icon: FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
           ),
         ]),
       ),
@@ -215,8 +215,8 @@ class _AskOmiBar extends StatelessWidget {
             height: 42,
             margin: const EdgeInsets.only(right: 6),
             alignment: Alignment.center,
-            decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-            child: const FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
+            decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+            child: FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
           ),
         ]),
       );

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 /// The tab bar's two-bubbles glyph (FontAwesome `comments`, regular weight). Ask Omi uses the same
 /// glyph everywhere it appears, so the button and the tab read as one family.
@@ -49,7 +50,14 @@ double bottomNavBarClearance(BuildContext context) => kBottomNavBarHeight + bott
 const double kHomeChatBarHeight = 62;
 
 /// The tab bar's solid colour, which the Home chat bar's backdrop continues.
-const Color kBottomNavBackground = Color.fromARGB(255, 15, 15, 15);
+Color get kBottomNavBackground =>
+    OmiColors.active == OmiPalette.dark ? const Color.fromARGB(255, 15, 15, 15) : OmiColors.surface0;
+
+/// Interpolate the light fade through transparent page-coloured pixels. A
+/// zero-alpha black transparent stop darkens intermediate gradient colours and
+/// shows up as a grey band against the light page.
+Color get _bottomNavFadeStart =>
+    OmiColors.active == OmiPalette.light ? OmiColors.surface0.withValues(alpha: 0) : Colors.transparent;
 
 /// Offset from the bottom of the screen to the bottom edge of the home chat bar.
 double bottomNavChatBarOffset(BuildContext context) =>
@@ -74,14 +82,14 @@ class HomeChatBarBackdrop extends StatelessWidget {
       // From the top of the tab row up to the fade above the chat bar.
       bottom: kBottomNavRowHeight + bottomNavBarReservedInset(context),
       height: height,
-      child: const IgnorePointer(
+      child: IgnorePointer(
         child: DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              stops: [0.0, kBottomNavFadeHeight / height, 1.0],
-              colors: [Colors.transparent, kBottomNavBackground, kBottomNavBackground],
+              stops: const [0.0, kBottomNavFadeHeight / height, 1.0],
+              colors: [_bottomNavFadeStart, kBottomNavBackground, kBottomNavBackground],
             ),
           ),
         ),
@@ -133,7 +141,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
                 // The fade ends where the tab row begins whatever the inset is,
                 // so the row and the inset below it are always solid.
                 stops: [0.0, kBottomNavFadeHeight / height, 1.0],
-                colors: const [Colors.transparent, kBottomNavBackground, kBottomNavBackground],
+                colors: [_bottomNavFadeStart, kBottomNavBackground, kBottomNavBackground],
               ),
             ),
             child: Row(
@@ -183,7 +191,15 @@ class _BottomNavBarState extends State<BottomNavBar> {
           },
           child: SizedBox(
             height: kBottomNavRowHeight,
-            child: Center(child: FaIcon(icon, color: selectedIndex == index ? Colors.white : Colors.grey, size: 26)),
+            child: Center(
+              child: FaIcon(
+                icon,
+                color: selectedIndex == index
+                    ? (OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.white)
+                    : (OmiColors.active == OmiPalette.light ? OmiColors.textTertiary : Colors.grey),
+                size: 26,
+              ),
+            ),
           ),
         ),
       ),

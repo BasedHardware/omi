@@ -3593,5 +3593,9 @@
     "usageYear": "Este año",
     "usageAll": "Todo el tiempo",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "Apariencia",
+    "appearanceSystem": "Sistema",
+    "appearanceLight": "Claro",
+    "appearanceDark": "Oscuro"
 }
