@@ -1,3 +1,7 @@
+import 'dart:math';
+
+import 'package:flutter/foundation.dart';
+
 // Public share-link base URL for self-hosting (#4339).
 //
 // Matches backend `OMI_SHARE_BASE_URL` / desktop share helpers.
@@ -39,14 +43,49 @@ String shareBaseUrl([String? raw]) {
 }
 
 /// Join [shareBaseUrl] with a path (leading slash optional).
-String buildShareUrl(String path, {String? raw}) {
+String buildShareUrl(String path, {String? raw, String? source, String? sid}) {
   final normalized = path.startsWith('/') ? path : '/$path';
-  return '${shareBaseUrl(raw)}$normalized';
+  return Uri.parse(
+    '${shareBaseUrl(raw)}$normalized',
+  ).replace(queryParameters: {'s': source ?? mobileShareSource(), 'sid': sid ?? newShareId()}).toString();
 }
 
-String conversationShareUrl(String conversationId, {String? raw}) =>
-    buildShareUrl('/conversations/$conversationId', raw: raw);
+String mobileShareSource() => switch (defaultTargetPlatform) {
+  TargetPlatform.iOS => 'ios',
+  TargetPlatform.android => 'android',
+  _ => 'unknown',
+};
 
-String appShareUrl(String appId, {String? raw}) => buildShareUrl('/apps/$appId', raw: raw);
+/// Random per-share attempt; never derived from the sender or content.
+String newShareId() {
+  final random = Random.secure();
+  return List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+}
 
-String recapShareUrl(String summaryId, {String? raw}) => buildShareUrl('/recaps/$summaryId', raw: raw);
+String conversationShareUrl(String conversationId, {String? raw, String? source, String? sid}) =>
+    buildShareUrl('/conversations/$conversationId', raw: raw, source: source, sid: sid);
+
+String appShareUrl(String appId, {String? raw, String? source, String? sid}) =>
+    buildShareUrl('/apps/$appId', raw: raw, source: source, sid: sid);
+
+String recapShareUrl(String summaryId, {String? raw, String? source, String? sid}) =>
+    buildShareUrl('/recaps/$summaryId', raw: raw, source: source, sid: sid);
+
+/// Share Plus reports a platform activity/package when available. Keep the event bounded.
+String? shareTargetApp(String raw) {
+  final value = raw.toLowerCase();
+  if (value.isEmpty || value.contains('/share/unavailable')) return null;
+  if (value.contains('whatsapp')) return 'whatsapp';
+  if (value.contains('telegram')) return 'telegram';
+  if (value.contains('slack')) return 'slack';
+  if (value.contains('discord')) return 'discord';
+  if (value.contains('signal')) return 'signal';
+  if (value.contains('message') || value.contains('sms')) return 'messages';
+  if (value.contains('mail') || value.contains('gmail')) return 'email';
+  if (value.contains('airdrop')) return 'airdrop';
+  if (value.contains('copy')) return 'copy';
+  if (value.contains('facebook') || value.contains('messenger')) return 'meta';
+  if (value.contains('twitter') || value.contains('tweet')) return 'x';
+  if (value.contains('linkedin')) return 'linkedin';
+  return 'other';
+}

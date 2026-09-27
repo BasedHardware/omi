@@ -1486,9 +1486,9 @@ class AnalyticsManager {
         properties: {'conversation_id': conversationId, 'contact_count': contactCount},
       );
 
-  void shareToContactsSmsOpened(String conversationId, int contactCount) => track(
+  void shareToContactsSmsOpened(String conversationId, int contactCount, String shareId) => track(
         'Share To Contacts SMS Opened',
-        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+        properties: {'conversation_id': conversationId, 'contact_count': contactCount, 'share_id': shareId, 'target_app': 'sms'},
       );
 
   void chatMessageConversationClicked(ServerConversation conversation) =>
@@ -1902,9 +1902,12 @@ class AnalyticsManager {
     );
   }
 
-  void conversationShared({required ServerConversation conversation, required String shareMethod}) {
+  void conversationShared({required ServerConversation conversation, required String shareMethod, required String shareId, required String shareStatus, String? targetApp}) {
     var properties = getConversationEventProperties(conversation);
     properties['share_method'] = shareMethod;
+    properties['share_id'] = shareId;
+    properties['share_status'] = shareStatus;
+    if (targetApp != null) properties['target_app'] = targetApp;
     track('Conversation Shared', properties: properties);
   }
 
@@ -2175,8 +2178,8 @@ class AnalyticsManager {
     track('App Detail Section Viewed', properties: {'app_id': appId, 'section_name': sectionName});
   }
 
-  void appDetailShared({required String appId, required String appName}) {
-    track('App Detail Shared', properties: {'app_id': appId, 'app_name': appName});
+  void appDetailShared({required String appId, required String appName, required String shareId, String? targetApp}) {
+    track('App Detail Shared', properties: {'app_id': appId, 'app_name': appName, 'share_id': shareId, if (targetApp != null) 'target_app': targetApp});
   }
 
   void appDetailReviewsOpened({required String appId, required int reviewCount}) {
@@ -2466,8 +2469,8 @@ class AnalyticsManager {
     track('Daily Summary Notification Opened', properties: {'summary_id': summaryId, 'date': date});
   }
 
-  void dailySummaryShared({required String summaryId, required String date}) {
-    track('Daily Summary Shared', properties: {'summary_id': summaryId, 'date': date});
+  void dailySummaryShared({required String summaryId, required String date, required String shareId, String? targetApp}) {
+    track('Daily Summary Shared', properties: {'summary_id': summaryId, 'date': date, 'share_id': shareId, if (targetApp != null) 'target_app': targetApp});
   }
 
   void dailySummaryConversationClicked({
