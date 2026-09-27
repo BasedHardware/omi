@@ -153,6 +153,18 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
     XCTAssertThrowsError(try decoder.decode(ServerMemory.self, from: JSONSerialization.data(withJSONObject: unknown)))
   }
 
+  func testUnknownLegacyTierAliasesAreIgnoredLikeBackendExtras() throws {
+    let payload: [String: Any] = [
+      "id": "legacy-extra", "content": "Legacy memory", "category": "interesting",
+      "created_at": "2026-06-21T10:00:00Z", "updated_at": "2026-06-21T10:05:00Z",
+      "layer": "future_tier", "tier": "future_tier",
+    ]
+    let memory = try decoder.decode(ServerMemory.self, from: JSONSerialization.data(withJSONObject: payload))
+    XCTAssertEqual(memory.tier, .longTerm)
+    XCTAssertFalse(memory.tierIsExplicit)
+    XCTAssertTrue(SiriIndexScope.memory(MemoryRecord.from(memory), now: Date()))
+  }
+
   func testDecodesServerOwnedCurrencyEvidenceAndKeepsUnknownUsefulNow() throws {
     let json = Data(
       """
@@ -199,14 +211,14 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
     XCTAssertFalse(memory.isHistory)
   }
 
-  func testUnknownPresentTierFailsClosed() {
+  func testUnknownCanonicalMemoryTierFailsClosed() {
     let json = Data(
       """
       {
         "id": "mem-future",
         "content": "Future tier",
         "category": "system",
-        "tier": "future_archive",
+        "memory_tier": "future_archive",
         "created_at": "2026-06-21T10:00:00Z",
         "updated_at": "2026-06-21T10:05:00Z"
       }

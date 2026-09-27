@@ -58,6 +58,20 @@ void main() {
       expect(row.layerIsExplicit, false);
       expect(siriMemoryIsIndexable(row, DateTime.utc(2026, 6, 22), owner: 'user-1'), true);
     });
+
+    test('conflicting aliases cannot override an archived canonical tier', () {
+      final row = <String, dynamic>{
+        'id': 'archive-1',
+        'uid': 'user-1',
+        'content': 'Archived memory',
+        'category': 'interesting',
+        'created_at': '2026-06-21T10:00:00.000Z',
+        'updated_at': '2026-06-21T10:05:00.000Z',
+        'layer': 'long_term',
+        'memory_tier': 'archive',
+      };
+      expect(() => Memory.fromJson(row), throwsA(isA<FormatException>()));
+    });
     test('layer field only sets explicit layer', () {
       final memory = Memory.fromJson({
         'id': 'mem-layer-1',
@@ -105,8 +119,8 @@ void main() {
       expect(memory.layerIsExplicit, isFalse);
     });
 
-    test('layer preferred over tier alias when both present', () {
-      final memory = Memory.fromJson({
+    test('conflicting legacy tier aliases fail closed', () {
+      final row = <String, dynamic>{
         'id': 'mem-priority',
         'uid': 'user-1',
         'content': 'Priority test',
@@ -116,10 +130,8 @@ void main() {
         'created_at': '2026-06-21T10:00:00.000Z',
         'updated_at': '2026-06-21T10:05:00.000Z',
         'visibility': 'private',
-      });
-
-      expect(memory.layer, MemoryLayer.shortTerm);
-      expect(memory.layerIsExplicit, isTrue);
+      };
+      expect(() => Memory.fromJson(row), throwsA(isA<FormatException>()));
     });
   });
 }

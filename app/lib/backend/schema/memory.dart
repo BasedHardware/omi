@@ -256,6 +256,9 @@ class Memory {
     if (rawMemoryTier != null && memoryTierValue == null) {
       throw FormatException('Unknown memory memory_tier: $rawMemoryTier');
     }
+    if ([layerValue, tierValue, memoryTierValue].whereType<MemoryLayer>().toSet().length > 1) {
+      throw const FormatException('Conflicting memory tier aliases');
+    }
     normalizedJson['layer'] = (layerValue ?? tierValue ?? memoryTierValue ?? MemoryLayer.longTerm).apiValue;
     normalizedJson['memory_tier'] = (memoryTierValue ?? tierValue ?? layerValue ?? MemoryLayer.longTerm).apiValue;
 

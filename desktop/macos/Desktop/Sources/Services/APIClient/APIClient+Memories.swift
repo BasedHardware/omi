@@ -414,9 +414,9 @@ struct ServerMemory: Decodable, Identifiable {
     // (schema-validated); fall back to container decoding when the wire DTO
     // could not be constructed (missing required fields like uid).
     let layerValue =
-      try wire?.layer.flatMap(MemoryLayer.init(rawValue:))
-      ?? container.decodeIfPresent(MemoryLayer.self, forKey: .layer)
-    let tierValue = try container.decodeIfPresent(MemoryLayer.self, forKey: .tier)
+      wire?.layer.flatMap(MemoryLayer.init(rawValue:))
+      ?? (try? container.decode(MemoryLayer.self, forKey: .layer))
+    let tierValue = try? container.decode(MemoryLayer.self, forKey: .tier)
     let memoryTierValue =
       try wire?.memoryTier.flatMap { MemoryLayer(rawValue: $0.rawValue) }
       ?? container.decodeIfPresent(MemoryLayer.self, forKey: .memoryTier)
