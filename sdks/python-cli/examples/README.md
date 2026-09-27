@@ -26,6 +26,7 @@
   dates on a calendar: JSON export to an iCalendar (.ics) file.
 * [`action_items_todotxt.md`](action_items_todotxt.md) — turn an action-item
   export into a todo.txt file with due: tags for todo.txt apps.
+* [`action_items_linear.md`](action_items_linear.md) — export action items to Linear (CSV) with title, due date, status, and tags.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
 * [`conversations_html.md`](conversations_html.md) — build a self-contained HTML
   report of conversations: one section per day, printable, no scripts.
