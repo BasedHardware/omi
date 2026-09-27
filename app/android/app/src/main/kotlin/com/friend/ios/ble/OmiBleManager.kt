@@ -116,7 +116,7 @@ class OmiBleManager private constructor(private val application: Application) {
     private var isProcessingCommand = false
 
     private var rssiKeepAliveRunnable: Runnable? = null
-    private val rssiKeepAliveInterval = 7_500L // ms; two samples fit the 15s trend window.
+    private val rssiKeepAliveInterval = 10_000L // ms; only one low-cost local radio read per interval.
     @Volatile
     var isRssiStreamingEnabled = false
 
@@ -469,14 +469,27 @@ class OmiBleManager private constructor(private val application: Application) {
 
     fun startRssiKeepAlive(address: String) {
         stopRssiKeepAlive()
+        val normalizedAddress = address.uppercase()
         val runnable = object : Runnable {
             override fun run() {
-                connectedGatts[address]?.readRemoteRssi()
-                mainHandler.postDelayed(this, if (isRssiStreamingEnabled) 3_000L else rssiKeepAliveInterval)
+                val gatt = connectedGatts[normalizedAddress]
+                synchronized(this@OmiBleManager) {
+                    if (rssiKeepAliveRunnable !== this || gatt == null || connectedGatts[normalizedAddress] !== gatt) {
+                        if (rssiKeepAliveRunnable === this) rssiKeepAliveRunnable = null
+                        return
+                    }
+                    gatt.readRemoteRssi()
+                    mainHandler.postDelayed(this, rssiKeepAliveInterval)
+                }
             }
         }
-        rssiKeepAliveRunnable = runnable
-        mainHandler.postDelayed(runnable, rssiKeepAliveInterval)
+        synchronized(this) {
+            rssiKeepAliveRunnable = runnable
+            connectedGatts[normalizedAddress]?.let { gatt ->
+                gatt.readRemoteRssi()
+                mainHandler.postDelayed(runnable, rssiKeepAliveInterval)
+            }
+        }
     }
 
     fun sampleRssi(address: String) {
@@ -484,8 +497,10 @@ class OmiBleManager private constructor(private val application: Application) {
     }
 
     fun stopRssiKeepAlive() {
-        rssiKeepAliveRunnable?.let { mainHandler.removeCallbacks(it) }
-        rssiKeepAliveRunnable = null
+        synchronized(this) {
+            rssiKeepAliveRunnable?.let { mainHandler.removeCallbacks(it) }
+            rssiKeepAliveRunnable = null
+        }
     }
 
     // ── State & utility ──

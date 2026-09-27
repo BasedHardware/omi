@@ -347,7 +347,7 @@ final class OmiBleManager: NSObject {
         let uuid = peripheralUuidString(peripheral)
         stopRssiDiagnosticsPolling(uuid: uuid)
         peripheral.readRSSI()
-        let interval = diagnosticsRssiPeripheralUuid == uuid ? 3.0 : 7.5
+        let interval = 10.0
         rssiTimers[uuid] = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self, weak peripheral] _ in
             guard let self, let peripheral else { return }
             let uuid = self.peripheralUuidString(peripheral)

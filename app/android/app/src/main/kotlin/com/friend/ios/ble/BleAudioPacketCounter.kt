@@ -8,6 +8,7 @@ internal class BleAudioPacketCounter {
         private set
     private var previous: Int? = null
 
+    @Synchronized
     fun record(packet: ByteArray): Boolean {
         if (packet.size < 3) return false
         val index = (packet[0].toInt() and 0xff) or ((packet[1].toInt() and 0xff) shl 8)
@@ -18,4 +19,7 @@ internal class BleAudioPacketCounter {
         previous = index
         return true
     }
+
+    @Synchronized
+    fun snapshot(): Pair<Long, Long> = received to expected
 }

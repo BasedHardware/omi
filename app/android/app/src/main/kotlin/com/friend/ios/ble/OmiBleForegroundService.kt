@@ -216,10 +216,11 @@ class OmiBleForegroundService : Service() {
             if (services.isEmpty()) {
                 Log.w(TAG, "No services discovered for $addr")
             }
-            if (services.any { it.uuid.equals(DIAGNOSTICS_SERVICE, ignoreCase = true) &&
+            val hasDiagnostics = services.any { it.uuid.equals(DIAGNOSTICS_SERVICE, ignoreCase = true) &&
                 it.characteristicUuids.any { characteristic -> characteristic.equals(DIAGNOSTICS_CHAR, ignoreCase = true) }
-            }) {
-                bleManager.readCharacteristic(addr, DIAGNOSTICS_SERVICE, DIAGNOSTICS_CHAR) { result ->
+            }
+            val readDiagnostics = {
+                if (hasDiagnostics) bleManager.readCharacteristic(addr, DIAGNOSTICS_SERVICE, DIAGNOSTICS_CHAR) { result ->
                     result.getOrNull()?.let { value ->
                         FirmwareDiagnosticsParser.parse(value, System.currentTimeMillis())?.let { parsed ->
                             if (!parsed.isNull("charging")) bleManager.chargingState[addr] = parsed.getBoolean("charging")
@@ -238,10 +239,10 @@ class OmiBleForegroundService : Service() {
                         managed.retryCount = 0
                         managed.requiresBond = false
                     }
-                    requestMtuThenNotifyReady(addr, services)
+                    requestMtuThenNotifyReady(addr, services, readDiagnostics)
                 }
             } else {
-                requestMtuThenNotifyReady(addr, services)
+                requestMtuThenNotifyReady(addr, services, readDiagnostics)
             }
         }
 
@@ -252,7 +253,7 @@ class OmiBleForegroundService : Service() {
 
     // ── Post-discovery pipeline ──
 
-    private fun requestMtuThenNotifyReady(address: String, services: List<BleService>) {
+    private fun requestMtuThenNotifyReady(address: String, services: List<BleService>, afterReady: () -> Unit = {}) {
         val addr = address.uppercase()
         val gatt = bleManager.connectedGatts[addr] ?: return
 
@@ -262,6 +263,7 @@ class OmiBleForegroundService : Service() {
                 bleManager.connectionListener = originalListener
                 Log.i(TAG, "MTU done for $addr (mtu=$mtu, status=$status)")
                 fireDeviceReady(addr, services)
+                afterReady()
             }
         }
 
@@ -273,12 +275,14 @@ class OmiBleForegroundService : Service() {
                         bleManager.completeCommand()
                         bleManager.connectionListener = originalListener
                         fireDeviceReady(addr, services)
+                        afterReady()
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "requestMtu exception for $addr: ${e.message}")
                     bleManager.completeCommand()
                     bleManager.connectionListener = originalListener
                     fireDeviceReady(addr, services)
+                    afterReady()
                 }
             }
         }, MTU_REQUEST_DELAY_MS)
@@ -934,7 +938,7 @@ class OmiBleForegroundService : Service() {
             synchronized(deque) { deque.toList() }
         } ?: emptyList()
         val trend = BleRssiDiagnostics.trend(rssiSnapshot, now)
-        val counter = audioCounters[addr]
+        val counter = audioCounters[addr]?.snapshot()
 
         val event = JSONObject().apply {
             put("timestamp", now)
@@ -944,8 +948,8 @@ class OmiBleForegroundService : Service() {
             put("eventType", eventType)
             put("lastRssi", bleManager.lastRssi[addr] ?: 0)
             put("lastRssiAgeMs", BleRssiDiagnostics.ageMs(rssiSnapshot, now))
-            put("audioPacketsReceived", counter?.received ?: 0L)
-            put("audioPacketsExpected", counter?.expected ?: 0L)
+            put("audioPacketsReceived", counter?.first ?: 0L)
+            put("audioPacketsExpected", counter?.second ?: 0L)
             put("connectionDurationMs", durationMs)
             put("appState", currentAppState())
             put("timeToReconnectMs", 0L)
@@ -983,15 +987,15 @@ class OmiBleForegroundService : Service() {
         bleManager.rssiHistory[addr]?.let { deque -> synchronized(deque) {
             deque.forEach { (ts, rssi) -> samples.put(JSONObject().put("ts", ts).put("rssi", rssi)) }
         } }
-        val counter = audioCounters[addr]
+        val counter = audioCounters[addr]?.snapshot()
         return JSONObject()
             .put("disconnect_history_v2", array(historyKey(addr)))
             .put("battery_history_v2", try {
                 JSONArray(getSharedPreferences("battery_history", MODE_PRIVATE).getString("battery_history_$addr", "[]"))
             } catch (_: Exception) { JSONArray() })
             .put("rssi_samples", samples)
-            .put("audio_packets_received", counter?.received ?: 0L)
-            .put("audio_packets_expected", counter?.expected ?: 0L)
+            .put("audio_packets_received", counter?.first ?: 0L)
+            .put("audio_packets_expected", counter?.second ?: 0L)
             .put("connected_at", managedDevices[addr]?.connectionStartTime ?: 0L)
             .put("firmware_diagnostics", array("firmware_$addr"))
             .put("lifecycle_events", array("lifecycle"))
