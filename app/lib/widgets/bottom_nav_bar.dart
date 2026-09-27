@@ -53,6 +53,12 @@ const double kHomeChatBarHeight = 62;
 Color get kBottomNavBackground =>
     OmiColors.active == OmiPalette.dark ? const Color.fromARGB(255, 15, 15, 15) : OmiColors.surface0;
 
+/// Interpolate the light fade through transparent page-coloured pixels. A
+/// zero-alpha black transparent stop darkens intermediate gradient colours and
+/// shows up as a grey band against the light page.
+Color get _bottomNavFadeStart =>
+    OmiColors.active == OmiPalette.light ? OmiColors.surface0.withValues(alpha: 0) : Colors.transparent;
+
 /// Offset from the bottom of the screen to the bottom edge of the home chat bar.
 double bottomNavChatBarOffset(BuildContext context) =>
     kBottomNavRowHeight + kBottomNavChatBarGap + bottomNavBarReservedInset(context);
@@ -83,7 +89,7 @@ class HomeChatBarBackdrop extends StatelessWidget {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               stops: const [0.0, kBottomNavFadeHeight / height, 1.0],
-              colors: [Colors.transparent, kBottomNavBackground, kBottomNavBackground],
+              colors: [_bottomNavFadeStart, kBottomNavBackground, kBottomNavBackground],
             ),
           ),
         ),
@@ -135,7 +141,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
                 // The fade ends where the tab row begins whatever the inset is,
                 // so the row and the inset below it are always solid.
                 stops: [0.0, kBottomNavFadeHeight / height, 1.0],
-                colors: [Colors.transparent, kBottomNavBackground, kBottomNavBackground],
+                colors: [_bottomNavFadeStart, kBottomNavBackground, kBottomNavBackground],
               ),
             ),
             child: Row(

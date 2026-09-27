@@ -156,6 +156,13 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   int _previousSearchResultIndex = -1;
 
   Color _getSpeakerBubbleColor(bool isUser, int speakerId, Person? person) {
+    if (OmiColors.active == OmiPalette.light) {
+      if (isUser) return OmiColors.surface2;
+      // Keep anonymous speaker bubbles quiet on the light canvas. Known
+      // speakers use a soft blue tint so their bubbles remain distinct without
+      // carrying the dark, saturated palette from dark mode.
+      return person == null ? const Color(0xFFE5E5EA) : const Color(0xFFE4EEFF);
+    }
     if (isUser) return OmiColors.surface3;
     final colorIndex = (person?.colorIdx ?? speakerId) % _speakerColors.length;
     return _speakerColors[colorIndex].withValues(alpha: 0.8);
