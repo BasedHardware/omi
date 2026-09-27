@@ -583,7 +583,7 @@ def test_mobile_ios_compile_check_is_path_gated_simulator_unsigned_and_secret_fr
     resolver = _load_repo_script("pre_push_ci_prediction")
 
     assert "name: iOS Compile Check" in mobile_checks
-    assert "runs-on: macos-26" in ios
+    assert "runs-on: xcode-27" in ios
     assert "needs: changes" in ios
     assert "has_app_ios_compile" in ios
     assert "has_app_ios_compile" in changes
