@@ -553,15 +553,13 @@ Future<EditMemoryResult> editMemoryServer(String memoryId, String value) async {
     return const EditMemoryResult(persisted: false);
   }
   try {
-    final payload = json.decode(response.body) as Map<String, dynamic>;
-    final rawMemory = payload['memory'];
-    final authoritativeMemory =
-        rawMemory is Map ? Memory.fromGeneratedWireJson(Map<String, dynamic>.from(rawMemory)) : null;
+    final payload = MemoryEditResponse.fromJson(json.decode(response.body));
+    final authoritativeMemory = payload.memory == null ? null : Memory.fromGeneratedWireJson(payload.memory!.toJson());
     Logger.debug(
       'editMemory persisted; authoritativeReplacement=${authoritativeMemory != null}',
     );
     return EditMemoryResult(
-      persisted: true,
+      persisted: authoritativeMemory != null,
       authoritativeMemory: authoritativeMemory,
     );
   } catch (error) {
