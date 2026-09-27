@@ -116,3 +116,12 @@ def test_verdict_records_reason_and_measured_inputs_for_every_policy_branch(upda
     assert verdict.dedup_speech_s == pytest.approx(
         59 if reason == 'insufficient_speech' else 299 if reason == 'too_short' else 1719.8
     )
+
+
+def test_wall_duration_is_used_when_transcript_is_empty():
+    conversation = _meeting(duration_seconds=20 * 60, segments=[])
+
+    verdict = meeting_treatment_verdict(conversation)
+
+    assert verdict.duration_s == 20 * 60
+    assert verdict.dedup_speech_s == 0
