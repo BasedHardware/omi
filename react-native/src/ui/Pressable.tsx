@@ -1,10 +1,19 @@
 import React, {forwardRef, useState} from 'react';
 import {
+  Platform,
   Pressable as NativePressable,
   type PressableProps,
   StyleSheet,
 } from 'react-native';
 import {type KitTokens, useKitStyleSheets} from '../desktop/DesktopTheme';
+
+// On macOS the chrome row doubles as a window-drag region: a left-click that
+// hit-tests to a plain RCTView is swallowed by performWindowDragWithEvent and
+// never reaches the React touch system. RCTView defaults to
+// mouseDownCanMoveWindow = YES, so without this a pressable only responds on
+// its Text glyphs (the glyph, not the padding, is what blocks the drag).
+const blocksWindowDrag =
+  Platform.OS === 'macos' ? {mouseDownCanMoveWindow: false} : undefined;
 
 export const FocusPressable = forwardRef<
   React.ElementRef<typeof NativePressable>,
@@ -16,6 +25,7 @@ export const FocusPressable = forwardRef<
   return (
     <NativePressable
       ref={ref}
+      {...blocksWindowDrag}
       {...props}
       aria-checked={props['aria-checked'] ?? props.accessibilityState?.checked}
       aria-selected={

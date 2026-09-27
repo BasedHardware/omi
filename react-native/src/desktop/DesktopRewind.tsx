@@ -17,7 +17,6 @@ import {
   useDesktopTheme,
   useDesktopStyleSheets,
 } from './DesktopTheme';
-import {ScrollFade, useScrollFade} from './ScrollFade';
 import {createRewindTimeline} from './rewindTimeline';
 
 type Frame = {
@@ -89,7 +88,6 @@ export function DesktopRewind({
 }) {
   const styles = useDesktopStyleSheets(createStyles);
   const {tokens: token} = useDesktopTheme();
-  const fade = useScrollFade();
   const seenRevision = useRef(captureRevision);
   const lastQuery = useRef(query);
   const paginated = useRef(false);
@@ -316,11 +314,8 @@ export function DesktopRewind({
         />
       ) : (
         <View style={styles.content}>
-          <ScrollFade visible style={styles.list}>
+          <View style={styles.list}>
             <ScrollView
-              onLayout={fade.onLayout}
-              onScroll={fade.onScroll}
-              onContentSizeChange={fade.onContentSizeChange}
               scrollEventThrottle={16}
               contentContainerStyle={styles.rows}>
               {(() => {
@@ -373,7 +368,7 @@ export function DesktopRewind({
                 </FocusPressable>
               ) : null}
             </ScrollView>
-          </ScrollFade>
+          </View>
           <View style={styles.preview}>
             {selected === null ? (
               <View style={styles.previewPrompt}>

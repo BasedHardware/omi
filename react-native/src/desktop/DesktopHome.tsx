@@ -16,7 +16,6 @@ import {matchesSearchQuery} from '../searchText';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import {omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
-import {ScrollFade} from './ScrollFade';
 import {ReadStatus} from '../ui/ReadStatus';
 import {ShippingListInsert} from './ShippingStage';
 import {MaterialIcon} from '../ui/MaterialIcon';
@@ -414,7 +413,7 @@ export function DesktopHome({
   return (
     <View style={styles.home}>
       <DesktopReadBanner onRefresh={onRefresh} readsPhase={readsPhase} />
-      <ScrollFade visible style={styles.scroll}>
+      <View style={styles.scroll}>
         <ScrollView
           scrollEventThrottle={16}
           contentContainerStyle={styles.listContent}
@@ -553,7 +552,7 @@ export function DesktopHome({
             </View>
           </View>
         </ScrollView>
-      </ScrollFade>
+      </View>
     </View>
   );
 }

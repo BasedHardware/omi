@@ -6,7 +6,6 @@ import {MaterialIcon, type MaterialIconName} from '../ui/MaterialIcon';
 
 import {useReduceMotion} from '../app/useReduceMotion';
 import {desktopEaseSmoothOut} from './desktopMotion';
-import {ScrollFade, useScrollFade} from './ScrollFade';
 import {AppsPage} from './DesktopPages';
 import {
   loadAccountSettings,
@@ -348,7 +347,6 @@ export function DesktopSettings({
 }: Props) {
   const styles = useDesktopStyleSheets(createStyles);
   const [pane, setPane] = useState<DesktopSettingsPane>('General');
-  const fade = useScrollFade();
   const [prefs, setPrefs] = useState<DesktopPreferences>(
     defaultDesktopPreferences,
   );
@@ -849,11 +847,8 @@ export function DesktopSettings({
   return (
     <View style={styles.root}>
       <SettingsNav onChange={setPane} pane={pane} />
-      <ScrollFade visible style={styles.scroll}>
+      <View style={styles.scroll}>
         <ScrollView
-          onLayout={fade.onLayout}
-          onScroll={fade.onScroll}
-          onContentSizeChange={fade.onContentSizeChange}
           scrollEventThrottle={16}
           contentContainerStyle={styles.content}>
           {actionStatus !== null ? (
@@ -869,7 +864,7 @@ export function DesktopSettings({
             {pane === 'General' ? deviceContent : null}
           </ShippingStage>
         </ScrollView>
-      </ScrollFade>
+      </View>
     </View>
   );
 }
