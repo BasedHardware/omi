@@ -70,6 +70,10 @@
 		7361ED343F303C57EF2931A2 /* OmiCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		51794E0351794E0351794E03 /* SyncTransferBackgroundLease.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51794E0151794E0151794E01 /* SyncTransferBackgroundLease.swift */; };
+		7AA100000000000000000001 /* TtsMp3Decoder.c in Sources */ = {isa = PBXBuildFile; fileRef = 7AA100000000000000000003 /* TtsMp3Decoder.c */; };
+		7AA100000000000000000002 /* TtsMp3Decoder.c in Sources */ = {isa = PBXBuildFile; fileRef = 7AA100000000000000000003 /* TtsMp3Decoder.c */; };
+		7AA100000000000000000006 /* TtsPcmPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AA100000000000000000008 /* TtsPcmPlayer.swift */; };
+		7AA100000000000000000007 /* TtsPcmPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AA100000000000000000008 /* TtsPcmPlayer.swift */; };
 		E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1293503E1293503E1293503 /* SpeechDeadline.swift */; };
 		7B703A24854FEB9BACB52CCA /* PhoneMicOpusShim.m in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */; };
 		7BB46D8ED545353079641366 /* BatteryWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2BF831EA0797124264B67C /* BatteryWidget.swift */; };
@@ -247,6 +251,10 @@
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		51794E0151794E0151794E01 /* SyncTransferBackgroundLease.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncTransferBackgroundLease.swift; sourceTree = "<group>"; };
+		7AA100000000000000000003 /* TtsMp3Decoder.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = TtsMp3Decoder.c; sourceTree = "<group>"; };
+		7AA100000000000000000004 /* TtsMp3Decoder.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = TtsMp3Decoder.h; sourceTree = "<group>"; };
+		7AA100000000000000000005 /* minimp3.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NativeVendor/minimp3.h; sourceTree = "<group>"; };
+		7AA100000000000000000008 /* TtsPcmPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TtsPcmPlayer.swift; sourceTree = "<group>"; };
 		E1293503E1293503E1293503 /* SpeechDeadline.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SpeechDeadline.swift; sourceTree = "<group>"; };
 		79B00761CB247C7EC7C8983B /* devRelease.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devRelease.xcconfig; path = Flutter/devRelease.xcconfig; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
@@ -504,6 +512,10 @@
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
 				51794E0151794E0151794E01 /* SyncTransferBackgroundLease.swift */,
+				7AA100000000000000000003 /* TtsMp3Decoder.c */,
+				7AA100000000000000000004 /* TtsMp3Decoder.h */,
+				7AA100000000000000000005 /* minimp3.h */,
+				7AA100000000000000000008 /* TtsPcmPlayer.swift */,
 				E1293503E1293503E1293503 /* SpeechDeadline.swift */,
 				CD12345678901234567890CD /* AppleRemindersService.swift */,
 				CD12345678901234567890CE /* AppleHealthService.swift */,
@@ -960,6 +972,8 @@
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				51794E0351794E0351794E03 /* SyncTransferBackgroundLease.swift in Sources */,
+				7AA100000000000000000001 /* TtsMp3Decoder.c in Sources */,
+				7AA100000000000000000006 /* TtsPcmPlayer.swift in Sources */,
 				E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */,
 				E91B0002E91B0002E91B0002 /* OmiBleEnergyPolicy.swift in Sources */,
 				DAD10002DAD10002DAD10002 /* OmiBleConnectionPolicy.swift in Sources */,
@@ -1011,6 +1025,8 @@
 			files = (
 				873C99F3D85C142369688A1D /* AppDelegate.swift in Sources */,
 				51794E0451794E0451794E04 /* SyncTransferBackgroundLease.swift in Sources */,
+				7AA100000000000000000002 /* TtsMp3Decoder.c in Sources */,
+				7AA100000000000000000007 /* TtsPcmPlayer.swift in Sources */,
 				E1293502E1293502E1293502 /* SpeechDeadline.swift in Sources */,
 				E91B0003E91B0003E91B0003 /* OmiBleEnergyPolicy.swift in Sources */,
 				DAD10003DAD10003DAD10003 /* OmiBleConnectionPolicy.swift in Sources */,

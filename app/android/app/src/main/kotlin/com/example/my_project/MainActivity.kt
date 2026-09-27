@@ -52,6 +52,8 @@ class MainActivity: FlutterActivity() {
         PhoneMicController.instance.bindFlutterApi(PhoneMicFlutterApi(flutterEngine.dartExecutor.binaryMessenger))
         PhoneMicHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, PhoneMicHostApiImpl(PhoneMicController.instance))
         SyncTransferPlugin.register(flutterEngine, this)
+        TtsMp3DecoderPlugin.register(flutterEngine)
+        TtsPcmPlayerPlugin.register(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NATIVE_BLE_TRANSCRIPT_CHANNEL).setMethodCallHandler {
             call, result ->
             if (call.method == "drain") {
