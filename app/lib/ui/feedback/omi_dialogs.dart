@@ -96,7 +96,9 @@ class OmiAlertDialog extends StatelessWidget {
             style: TextButton.styleFrom(
               foregroundColor: action.isDestructive
                   ? omiDialogDangerColor
-                  : (action.isDefault ? Colors.white : Colors.white.withValues(alpha: 0.78)),
+                  : (OmiColors.active == OmiPalette.light
+                      ? OmiColors.textPrimary
+                      : (action.isDefault ? Colors.white : Colors.white.withValues(alpha: 0.78))),
               minimumSize: const Size(64, 44),
             ),
             child: Text(

@@ -120,7 +120,11 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                   const SizedBox(width: 4),
                   HeaderCircleButton(
                     semanticLabel: l10n.phoneCallsWithOmi,
-                    icon: const Icon(Icons.phone_in_talk_rounded, color: Colors.white, size: 16),
+                    icon: Icon(
+                      Icons.phone_in_talk_rounded,
+                      color: OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.white,
+                      size: 16,
+                    ),
                     onTap: () {
                       OmiHaptics.selection();
                       routeToPage(context, const PhoneCallsPage());

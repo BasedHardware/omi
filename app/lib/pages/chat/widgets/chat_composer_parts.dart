@@ -11,11 +11,13 @@ import 'package:omi/utils/l10n_extensions.dart';
 // in `chat/page.dart`: they are the catalogued controls (omi.chat.input / omi.chat.send).
 
 /// The soft shadow that lifts the composer pill and its side button off the transcript.
-const List<BoxShadow> kChatComposerShadow = [
-  BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.65), blurRadius: 60, spreadRadius: 14, offset: Offset(0, -16)),
-  BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.45), blurRadius: 32, spreadRadius: 6, offset: Offset(0, -8)),
-  BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.25), blurRadius: 10, offset: Offset(0, 2)),
-];
+List<BoxShadow> get kChatComposerShadow => OmiColors.active == OmiPalette.dark
+    ? const [
+        BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.65), blurRadius: 60, spreadRadius: 14, offset: Offset(0, -16)),
+        BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.45), blurRadius: 32, spreadRadius: 6, offset: Offset(0, -8)),
+        BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.25), blurRadius: 10, offset: Offset(0, 2)),
+      ]
+    : const [BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.08), blurRadius: 16, offset: Offset(0, -4))];
 
 /// The 48 pt round button beside the composer pill: Add (idle) or Stop (recording).
 ///

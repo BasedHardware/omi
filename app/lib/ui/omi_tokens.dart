@@ -90,8 +90,8 @@ class OmiPalette {
   static const light = OmiPalette(
     surface0: Color(0xFFF2F2F7),
     surface1: Color(0xFFFFFFFF),
-    surface2: Color(0xFFF2F2F7),
-    surface3: Color(0xFFE5E5EA),
+    surface2: Color(0xFFE5E5EA),
+    surface3: Color(0xFFD1D1D6),
     chipSurface: Color(0xFFE5E5EA),
     messageSurface: Color(0xFFE5E5EA),
     categorySurface: Color(0xFFF2F2F7),

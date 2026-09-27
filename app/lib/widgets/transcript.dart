@@ -1129,7 +1129,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   Widget _buildSegmentFooter(TranscriptSegment data, bool isUser) {
-    final color = isUser ? OmiColors.textSecondary : OmiColors.textTertiary;
+    final color = isUser
+        ? OmiColors.textSecondary
+        : (OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : OmiColors.textTertiary);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [

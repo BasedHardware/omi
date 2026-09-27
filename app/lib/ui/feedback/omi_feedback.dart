@@ -148,7 +148,7 @@ abstract final class OmiFeedback {
         ),
       ),
       action: actionLabel != null && onAction != null
-          ? SnackBarAction(label: actionLabel, textColor: Colors.white, onPressed: onAction)
+          ? SnackBarAction(label: actionLabel, textColor: OmiColors.accent, onPressed: onAction)
           : null,
     );
   }

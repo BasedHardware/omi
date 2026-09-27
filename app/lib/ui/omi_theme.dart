@@ -48,7 +48,7 @@ ThemeData buildOmiTheme({Brightness brightness = Brightness.dark}) {
       behavior: SnackBarBehavior.floating,
       backgroundColor: palette.surface2,
       contentTextStyle: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: palette.textPrimary),
-      actionTextColor: palette.textPrimary,
+      actionTextColor: palette.accent,
       closeIconColor: palette.textSecondary,
       shape: const RoundedRectangleBorder(borderRadius: OmiRadius.mdAll),
       elevation: 0,
@@ -56,6 +56,9 @@ ThemeData buildOmiTheme({Brightness brightness = Brightness.dark}) {
     dialogTheme: DialogThemeData(
       backgroundColor: palette.surface1,
       shape: const RoundedRectangleBorder(borderRadius: OmiRadius.lgAll),
+      elevation: dark ? null : 0,
+      shadowColor: dark ? null : Colors.transparent,
+      surfaceTintColor: dark ? null : Colors.transparent,
     ),
     bottomSheetTheme: BottomSheetThemeData(
       backgroundColor: palette.surface1,
