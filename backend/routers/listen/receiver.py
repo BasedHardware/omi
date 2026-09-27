@@ -57,6 +57,7 @@ from utils.stt.live_failure import (
 )
 from config.stt_provider_policy import provider_for_service
 from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
+from utils.stt.language_policy import observe_live_segments, record_live_connection
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
 from utils.stt.streaming import (
     STTService,
@@ -401,27 +402,20 @@ class ListenReceiver:
         )
         return self.host.state.current_conversation_id
 
-    def _enqueue_clock_positioned_segments(self, segments: List[Dict[str, Any]]) -> None:
-        """Attach each segment's capture-projected window for speaker ID only.
+    def _enqueue_clock_positioned_segments(
+        self, segments: List[Dict[str, Any]], provider: Optional[str] = None
+    ) -> None:
+        """Attach a private capture window for speaker ID in clock-only mode.
 
-        Clock-only mode (capture clock on, v2 persistence off): the transcript
-        keeps exactly the legacy pipeline — provider-native times, current
-        conversation, no owner fencing — so persisted fields and WebSocket
-        output stay byte-identical to the flag-off baseline. The only addition
-        is the private absolute window the ring buffer can actually locate,
-        which survives provider failovers whose timestamps restart at zero.
-
-        LIVE_SPEAKER_CAPTURE_CLOCK is the runtime kill switch for that
-        addition (read here, at the call boundary): falsy reverts speaker-ID
-        windows to the legacy first-audio + provider-time formula without a
-        deploy. It never touches the transcript itself.
+        Transcript times stay provider-native; the window survives failover.
+        LIVE_SPEAKER_CAPTURE_CLOCK=false restores legacy speaker-ID timing.
         """
         if not live_speaker_capture_clock_enabled():
             for segment in segments:
                 segment.pop('_capture_start_sample', None)
                 segment.pop('_capture_end_sample', None)
                 segment['_capture_window_unavailable'] = True
-            self._enqueue_stt_segments(segments)
+            self._enqueue_stt_segments(segments, provider=provider)
             return
         for segment in segments:
             start_sample = segment.pop('_capture_start_sample', None)
@@ -434,7 +428,7 @@ class ListenReceiver:
                     segment['_capture_abs_end'] = abs_end
                     continue
             segment['_capture_window_unavailable'] = True
-        self._enqueue_stt_segments(segments)
+        self._enqueue_stt_segments(segments, provider=provider)
 
     def _run_on_listen_loop(self, action, segments: List[Dict[str, Any]]) -> None:
         """Run a provider callback on the listen event loop.
@@ -549,7 +543,7 @@ class ListenReceiver:
         if self.capture_timeline_v2:
             self._enqueue_translated_segments(segments, provider=provider)
         else:
-            self._enqueue_clock_positioned_segments(segments)
+            self._enqueue_clock_positioned_segments(segments, provider=provider)
 
     @staticmethod
     def _record_elapsed_validation(provider: str, interval: Optional[Tuple[int, int]], gate: Any) -> None:
@@ -722,6 +716,7 @@ class ListenReceiver:
 
     def _enqueue_stt_segments(self, segments: List[Dict[str, Any]], provider: Optional[str] = None) -> None:
         """Persist the provider epoch before local speaker numbers enter the conversation."""
+        observe_live_segments(self.host, segments, provider or self._serving_provider())
         pending = self._pending_live_failover
         if pending is not None and (provider is None or provider == pending.to_mode):
             pending.note_transcript(segments)
@@ -888,6 +883,7 @@ class ListenReceiver:
                     modulate_callback or callback,
                     sample_rate,
                     self.host.stt_language,
+                    profile=self.host.language_profile,
                 ),
                 connect_modulate=(
                     (
@@ -1093,6 +1089,7 @@ class ListenReceiver:
                         )
                         return False
                     self.stt_sockets_multi[index] = socket
+                    record_live_connection(self.host, self._serving_provider())
                 return True
             if not managed_chain_enabled(self.host) and should_initialize_vad_gate(
                 override=request.vad_gate_override, global_gate_enabled=is_gate_enabled()
@@ -1129,6 +1126,7 @@ class ListenReceiver:
                 epoch.provider_label = audio_timeline_provider_label(getattr(self.host.stt_service, 'value', None))
             self.stt_socket = self._wrap_legacy_stt_socket(raw, epoch)
             self._record_selected_epoch(epoch, self.stt_socket)
+            record_live_connection(self.host, self._serving_provider())
             # Retained so a mid-session failover can rebuild the socket against the
             # next provider without re-deriving the callbacks or the gate.
             self._stt_rebuild = (self._build_stt_callbacks, request.sample_rate)
@@ -1176,6 +1174,7 @@ class ListenReceiver:
         service, language, model = get_stt_service_for_language(
             self.host.language,
             multi_lang_enabled=self.host.multi_lang_enabled,
+            language_profile=self.host.language_profile,
             exclude=frozenset(self._stt_failed_providers),
             **window_selection_kwargs(self.host, self.host.request.uid),
         )
@@ -1220,6 +1219,7 @@ class ListenReceiver:
 
         self.stt_socket = self._wrap_legacy_stt_socket(raw, epoch)
         self._record_selected_epoch(epoch, self.stt_socket)
+        record_live_connection(self.host, self._serving_provider())
         self._pending_live_failover = hop
         record_live_stt_failover_accepted(provider=self.host.stt_service.value, platform=self._telemetry_platform())
         logger.info(f'STT failover mid-session: {dead_provider} -> {self.host.stt_service.value}')

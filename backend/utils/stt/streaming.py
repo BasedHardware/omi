@@ -32,6 +32,7 @@ from config.stt_provider_policy import (
     supports_live_multilingual_mode,
 )
 from utils.stt.live_rollout import configured_chain_enabled, window_allocation, window_language_supported
+from utils.stt.language_policy import LiveLanguageProfile, prefer_hintable_soniox
 from utils.async_tasks import create_named_task
 from utils.byok import get_byok_key
 from utils.executors import sync_executor, run_blocking
@@ -738,12 +739,7 @@ def _stt_selection_from_mode(_language: str, base_lang: str) -> str:
 def _requested_stt_language(
     language: Optional[str], base_lang: str, *, multi_lang_enabled: bool, surface: STTServingSurface
 ) -> str:
-    """Resolve the provider language while retaining PTT's explicit input language.
-
-    Live sessions with multi-language enabled must select a provider's auto-detect
-    mode. PTT does not load the user's transcription preference, so it keeps its
-    explicit language unless the client itself sends the ``multi`` sentinel.
-    """
+    """Use auto-detect for live multi sessions; keep PTT's explicit language."""
     if base_lang == 'multi' or (
         surface == STTServingSurface.STREAMING
         and multi_lang_enabled
@@ -774,10 +770,9 @@ def get_stt_service_for_language(
     preferred_service: Optional[str] = None,
     exclude: frozenset[str] = frozenset(),
     window_uid: Optional[str] = None,
+    language_profile: LiveLanguageProfile | None = None,
 ) -> Tuple[Optional[STTService], Optional[str], Optional[str]]:
     """Select a surface-compatible provider; see ARCHITECTURE.md (incident history)."""
-    # Missing language metadata historically meant English. Preserve that
-    # behavior without opening a retired-provider fallback for unknown values.
     base_lang = normalized_stt_language(language) or 'en'
     requested_language = _requested_stt_language(
         language,
@@ -785,6 +780,14 @@ def get_stt_service_for_language(
         multi_lang_enabled=multi_lang_enabled,
         surface=surface,
     )
+    if surface == STTServingSurface.STREAMING and prefer_hintable_soniox(
+        language_profile,
+        stt_service_models,
+        exclude,
+        lambda: _circuit_for_primary(STTService.soniox).cooldown_elapsed()
+        and _circuit_for_primary(STTService.soniox).account_cooldown_elapsed(),
+    ):
+        return STTService.soniox, requested_language, 'soniox'
 
     def select(
         models: List[str] | Tuple[str, ...],
@@ -829,8 +832,7 @@ def get_stt_service_for_language(
             ):
                 return (STTService.modulate, requested_language, 'velma-2'), parakeet_fallback_reason
             if model == 'soniox' and provider_is_enabled(SONIOX_PROVIDER, surface) and os.getenv('SONIOX_API_KEY'):
-                # Soniox identifies the language itself, so every requested language
-                # including 'multi' is serviceable.
+                # Soniox identifies every requested language, including multi.
                 return (STTService.soniox, requested_language, 'soniox'), parakeet_fallback_reason
         return None, parakeet_fallback_reason
 
@@ -887,11 +889,7 @@ def get_stt_service_for_language(
 
 
 def should_preserve_filler_words(language: str) -> bool:
-    """Return True if filler words should be preserved for the given Deepgram language.
-
-    English filler sounds ("um", "uh") are safe to strip. But in other languages
-    those sounds are real words — e.g. Portuguese "um" means "a/one" (#6575).
-    """
+    """Keep non-English fillers: Portuguese "um" is a word (#6575)."""
     return not language.startswith('en')
 
 
@@ -1640,6 +1638,8 @@ class SafeModulateSocket(STTSocket):
                 'person_id': None,
             }
         ]
+        if msg.get('language'):
+            segments[0]['_provider_language'] = msg['language']
         self._stream_transcript(segments)
 
 

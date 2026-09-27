@@ -67,6 +67,12 @@ environment_shared:
         STT_CONNECT_ORDER_FROM_CONFIG:
           value: 'false'
           category: rollout
+        STT_MULTI_LANGUAGE_HINTS:
+          value: 'true'
+          category: rollout
+        STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
+          value: '0'
+          category: rollout
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
           value: '0'
           category: rollout

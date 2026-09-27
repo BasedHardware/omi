@@ -18,6 +18,7 @@ from config.stt_provider_policy import normalized_stt_language, soniox_accepts_l
 from utils.metrics import OMI_LIVE_STT_MISALIGNED_FRAMES_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.stt.socket import STTSocket
+from utils.stt.language_policy import LiveLanguageProfile, soniox_hints
 from utils.stt.stream_close import PROVIDER_AUTH_REJECTED, PROVIDER_BUDGET_EXHAUSTED, record_stt_stream_close
 
 logger = logging.getLogger(__name__)
@@ -326,6 +327,7 @@ class SafeSonioxSocket(STTSocket):
         self._pending_segment = None
         if segment is not None and segment['text'].strip():
             segment['text'] = segment['text'].strip()
+            segment.pop('_language_mixed', None)
             if ready is not None:
                 ready.append(segment)
             else:
@@ -376,9 +378,17 @@ class SafeSonioxSocket(STTSocket):
                     'is_user': False,
                     'person_id': None,
                 }
+                if token.get('language'):
+                    self._pending_segment['_provider_language'] = token['language']
             else:
                 self._pending_segment['text'] += text
                 self._pending_segment['end'] = max(self._pending_segment['end'], end - self._preseconds)
+                token_language = token.get('language')
+                if not self._pending_segment.get('_language_mixed') and token_language != self._pending_segment.get(
+                    '_provider_language'
+                ):
+                    self._pending_segment.pop('_provider_language', None)
+                    self._pending_segment['_language_mixed'] = True
             if text[-1].isspace():
                 self._flush_pending(ready)
         if ready:
@@ -390,6 +400,8 @@ async def process_audio_soniox(
     sample_rate: int,
     language: str,
     preseconds: int = 0,
+    *,
+    profile: LiveLanguageProfile | None = None,
 ) -> SafeSonioxSocket:
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
@@ -413,26 +425,31 @@ async def process_audio_soniox(
     # ISO code, so it must send no hint; compare on the normalized base code so
     # a capitalized sentinel or a region-tagged locale ('Multi', 'ja-JP') cannot
     # smuggle a rejected entry past the raw-string guard.
-    normalized = normalized_stt_language(language)
-    if normalized and normalized != 'multi':
-        if soniox_accepts_language_hint(normalized):
-            config['language_hints'] = [normalized]
-        else:
-            # Auto-detect serves every language the model supports, so the
-            # session stays live; this is a mode change (hinted -> identified)
-            # and must be visible to ops, not silently healed.
-            record_fallback(
-                component='stt_selection',
-                from_mode='soniox_language_hint',
-                to_mode='soniox_language_identification',
-                reason='capability_mismatch',
-                outcome='degraded',
-            )
-            logger.warning(
-                'Soniox language hint dropped: language=%s is outside the documented hint vocabulary; '
-                'falling back to language identification',
-                language,
-            )
+    hints = soniox_hints(language, profile)
+    if hints:
+        config['language_hints'] = hints
+    rejected = (
+        profile.primary
+        if profile
+        and profile.multi
+        and profile.primary_group == 'non_en'
+        and os.getenv('STT_MULTI_LANGUAGE_HINTS', 'true').lower() == 'true'
+        else normalized_stt_language(language)
+    )
+    if rejected and rejected != 'multi' and not soniox_accepts_language_hint(rejected):
+        # Invalid hints are dropped while identification remains enabled.
+        record_fallback(
+            component='stt_selection',
+            from_mode='soniox_language_hint',
+            to_mode='soniox_language_identification',
+            reason='capability_mismatch',
+            outcome='degraded',
+        )
+        logger.warning(
+            'Soniox language hint dropped: language=%s is outside the documented hint vocabulary; '
+            'falling back to language identification',
+            rejected,
+        )
 
     logger.info(f'Connecting to Soniox streaming sample_rate={sample_rate} language={language}')
     ws = await websockets.connect(SONIOX_WS_URL, ping_timeout=15, ping_interval=15)
