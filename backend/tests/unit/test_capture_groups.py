@@ -298,6 +298,47 @@ def test_confirmed_overlap_is_grouped_and_linked(store, seam):
     assert ('capture_group_joined', 'applied') in seam
 
 
+def test_same_source_same_device_shared_speech_is_grouped_without_cross_device_pointer(store, seam):
+    store.rows.update(
+        {
+            path('live'): row('live', 'omi', client_device_id='pendant-1'),
+            path('wal'): row('wal', 'omi', 100, 590, client_device_id='pendant-1'),
+        }
+    )
+    policy.link_duplicate_captures(UID, Conversation(**store.rows[path('wal')]))
+    live, wal = store.rows[path('live')], store.rows[path('wal')]
+    assert 'duplicate_capture_of' not in live.get('external_data', {})
+    assert 'duplicate_capture_of' not in wal.get('external_data', {})
+    assert live['capture_group'] == wal['capture_group']
+    assert ('capture_group_joined', 'applied') in seam
+
+
+def test_same_source_same_device_without_shared_speech_stays_separate(store, seam):
+    store.rows.update(
+        {
+            path('live'): row('live', 'omi', text=OTHER, client_device_id='pendant-1'),
+            path('wal'): row('wal', 'omi', 100, 590, client_device_id='pendant-1'),
+        }
+    )
+    policy.link_duplicate_captures(UID, Conversation(**store.rows[path('wal')]))
+    assert all('capture_group' not in row for row in store.rows.values())
+    assert all('duplicate_capture_of' not in row.get('external_data', {}) for row in store.rows.values())
+    assert ('capture_group_joined', 'none') in seam
+
+
+@pytest.mark.parametrize('device', ['other-pendant', ''])
+def test_same_source_different_or_unknown_device_is_not_grouped(store, seam, device):
+    store.rows.update(
+        {
+            path('live'): row('live', 'omi', client_device_id='pendant-1'),
+            path('wal'): row('wal', 'omi', 100, 590, client_device_id=device),
+        }
+    )
+    before = deepcopy(store.rows)
+    policy.link_duplicate_captures(UID, Conversation(**store.rows[path('wal')]))
+    assert store.rows == before
+
+
 def test_window_overlap_without_shared_speech_is_linked_but_not_grouped(store, seam):
     store.rows.update(
         {path('pendant'): row('pendant', 'omi', text=OTHER), path('desktop'): row('desktop', 'desktop', 100, 590)}

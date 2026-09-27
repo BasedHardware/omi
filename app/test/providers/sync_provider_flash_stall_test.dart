@@ -45,7 +45,8 @@ SyncUploadGate _hermeticGate() {
   return SyncUploadGate(
     limiter: limiter,
     fairUseStatusLoader: () async => {'stage': 'none'},
-    uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async =>
+    uploader: (files,
+            {onUploadProgress, conversationId, recordingSessionId, claimLiveCapture = false, geolocation}) async =>
         UploadFilesResult.queued('unused'),
   );
 }

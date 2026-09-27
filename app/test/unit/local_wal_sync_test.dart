@@ -272,6 +272,32 @@ void main() {
       expect(batch.map((wal) => wal.timerStart), [liveNewest.timerStart, liveOlder.timerStart]);
     });
 
+    test('does not mix safety WALs from different recording sessions', () {
+      const now = 2000000000;
+      final newest = Wal(
+        timerStart: now - 30,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        recordingSessionId: 'recording-b',
+      );
+      final olderSame = Wal(
+        timerStart: now - 90,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        recordingSessionId: 'recording-b',
+      );
+      final otherRecording = Wal(
+        timerStart: now - 20,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        recordingSessionId: 'recording-a',
+      );
+
+      final batch = nextSyncUploadBatch([otherRecording, newest, olderSame], now);
+
+      expect(batch.map((wal) => wal.recordingSessionId), ['recording-a']);
+    });
+
     test('recent ID-less WAL counts as live capture but cannot claim an existing manifest', () {
       const now = 2000000000;
       Wal at(int ageSeconds, {String? conversationId}) =>
@@ -496,6 +522,48 @@ void main() {
 
       sync.testWals[0].geolocation!.latitude = 42.0;
       expect(sync.testWals[1].geolocation?.latitude, 40.7128);
+    });
+
+    test('a finalized safety WAL carries the active recording session id', () async {
+      SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
+      sync.setActiveRecordingSessionId('  recording-live  ');
+      sync.onFrameCaptured(WalFrame(payload: [1], syncKey: FrameSyncKey([1])));
+
+      await sync.finalizeCurrentSession();
+
+      expect(sync.testWals, hasLength(1));
+      expect(sync.testWals.single.recordingSessionId, 'recording-live');
+      final encoded = sync.testWals.single.toJson();
+      expect(encoded['recording_session_id'], 'recording-live');
+      final restored = Wal.fromJson({...encoded, 'codec': 'opus'});
+      expect(restored.recordingSessionId, 'recording-live');
+    });
+
+    test('stampConversationId follows the recording id when timerStart is before the session', () async {
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      sync.testWals = [
+        Wal(
+          timerStart: now - 200,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          recordingSessionId: 'recording-live',
+        ),
+        Wal(
+          timerStart: now - 180,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          recordingSessionId: 'recording-other',
+        ),
+      ];
+
+      await sync.stampConversationId(now - 100, 'conv-live', recordingSessionId: 'recording-live');
+
+      expect(sync.testWals[0].conversationId, 'conv-live');
+      expect(sync.testWals[1].conversationId, isNull);
     });
 
     test('cleared session location is not inherited by external WALs', () async {

@@ -134,6 +134,7 @@ from utils.observability.speaker_identification import SYNC_SPEAKER_DECISIONS
 from utils.stt.vad import vad_is_empty
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration
 from utils.sync.capture import chunk_identity
+from utils.sync.recording_session_target import resolve_recording_session_sync_target
 from utils.sync.bridge import finish_sync_segment
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
@@ -1610,6 +1611,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     inline_run_lock_token: Optional[str] = None,
     content_run_bound: bool = False,
     ledger_fence_active: bool = True,
+    recording_session_id: Optional[str] = None,
 ):
     """Async coordinator for the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
@@ -1634,6 +1636,21 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     # keeps the caller's exact coordinates and returns the input unchanged on
     # any geocode failure, so a miss never drops the user's location.
     geolocation = await async_resolve_geolocation(geolocation)
+    # A safety WAL that missed its conversation id can still name the live
+    # recording. Resolve once, before any segment intake, and then use the
+    # existing explicit-target path (including transcript dedupe).
+    if not target_conversation_id and recording_session_id:
+        resolved_target = await run_blocking(
+            db_executor,
+            resolve_recording_session_sync_target,
+            uid,
+            recording_session_id,
+            source,
+            client_device_id,
+            bool(should_lock),
+        )
+        if resolved_target:
+            target_conversation_id = resolved_target
 
     sync_provider = 'unknown'
     sync_model = 'unknown'

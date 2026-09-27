@@ -784,6 +784,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   List<File> files, {
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
+  String? recordingSessionId,
   bool claimLiveCapture = false,
   Geolocation? geolocation,
 }) async {
@@ -793,8 +794,12 @@ Future<UploadFilesResult> uploadLocalFilesV2(
     captureManifest = await _createSyncCaptureManifest(files, conversationId!);
   }
   var url = '${Env.apiBaseUrl}v2/sync-local-files';
-  if (conversationId != null) {
-    url += '?conversation_id=${Uri.encodeQueryComponent(conversationId)}';
+  final query = <String, String>{
+    if (conversationId != null && conversationId.isNotEmpty) 'conversation_id': conversationId,
+    if (recordingSessionId != null && recordingSessionId.isNotEmpty) 'recording_session_id': recordingSessionId,
+  };
+  if (query.isNotEmpty) {
+    url += '?${query.entries.map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}').join('&')}';
   }
   var response = await makeMultipartApiCall(
     url: url,

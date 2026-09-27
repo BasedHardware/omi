@@ -2399,6 +2399,7 @@ class CaptureController extends ChangeNotifier
     // Drain any tail from the preceding phone session before replacing its
     // location. A stale session snapshot must never be applied to a later WAL.
     await _wal.getSyncs().phone.finalizeCurrentSession();
+    _bindSafetyWalRecordingSession();
     _rollCaptureSession('phone');
     _clearSessionLocation();
     // Mode is fixed for the whole session at start. On iOS and Android the phone
@@ -2741,6 +2742,7 @@ class CaptureController extends ChangeNotifier
     // snapshot; otherwise those frames could be flushed under the next session's
     // location.
     await _wal.getSyncs().phone.finalizeCurrentSession();
+    _bindSafetyWalRecordingSession();
     _rollCaptureSession(_recordingDevice?.id ?? 'device');
     _sessionTransportInterrupted = false;
     _clearSessionLocation();
@@ -3292,6 +3294,7 @@ class CaptureController extends ChangeNotifier
 
   Future<void> forceProcessingCurrentConversation() async {
     final sessionStart = _sessionStartSeconds;
+    final recordingSessionId = activeRecordingId;
 
     final phoneSync = _wal.getSyncs().phone;
     // Show the Conversations-tab skeleton before the WAL drain. Awaiting
@@ -3313,7 +3316,7 @@ class CaptureController extends ChangeNotifier
         onCreated: _processConversationCreated,
       );
       if (sessionStart > 0 && conversationId != null) {
-        await phoneSync.stampConversationId(sessionStart, conversationId);
+        await phoneSync.stampConversationId(sessionStart, conversationId, recordingSessionId: recordingSessionId);
         _autoSyncSessionWals();
       }
     });
@@ -3321,15 +3324,29 @@ class CaptureController extends ChangeNotifier
 
   /// Force-drain tail buffer and stamp all session WALs with conversation ID.
   /// Called from synchronous onMessageEventReceived — fire-and-forget async.
+  void _bindSafetyWalRecordingSession() {
+    final phone = _wal.getSyncs().phone;
+    // Test doubles implement a narrower phone sync. Production phone storage
+    // is [LocalWalSyncImpl], which copies this id onto each new safety WAL.
+    if (phone is! LocalWalSyncImpl) return;
+    phone.setActiveRecordingSessionId(activeRecordingId);
+  }
+
   Future<void> _finalizeAndStampSession(int sessionStartSeconds, String conversationId) async {
     final ownerToken = _sessionOwner?.token;
     final locationGeneration = _sessionGeolocationGeneration;
+    // Capture before the flush. A device update can roll the session while
+    // finalize awaits disk, and the rolled session must not cancel this stamp.
+    final recordingSessionId = activeRecordingId;
     try {
       final phoneSync = _wal.getSyncs().phone;
       await phoneSync.finalizeCurrentSession();
-      if (!_captureSessionIsCurrent(ownerToken)) return;
       if (sessionStartSeconds > 0) {
-        await phoneSync.stampConversationId(sessionStartSeconds, conversationId);
+        await phoneSync.stampConversationId(
+          sessionStartSeconds,
+          conversationId,
+          recordingSessionId: recordingSessionId,
+        );
       }
     } catch (e) {
       Logger.debug('_finalizeAndStampSession error: $e');

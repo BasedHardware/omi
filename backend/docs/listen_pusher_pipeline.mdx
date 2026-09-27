@@ -281,16 +281,19 @@ The durable `finalize_persisted_conversation` service attaches an advisory link
 once completion is persisted and the fanout claim is owned (including completed
 replays). Sync/REST callers use the same helper after successful completion
 persistence in `process_conversation`. `duplicate_capture.link_duplicate_captures` reads completed conversations
-for the same user through the existing `(status, finished_at)` query/index. Only
-different, known sources with positive wall windows and neither side discarded
-qualify. Overlap must be strictly greater than 60 seconds and greater than 0.5 of
+for the same user through the existing `(status, finished_at)` query/index. Different,
+known sources qualify, and so does the same source when both captures share one
+non-empty `client_device_id` (one physical device cannot record two different
+conversations at once). An unknown device, or the same source on two devices, stays
+separate. Neither side may be discarded, and both windows must be positive. Overlap must be strictly greater than 60 seconds and greater than 0.5 of
 the shorter window. Override with `CROSS_DEVICE_DEDUP_MIN_OVERLAP_SECONDS` and
 `CROSS_DEVICE_DEDUP_MIN_OVERLAP_RATIO` (finite, nonnegative; ratio at most 1).
 These wall windows compare simultaneous capture, not user-visible content duration.
 
 The longer capture is primary, with lexicographic document ID breaking duration
 ties. Either finalization order can link the shorter capture, even when it finished
-first. A transaction rereads both documents and fences deletion, discard, status,
+first. Same-source pairs do not receive this cross-device pointer; they are grouped
+only when the shared-speech confirmation below passes. A transaction rereads both documents and fences deletion, discard, status,
 source, or window changes before updating only the secondary's `external_data`:
 
 - `duplicate_capture_of`: the existing primary-conversation pointer.
