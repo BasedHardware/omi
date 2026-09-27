@@ -2,12 +2,51 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   attributedCtaHref,
+  chatActionProperties,
   ctaTarget,
   deviceClass,
   shareId,
   shareSource,
   shareSurface,
 } from '../lib/share-analytics.mjs';
+
+test('shared-chat actions keep only bounded fields', () => {
+  assert.deepEqual(
+    chatActionProperties({ type: 'question_asked', text: 'private question' }),
+    {
+      action: 'question_asked',
+    },
+  );
+  assert.deepEqual(
+    chatActionProperties({
+      type: 'limit_card_shown',
+      reason: 'free_questions_exhausted',
+    }),
+    {
+      action: 'limit_card_shown',
+      reason: 'free_questions_exhausted',
+    },
+  );
+  assert.deepEqual(
+    chatActionProperties({
+      type: 'upsell_clicked',
+      target: 'pendant',
+      transcript: 'private',
+    }),
+    {
+      action: 'upsell_clicked',
+      target: 'pendant',
+    },
+  );
+  assert.equal(
+    chatActionProperties({ type: 'limit_card_shown', reason: 'private string' }),
+    null,
+  );
+  assert.equal(
+    chatActionProperties({ type: 'question_failed', text: 'private question' }),
+    null,
+  );
+});
 
 test('only public share paths produce a bounded surface', () => {
   assert.equal(shareSurface('/conversations/abc'), 'conversation');
