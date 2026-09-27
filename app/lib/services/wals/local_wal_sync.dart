@@ -1089,6 +1089,9 @@ class LocalWalSyncImpl implements LocalWalSync {
           files,
           conversationId: batchWals.first.conversationId,
           recordingSessionId: batchWals.first.recordingSessionId,
+          audioStartSeconds: batchWals.map((wal) => wal.timerStart).reduce((a, b) => a < b ? a : b).toDouble(),
+          audioEndSeconds:
+              batchWals.map((wal) => wal.timerStart + wal.seconds).reduce((a, b) => a > b ? a : b).toDouble(),
           claimLiveCapture: claimLiveCapture,
           geolocation: batchWals.first.geolocation,
         );
@@ -1316,6 +1319,8 @@ class LocalWalSyncImpl implements LocalWalSync {
         [walFile],
         conversationId: walToSync.conversationId,
         recordingSessionId: walToSync.recordingSessionId,
+        audioStartSeconds: walToSync.timerStart.toDouble(),
+        audioEndSeconds: (walToSync.timerStart + walToSync.seconds).toDouble(),
         claimLiveCapture: claimLiveCapture,
         geolocation: walToSync.geolocation,
       );

@@ -49,7 +49,13 @@ void main() {
       uploadGate: SyncUploadGate(
         limiter: SyncRateLimiter.instance,
         uploader: (files,
-            {onUploadProgress, conversationId, recordingSessionId, claimLiveCapture = false, geolocation}) async {
+            {onUploadProgress,
+            conversationId,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation}) async {
           claims.add(claimLiveCapture);
           return UploadFilesResult.queued('job-${claims.length}');
         },

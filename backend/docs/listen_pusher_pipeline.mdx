@@ -12,6 +12,15 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 > live services (backend, pusher, STT providers, embedding API). Update when the
 > pipeline changes.
 
+Phone safety-WAL uploads may carry the client recording id and audio interval.
+Sync binds an upload without `conversation_id` only when one conversation in
+the authenticated user's collection matches that id, source, client device,
+lock state, and fully contains the uploaded interval. Listen creates a new
+server recording id on silence rollover, while the client id can span that
+rollover; a spanning WAL stays on the ordinary unbound sync path. This avoids
+assigning it to the earlier live generation, but does not bind the later
+generation until the client sends its server-issued id.
+
 The backend-to-Pusher binary protocol accepts only opcodes `100` through `105`.
 Audio frames (`101`) require the four-byte opcode, an eight-byte timestamp, and
 PCM payload; JSON opcodes require an object payload, with transcript, finalization,

@@ -179,6 +179,8 @@ void main() {
               onUploadProgress,
               conversationId,
               recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
               claimLiveCapture = false,
               geolocation,
             }) async {
@@ -229,6 +231,8 @@ void main() {
             onUploadProgress,
             conversationId,
             recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
             claimLiveCapture = false,
             geolocation,
           }) async {
@@ -262,6 +266,8 @@ void main() {
           onUploadProgress,
           conversationId,
           recordingSessionId,
+          audioStartSeconds,
+          audioEndSeconds,
           claimLiveCapture = false,
           geolocation,
         }) async {
@@ -331,6 +337,8 @@ void main() {
               onUploadProgress,
               conversationId,
               recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
               claimLiveCapture = false,
               geolocation,
             }) async {
@@ -386,6 +394,8 @@ void main() {
               onUploadProgress,
               conversationId,
               recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
               claimLiveCapture = false,
               geolocation,
             }) async {
@@ -442,6 +452,8 @@ void main() {
               onUploadProgress,
               conversationId,
               recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
               claimLiveCapture = false,
               geolocation,
             }) async {

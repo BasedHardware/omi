@@ -1690,6 +1690,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     content_run_bound: bool = False,
     ledger_fence_active: bool = True,
     recording_session_id: Optional[str] = None,
+    audio_start_seconds: Optional[float] = None,
+    audio_end_seconds: Optional[float] = None,
 ):
     """Async coordinator for the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
@@ -1714,10 +1716,10 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     # keeps the caller's exact coordinates and returns the input unchanged on
     # any geocode failure, so a miss never drops the user's location.
     geolocation = await async_resolve_geolocation(geolocation)
-    # A safety WAL that missed its conversation id can still name the live
-    # recording. Resolve once, before any segment intake, and then use the
-    # existing explicit-target path (including transcript dedupe).
-    if not target_conversation_id and recording_session_id:
+    # Resolve before segment intake. Even a WAL carrying a locally stamped
+    # conversation_id must prove that its complete interval belongs to that
+    # live generation; client recording ids can span server silence rollovers.
+    if recording_session_id and audio_start_seconds is not None and audio_end_seconds is not None:
         resolved_target = await run_blocking(
             db_executor,
             resolve_recording_session_sync_target,
@@ -1726,8 +1728,12 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             source,
             client_device_id,
             bool(should_lock),
+            audio_start_seconds,
+            audio_end_seconds,
         )
-        if resolved_target:
+        if target_conversation_id and resolved_target != target_conversation_id:
+            target_conversation_id = None
+        elif not target_conversation_id and resolved_target:
             target_conversation_id = resolved_target
 
     sync_provider = 'unknown'

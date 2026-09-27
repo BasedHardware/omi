@@ -90,7 +90,13 @@ void main() {
       uploadGate: SyncUploadGate(
         limiter: SyncRateLimiter.instance,
         uploader: (files,
-            {onUploadProgress, conversationId, recordingSessionId, claimLiveCapture = false, geolocation}) async {
+            {onUploadProgress,
+            conversationId,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation}) async {
           throw uploadFailure;
         },
         fairUseStatusLoader: () async => {'stage': 'none'},
@@ -541,7 +547,13 @@ void main() {
         uploadGate: SyncUploadGate(
           limiter: SyncRateLimiter.instance,
           uploader: (files,
-              {onUploadProgress, conversationId, recordingSessionId, claimLiveCapture = false, geolocation}) async {
+              {onUploadProgress,
+              conversationId,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
             uploads++;
             return UploadFilesResult.done(
               SyncLocalFilesResponse(newConversationIds: const [], updatedConversationIds: const ['recovered']),
@@ -585,7 +597,13 @@ void main() {
         uploadGate: SyncUploadGate(
           limiter: SyncRateLimiter.instance,
           uploader: (files,
-              {onUploadProgress, conversationId, recordingSessionId, claimLiveCapture = false, geolocation}) async {
+              {onUploadProgress,
+              conversationId,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
             uploads++;
             uploadedConversationId = conversationId;
             claimedLiveCapture = claimLiveCapture;

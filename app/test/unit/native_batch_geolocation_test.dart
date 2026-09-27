@@ -56,7 +56,13 @@ void main() {
         limiter: SyncRateLimiter.instance,
         fairUseStatusLoader: () async => {'stage': 'none'},
         uploader: (files,
-            {onUploadProgress, conversationId, recordingSessionId, claimLiveCapture = false, geolocation}) async {
+            {onUploadProgress,
+            conversationId,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation}) async {
           uploaded = geolocation;
           return UploadFilesResult.queued('job-1');
         },

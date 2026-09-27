@@ -785,6 +785,8 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   UploadProgressCallback? onUploadProgress,
   String? conversationId,
   String? recordingSessionId,
+  double? audioStartSeconds,
+  double? audioEndSeconds,
   bool claimLiveCapture = false,
   Geolocation? geolocation,
 }) async {
@@ -797,6 +799,8 @@ Future<UploadFilesResult> uploadLocalFilesV2(
   final query = <String, String>{
     if (conversationId != null && conversationId.isNotEmpty) 'conversation_id': conversationId,
     if (recordingSessionId != null && recordingSessionId.isNotEmpty) 'recording_session_id': recordingSessionId,
+    if (audioStartSeconds != null) 'audio_start_seconds': audioStartSeconds.toString(),
+    if (audioEndSeconds != null) 'audio_end_seconds': audioEndSeconds.toString(),
   };
   if (query.isNotEmpty) {
     url += '?${query.entries.map((entry) => '${entry.key}=${Uri.encodeQueryComponent(entry.value)}').join('&')}';

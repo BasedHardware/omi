@@ -39,7 +39,6 @@ class CaptureRecord:
     started_at: datetime
     finished_at: datetime
     source: str
-    client_device_id: str = ''
 
     @property
     def duration_seconds(self) -> float:
@@ -64,18 +63,11 @@ def capture_record(record: Any) -> CaptureRecord | None:
     source = getattr(field('source'), 'value', field('source'))
     if finish <= start or not source or not field('id'):
         return None
-    device = field('client_device_id')
-    device_id = device.strip() if isinstance(device, str) else ''
-    return CaptureRecord(str(field('id')), start, finish, str(source), device_id)
+    return CaptureRecord(str(field('id')), start, finish, str(source))
 
 
 def overlap_match(a: CaptureRecord, b: CaptureRecord, *, seconds: float, ratio: float) -> dict | None:
-    if a.conversation_id == b.conversation_id:
-        return None
-    # One physical device cannot record two different conversations at once.
-    # Same source on different devices (or an unknown device) stays separate.
-    # Different sources are unchanged.
-    if a.source == b.source and (not a.client_device_id or a.client_device_id != b.client_device_id):
+    if a.conversation_id == b.conversation_id or a.source == b.source:
         return None
     overlap = (min(a.finished_at, b.finished_at) - max(a.started_at, b.started_at)).total_seconds()
     coverage = overlap / min(a.duration_seconds, b.duration_seconds)
@@ -118,10 +110,6 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
             if match is None:
                 continue
             matches.append(other)
-            # The cross-device pointer is a time-window hint. Same-source pairs
-            # are grouped only after shared-speech confirmation below.
-            if candidate.source == other.source:
-                continue
             primary, secondary = sorted((candidate, other), key=lambda row: row.primary_rank)
             if conversations_db.link_duplicate_capture(uid, primary, secondary, match):
                 record_product_event('duplicate_capture_detected')

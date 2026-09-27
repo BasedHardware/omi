@@ -1,15 +1,17 @@
-"""Bind an unbound safety-WAL upload to the live conversation it already belongs to.
+"""Bind an unbound safety-WAL upload to the live conversation it belongs to.
 
-``/v4/listen`` stamps ``external_data.recording_session_id`` with the client-minted
-recording id. A phone safety WAL that missed its conversation id can send that
-same id. When it matches one conversation for this user, source, and device,
-sync intake uses that conversation as an explicit target. No match keeps today's
-temporal assignment.
+``/v4/listen`` stamps ``external_data.recording_session_id`` with the client
+recording id. Binding also requires source, device, lock state, and full audio
+interval containment. A client id can outlive server-side silence rollover;
+containment prevents a spanning WAL from binding to the earlier generation.
+No unique match keeps today's temporal assignment.
 """
 
 from __future__ import annotations
 
 import logging
+import math
+from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence, cast
 
 logger = logging.getLogger(__name__)
@@ -27,6 +29,15 @@ def _source_value(source: Any) -> str:
     return _text(getattr(source, 'value', source))
 
 
+def _unix_seconds(value: Any) -> float | None:
+    if isinstance(value, datetime):
+        normalized = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return normalized.timestamp()
+    if isinstance(value, (int, float)) and math.isfinite(value):
+        return float(value)
+    return None
+
+
 def select_recording_session_target(
     rows: Sequence[Mapping[str, Any]],
     recording_session_id: str,
@@ -34,17 +45,26 @@ def select_recording_session_target(
     source: Any,
     client_device_id: str | None,
     is_locked: bool,
+    audio_start_seconds: float | None = None,
+    audio_end_seconds: float | None = None,
 ) -> str | None:
     """Return the one conversation id that is safe to treat as an explicit target.
 
-    Zero matches and more than one match both return None. An ambiguous id must
-    not pick a conversation, and a provenance mismatch must not be handed to
-    intake: the explicit-target path rejects it and fails the upload.
+    Zero matches, an ambiguous id, a provenance mismatch, or an audio interval
+    that crosses a generation boundary keeps the existing unbound sync path.
     """
     session_id = _text(recording_session_id)
     device_id = _text(client_device_id)
     source_value = _source_value(source)
     if not session_id or not device_id or not source_value:
+        return None
+    if (
+        audio_start_seconds is None
+        or audio_end_seconds is None
+        or not math.isfinite(audio_start_seconds)
+        or not math.isfinite(audio_end_seconds)
+        or audio_end_seconds <= audio_start_seconds
+    ):
         return None
     matches: list[str] = []
     for row in rows:
@@ -58,6 +78,15 @@ def select_recording_session_target(
         if _text(row.get('client_device_id')) != device_id:
             continue
         if bool(row.get('is_locked')) != bool(is_locked):
+            continue
+        conversation_start = _unix_seconds(row.get('started_at'))
+        conversation_end = _unix_seconds(row.get('finished_at'))
+        if (
+            conversation_start is None
+            or conversation_end is None
+            or audio_start_seconds < conversation_start
+            or audio_end_seconds > conversation_end
+        ):
             continue
         conversation_id = _text(row.get('id'))
         if conversation_id:
@@ -97,6 +126,8 @@ def resolve_recording_session_sync_target(
     source: Any,
     client_device_id: str | None,
     is_locked: bool,
+    audio_start_seconds: float | None = None,
+    audio_end_seconds: float | None = None,
     *,
     firestore_client: Any = None,
 ) -> str | None:
@@ -123,4 +154,6 @@ def resolve_recording_session_sync_target(
         source=source,
         client_device_id=client_device_id,
         is_locked=is_locked,
+        audio_start_seconds=audio_start_seconds,
+        audio_end_seconds=audio_end_seconds,
     )
