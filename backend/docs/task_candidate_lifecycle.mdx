@@ -148,6 +148,15 @@ Released action-item request shapes are accepted through an explicit compatibili
 and Candidate models remain strict; legacy-only fields are ignored at the old route boundary, and
 `clear_due_at` is projected to an explicit `due_at: null` update.
 
+Shared-link acceptance (`POST /v1/action-items/accept`) resolves eligible source tasks before creating the
+recipient's copies in one `create_action_items_batch` transaction (a share contains at most 20 tasks).
+Indexing, reminders, and Chat-first wakes happen only after the entire batch is saved. A source-read or
+rejected-write failure therefore cannot leave a copied prefix behind an already-used share. The existing
+Redis acceptance marker still rejects duplicate requests; this is not a cross-store crash-recovery protocol.
+Process death after that claim, ambiguous commit outcomes, and historical partial accepts remain separate
+recovery limitations. The Firestore emulator proof is
+`backend/tests/integration/test_shared_task_acceptance_atomic_emulator.py`.
+
 What Matters Now projections, interventions, feedback, outcomes, attention overrides, and device snapshots are
 all account-generation scoped. Their Firestore mutations re-read workflow control in the commit transaction, so
 a reset during model judgment or feedback handling cannot publish or link stale state. Context and open-loop
