@@ -118,8 +118,9 @@ struct OmiNativeAPI {
     #if OMI_SIRI_PROBE
     static var testSession: URLSession?
     #endif
-    func request(method: String, path: String, body: [String: Any]) async throws -> [String: Any] {
-        guard let config = SiriSession.shared.currentConfig(),
+    func request(method: String, path: String, body: [String: Any],
+                 owner: SiriSession.Config? = nil) async throws -> [String: Any] {
+        guard let config = owner ?? SiriSession.shared.currentConfig(),
               let base = URL(string: config.baseUrl),
               let url = URL(string: path, relativeTo: base)?.absoluteURL,
               url.host == base.host else { throw SiriSession.Failure.invalidConfiguration }

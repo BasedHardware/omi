@@ -130,11 +130,49 @@ final class SiriSnapshotStore {
         update()
         try persist()
     }
-    private func mutateForOwner(_ uid: String, _ update: () -> Void) throws {
+    private func mutateForOwner(_ uid: String, generation: Int64? = nil, _ update: () -> Void) throws {
         lock.lock(); defer { lock.unlock() }
-        guard accountOwnerLocked(), snapshot.ownerUid == uid else { throw SiriSession.Failure.auth }
+        guard accountOwnerLocked(), snapshot.ownerUid == uid,
+              generation.map(generationMatchesLocked) ?? true,
+              transitionGeneration == nil,
+              (defaults.stringArray(forKey: pendingWipeOwnersKey) ?? []).isEmpty else {
+            throw SiriSession.Failure.auth
+        }
         update()
         try persist()
+    }
+
+    /// A native intent can finish with no Flutter engine. Commit its confirmed
+    /// response under the same owner generation that authorized the request.
+    func applyConfirmedMemory(id: String, content: String, owner: SiriSession.Config) async throws {
+        try SiriSession.shared.validateOwner(owner)
+        guard !id.isEmpty else { throw SiriSession.Failure.server }
+        try mutateForOwner(owner.uid, generation: owner.generation ?? 0) {
+            snapshot.memories[id] = Memory(id: id, content: content,
+                createdAtMs: Int64(Date().timeIntervalSince1970 * 1000), expiresAtMs: nil)
+        }
+        if enabled {
+            do { try await rebuildIndex() }
+            catch { NSLog("[SiriIndex] Confirmed memory index deferred: %@", String(describing: error)); scheduleIndexRetry() }
+        }
+    }
+
+    func applyConfirmedTask(id: String, title: String, completed: Bool, dueAt: Date?,
+                            owner: SiriSession.Config) async throws {
+        try SiriSession.shared.validateOwner(owner)
+        guard !id.isEmpty else { throw SiriSession.Failure.server }
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        try mutateForOwner(owner.uid, generation: owner.generation ?? 0) {
+            let existing = snapshot.tasks[id]
+            snapshot.tasks[id] = Task(id: id, title: title, completed: completed,
+                createdAtMs: existing?.createdAtMs ?? now,
+                dueAtMs: dueAt.map { Int64($0.timeIntervalSince1970 * 1000) } ?? existing?.dueAtMs,
+                completedAtMs: completed ? now : nil)
+        }
+        if enabled {
+            do { try await rebuildIndex() }
+            catch { NSLog("[SiriIndex] Confirmed task index deferred: %@", String(describing: error)); scheduleIndexRetry() }
+        }
     }
     private func cancelExpiryTask() {
         lock.lock(); defer { lock.unlock() }

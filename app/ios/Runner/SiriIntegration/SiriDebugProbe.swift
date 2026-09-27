@@ -103,7 +103,29 @@ enum SiriDebugProbe {
                 intent.content = "probe memory"
                 let result = try await intent.perform()
                 NSLog("[SiriProbe] rememberPerform=returned result=%@", String(reflecting: result))
+                NSLog("[SiriProbe] engineFreeRememberIndexed=%@",
+                      SiriSnapshotStore.shared.probeStoredEntity(type: "memory", id: "stub-memory-1") ? "PASS" : "FAIL")
                 if #available(iOS 27.0, *) {
+                    let writeConfig = URLSessionConfiguration.ephemeral
+                    writeConfig.protocolClasses = [SiriProbeURLProtocol.self]
+                    OmiNativeAPI.testSession = URLSession(configuration: writeConfig)
+                    SiriProbeURLProtocol.status = 200
+                    SiriProbeURLProtocol.payload = "{\"id\":\"native-task-1\"}"
+                    var create = CreateOmiTaskIntent()
+                    create.title = "Native task"
+                    _ = try await create.perform()
+                    NSLog("[SiriProbe] engineFreeCreateIndexed=%@",
+                          SiriSnapshotStore.shared.probeStoredEntity(type: "task", id: "native-task-1") ? "PASS" : "FAIL")
+                    SiriProbeURLProtocol.payload = "{\"id\":\"native-task-1\"}"
+                    var complete = CompleteOmiTaskIntent()
+                    complete.target = TaskEntity(id: "native-task-1", title: "Native task", isCompleted: false,
+                                                 creationDate: Date(), dueDate: nil, completionDate: nil)
+                    complete.isCompleted = true
+                    _ = try await complete.perform()
+                    NSLog("[SiriProbe] engineFreeCompleteIndexed=%@",
+                          SiriSnapshotStore.shared.tasks(ids: ["native-task-1"]).first?.isCompleted == true ? "PASS" : "FAIL")
+                    OmiNativeAPI.testSession = nil
+                    SiriProbeURLProtocol.payload = "[]"
                     try await SiriSnapshotStore.shared.upsert([
                         SiriMemory(id: "stub-memory-1", content: "probe memory",
                                    createdAtMs: Int64(Date().timeIntervalSince1970 * 1000),
@@ -343,6 +365,18 @@ enum SiriDebugProbe {
                     } catch SiriSession.Failure.auth {
                         NSLog("[SiriProbe] staleUidWrite=rejected")
                     }
+                    do {
+                        let prior = SiriSession.Config(
+                            uid: config.uid, generation: config.generation, baseUrl: config.baseUrl,
+                            profile: config.profile, appVersion: config.appVersion,
+                            appBuild: config.appBuild, deviceIdHash: config.deviceIdHash,
+                            expiresAtMs: config.tokenExpiresAtMs)
+                        try await SiriSnapshotStore.shared.applyConfirmedMemory(
+                            id: "stale-confirmed", content: "old owner", owner: prior)
+                        NSLog("[SiriProbe] staleConfirmedWrite=FAIL")
+                    } catch SiriSession.Failure.auth {
+                        NSLog("[SiriProbe] staleConfirmedWrite=PASS")
+                    }
                     let sessionConfig = URLSessionConfiguration.ephemeral
                     sessionConfig.protocolClasses = [SiriProbeURLProtocol.self]
                     OmiNativeAPI.testSession = URLSession(configuration: sessionConfig)
@@ -471,6 +505,7 @@ enum SiriDebugProbe {
 private final class SiriProbeURLProtocol: URLProtocol {
     static var status = 500
     static var requestCount = 0
+    static var payload = "[]"
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -482,7 +517,7 @@ private final class SiriProbeURLProtocol: URLProtocol {
         let response = HTTPURLResponse(url: request.url!, statusCode: Self.status,
                                        httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Self.status == 200 ? Data("[]".utf8) : Data("{}".utf8))
+        client?.urlProtocol(self, didLoad: Self.status == 200 ? Data(Self.payload.utf8) : Data("{}".utf8))
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() {}

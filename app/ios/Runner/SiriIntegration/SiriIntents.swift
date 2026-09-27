@@ -57,10 +57,13 @@ struct RememberIntent: AppIntent {
         let value = cleanedMemory(content)
         guard !value.isEmpty else { outcome = "cancelled"; return .result(dialog: "What should Omi remember?") }
         do {
+            guard let owner = SiriSession.shared.currentConfig() else { throw SiriSession.Failure.auth }
             let response = try await OmiNativeAPI().request(method: "POST", path: "/v3/memories", body: [
                 "content": value, "category": "manual", "visibility": "private", "tags": ["siri"]
-            ])
+            ], owner: owner)
             guard let id = response["id"] as? String, !id.isEmpty else { throw SiriSession.Failure.server }
+            try await SiriSnapshotStore.shared.applyConfirmedMemory(
+                id: id, content: response["content"] as? String ?? value, owner: owner)
             SiriBridge.shared.memoryCreated(id)
             outcome = "ok"
             return .result(dialog: "Saved to Omi")
@@ -100,10 +103,13 @@ struct OmiCreateNoteIntent {
               attachments.isEmpty, tags.isEmpty, !isPinned else {
             throw SiriUnsupportedInput(kind: .note)
         }
+        guard let owner = SiriSession.shared.currentConfig() else { throw SiriSession.Failure.auth }
         let response = try await OmiNativeAPI().request(method: "POST", path: "/v3/memories", body: [
             "content": value, "category": "manual", "visibility": "private", "tags": ["siri"]
-        ])
+        ], owner: owner)
         guard let id = response["id"] as? String, !id.isEmpty else { throw SiriSession.Failure.server }
+        try await SiriSnapshotStore.shared.applyConfirmedMemory(
+            id: id, content: response["content"] as? String ?? value, owner: owner)
         SiriBridge.shared.memoryCreated(id)
         SiriTelemetry.intent("createNote", outcome: "ok", started: started)
         return .result(value: ConversationEntity(memoryId: id, content: value, creationDate: Date()), dialog: "Saved to Omi")
@@ -244,8 +250,13 @@ struct CompleteOmiTaskIntent {
               dueDate == nil, recurrence == nil, isFlagged == nil, list == nil, locationTrigger == nil
         else { throw SiriUnsupportedInput(kind: .completeTask) }
         let id = target.id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? target.id
-        let response = try await OmiNativeAPI().request(method: "PATCH", path: "/v1/action-items/\(id)", body: ["completed": true])
+        guard let owner = SiriSession.shared.currentConfig() else { throw SiriSession.Failure.auth }
+        let response = try await OmiNativeAPI().request(method: "PATCH", path: "/v1/action-items/\(id)",
+            body: ["completed": true], owner: owner)
         guard let returnedId = response["id"] as? String, returnedId == target.id else { throw SiriSession.Failure.server }
+        try await SiriSnapshotStore.shared.applyConfirmedTask(id: target.id,
+            title: response["description"] as? String ?? target.title,
+            completed: true, dueAt: target.dueDate.flatMap { Calendar.current.date(from: $0) }, owner: owner)
         SiriBridge.shared.taskChanged(target.id)
         let entity = TaskEntity(id: target.id, title: target.title, isCompleted: true,
                                 creationDate: target.creationDate ?? Date(),
@@ -298,8 +309,13 @@ struct CreateOmiTaskIntent {
         if let due {
             body["due_at"] = ISO8601DateFormatter().string(from: due)
         }
-        let response = try await OmiNativeAPI().request(method: "POST", path: "/v1/action-items", body: body)
+        guard let owner = SiriSession.shared.currentConfig() else { throw SiriSession.Failure.auth }
+        let response = try await OmiNativeAPI().request(method: "POST", path: "/v1/action-items",
+            body: body, owner: owner)
         guard let id = response["id"] as? String, !id.isEmpty else { throw SiriSession.Failure.server }
+        try await SiriSnapshotStore.shared.applyConfirmedTask(id: id,
+            title: response["description"] as? String ?? value,
+            completed: false, dueAt: due, owner: owner)
         SiriBridge.shared.taskChanged(id)
         let entity = TaskEntity(id: id, title: value, isCompleted: false, creationDate: Date(),
                                 dueDate: due, completionDate: nil)
