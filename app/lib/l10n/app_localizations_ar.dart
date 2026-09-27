@@ -11337,6 +11337,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get appearanceDark => 'داكن';
 
   @override
+  String get chatDiscardRecording => 'تجاهل';
+
+  @override
   String get voiceQuestionNoSpeech => 'لم ألتقط ذلك — حاول مرة أخرى';
 
   @override

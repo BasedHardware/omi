@@ -11418,6 +11418,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get appearanceDark => 'Gelap';
 
   @override
+  String get chatDiscardRecording => 'Buang';
+
+  @override
   String get voiceQuestionNoSpeech => 'Tidak terdengar — coba lagi';
 
   @override

@@ -694,6 +694,12 @@ class MessageProvider extends ChangeNotifier {
           continue;
         }
 
+        if (chunk.type == MessageChunkType.memory) {
+          message.memoryAction = chunk.text;
+          notifyListeners();
+          continue;
+        }
+
         if (chunk.type == MessageChunkType.data) {
           message.text += chunk.text;
           if (playResponseAudio) {
@@ -708,6 +714,7 @@ class MessageProvider extends ChangeNotifier {
         }
 
         if (chunk.type == MessageChunkType.done) {
+          chunk.message!.memoryAction = message.memoryAction;
           message = chunk.message!;
           messages[aiIndex] = message;
           _transferChatTelemetryAttempt(responseMessageId, message.id);
@@ -882,6 +889,12 @@ class MessageProvider extends ChangeNotifier {
           continue;
         }
 
+        if (chunk.type == MessageChunkType.memory) {
+          message.memoryAction = chunk.text;
+          notifyListeners();
+          continue;
+        }
+
         if (chunk.type == MessageChunkType.data) {
           if (agentThinkingAfterText) {
             agentThinkingAfterText = false;
@@ -899,6 +912,7 @@ class MessageProvider extends ChangeNotifier {
         flushBuffer();
 
         if (chunk.type == MessageChunkType.done) {
+          chunk.message!.memoryAction = message.memoryAction;
           message = chunk.message!;
           messages[aiIndex] = message;
           _transferChatTelemetryAttempt(responseMessageId, message.id);

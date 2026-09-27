@@ -3598,6 +3598,7 @@
     "appearanceSystem": "Sistema",
     "appearanceLight": "Claro",
     "appearanceDark": "Oscuro",
+    "chatDiscardRecording": "Descartar",
     "voiceQuestionNoSpeech": "No entendí eso — inténtalo de nuevo",
     "siriIndexSetting": "Usar Omi con Siri y Apple Intelligence",
     "siriIndexSettingDescription": "Permite que Siri encuentre tus conversaciones, recuerdos y tareas en este dispositivo. Al desactivarlo, se eliminan de la búsqueda de Apple."

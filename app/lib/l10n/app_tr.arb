@@ -3633,6 +3633,7 @@
     "appearanceSystem": "Sistem",
     "appearanceLight": "Açık",
     "appearanceDark": "Koyu",
+    "chatDiscardRecording": "Vazgeç",
     "voiceQuestionNoSpeech": "Anlayamadım — tekrar deneyin",
     "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
     "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."

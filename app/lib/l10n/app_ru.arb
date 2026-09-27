@@ -3633,6 +3633,7 @@
     "appearanceSystem": "Система",
     "appearanceLight": "Светлая",
     "appearanceDark": "Тёмная",
+    "chatDiscardRecording": "Отменить",
     "voiceQuestionNoSpeech": "Не удалось расслышать — попробуйте ещё раз",
     "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
     "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."

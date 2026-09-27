@@ -3598,6 +3598,7 @@
     "appearanceSystem": "Sistem",
     "appearanceLight": "Luminos",
     "appearanceDark": "Întunecat",
+    "chatDiscardRecording": "Renunță",
     "voiceQuestionNoSpeech": "Nu am înțeles — încearcă din nou",
     "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
     "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
