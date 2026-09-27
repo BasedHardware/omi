@@ -126,10 +126,10 @@ struct ConversationDetailHeader<BannerInset: View, Recordings: View, Trailing: V
       Text(conversation.displayTitle)
         .scaledFont(size: OmiType.heading, weight: .semibold)
         .foregroundColor(titleColor)
-        .lineLimit(1)
+        .lineLimit(2)
         .truncationMode(.tail)
         .help(conversation.displayTitle)
-        .layoutPriority(-1)
+        .layoutPriority(1)
       // Fixed so a narrow window truncates the title, never wraps the badge.
       ConversationStatusBadge(state: conversation.displayState)
         .fixedSize()
