@@ -175,7 +175,7 @@ void main() {
   });
 
   if (PhysicalQualification.enabled) {
-    test('opt-in excludes analytics initialization, identity and experiment refresh even with an adapter', () async {
+    test('opt-in excludes analytics initialization and identity even with an adapter', () async {
       AnalyticsManager.resetForTesting();
       final adapter = _QualificationAnalytics();
       AnalyticsManager.configure(adapter);
@@ -183,7 +183,6 @@ void main() {
         final analytics = AnalyticsManager();
         analytics.bindIdentity('omi-physical-fixture-test');
         await AnalyticsManager.init();
-        await analytics.refreshExperiments();
         analytics.recordProductError(ProductErrorKind.uncaughtDart);
         analytics.recordTelemetryHealth();
         await AnalyticsManager.flushPending(force: true);

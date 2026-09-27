@@ -50,8 +50,8 @@ vi.mock('@/lib/api', () => ({
   getChatApps: vi.fn(async () => []),
 }));
 
-vi.mock('@/lib/analytics/mixpanel', () => ({
-  MixpanelManager: { track: vi.fn() },
+vi.mock('@/lib/analytics/posthog', () => ({
+  PostHogManager: { track: vi.fn() },
 }));
 
 beforeEach(() => {

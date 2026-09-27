@@ -197,15 +197,55 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     # streaming session selects Deepgram cloud, and a spent managed key made
     # the fallback hops dial a 402 account for days (FC-deterministic-provider-
     # rejection-burns-connect-retries).
-    "prod": frozenset({"DEEPGRAM_API_KEY", "DEEPGRAM_SELF_HOSTED_URL", "REDIS_DB_HOST", "TYPESENSE_HOST"}),
+    "prod": frozenset(
+        {
+            "DEEPGRAM_API_KEY",
+            "DEEPGRAM_SELF_HOSTED_URL",
+            "REDIS_DB_HOST",
+            "TYPESENSE_HOST",
+            # Process-local final-pass shadow is admitted only on the prod pusher.
+            "TRANSCRIPTION_SHADOW_ENABLED",
+            "TRANSCRIPTION_SHADOW_KILL_SWITCH",
+            "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
+            "TRANSCRIPTION_SHADOW_PERCENT",
+            "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
+        }
+    ),
 }
 
 # Shared keys whose *literal* values are allowed to differ. Name-only diffs
 # belong in the only-allowed sets above, not here.
 SHARED_VALUE_DIFF_ALLOWED: dict[str, frozenset[str]] = {
     # Live TDT is a listen-only experiment; pusher retains its existing STT route.
-    "dev": frozenset({"DD_SERVICE", "STRIPE_ARCHITECT_MONTHLY_PRICE_ID", "STT_SERVICE_MODELS"}),
+    # Final-pass shadow runs on the dev pusher finalizer only. Backend-listen
+    # dispatches finalization but cannot own this process-local shadow worker.
+    "dev": frozenset(
+        {
+            "DD_SERVICE",
+            "STRIPE_ARCHITECT_MONTHLY_PRICE_ID",
+            "STT_SERVICE_MODELS",
+            "TRANSCRIPTION_SHADOW_ENABLED",
+            "TRANSCRIPTION_SHADOW_UID_ALLOWLIST",
+            "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
+        }
+    ),
     "prod": frozenset({"BUCKET_SPEECH_PROFILES", "DD_SERVICE", "DEEPGRAM_SELF_HOSTED_ENABLED"}),
+}
+
+DEV_SHADOW_VALUES = {
+    "TRANSCRIPTION_SHADOW_ENABLED": ("true", "false"),
+    "TRANSCRIPTION_SHADOW_KILL_SWITCH": ("false", "false"),
+    "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": ("omi-release-probe", ""),
+    "TRANSCRIPTION_SHADOW_PERCENT": ("0", "0"),
+    "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": ("1", "0"),
+}
+
+PROD_SHADOW_VALUES = {
+    "TRANSCRIPTION_SHADOW_ENABLED": ("true", None),
+    "TRANSCRIPTION_SHADOW_KILL_SWITCH": ("false", None),
+    "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": ("vi7SA9ckQCe4ccobWNxlbdcNdC23", None),
+    "TRANSCRIPTION_SHADOW_PERCENT": ("0", None),
+    "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": ("1", None),
 }
 
 
@@ -368,6 +408,16 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
 
         allowed_value_diff = SHARED_VALUE_DIFF_ALLOWED[env]
         shared = set(pusher_env) & set(listen_env)
+        for name, (expected_pusher, expected_listen) in (
+            DEV_SHADOW_VALUES if env == "dev" else PROD_SHADOW_VALUES
+        ).items():
+            actual_pusher = pusher_env[name].value if name in pusher_env else None
+            actual_listen = listen_env[name].value if name in listen_env else None
+            if (actual_pusher, actual_listen) != (expected_pusher, expected_listen):
+                errors.append(
+                    f"[{env}] shadow scope {name} must be pusher={expected_pusher!r} "
+                    f"listen={expected_listen!r}, got pusher={actual_pusher!r} listen={actual_listen!r}"
+                )
         for name in sorted(shared):
             pusher_value = pusher_env[name].value
             listen_value = listen_env[name].value

@@ -141,10 +141,16 @@ class LiveChainSession:
                     component='vad', from_mode='gated', to_mode='direct', reason='config_incomplete', outcome='degraded'
                 )
             passthrough = service == st.STTService.modulate
+            if epoch is not None:
+                epoch.set_validation_callback(
+                    lambda provider, interval: self.receiver._record_elapsed_validation(provider, interval, gate)
+                )
 
             def callback(segments: list[dict[str, Any]]) -> None:
-                if generation != self.generation:
+                if generation != self.generation and not (epoch is not None and epoch.project_times):
                     return
+                if epoch is not None:
+                    epoch.provider_label = service.value
                 if epoch is not None and epoch.project_times:
                     # Audio-timeline v2: the translator maps provider
                     # times through its accepted send spans onto the capture
@@ -220,6 +226,10 @@ class LiveChainSession:
                     )
                 if raw is None:
                     raise RuntimeError('Provider returned no socket')
+                if epoch is not None:
+                    # The selected fallback may differ from the receiver's
+                    # initial service. Set its clock policy before first send.
+                    epoch.provider_label = service.value
                 leg = LiveLegSocket(raw, gate, self, service, sample_rate, is_window, passthrough, send_tracker=epoch)
                 return leg
             except BaseException:
@@ -388,6 +398,7 @@ class LiveLegSocket(STTSocket):
             self.finish()
             return False
         if sent_spans and self._send_tracker is not None:
+            self._send_tracker.send_path = 'managed_chain'
             self._send_tracker.note_accepted_spans(sent_spans)
         duration = len(data) / (self.sample_rate * 2)
         self._seconds += duration

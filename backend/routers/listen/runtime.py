@@ -48,7 +48,12 @@ from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
 from utils.observability.journeys import ClientJourneyAttempt
-from utils.observability.transcription import LiveSTTAttempt, record_live_stt_audio_seconds
+from utils.observability.transcription import (
+    LiveSTTAttempt,
+    LiveSessionTranscriptOutcome,
+    record_live_session_transcript_outcome,
+    record_live_stt_audio_seconds,
+)
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.product_telemetry import emit_product_event
 from utils.stt.streaming import get_stt_service_for_language
@@ -270,6 +275,7 @@ class ListenSessionRuntime:
 
     def complete_live_transcription(self) -> None:
         """Record the first nonempty transcript successfully delivered to the client."""
+        self.state.live_transcript_delivered = True
         if self.state.live_transcription_attempt is not None:
             self.state.live_transcription_attempt.finish('success', phase='transcript_delivery')
         client_attempt = getattr(self.state, 'client_live_transcription_attempt', None)
@@ -293,6 +299,97 @@ class ListenSessionRuntime:
                 client_attempt.fail('provider_error')
             else:
                 client_attempt.cancel()
+
+    # Under this wall-clock span a session is "too short" for the transcript
+    # SLI: the provider barely had anything to transcribe. Matches the ~10s
+    # brief guidance; quiet sessions must not count as failures.
+    SESSION_TOO_SHORT_AUDIO_SECONDS = 10.0
+
+    def _session_speech_seconds(self) -> Optional[float]:
+        """Cumulative VAD speech seconds, or None when no gate measured speech.
+
+        The managed chain exposes the total on its session object (which also
+        plays the receiver's vad_gate role); the legacy path exposes it through
+        VADStreamingGate.get_metrics(). Multi-channel and VAD-off sessions have
+        no gate, so they are judged on audio span alone.
+        """
+
+        gate = getattr(self.receiver, 'vad_gate', None)
+        if gate is None:
+            return None
+        total_speech_ms = getattr(gate, 'total_speech_ms', None)
+        if isinstance(total_speech_ms, (int, float)):
+            return float(total_speech_ms) / 1000.0
+        get_metrics = getattr(gate, 'get_metrics', None)
+        if callable(get_metrics):
+            try:
+                metrics = get_metrics()
+                if isinstance(metrics, dict):
+                    return float(metrics.get('speech_ms_total') or 0) / 1000.0
+            except Exception as error:
+                logger.warning('Listen session speech total read failed type=%s', type(error).__name__)
+        return None
+
+    def _session_ended_in_terminal_stt_failure(self) -> bool:
+        # Only an STT-terminal death (chain exhausted at session start, or a
+        # provider close 1011) forfeits the too_short excuse. The broader
+        # live_transcription_failed flag is also set by supervisor lifetime_done
+        # — including the 90s idle heartbeat reap of a silent socket — and a
+        # silent session must stay too_short, not count as no_transcript.
+        return self.state.stt_terminal_failure or self.state.close_code == 1011
+
+    def _session_transcript_outcome(self) -> LiveSessionTranscriptOutcome:
+        """Classify the session for the headline SLI (what the user felt)."""
+
+        if self.state.live_transcript_delivered:
+            return 'transcribed'
+        if self._session_ended_in_terminal_stt_failure():
+            # An STT-terminal session never gets the too_short excuse, even when
+            # it died before its first audio byte: initialize_stt failures are
+            # exactly the incident shape (chain exhausted at session start).
+            return 'no_transcript'
+        first = self.state.first_audio_byte_timestamp
+        last = self.state.last_audio_received_time
+        audio_span = max(0.0, last - first) if first is not None and last is not None else 0.0
+        if audio_span < self.SESSION_TOO_SHORT_AUDIO_SECONDS:
+            return 'too_short'
+        speech_seconds = self._session_speech_seconds()
+        if speech_seconds is not None and speech_seconds <= 0:
+            return 'too_short'
+        return 'no_transcript'
+
+    def _record_session_transcript_outcome(self) -> None:
+        """Emit omi_live_session_transcript_outcome_total exactly once per session.
+
+        Session-end seam: _teardown_components reaches this on every disconnect
+        path after STT initialization (the run() finally). Limitations, on
+        purpose: (1) sessions that fail admission/_bootstrap or crash before
+        the supervisor starts never tear down and are not counted — the same
+        seam the existing LiveSTTAttempt terminal uses; (2) the unit is one
+        accepted backend-STT WebSocket, so a client that reconnects mid
+        conversation counts once per socket: the runtime cannot see the prior
+        socket's transcripts without cross-connection state, and each
+        transcript-less reconnect is itself a user-felt failure. Custom-STT
+        sessions are skipped: their transcripts are the client's own.
+        """
+
+        if getattr(self, '_session_transcript_outcome_recorded', False):
+            return
+        self._session_transcript_outcome_recorded = True
+        # getattr: harness-constructed runtimes may predate this field; a real
+        # session always sets it in __init__ and defaults to counting.
+        if getattr(self, 'use_custom_stt', False):
+            return
+        try:
+            record_live_session_transcript_outcome(
+                outcome=self._session_transcript_outcome(),
+                uid=self.request.uid,
+                source=self.request.source,
+                platform=self.client_device_context.platform,
+                recording_id=self.request.client_conversation_id,
+            )
+        except Exception as error:
+            logger.warning('Listen session transcript outcome metric failed type=%s', type(error).__name__)
 
     async def _admit(self) -> bool:
         if not self.request.uid:
@@ -864,6 +961,7 @@ class ListenSessionRuntime:
             self.request.owner_persistence_blocked.set()
             await self.task_supervisor.drain_all(timeout=5.0, cancel=True)
         self._finish_live_transcription()
+        self._record_session_transcript_outcome()
         if not owner_persistence_blocked:
             try:
                 await self.transcripts.flush_translations()

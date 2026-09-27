@@ -18,6 +18,7 @@ from typing import Any, List, Mapping, Optional
 
 from database.audio_timeline import chunk_span_bounds
 from utils.audio_timeline import coverage_outcome, segment_wall_window
+from utils.speaker_tag_prompts.coverage import prompt_window_covered
 from utils.metrics import OMI_AUDIO_TIMELINE_COVERAGE_TOTAL
 from utils.other.storage import download_audio_chunks_and_merge
 
@@ -76,6 +77,8 @@ def conversation_clip_pcm(
     started_at = _started_at_seconds(conversation)
     if started_at is None:
         return None
+    if not prompt_window_covered(conversation, start, end):
+        return None
     marker = conversation.get('audio_timeline')
     if isinstance(marker, Mapping) and marker.get('version') == 2:
         window = segment_wall_window(conversation, start, end)
@@ -91,9 +94,14 @@ def conversation_clip_pcm(
         relevant = _v2_relevant_timestamps(conversation, abs_start, abs_end)
         if not relevant:
             return None
-        merged = download_audio_chunks_and_merge(
-            uid, conversation['id'], relevant, fill_gaps=True, sample_rate=sample_rate
-        )
+        try:
+            merged = download_audio_chunks_and_merge(
+                uid, conversation['id'], relevant, fill_gaps=True, sample_rate=sample_rate
+            )
+        except FileNotFoundError:
+            # Listed chunks that storage cannot return are missing audio, not a
+            # server error: callers answer 404 / "no sample".
+            return None
         spans = [
             bounds
             for audio_file in conversation.get('audio_files') or []
@@ -114,7 +122,12 @@ def conversation_clip_pcm(
     if not relevant:
         return None
 
-    merged = download_audio_chunks_and_merge(uid, conversation['id'], relevant, fill_gaps=True, sample_rate=sample_rate)
+    try:
+        merged = download_audio_chunks_and_merge(
+            uid, conversation['id'], relevant, fill_gaps=True, sample_rate=sample_rate
+        )
+    except FileNotFoundError:
+        return None
     buffer_start = min(relevant)
     pcm = trim_pcm16(merged, sample_rate, abs_start - buffer_start, abs_end - buffer_start)
     return pcm or None
