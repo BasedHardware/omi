@@ -105,6 +105,8 @@ class TranscriptProcessor:
                 translation_service=self.translation_service,
                 on_translation_ready=self._on_translation_ready,
                 language_state=ConversationLanguageState(host.translation_language or 'en'),
+                expected_languages=getattr(getattr(host, 'language_profile', None), 'expected', ()),
+                realtime_interpreter=getattr(getattr(host, 'request', None), 'source', None) == 'phone_call',
             )
         self._flush_failures = 0
         self._flush_backoff_until = 0.0

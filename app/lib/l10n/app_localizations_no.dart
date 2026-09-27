@@ -11407,6 +11407,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get appearanceDark => 'Mørk';
 
   @override
+  String get voiceQuestionNoSpeech => 'Jeg fikk ikke med meg det — prøv igjen';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

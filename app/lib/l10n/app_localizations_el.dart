@@ -11485,6 +11485,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get appearanceDark => 'Σκοτεινό';
 
   @override
+  String get voiceQuestionNoSpeech => 'Δεν το κατάλαβα — δοκιμάστε ξανά';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

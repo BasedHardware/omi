@@ -11222,6 +11222,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get appearanceDark => '다크';
 
   @override
+  String get voiceQuestionNoSpeech => '잘 듣지 못했어요 — 다시 시도해 주세요';
+
+  @override
   String get siriIndexSetting => 'Siri 및 Apple Intelligence와 함께 Omi 사용';
 
   @override

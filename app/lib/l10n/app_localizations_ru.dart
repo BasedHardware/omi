@@ -11446,6 +11446,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get appearanceDark => 'Тёмная';
 
   @override
+  String get voiceQuestionNoSpeech => 'Не удалось расслышать — попробуйте ещё раз';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

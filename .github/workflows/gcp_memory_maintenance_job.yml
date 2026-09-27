@@ -24,6 +24,11 @@ on:
 env:
   SERVICE: memory-maintenance-job
   SCHEDULER_JOB: memory-maintenance-hourly
+  # The account this workflow's hourly trigger invokes as. Not otherwise stated
+  # in-repo, so it follows the convention every sibling trigger in this
+  # family uses; set MEMORY_MAINTENANCE_SCHEDULER_SERVICE_ACCOUNT to override
+  # without editing this file.
+  SCHEDULER_SERVICE_ACCOUNT: ${{ vars.MEMORY_MAINTENANCE_SCHEDULER_SERVICE_ACCOUNT || format('memory-maintenance-scheduler@{0}.iam.gserviceaccount.com', vars.GCP_PROJECT_ID) }}
   REGION: us-central1
 
 # Share the development lock with the auto-deploy workflow that writes this Cloud Run job.
@@ -193,7 +198,8 @@ jobs:
             --project "${{ vars.GCP_PROJECT_ID }}" \
             --region "$REGION" \
             --scheduler-job "$SCHEDULER_JOB" \
-            --cloud-run-job "$SERVICE"
+            --cloud-run-job "$SERVICE" \
+            --scheduler-service-account "$SCHEDULER_SERVICE_ACCOUNT"
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output

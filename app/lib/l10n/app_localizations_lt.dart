@@ -11425,6 +11425,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get appearanceDark => 'Tamsus';
 
   @override
+  String get voiceQuestionNoSpeech => 'Neišgirdau — bandykite dar kartą';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

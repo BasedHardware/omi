@@ -11410,6 +11410,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get appearanceDark => 'Tumma';
 
   @override
+  String get voiceQuestionNoSpeech => 'En saanut selvää — yritä uudelleen';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

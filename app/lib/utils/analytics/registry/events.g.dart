@@ -1558,6 +1558,29 @@ final class VoiceReplyPlayback extends RegisteredEvent {
   Map<String, Object> get properties => {"outcome": outcome.wireName, "skip_reason": skipReason.wireName, "mode": mode.wireName, "output_route": outputRoute.wireName, "chunks_requested": chunksRequested, "chunks_played": chunksPlayed, "chunks_dropped": chunksDropped, "fallback_reason": fallbackReason.wireName, "first_audio_latency_ms": firstAudioLatencyMs, "interrupt_source": interruptSource.wireName};
 }
 
+enum PendantVoiceQuestionDroppedReason {
+  invalidButtonPayload("invalid_button_payload"),
+  actionsDisabled("actions_disabled"),
+  emptyFrames("empty_frames"),
+  noDevice("no_device"),
+  cancelled("cancelled"),
+  sendInFlight("send_in_flight"),
+  audioSaveFailed("audio_save_failed"),
+  autoEndGrace("auto_end_grace"),
+  codecLookupFailed("codec_lookup_failed");
+  const PendantVoiceQuestionDroppedReason(this.wireName);
+  final String wireName;
+}
+
+final class PendantVoiceQuestionDropped extends RegisteredEvent {
+  const PendantVoiceQuestionDropped({required this.reason});
+  final PendantVoiceQuestionDroppedReason reason;
+  @override
+  String get wireName => "Pendant Voice Question Dropped";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName};
+}
+
 enum SiriIntentPerformedIntent {
   remember("remember"),
   createNote("create_note"),

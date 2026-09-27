@@ -11443,6 +11443,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get appearanceDark => 'Ciemny';
 
   @override
+  String get voiceQuestionNoSpeech => 'Nie udało się usłyszeć — spróbuj ponownie';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

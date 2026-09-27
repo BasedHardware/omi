@@ -200,6 +200,11 @@ def assign_in_transaction(
     for row in sorted(records, key=lambda row: row['id'] != canonical):
         new = deepcopy(row.get('transcript_segments', []))
         for segment in new:
+            if row['id'] == canonical and not result['sync_live_target'] and not segment.get('speaker_id_scope'):
+                # A pre-scope sync survivor is still audio-aligned. Leave its
+                # visible ID intact (manual receipts may name it), but give
+                # conversation resolution the provenance it needs.
+                segment['speaker_id_scope'] = f"legacy-conversation:{row['id']}:{segment.get('speaker_id')}"
             segment['timestamp'] = row['started_at'].timestamp() + segment['start']
             duration = segment['end'] - segment['start']
             segment['start'] = segment['timestamp'] - origin

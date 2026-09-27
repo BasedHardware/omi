@@ -11508,6 +11508,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get appearanceDark => 'Madilim';
 
   @override
+  String get voiceQuestionNoSpeech => 'Hindi ko narinig iyon — subukan ulit';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

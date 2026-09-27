@@ -750,7 +750,7 @@ struct ConversationDetailView: View {
   private var summaryContent: some View {
     if MeetingScreenshotsStore.isEnabled {
       MeetingNoteScreenshotsLayout(
-        store: screenshotsStore, conversation: displayConversation, date: displayDate
+        store: screenshotsStore, conversation: displayConversation
       ) {
         summaryBeforeScreenshots
       } afterScreenshots: {

@@ -11218,6 +11218,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get appearanceDark => 'ダーク';
 
   @override
+  String get voiceQuestionNoSpeech => '聞き取れませんでした — もう一度お試しください';
+
+  @override
   String get siriIndexSetting => 'SiriとApple IntelligenceでOmiを使用';
 
   @override

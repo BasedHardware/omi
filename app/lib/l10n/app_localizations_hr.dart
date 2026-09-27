@@ -11443,6 +11443,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get appearanceDark => 'Tamno';
 
   @override
+  String get voiceQuestionNoSpeech => 'Nisam razumio — pokušajte ponovno';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

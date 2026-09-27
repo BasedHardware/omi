@@ -11455,6 +11455,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get appearanceDark => 'డార్క్';
 
   @override
+  String get voiceQuestionNoSpeech => 'వినిపించలేదు — మళ్లీ ప్రయత్నించండి';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

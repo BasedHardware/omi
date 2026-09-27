@@ -11403,6 +11403,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get appearanceDark => 'Tume';
 
   @override
+  String get voiceQuestionNoSpeech => 'Ma ei saanud aru — proovige uuesti';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

@@ -11474,6 +11474,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get appearanceDark => 'Fosc';
 
   @override
+  String get voiceQuestionNoSpeech => 'No ho he entès — torna-ho a provar';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

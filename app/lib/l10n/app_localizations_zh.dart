@@ -11196,6 +11196,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appearanceDark => '深色';
 
   @override
+  String get voiceQuestionNoSpeech => '没听清楚 — 请再试一次';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

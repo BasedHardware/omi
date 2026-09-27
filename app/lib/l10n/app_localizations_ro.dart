@@ -11461,6 +11461,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get appearanceDark => 'Întunecat';
 
   @override
+  String get voiceQuestionNoSpeech => 'Nu am înțeles — încearcă din nou';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

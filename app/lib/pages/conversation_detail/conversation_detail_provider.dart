@@ -31,18 +31,24 @@ typedef SpeakerAssignmentCall = Future<bool> Function(
   int? speakerId,
 });
 typedef ConversationReprocessCall = Future<ServerConversation?> Function(String, {String? appId});
+typedef ConversationDetailFetchCall = Future<ServerConversation?> Function(String);
 
 class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
+  static final RegExp _syncConversationId = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-');
   ConversationDetailProvider({
     SpeakerAssignmentCall? assignSpeaker,
     ConversationReprocessCall? reprocess,
+    ConversationDetailFetchCall? fetchConversation,
   })  : _assignSpeaker = assignSpeaker ?? assignBulkConversationTranscriptSegments,
-        _reprocess = reprocess ?? reProcessConversationServer;
+        _reprocess = reprocess ?? reProcessConversationServer,
+        _fetchConversation = fetchConversation ?? getConversationById;
   final SpeakerAssignmentCall _assignSpeaker;
   final ConversationReprocessCall _reprocess;
+  final ConversationDetailFetchCall _fetchConversation;
   String? _speakerSummaryConversationId;
   int _speakerEditGeneration = 0;
   int _pendingSpeakerSaves = 0;
+  String? _speakerRefreshId;
   bool get _savingSpeaker => _pendingSpeakerSaves > 0;
   Future<void> _speakerSaveTail = Future.value();
 
@@ -195,6 +201,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         );
         return false;
       }
+      // A sync bridge may have retired the ID while this detail page stayed
+      // open. Refresh after the queued edits drain so each edit still targets
+      // the same optimistic conversation, then adopt the survivor ID.
+      if (_syncConversationId.hasMatch(target.id)) _speakerRefreshId = target.id;
       if (!_isDisposed && generation == _speakerEditGeneration && identical(conversationOrNull, target)) {
         if (changed) {
           if (target.status == ConversationStatus.completed && target.structured.overview.trim().isNotEmpty) {
@@ -206,6 +216,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       return true;
     } finally {
       _pendingSpeakerSaves--;
+      if (_pendingSpeakerSaves == 0) {
+        final refreshId = _speakerRefreshId;
+        _speakerRefreshId = null;
+        if (refreshId != null && refreshId == conversationOrNull?.id) await refreshConversation();
+      }
     }
   }
 
@@ -875,11 +890,20 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   Future<void> refreshConversation() async {
     try {
-      final updatedConversation = await getConversationById(conversation.id);
+      final openedId = conversation.id;
+      final updatedConversation = await _fetchConversation(openedId);
       if (_isDisposed) return;
-      if (updatedConversation != null) {
+      if (updatedConversation != null && conversationOrNull?.id == openedId) {
+        if (updatedConversation.id != openedId) {
+          if (!_syncConversationId.hasMatch(openedId)) return;
+          _cachedConversationId = updatedConversation.id;
+          selectedDate = conversationLocalDayKey(updatedConversation.startedAt ?? updatedConversation.createdAt);
+          if (_speakerSummaryConversationId == openedId) _speakerSummaryConversationId = updatedConversation.id;
+          conversationProvider?.replaceBridgedConversation(openedId, updatedConversation);
+        } else {
+          conversationProvider?.updateConversation(updatedConversation);
+        }
         _cachedConversation = updatedConversation;
-        conversationProvider?.updateConversation(updatedConversation);
         notifyListeners();
       }
     } catch (e) {

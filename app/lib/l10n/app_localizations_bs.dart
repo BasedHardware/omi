@@ -11437,6 +11437,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get appearanceDark => 'Tamno';
 
   @override
+  String get voiceQuestionNoSpeech => 'Nisam razumio — pokušajte ponovo';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

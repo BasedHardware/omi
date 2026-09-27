@@ -11451,6 +11451,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get appearanceDark => 'Sötét';
 
   @override
+  String get voiceQuestionNoSpeech => 'Nem értettem — próbáld újra';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

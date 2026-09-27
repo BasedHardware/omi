@@ -11403,6 +11403,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get appearanceDark => 'تیره';
 
   @override
+  String get voiceQuestionNoSpeech => 'متوجه نشدم — دوباره تلاش کنید';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

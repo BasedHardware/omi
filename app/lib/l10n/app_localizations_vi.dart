@@ -11402,6 +11402,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get appearanceDark => 'Tối';
 
   @override
+  String get voiceQuestionNoSpeech => 'Không nghe rõ — hãy thử lại';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

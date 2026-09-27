@@ -20775,6 +20775,12 @@ abstract class AppLocalizations {
   /// **'Dark'**
   String get appearanceDark;
 
+  /// Shown in chat when a pendant voice question contains no detectable speech.
+  ///
+  /// In en, this message translates to:
+  /// **'Didn\'t catch that — try again'**
+  String get voiceQuestionNoSpeech;
+
   /// No description provided for @siriIndexSetting.
   ///
   /// In en, this message translates to:

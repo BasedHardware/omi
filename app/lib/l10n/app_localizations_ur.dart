@@ -11418,6 +11418,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get appearanceDark => 'گہرا';
 
   @override
+  String get voiceQuestionNoSpeech => 'سمجھ نہیں آیا — دوبارہ کوشش کریں';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

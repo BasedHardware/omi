@@ -3598,6 +3598,7 @@
     "appearanceSystem": "システム",
     "appearanceLight": "ライト",
     "appearanceDark": "ダーク",
+    "voiceQuestionNoSpeech": "聞き取れませんでした — もう一度お試しください",
     "siriIndexSetting": "SiriとApple IntelligenceでOmiを使用",
     "siriIndexSettingDescription": "Siriがこのデバイス上の会話、メモリー、タスクを検索できるようにします。オフにするとAppleの検索から削除されます。"
 }

@@ -5809,12 +5809,15 @@ struct TaskRow: View {
 
     do {
       let response = try await APIClient.shared.shareTasks(taskIds: [task.id])
+      let url = DesktopBackendEnvironment.tagShareURL(response.url)
       let pasteboard = NSPasteboard.general
       pasteboard.clearContents()
-      pasteboard.setString(response.url, forType: .string)
+      guard pasteboard.setString(url, forType: .string) else { return }
       showShareCopiedFeedback()
-      AnalyticsManager.shared.shareAction(category: "task", properties: ["task_id": task.id])
-      log("Copied task share link to clipboard: \(response.url)")
+      if let sid = DesktopBackendEnvironment.shareID(from: url) {
+        AnalyticsManager.shared.shareAction(category: "task", properties: ["share_id": sid, "target_app": "copy"])
+      }
+      log("Copied task share link to clipboard")
     } catch {
       log("Failed to get task share link: \(error)")
     }

@@ -230,11 +230,7 @@ struct ConversationDetailHeader<BannerInset: View, Recordings: View, Trailing: V
 
       ConversationShareLinkButton(
         conversationId: conversation.id,
-        canShare: canCopyTranscript,
-        onCopied: {
-          AnalyticsManager.shared.shareAction(
-            category: "conversation", properties: ["conversation_id": conversation.id])
-        }
+        canShare: canCopyTranscript
       )
 
       moreMenu
