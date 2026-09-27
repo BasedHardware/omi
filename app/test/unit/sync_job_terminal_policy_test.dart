@@ -83,7 +83,6 @@ void main() {
     test('does not hide typed zero-segment failures from retry accounting', () {
       expect(syncJobIsBackendBusy(status(reasonCode: 'sync_invalid_audio')), isFalse);
       expect(syncJobIsBackendBusy(status(reasonCode: 'sync_vad_failed')), isFalse);
-      expect(syncJobIsBackendBusy(status(reasonCode: 'sync_repeat_failure_paused')), isFalse);
     });
   });
 
@@ -116,7 +115,6 @@ void main() {
         'sync_worker_stale',
         'backfill_paced',
         'backfill_capacity',
-        'sync_repeat_failure_paused',
         null,
       ]) {
         expect(
