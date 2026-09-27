@@ -225,8 +225,14 @@ def test_client_provider_label_cannot_expand_metric_cardinality():
     assert observations.providers == {'other'}
     assert observations.counts['out_of_profile'] == 1
     host.use_custom_stt = True
-    observe_live_segments(host, [{'text': 'a', '_provider_language': 'it'}], 'arbitrary-client-string')
+    unobserved = {'text': 'a', '_provider_language': 'it'}
+    observe_live_segments(host, [unobserved], 'arbitrary-client-string')
     assert observations.counts['out_of_profile'] == 1
+    assert '_provider_language' not in unobserved
+    host.use_custom_stt, host.language_observations = False, None
+    unobserved = {'text': 'a', '_provider_language': 'it'}
+    observe_live_segments(host, [unobserved], 'soniox')
+    assert '_provider_language' not in unobserved
 
 
 def test_telemetry_failure_cannot_abort_segment_delivery():

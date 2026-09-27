@@ -190,7 +190,8 @@ class LiveLanguageObservations:
 
     async def summarize(self) -> None:
         if self.pending:
-            await asyncio.gather(*tuple(self.pending), return_exceptions=True)
+            # Bounded so a backed-up executor cannot hold session close.
+            await asyncio.wait(tuple(self.pending), timeout=2.0)
         logger.info(
             'live_stt_language_summary primary=%s expected=%s providers=%s constraint=%s arm=%s '
             'in_profile=%d out_of_profile=%d undetermined=%d top_out_code=%s',
@@ -207,17 +208,18 @@ class LiveLanguageObservations:
 
 
 def observe_live_segments(host: Any, segments: list[dict[str, Any]], provider: str) -> None:
-    if getattr(host, 'use_custom_stt', False):
-        return
     observations = getattr(host, 'language_observations', None)
-    if isinstance(observations, LiveLanguageObservations):
+    if getattr(host, 'use_custom_stt', False) or not isinstance(observations, LiveLanguageObservations):
         for segment in segments:
-            try:
-                observations.observe(segment, provider if provider in LIVE_PROVIDERS else 'other', host.spawn)
-            except Exception:
-                # Telemetry must never interrupt a provider callback or transcript delivery.
-                segment.pop('_provider_language', None)
-                observations.warn_once()
+            segment.pop('_provider_language', None)
+        return
+    for segment in segments:
+        try:
+            observations.observe(segment, provider if provider in LIVE_PROVIDERS else 'other', host.spawn)
+        except Exception:
+            # Telemetry must never interrupt a provider callback or transcript delivery.
+            segment.pop('_provider_language', None)
+            observations.warn_once()
 
 
 def record_live_connection(host: Any, provider: str) -> None:
