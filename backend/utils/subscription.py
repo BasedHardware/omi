@@ -205,6 +205,10 @@ TRIAL_PAYWALL_ENABLED = False
 # from here so a new desktop OS is wired in one place.
 DESKTOP_PLATFORMS = {'macos', 'windows'}
 
+# Desktop typed chat consumes Anthropic BYOK, not an arbitrary enrolled LLM
+# key. Reporting and enforcement must project the same provider capability.
+DESKTOP_CHAT_BYOK_PROVIDER = 'anthropic'
+
 # Platform identifiers that count as desktop for paywall purposes. The desktop
 # clients send X-App-Platform: macos / windows and the listen WS uses
 # source=desktop. Anything else (ios, android, omi device, phone_call, unknown)
@@ -234,7 +238,8 @@ def request_has_llm_byok_key() -> bool:
 _request_has_llm_byok_key = request_has_llm_byok_key
 
 
-def _request_has_byok_provider(provider: str) -> bool:
+def request_has_byok_provider(provider: str) -> bool:
+    """Whether the request carries a validated key for this exact provider."""
     return has_validated_byok_keys() and bool(get_byok_key(provider))
 
 
@@ -259,7 +264,7 @@ def _is_trial_expired_uncached(
     key on this request, never a stored fingerprint alone.
     """
     try:
-        if byok_exempt and required_byok_provider and _request_has_byok_provider(required_byok_provider):
+        if byok_exempt and required_byok_provider and request_has_byok_provider(required_byok_provider):
             return False
         subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
         plan = subscription.plan if subscription else PlanType.basic
@@ -305,7 +310,7 @@ def _is_trial_expired_cached(
     # Firestore. Trust the live request.
     if byok_exempt:
         if required_byok_provider:
-            if _request_has_byok_provider(required_byok_provider):
+            if request_has_byok_provider(required_byok_provider):
                 return False
         elif _request_has_llm_byok_key():
             return False
@@ -1221,7 +1226,7 @@ def enforce_chat_quota(
     # so a user can't activate with fake fingerprints or send only x-byok-deepgram
     # to bypass chat quota while chat falls back to Omi's OpenAI/Anthropic keys.
     has_exempt_llm = (
-        _request_has_byok_provider(required_llm_provider) if required_llm_provider else _request_has_llm_byok_key()
+        request_has_byok_provider(required_llm_provider) if required_llm_provider else _request_has_llm_byok_key()
     )
     if byok_exempt and users_db.is_byok_active(uid, firestore_client=firestore_client) and has_exempt_llm:
         return
@@ -1273,7 +1278,7 @@ def enforce_desktop_chat_quota(uid: str, platform: Optional[str] = None, *, byok
         platform,
         firestore_client=get_customer_firestore_client(),
         provision=False,
-        required_llm_provider='anthropic',
+        required_llm_provider=DESKTOP_CHAT_BYOK_PROVIDER,
         byok_exempt=byok_exempt,
     )
 

@@ -180,4 +180,5 @@ jobs:
             --project="${{ vars.GCP_PROJECT_ID }}" --format=json > "$state_file"
           python3 backend/scripts/validate_memory_maintenance_scheduler.py \
             --state-file "$state_file" --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region "$REGION" --scheduler-job "$SCHEDULER_JOB" --cloud-run-job "$SERVICE"
+            --region "$REGION" --scheduler-job "$SCHEDULER_JOB" --cloud-run-job "$SERVICE" \
+            --scheduler-service-account "$SCHEDULER_SERVICE_ACCOUNT"
