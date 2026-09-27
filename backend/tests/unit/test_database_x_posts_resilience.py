@@ -184,3 +184,40 @@ def test_get_newest_tweet_id_invalid_uid_returns_none(invalid_uid):
     with patch.object(x_posts_db, "db", fake_db):
         assert x_posts_db.get_newest_tweet_id(invalid_uid) is None  # type: ignore[arg-type]
     fake_db.collection.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Batch chunking (>500 operations) tests
+# ---------------------------------------------------------------------------
+
+
+def test_save_x_posts_splits_batches_at_500_ops():
+    fake_db = MagicMock()
+    batch_mock = MagicMock()
+    fake_db.batch.return_value = batch_mock
+
+    # 501 unique posts to force chunk split: 500 in first batch, 1 in second batch
+    posts = [{"id": f"tweet_{i}", "text": f"Tweet content {i}"} for i in range(501)]
+
+    with patch.object(x_posts_db, "db", fake_db):
+        written = x_posts_db.save_x_posts("u1", posts)
+
+    assert written == 501
+    assert fake_db.batch.call_count == 2
+    assert batch_mock.commit.call_count == 2
+    assert batch_mock.set.call_count == 501
+
+
+def test_mark_memory_extraction_completed_splits_batches_at_500_ops():
+    fake_db = MagicMock()
+    batch_mock = MagicMock()
+    fake_db.batch.return_value = batch_mock
+
+    post_ids = [f"post_{i}" for i in range(501)]
+
+    with patch.object(x_posts_db, "db", fake_db):
+        x_posts_db.mark_memory_extraction_completed("u1", post_ids)
+
+    assert fake_db.batch.call_count == 2
+    assert batch_mock.commit.call_count == 2
+    assert batch_mock.set.call_count == 501
