@@ -65,6 +65,37 @@ def test_dev_shadow_scope_rejects_a_different_uid(gate: SimpleNamespace, chart_f
     )
 
 
+@pytest.mark.parametrize(
+    ('name', 'expected', 'changed'),
+    (
+        ('ENABLED', 'true', 'false'),
+        ('KILL_SWITCH', 'false', 'true'),
+        ('UID_ALLOWLIST', 'vi7SA9ckQCe4ccobWNxlbdcNdC23', 'other-user'),
+        ('PERCENT', '0', '1'),
+        ('DAILY_AUDIO_HOURS', '1', '2'),
+    ),
+)
+def test_prod_shadow_scope_rejects_value_drift(
+    gate: SimpleNamespace, chart_fixture: Path, name: str, expected: str, changed: str
+) -> None:
+    values = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
+    flag = f'TRANSCRIPTION_SHADOW_{name}'
+    replace_once(values, f'  - name: {flag}\n    value: "{expected}"\n', f'  - name: {flag}\n    value: "{changed}"\n')
+    assert any(f'[prod] shadow scope {flag}' in error for error in gate.validate_preflight(chart_fixture))
+
+
+def test_prod_shadow_scope_rejects_listen_enablement(gate: SimpleNamespace, chart_fixture: Path) -> None:
+    values = chart_fixture / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml'
+    replace_once(
+        values,
+        'env:\n  - name: REFERRAL_PUBLIC_BASE_URL\n',
+        'env:\n  - name: TRANSCRIPTION_SHADOW_ENABLED\n    value: "true"\n  - name: REFERRAL_PUBLIC_BASE_URL\n',
+    )
+    assert any(
+        '[prod] shadow scope TRANSCRIPTION_SHADOW_ENABLED' in error for error in gate.validate_preflight(chart_fixture)
+    )
+
+
 def test_cli_passes_on_repo_root(gate: SimpleNamespace) -> None:
     assert gate.main(["--root", str(REPO_ROOT)]) == 0
 

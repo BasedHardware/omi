@@ -25,7 +25,7 @@ import { getApp, enableApp, disableApp, reEnableApp } from '@/lib/api';
 import type { App } from '@/types/apps';
 import { AppDisabledNotice } from '@/components/apps/AppDisabledNotice';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { PostHogManager } from '@/lib/analytics/posthog';
 
 interface AppDetailProps {
   appId: string;
@@ -101,11 +101,11 @@ export function AppDetail({ appId }: AppDetailProps) {
     try {
       if (app.enabled) {
         await disableApp(app.id);
-        MixpanelManager.track('App Disabled', { app_id: app.id });
+        PostHogManager.track('App Disabled', { app_id: app.id });
         setApp({ ...app, enabled: false });
       } else {
         await enableApp(app.id);
-        MixpanelManager.track('App Enabled', { app_id: app.id });
+        PostHogManager.track('App Enabled', { app_id: app.id });
         setApp({ ...app, enabled: true });
       }
     } catch (err) {
@@ -122,7 +122,7 @@ export function AppDetail({ appId }: AppDetailProps) {
     setReEnableError(null);
     try {
       await reEnableApp(app.id);
-      MixpanelManager.track('App Re-enabled', { app_id: app.id });
+      PostHogManager.track('App Re-enabled', { app_id: app.id });
       setApp({
         ...app,
         disabled: false,

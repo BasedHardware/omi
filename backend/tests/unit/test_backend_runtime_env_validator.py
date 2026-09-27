@@ -2917,9 +2917,32 @@ def test_transcription_shadow_dev_scope_matches_generated_manifest_and_charts():
         entries = parse_env_entries(chart.read_text(encoding='utf-8'))
         assert {key: entries[key].value for key in controls} == expected
 
+
+def test_transcription_shadow_prod_scope_matches_generated_manifest_overlay_and_chart():
+    controls = {
+        'TRANSCRIPTION_SHADOW_ENABLED': 'true',
+        'TRANSCRIPTION_SHADOW_KILL_SWITCH': 'false',
+        'TRANSCRIPTION_SHADOW_UID_ALLOWLIST': 'vi7SA9ckQCe4ccobWNxlbdcNdC23',
+        'TRANSCRIPTION_SHADOW_PERCENT': '0',
+        'TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS': '1',
+    }
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
     prod = validator._get_env_config(manifest, 'prod')
-    for _, env in _manifest_env_blocks(prod):
-        assert all(key not in env for key in controls)
+    overlay = validator._load_yaml(ROOT / 'deploy/runtime_env/prod.overlay.yaml')['overlay']
+    for source in (prod, overlay):
+        pusher = source['gke']['pusher']['env']
+        assert {key: pusher[key]['value'] for key in controls} == controls
+        for scope, env in _manifest_env_blocks(source):
+            if scope != 'gke/pusher':
+                assert all(key not in env for key in controls), scope
+
+    pusher_chart = ROOT / 'charts/pusher/prod_omi_pusher_values.yaml'
+    pusher_entries = parse_env_entries(pusher_chart.read_text(encoding='utf-8'))
+    assert {key: pusher_entries[key].value for key in controls} == controls
+    listen_chart = ROOT / 'charts/backend-listen/prod_omi_backend_listen_values.yaml'
+    listen_entries = parse_env_entries(listen_chart.read_text(encoding='utf-8'))
+    assert all(key not in listen_entries for key in controls)
 
 
 def _manifest_env_blocks(env_config: dict) -> list[tuple[str, dict]]:

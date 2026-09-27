@@ -27,7 +27,13 @@ with `TRANSCRIPTION_SHADOW_PERCENT` (default 0). The shared daily cap is
 with enabled=true, allowlist=`omi-release-probe`, percent=0, daily audio cap=1
 hour, and kill switch=false. Dev backend-listen and backend-sync remain off;
 the latter needs durable shadow dispatch before enablement. The local dev env
-template remains off. No production values change. `TRANSCRIPTION_SHADOW_UPLOAD_GRACE_SECONDS`
+template remains off. Prod pusher is enabled only for
+`vi7SA9ckQCe4ccobWNxlbdcNdC23`, with percent=0, a shared daily audio cap
+of 1 hour, and kill switch=false. Prod backend-listen and all prod Cloud Run
+services remain off; Cloud Run requires durable shadow dispatch before enablement.
+To stop admission, set `TRANSCRIPTION_SHADOW_KILL_SWITCH` to `"true"` or
+`TRANSCRIPTION_SHADOW_ENABLED` to `"false"` and redeploy the prod pusher.
+`TRANSCRIPTION_SHADOW_UPLOAD_GRACE_SECONDS`
 defaults 70 so the pusher has time to flush its 60-second audio batch.
 `TRANSCRIPTION_SHADOW_TIMEOUT_SECONDS` defaults 600; provider calls are also
 bounded by the existing Parakeet client timeout. A worker checks the deadline
