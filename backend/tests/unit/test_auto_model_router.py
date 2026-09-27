@@ -25,10 +25,10 @@ import routers.auto_model as auto_model
 @pytest.fixture(autouse=True)
 def _reset_cache():
     """Each test starts from a cold cache and a clean lock."""
-    auto_model._cache.update(provider=None, ts=0.0, detail={})
+    auto_model._cache.update(provider=None, ts=0.0, detail={}, ttl=auto_model.TTL_SECONDS)
     auto_model._cache_lock = asyncio.Lock()
     yield
-    auto_model._cache.update(provider=None, ts=0.0, detail={})
+    auto_model._cache.update(provider=None, ts=0.0, detail={}, ttl=auto_model.TTL_SECONDS)
 
 
 def _client(uid: str = "user-1") -> TestClient:
@@ -262,3 +262,50 @@ def test_upstream_failure_keeps_serving_a_pick(monkeypatch):
     assert body["provider"] == "geminiFlashLive"
     assert body["attribution"] == "https://artificialanalysis.ai/"
     assert isinstance(body["detail"]["reason"], str)
+
+
+# --- fallback caching must not pin the default for the full TTL -------------
+
+
+def test_scoreless_result_uses_short_retry_ttl(monkeypatch):
+    """A malformed-but-fetched payload is retried soon, not held for a day."""
+    _patch_fetch(monkeypatch, payload=["unexpected"])
+    _client().get("/v1/auto/model-pick")
+    assert auto_model._cache["ttl"] == auto_model.RETRY_TTL_SECONDS
+    assert auto_model.RETRY_TTL_SECONDS < auto_model.TTL_SECONDS
+
+
+def test_scored_result_uses_full_ttl(monkeypatch):
+    _patch_fetch(monkeypatch, payload=_models_payload(_model("gemini-3-5-flash", 90, 200)))
+    _client().get("/v1/auto/model-pick")
+    assert auto_model._cache["ttl"] == auto_model.TTL_SECONDS
+
+
+def test_fallback_is_refetched_after_retry_ttl(monkeypatch):
+    """After the short window a new upstream call is made, and a good payload wins."""
+    calls = {"n": 0}
+    original = auto_model._fetch_and_score
+
+    async def _counting():
+        calls["n"] += 1
+        return await original()
+
+    monkeypatch.setattr(auto_model, "_fetch_and_score", _counting)
+    client = _client()
+
+    _patch_fetch(monkeypatch, payload=["unexpected"])
+    client.get("/v1/auto/model-pick")
+    assert calls["n"] == 1
+
+    # Within the retry window the cached fallback is still served, no new call.
+    client.get("/v1/auto/model-pick")
+    assert calls["n"] == 1
+
+    # Age the cache past the retry window; upstream now returns a real payload.
+    auto_model._cache["ts"] -= auto_model.RETRY_TTL_SECONDS + 1
+    _patch_fetch(monkeypatch, payload=_models_payload(_model("gemini-3-5-flash", 90, 200)))
+    body = client.get("/v1/auto/model-pick").json()
+    assert calls["n"] == 2
+    assert body["provider"] == "geminiFlashLive"
+    assert body["detail"].get("scores")
+    assert auto_model._cache["ttl"] == auto_model.TTL_SECONDS

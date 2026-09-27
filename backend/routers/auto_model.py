@@ -32,6 +32,10 @@ QUALITY_WEIGHT = 0.65
 SPEED_WEIGHT = 0.35
 SPEED_CAP = 250.0  # tokens/sec, for normalization
 TTL_SECONDS = 24 * 3600
+# A refresh that did not produce a real pick (missing key, malformed body, no
+# matching models) must not pin the default for a full day: a transient upstream
+# shape glitch would otherwise become 24h of default picks. Retry those sooner.
+RETRY_TTL_SECONDS = 15 * 60
 AA_URL = "https://artificialanalysis.ai/api/v2/data/llms/models"
 
 # Client-safe fallback texts. These are the ONLY strings from this module that a
@@ -42,7 +46,7 @@ _FALLBACK_REASON = "model scoring fetch failed; default to Gemini"
 _FALLBACK_NO_MODELS = "no matching AA models"
 _FALLBACK_NO_KEY = "no ARTIFICIALANALYSIS_API_KEY; default to Gemini"
 
-_cache = {"provider": None, "ts": 0.0, "detail": {}}
+_cache = {"provider": None, "ts": 0.0, "detail": {}, "ttl": TTL_SECONDS}
 _cache_lock = asyncio.Lock()
 
 
@@ -50,6 +54,17 @@ def _score(quality, speed):
     q = min(max(quality, 0.0), 100.0) / 100.0
     s = min(max(speed, 0.0), SPEED_CAP) / SPEED_CAP
     return QUALITY_WEIGHT * q + SPEED_WEIGHT * s
+
+
+def _ttl_for(detail):
+    """Cache lifetime for a refresh result.
+
+    A result with computed scores is good for the full day. A fallback result
+    (no key, malformed body, or no matching models) is retried after a short
+    window so a transient upstream problem self-heals instead of serving the
+    default pick for the whole TTL.
+    """
+    return TTL_SECONDS if (detail or {}).get("scores") else RETRY_TTL_SECONDS
 
 
 def _as_float(value):
@@ -126,11 +141,17 @@ async def _refresh_cache():
     now = time.time()
     try:
         provider, detail = await _fetch_and_score()
-        _cache.update(provider=provider, ts=now, detail=detail)
+        # Only a scored result earns the long TTL; a fallback is retried sooner.
+        _cache.update(provider=provider, ts=now, detail=detail, ttl=_ttl_for(detail))
     except Exception as e:  # noqa: BLE001 — the endpoint must never 500 on upstream failure
         logger.error("auto model-pick fetch failed: %s", sanitize(str(e)))
         if _cache["provider"] is None:
-            _cache.update(provider="geminiFlashLive", ts=now, detail={"reason": _FALLBACK_REASON})
+            _cache.update(
+                provider="geminiFlashLive",
+                ts=now,
+                detail={"reason": _FALLBACK_REASON},
+                ttl=RETRY_TTL_SECONDS,
+            )
 
 
 @router.get("/v1/auto/model-pick", response_model=AutoModelPick)
@@ -142,11 +163,11 @@ async def auto_model_pick(uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     now = time.time()
-    if _cache["provider"] is None or (now - _cache["ts"]) > TTL_SECONDS:
+    if _cache["provider"] is None or (now - _cache["ts"]) > _cache.get("ttl", TTL_SECONDS):
         # Serialize concurrent refreshes so a cache miss fires only one AA fetch.
         async with _cache_lock:
             now = time.time()  # re-check after acquiring the lock
-            if _cache["provider"] is None or (now - _cache["ts"]) > TTL_SECONDS:
+            if _cache["provider"] is None or (now - _cache["ts"]) > _cache.get("ttl", TTL_SECONDS):
                 await _refresh_cache()
     return {
         "provider": _cache["provider"],
