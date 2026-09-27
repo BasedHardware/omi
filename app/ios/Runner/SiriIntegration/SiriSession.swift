@@ -1,3 +1,4 @@
+#if compiler(>=6.4)
 import Foundation
 import Security
 import FirebaseAuth
@@ -159,3 +160,4 @@ struct OmiNativeAPI {
         }
     }
 }
+#endif

@@ -493,7 +493,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
     def test_mobile_27_only_sources_compile_out_on_required_ci(self):
         root = REPO_ROOT / "app/ios/Runner/SiriIntegration"
-        for name in ("SiriBridge", "SiriDebugProbe", "SiriEntities", "SiriIntents"):
+        for name in ("SiriBridge", "SiriDebugProbe", "SiriEntities", "SiriIntents", "SiriSession"):
             with self.subTest(source=name):
                 self.assertTrue((root / f"{name}.swift").read_text().startswith("#if compiler(>=6.4)\n"))
         snapshot = (root / "SiriSnapshotStore.swift").read_text()
