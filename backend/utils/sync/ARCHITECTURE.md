@@ -60,3 +60,11 @@ After duplicate removal, the transaction hydrates the surviving conversation's
 allocator and allocates incoming and donor identities. Legacy donors receive a
 stable conversation/speaker scope. Provider labels and recognized person IDs are
 preserved; equal provider numbers never establish that two voices are the same.
+Conversation-wide resolution uses stored private-cloud audio after each sync
+job's append and reprocess. If audio is unavailable or its timeline cannot be
+trusted, the resolver marks the cross-chunk IDs `unavailable` and logs the
+anonymous skip reason; clients must treat those labels as provisional. A sync
+bridge's redirect tombstone remains available to owner detail reads and manual
+speaker assignment: the assignment transaction follows the survivor chain and
+maps the donor's selected speaker number through stable segment IDs so it never
+labels a different survivor voice.

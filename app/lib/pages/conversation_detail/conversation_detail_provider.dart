@@ -32,6 +32,7 @@ typedef SpeakerAssignmentCall = Future<bool> Function(
 typedef ConversationReprocessCall = Future<ServerConversation?> Function(String, {String? appId});
 
 class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
+  static final RegExp _syncConversationId = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-');
   ConversationDetailProvider({
     SpeakerAssignmentCall? assignSpeaker,
     ConversationReprocessCall? reprocess,
@@ -42,6 +43,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   String? _speakerSummaryConversationId;
   int _speakerEditGeneration = 0;
   int _pendingSpeakerSaves = 0;
+  String? _speakerRefreshId;
   bool get _savingSpeaker => _pendingSpeakerSaves > 0;
   Future<void> _speakerSaveTail = Future.value();
 
@@ -194,6 +196,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         );
         return false;
       }
+      // A sync bridge may have retired the ID while this detail page stayed
+      // open. Refresh after the queued edits drain so each edit still targets
+      // the same optimistic conversation, then adopt the survivor ID.
+      if (_syncConversationId.hasMatch(target.id)) _speakerRefreshId = target.id;
       if (!_isDisposed && generation == _speakerEditGeneration && identical(conversationOrNull, target)) {
         if (changed) {
           if (target.status == ConversationStatus.completed && target.structured.overview.trim().isNotEmpty) {
@@ -205,6 +211,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       return true;
     } finally {
       _pendingSpeakerSaves--;
+      if (_pendingSpeakerSaves == 0) {
+        final refreshId = _speakerRefreshId;
+        _speakerRefreshId = null;
+        if (refreshId != null && refreshId == conversationOrNull?.id) await refreshConversation();
+      }
     }
   }
 

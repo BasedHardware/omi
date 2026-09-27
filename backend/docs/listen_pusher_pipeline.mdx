@@ -155,6 +155,11 @@ conversation's `speaker_resolution` tells clients whether ids are people:
 open onto capture's ids; `CONVERSATION_SPEAKER_RESOLUTION_ENABLED=false` disables
 it, and `CONVERSATION_SPEAKER_RESOLUTION_BUDGET_SECONDS` (45) and
 `..._MAX_EMBEDDINGS` (1500) bound one run, which resumes from the cache next time.
+Every early exit records an anonymous reason (`no_audio`, `unaligned_audio`, or
+`no_embeddings`) so a successful sync reprocess cannot conceal an unavailable
+resolution. The Flutter transcript presents anonymous IDs as provisional when
+the status is `unavailable`; those chunk-local IDs must not be displayed as
+dozens of confirmed participants.
 
 Pre-recorded STT results from providers such as Modulate and Parakeet are
 normalized before they are written as transcript segments. Consecutive entries
@@ -894,6 +899,13 @@ It persists manual overrides/defaults, invalidates contributing profiles, and cl
 client projections atomically. Live/sync writers overlay those decisions; live
 writers preserve unseen appends and explicitly identify merged-away segments.
 Manually curated conversations cannot be automatic sync bridge donors.
+When a sync bridge retires an ID already open on a client, its tombstone is
+followed on detail reads. Assignment follows the same owner-scoped redirect
+inside its transaction. A donor speaker number is translated through its
+stable segment IDs before updating the survivor, because bridge allocation
+can give that number to another voice. A missing or user-deleted survivor
+remains a 404; missing selected segments fail instead of labeling another
+speaker. The returned conversation carries the survivor ID for client refresh.
 
 Enrollment remains **best-effort**. Pusher publishes `audio_files` during capture
 as well as at finalization. REST tries immediately; the acknowledged socket path

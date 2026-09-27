@@ -120,7 +120,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
+def _get_valid_conversation_by_id(uid: str, conversation_id: str, *, follow_sync_bridge: bool = False) -> dict:
     conversation = conversations_db.get_conversation(
         uid, conversation_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
     )
@@ -128,7 +128,16 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversations_db.is_soft_deleted(conversation):
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        if not follow_sync_bridge or not conversation.get('sync_merged_into'):
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        survivor_id = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
+        if not survivor_id:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        conversation = conversations_db.get_conversation(
+            uid, survivor_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
+        )
+        if not conversation or conversations_db.is_soft_deleted(conversation):
+            raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
@@ -955,7 +964,7 @@ def get_conversation_by_id(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id, follow_sync_bridge=True)
     if source is not None:
         if source != 'omi':
             raise HTTPException(
@@ -1504,6 +1513,7 @@ def _assign_manual_speaker(
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     conversation = deserialize_conversation(raw)
+    resolved_conversation_id = raw['id']
     _drop_display_projection(conversation)
     if background_tasks is not None:
         for path in removed:
@@ -1513,12 +1523,12 @@ def _assign_manual_speaker(
                 extract_speaker_samples,
                 uid=uid,
                 person_id=person_id,
-                conversation_id=conversation_id,
+                conversation_id=resolved_conversation_id,
                 segment_ids=teaching_segment_ids(raw.get('transcript_segments') or [], resolved),
             )
     _emit_speaker_identity_confirmed(
         uid=uid,
-        conversation_id=conversation_id,
+        conversation_id=resolved_conversation_id,
         scope='speaker' if speaker_id is not None else 'segment' if segment_index is not None else 'bulk',
         before=[_speaker_assignment(TranscriptSegment(**{'is_user': False, **s})) for s in before],
         after=[_speaker_assignment(s) for s in conversation.transcript_segments if s.id in resolved],
@@ -1562,6 +1572,7 @@ def set_assignee_conversation_speaker(
     speaker_id: int,
     assign_type: str,
     value: Optional[str] = None,
+    data: Optional[BulkAssignSegmentsRequest] = None,
     use_for_speech_training: bool = True,
     uid: str = Depends(auth.get_current_user_uid),
     background_tasks: BackgroundTasks = None,
@@ -1573,6 +1584,7 @@ def set_assignee_conversation_speaker(
         uid,
         background_tasks,
         speaker_id=speaker_id,
+        segment_ids=data.segment_ids if data else None,
         use_for_speech_training=use_for_speech_training,
     )
 

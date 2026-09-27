@@ -241,7 +241,7 @@ def _audio_aligned(conversation: Conversation) -> bool:
     """
     own = f'conversation:{conversation.id}'
     return all(
-        (s.speaker_id_scope or '').startswith('sync:') or s.speaker_id_scope == own
+        (s.speaker_id_scope or '').startswith(('sync:', 'legacy-conversation:')) or s.speaker_id_scope == own
         for s in conversation.transcript_segments
         if s.speaker_id != OMI_SPEAKER_ID_SENTINEL
     )
@@ -258,6 +258,15 @@ def _without_resolution(conversation: Conversation, outcome: str) -> None:
     else:
         conversation.speaker_resolution = ConversationSpeakers(status='unavailable', version=RESOLUTION_VERSION)
     OMI_CONVERSATION_SPEAKER_RESOLUTION_TOTAL.labels(outcome=outcome).inc()
+    # A silent early return made a successful processing run indistinguishable
+    # from a completed conversation-wide resolution. Keep this bounded and
+    # anonymous: the conversation's captured speaker ids are not identities.
+    logger.info(
+        'event=conversation_speaker_resolution outcome=%s status=%s segments=%d',
+        outcome,
+        conversation.speaker_resolution.status,
+        len(segments),
+    )
 
 
 def apply_speaker_resolution(
