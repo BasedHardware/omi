@@ -35,13 +35,83 @@ def test_alignment_probe_rejects_repeated_live_fixture(probe):
     assert phrase not in str(receipt)
 
 
-def test_qualification_probe_counts_eight_fixture_sends(probe):
+def test_qualification_probe_bounds_one_conversation_with_eight_fixture_sends(probe):
     phrase = probe.load_fixture().expected_phrase
-    observed, expected = probe._alignment_word_counts([{'text': phrase}] * 8, phrase, probe.DISCARD_KEEP_AUDIO_PASSES)
-    assert (observed, expected) == (136, 136)
-    assert probe._alignment_word_count_ok(137, expected)
-    assert not probe._alignment_word_count_ok(68, expected)
-    assert not probe._alignment_word_count_ok(34, expected)
+    fixture_words = len(phrase.split())
+    for passes in (1, 2, 4, 8):
+        observed, expected = probe._alignment_word_counts(
+            [{'text': phrase}] * passes, phrase, probe.DISCARD_KEEP_AUDIO_PASSES
+        )
+        assert expected == 136
+        assert probe._base_word_count_ok(observed, expected, fixture_words)
+    # The readback's phrase check proves one pass. This upper bound still
+    # rejects two transcripts for each of the eight physical sends.
+    assert not probe._base_word_count_ok(0, expected, fixture_words)
+    assert not probe._base_word_count_ok(272, expected, fixture_words)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('passes', 'passed'), [(1, True), (10, False)])
+async def test_base_probe_records_counts_when_rollover_or_duplication_changes_the_readback(
+    monkeypatch, probe, tmp_path, passes, passed
+):
+    phrase = probe.load_fixture().expected_phrase
+    monkeypatch.setattr(probe, '_read_token', lambda *_: 'token')
+    monkeypatch.setattr(probe, '_listen_sample', lambda *_a, **_k: asyncio.sleep(0, result=(True, '')))
+    monkeypatch.setattr(
+        probe,
+        '_terminal_readback',
+        lambda *_a, **_k: asyncio.sleep(0, result={'transcript_segments': [{'text': phrase}] * passes}),
+    )
+    monkeypatch.setattr(probe, '_observe_candidate_pusher', lambda *_a, **_k: asyncio.sleep(0, result=1))
+    deployment_receipt = tmp_path / 'deployment.json'
+    deployment_receipt.write_text(json.dumps({'image': {'digest': 'sha256:synthetic'}}))
+    args = SimpleNamespace(
+        run_id='123',
+        bearer_token_file=tmp_path / 'token',
+        deployment_receipt=deployment_receipt,
+        api_url='https://example.invalid',
+        allow_local_http=False,
+        finalization_timeout_seconds=1,
+        project='synthetic',
+        namespace='synthetic',
+    )
+
+    receipt, actual_passed = await probe.run_probe(args)
+
+    assert actual_passed is passed
+    assert receipt['word_counts'] == {'live': 17 * passes, 'expected': 136}
+    assert receipt['consumer_readback'] == {'status': 'PASS'}
+    assert receipt.get('failure_stage') == (None if passed else 'transcript_word_count')
+
+
+def test_base_probe_status_line_exposes_only_bounded_diagnostics(monkeypatch, probe, tmp_path, capsys):
+    receipt = probe._receipt(
+        status='FAIL',
+        evidence_id='pusher-dev-123-synthetic',
+        deployment_receipt={},
+        deployment_receipt_sha256='',
+        started_at='2026-09-27T00:00:00Z',
+        ended_at='2026-09-27T00:00:01Z',
+        candidate_pod_count=0,
+        failure_stage='transcript_word_count',
+        live_word_count=17,
+        expected_word_count=136,
+        consumer_readback_passed=True,
+    )
+    receipt['private_extra'] = 'secret transcript token endpoint uid'
+    monkeypatch.setattr(
+        probe, 'parse_args', lambda *_: SimpleNamespace(output=tmp_path / 'receipt.json', alignment_scenario=False)
+    )
+    monkeypatch.setattr(probe, 'run_probe', lambda *_: asyncio.sleep(0, result=(receipt, False)))
+
+    assert probe.main([]) == 1
+    line = capsys.readouterr().out.strip()
+    assert 'failure_stage=transcript_word_count' in line
+    assert 'word_counts_live=17 word_counts_expected=136' in line
+    assert 'consumer_readback=PASS candidate_pod_count=0' in line
+    assert 'secret' not in line
+    assert 'transcript token endpoint uid' not in line
 
 
 @pytest.fixture
