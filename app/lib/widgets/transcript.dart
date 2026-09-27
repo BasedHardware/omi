@@ -156,6 +156,15 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   int _previousSearchResultIndex = -1;
 
   Color _getSpeakerBubbleColor(bool isUser, int speakerId, Person? person) {
+    if (OmiColors.active == OmiPalette.light) {
+      if (isUser) return OmiColors.surface2;
+      // Keep anonymous speaker bubbles quiet on the light canvas. Known
+      // speakers use a pale tint of their speaker colour so their bubbles remain
+      // distinct without carrying the dark, saturated fill from dark mode.
+      if (person == null) return OmiColors.surface2;
+      final colorIndex = (person.colorIdx ?? speakerId) % _speakerColors.length;
+      return Color.alphaBlend(_speakerColors[colorIndex].withValues(alpha: 0.15), OmiColors.surface1);
+    }
     if (isUser) return OmiColors.surface3;
     final colorIndex = (person?.colorIdx ?? speakerId) % _speakerColors.length;
     return _speakerColors[colorIndex].withValues(alpha: 0.8);
@@ -1129,7 +1138,9 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   }
 
   Widget _buildSegmentFooter(TranscriptSegment data, bool isUser) {
-    final color = isUser ? OmiColors.textSecondary : OmiColors.textTertiary;
+    final color = isUser
+        ? OmiColors.textSecondary
+        : (OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : OmiColors.textTertiary);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -1159,7 +1170,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.check_circle, size: 12, color: OmiColors.textTertiary),
+            Icon(Icons.check_circle, size: 12, color: OmiColors.textTertiary),
             const SizedBox(width: 4),
             Text(
               context.l10n.translatedByOmi,

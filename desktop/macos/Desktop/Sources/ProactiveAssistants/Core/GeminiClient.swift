@@ -579,12 +579,6 @@ actor GeminiClient {
   /// Client UX gate. Server 402 `plan_gated` remains the invariant.
   static func requireManagedProactivity(_ decision: SubscriptionEntitlementDecision) throws {
     guard decision == .planGated else { return }
-    // S24 / TBD-2 local-lane seam: when OMI_LOCAL_PROACTIVITY flips, route to
-    // `LocalInferenceRuntime.generateStructuredFailClosed` / `runToolLoopFailClosed`.
-    // This shard only types the gate. Flag read is the seam; the lane is not built.
-    if ProcessInfo.processInfo.environment["OMI_LOCAL_PROACTIVITY"] == "1" {
-      // Local lane not shipped — still fail closed to `.planGated`.
-    }
     throw GeminiClientError.planGated
   }
 

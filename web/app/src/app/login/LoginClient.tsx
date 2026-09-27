@@ -7,7 +7,7 @@ import Link from '@tschk/moonshine-next/link';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { cn } from '@/lib/utils';
-import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { PostHogManager } from '@/lib/analytics/posthog';
 import { TextSwap } from '@/components/ui/TextSwap';
 import { replayErrorShake } from '@/lib/transitionsDev';
 import { isFirebaseAuthConfigured } from '@/lib/firebase';
@@ -19,7 +19,7 @@ import {
 
 export function getAuthErrorMessage(
   error: unknown,
-  provider: 'Google' | 'Apple',
+  provider?: 'Google' | 'Apple',
 ): string {
   const code =
     typeof error === 'object' && error !== null && 'code' in error
@@ -31,13 +31,18 @@ export function getAuthErrorMessage(
   if (code === 'auth/popup-blocked') {
     return 'Your browser blocked the sign-in window. Allow pop-ups and try again.';
   }
-  if (code === 'auth/popup-closed-by-user') {
+  if (code === 'auth/popup-closed-by-user' || code === 'auth/redirect-cancelled-by-user') {
     return 'The sign-in window was closed before sign-in finished.';
+  }
+  if (code === 'auth/operation-not-supported-in-this-environment') {
+    return 'This browser cannot open the sign-in window. Open app.omi.me in Safari or Chrome and try again.';
   }
   if (code === 'auth/configuration-not-found') {
     return 'Sign-in is not configured in this local preview.';
   }
-  return `Failed to sign in with ${provider}. Please try again.`;
+  return provider
+    ? `Failed to sign in with ${provider}. Please try again.`
+    : 'Sign-in failed. Please try again.';
 }
 
 const omiMarkDots = [
@@ -52,7 +57,14 @@ const omiMarkDots = [
 ] as const;
 
 export function LoginClient() {
-  const { user, loading, signInWithGoogle, signInWithApple } = useAuth();
+  const {
+    user,
+    loading,
+    signInWithGoogle,
+    signInWithApple,
+    redirectSignInError,
+    clearRedirectSignInError,
+  } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [isSigningIn, setIsSigningIn] = useState<'google' | 'apple' | null>(null);
@@ -65,6 +77,7 @@ export function LoginClient() {
   const signInUnavailable = !isFirebaseAuthConfigured;
   const statusMessage =
     error ??
+    (redirectSignInError ? getAuthErrorMessage(redirectSignInError) : null) ??
     (signInUnavailable ? 'Sign-in is not configured in this local preview.' : null);
   const authActionsRef = useRef<HTMLDivElement>(null);
 
@@ -75,7 +88,7 @@ export function LoginClient() {
 
   // Track page view
   useEffect(() => {
-    MixpanelManager.pageView('Login');
+    PostHogManager.pageView('Login');
   }, []);
 
   const finishReferral = useCallback(async () => {
@@ -85,7 +98,7 @@ export function LoginClient() {
     referralClaimStarted.current = true;
     try {
       const result = await claimReferralTrial(referralCode, referralEnvironment);
-      MixpanelManager.track('Referral Signup Completed', {
+      PostHogManager.track('Referral Signup Completed', {
         claimed: result.claimed,
       });
       if (!result.claimed) {
@@ -114,6 +127,7 @@ export function LoginClient() {
   const handleGoogleSignIn = async () => {
     setIsSigningIn('google');
     setError(null);
+    clearRedirectSignInError();
     try {
       await signInWithGoogle();
       if (!isReferralFlow) router.push('/home');
@@ -128,6 +142,7 @@ export function LoginClient() {
   const handleAppleSignIn = async () => {
     setIsSigningIn('apple');
     setError(null);
+    clearRedirectSignInError();
     try {
       await signInWithApple();
       if (!isReferralFlow) router.push('/home');

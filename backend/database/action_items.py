@@ -139,6 +139,22 @@ def get_action_item_ids(uid: str, *, firestore_client: Any = None) -> List[str]:
     return [doc.id for doc in _iter_query_pages(query)]
 
 
+def iter_all_action_items(uid: str, *, firestore_client: Any = None) -> Iterable[Dict[str, Any]]:
+    """Stream every non-deleted action item, including fields the list reader omits.
+
+    Account export must not page ``get_action_items``. That reader caps at
+    ``_ACTION_ITEMS_LIST_HARD_MAX`` and its projection leaves ``provenance`` out.
+    """
+    client = firestore_client or get_firestore_client()
+    query = client.collection('users').document(uid).collection(action_items_collection).order_by('__name__')
+    for doc in _iter_query_pages(query):
+        data = typed_doc(doc)
+        if data.get('deleted'):
+            continue
+        data['id'] = doc.id
+        yield prepare_action_item_for_read(data)
+
+
 def get_visible_action_item_ids(
     uid: str,
     *,
@@ -309,13 +325,13 @@ def create_action_item(
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
 
-    if 'created_at' not in action_item_data:
+    if not action_item_data.get('created_at'):
         action_item_data['created_at'] = datetime.now(timezone.utc)
-    if 'updated_at' not in action_item_data:
+    if not action_item_data.get('updated_at'):
         action_item_data['updated_at'] = datetime.now(timezone.utc)
 
     # Set completed_at if the item is being created as completed
-    if action_item_data.get('completed', False) and 'completed_at' not in action_item_data:
+    if action_item_data.get('completed', False) and not action_item_data.get('completed_at'):
         action_item_data['completed_at'] = datetime.now(timezone.utc)
 
     if idempotency_key:
@@ -337,9 +353,9 @@ def create_action_item(
         control = typed_doc(control_snapshot) if control_snapshot.exists else {}
         account_generation = int(control.get('account_generation', 0))
         if idempotency_key:
-            existing_query = action_items_ref.where(filter=FieldFilter('idempotency_key', '==', idempotency_key)).where(
-                filter=FieldFilter('completed', '==', False)
-            )
+            # Completion does not turn a retry into a new create. In particular,
+            # a delayed retry must not resurrect a task the user already finished.
+            existing_query = action_items_ref.where(filter=FieldFilter('idempotency_key', '==', idempotency_key))
             if account_generation > 0:
                 existing_query = existing_query.where(
                     filter=FieldFilter('account_generation', '==', account_generation)
@@ -415,13 +431,12 @@ def create_action_items_batch(
     for index, action_item_data in enumerate(action_items_data):
         action_item_data = _prepare_action_item_for_write(action_item_data)
 
-        if 'created_at' not in action_item_data:
+        if not action_item_data.get('created_at'):
             action_item_data['created_at'] = datetime.now(timezone.utc)
-        if 'updated_at' not in action_item_data:
+        if not action_item_data.get('updated_at'):
             action_item_data['updated_at'] = datetime.now(timezone.utc)
-
         # Set completed_at if the item is being created as completed
-        if action_item_data.get('completed', False) and 'completed_at' not in action_item_data:
+        if action_item_data.get('completed', False) and not action_item_data.get('completed_at'):
             action_item_data['completed_at'] = datetime.now(timezone.utc)
 
         doc_ref = (
@@ -548,7 +563,7 @@ def _action_item_list_sort_key(item: Dict[str, Any]) -> tuple:
         bool(item.get('completed')),
         item.get('due_at') is None,
         item.get('due_at') or datetime.max.replace(tzinfo=timezone.utc),
-        -(item.get('created_at', datetime.min.replace(tzinfo=timezone.utc)).timestamp()),
+        -((item.get('created_at') or datetime.min.replace(tzinfo=timezone.utc)).timestamp()),
     )
 
 

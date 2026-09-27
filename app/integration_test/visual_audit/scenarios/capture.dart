@@ -61,6 +61,8 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   @override
   bool get isPhoneMicBatchRecording => false;
   @override
+  bool get isPendantBatchRecording => false;
+  @override
   DateTime? get liveCaptureStartedAt =>
       live == AuditLive.idle ? null : DateTime.now().subtract(Duration(seconds: _phone ? 134 : 724));
   @override
@@ -174,13 +176,14 @@ class _HomeFrame extends StatelessWidget {
           HeaderCircleButton(
             semanticLabel: 'Settings',
             onTap: () {},
-            icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
+            icon: FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
           ),
         ]),
       ),
       body: Stack(children: [
         const HomeContentPage(),
         BottomNavBar(onTabTap: (_, __) {}),
+        const HomeChatBarBackdrop(),
         Positioned(
           left: 16,
           right: 16,
@@ -212,8 +215,8 @@ class _AskOmiBar extends StatelessWidget {
             height: 42,
             margin: const EdgeInsets.only(right: 6),
             alignment: Alignment.center,
-            decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-            child: const FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
+            decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+            child: FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
           ),
         ]),
       );

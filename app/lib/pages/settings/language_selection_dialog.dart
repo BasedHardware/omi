@@ -145,7 +145,7 @@ class _PrimaryLanguagePickerState extends State<_PrimaryLanguagePicker> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.info_outline, color: OmiColors.textTertiary, size: 18),
+                Icon(Icons.info_outline, color: OmiColors.textTertiary, size: 18),
                 const SizedBox(width: OmiSpacing.xs),
                 Expanded(
                   child: Text(
@@ -174,7 +174,7 @@ class _PrimaryLanguagePickerState extends State<_PrimaryLanguagePicker> {
                     final isSelected = _selected == language.value;
                     return ListTile(
                       title: Text(language.key, style: OmiType.body),
-                      trailing: isSelected ? const Icon(Icons.check_circle, color: OmiColors.textPrimary) : null,
+                      trailing: isSelected ? Icon(Icons.check_circle, color: OmiColors.textPrimary) : null,
                       selected: isSelected,
                       selectedTileColor: OmiColors.surface2,
                       shape: const RoundedRectangleBorder(borderRadius: OmiRadius.smAll),

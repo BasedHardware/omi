@@ -4824,18 +4824,6 @@ abstract class AppLocalizations {
   /// Experimental feature name
   ///
   /// In en, this message translates to:
-  /// **'Auto-create Speakers'**
-  String get autoCreateSpeakers;
-
-  /// Description for auto-create speakers
-  ///
-  /// In en, this message translates to:
-  /// **'Auto-create when name detected'**
-  String get autoCreateWhenNameDetected;
-
-  /// Experimental feature name
-  ///
-  /// In en, this message translates to:
   /// **'Follow-up Questions'**
   String get followUpQuestions;
 
@@ -20355,12 +20343,6 @@ abstract class AppLocalizations {
   /// **'Transcriptions are unavailable, recording continues on device and will process later'**
   String get transcriptionUnavailableRecordingContinues;
 
-  /// Compact transcription-outage status for the in-progress capture card.
-  ///
-  /// In en, this message translates to:
-  /// **'Transcription unavailable · saving on device'**
-  String get transcriptionUnavailableSavingOnDevice;
-
   /// Queued recordings still waiting for transcription (pending) out of the session total, on the live-capture WAL indicator.
   ///
   /// In en, this message translates to:
@@ -20462,6 +20444,336 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open call'**
   String get openCall;
+
+  /// Persistent repair banner shown when a connected pendant's audio is not reaching the app; tapping opens device repair settings
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant audio is not reaching the app — tap to repair'**
+  String get captureRecoveryBanner;
+
+  /// No description provided for @phoneRecordingBlockedByPendantBatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop Transcribe Later on your pendant before recording with your phone.'**
+  String get phoneRecordingBlockedByPendantBatch;
+
+  /// Home live capture card, line 1: live transcription is not running (server said it cannot); audio keeps recording. Must stay short (one line on a small phone).
+  ///
+  /// In en, this message translates to:
+  /// **'Not transcribing'**
+  String get captureNotTranscribing;
+
+  /// Home live capture card, line 2 after the timer (e.g. "0:14 · Audio saved, transcribes later"): recording continues on the phone and will be transcribed later.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio saved, transcribes later'**
+  String get captureAudioSavedTranscribesLater;
+
+  /// Home live capture card, line 2 after the timer while the transcription connection is being restored: recording has not stopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Still recording'**
+  String get captureStillRecording;
+
+  /// Home live capture card, line 2 after the timer when the OS or another app (a call, another audio app) took the microphone and capture is paused.
+  ///
+  /// In en, this message translates to:
+  /// **'Mic in use by another app'**
+  String get captureMicInUseElsewhere;
+
+  /// Details sheet opened from the Home live capture card when a call or another app took the microphone. Explains the pause and that it resumes by itself.
+  ///
+  /// In en, this message translates to:
+  /// **'A call or another app took the microphone, so Omi can\'t hear right now. Omi resumes on its own when the microphone is free. Everything recorded before this is safe.'**
+  String get captureMicInterruptedDetail;
+
+  /// Details sheet opened from the Home live capture card when the user's custom speech-to-text endpoint cannot be reached; audio is buffered on the phone.
+  ///
+  /// In en, this message translates to:
+  /// **'Your custom speech-to-text service can\'t be reached. Omi keeps your audio on this phone and sends it when the service is back. Nothing is lost.'**
+  String get captureCustomSttUnreachableDetail;
+
+  /// Home live capture card, line 1: the phone microphone recording is starting and audio is not flowing yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting…'**
+  String get captureStarting;
+
+  /// Transcribe Later card, line 2 after the timer: recording paused because the phone is out of storage.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone storage full'**
+  String get capturePhoneStorageFull;
+
+  /// Transcribe Later card for a pendant, line 2: the pendant's own storage is almost full.
+  ///
+  /// In en, this message translates to:
+  /// **'Storage almost full'**
+  String get captureStorageAlmostFull;
+
+  /// Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture.
+  ///
+  /// In en, this message translates to:
+  /// **'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.'**
+  String get capturePendantDisconnectedDetail;
+
+  /// Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'
+  ///
+  /// In en, this message translates to:
+  /// **'{name} + others'**
+  String participantsSummaryUncounted(String name);
+
+  /// No description provided for @deviceOnboardingVoiceReplyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Hear Omi\'s Answers'**
+  String get deviceOnboardingVoiceReplyTitle;
+
+  /// No description provided for @deviceOnboardingVoiceReplySample.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'ve got it. Your next meeting starts in twenty minutes.'**
+  String get deviceOnboardingVoiceReplySample;
+
+  /// No description provided for @deviceOnboardingAllSetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re All Set'**
+  String get deviceOnboardingAllSetTitle;
+
+  /// No description provided for @deviceOnboardingAllSetSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap a row to review or change it.'**
+  String get deviceOnboardingAllSetSubtitle;
+
+  /// No description provided for @deviceOnboardingAllSetSinglePressBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'1×'**
+  String get deviceOnboardingAllSetSinglePressBadge;
+
+  /// No description provided for @deviceOnboardingAllSetDoublePressBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'2×'**
+  String get deviceOnboardingAllSetDoublePressBadge;
+
+  /// Teaching subtitle for the voice reply onboarding step
+  ///
+  /// In en, this message translates to:
+  /// **'When you ask with the button, Omi can read its answer out loud.'**
+  String get deviceOnboardingVoiceReplySubtitle;
+
+  /// Title of the idle voice answer preview card
+  ///
+  /// In en, this message translates to:
+  /// **'Hear your last answer'**
+  String get deviceOnboardingVoiceReplyPreviewIdle;
+
+  /// Title of the voice answer preview card while audio is playing
+  ///
+  /// In en, this message translates to:
+  /// **'Playing your last answer...'**
+  String get deviceOnboardingVoiceReplyPreviewPlaying;
+
+  /// Voice preview output route when headphones are connected
+  ///
+  /// In en, this message translates to:
+  /// **'Through {device}'**
+  String deviceOnboardingVoiceReplyPreviewThroughDevice(String device);
+
+  /// Voice preview output route when using the phone speaker
+  ///
+  /// In en, this message translates to:
+  /// **'Through the phone speaker'**
+  String get deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker;
+
+  /// Voice preview output route while the system route is not yet known
+  ///
+  /// In en, this message translates to:
+  /// **'Through the current audio output'**
+  String get deviceOnboardingVoiceReplyPreviewThroughCurrentOutput;
+
+  /// Description of the Off voice response mode
+  ///
+  /// In en, this message translates to:
+  /// **'Answers stay on screen. Nothing is spoken.'**
+  String get deviceOnboardingVoiceReplyOffDescription;
+
+  /// Description of the Headphones only voice response mode
+  ///
+  /// In en, this message translates to:
+  /// **'Private. Speaks only through AirPods, Bluetooth or wired headphones.'**
+  String get deviceOnboardingVoiceReplyHeadphonesDescription;
+
+  /// Description of the Always voice response mode
+  ///
+  /// In en, this message translates to:
+  /// **'Uses the phone speaker when no headphones are connected.'**
+  String get deviceOnboardingVoiceReplyAlwaysDescription;
+
+  /// Output consequence when voice responses are off
+  ///
+  /// In en, this message translates to:
+  /// **'Omi will stay silent. Answers still appear in the app.'**
+  String get deviceOnboardingVoiceReplyStatusOff;
+
+  /// Output consequence for Headphones only mode with connected headphones
+  ///
+  /// In en, this message translates to:
+  /// **'{device} connected. Omi will speak here.'**
+  String deviceOnboardingVoiceReplyStatusHeadphonesConnected(String device);
+
+  /// Output consequence for Headphones only mode without connected headphones
+  ///
+  /// In en, this message translates to:
+  /// **'No headphones connected. Omi stays silent until you connect some.'**
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected;
+
+  /// Output consequence for Always mode with connected headphones
+  ///
+  /// In en, this message translates to:
+  /// **'Plays through {device}.'**
+  String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device);
+
+  /// Output consequence for Always mode without connected headphones
+  ///
+  /// In en, this message translates to:
+  /// **'Plays out loud through the phone speaker.'**
+  String get deviceOnboardingVoiceReplyStatusAlwaysSpeaker;
+
+  /// Footer explaining where to change voice response settings
+  ///
+  /// In en, this message translates to:
+  /// **'You can change this anytime in {settings} › {voiceResponse}'**
+  String deviceOnboardingVoiceReplySettingsHint(String settings, String voiceResponse);
+
+  /// Footer explaining the complete Settings menu path for replaying the device tutorial
+  ///
+  /// In en, this message translates to:
+  /// **'Replay this tour anytime in {settings} › {deviceSettings} › {deviceTutorial}'**
+  String deviceOnboardingAllSetReplayHint(String settings, String deviceSettings, String deviceTutorial);
+
+  /// Generic fallback name for connected headphones when the system does not provide a device name
+  ///
+  /// In en, this message translates to:
+  /// **'Headphones'**
+  String get deviceOnboardingVoiceReplyGenericHeadphones;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Listened'**
+  String get usageListened;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Words heard'**
+  String get usageWordsHeard;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks & notes'**
+  String get usageTasksNotes;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Peak hour'**
+  String get usagePeakHour;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Best day'**
+  String get usageBestDay;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Best month'**
+  String get usageBestMonth;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Best year'**
+  String get usageBestYear;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Minutes'**
+  String get usageMinutes;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Words'**
+  String get usageWords;
+
+  /// Plan and Usage dashboard label
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks'**
+  String get usageTasks;
+
+  /// Plan and Usage period selector
+  ///
+  /// In en, this message translates to:
+  /// **'Month'**
+  String get usageMonth;
+
+  /// Plan and Usage period selector
+  ///
+  /// In en, this message translates to:
+  /// **'Year'**
+  String get usageYear;
+
+  /// Plan and Usage period selector
+  ///
+  /// In en, this message translates to:
+  /// **'All time'**
+  String get usageAll;
+
+  /// Current hour marker on Plan and Usage chart
+  ///
+  /// In en, this message translates to:
+  /// **'now'**
+  String get usageNow;
+
+  /// Label for monthly chat usage meter
+  ///
+  /// In en, this message translates to:
+  /// **'Chat this month'**
+  String get usageChatThisMonth;
+
+  /// No description provided for @appearance.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get appearance;
+
+  /// No description provided for @appearanceSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get appearanceSystem;
+
+  /// No description provided for @appearanceLight.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get appearanceLight;
+
+  /// No description provided for @appearanceDark.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get appearanceDark;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

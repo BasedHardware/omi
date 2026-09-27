@@ -1,5 +1,7 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -8,6 +10,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/memories/widgets/memory_edit_sheet.dart';
 import 'package:omi/pages/memories/widgets/memory_item.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/feedback/omi_feedback.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -192,5 +195,33 @@ void main() {
     expect(provider.deleted, ['mem-1']);
     expect(find.text('Memory deleted'), findsOneWidget);
     expect(edits, 0);
+  });
+
+  testWidgets('long-press on a locked memory row does not reveal it', (tester) async {
+    final provider = _RecordingMemoriesProvider();
+    addTearDown(provider.dispose);
+    final usage = UsageProvider();
+    addTearDown(usage.dispose);
+    await tester.pumpWidget(
+      ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: const [Locale('en')],
+          home: Scaffold(
+            body: MemoryItem(memory: _memory()..isLocked = true, provider: provider, onTap: (_, __, ___) {}),
+          ),
+        ),
+      ),
+    );
+
+    final press = await tester.startGesture(tester.getCenter(find.text('Prefers morning meetings')));
+    await tester.pump(kLongPressTimeout + const Duration(milliseconds: 100));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Open'), findsNothing);
+    expect(find.text('Edit'), findsNothing);
+    expect(find.text('Delete'), findsNothing);
+    expect(find.text('Prefers morning meetings'), findsOneWidget);
+    await press.cancel();
   });
 }

@@ -151,6 +151,21 @@ class TestRequestObservability:
         assert record["message"] == mcp_analytics.MCP_REQUEST_LOG_MESSAGE == "mcp_request"
         return record
 
+    def test_2026_notification_logs_accepted(self, client, authed):
+        """A classified notification (notifications/initialized) is a handshake
+        and, once accepted, logs HTTP 202 rather than the capabilities 400."""
+        response = _post(
+            client,
+            "/v1/mcp",
+            {"jsonrpc": "2.0", "method": "notifications/initialized"},
+            **{"mcp-protocol-version": "2026-07-28"},
+        )
+        assert response.status_code == 202
+        kwargs = authed.request_log.call_args.kwargs
+        assert kwargs["jsonrpc_methods"] == ["notifications/initialized"]
+        assert kwargs["http_status"] == 202
+        assert kwargs["is_handshake"] is True
+
     def test_request_log_once_per_post(self, client, authed):
         _post(client, "/v1/mcp", _msg("tools/list"), **{"mcp-protocol-version": "2025-06-18"})
         authed.request_log.assert_called_once()

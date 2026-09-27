@@ -605,6 +605,7 @@ export interface AudioDownloadPendingResponse {
 }
 
 export interface AudioFile {
+  chunk_spans?: Array<ChunkSpan> | null;
   chunk_timestamps: Array<number>;
   conversation_id: string;
   duration: number;
@@ -626,6 +627,10 @@ export interface AudioPrecacheResponse {
   audio_file_count?: number | null;
   message?: string | null;
   status: string;
+}
+
+export interface AudioTimelineProvenance {
+  version: number;
 }
 
 export interface AudioUrlsResponse {
@@ -1055,6 +1060,11 @@ export interface CheckVerificationResponse {
   verified: boolean;
 }
 
+export interface ChunkSpan {
+  end: number;
+  start: number;
+}
+
 export interface CleanerMemory {
   archive_default_visible?: boolean | null;
   category: MemoryCategory;
@@ -1141,6 +1151,7 @@ export interface Conversation {
   app_id?: string | null;
   apps_results?: Array<AppResult>;
   audio_files?: Array<AudioFile>;
+  audio_timeline?: AudioTimelineProvenance | null;
   calendar_event?: CalendarEventLink | null;
   call_id?: string | null;
   capture_group?: CaptureGroup | null;
@@ -1172,6 +1183,7 @@ export interface Conversation {
   processing_state?: ConversationProcessingState | null;
   screenshot_sharing_enabled?: boolean;
   source?: ConversationSource | null;
+  speaker_resolution?: ConversationSpeakers | null;
   starred?: boolean;
   started_at: string | null;
   status?: ConversationStatus | null;
@@ -1324,6 +1336,7 @@ export interface ConversationSearchItem {
   app_id?: string | null;
   apps_results?: Array<AppResult>;
   audio_files?: Array<AudioFile>;
+  audio_timeline?: AudioTimelineProvenance | null;
   calendar_event?: CalendarEventLink | null;
   call_id?: string | null;
   capture_group?: CaptureGroup | null;
@@ -1356,6 +1369,7 @@ export interface ConversationSearchItem {
   processing_state?: ConversationProcessingState | null;
   screenshot_sharing_enabled?: boolean;
   source?: ConversationSource | null;
+  speaker_resolution?: ConversationSpeakers | null;
   starred?: boolean;
   started_at: string | null;
   status?: ConversationStatus | null;
@@ -1371,6 +1385,12 @@ export interface ConversationSearchItem {
 }
 
 export type ConversationSource = "friend" | "omi" | "fieldy" | "bee" | "plaud" | "frame" | "friend_com" | "apple_watch" | "phone" | "phone_call" | "desktop" | "openglass" | "screenpipe" | "workflow" | "sdcard" | "external_integration" | "limitless" | "rayban_meta" | "onboarding" | "unknown";
+
+export interface ConversationSpeakers {
+  participant_speaker_ids?: Array<number>;
+  status: "resolved" | "capture" | "unavailable";
+  version?: number;
+}
 
 export type ConversationStatus = "in_progress" | "processing" | "merging" | "completed" | "failed";
 
@@ -1461,7 +1481,7 @@ export interface CreateConversationFromTranscriptRequest {
   client_platform?: string | null;
   client_processing?: unknown | null;
   client_session_id?: string | null;
-  conversation_finalization_reason?: "user_stop" | "finish_and_continue" | "meeting_started" | "meeting_ended" | "max_duration_rotation" | "crash_recovery" | "retry" | null;
+  conversation_finalization_reason?: string | null;
   conversation_role?: "ambient" | "meeting";
   finished_at?: string | null;
   geolocation?: GeolocationInput | null;
@@ -4506,9 +4526,14 @@ export interface TaskIntegrationMutationResponse {
   status: string;
 }
 
+export interface TaskIntegrationStatus {
+  app_key: string;
+  connected: boolean;
+}
+
 export interface TaskIntegrationsResponse {
   default_app: string | null;
-  integrations: Record<string, unknown>;
+  integrations: Record<string, TaskIntegrationStatus>;
 }
 
 export type TaskIntelligenceFeedbackAction = "do_now" | "later" | "dismiss" | "accept_candidate" | "edit" | "complete";
@@ -5185,6 +5210,7 @@ export interface OmiApiSchemas {
   "AudioFile": AudioFile;
   "AudioFileUrlInfo": AudioFileUrlInfo;
   "AudioPrecacheResponse": AudioPrecacheResponse;
+  "AudioTimelineProvenance": AudioTimelineProvenance;
   "AudioUrlsResponse": AudioUrlsResponse;
   "AuthStep": AuthStep;
   "AvailableLanguage": AvailableLanguage;
@@ -5254,6 +5280,7 @@ export interface OmiApiSchemas {
   "ChatUsageQuota": ChatUsageQuota;
   "CheckVerificationRequest": CheckVerificationRequest;
   "CheckVerificationResponse": CheckVerificationResponse;
+  "ChunkSpan": ChunkSpan;
   "CleanerMemory": CleanerMemory;
   "ClickUpListsResponse": ClickUpListsResponse;
   "ClickUpSpacesResponse": ClickUpSpacesResponse;
@@ -5288,6 +5315,7 @@ export interface OmiApiSchemas {
   "ConversationScreenFrameSet": ConversationScreenFrameSet;
   "ConversationSearchItem": ConversationSearchItem;
   "ConversationSource": ConversationSource;
+  "ConversationSpeakers": ConversationSpeakers;
   "ConversationStatus": ConversationStatus;
   "ConversationStatusResponse": ConversationStatusResponse;
   "ConversationSuggestedAppsResponse": ConversationSuggestedAppsResponse;
@@ -5718,6 +5746,7 @@ export interface OmiApiSchemas {
   "TaskGoalLinkImportRequest": TaskGoalLinkImportRequest;
   "TaskIntegrationData": TaskIntegrationData;
   "TaskIntegrationMutationResponse": TaskIntegrationMutationResponse;
+  "TaskIntegrationStatus": TaskIntegrationStatus;
   "TaskIntegrationsResponse": TaskIntegrationsResponse;
   "TaskIntelligenceFeedbackAction": TaskIntelligenceFeedbackAction;
   "TaskIntelligenceFeedbackReason": TaskIntelligenceFeedbackReason;
@@ -17534,7 +17563,7 @@ export async function get_user_trial_status_v1_users_me_trial_get(header: { auth
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_user_usage_stats_endpoint_v1_users_me_usage_get(query: { period?: UsagePeriod }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<UserUsageResponse> {
+export async function get_user_usage_stats_endpoint_v1_users_me_usage_get(query: { period?: UsagePeriod, time_zone?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<UserUsageResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/me/usage`;
   const _params = query ? Object.entries(query)

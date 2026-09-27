@@ -53,6 +53,11 @@ def get_changelogs(
     Sorted by version descending (newest first).
     User sees the latest version's changelog first, can swipe to see older versions.
     """
+    # Validate in the handler, not with Query(ge=...): adding a `minimum` bound to the
+    # published schema is a breaking change for the released app-client contract, while a
+    # non-positive limit only needs to stop reaching the negative-slice path below.
+    if limit < 1:
+        raise HTTPException(status_code=422, detail="limit must be at least 1")
     if from_version and to_version:
         changelogs = get_app_changelogs(from_version, to_version)
     else:

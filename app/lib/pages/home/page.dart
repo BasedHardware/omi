@@ -809,6 +809,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   }
                                 },
                               ),
+                              if (home.selectedIndex == 0) const HomeChatBarBackdrop(),
                               if (home.selectedIndex == 0)
                                 Positioned(
                                   left: 16,
@@ -899,8 +900,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       width: 42,
                       height: 42,
                       alignment: Alignment.center,
-                      decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-                      child: const FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
+                      decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+                      child: FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
                     ),
                   ),
                 ),
@@ -986,7 +987,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         HeaderCircleButton(
                           semanticLabel: context.l10n.search,
                           color: homeProvider.showConvoSearchBar ? OmiColors.surface3 : OmiColors.surface1,
-                          icon: const Icon(Icons.search, size: 18, color: OmiColors.textSecondary),
+                          icon: Icon(Icons.search, size: 18, color: OmiColors.textSecondary),
                           onTap: () {
                             OmiHaptics.light();
                             homeProvider.toggleConvoSearchBar();
@@ -997,7 +998,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         HeaderCircleButton(
                           semanticLabel: context.l10n.filters,
                           color: OmiColors.surface3,
-                          icon: const FaIcon(FontAwesomeIcons.calendarDay, size: 16, color: OmiColors.textPrimary),
+                          icon: FaIcon(FontAwesomeIcons.calendarDay, size: 16, color: OmiColors.textPrimary),
                           onTap: () async {
                             OmiHaptics.selection();
                             await showConversationDateRangePicker(context);
@@ -1019,7 +1020,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       // Export button
                       HeaderCircleButton(
                         semanticLabel: context.l10n.exportButton,
-                        icon: const FaIcon(
+                        icon: FaIcon(
                           FontAwesomeIcons.arrowUpFromBracket,
                           size: 16,
                           color: OmiColors.textSecondary,
@@ -1075,7 +1076,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     ],
                     buttonBuilder: (context, showMenu) => HeaderCircleButton(
                       semanticLabel: context.l10n.createAnApp,
-                      icon: const Icon(Icons.add, size: 18, color: OmiColors.textSecondary),
+                      icon: Icon(Icons.add, size: 18, color: OmiColors.textSecondary),
                       onTap: () {
                         OmiHaptics.selection();
                         showMenu();
@@ -1087,7 +1088,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               // Settings button - always visible
               HeaderCircleButton(
                 semanticLabel: context.l10n.settings,
-                icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
+                icon: FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
                 onTap: () {
                   OmiHaptics.selection();
                   PlatformManager.instance.analytics.pageOpened('Settings');
@@ -1170,7 +1171,7 @@ class _TabLoadingSkeleton extends StatelessWidget {
             child: Container(
               height: index == 0 ? 34 : 76,
               width: double.infinity,
-              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
             ),
           ),
         ),

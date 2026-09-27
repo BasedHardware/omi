@@ -150,3 +150,34 @@ verification on the original host; redirects are never followed. Every
 self-published `client_name` is displayed suffixed with the verified ASCII
 host — an exact-match brand list cannot catch homoglyph spoofs like
 Cyrillic "Сlaude".
+
+## Load balancer routing
+
+The canonical MCP POST is the bare path `/v1/mcp`. GCP URL-map path matchers
+treat `/v1/mcp/*` as a prefix of children only: it does **not** match `/v1/mcp`
+itself. Every environment's URL map must therefore list both paths on the
+backend-integration service:
+
+- `/v1/mcp`
+- `/v1/mcp/*`
+
+Production map `custom-domains-49a4` (project `based-hardware`), path matcher
+`api-omi-me`, historically routed only `['/v2/integrations/*', '/v1/mcp/*']`
+to `prod-omi-backend-integration`. Bare `/v1/mcp` then fell through to the
+default `backend` service. That service runs the same image, so the protocol
+still works, but it has no `POSTHOG_EVENTS_API_KEY` (no MCP analytics) and it
+puts MCP load on the main API.
+
+`/.well-known/*`, `/authorize`, and `/token` stay on `backend` on purpose.
+OAuth metadata and token issuance are not part of the integration path rule.
+
+Verify after an edit (do not apply from this repo; the URL map is not managed
+here):
+
+```bash
+gcloud compute url-maps describe custom-domains-49a4 --project=<project> --global --format=json
+gcloud compute url-maps validate --source=<exported-map>.yaml --global
+```
+
+In the describe output, the backend-integration path rule must contain both
+`/v1/mcp` and `/v1/mcp/*`. `validate` checks the map before import.
