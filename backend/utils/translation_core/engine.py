@@ -9,6 +9,8 @@ from enum import Enum
 from typing import Callable
 
 from config.translation import TranslationProfile, resolve_translation_profile
+from utils.translation_core.quality import output_rejection_reason
+from utils.translation_core.metrics import get_translation_metrics
 from utils.translation_core.cache import CachedTranslation, TranslationCache
 from utils.translation_core.planner import (
     PlannedUnit,
@@ -72,7 +74,7 @@ class TranslationEngine:
                 continue
             cached = self.cache.get(full_fingerprint, target_language)
             if cached is not None:
-                outcomes[unit.ordinal] = _outcome_from_value(unit, cached)
+                outcomes[unit.ordinal] = _outcome_from_value(unit, _guard_value(unit.text, cached, target_language))
                 continue
             if self.cache.is_negative(full_fingerprint, target_language):
                 outcomes[unit.ordinal] = _unchanged(unit, _base_language(target_language))
@@ -90,7 +92,7 @@ class TranslationEngine:
         for segment in plan.unique_segments:
             cached = self.cache.get(segment.fingerprint, target_language)
             if cached is not None:
-                segment_values[segment.fingerprint] = cached
+                segment_values[segment.fingerprint] = _guard_value(segment.text, cached, target_language)
             elif self.cache.is_negative(segment.fingerprint, target_language):
                 # A negative-cache hit marks "this segment needs no translation", which is not a
                 # language detection. It must not vote in the unit's dominant language, or a unit
@@ -129,8 +131,10 @@ class TranslationEngine:
         # requested chunk has returned a complete, valid response.
         if provider_failure is None:
             for fingerprint, value in staged.items():
-                self.cache.put(fingerprint, target_language, value, profile)
-            segment_values.update(staged)
+                guarded = _guard_value(segment_text[fingerprint], value, target_language)
+                if guarded is value:
+                    self.cache.put(fingerprint, target_language, value, profile)
+                segment_values[fingerprint] = guarded
 
         for planned_unit in plan.units:
             if not planned_unit.segment_fingerprints:
@@ -148,7 +152,8 @@ class TranslationEngine:
             if len(planned_unit.segment_fingerprints) != 1 or (
                 planned_unit.full_fingerprint != planned_unit.segment_fingerprints[0]
             ):
-                self.cache.put(planned_unit.full_fingerprint, target_language, full_value, profile)
+                if outcome.status == TranslationStatus.translated:
+                    self.cache.put(planned_unit.full_fingerprint, target_language, full_value, profile)
 
         return _ordered(units, outcomes)
 
@@ -158,6 +163,16 @@ class TranslationEngine:
             logger.warning('Ignoring unsupported translation providers: %s', ','.join(profile.unsupported_tokens))
         if profile.unavailable_tokens:
             logger.warning('Ignoring unavailable translation providers: %s', ','.join(profile.unavailable_tokens))
+
+
+def _guard_value(source: str, value: CachedTranslation, target: str) -> CachedTranslation:
+    reason = output_rejection_reason(source, value.text, target)
+    if reason is None or reason == 'unchanged':
+        return value
+    get_translation_metrics().decision(target, 'rejected_by_guard', reason)
+    # No language assertion or negative-cache write: a rejected paraphrase is
+    # not evidence that the original text is in the target language.
+    return CachedTranslation(text=source, detected_language='')
 
 
 def _reconstruct(
