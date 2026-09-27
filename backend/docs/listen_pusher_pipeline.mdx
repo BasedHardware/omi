@@ -1027,6 +1027,16 @@ sequenceDiagram
     Note over Pusher: In LOCAL_DEVELOPMENT mode,<br/>GCS upload fails (no prod creds).<br/>Conversation lifecycle still works.
 ```
 
+### Offline upload status ownership
+
+`GET /v2/sync-local-files/{job_id}` reads the job without mutating it, checks
+the authenticated owner, and only then attempts stale Cloud Tasks recovery
+under the worker's run lease. An old progress timestamp alone cannot fail
+an active worker, override standby, or replace a concurrent completed result.
+Inline coordinators retain their own terminal-write authority. The recovery
+and retained-audio limits are documented in the
+[two-lane sync runbook](runbooks/sync-two-lane.md).
+
 ### Conversation playback artifact
 
 At conversation completion (`process_conversation`, and `_finalize_sync_audio_files` for offline sync), an `audio-merge` Cloud Task (schema_version 2, name `amc-{conversation_id}-{fingerprint}`) builds **one dense per-conversation MP3** — `playback/{uid}/{conversation_id}/conversation.mp3` — containing only captured audio: intra-part gaps (&lt;90s) stay silence-filled, inter-part gaps (&gt;90s) are collapsed. The handler stamps the conversation doc with `conversation_audio`: a spans manifest (`{file_id, wall_offset, artifact_offset, len}` per part, wall offsets relative to `started_at` — the `TranscriptSegment.start` basis), both durations (`duration` = wall clock, `captured_duration` = audio only), and the `audio_files_fingerprint` it was built from.

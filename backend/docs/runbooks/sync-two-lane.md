@@ -102,7 +102,13 @@ after retirement—WAL and Cloud Tasks are the recovery boundary.
 
 Each job records its dispatch owner. Cloud Tasks jobs use the run lease for
 delivery serialization and can be stale-finalized by a polling read only after
-that reader acquires the lease and rechecks the job. Inline jobs renew the same
+that reader acquires the lease and rechecks the job. `get_sync_job` is read-only:
+an old progress timestamp cannot authorize a Redis failure write, dead-letter
+record, or cleanup. The authenticated status route performs recovery through
+the existing finalizer after acquiring ownership. HTTP coverage in
+`tests/unit/test_sync_status_read_ownership.py` exercises the real reader,
+run-lease operations, and finalizer together so a mocked lookup cannot hide a
+second transition owner. Inline jobs renew the same
 lease while their coordinator is alive, but a poller never stale-finalizes an
 inline job: a cancelled coordinator can have an executor leaf still writing,
 and a lease renewal alone is not a terminal-write fence. Renewal errors or
