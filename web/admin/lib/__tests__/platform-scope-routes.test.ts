@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const captured: string[] = [];
 const releaseRows: [string, string, string][] = [];
 let releaseBoundaryTimestamp: string | null = null;
+let releasePosthogFailure = false;
 
 vi.mock("@/lib/auth", () => ({
   verifyAdmin: vi.fn(async () => ({ uid: "test" })),
@@ -27,6 +28,9 @@ vi.mock("@/lib/posthog", () => ({
   posthogResults: vi.fn(
     async (_h: string, _p: string, _k: string, query: string) => {
       captured.push(query);
+      if (releasePosthogFailure && query.includes("properties.$app_build")) {
+        throw new Error("PostHog unavailable");
+      }
       if (releaseBoundaryTimestamp && query.includes("properties.$app_build")) {
         const timestamp = new Date(releaseBoundaryTimestamp);
         const day = query.includes(
@@ -89,6 +93,7 @@ function expectScoped(queries: string[], scope: "macos" | "mobile" | "all") {
 beforeEach(() => {
   releaseRows.length = 0;
   releaseBoundaryTimestamp = null;
+  releasePosthogFailure = false;
   process.env.POSTHOG_PERSONAL_API_KEY = "phx_test";
   process.env.POSTHOG_PROJECT_ID = "1";
   process.env.POSTHOG_HOST = "https://posthog.test";
@@ -339,6 +344,79 @@ describe("releases route", () => {
     } finally {
       vi.unstubAllGlobals();
       vi.useRealTimers();
+    }
+  });
+
+  it("returns 500 when PostHog fails even if GitHub and iTunes succeed", async () => {
+    releasePosthogFailure = true;
+    const fetchMock = vi.fn(async (url: string) => ({
+      ok: true,
+      json: async () =>
+        url.includes("itunes.apple.com")
+          ? {
+              results: [
+                {
+                  version: "1.2",
+                  currentVersionReleaseDate: "2026-09-27T12:00:00Z",
+                },
+              ],
+            }
+          : [],
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      vi.resetModules();
+      const { GET } = await import("@/app/api/omi/stats/releases/route");
+      const response = await GET(request("/api/omi/stats/releases?days=3"));
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({ error: "PostHog unavailable" });
+      expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+        expect.stringContaining(
+          "api.github.com/repos/BasedHardware/omi/releases"
+        ),
+        expect.stringContaining("itunes.apple.com/lookup"),
+      ]);
+    } finally {
+      errorLog.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps iTunes failure optional but returns 500 for a GitHub failure", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.includes("itunes.apple.com"))
+        throw new Error("iTunes unavailable");
+      return { ok: true, json: async () => [] };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      vi.resetModules();
+      const { GET } = await import("@/app/api/omi/stats/releases/route");
+      const response = await GET(request("/api/omi/stats/releases?days=3"));
+      expect(response.status).toBe(200);
+      expect((await response.json()).latest.ios.display).toBe(
+        "no releases found"
+      );
+
+      fetchMock.mockImplementation(async (url: string) => {
+        if (url.includes("api.github.com"))
+          return { ok: false, status: 503, json: async () => [] };
+        return { ok: true, json: async () => [] };
+      });
+      vi.resetModules();
+      const failingRoute = await import("@/app/api/omi/stats/releases/route");
+      const failed = await failingRoute.GET(
+        request("/api/omi/stats/releases?days=3")
+      );
+      expect(failed.status).toBe(500);
+      expect((await failed.json()).error).toContain(
+        "GitHub releases fetch failed: 503"
+      );
+    } finally {
+      errorLog.mockRestore();
+      vi.unstubAllGlobals();
     }
   });
 });

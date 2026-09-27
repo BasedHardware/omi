@@ -251,4 +251,61 @@ describe("computeProfitability cost-per-user honesty", () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it("marks both mobile PostHog legs unavailable when their fetches reject", async () => {
+    const dates = dayKeys(DAYS);
+    mockInfra.mockResolvedValue(billingPayload(dates));
+    process.env.POSTHOG_PERSONAL_API_KEY = "phk";
+    process.env.POSTHOG_PROJECT_ID = "1";
+    process.env.POSTHOG_HOST = "https://posthog.test";
+    const queries: string[] = [];
+    const fetchMock = vi.fn(async (_url: string, init: { body: string }) => {
+      const query = JSON.parse(init.body).query.query as string;
+      queries.push(query);
+      if (query.includes("$os_name IN ('iOS','Android')")) {
+        throw new Error("PostHog mobile unavailable");
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          results: query.includes("count(DISTINCT distinct_id)")
+            ? dates.map((day) => [day, 10])
+            : [["desktop-uid"]],
+        }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const { computeProfitability } = await loadRoute();
+      const payload = await computeProfitability({
+        days: DAYS,
+        desktopCost: 0.2,
+        mobileCost: 0.2,
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect(
+        queries.filter((query) =>
+          query.includes("$os_name IN ('iOS','Android')")
+        )
+      ).toHaveLength(2);
+      expect(payload.summary.sources.posthogMobile).toBe(false);
+      expect(payload.summary.sources.posthogDesktop).toBe(true);
+      expect(payload.summary.partial).toBe(true);
+      expect(
+        payload.activeUsers.every(
+          (row) => row.mobile === 0 && row.desktop === 10
+        )
+      ).toBe(true);
+      expect(
+        payload.costPerUser.every(
+          (row) => row.mobile === null && row.desktop === 6
+        )
+      ).toBe(true);
+      expect(payload.summary.avgCostPerUserMobile).toBeNull();
+    } finally {
+      errorLog.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
 });
