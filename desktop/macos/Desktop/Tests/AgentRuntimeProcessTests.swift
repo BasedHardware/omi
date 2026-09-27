@@ -295,6 +295,28 @@ private actor ContextAdmissionRetryTestState {
 }
 
 final class AgentRuntimeProcessTests: XCTestCase {
+  func testAgentEnvironmentStripsYoloModeOnlyInProduction() {
+    let inherited = ["OMI_YOLO_MODE": "1", "PATH": "/usr/bin", "OMI_UNRELATED": "keep"]
+
+    let production = AgentRuntimeCredentialPolicy.agentEnvironment(
+      inherited, isNonProduction: false)
+    XCTAssertNil(
+      production["OMI_YOLO_MODE"],
+      "production must never let an inherited YOLO override reach the agent subprocess")
+    XCTAssertEqual(production["PATH"], "/usr/bin")
+    XCTAssertEqual(production["OMI_UNRELATED"], "keep")
+
+    let productionOff = AgentRuntimeCredentialPolicy.agentEnvironment(
+      ["OMI_YOLO_MODE": "0"], isNonProduction: false)
+    XCTAssertNil(
+      productionOff["OMI_YOLO_MODE"],
+      "an explicit =0 must also be stripped so a shipped bundle can never carry the key")
+
+    let nonProduction = AgentRuntimeCredentialPolicy.agentEnvironment(
+      inherited, isNonProduction: true)
+    XCTAssertEqual(nonProduction, inherited)
+  }
+
   func testHermeticFaultModelTokenIsNonProductionOnlyAndAvoidsFirebaseRefresh() {
     let environment = [
       AgentRuntimeCredentialPolicy.hermeticFaultModelTokenEnvironmentKey: "fault-suite-model-token"

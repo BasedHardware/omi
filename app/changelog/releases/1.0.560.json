@@ -1,0 +1,19 @@
+{
+  "version": "1.0.560",
+  "date": "2026-09-26",
+  "changes": [
+    "Conversation duration accurately reflects speech length instead of the full audio streaming session",
+    "Ask Omi and other buttons use the same icons as the tab bar again",
+    "Settings is simpler: Account at the top, then seven clear groups, and a calmer Ask Omi button",
+    "Plan & Usage, Referral Program and Feedback are back on the first Settings page, and Permissions now lives under Device",
+    "A calmer, more consistent app: Undo after deleting, clear Back and Close everywhere, and no more surprise pop-ups while you record",
+    "Omi can now ask you to name voices from your recent conversations, so it learns who is speaking",
+    "Home shows what is recording now in one live card (Pendant, Phone or Call, with Pause), the record button always records with this phone and explains when your pendant is listening, the live page names its source with Pause and Finish, and the device chip shows a battery gauge",
+    "Pausing a phone recording now keeps it as one conversation, the pendant pauses while you record with the phone or take an Omi call and then resumes on its own, and stopping the phone no longer leaves the pendant paused",
+    "Get help reconnecting your pendant when audio stops reaching the app",
+    "MCP setup now uses the hosted Streamable HTTP endpoint, with correct Claude Desktop and claude.ai OAuth instructions.",
+    "The Memory Graph empty state no longer overlaps the page title",
+    "Processing conversations now show a dedicated card on the Conversations screen while they finish up",
+    "When transcription is unavailable, recording now says it continues on device and will process later, with a pending count while recordings catch up"
+  ]
+}

@@ -2,12 +2,12 @@
 
 import { useEffect } from 'react';
 import { FairUseStatus } from '@/components/fair-use/FairUseStatus';
-import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { PostHogManager } from '@/lib/analytics/posthog';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 export default function FairUsePage() {
   useEffect(() => {
-    MixpanelManager.pageView('Fair Use');
+    PostHogManager.pageView('Fair Use');
   }, []);
 
   return (

@@ -3,14 +3,14 @@
 import { useEffect } from 'react';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { crispEmbedUrl } from '@/lib/support';
-import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { PostHogManager } from '@/lib/analytics/posthog';
 import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 export default function HelpPage() {
   const { user } = useAuth();
 
   useEffect(() => {
-    MixpanelManager.pageView('Help');
+    PostHogManager.pageView('Help');
   }, []);
 
   return (

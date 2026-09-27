@@ -26,6 +26,7 @@ class ProcessingTrigger(str, Enum):
     FIRST_OPEN = 'first_open'  # deferred enrichment when the user opens it
     USER_REPROCESS = 'user_reprocess'  # the user asked to reprocess it
     MERGE = 'merge'  # the user merged conversations into it
+    SERVER_RECOVERY = 'server_recovery'
 
 
 class RelevancePolicy(str, Enum):
@@ -42,7 +43,8 @@ class ProcessingMode:
     reprocess: bool
     # Run derived work eagerly even when JIT first-open would defer it.
     bypass_jit_first_open: bool
-    # KEEP only for triggers that are themselves a user action on this row.
+    # KEEP for triggers that are themselves a user action on this row, plus
+    # SERVER_RECOVERY: the repair run must never discard the recovered copy.
     relevance: RelevancePolicy
 
 
@@ -60,6 +62,7 @@ PROCESSING_MODES: Mapping[ProcessingTrigger, ProcessingMode] = MappingProxyType(
         ProcessingTrigger.FIRST_OPEN: ProcessingMode(True, False, False, _KEEP),
         ProcessingTrigger.USER_REPROCESS: ProcessingMode(True, True, True, _KEEP),
         ProcessingTrigger.MERGE: ProcessingMode(True, False, False, _KEEP),
+        ProcessingTrigger.SERVER_RECOVERY: ProcessingMode(True, True, True, _KEEP),
     }
 )
 

@@ -760,7 +760,6 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
         }
         provider.updateVisibilityLocally(ConversationVisibility.shared);
       }
-      PlatformManager.instance.analytics.conversationShared(conversation: conversation, shareMethod: 'url_share');
       final origin = shareSheetOrigin(_shareButtonKey);
       // The sheet is up once the call is made; the button stops spinning while it is shown.
       final result = shareConversationLink(conversation, sharePositionOrigin: origin);
@@ -870,7 +869,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       PullDownMenuItem(
         title: l10n.deleteConversation,
         isDestructive: true,
-        iconWidget: const FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
+        iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
         onTap: () => _handleMenuSelection(context, 'delete', provider),
       ),
     ];

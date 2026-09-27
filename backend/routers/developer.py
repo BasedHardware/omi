@@ -1208,18 +1208,11 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     conversation_role: Literal['ambient', 'meeting'] = 'ambient'
     # Optional for backwards compatibility. When supplied, rotation fragments
     # are persisted but do not create a notes-ready receipt.
-    conversation_finalization_reason: (
-        Literal[
-            'user_stop',
-            'finish_and_continue',
-            'meeting_started',
-            'meeting_ended',
-            'max_duration_rotation',
-            'crash_recovery',
-            'retry',
-        ]
-        | None
-    ) = None
+    # Plain string, not a Literal: this is opaque client-versioned metadata
+    # (only 'max_duration_rotation' is ever compared downstream), and a closed
+    # enum here previously fell out of sync with the desktop client's finalization
+    # reasons, causing every upload carrying a newer reason to fail with a 422.
+    conversation_finalization_reason: Optional[str] = None
 
     @field_validator('client_session_id')
     @classmethod

@@ -50,6 +50,7 @@ extension AppState {
 
     for segment in segments {
       guard !segment.text.isEmpty else { continue }
+      UpdateInstallActivity.markTranscriptActivity()
 
       // Extract speaker_id from backend (e.g. "SPEAKER_00" → 0)
       let speakerId = segment.speaker_id ?? 0

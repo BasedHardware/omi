@@ -95,12 +95,14 @@ def test_valid_injected_mcp_context_composes_with_stored_default_read_grant_with
 
 def test_mcp_routes_advertise_memories_read_and_wire_memory_context_only_on_memory_search_paths():
     rest_source = (ROOT / 'routers' / 'mcp.py').read_text()
-    sse_source = (ROOT / 'routers' / 'mcp_sse.py').read_text()
+    registry_source = (ROOT / 'utils' / 'mcp_server' / 'registry.py').read_text()
+    auth_source = (ROOT / 'utils' / 'mcp_server' / 'auth.py').read_text()
+    memory_handlers_source = (ROOT / 'utils' / 'mcp_server' / 'handlers' / 'memories.py').read_text()
 
     assert 'uid: str = Depends(get_uid_from_mcp_api_key)' in rest_source
-    assert 'MEMORIES_READ_SECURITY = [{"type": "oauth2", "scopes": ["memories.read"]}]' in sse_source
-    assert 'auth_context: Optional[ProductAuthorizationContext] = None' in sse_source
-    assert 'authenticate_api_key_auth_context' in sse_source
-    assert 'authorize_memory_external_default_memory_read(auth_context, db_client=db)' in sse_source
+    assert 'MEMORIES_READ_SECURITY = [{"type": "oauth2", "scopes": ["memories.read"]}]' in registry_source
+    assert 'auth_context: Optional[ProductAuthorizationContext] = None' in memory_handlers_source
+    assert 'authenticate_api_key_auth_context' in auth_source
+    assert 'authorize_memory_external_default_memory_read(auth_context, db_client=db)' in memory_handlers_source
     assert 'get_mcp_memory_default_memory_read_context' in rest_source
-    assert 'build_mcp_default_memory_read_context' in sse_source
+    assert 'build_mcp_default_memory_read_context' in auth_source

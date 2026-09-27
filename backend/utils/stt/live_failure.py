@@ -385,6 +385,7 @@ async def send_live_stt_audio(
     provider: str | None,
     platform: str | None,
     attempt_failover: Callable[[], Awaitable[bool]] | None = None,
+    start_sample: int | None = None,
 ) -> bool:
     """Send one audio chunk, terminating the client if the provider is unusable.
 
@@ -431,7 +432,16 @@ async def send_live_stt_audio(
         return False
 
     try:
-        accepted = stt_socket.send(audio)
+        accepted = (
+            stt_socket.send(audio, start_sample=start_sample) if start_sample is not None else stt_socket.send(audio)
+        )
+    except TypeError:
+        # A socket that predates the capture-position seam: send without it.
+        try:
+            accepted = stt_socket.send(audio)
+        except Exception:
+            await _recoverable_failure('send_failed')
+            return False
     except Exception:
         await _recoverable_failure('send_failed')
         return False
@@ -458,6 +468,7 @@ async def flush_live_stt_buffer(
     provider: str | None,
     platform: str | None,
     attempt_failover: Callable[[], Awaitable[bool]] | None = None,
+    start_sample: int | None = None,
 ) -> bool:
     """Send and clear a buffer only after the provider accepted its contents."""
 
@@ -469,6 +480,7 @@ async def flush_live_stt_buffer(
         provider=provider,
         platform=platform,
         attempt_failover=attempt_failover,
+        start_sample=start_sample,
     )
     if sent:
         buffer.clear()

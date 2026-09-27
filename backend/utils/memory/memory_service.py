@@ -4327,13 +4327,8 @@ class MemoryService:
         upsert_vector: bool = True,
     ) -> MemoryDB:
         del memory_system, consumer, operation, upsert_vector
-        self.ensure_canonical_mutation_ready(uid)
-        materialized = self._ensure_canonical_target(uid, memory_id)
-        try:
-            updated = self._canonical.update_content(uid, memory_id, content)
-        except ValueError as exc:
-            raise HTTPException(status_code=404, detail="Memory not found") from exc
-        if materialized:
-            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
-        self._invalidate_prompt_cache(uid)
-        return updated
+        # Route through ``update_content`` so ledger-schema memories are
+        # corrected through the ledger path rather than a blind canonical
+        # content overwrite; it performs the same readiness/materialization and
+        # historical cleanup internally.
+        return self.update_content(uid, memory_id, content)
