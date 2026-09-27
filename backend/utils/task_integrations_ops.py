@@ -367,7 +367,7 @@ async def create_task_internal(
                 }
 
         elif app_key == 'clickup':
-            list_id = integration.get('list_id')
+            list_id: str | None = integration.get('list_id')  # type: ignore
             if not list_id:
                 return {"success": False, "error": "No list configured", "error_code": "no_list"}
 
