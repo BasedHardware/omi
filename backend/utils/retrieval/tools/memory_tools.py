@@ -323,10 +323,11 @@ def get_memories_tool(
         if stamp and stamp.tzinfo is not None:
             stamp = stamp.astimezone(timezone.utc)
         date_str = stamp.strftime('%Y-%m-%d %H:%M:%S UTC') if stamp else 'Unknown'
+        memory_id = getattr(memory, 'id', None)
         records.append(
             format_memory_evidence(
                 memory.content,
-                suffix=f'memory_id: {memory.id}, date: {date_str}',
+                suffix=f'memory_id: {memory_id}, date: {date_str}' if memory_id else f'date: {date_str}',
                 subject_attribution=getattr(memory, 'subject_attribution', 'unknown'),
             )
         )
@@ -490,9 +491,9 @@ def search_memories_tool(
             score = match.score
             display_date = _memory_read_date(memory, temporal=effective_view != 'released')
             date_str = format_local_date(display_date, display_tz) if display_date else 'Unknown'
-            suffix = (
-                f"memory_id: {memory.id}, relevance: {score:.2f}, category: {memory.category.value}, date: {date_str}"
-            )
+            memory_id = getattr(memory, 'id', None)
+            memory_id_prefix = f'memory_id: {memory_id}, ' if memory_id else ''
+            suffix = f"{memory_id_prefix}relevance: {score:.2f}, category: {memory.category.value}, date: {date_str}"
             if effective_view != 'released':
                 band = getattr(memory, 'currency_band', None)
                 evidence_date = getattr(memory, 'as_of', None)
