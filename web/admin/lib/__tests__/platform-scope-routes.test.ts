@@ -352,7 +352,7 @@ describe("releases route", () => {
     const fetchMock = vi.fn(async (url: string) => ({
       ok: true,
       json: async () =>
-        url.includes("itunes.apple.com")
+        new URL(url).host === "itunes.apple.com"
           ? {
               results: [
                 {
@@ -385,7 +385,7 @@ describe("releases route", () => {
 
   it("keeps iTunes failure optional but returns 500 for a GitHub failure", async () => {
     const fetchMock = vi.fn(async (url: string) => {
-      if (url.includes("itunes.apple.com"))
+      if (new URL(url).host === "itunes.apple.com")
         throw new Error("iTunes unavailable");
       return { ok: true, json: async () => [] };
     });
@@ -401,7 +401,7 @@ describe("releases route", () => {
       );
 
       fetchMock.mockImplementation(async (url: string) => {
-        if (url.includes("api.github.com"))
+        if (new URL(url).host === "api.github.com")
           return { ok: false, status: 503, json: async () => [] };
         return { ok: true, json: async () => [] };
       });
