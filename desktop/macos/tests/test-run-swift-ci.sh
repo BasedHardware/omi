@@ -98,8 +98,8 @@ fi
 if [ "$(grep -c 'swift build ' "$FAKE_XCRUN_LOG")" -ne 1 ]; then
   fail "release test compile and regression must invoke exactly one build"
 fi
-if ! grep -qx 'swift build -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -enable-testing --build-tests' "$FAKE_RELEASE_BUILD"; then
-  fail "release app and test targets must build together with the same destination"
+if ! grep -qx 'swift build -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -enable-testing --jobs 1 --build-tests' "$FAKE_RELEASE_BUILD"; then
+  fail "release app and test targets must build together with bounded compiler concurrency"
 fi
 if ! grep -q -- 'swift test -c release --package-path Desktop --triple arm64-apple-macosx -Xswiftc -enable-testing --skip-build --filter UserNotificationCallbackBridgeTests/' "$FAKE_XCRUN_LOG"; then
   fail "release notification regression did not reuse the compiled tests"

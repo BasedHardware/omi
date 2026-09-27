@@ -96,7 +96,9 @@ case "${1:-}" in
     # can recompile the app with testability enabled and exhaust the job budget
     # (#13481). --build-tests also compiles non-Notification tests (#13123/#13467).
     if [ "$1" = --release-test-compile ]; then
-      xcrun swift build "${RELEASE_TEST_OPTIONS[@]}" --build-tests
+      # The hosted xcode-27 runner has 7 GB RAM. Concurrent release frontends
+      # can exhaust it while compiling the app and test modules together.
+      xcrun swift build "${RELEASE_TEST_OPTIONS[@]}" --jobs 1 --build-tests
     else
       xcrun swift build "${RELEASE_OPTIONS[@]}"
     fi
