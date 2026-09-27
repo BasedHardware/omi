@@ -24,6 +24,7 @@ from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
 import httpx
 import numpy as np
+from google.api_core import exceptions as google_exceptions
 from fastapi import HTTPException, UploadFile
 from pydub import AudioSegment
 
@@ -136,6 +137,7 @@ from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_w
 from utils.sync.capture import chunk_identity
 from utils.sync.bridge import finish_sync_segment
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
+from config.sync_telemetry import SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS
 from utils.sync.backfill import release_backfill_slot, reserve_backfill_speech
 from utils.sync.content_id import compute_sync_segment_id
 from utils.sync.lanes import SyncLane
@@ -182,6 +184,54 @@ _SYNC_FAILURE_REASON_CODES = {
     'sync_vad_failed',
     'sync_worker_stale',
 }
+
+
+def _persistence_failure_fingerprint(error: BaseException, phase: str) -> str | None:
+    """Identify a bounded persistence data-shape failure, never an unknown error.
+
+    Inspect the full cause chain so an apparent data-shape error wrapping a
+    transient transport or Firestore failure cannot record a strike.
+    """
+    if phase != 'persistence':
+        return None
+    subtype = bounded_exception_class(error)
+    if subtype not in SYNC_REPEATABLE_PERSISTENCE_EXCEPTIONS:
+        return None
+    chain: list[BaseException] = []
+    current: BaseException | None = error
+    while current is not None and all(current is not item for item in chain):
+        chain.append(current)
+        current = current.__cause__ or current.__context__
+    if any(
+        type(item).__name__ == 'FirestoreContentionExhausted'
+        or isinstance(
+            item,
+            (
+                google_exceptions.Aborted,
+                google_exceptions.GoogleAPICallError,
+                google_exceptions.DeadlineExceeded,
+                google_exceptions.ServiceUnavailable,
+                google_exceptions.ResourceExhausted,
+                google_exceptions.RetryError,
+                TimeoutError,
+                ConnectionError,
+                httpx.TimeoutException,
+                httpx.TransportError,
+                httpx.HTTPStatusError,
+            ),
+        )
+        for item in chain
+    ):
+        return None
+    return f'persistence:{subtype}'
+
+
+def _whole_job_persistence_fingerprint(
+    failed_segments: int, total_segments: int, fingerprints: list[str]
+) -> str | None:
+    if failed_segments > 0 and failed_segments == total_segments == len(fingerprints) and len(set(fingerprints)) == 1:
+        return fingerprints[0]
+    return None
 
 
 async def _resolve_fair_use_soft_cap_plan(uid: str):
@@ -695,6 +745,8 @@ async def _finalize_sync_job_failure(
     attempt_ref: str | None = None,
     failure_phase: str | None = None,
     failure_class: str | None = None,
+    failure_key: str | None = None,
+    failure_fingerprint: str | None = None,
 ) -> None:
     """Offload the atomic failure publication boundary to the DB executor."""
     finalized = await run_blocking(
@@ -714,6 +766,8 @@ async def _finalize_sync_job_failure(
         attempt_ref=attempt_ref,
         failure_phase=failure_phase,
         failure_class=failure_class,
+        failure_key=failure_key,
+        failure_fingerprint=failure_fingerprint,
     )
     if finalized is None:
         # The epoch-fenced path lost its lease; the compatibility path saw an
@@ -738,6 +792,8 @@ def finalize_sync_job_failure_now(
     attempt_ref: str | None = None,
     failure_phase: str | None = None,
     failure_class: str | None = None,
+    failure_key: str | None = None,
+    failure_fingerprint: str | None = None,
 ) -> Optional[Dict]:
     """Publish one truthful failure and then make its retry claim available.
 
@@ -766,16 +822,19 @@ def finalize_sync_job_failure_now(
     if finalized is None:
         return None
     if content_id:
+        failure_kwargs = {'failure_key': failure_key} if failure_key else {}
+        if failure_fingerprint:
+            failure_kwargs['failure_fingerprint'] = failure_fingerprint
         if run_lock_token is None:
             # The pre-cutover protocol has no epoch binding. Keep all ledger
             # operations tokenless while legacy revisions may still exist.
-            release_sync_content_claim(uid, content_id, job_id)
+            release_sync_content_claim(uid, content_id, job_id, **failure_kwargs)
         else:
             # The fenced Redis terminal transition already succeeded. A lease
             # can expire between that CAS and Firestore release, so use the
             # deliberately retired-job transaction rather than treating this
             # as a live write.
-            release_sync_content_claim_after_job_retired(uid, content_id, job_id)
+            release_sync_content_claim_after_job_retired(uid, content_id, job_id, **failure_kwargs)
     if run_lock_token is not None:
         delete_sync_job_run_lock_epoch(job_id)
     logger.error(
@@ -1232,6 +1291,15 @@ def process_segment(
     except Exception as e:
         if is_destructive_operation_in_progress(e):
             raise
+        if phase == 'persistence' and bounded_exception_class(e) == 'OtherException':
+            # Preserve a bounded code-defined subtype for incident diagnosis;
+            # never log exception text, document IDs, paths, or transcript.
+            logger.error(
+                'event=sync_persistence_exception exception_type=%s job_ref=%s attempt_ref=%s',
+                _bounded_exception_type(e),
+                _bounded_correlation_ref(job_id),
+                _bounded_correlation_ref(attempt_ref),
+            )
         failure = failure_from_exception(e, provider=provider)
         _set_deferred_segment_outcome(
             deferred_outcome,
@@ -1242,6 +1310,16 @@ def process_segment(
             phase=phase,
             exception_type=bounded_exception_class(e),
         )
+        fingerprint = _persistence_failure_fingerprint(e, phase)
+        if deferred_outcome is not None and fingerprint:
+            deferred_outcome['repeat_failure_key'] = 'persistent_persistence'
+            deferred_outcome['repeat_failure_fingerprint'] = fingerprint
+        elif (
+            deferred_outcome is not None
+            and phase in ('provider_call', 'parse')
+            and failure.outcome == TranscriptionOutcome.INVALID_INPUT
+        ):
+            deferred_outcome['provider_invalid_input'] = True
         _record_sync_segment_failure(
             failure,
             model=model,
@@ -1742,6 +1820,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     attempt_ref=attempt_ref,
                     failure_phase='decode',
                     failure_class=bounded_exception_class(e),
+                    failure_key='invalid_audio',
                 )
                 return
             except Exception as e:
@@ -1790,6 +1869,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     run_lock_token=active_run_lock_token,
                     attempt_ref=attempt_ref,
                     failure_phase='decode',
+                    failure_key='invalid_audio',
                 )
                 return
 
@@ -2057,6 +2137,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             content_segment_count = [0]
             segment_lock = threading.Lock()
             first_segment_failure: list = []
+            persistence_failure_fingerprints: list[str] = []
+            provider_invalid_failures = [0]
 
             # Segments that fully landed in a prior Cloud Tasks attempt are skipped
             already_processed = set()
@@ -2188,6 +2270,12 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         attempt_ref=attempt_ref,
                     )
                 elif ok is False:
+                    if deferred_outcome.get('repeat_failure_key') == 'persistent_persistence':
+                        with segment_lock:
+                            persistence_failure_fingerprints.append(deferred_outcome['repeat_failure_fingerprint'])
+                    elif deferred_outcome.get('provider_invalid_input'):
+                        with segment_lock:
+                            provider_invalid_failures[0] += 1
                     (
                         outcome,
                         outcome_provider,
@@ -2363,6 +2451,17 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 'model': _bounded_sync_model(sync_model),
                 'lane': sync_lane,
             }
+            repeat_failure_fingerprint = _whole_job_persistence_fingerprint(
+                failed_segments, total_segments, persistence_failure_fingerprints
+            )
+            repeat_failure_key = 'persistent_persistence' if repeat_failure_fingerprint else None
+            if repeat_failure_key:
+                # A polling cleanup or duplicate task may release the retired
+                # claim before this worker. Carry the strike through Redis.
+                final_result['repeat_failure_key'] = repeat_failure_key
+                final_result['repeat_failure_fingerprint'] = repeat_failure_fingerprint
+            if failed_segments == total_segments == provider_invalid_failures[0] and failed_segments > 0:
+                final_result['reason_code'] = 'stt_invalid_input'
             if content_id and failed_segments == 0:
                 # The durable content ledger proves every successful segment
                 # before the WAL-visible completed status is published.
@@ -2393,6 +2492,11 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 failure_class=failure_class,
             )
             if content_id and failed_segments > 0:
+                failure_kwargs = (
+                    {'failure_key': repeat_failure_key, 'failure_fingerprint': repeat_failure_fingerprint}
+                    if repeat_failure_key
+                    else {}
+                )
                 if ledger_fence_active:
                     await run_blocking(
                         db_executor,
@@ -2400,9 +2504,12 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         uid,
                         content_id,
                         job_id,
+                        **failure_kwargs,
                     )
                 else:
-                    await run_blocking(db_executor, release_sync_content_claim, uid, content_id, job_id)
+                    await run_blocking(
+                        db_executor, release_sync_content_claim, uid, content_id, job_id, **failure_kwargs
+                    )
             if ledger_fence_active:
                 await run_blocking(db_executor, delete_sync_job_run_lock_epoch, job_id)
             await _record_sync_job_outcome_async(
