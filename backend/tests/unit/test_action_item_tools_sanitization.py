@@ -81,6 +81,15 @@ def test_get_action_items_tool_invalid_date_sanitized():
     assert "ISO format" not in res
 
 
+def test_get_action_items_tool_config_exception_sanitized():
+    bad_config = MagicMock()
+    bad_config.__contains__.side_effect = RuntimeError("secret_config_vault_token_leak")
+
+    res = action_item_tools.get_action_items_tool(config=bad_config)
+    assert res == "Error: Configuration error."
+    assert "secret_config_vault_token_leak" not in res
+
+
 def test_get_action_items_tool_db_exception_sanitized():
     config = {"configurable": {"user_id": "test_user_123"}}
     action_items_db = sys.modules["database.action_items"]
@@ -146,6 +155,7 @@ def test_update_action_item_tool_update_db_exception_sanitized():
 
 if __name__ == "__main__":
     test_get_action_items_tool_invalid_date_sanitized()
+    test_get_action_items_tool_config_exception_sanitized()
     test_get_action_items_tool_db_exception_sanitized()
     test_create_action_item_tool_invalid_due_at_sanitized()
     test_create_action_item_tool_db_exception_sanitized()

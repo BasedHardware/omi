@@ -179,11 +179,12 @@ def get_action_items_tool(
 
         logger.info(f"✅ get_action_items_tool - uid: {uid}, limit: {limit}")
     except Exception as config_error:
-        logger.error(f"❌ get_action_items_tool - error accessing config: {config_error}")
-        import traceback
-
-        traceback.print_exc()
-        return f"Error: Configuration error - {str(config_error)}"
+        logger.error(
+            "❌ get_action_items_tool - error accessing config: %s",
+            type(config_error).__name__,
+            exc_info=True,
+        )
+        return "Error: Configuration error."
 
     # Hard-scope: force conversation_id and intersect creation dates with chat_scope (#4515).
     scope = chat_scope_from_config(configurable)
