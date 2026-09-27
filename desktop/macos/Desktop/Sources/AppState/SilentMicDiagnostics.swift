@@ -82,7 +82,7 @@ struct CapturePresence: Equatable {
     }
     return Self(
       screenLocked: locked, displaysAsleep: asleep,
-      consoleSessionActive: console, lidClosed: lidClosed, appActive: NSApp.isActive)
+      consoleSessionActive: console, lidClosed: lidClosed, appActive: NSApp?.isActive ?? false)
   }
 }
 
