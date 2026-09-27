@@ -377,7 +377,7 @@ def decoded_frame_map(claim: dict, frame_samples: list[int], *, wav_rate_hz: int
 
 def source_coordinate(frame_map: dict, sample: int) -> tuple[int, int] | None:
     offsets = frame_map['offsets']
-    if not isinstance(sample, int) or sample < 0 or sample > offsets[-1]:
+    if sample < 0 or sample > offsets[-1]:
         return None
     if sample == offsets[-1]:
         return frame_map['claim']['source_frame_start'] + len(offsets) - 1, 0
@@ -408,7 +408,7 @@ def sync_segment_receipt(
     }
 
 
-def merge_track_receipts(existing: Iterable[dict], incoming: Iterable[dict]) -> dict:
+def merge_track_receipts(existing: Iterable[object], incoming: Iterable[object]) -> dict:
     """Keep each contributor once; overflow is an explicit incomplete receipt."""
     receipts: dict[tuple, dict] = {}
     for receipt in [*existing, *incoming]:
@@ -418,11 +418,22 @@ def merge_track_receipts(existing: Iterable[dict], incoming: Iterable[dict]) -> 
         if key in receipts and receipts[key] != receipt:
             return unknown_envelope('missing_source_position', origin='sync_conflict')
         receipts[key] = receipt
-    result = {'version': 1, 'capability': 'source_position', 'coverage': 'mapped', 'origin': 'sync_vad', 'receipts': []}
+    kept: list[dict] = []
+    coverage = 'mapped'
     for receipt in receipts.values():
-        candidate = {**result, 'receipts': [*result['receipts'], receipt]}
+        candidate = {
+            'version': 1,
+            'capability': 'source_position',
+            'coverage': coverage,
+            'origin': 'sync_vad',
+            'receipts': [*kept, receipt],
+        }
         if len(json.dumps(candidate, sort_keys=True, separators=(',', ':')).encode()) > MAX_ENVELOPE_BYTES:
-            result['coverage'] = 'incomplete'
+            coverage = 'incomplete'
             break
-        result['receipts'].append(receipt)
-    return result if result['receipts'] else unknown_envelope('missing_source_position', origin='sync_overflow')
+        kept.append(receipt)
+    return (
+        {'version': 1, 'capability': 'source_position', 'coverage': coverage, 'origin': 'sync_vad', 'receipts': kept}
+        if kept
+        else unknown_envelope('missing_source_position', origin='sync_overflow')
+    )
