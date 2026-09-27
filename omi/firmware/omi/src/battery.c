@@ -25,7 +25,7 @@ int16_t sample_buffer[ADC_TOTAL_SAMPLES + 1];
 #define ADC_ACQUISITION_TIME ADC_ACQ_TIME(ADC_ACQ_TIME_MICROSECONDS, 10)
 #define ADC_1ST_CHANNEL_ID 0
 #define ADC_1ST_CHANNEL_INPUT NRF_SAADC_INPUT_AIN0
-#define BATTERY_FILTER_ALPHA_U16 (uint16_t) (65535 / (5 + 1))
+#define BATTERY_FILTER_ALPHA_U16 (65535 / (5 + 1))
 #define FILTER_INIT_CYCLES 5
 #define BATTERY_STATES(is_charging) ((is_charging) ? battery_charging_states : battery_discharge_states)
 
