@@ -1586,10 +1586,15 @@ def fetch_app_chat_tools_from_manifest(
         if isinstance(chat_messages_raw, dict):
             chat_messages: Dict[str, Any] = cast(Dict[str, Any], chat_messages_raw)
             if chat_messages.get('enabled', False):
+                # A present null (or out-of-contract value) must behave like absent: the stored
+                # doc feeds ExternalIntegration.chat_messages_target: Literal['main','app'] and
+                # chat_messages_notify: bool, so a raw null poisons every App(**doc) read.
+                target = chat_messages.get('target')
+                notify = chat_messages.get('notify')
                 chat_messages_config = {
                     'enabled': True,
-                    'target': chat_messages.get('target', 'app'),  # 'main' or 'app', default 'app'
-                    'notify': chat_messages.get('notify', True),  # send push notification, default True
+                    'target': target if target in ('main', 'app') else 'app',  # 'main' or 'app', default 'app'
+                    'notify': notify if isinstance(notify, bool) else True,  # send push notification, default True
                 }
 
         logger.info(
