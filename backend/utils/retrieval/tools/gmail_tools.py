@@ -3,7 +3,6 @@ Tools for accessing Gmail messages.
 """
 
 import base64
-import traceback
 from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional, cast
 
@@ -211,6 +210,7 @@ async def get_gmail_messages_tool(
         )
         if access_err:
             if access_err.startswith('Error checking Gmail connection'):
+                logger.error("Gmail connection check failed: %s", access_err)
                 return 'Error checking Gmail connection.'
             return access_err
         assert uid is not None
