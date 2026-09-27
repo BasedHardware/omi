@@ -1,6 +1,7 @@
 import React from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import {MaterialIcon, type MaterialIconName} from '../../ui/MaterialIcon';
+import {Pressable} from '../../ui/Pressable';
 
 import type {
   DesktopReadOutcomes,
@@ -15,14 +16,24 @@ import {
   useDesktopStyleSheets,
 } from '../DesktopTheme';
 
-type EntryKind = 'conversation' | 'memory' | 'task';
+type EntryKind = 'conversation' | 'memory' | 'task' | 'capture';
 
-type TimelineEntry = {
+export type ActivityFilter = 'all' | 'conversations' | 'recall' | 'tasks';
+
+export type TimelineEntry = {
   id: string;
   kind: EntryKind;
   atMs: number;
   title: string;
   detail: string;
+};
+
+export type CaptureGroupSummary = {
+  id: string;
+  title: string;
+  appName: string;
+  capturedAtMs: number;
+  count: number;
 };
 
 function secondsOrMillisToMs(value: number): number {
@@ -66,6 +77,29 @@ function taskEntry(item: TaskProjection): TimelineEntry {
   };
 }
 
+function captureEntry(item: CaptureGroupSummary): TimelineEntry {
+  return {
+    id: `capture-${item.id}`,
+    kind: 'capture',
+    atMs: item.capturedAtMs,
+    title: item.title,
+    detail:
+      item.count > 1
+        ? `${item.appName} · ${item.count} captures`
+        : item.appName,
+  };
+}
+
+function entryFilterBucket(kind: EntryKind): ActivityFilter {
+  if (kind === 'capture') {
+    return 'recall';
+  }
+  if (kind === 'task') {
+    return 'tasks';
+  }
+  return 'conversations';
+}
+
 function matchesQuery(entry: TimelineEntry, query: string): boolean {
   const needle = query.trim().toLowerCase();
   if (needle === '') {
@@ -77,6 +111,8 @@ function matchesQuery(entry: TimelineEntry, query: string): boolean {
 export function mergeTimeline(
   outcomes: DesktopReadOutcomes | null,
   query = '',
+  captures: CaptureGroupSummary[] = [],
+  filter: ActivityFilter = 'all',
 ): {entries: TimelineEntry[]; failures: string[]} {
   if (outcomes === null) {
     return {entries: [], failures: []};
@@ -104,9 +140,16 @@ export function mergeTimeline(
   } else {
     failures.push('Tasks are unavailable.');
   }
+  for (const item of captures) {
+    entries.push(captureEntry(item));
+  }
   entries.sort((a, b) => b.atMs - a.atMs);
   return {
-    entries: entries.filter(entry => matchesQuery(entry, query)),
+    entries: entries.filter(
+      entry =>
+        (filter === 'all' || entryFilterBucket(entry.kind) === filter) &&
+        matchesQuery(entry, query),
+    ),
     failures,
   };
 }
@@ -148,25 +191,35 @@ const kindMeta: Record<EntryKind, {icon: MaterialIconName; label: string}> = {
   conversation: {icon: 'chat_bubble', label: 'Conversation'},
   memory: {icon: 'auto_awesome', label: 'Memory'},
   task: {icon: 'check_circle', label: 'Task'},
+  capture: {icon: 'monitor', label: 'Recall'},
 };
 
 /**
- * Experimental unified timeline Home: one chronological feed of
- * conversations, memories, and tasks, like the mobile app's day view.
- * Gated by the flag in ./flag.
+ * Unified activity timeline: one chronological feed of conversations,
+ * memories, tasks, and recall capture groups — like the mobile app's day view.
+ * The standalone Activity page owns the filters; this renders the merged feed.
  */
 export function UnifiedTimeline({
   outcomes,
   query = '',
   loading,
+  captures = [],
+  filter = 'all',
+  onOpenEntry,
+  header,
 }: {
   outcomes: DesktopReadOutcomes | null;
   query?: string;
   loading: boolean;
+  captures?: CaptureGroupSummary[];
+  filter?: ActivityFilter;
+  onOpenEntry?: (entry: TimelineEntry) => void;
+  /** Optional content rendered above the feed inside the scroll view. */
+  header?: React.ReactNode;
 }) {
   const styles = useDesktopStyleSheets(createStyles);
   const {tokens: token} = useDesktopTheme();
-  const {entries, failures} = mergeTimeline(outcomes, query);
+  const {entries, failures} = mergeTimeline(outcomes, query, captures, filter);
   let lastDay = '';
   return (
     <View style={styles.root}>
@@ -174,12 +227,13 @@ export function UnifiedTimeline({
         accessibilityLabel="Unified timeline"
         scrollEventThrottle={16}
         contentContainerStyle={styles.content}>
+        {header}
         {loading && entries.length === 0 ? (
           <View style={styles.loading}>
             <OmiLoadingMark inkColor={token.color.ink} size={56} />
             <Text style={styles.empty}>Gathering your timeline…</Text>
           </View>
-        ) : entries.length === 0 ? (
+        ) : entries.length === 0 && failures.length === 0 ? (
           <Text style={styles.empty}>
             {query.trim() !== ''
               ? 'Nothing in your timeline matches yet.'
@@ -196,32 +250,46 @@ export function UnifiedTimeline({
           const showDay = day !== lastDay;
           lastDay = day;
           const meta = kindMeta[entry.kind].icon;
+          const body = (
+            <View style={styles.row}>
+              <View style={styles.rowIcon}>
+                <MaterialIcon
+                  name={meta}
+                  size={16}
+                  color={token.color.inkMuted}
+                />
+              </View>
+              <View style={styles.rowBody}>
+                <Text style={styles.rowTitle} numberOfLines={1}>
+                  {entry.title}
+                </Text>
+                {entry.detail.trim() !== '' ? (
+                  <Text style={styles.rowDetail} numberOfLines={2}>
+                    {entry.detail}
+                  </Text>
+                ) : null}
+                <Text style={styles.rowMeta}>
+                  {kindMeta[entry.kind].label}
+                  {entry.atMs === 0 ? '' : ` · ${timeLabel(entry.atMs)}`}
+                </Text>
+              </View>
+            </View>
+          );
           return (
             <View key={entry.id}>
               {showDay ? <Text style={styles.day}>{day}</Text> : null}
-              <View style={styles.row}>
-                <View style={styles.rowIcon}>
-                  <MaterialIcon
-                    name={meta}
-                    size={16}
-                    color={token.color.inkMuted}
-                  />
-                </View>
-                <View style={styles.rowBody}>
-                  <Text style={styles.rowTitle} numberOfLines={1}>
-                    {entry.title}
-                  </Text>
-                  {entry.detail.trim() !== '' ? (
-                    <Text style={styles.rowDetail} numberOfLines={2}>
-                      {entry.detail}
-                    </Text>
-                  ) : null}
-                  <Text style={styles.rowMeta}>
-                    {kindMeta[entry.kind].label}
-                    {entry.atMs === 0 ? '' : ` · ${timeLabel(entry.atMs)}`}
-                  </Text>
-                </View>
-              </View>
+              {onOpenEntry ? (
+                <Pressable
+                  accessibilityLabel={`${kindMeta[entry.kind].label} ${
+                    entry.title
+                  }`}
+                  style={styles.rowPress}
+                  onPress={() => onOpenEntry(entry)}>
+                  {body}
+                </Pressable>
+              ) : (
+                body
+              )}
             </View>
           );
         })}
@@ -255,6 +323,11 @@ const createStyles = (token: DesktopTokens) =>
       gap: 12,
       paddingVertical: 10,
       alignItems: 'flex-start',
+    },
+    rowPress: {
+      borderRadius: 12,
+      paddingHorizontal: 6,
+      marginHorizontal: -6,
     },
     rowIcon: {
       width: 30,

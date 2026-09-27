@@ -41,7 +41,7 @@ test('puts traffic lights in the content chrome next to Home', () => {
   expect(source).toContain(
     '[window standardWindowButton:NSWindowZoomButton].hidden = NO;',
   );
-  expect(source).toContain('window.movableByWindowBackground = NO;');
+  expect(source).toContain('window.movableByWindowBackground = YES;');
   expect(source).toContain('window.title = @"";');
   expect(source).toContain('NSWindowTitleHidden');
   expect(source).toContain('positionOmiTrafficLights');
@@ -95,31 +95,23 @@ test('shifts the whole titlebar container instead of reframing individual button
   );
 });
 
-test('titlebar and drag monitor do not steal chrome clicks', () => {
+test('titlebar stays click-through with no drag monitor to steal chrome clicks', () => {
   const source = readNativeSource('AppDelegate.mm');
   const header = readNativeSource('AppDelegate.h');
 
   expect(source).toContain('OmiTitlebarPassthroughView');
   expect(source).toContain('OmiChromeRowHeight + OmiWindowInset');
-  expect(
-    source.replaceAll('NSAccessibilitySearchFieldSubrole', ''),
-  ).not.toContain('NSAccessibilitySearchFieldRole');
-  expect(source).toContain('NSAccessibilitySearchFieldSubrole');
   expect(source).toContain('installOmiTitlebarClickThrough');
   expect(source).toContain('OmiSwizzleTitlebarHitTest');
-  expect(source).toContain('OmiTrafficLightHit');
   expect(source).toContain('OmiSwizzleContentHitTest');
-  expect(source).toContain('OmiViewBlocksWindowDrag');
-  expect(source).toContain('NSAccessibilityButtonRole');
-  expect(source).toContain('RCTText');
-  expect(source).toContain('return nil;');
-  expect(header).toContain('omiWindowDragMonitor');
-  const dragStart = source.indexOf('- (BOOL)omiWindowGroundDragEvent:');
-  expect(dragStart).toBeGreaterThan(-1);
-  const dragEnd = source.indexOf('\n}', dragStart);
-  const dragSource = source.slice(dragStart, dragEnd);
-  expect(dragSource).toContain('OmiViewBlocksWindowDrag(view)');
-  expect(dragSource).toContain('return NO;');
+  // Dragging is AppKit's own movableByWindowBackground path; the old local
+  // click monitor (which swallowed chrome clicks) must stay deleted.
+  expect(source).toContain('window.movableByWindowBackground = YES;');
+  expect(source).not.toContain('NSAccessibilitySearchFieldSubrole');
+  expect(source).not.toContain('OmiViewBlocksWindowDrag');
+  expect(source).not.toContain('addLocalMonitorForEventsMatchingMask');
+  expect(header).not.toContain('omiWindowDragMonitor');
+  expect(source).not.toContain('omiWindowGroundDragEvent');
 });
 
 test('pairs the macOS backend origin and credentials in one validated policy', () => {

@@ -4,6 +4,48 @@ export type RewindFrame = {
   appName: string;
   windowTitle: string;
 };
+// Consecutive frames over the same window collapse into one timeline moment.
+// The gap bound keeps a capture that paused (sleep, stop/start) from merging
+// into the previous session even though app and title match.
+export type RewindCaptureGroup = {
+  id: string;
+  frame: RewindFrame;
+  appName: string;
+  windowTitle: string;
+  capturedAtMs: number;
+  firstCapturedAtMs: number;
+  count: number;
+};
+const GROUP_GAP_MS = 12 * 60 * 1000;
+
+export function groupRewindFrames(frames: RewindFrame[]): RewindCaptureGroup[] {
+  const groups: RewindCaptureGroup[] = [];
+  for (const frame of frames) {
+    const previous = groups[groups.length - 1];
+    const sameWindow =
+      previous !== undefined &&
+      previous.appName === frame.appName &&
+      previous.windowTitle === frame.windowTitle;
+    const contiguous =
+      previous !== undefined &&
+      previous.firstCapturedAtMs - frame.capturedAtMs <= GROUP_GAP_MS;
+    if (sameWindow && contiguous) {
+      previous.count += 1;
+      previous.firstCapturedAtMs = frame.capturedAtMs;
+      continue;
+    }
+    groups.push({
+      id: frame.id,
+      frame,
+      appName: frame.appName,
+      windowTitle: frame.windowTitle,
+      capturedAtMs: frame.capturedAtMs,
+      firstCapturedAtMs: frame.capturedAtMs,
+      count: 1,
+    });
+  }
+  return groups;
+}
 type Source = 'captured' | 'shipping';
 export type RewindTimelineBridge = {
   listFrames(input: {

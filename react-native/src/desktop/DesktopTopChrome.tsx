@@ -31,15 +31,28 @@ import {
   useDesktopStyleSheets,
 } from './DesktopTheme';
 
-export type DesktopRoute = DesktopNavItem | 'Settings';
+// 'Chat' stays a valid route id for the chat overlay's explore entry, but it
+// is no longer a rail destination.
+export type DesktopRoute = DesktopNavItem | 'Chat' | 'Settings';
 
 const navIcons: Record<DesktopNavItem, MaterialIconName> = {
-  Home: 'home',
-  Chat: 'chat',
+  Home: 'view_timeline',
   Conversations: 'chat_bubble',
   Rewind: 'history',
   Tasks: 'checklist',
 };
+
+// Rail ids to human labels. Home is the unified Activity page; Rewind has
+// always shipped as "Recall".
+export function desktopNavLabel(label: DesktopNavItem): string {
+  if (label === 'Rewind') {
+    return 'Recall';
+  }
+  if (label === 'Home') {
+    return 'Activity';
+  }
+  return label;
+}
 
 export type OmnibarMode = 'Ask' | 'Search';
 
@@ -51,6 +64,10 @@ type Props = {
   activeGenerationId: string | null;
   route: DesktopRoute;
   onNavigate: (route: DesktopRoute) => void;
+  // Which rail pill reads as selected. Defaults to the current route; the
+  // Activity page passes a filter-derived destination (e.g. Conversations
+  // while Home shows the conversations filter).
+  activeNav?: DesktopNavItem | null;
   // Screen-capture toggle shown in the nav row when capture is available.
   captureActive?: boolean;
   captureAvailable?: boolean;
@@ -61,6 +78,9 @@ type Props = {
   onSend: () => void;
   onStop: () => void;
   chatNotice: string | null;
+  // Small inline answer card pinned under the omnibar, like the mobile app's
+  // reply bubble. Rendered by the app shell; the chrome only places it.
+  inlineCard?: React.ReactNode;
   omnibarRef: React.RefObject<TextInput | null>;
   // When set, a decorative fake cursor travels to this destination in the
   // chrome (nav pill or the settings gear) and nudges it until dismissed.
@@ -81,6 +101,8 @@ export function DesktopChrome({
   onSend,
   onStop,
   route,
+  activeNav: activeNavProp,
+  inlineCard,
   captureActive = false,
   captureAvailable = false,
   captureBusy = false,
@@ -101,7 +123,9 @@ export function DesktopChrome({
   const placed = useRef(false);
   const animating = useRef(false);
   const lastTarget = useRef({x: -1, width: -1});
-  const activeNav = route === 'Settings' ? null : route;
+  const derivedNav: DesktopNavItem | null =
+    route === 'Settings' || route === 'Chat' ? null : route;
+  const activeNav = activeNavProp !== undefined ? activeNavProp : derivedNav;
   const activeFrame = activeNav === null ? undefined : frames[activeNav];
   const activeX = activeFrame?.x;
   const activeWidth = activeFrame?.width;
@@ -254,6 +278,10 @@ export function DesktopChrome({
         height: gearBox.height,
       };
     }
+    // Chat has no rail pill — its explore entry opens the overlay directly.
+    if (guideTarget === 'Chat') {
+      return null;
+    }
     const frame = frames[guideTarget];
     if (frame === undefined || navBox === null) {
       return null;
@@ -360,7 +388,7 @@ export function DesktopChrome({
           />
           {desktopNavItems.map((label, index) => {
             const iconName = navIcons[label];
-            const active = route === label;
+            const active = activeNav === label;
             return (
               <View
                 key={label}
@@ -382,7 +410,7 @@ export function DesktopChrome({
                   index < desktopNavItems.length - 1 && styles.navItemFollow,
                 ]}>
                 <FocusPressable
-                  accessibilityLabel={label === 'Rewind' ? 'Recall' : label}
+                  accessibilityLabel={desktopNavLabel(label)}
                   accessibilityRole="button"
                   accessibilityState={{selected: active}}
                   onPress={() => onNavigate(label)}
@@ -399,7 +427,7 @@ export function DesktopChrome({
                   </View>
                   <Text
                     style={[styles.navText, active && styles.navTextActive]}>
-                    {label === 'Rewind' ? 'Recall' : label}
+                    {desktopNavLabel(label)}
                   </Text>
                 </FocusPressable>
               </View>
@@ -557,6 +585,11 @@ export function DesktopChrome({
             <MaterialIcon name="search" size={17} color={token.color.dark} />
           )}
         </FocusPressable>
+        {inlineCard ? (
+          <View pointerEvents="box-none" style={styles.inlineCardSlot}>
+            {inlineCard}
+          </View>
+        ) : null}
       </View>
       {chatNotice === null ? null : (
         <Text
@@ -745,6 +778,16 @@ const createStyles = (token: DesktopTokens) =>
       minWidth: 220,
       paddingHorizontal: 8,
       paddingVertical: 6,
+    },
+    // The inline ask answer hangs just below the omnibar without pushing the
+    // page layout underneath it.
+    inlineCardSlot: {
+      position: 'absolute',
+      top: '100%',
+      left: 0,
+      right: 0,
+      marginTop: 8,
+      zIndex: 6,
     },
     omnibarInput: {
       color: token.color.ink,

@@ -153,9 +153,16 @@ async function openChat(renderer: ReactTestRenderer.ReactTestRenderer) {
   if (labelsOf(renderer).includes('Chat with Omi')) {
     return;
   }
+  // Chat is an overlay opened from the Activity checklist; the preference
+  // read has to settle before the checklist mounts.
+  await act(async () => {
+    await Promise.resolve();
+  });
   await act(async () =>
     renderer.root
-      .find(node => node.props.accessibilityLabel === 'Chat')
+      .find(
+        node => node.props.accessibilityLabel === 'Guide: Ask about your day',
+      )
       .props.onPress(),
   );
 }
@@ -241,12 +248,19 @@ test('signed-out Mac sees only the Welcome until a real session lands', async ()
   let labels = labelsOf(renderer);
   expect(labels).toContain('First-run onboarding');
   expect(textOf(renderer)).toContain('Welcome to Omi');
-  // No nav pills, no omnibar, no Home currents, no Settings gear.
-  for (const nav of ['Home', 'Conversations', 'Tasks', 'Apps', 'Settings']) {
+  // No nav pills, no omnibar, no Activity timeline, no Settings gear.
+  for (const nav of [
+    'Activity',
+    'Conversations',
+    'Recall',
+    'Tasks',
+    'Apps',
+    'Settings',
+  ]) {
     expect(labels).not.toContain(nav);
   }
   expect(renderer.root.findAllByType(TextInput)).toHaveLength(0);
-  expect(labels).not.toContain('Home currents');
+  expect(labels).not.toContain('Activity page');
   expect(labels).not.toContain('Home tasks');
   expect(textOf(renderer)).not.toContain('Chat is temporarily unavailable.');
 
@@ -275,7 +289,7 @@ test('signed-out Mac sees only the Welcome until a real session lands', async ()
   labels = labelsOf(renderer);
   expect(labels).not.toContain('First-run onboarding');
   expect(labels).toContain('Omi desktop chrome');
-  expect(labels).toContain('Home currents');
+  expect(labels).toContain('Activity page');
   expect(
     renderer.root.findAllByType(TextInput).map(node => node.props.placeholder),
   ).toContain('Ask about your day…');
@@ -577,7 +591,7 @@ test('the previous session transcript never survives a sign-out', async () => {
     await Promise.resolve();
   });
   expect(labelsOf(renderer)).toContain('Omi desktop chrome');
-  expect(labelsOf(renderer)).toContain('Home currents');
+  expect(labelsOf(renderer)).toContain('Activity page');
   await openChat(renderer);
   expect(textOf(renderer)).not.toContain('PRIVATE PRIOR SESSION');
 });
@@ -927,6 +941,7 @@ test('a send during the initial history load still receives the transcript', asy
     await flushAsyncQueue();
   });
 
+  await openChat(renderer);
   expect(textOf(renderer)).toContain('PRIOR HISTORY MESSAGE');
   expect(textOf(renderer)).toContain('PRIOR HISTORY REPLY');
   expect(textOf(renderer)).toContain('sent before history landed');
@@ -1307,6 +1322,7 @@ test('old chat shows streamed tokens before the terminal frame arrives', async (
       .find(node => node.props.accessibilityLabel === 'Send')
       .props.onPress();
   });
+  await openChat(renderer);
   expect(
     renderer.root.findAll(
       node => node.props.accessibilityLabel === 'Waiting for response',
