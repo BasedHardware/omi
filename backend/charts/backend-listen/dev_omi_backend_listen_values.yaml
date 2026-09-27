@@ -106,6 +106,12 @@ envFrom:
       name: dev-omi-backend-config
 
 env:
+  # Keep these aligned with the development GitHub environment variables used
+  # by the Cloud Run backend; api.omiapi.com is served by backend-listen.
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE
+    value: "https://backend-dt5lrfkkoa-uc.a.run.app"
+  - name: PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA
+    value: "1031333818730-compute@developer.gserviceaccount.com"
   - name: TRANSCRIPTION_SHADOW_ENABLED
     value: "false"
   - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
@@ -221,7 +227,7 @@ env:
   - name: OMI_LLM_CHAT_AGENT_ROUTE
     value: "gateway"
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
-    value: "off"
+    value: "gateway"
   - name: ACCOUNT_CUTOVER_ENFORCEMENT
     value: "off"
   - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION

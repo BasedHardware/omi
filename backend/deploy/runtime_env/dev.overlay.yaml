@@ -8,6 +8,8 @@ overlay:
   gke:
     backend-listen:
       env:
+        PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+          value: 'gateway'
         TRANSCRIPTION_SHADOW_ENABLED:
           value: 'false'
           category: rollout
@@ -337,6 +339,8 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
           SCREEN_FRAME_EGRESS_ENABLED:
             value: 'true'
             category: rollout
@@ -430,6 +434,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
           TRANSCRIPTION_SHADOW_ENABLED:
             value: 'false'
             category: rollout
@@ -525,6 +531,8 @@ overlay:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
@@ -594,6 +602,8 @@ overlay:
             secret: POSTHOG_EVENTS_API_KEY
             version: latest
         env:
+          PUBLIC_SHARED_CONVERSATION_CHAT_MODE:
+            value: 'gateway'
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
