@@ -11334,4 +11334,49 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Hovedtelefoner';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'minutter';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Opgaver';
+
+  @override
+  String get usageMonth => 'Denne måned';
+
+  @override
+  String get usageYear => 'Dette år';
+
+  @override
+  String get usageAll => 'Altid';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
 }

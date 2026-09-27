@@ -3578,5 +3578,20 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Toistaa ääneen puhelimen kaiuttimesta.",
     "deviceOnboardingVoiceReplySettingsHint": "Voit muuttaa tätä milloin tahansa numerossa {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Toista tämä kiertue milloin tahansa numerossa {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Kuulokkeet"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Kuulokkeet",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "minuuttia",
+    "usageWords": "Words",
+    "usageTasks": "Tehtävät",
+    "usageMonth": "Tässä kuussa",
+    "usageYear": "Tänä vuonna",
+    "usageAll": "Kaikki aika",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month"
 }

@@ -3578,5 +3578,20 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "電話のスピーカーから大音量で再生されます。",
     "deviceOnboardingVoiceReplySettingsHint": "これはいつでも {settings} › {voiceResponse} で変更できます。",
     "deviceOnboardingAllSetReplayHint": "{settings} › {deviceSettings} › {deviceTutorial} でいつでもこのツアーを再生できます",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "ヘッドフォン"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "ヘッドフォン",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "分",
+    "usageWords": "Words",
+    "usageTasks": "タスク",
+    "usageMonth": "今月",
+    "usageYear": "今年",
+    "usageAll": "全期間",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month"
 }
