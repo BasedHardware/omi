@@ -32,6 +32,7 @@
 * [`conversations_markdown.pt.md`](conversations_markdown.pt.md) — exportar conversas do Omi para Markdown (Portuguese recipe).
 * [`conversations_csv.md`](conversations_csv.md) — convert a conversation-list
   JSON export to CSV for spreadsheets.
+* [`goals_csv.md`](goals_csv.md) — convert goals and tracked habits to CSV for spreadsheets and data analysis.
 * [`conversations_digest.md`](conversations_digest.md) — summarise conversation-list
   exports into a digest: per-day totals, categories and longest sessions.
 * [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
