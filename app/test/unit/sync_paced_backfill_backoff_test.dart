@@ -177,6 +177,7 @@ void main() {
             uploader: (
               files, {
               onUploadProgress,
+              captureEvidence,
               conversationId,
               claimLiveCapture = false,
               geolocation,
@@ -226,6 +227,7 @@ void main() {
           uploader: (
             files, {
             onUploadProgress,
+            captureEvidence,
             conversationId,
             claimLiveCapture = false,
             geolocation,
@@ -258,6 +260,7 @@ void main() {
         uploader: (
           files, {
           onUploadProgress,
+          captureEvidence,
           conversationId,
           claimLiveCapture = false,
           geolocation,
@@ -326,6 +329,7 @@ void main() {
             uploader: (
               files, {
               onUploadProgress,
+              captureEvidence,
               conversationId,
               claimLiveCapture = false,
               geolocation,
@@ -380,6 +384,7 @@ void main() {
             uploader: (
               files, {
               onUploadProgress,
+              captureEvidence,
               conversationId,
               claimLiveCapture = false,
               geolocation,
@@ -435,6 +440,7 @@ void main() {
             uploader: (
               files, {
               onUploadProgress,
+              captureEvidence,
               conversationId,
               claimLiveCapture = false,
               geolocation,
