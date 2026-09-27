@@ -113,33 +113,29 @@ def get_focus_sessions(uid: str, date: Optional[str] = None, limit: int = 100, o
     if not uid or not isinstance(uid, str) or not uid.strip():
         return []
     clean_uid = uid.strip()
-    try:
-        col = _user_col(clean_uid, 'focus_sessions')
-        query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
+    col = _user_col(clean_uid, 'focus_sessions')
+    query = col.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-        if date:
-            if not isinstance(date, str) or not date.strip():
-                return []
-            try:
-                day_start = datetime.strptime(date.strip(), '%Y-%m-%d').replace(tzinfo=timezone.utc)
-                day_end = day_start + timedelta(days=1)
-                query = query.where(filter=FieldFilter('created_at', '>=', day_start))
-                query = query.where(filter=FieldFilter('created_at', '<', day_end))
-            except (ValueError, TypeError) as e:
-                logger.warning(f'get_focus_sessions invalid date={date!r} for uid={clean_uid}: {e}')
-                return []
+    if date:
+        if not isinstance(date, str) or not date.strip():
+            return []
+        try:
+            day_start = datetime.strptime(date.strip(), '%Y-%m-%d').replace(tzinfo=timezone.utc)
+            day_end = day_start + timedelta(days=1)
+            query = query.where(filter=FieldFilter('created_at', '>=', day_start))
+            query = query.where(filter=FieldFilter('created_at', '<', day_end))
+        except (ValueError, TypeError) as e:
+            logger.warning(f'get_focus_sessions invalid date={date!r} for uid={clean_uid}: {e}')
+            return []
 
-        bounded_limit = max(1, min(limit if isinstance(limit, int) else 100, 5000))
-        bounded_offset = max(0, offset if isinstance(offset, int) else 0)
-        query = query.offset(bounded_offset).limit(bounded_limit)
-        items: List[Dict[str, Any]] = []
-        for doc in query.stream():
-            data = _typed_doc(doc)
-            items.append(_normalize_focus_session_doc(doc.id, data))
-        return items
-    except Exception as e:
-        logger.warning(f'get_focus_sessions failed for uid={clean_uid}: {e}')
-        return []
+    bounded_limit = max(1, min(limit if isinstance(limit, int) else 100, 5000))
+    bounded_offset = max(0, offset if isinstance(offset, int) else 0)
+    query = query.offset(bounded_offset).limit(bounded_limit)
+    items: List[Dict[str, Any]] = []
+    for doc in query.stream():
+        data = _typed_doc(doc)
+        items.append(_normalize_focus_session_doc(doc.id, data))
+    return items
 
 
 def delete_focus_session(uid: str, session_id: str) -> bool:
@@ -149,16 +145,13 @@ def delete_focus_session(uid: str, session_id: str) -> bool:
         return False
     clean_uid = uid.strip()
     clean_session_id = session_id.strip()
+    ref = _user_col(clean_uid, 'focus_sessions').document(clean_session_id)
     try:
-        ref = _user_col(clean_uid, 'focus_sessions').document(clean_session_id)
         if not getattr(ref.get(), "exists", False):
             return False
         ref.delete()
         return True
     except NotFound:
-        return False
-    except Exception as e:
-        logger.warning(f'delete_focus_session failed uid={clean_uid} session_id={clean_session_id}: {e}')
         return False
 
 
@@ -175,7 +168,8 @@ def get_focus_stats(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
             datetime.strptime(clean_date, '%Y-%m-%d')
             day = clean_date
         except ValueError:
-            day = clean_date
+            logger.warning(f'get_focus_stats invalid date={clean_date!r}, falling back to today')
+            day = datetime.now(timezone.utc).strftime('%Y-%m-%d')
     else:
         day = datetime.now(timezone.utc).strftime('%Y-%m-%d')
 

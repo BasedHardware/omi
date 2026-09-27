@@ -131,6 +131,32 @@ def test_delete_focus_session_success():
         fake_ref.delete.assert_called_once()
 
 
+def test_get_focus_sessions_propagates_infrastructure_error():
+    fake_query = MagicMock()
+    fake_query.stream.side_effect = RuntimeError("Firestore unavailable")
+    fake_col = MagicMock()
+    fake_col.order_by.return_value = fake_query
+    fake_query.offset.return_value = fake_query
+    fake_query.limit.return_value = fake_query
+
+    with patch.object(focus_db, "_user_col", return_value=fake_col):
+        with pytest.raises(RuntimeError, match="Firestore unavailable"):
+            focus_db.get_focus_sessions("user-1")
+
+
+def test_delete_focus_session_propagates_infrastructure_error():
+    fake_ref = MagicMock()
+    fake_ref.get.return_value.exists = True
+    fake_ref.delete.side_effect = RuntimeError("Network timeout")
+
+    fake_col = MagicMock()
+    fake_col.document.return_value = fake_ref
+
+    with patch.object(focus_db, "_user_col", return_value=fake_col):
+        with pytest.raises(RuntimeError, match="Network timeout"):
+            focus_db.delete_focus_session("user-1", "sess-1")
+
+
 # ============================================================================
 # GET FOCUS STATS RESILIENCE
 # ============================================================================
@@ -144,6 +170,22 @@ def test_get_focus_stats_blank_uid_returns_zeroed_stats():
     assert validated.focused_minutes == 0
     assert validated.distracted_minutes == 0
     assert validated.top_distractions == []
+
+
+def test_get_focus_stats_invalid_date_falls_back_to_today():
+    fake_col = MagicMock()
+    fake_query = MagicMock()
+    fake_col.order_by.return_value = fake_query
+    fake_query.offset.return_value = fake_query
+    fake_query.limit.return_value = fake_query
+    fake_query.where.return_value = fake_query
+    fake_query.stream.return_value = []
+
+    with patch.object(focus_db, "_user_col", return_value=fake_col):
+        stats = focus_db.get_focus_stats("user-1", date="not-a-valid-date")
+        validated = FocusStats.model_validate(stats)
+        today_str = focus_db.datetime.now(focus_db.timezone.utc).strftime("%Y-%m-%d")
+        assert validated.date == today_str
 
 
 # ============================================================================
