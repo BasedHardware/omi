@@ -11496,6 +11496,18 @@ class AppLocalizationsTl extends AppLocalizations {
   String get usageChatThisMonth => 'Chat this month';
 
   @override
+  String get appearance => 'Hitsura';
+
+  @override
+  String get appearanceSystem => 'System';
+
+  @override
+  String get appearanceLight => 'Maliwanag';
+
+  @override
+  String get appearanceDark => 'Madilim';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

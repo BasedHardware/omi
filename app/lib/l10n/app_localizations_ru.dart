@@ -11434,6 +11434,18 @@ class AppLocalizationsRu extends AppLocalizations {
   String get usageChatThisMonth => 'Chat this month';
 
   @override
+  String get appearance => 'Внешний вид';
+
+  @override
+  String get appearanceSystem => 'Система';
+
+  @override
+  String get appearanceLight => 'Светлая';
+
+  @override
+  String get appearanceDark => 'Тёмная';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

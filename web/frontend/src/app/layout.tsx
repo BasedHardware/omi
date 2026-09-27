@@ -7,6 +7,7 @@ import AnnouncementBar from '../components/shared/announcement-bar';
 import envConfig from '../constants/envConfig';
 import { GoogleAnalytics } from '@/src/components/shared/google-analytics';
 import { PublicBuildCanary } from '../components/public-build-canary';
+import { ShareAnalytics } from '../components/shared/share-analytics';
 
 const inter = Mulish({
   subsets: ['latin'],
@@ -35,6 +36,7 @@ export default function RootLayout({
       </head>
       <body className={inter.className}>
         <PublicBuildCanary />
+        <ShareAnalytics />
         <AppHeader />
         {/* Elfsight Announcement Bar */}
         <AnnouncementBar />

@@ -3629,6 +3629,10 @@
     "usageAll": "Depuis toujours",
     "usageNow": "now",
     "usageChatThisMonth": "Chat this month",
+    "appearance": "Apparence",
+    "appearanceSystem": "Système",
+    "appearanceLight": "Clair",
+    "appearanceDark": "Sombre",
     "siriIndexSetting": "Utiliser Omi avec Siri et Apple Intelligence",
     "siriIndexSettingDescription": "Autorisez Siri à trouver vos conversations, souvenirs et tâches sur cet appareil. Désactiver cette option les supprime de la recherche Apple."
 }

@@ -11184,6 +11184,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get usageChatThisMonth => 'Chat this month';
 
   @override
+  String get appearance => '外观';
+
+  @override
+  String get appearanceSystem => '系统';
+
+  @override
+  String get appearanceLight => '浅色';
+
+  @override
+  String get appearanceDark => '深色';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

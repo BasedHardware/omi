@@ -11443,6 +11443,18 @@ class AppLocalizationsTe extends AppLocalizations {
   String get usageChatThisMonth => 'Chat this month';
 
   @override
+  String get appearance => 'రూపం';
+
+  @override
+  String get appearanceSystem => 'సిస్టమ్';
+
+  @override
+  String get appearanceLight => 'లైట్';
+
+  @override
+  String get appearanceDark => 'డార్క్';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

@@ -3594,6 +3594,10 @@
     "usageAll": "Celkovo",
     "usageNow": "now",
     "usageChatThisMonth": "Chat this month",
+    "appearance": "Vzhľad",
+    "appearanceSystem": "Systém",
+    "appearanceLight": "Svetlý",
+    "appearanceDark": "Tmavý",
     "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
     "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

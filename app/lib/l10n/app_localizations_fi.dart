@@ -11398,6 +11398,18 @@ class AppLocalizationsFi extends AppLocalizations {
   String get usageChatThisMonth => 'Chat this month';
 
   @override
+  String get appearance => 'Ulkoasu';
+
+  @override
+  String get appearanceSystem => 'Järjestelmä';
+
+  @override
+  String get appearanceLight => 'Vaalea';
+
+  @override
+  String get appearanceDark => 'Tumma';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

@@ -11390,6 +11390,18 @@ class AppLocalizationsVi extends AppLocalizations {
   String get usageChatThisMonth => 'Chat this month';
 
   @override
+  String get appearance => 'Giao diện';
+
+  @override
+  String get appearanceSystem => 'Hệ thống';
+
+  @override
+  String get appearanceLight => 'Sáng';
+
+  @override
+  String get appearanceDark => 'Tối';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

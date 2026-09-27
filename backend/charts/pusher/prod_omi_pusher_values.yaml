@@ -195,6 +195,12 @@ env:
     value: "0"
   - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS
     value: "1"
+  - name: CAPTURE_JEV_SHADOW_ENABLED
+    value: "true"
+  - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: CAPTURE_JEV_SHADOW_PERCENT
+    value: "0"
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:

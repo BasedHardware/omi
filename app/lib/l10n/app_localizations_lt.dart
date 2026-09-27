@@ -11413,6 +11413,18 @@ class AppLocalizationsLt extends AppLocalizations {
   String get usageChatThisMonth => 'Chat this month';
 
   @override
+  String get appearance => 'Išvaizda';
+
+  @override
+  String get appearanceSystem => 'Sistema';
+
+  @override
+  String get appearanceLight => 'Šviesus';
+
+  @override
+  String get appearanceDark => 'Tamsus';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

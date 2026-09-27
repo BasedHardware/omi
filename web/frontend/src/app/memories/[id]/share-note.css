@@ -1092,6 +1092,44 @@ html[data-share-theme='dark']:has(.share-note) body {
   height: 18px;
 }
 
+.share-note .sn-chat-budget {
+  margin: 0;
+  padding: 0 16px 12px;
+  color: var(--sn-muted);
+  font-size: 12px;
+}
+
+.share-note .sn-chat-limit {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 24px;
+  border-top: 1px solid var(--sn-hairline);
+  background: var(--sn-card);
+}
+
+.share-note .sn-chat-upsell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--sn-muted);
+  font-size: 14px;
+}
+
+.share-note .sn-chat-upsell strong {
+  color: var(--sn-ink);
+}
+.share-note .sn-chat-upsell-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.share-note .sn-chat-upsell-links a {
+  color: var(--sn-ink);
+  text-underline-offset: 3px;
+}
+
 /* ---- Install call to action ------------------------------------------- */
 
 .share-note .sn-cta {

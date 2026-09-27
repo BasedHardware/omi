@@ -14,6 +14,7 @@ import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 /// Grep-style transcript hit from conversation search (seek-to-moment).
 class TranscriptMatchSnippet {
@@ -674,12 +675,12 @@ class ServerConversation {
 
   Color getTagTextColor() {
     if (source == ConversationSource.screenpipe) return Colors.deepPurple;
-    return Colors.white;
+    return OmiColors.textPrimary;
   }
 
   Color getTagColor() {
     if (source == ConversationSource.screenpipe) return Colors.white;
-    return const Color(0xFF35343B);
+    return OmiColors.categorySurface;
   }
 
   VoidCallback? onTagPressed(BuildContext context) {

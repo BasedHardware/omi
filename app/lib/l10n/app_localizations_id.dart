@@ -11406,6 +11406,18 @@ class AppLocalizationsId extends AppLocalizations {
   String get usageChatThisMonth => 'Chat this month';
 
   @override
+  String get appearance => 'Tampilan';
+
+  @override
+  String get appearanceSystem => 'Sistem';
+
+  @override
+  String get appearanceLight => 'Terang';
+
+  @override
+  String get appearanceDark => 'Gelap';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

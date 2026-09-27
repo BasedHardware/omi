@@ -13,6 +13,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:omi/utils/share_sheet.dart';
+import 'package:omi/utils/share_links.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/models/subscription.dart';
@@ -79,6 +81,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     final l10n = context.l10n;
     final provider = context.read<UsageProvider>();
     final localeName = l10n.localeName;
+    final sharePeriod = _getPeriodForIndex(_tabController.index);
 
     final captureContext = _screenshotKeys[_tabController.index].currentContext;
     if (captureContext == null || !mounted) return;
@@ -103,7 +106,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       text: TextSpan(
         text: 'omi.me',
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.8),
+          color: OmiColors.textPrimary.withValues(alpha: 0.8),
           fontSize: 14 * 3.0, // Scale font size with pixelRatio
           fontWeight: FontWeight.w600,
         ),
@@ -216,7 +219,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       shareText = baseText;
     }
 
-    await SharePlus.instance.share(
+    final outcome = await SharePlus.instance.share(
       ShareParams(
         files: [XFile(file.path)],
         subject: periodTitle.isEmpty ? null : periodTitle,
@@ -224,6 +227,12 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
         sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
       ),
     );
+    final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
+    PlatformManager.instance.analytics.track('Usage Stats Shared', properties: {
+      'period': sharePeriod,
+      'share_status': outcome.status.name,
+      if (targetApp != null) 'target_app': targetApp,
+    });
   }
 
   String _getPeriodForIndex(int index) {
@@ -480,7 +489,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
                   child: isPaid
                       ? Container(
                           padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.xxs),
-                          decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+                          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
                           child: Text(planLabel, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w700)),
                         )
                       : Text(planLabel, style: OmiType.headline)),
@@ -498,7 +507,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
                           Text(context.l10n.managePlan,
                               style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
                           const SizedBox(width: OmiSpacing.xxs),
-                          const Icon(Icons.chevron_right, color: OmiColors.textSecondary, size: 20),
+                          Icon(Icons.chevron_right, color: OmiColors.textSecondary, size: 20),
                         ],
                       ),
                     ),

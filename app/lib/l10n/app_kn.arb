@@ -11154,6 +11154,10 @@
     "usageAll": "ಎಲ್ಲಾ ಸಮಯ",
     "usageNow": "now",
     "usageChatThisMonth": "Chat this month",
+    "appearance": "ಗೋಚರತೆ",
+    "appearanceSystem": "ಸಿಸ್ಟಮ್",
+    "appearanceLight": "ಬೆಳಕು",
+    "appearanceDark": "ಕತ್ತಲೆ",
     "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
     "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

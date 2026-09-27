@@ -3629,6 +3629,10 @@
     "usageAll": "Всё время",
     "usageNow": "now",
     "usageChatThisMonth": "Chat this month",
+    "appearance": "Внешний вид",
+    "appearanceSystem": "Система",
+    "appearanceLight": "Светлая",
+    "appearanceDark": "Тёмная",
     "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
     "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

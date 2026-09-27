@@ -3594,6 +3594,10 @@
     "usageAll": "Todo el tiempo",
     "usageNow": "now",
     "usageChatThisMonth": "Chat this month",
+    "appearance": "Apariencia",
+    "appearanceSystem": "Sistema",
+    "appearanceLight": "Claro",
+    "appearanceDark": "Oscuro",
     "siriIndexSetting": "Usar Omi con Siri y Apple Intelligence",
     "siriIndexSettingDescription": "Permite que Siri encuentre tus conversaciones, recuerdos y tareas en este dispositivo. Al desactivarlo, se eliminan de la búsqueda de Apple."
 }

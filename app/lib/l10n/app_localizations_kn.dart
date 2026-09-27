@@ -11431,6 +11431,18 @@ class AppLocalizationsKn extends AppLocalizations {
   String get usageChatThisMonth => 'Chat this month';
 
   @override
+  String get appearance => 'ಗೋಚರತೆ';
+
+  @override
+  String get appearanceSystem => 'ಸಿಸ್ಟಮ್';
+
+  @override
+  String get appearanceLight => 'ಬೆಳಕು';
+
+  @override
+  String get appearanceDark => 'ಕತ್ತಲೆ';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

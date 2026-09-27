@@ -13554,6 +13554,10 @@
     "@usageChatThisMonth": {
         "description": "Label for monthly chat usage meter"
     },
+    "appearance": "Appearance",
+    "appearanceSystem": "System",
+    "appearanceLight": "Light",
+    "appearanceDark": "Dark",
     "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
     "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

@@ -177,7 +177,6 @@ Future<void> shareConversation(BuildContext context, ServerConversation conversa
     }
     conversation.visibility = ConversationVisibility.shared;
   }
-  PlatformManager.instance.analytics.conversationShared(conversation: conversation, shareMethod: 'url_share');
   final box = context.findRenderObject() as RenderBox?;
   final outcome = await shareConversationLink(
     conversation,

@@ -11473,6 +11473,18 @@ class AppLocalizationsEl extends AppLocalizations {
   String get usageChatThisMonth => 'Chat this month';
 
   @override
+  String get appearance => 'Εμφάνιση';
+
+  @override
+  String get appearanceSystem => 'Σύστημα';
+
+  @override
+  String get appearanceLight => 'Φωτεινό';
+
+  @override
+  String get appearanceDark => 'Σκοτεινό';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

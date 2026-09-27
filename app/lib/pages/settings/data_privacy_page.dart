@@ -65,8 +65,8 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
           Container(
             width: 40,
             height: 40,
-            decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-            child: const Icon(Icons.lock_outline, color: OmiColors.textPrimary, size: 20),
+            decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+            child: Icon(Icons.lock_outline, color: OmiColors.textPrimary, size: 20),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -77,7 +77,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                   TextSpan(text: '${context.l10n.dataEncryptedBanner} '),
                   TextSpan(
                     text: context.l10n.learnMore,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: OmiColors.textPrimary,
                       decoration: TextDecoration.underline,
                       decorationColor: OmiColors.textPrimary,
@@ -171,7 +171,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                           children: [
                             OmiSectionHeader(context.l10n.appAccess, subtitle: context.l10n.appAccessDesc),
                             Container(
-                              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+                              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
                               child: OmiEmptyState(icon: Icons.apps_outlined, title: context.l10n.noAppsExternalAccess),
                             ),
                           ],

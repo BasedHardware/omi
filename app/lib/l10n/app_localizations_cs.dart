@@ -11393,6 +11393,18 @@ class AppLocalizationsCs extends AppLocalizations {
   String get usageChatThisMonth => 'Chat this month';
 
   @override
+  String get appearance => 'Vzhled';
+
+  @override
+  String get appearanceSystem => 'Systém';
+
+  @override
+  String get appearanceLight => 'Světlý';
+
+  @override
+  String get appearanceDark => 'Tmavý';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

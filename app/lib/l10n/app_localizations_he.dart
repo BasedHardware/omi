@@ -11304,6 +11304,18 @@ class AppLocalizationsHe extends AppLocalizations {
   String get usageChatThisMonth => 'Chat this month';
 
   @override
+  String get appearance => 'מראה';
+
+  @override
+  String get appearanceSystem => 'מערכת';
+
+  @override
+  String get appearanceLight => 'בהיר';
+
+  @override
+  String get appearanceDark => 'כהה';
+
+  @override
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override

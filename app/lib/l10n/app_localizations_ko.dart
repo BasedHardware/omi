@@ -11210,6 +11210,18 @@ class AppLocalizationsKo extends AppLocalizations {
   String get usageChatThisMonth => 'Chat this month';
 
   @override
+  String get appearance => '화면 모드';
+
+  @override
+  String get appearanceSystem => '시스템';
+
+  @override
+  String get appearanceLight => '라이트';
+
+  @override
+  String get appearanceDark => '다크';
+
+  @override
   String get siriIndexSetting => 'Siri 및 Apple Intelligence와 함께 Omi 사용';
 
   @override

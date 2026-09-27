@@ -11413,6 +11413,18 @@ class AppLocalizationsPt extends AppLocalizations {
   String get usageChatThisMonth => 'Chat this month';
 
   @override
+  String get appearance => 'Aparência';
+
+  @override
+  String get appearanceSystem => 'Sistema';
+
+  @override
+  String get appearanceLight => 'Claro';
+
+  @override
+  String get appearanceDark => 'Escuro';
+
+  @override
   String get siriIndexSetting => 'Usar Omi com Siri e Apple Intelligence';
 
   @override
