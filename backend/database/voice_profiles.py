@@ -61,7 +61,7 @@ def get_voice_profile_context(uid: str, *, firestore_client: Any = None) -> Tupl
     return _resolve_settings(data), bool(data.get('speaker_embedding'))
 
 
-def set_voice_profile_settings(uid: str, updates: Dict[str, bool], *, firestore_client: Any = None) -> None:
+def set_voice_profile_settings(uid: str, updates: Any, *, firestore_client: Any = None) -> None:
     clean_uid = _clean_uid(uid)
     if not isinstance(updates, dict):
         raise ValueError('updates must be a dictionary')
@@ -186,7 +186,7 @@ def record_tag_prompt_answered(uid: str, prompt_id: str, now: datetime, *, fires
     run_transactional(client, record)
 
 
-def answered_prompt_ids(state: Dict[str, Any], now: Optional[datetime] = None) -> set:
+def answered_prompt_ids(state: Any, now: Optional[datetime] = None) -> set:
     if not isinstance(state, dict):
         return set()
     return set(_pruned_answers(state, now or datetime.now(timezone.utc)))
@@ -194,7 +194,7 @@ def answered_prompt_ids(state: Dict[str, Any], now: Optional[datetime] = None) -
 
 def add_owner_voice_confirmation(
     uid: str,
-    embedding: Sequence[float],
+    embedding: Any,
     pool: Callable[[List[List[float]]], List[float]],
     *,
     conversation_id: str,
