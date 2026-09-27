@@ -27,6 +27,37 @@ export function deviceClass(userAgent) {
   return 'desktop';
 }
 
+/** Keep shared-chat telemetry to fixed action categories; never forward chat content. */
+export function chatActionProperties(event) {
+  if (!event || typeof event !== 'object') return null;
+  const action = event.type;
+  if (
+    ['question_asked', 'answered', 'signin_clicked', 'signin_completed'].includes(action)
+  ) {
+    return { action };
+  }
+  if (action === 'limit_card_shown') {
+    const reasons = [
+      'free_questions_exhausted',
+      'conversation_daily',
+      'global_minute',
+      'global_daily',
+      'subject_minute',
+      'signed_user_daily',
+      'signed_global_daily',
+      'no_omi_account',
+      'invalid_token',
+    ];
+    return reasons.includes(event.reason) ? { action, reason: event.reason } : null;
+  }
+  if (action === 'upsell_clicked') {
+    return ['phone_app', 'mac_app', 'pendant'].includes(event.target)
+      ? { action, target: event.target }
+      : null;
+  }
+  return null;
+}
+
 export function ctaTarget(href) {
   if (!href) return null;
   if (/^omi:\/\//i.test(href) || /^intent:\/\//i.test(href)) return 'open_in_omi';

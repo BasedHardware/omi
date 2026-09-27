@@ -310,6 +310,7 @@ methods_timeout = {
 # lock TTL (1800s) so a lock can never expire under a live run.
 paths_timeout = {
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
+    "/v2/sync-backfill-sequencer/sweep": 150,  # Below Scheduler's 180s deadline.
     "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
     "/v1/users/account-deletion-wipes/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
     "/v1/conversation-finalization-jobs/run": os.environ.get('HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT', 1500),
