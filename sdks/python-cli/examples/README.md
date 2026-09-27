@@ -10,6 +10,12 @@
   omi-cli ガイド (Japanese agent guide).
 * [`agent_quickstart.fr.md`](agent_quickstart.fr.md) — guide omi-cli pour les
   agents (French agent guide).
+* [`agent_quickstart.pcm.md`](agent_quickstart.pcm.md) — Naija Pidgin guide for agents (Nigerian Pidgin agent guide).
+* [`agent_quickstart.wuu.md`](agent_quickstart.wuu.md) — 畀代理用个 omi-cli 指南 (Wu Chinese agent guide).
+* [`agent_quickstart.nan.md`](agent_quickstart.nan.md) — 予代理用的 omi-cli 指南 (Min Nan agent guide).
+* [`agent_quickstart.hak.md`](agent_quickstart.hak.md) — 代理用个 omi-cli 指南 (Hakka agent guide).
+* [`agent_quickstart.za.md`](agent_quickstart.za.md) — saw cungj omi-cli guh vunz yungh dienznauj (Zhuang agent guide).
+* [`agent_quickstart.ckb.md`](agent_quickstart.ckb.md) — ڕێبەری omi-cli بۆ بریکارەکان (Sorani agent guide).
 * [`agent_quickstart.pt.md`](agent_quickstart.pt.md) — omi-cli para agentes
   (Portuguese agent guide).
 * [`agent_quickstart.ms.md`](agent_quickstart.ms.md) — omi-cli untuk ejen
