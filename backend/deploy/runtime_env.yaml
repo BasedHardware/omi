@@ -1949,6 +1949,21 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omi.me:80
+          TRANSCRIPTION_SHADOW_ENABLED:
+            value: 'true'
+            category: rollout
+          TRANSCRIPTION_SHADOW_KILL_SWITCH:
+            value: 'false'
+            category: rollout
+          TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: rollout
+          TRANSCRIPTION_SHADOW_PERCENT:
+            value: '0'
+            category: rollout
+          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
+            value: '1'
+            category: rollout
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware
       config_map:
