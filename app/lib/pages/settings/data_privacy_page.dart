@@ -150,7 +150,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                   if (Platform.isIOS) ...[
                     const SizedBox(height: OmiSpacing.xxl),
                     Container(
-                      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+                      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
                       child: SwitchListTile(
                         title: Text(context.l10n.siriIndexSetting),
                         subtitle: Text(context.l10n.siriIndexSettingDescription),
