@@ -436,8 +436,8 @@ private struct CaptureWaveform: View {
     }
 }
 
-/// Equal capsules 8 pt apart: secondary rgba(255,255,255,.12/.14), primary
-/// #ECEEF2 with ink text, 15 pt / 600.
+/// Equal capsules 8 pt apart: secondary rgba(255,255,255,.12/.14) at 15 pt / 600, primary
+/// #ECEEF2 with ink text at 15 pt / 700.
 @available(iOS 16.1, *)
 private struct CaptureActions: View {
     let snapshot: CaptureSnapshot
@@ -449,14 +449,15 @@ private struct CaptureActions: View {
     var body: some View {
         if #available(iOS 17.0, *), !snapshot.isStale, state.status != "ended" {
             HStack(spacing: 8) {
-                // Resume is offered only after the user paused; recovery states keep Pause.
+                // Stop pauses and Start resumes. Start is offered only after the user stopped;
+                // recovery states keep Stop.
                 if state.canPause {
                     let resume = state.status == "paused"
-                    action(resume ? "Resume" : "Pause", value: resume ? "resume" : "pause", enabled: true)
+                    action(resume ? "Start" : "Stop", value: resume ? "resume" : "pause", enabled: true)
                 }
-                // Pendant capture keeps listening after a conversation ends; phone capture stops.
-                action(state.source == "phone" ? "Stop" : "End Conversation",
-                       value: "finish", enabled: state.canFinish, primary: true)
+                // End always closes this card, saving the conversation first when there is one
+                // (LiveActivityManager).
+                action("End", value: state.canFinish ? "finish" : "close", enabled: true, primary: true)
             }
             .dynamicTypeSize(...DynamicTypeSize.xLarge)
         }
@@ -470,7 +471,7 @@ private struct CaptureActions: View {
         return Button(intent: OmiCaptureIntent(recordingId: snapshot.recordingId,
                                                revision: state.conversationRevision, action: value)) {
             Text(label)
-                .font(.subheadline.weight(.semibold))
+                .font(.subheadline.weight(primary ? .bold : .semibold))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, minHeight: height)
                 .foregroundStyle(filled ? CapturePalette.ink : CapturePalette.label.opacity(available ? 1 : 0.5))

@@ -190,6 +190,11 @@ final class LiveActivityManager {
               active, current == id, state.conversationRevision == revision else {
             throw CaptureActionError.unavailable
         }
+        // End with nothing to save only closes the card; the recording is not touched.
+        if action == "close" {
+            closeCard(for: id)
+            return
+        }
         let backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Omi recording action")
         defer {
             if backgroundTask != .invalid { UIApplication.shared.endBackgroundTask(backgroundTask) }
@@ -222,6 +227,20 @@ final class LiveActivityManager {
                 await self.reconcile()
             }
             throw error
+        }
+        if action == "finish" { closeCard(for: id) }
+    }
+
+    /// End closes the card at once. A pendant keeps listening after its conversation ends, so the
+    /// card stays closed for the rest of this recording, as when it is swiped away.
+    private func closeCard(for id: String) {
+        enqueue { [weak self] in
+            guard let self else { return }
+            self.suppressedRecordingId = id
+            if let current = self.activity, current.attributes.recordingId == id {
+                await self.end(current, immediate: true)
+                self.activity = nil
+            }
         }
     }
 }

@@ -1201,602 +1201,302 @@
         }
       }
     },
-    "Pause": {
+    "Start": {
       "extractionState": "manual",
       "comment": "Capture Live Activity",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pause"
+            "value": "Start"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "إيقاف مؤقت"
+            "value": "بدء"
           }
         },
         "be": {
           "stringUnit": {
             "state": "translated",
-            "value": "Паўза"
+            "value": "Пачаць"
           }
         },
         "bg": {
           "stringUnit": {
             "state": "translated",
-            "value": "Пауза"
+            "value": "Старт"
           }
         },
         "bn": {
           "stringUnit": {
             "state": "translated",
-            "value": "বিরতি"
+            "value": "শুরু করুন"
           }
         },
         "bs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pauza"
+            "value": "Počni"
           }
         },
         "ca": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pausa"
+            "value": "Iniciar"
           }
         },
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pozastavit"
+            "value": "Spustit"
           }
         },
         "da": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pause"
+            "value": "Start"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pause"
+            "value": "Starten"
           }
         },
         "el": {
           "stringUnit": {
             "state": "translated",
-            "value": "Παύση"
+            "value": "Έναρξη"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pausar"
+            "value": "Iniciar"
           }
         },
         "et": {
           "stringUnit": {
             "state": "translated",
-            "value": "Paus"
+            "value": "Alusta"
           }
         },
         "fa": {
           "stringUnit": {
             "state": "translated",
-            "value": "توقف"
+            "value": "شروع"
           }
         },
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tauko"
+            "value": "Aloita"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pause"
+            "value": "Démarrer"
           }
         },
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "השהיה"
+            "value": "התחל"
           }
         },
         "hi": {
           "stringUnit": {
             "state": "translated",
-            "value": "रोकें"
+            "value": "शुरू करें"
           }
         },
         "hr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pauza"
+            "value": "Početak"
           }
         },
         "hu": {
           "stringUnit": {
             "state": "translated",
-            "value": "Szünet"
+            "value": "Indítás"
           }
         },
         "id": {
           "stringUnit": {
             "state": "translated",
-            "value": "Jeda"
+            "value": "Mulai"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pausa"
+            "value": "Avvia"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "一時停止"
+            "value": "開始"
           }
         },
         "kn": {
           "stringUnit": {
             "state": "translated",
-            "value": "ವಿರಾಮ"
+            "value": "ಪ್ರಾರಂಭ"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "일시정지"
+            "value": "시작"
           }
         },
         "lt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pristabdyti"
+            "value": "Pradėti"
           }
         },
         "lv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pauze"
+            "value": "Sākt"
           }
         },
         "mk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Пауза"
+            "value": "Почни"
           }
         },
         "mr": {
           "stringUnit": {
             "state": "translated",
-            "value": "थांबवा"
+            "value": "सुरू करा"
           }
         },
         "ms": {
           "stringUnit": {
             "state": "translated",
-            "value": "Jeda"
+            "value": "Mula"
           }
         },
         "nl": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pauzeren"
+            "value": "Starten"
           }
         },
         "no": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pause"
+            "value": "Start"
           }
         },
         "pl": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wstrzymaj"
+            "value": "Rozpocznij"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pausar"
+            "value": "Iniciar"
           }
         },
         "ro": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pauză"
+            "value": "Pornire"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Пауза"
+            "value": "Начать"
           }
         },
         "sk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pozastaviť"
+            "value": "Spustiť"
           }
         },
         "sl": {
           "stringUnit": {
             "state": "translated",
-            "value": "Premor"
+            "value": "Začni"
           }
         },
         "sr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Пауза"
+            "value": "Почетак"
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pausa"
+            "value": "Starta"
           }
         },
         "ta": {
           "stringUnit": {
             "state": "translated",
-            "value": "இடைநிறுத்து"
+            "value": "தொடங்கவும்"
           }
         },
         "te": {
           "stringUnit": {
             "state": "translated",
-            "value": "పాజ్"
+            "value": "ప్రారంభించండి"
           }
         },
         "th": {
           "stringUnit": {
             "state": "translated",
-            "value": "หยุดชั่วคราว"
+            "value": "เริ่ม"
           }
         },
         "tl": {
           "stringUnit": {
             "state": "translated",
-            "value": "I-pause"
+            "value": "Magsimula"
           }
         },
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Duraklat"
+            "value": "Başlat"
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Пауза"
+            "value": "Почати"
           }
         },
         "ur": {
           "stringUnit": {
             "state": "translated",
-            "value": "روکیں"
+            "value": "شروع کریں"
           }
         },
         "vi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tạm dừng"
+            "value": "Bắt đầu"
           }
         },
         "zh": {
           "stringUnit": {
             "state": "translated",
-            "value": "暂停"
-          }
-        }
-      }
-    },
-    "Resume": {
-      "extractionState": "manual",
-      "comment": "Capture Live Activity",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Resume"
-          }
-        },
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "استئناف التسجيل"
-          }
-        },
-        "be": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Адновіць запіс"
-          }
-        },
-        "bg": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Възобновяване на записа"
-          }
-        },
-        "bn": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "রেকর্ডিং চালু করুন"
-          }
-        },
-        "bs": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nastavi snimanje"
-          }
-        },
-        "ca": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reprendre la gravació"
-          }
-        },
-        "cs": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Obnovit nahrávání"
-          }
-        },
-        "da": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Genoptag optagelse"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aufnahme fortsetzen"
-          }
-        },
-        "el": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Συνέχιση εγγραφής"
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reanudar grabación"
-          }
-        },
-        "et": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Jätka salvestamist"
-          }
-        },
-        "fa": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ادامهِ ضبط"
-          }
-        },
-        "fi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Jatka nauhoitusta"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reprendre l'enregistrement"
-          }
-        },
-        "he": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "חזור להקלטה"
-          }
-        },
-        "hi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "रिकॉर्डिंग फिर से शुरू करें"
-          }
-        },
-        "hr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nastavi Snimanje"
-          }
-        },
-        "hu": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Felvétel folytatása"
-          }
-        },
-        "id": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lanjutkan Perekaman"
-          }
-        },
-        "it": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Riprendi registrazione"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "録音を再開"
-          }
-        },
-        "kn": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ರೆಕಾರ್ಡಿಂಗ್ ಮರುಪ್ರಾರಂಭಿಸಿ"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "녹음 재개"
-          }
-        },
-        "lt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tęsti įrašymą"
-          }
-        },
-        "lv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Atsākt ierakstu"
-          }
-        },
-        "mk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Продолжи Снимање"
-          }
-        },
-        "mr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "रेकॉर्डिंग पुन्हा सुरू करा"
-          }
-        },
-        "ms": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sambung Rakaman"
-          }
-        },
-        "nl": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Opname hervatten"
-          }
-        },
-        "no": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gjenoppta opptak"
-          }
-        },
-        "pl": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wznów nagrywanie"
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Retomar gravação"
-          }
-        },
-        "ro": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Reia înregistrarea"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Возобновить запись"
-          }
-        },
-        "sk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Obnoviť nahrávanie"
-          }
-        },
-        "sl": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nadaljuj Snemanje"
-          }
-        },
-        "sr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Настави снимање"
-          }
-        },
-        "sv": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Återuppta inspelning"
-          }
-        },
-        "ta": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ஒலிபதிவு மீண்டும் தொடரவும்"
-          }
-        },
-        "te": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "రికార్డింగ్ తిరిగి ప్రారంభించండి"
-          }
-        },
-        "th": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "บันทึกต่อ"
-          }
-        },
-        "tl": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ipagpatuloy ang Pag-record"
-          }
-        },
-        "tr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kaydı Sürdür"
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Відновити запис"
-          }
-        },
-        "ur": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ریکارڈنگ دوبارہ شروع کریں"
-          }
-        },
-        "vi": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Tiếp tục ghi âm"
-          }
-        },
-        "zh": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "继续录音"
+            "value": "开始"
           }
         }
       }
@@ -5101,302 +4801,302 @@
         }
       }
     },
-    "End Conversation": {
+    "End": {
       "extractionState": "manual",
       "comment": "Capture Live Activity",
       "localizations": {
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "إنهاء المحادثة"
+            "value": "إنهاء"
           }
         },
         "be": {
           "stringUnit": {
             "state": "translated",
-            "value": "Завяршыць размову"
+            "value": "Завершыць"
           }
         },
         "bg": {
           "stringUnit": {
             "state": "translated",
-            "value": "Край на разговор"
+            "value": "Край"
           }
         },
         "bn": {
           "stringUnit": {
             "state": "translated",
-            "value": "কথোপকথন শেষ করুন"
+            "value": "শেষ করুন"
           }
         },
         "bs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Završi razgovor"
+            "value": "Završi"
           }
         },
         "ca": {
           "stringUnit": {
             "state": "translated",
-            "value": "Finalitzar conversa"
+            "value": "Finalitzar"
           }
         },
         "cs": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ukončit konverzaci"
+            "value": "Ukoncit"
           }
         },
         "da": {
           "stringUnit": {
             "state": "translated",
-            "value": "Afslut samtale"
+            "value": "Afslut"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Unterhaltung beenden"
+            "value": "Beenden"
           }
         },
         "el": {
           "stringUnit": {
             "state": "translated",
-            "value": "Τερματισμός Συνομιλίας"
+            "value": "Τέλος"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "End Conversation"
+            "value": "End"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Terminar conversación"
+            "value": "Finalizar"
           }
         },
         "et": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lõpeta vestlus"
+            "value": "Lopeta"
           }
         },
         "fa": {
           "stringUnit": {
             "state": "translated",
-            "value": "پایان‌دادن به گفتگو"
+            "value": "پایان"
           }
         },
         "fi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lopeta keskustelu"
+            "value": "Lopeta"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Terminer la conversation"
+            "value": "Fin"
           }
         },
         "he": {
           "stringUnit": {
             "state": "translated",
-            "value": "סיים שיחה"
+            "value": "סיים"
           }
         },
         "hi": {
           "stringUnit": {
             "state": "translated",
-            "value": "बातचीत समाप्त करें"
+            "value": "समाप्त"
           }
         },
         "hr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Završi razgovor"
+            "value": "Završi"
           }
         },
         "hu": {
           "stringUnit": {
             "state": "translated",
-            "value": "Beszélgetés befejezése"
+            "value": "Befejezes"
           }
         },
         "id": {
           "stringUnit": {
             "state": "translated",
-            "value": "Akhiri Percakapan"
+            "value": "Akhiri"
           }
         },
         "it": {
           "stringUnit": {
             "state": "translated",
-            "value": "Termina Conversazione"
+            "value": "Fine"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "会話を終了"
+            "value": "終了"
           }
         },
         "kn": {
           "stringUnit": {
             "state": "translated",
-            "value": "ಸಂವಾದ ಆತೊಡೆತು"
+            "value": "ಅವಸಾನ"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "대화 종료"
+            "value": "종료"
           }
         },
         "lt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Baigti pokalbį"
+            "value": "Baigti"
           }
         },
         "lv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Beigt sarunu"
+            "value": "Beigt"
           }
         },
         "mk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Крај разговор"
+            "value": "Завршена"
           }
         },
         "mr": {
           "stringUnit": {
             "state": "translated",
-            "value": "संभाषण समाप्त करा"
+            "value": "संपला"
           }
         },
         "ms": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tamatkan Perbualan"
+            "value": "Tamat"
           }
         },
         "nl": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gesprek beëindigen"
+            "value": "Einde"
           }
         },
         "no": {
           "stringUnit": {
             "state": "translated",
-            "value": "Avslutt samtale"
+            "value": "Avslutt"
           }
         },
         "pl": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zakończ rozmowę"
+            "value": "Zakoncz"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Terminar conversa"
+            "value": "Encerrar"
           }
         },
         "ro": {
           "stringUnit": {
             "state": "translated",
-            "value": "Încheie conversația"
+            "value": "Incheie"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Завершить разговор"
+            "value": "Завершить"
           }
         },
         "sk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ukončiť konverzáciu"
+            "value": "Ukoncit"
           }
         },
         "sl": {
           "stringUnit": {
             "state": "translated",
-            "value": "Končaj pogovor"
+            "value": "Konec"
           }
         },
         "sr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Заврши разговор"
+            "value": "Заврши"
           }
         },
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Avsluta konversation"
+            "value": "Avsluta"
           }
         },
         "ta": {
           "stringUnit": {
             "state": "translated",
-            "value": "உரையாடல் முடிக்கவும்"
+            "value": "முடி"
           }
         },
         "te": {
           "stringUnit": {
             "state": "translated",
-            "value": "సంభాషణను ముగించండి"
+            "value": "ముగించు"
           }
         },
         "th": {
           "stringUnit": {
             "state": "translated",
-            "value": "จบบทสนทนา"
+            "value": "วางสาย"
           }
         },
         "tl": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tapusin ang Pag-uusap"
+            "value": "Tapos"
           }
         },
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Konuşmayı Sonlandır"
+            "value": "Bitir"
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Завершити розмову"
+            "value": "Завершити"
           }
         },
         "ur": {
           "stringUnit": {
             "state": "translated",
-            "value": "بات چیت ختم کریں"
+            "value": "ختم کریں"
           }
         },
         "vi": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kết thúc cuộc trò chuyện"
+            "value": "Kết thúc"
           }
         },
         "zh": {
           "stringUnit": {
             "state": "translated",
-            "value": "结束对话"
+            "value": "结束"
           }
         }
       }
