@@ -1,5 +1,6 @@
 """Unit tests for calendar meetings UTC normalization, duration validation, and query filter ordering."""
 
+import logging
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
@@ -193,7 +194,8 @@ def test_update_meeting_skips_empty_payload_without_firestore(monkeypatch):
 
 
 @pytest.mark.parametrize('limit', [101, 10_000])
-def test_list_meetings_caps_direct_call_limit(monkeypatch, limit):
+def test_list_meetings_caps_direct_call_limit(monkeypatch, caplog, limit):
+    caplog.set_level(logging.DEBUG, logger=calendar_db.__name__)
     calls = []
 
     class FakeQuery:
@@ -211,6 +213,7 @@ def test_list_meetings_caps_direct_call_limit(monkeypatch, limit):
 
     assert calendar_db.list_meetings('uid-1', limit=limit) == []
     assert calls == [100]
+    assert f'Capping calendar meeting list limit from {limit} to 100' in caplog.text
 
 
 @pytest.mark.parametrize('limit', [0, -1])

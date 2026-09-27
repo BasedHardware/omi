@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
@@ -9,6 +10,7 @@ from database.document_ids import calendar_meeting_doc_id
 
 T = TypeVar("T")
 MAX_MEETING_LIST_LIMIT = 100
+logger = logging.getLogger(__name__)
 
 
 def _clean_uid(uid: Any) -> str:
@@ -159,6 +161,8 @@ def list_meetings(
     if limit <= 0:
         return []
     bounded_limit = min(limit, MAX_MEETING_LIST_LIMIT)
+    if limit > MAX_MEETING_LIST_LIMIT:
+        logger.debug("Capping calendar meeting list limit from %s to %s", limit, MAX_MEETING_LIST_LIMIT)
 
     start_utc = _to_utc(start_date) if start_date is not None else None
     end_utc = _to_utc(end_date) if end_date is not None else None
