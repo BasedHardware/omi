@@ -329,6 +329,8 @@ class FailoverStack:
                 # The canonical read decode: the stored row carries zlib-compressed
                 # transcript segments once the first write has landed.
                 return conversations_db.prepare_conversation_for_read(raw, UID)
+            if fn is conversations_db.get_manual_speaker_receipt:
+                return {}
             if fn is conversations_db.update_conversation_finished_at:
                 _uid, conversation_id, finished_at = args
                 self.store.rows[('users', UID, 'conversations', conversation_id)]['finished_at'] = finished_at

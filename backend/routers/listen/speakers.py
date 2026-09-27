@@ -17,6 +17,8 @@ from utils.executors import storage_executor, sync_executor, run_blocking
 from utils.other.storage import get_profile_audio_if_exists
 from utils.speaker_sample import download_sample_audio
 from utils.speaker_sample_migration import maybe_migrate_person_samples
+from utils.manual_speaker_assignments import manual_owner_reserved
+from utils.stt.conversation_speakers import VOICE_MATCH_THRESHOLD
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
 from utils.stt.speaker_match import (
     SPEAKER_MATCH_MAX_CLIPS,
@@ -27,7 +29,7 @@ from utils.stt.speaker_match import (
     select_speaker_match,
 )
 from utils.transcribe_decisions import USER_SELF_PERSON_ID, should_spawn_speaker_match
-from utils.transcribe_store import get_user_name, user_db
+from utils.transcribe_store import conversations_db, get_user_name, user_db
 from utils.metrics import OMI_SPEAKER_ID_MATCH_EXITS_TOTAL
 
 logger = logging.getLogger(__name__)
@@ -69,6 +71,8 @@ class SpeakerMatcher:
         self._voice_distances: Dict[int, Dict[str, float]] = {}
         self._voice_decisions: Dict[int, SpeakerMatchDecision] = {}
         self._voice_segments: Dict[int, str] = {}
+        self._voice_centroids: Dict[int, Any] = {}
+        self._voice_scopes: Dict[int, str] = {}
         # Recent (embedding, clip seconds) per diarized speaker. A decision is made on
         # the centroid once enough audio has accumulated, instead of letting the first
         # clip that happens to land under the threshold stick for the whole session.
@@ -365,7 +369,30 @@ class SpeakerMatcher:
             self._voice_distances[speaker_id] = distances
             self._voice_decisions[speaker_id] = select_speaker_match(distances)
             self._voice_segments[speaker_id] = segment['id']
-            decisions = arbitrate_owner_matches(self._voice_distances, self._voice_decisions)
+            self._voice_centroids[speaker_id] = centroid
+            self._voice_scopes[speaker_id] = segment.get('speaker_id_scope') or ''
+            # Receipt reads may await. Re-arbitrate the latest shared evidence
+            # after the read, then publish synchronously.
+            owner_reserved = False
+            if conversation_id:
+                try:
+                    receipt = await self.host.persistence.call(
+                        conversations_db.get_manual_speaker_receipt, self.host.request.uid, conversation_id
+                    )
+                    owner_reserved = manual_owner_reserved(receipt)
+                except Exception as error:
+                    logger.warning('Speaker ID receipt load failed type=%s', type(error).__name__)
+                    owner_reserved = True
+            if (drop_reason := self._drop_reason(generation, conversation_id, speaker_id)) is not None:
+                self._record_exit(drop_reason, speaker_id)
+                return
+            voice_groups = self._provider_epoch_voice_groups()
+            decisions = arbitrate_owner_matches(
+                self._voice_distances,
+                self._voice_decisions,
+                owner_reserved=owner_reserved,
+                voice_groups=voice_groups,
+            )
             decision = decisions[speaker_id]
             logger.info(
                 'speaker_id_decision surface=live speaker=%s clips=%d evidence_seconds=%.1f '
@@ -413,6 +440,7 @@ class SpeakerMatcher:
                 self.voice_identity_status[voice] = status
                 self.segment_identity_status[segment_id] = status
             self.host.state.speaker_map_dirty = True
+            self.host.state.speaker_map_version = getattr(self.host.state, 'speaker_map_version', 0) + 1
         except Exception as error:
             logger.error(
                 'Speaker ID match failed speaker=%s type=%s session=%s',
@@ -420,6 +448,27 @@ class SpeakerMatcher:
                 type(error).__name__,
                 self._session_log_id(),
             )
+
+    def _provider_epoch_voice_groups(self) -> Dict[int, int]:
+        """Reconcile a voice only across stamped provider epochs with close audio."""
+        groups: Dict[int, int] = {}
+        members: Dict[int, list[int]] = {}
+        for voice, centroid in self._voice_centroids.items():
+            scope = self._voice_scopes.get(voice)
+            group = voice
+            if scope:
+                for representative, peers in members.items():
+                    if all(
+                        self._voice_scopes.get(peer)
+                        and self._voice_scopes[peer] != scope
+                        and compare_embeddings(centroid, self._voice_centroids[peer]) < VOICE_MATCH_THRESHOLD
+                        for peer in peers
+                    ):
+                        group = representative
+                        break
+            groups[voice] = group
+            members.setdefault(group, []).append(voice)
+        return groups
 
     async def drain(self, *, timeout: float, label: str) -> None:
         if self.tasks:
@@ -438,3 +487,5 @@ class SpeakerMatcher:
         self._voice_distances.clear()
         self._voice_decisions.clear()
         self._voice_segments.clear()
+        self._voice_centroids.clear()
+        self._voice_scopes.clear()

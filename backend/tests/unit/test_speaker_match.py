@@ -175,6 +175,45 @@ def test_one_long_clip_decides_immediately(monkeypatch):
     assert emitted == [(2, 'p1', 'Sarah', 's1')]
 
 
+def test_provider_failover_reconciles_one_owner_across_epoch_ids(monkeypatch):
+    # Both clips independently match the owner at 0.53/0.54. Their in-session
+    # vectors are close; provider epoch IDs alone must not create contention.
+    clips = [
+        np.array([[0.47, np.sqrt(1 - 0.47**2)]], dtype=np.float32),
+        np.array([[0.46, np.sqrt(1 - 0.46**2)]], dtype=np.float32),
+    ]
+    matcher, _host, _emitted = _live_matcher(monkeypatch, clips)
+    matcher.person_embeddings.pop('p1')
+    first = dict(_segment('before', 0, 6), speaker_id_scope='connection:0')
+    second = dict(_segment('after', 7, 6), speaker_id_scope='connection:1')
+
+    asyncio.run(matcher.match(1, first))
+    asyncio.run(matcher.match(2, second))
+
+    assert matcher.speaker_to_person[1][0] == 'user'
+    assert matcher.speaker_to_person[2][0] == 'user'
+    assert matcher.voice_identity_status[1] == matcher.voice_identity_status[2] == SpeakerIdentityStatus.user
+
+
+def test_manual_owner_receipt_reserves_live_owner_without_embedding(monkeypatch):
+    from routers.listen import speakers as speakers_mod
+
+    owner = np.array([[1.0, 0.0]], dtype=np.float32)
+    matcher, host, _emitted = _live_matcher(monkeypatch, [owner])
+    matcher._profile_conversation_id = 'c'
+
+    async def receipt(_fn, _uid, _conversation_id):
+        return {'segments': {'manual': {'is_user': True, 'person_id': None}}}
+
+    host.request.uid = 'u'
+    host.persistence = SimpleNamespace(call=receipt)
+    monkeypatch.setattr(speakers_mod.conversations_db, 'get_manual_speaker_receipt', lambda *_: {})
+    asyncio.run(matcher.match(2, _segment('automatic', 0, 6)))
+
+    assert 2 not in matcher.speaker_to_person
+    assert matcher.voice_identity_status[2] == SpeakerIdentityStatus.ambiguous
+
+
 def test_decision_uses_the_centroid_not_the_latest_clip(monkeypatch):
     """One noisy clip pointing at Sarah is outvoted by two owner clips in the window."""
     owner = np.array([[1.0, 0.0]], dtype=np.float32)

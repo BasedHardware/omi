@@ -101,6 +101,7 @@ def arbitrate_owner_matches(
     *,
     margin: float = SPEAKER_MATCH_MARGIN,
     owner_reserved: bool = False,
+    voice_groups: Optional[Mapping[SpeakerKey, SpeakerKey]] = None,
 ) -> dict[SpeakerKey, SpeakerMatchDecision]:
     """Require an owner claim to beat the other *voices*, not just other prints.
 
@@ -128,12 +129,21 @@ def arbitrate_owner_matches(
     winner = None
     if ranked and not owner_reserved:
         best, key = ranked[0]
-        if len(ranked) == 1 or ranked[1][0] - best >= margin:
-            winner = key
+        competing = next(
+            (
+                distance
+                for distance, other in ranked[1:]
+                if voice_groups is None or voice_groups.get(other, other) != voice_groups.get(key, key)
+            ),
+            float('inf'),
+        )
+        if competing - best >= margin:
+            winner = voice_groups.get(key, key) if voice_groups is not None else key
     return {
         key: (
             replace(decision, person_id=None, owner_contended=True)
-            if decision.person_id == 'user' and key != winner
+            if decision.person_id == 'user'
+            and (voice_groups.get(key, key) if voice_groups is not None else key) != winner
             else decision
         )
         for key, decision in decisions.items()
