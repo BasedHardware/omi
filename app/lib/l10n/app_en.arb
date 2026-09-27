@@ -1164,7 +1164,6 @@
     "daySummary": "Day Summary",
     "summaryGenerated": "Summary generated",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Add to claude_desktop_config.json",
     "copyConfig": "Copy Config",
     "configCopied": "Config copied to clipboard",
     "listeningMins": "Listening (mins)",
@@ -2718,10 +2717,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "Add to claude_desktop_config.json",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2755,10 +2750,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "Use your MCP API key",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -2802,14 +2793,6 @@
     "detailedDiagnosticMessages": "Detailed diagnostic messages",
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
-    },
-    "autoCreateSpeakers": "Auto-create Speakers",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "Auto-create when name detected",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
     },
     "followUpQuestions": "Follow-up Questions",
     "@followUpQuestions": {
@@ -11850,9 +11833,9 @@
     "@transcriptionNoAudio": {
         "description": "Status when an active call transcription socket receives no audio frames"
     },
-    "tapPlusToStartRecording": "Tap + to start recording",
+    "tapPlusToStartRecording": "Tap the record button to start recording",
     "@tapPlusToStartRecording": {
-        "description": "Empty-home hint pointing at the + record button"
+        "description": "Empty-home hint pointing at the round record button"
     },
     "chatBlockTask": "Task",
     "@chatBlockTask": {
@@ -12059,7 +12042,7 @@
             }
         }
     },
-    "noConversationsHeroMessage": "Conversations you record show up here. Tap + on Home to record your first one.",
+    "noConversationsHeroMessage": "Conversations you record show up here. Tap the record button on Home to record your first one.",
     "@noConversationsHeroMessage": {
         "description": "Empty state message on the Conversations tab for a new user"
     },
@@ -12613,7 +12596,7 @@
     "@deviceConnecting": {
         "description": "Header device pill while a paired device reconnects"
     },
-    "recordOptionsTip": "Tip: press and hold the record button to record a phone call.",
+    "recordOptionsTip": "Tip: tap the arrow on the record button to record a phone call.",
     "@recordOptionsTip": {
         "description": "One-time hint after the first phone-mic recording"
     },
@@ -13266,13 +13249,29 @@
     "@voiceSettingsSaveOthersSubtitle": {
         "description": "Settings switch explanation for remembering voices of people the user names"
     },
+    "leaveBlank": "Leave blank",
+    "@leaveBlank": {
+        "description": "Hint for an intentionally empty field (e.g. OAuth client secret)"
+    },
+    "mcpOAuthSetup": "On claude.ai, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.",
+    "@mcpOAuthSetup": {
+        "description": "OAuth connector setup instructions for the hosted MCP server"
+    },
+    "claudeCode": "Claude Code",
+    "@claudeCode": {
+        "description": "Claude Code (CLI) integration section"
+    },
+    "addToClaudeCodeConfig": "Add to ~/.claude.json",
+    "@addToClaudeCodeConfig": {
+        "description": "Subtitle under the Claude Code section: add the snippet to ~/.claude.json"
+    },
+    "claudeDesktopConnectorSetup": "On Claude Desktop → Settings → Connectors, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.",
+    "@claudeDesktopConnectorSetup": {
+        "description": "Claude Desktop connector setup instructions for the hosted MCP server"
+    },
     "transcriptionUnavailableRecordingContinues": "Transcriptions are unavailable, recording continues on device and will process later",
     "@transcriptionUnavailableRecordingContinues": {
         "description": "Live capture status while the transcription service is down; audio keeps recording locally."
-    },
-    "transcriptionUnavailableSavingOnDevice": "Transcription unavailable · saving on device",
-    "@transcriptionUnavailableSavingOnDevice": {
-        "description": "Compact transcription-outage status for the in-progress capture card."
     },
     "transcriptionsPendingFraction": "Transcriptions pending {pending}/{total}",
     "@transcriptionsPendingFraction": {
@@ -13294,5 +13293,297 @@
                 "type": "int"
             }
         }
+    },
+    "captureSourceCall": "Call",
+    "@captureSourceCall": {
+        "description": "Capture source label when an Omi phone call is being recorded, on the live card (e.g. 'Call · Listening · 3:10'). A noun."
+    },
+    "captureSourcePhoneMic": "Phone mic",
+    "@captureSourcePhoneMic": {
+        "description": "The phone's microphone as a capture source: live page title ('Listening · Phone mic') and the first row of the 'Record with' sheet."
+    },
+    "captureStatusWithSource": "{status} · {source}",
+    "@captureStatusWithSource": {
+        "description": "Live page title: recording status followed by the capture source, e.g. 'Listening · Pendant'.",
+        "placeholders": {
+            "status": {
+                "type": "String",
+                "example": "Listening"
+            },
+            "source": {
+                "type": "String",
+                "example": "Pendant"
+            }
+        }
+    },
+    "resume": "Resume",
+    "@resume": {
+        "description": "Button that resumes a paused recording."
+    },
+    "finish": "Finish",
+    "@finish": {
+        "description": "Button that ends the live recording and processes the conversation."
+    },
+    "pendantPausedResumesWhenYouFinish": "Pendant paused · resumes when you finish",
+    "@pendantPausedResumesWhenYouFinish": {
+        "description": "Small note on the live card while the phone records instead of the pendant."
+    },
+    "pendantIsListeningTitle": "Your pendant is listening",
+    "@pendantIsListeningTitle": {
+        "description": "Sheet title shown when the user taps the phone record button while the pendant is recording."
+    },
+    "oneSourceAtATime": "Omi records from one source at a time.",
+    "@oneSourceAtATime": {
+        "description": "Explanation line under the 'Your pendant is listening' sheet title."
+    },
+    "recordWithPhoneInstead": "Record with phone instead",
+    "@recordWithPhoneInstead": {
+        "description": "Option in the 'Your pendant is listening' sheet that switches recording to the phone microphone."
+    },
+    "pendantPausesUntilYouFinish": "Pendant pauses until you finish",
+    "@pendantPausesUntilYouFinish": {
+        "description": "Subtitle of the 'Record with phone instead' option."
+    },
+    "pendantPausesDuringCall": "Pendant pauses during the call",
+    "@pendantPausesDuringCall": {
+        "description": "Subtitle of the Phone call option in the 'Your pendant is listening' sheet."
+    },
+    "keepUsingPendant": "Keep using pendant",
+    "@keepUsingPendant": {
+        "description": "Button that dismisses the 'Your pendant is listening' sheet and keeps the pendant recording."
+    },
+    "recordWith": "Record with",
+    "@recordWith": {
+        "description": "Title of the sheet listing ways to record (Phone mic, Phone call)."
+    },
+    "moreWaysToRecord": "More ways to record",
+    "@moreWaysToRecord": {
+        "description": "Accessibility label of the small arrow badge on the record button that opens the 'Record with' sheet."
+    },
+    "openCall": "Open call",
+    "@openCall": {
+        "description": "Accessibility hint on the live card during a call; tapping opens the call screen."
+    },
+    "captureRecoveryBanner": "Pendant audio is not reaching the app — tap to repair",
+    "@captureRecoveryBanner": {
+        "description": "Persistent repair banner shown when a connected pendant's audio is not reaching the app; tapping opens device repair settings"
+    },
+    "phoneRecordingBlockedByPendantBatch": "Stop Transcribe Later on your pendant before recording with your phone.",
+    "captureNotTranscribing": "Not transcribing",
+    "@captureNotTranscribing": {
+        "description": "Home live capture card, line 1: live transcription is not running (server said it cannot); audio keeps recording. Must stay short (one line on a small phone)."
+    },
+    "captureAudioSavedTranscribesLater": "Audio saved, transcribes later",
+    "@captureAudioSavedTranscribesLater": {
+        "description": "Home live capture card, line 2 after the timer (e.g. \"0:14 · Audio saved, transcribes later\"): recording continues on the phone and will be transcribed later."
+    },
+    "captureStillRecording": "Still recording",
+    "@captureStillRecording": {
+        "description": "Home live capture card, line 2 after the timer while the transcription connection is being restored: recording has not stopped."
+    },
+    "captureMicInUseElsewhere": "Mic in use by another app",
+    "@captureMicInUseElsewhere": {
+        "description": "Home live capture card, line 2 after the timer when the OS or another app (a call, another audio app) took the microphone and capture is paused."
+    },
+    "captureMicInterruptedDetail": "A call or another app took the microphone, so Omi can't hear right now. Omi resumes on its own when the microphone is free. Everything recorded before this is safe.",
+    "@captureMicInterruptedDetail": {
+        "description": "Details sheet opened from the Home live capture card when a call or another app took the microphone. Explains the pause and that it resumes by itself."
+    },
+    "captureCustomSttUnreachableDetail": "Your custom speech-to-text service can't be reached. Omi keeps your audio on this phone and sends it when the service is back. Nothing is lost.",
+    "@captureCustomSttUnreachableDetail": {
+        "description": "Details sheet opened from the Home live capture card when the user's custom speech-to-text endpoint cannot be reached; audio is buffered on the phone."
+    },
+    "captureStarting": "Starting…",
+    "@captureStarting": {
+        "description": "Home live capture card, line 1: the phone microphone recording is starting and audio is not flowing yet."
+    },
+    "capturePhoneStorageFull": "Phone storage full",
+    "@capturePhoneStorageFull": {
+        "description": "Transcribe Later card, line 2 after the timer: recording paused because the phone is out of storage."
+    },
+    "captureStorageAlmostFull": "Storage almost full",
+    "@captureStorageAlmostFull": {
+        "description": "Transcribe Later card for a pendant, line 2: the pendant's own storage is almost full."
+    },
+    "capturePendantDisconnectedDetail": "Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.",
+    "@capturePendantDisconnectedDetail": {
+        "description": "Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture."
+    },
+    "participantsSummaryUncounted": "{name} + others",
+    "@participantsSummaryUncounted": {
+        "description": "Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingVoiceReplyTitle": "Hear Omi's Answers",
+    "deviceOnboardingVoiceReplySample": "I've got it. Your next meeting starts in twenty minutes.",
+    "deviceOnboardingAllSetTitle": "You're All Set",
+    "deviceOnboardingAllSetSubtitle": "Tap a row to review or change it.",
+    "deviceOnboardingAllSetSinglePressBadge": "1×",
+    "deviceOnboardingAllSetDoublePressBadge": "2×",
+    "deviceOnboardingVoiceReplySubtitle": "When you ask with the button, Omi can read its answer out loud.",
+    "@deviceOnboardingVoiceReplySubtitle": {
+        "description": "Teaching subtitle for the voice reply onboarding step"
+    },
+    "deviceOnboardingVoiceReplyPreviewIdle": "Hear your last answer",
+    "@deviceOnboardingVoiceReplyPreviewIdle": {
+        "description": "Title of the idle voice answer preview card"
+    },
+    "deviceOnboardingVoiceReplyPreviewPlaying": "Playing your last answer...",
+    "@deviceOnboardingVoiceReplyPreviewPlaying": {
+        "description": "Title of the voice answer preview card while audio is playing"
+    },
+    "deviceOnboardingVoiceReplyPreviewThroughDevice": "Through {device}",
+    "@deviceOnboardingVoiceReplyPreviewThroughDevice": {
+        "description": "Voice preview output route when headphones are connected",
+        "placeholders": {
+            "device": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": "Through the phone speaker",
+    "@deviceOnboardingVoiceReplyPreviewThroughPhoneSpeaker": {
+        "description": "Voice preview output route when using the phone speaker"
+    },
+    "deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": "Through the current audio output",
+    "@deviceOnboardingVoiceReplyPreviewThroughCurrentOutput": {
+        "description": "Voice preview output route while the system route is not yet known"
+    },
+    "deviceOnboardingVoiceReplyOffDescription": "Answers stay on screen. Nothing is spoken.",
+    "@deviceOnboardingVoiceReplyOffDescription": {
+        "description": "Description of the Off voice response mode"
+    },
+    "deviceOnboardingVoiceReplyHeadphonesDescription": "Private. Speaks only through AirPods, Bluetooth or wired headphones.",
+    "@deviceOnboardingVoiceReplyHeadphonesDescription": {
+        "description": "Description of the Headphones only voice response mode"
+    },
+    "deviceOnboardingVoiceReplyAlwaysDescription": "Uses the phone speaker when no headphones are connected.",
+    "@deviceOnboardingVoiceReplyAlwaysDescription": {
+        "description": "Description of the Always voice response mode"
+    },
+    "deviceOnboardingVoiceReplyStatusOff": "Omi will stay silent. Answers still appear in the app.",
+    "@deviceOnboardingVoiceReplyStatusOff": {
+        "description": "Output consequence when voice responses are off"
+    },
+    "deviceOnboardingVoiceReplyStatusHeadphonesConnected": "{device} connected. Omi will speak here.",
+    "@deviceOnboardingVoiceReplyStatusHeadphonesConnected": {
+        "description": "Output consequence for Headphones only mode with connected headphones",
+        "placeholders": {
+            "device": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": "No headphones connected. Omi stays silent until you connect some.",
+    "@deviceOnboardingVoiceReplyStatusHeadphonesDisconnected": {
+        "description": "Output consequence for Headphones only mode without connected headphones"
+    },
+    "deviceOnboardingVoiceReplyStatusAlwaysHeadphones": "Plays through {device}.",
+    "@deviceOnboardingVoiceReplyStatusAlwaysHeadphones": {
+        "description": "Output consequence for Always mode with connected headphones",
+        "placeholders": {
+            "device": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Plays out loud through the phone speaker.",
+    "@deviceOnboardingVoiceReplyStatusAlwaysSpeaker": {
+        "description": "Output consequence for Always mode without connected headphones"
+    },
+    "deviceOnboardingVoiceReplySettingsHint": "You can change this anytime in {settings} › {voiceResponse}",
+    "@deviceOnboardingVoiceReplySettingsHint": {
+        "description": "Footer explaining where to change voice response settings",
+        "placeholders": {
+            "settings": {
+                "type": "String"
+            },
+            "voiceResponse": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingAllSetReplayHint": "Replay this tour anytime in {settings} › {deviceSettings} › {deviceTutorial}",
+    "@deviceOnboardingAllSetReplayHint": {
+        "description": "Footer explaining the complete Settings menu path for replaying the device tutorial",
+        "placeholders": {
+            "settings": {
+                "type": "String"
+            },
+            "deviceSettings": {
+                "type": "String"
+            },
+            "deviceTutorial": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Headphones",
+    "@deviceOnboardingVoiceReplyGenericHeadphones": {
+        "description": "Generic fallback name for connected headphones when the system does not provide a device name"
+    },
+    "usageListened": "Listened",
+    "@usageListened": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageWordsHeard": "Words heard",
+    "@usageWordsHeard": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageTasksNotes": "Tasks & notes",
+    "@usageTasksNotes": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usagePeakHour": "Peak hour",
+    "@usagePeakHour": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageBestDay": "Best day",
+    "@usageBestDay": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageBestMonth": "Best month",
+    "@usageBestMonth": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageBestYear": "Best year",
+    "@usageBestYear": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageMinutes": "Minutes",
+    "@usageMinutes": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageWords": "Words",
+    "@usageWords": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageTasks": "Tasks",
+    "@usageTasks": {
+        "description": "Plan and Usage dashboard label"
+    },
+    "usageMonth": "Month",
+    "@usageMonth": {
+        "description": "Plan and Usage period selector"
+    },
+    "usageYear": "Year",
+    "@usageYear": {
+        "description": "Plan and Usage period selector"
+    },
+    "usageAll": "All time",
+    "@usageAll": {
+        "description": "Plan and Usage period selector"
+    },
+    "usageNow": "now",
+    "@usageNow": {
+        "description": "Current hour marker on Plan and Usage chart"
+    },
+    "usageChatThisMonth": "Chat this month",
+    "@usageChatThisMonth": {
+        "description": "Label for monthly chat usage meter"
     }
 }

@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
@@ -57,7 +60,11 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
     final segments = provider.conversation.transcriptSegments;
     final segment = segments[segmentIndex];
     final people = context.read<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
-    final speakerName = SpeakerNames.forSegments(segments, people: people, l10n: context.l10n).forSegment(segment);
+    final speakerName = SpeakerNames.forSegments(
+      segments,
+      people: people,
+      l10n: context.l10n,
+    ).forSegment(segment);
     PlatformManager.instance.analytics.editSegmentTextStarted();
     bool saved = false;
     showEditSegmentBottomSheet(
@@ -75,7 +82,11 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
     );
   }
 
-  void _nameSpeaker(ConversationDetailProvider provider, String segmentId, int speakerId) {
+  void _nameSpeaker(
+    ConversationDetailProvider provider,
+    String segmentId,
+    int speakerId,
+  ) {
     if (!_requireConnection()) return;
     showNameSpeakerSheet(
       context,
@@ -83,18 +94,86 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
       segmentId: segmentId,
       segments: provider.conversation.transcriptSegments,
       onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
-        final targetId = provider.conversation.id;
-        final peopleProvider = context.read<PeopleProvider>();
-        final finalPersonId = personId.isEmpty ? (await peopleProvider.createPersonProvider(personName))?.id : personId;
-        if (finalPersonId == null || finalPersonId.isEmpty) return false;
-        final saved = await provider.assignSpeaker(segmentIds, finalPersonId,
-            speakerId: applyToSpeaker ? speakerId : null, expectedConversationId: targetId);
-        if (saved) {
-          PlatformManager.instance.analytics.taggedSegment(finalPersonId == 'user' ? 'User' : 'User Person');
-        }
-        return saved;
+        return _startSpeakerAssignment(
+          provider,
+          provider.conversation.id,
+          speakerId,
+          personId,
+          personName,
+          segmentIds,
+          applyToSpeaker,
+        );
       },
     );
+  }
+
+  bool _startSpeakerAssignment(
+    ConversationDetailProvider provider,
+    String conversationId,
+    int speakerId,
+    String personId,
+    String personName,
+    List<String> segmentIds,
+    bool applyToSpeaker,
+  ) {
+    final peopleProvider = context.read<PeopleProvider>();
+    final newPerson = personId.isEmpty;
+    final temporaryId = newPerson ? 'optimistic-person:${DateTime.now().microsecondsSinceEpoch}' : null;
+    if (temporaryId != null) {
+      peopleProvider.addOptimisticPerson(
+        Person(
+          id: temporaryId,
+          name: personName,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        ),
+      );
+    }
+    var resolvedId = personId;
+    final pending = provider.startSpeakerAssignment(
+      segmentIds,
+      temporaryId ?? personId,
+      speakerId: applyToSpeaker ? speakerId : null,
+      expectedConversationId: conversationId,
+      createPerson: newPerson ? () async => (await peopleProvider.createPersonProvider(personName))?.id : null,
+      onReconciled: (id) {
+        resolvedId = id;
+        if (temporaryId != null) peopleProvider.removeOptimisticPerson(temporaryId);
+      },
+      onFailed: () {
+        if (temporaryId != null) peopleProvider.removeOptimisticPerson(temporaryId);
+        if (!mounted) return;
+        OmiFeedback.error(
+          context,
+          context.l10n.failedToSaveCheckConnection,
+          actionLabel: context.l10n.retry,
+          onAction: () => _startSpeakerAssignment(
+            provider,
+            conversationId,
+            speakerId,
+            resolvedId,
+            personName,
+            segmentIds,
+            applyToSpeaker,
+          ),
+        );
+      },
+    );
+    if (pending == null) {
+      if (temporaryId != null) peopleProvider.removeOptimisticPerson(temporaryId);
+      return false;
+    }
+    unawaited(
+      pending.then((saved) {
+        if (temporaryId != null) peopleProvider.removeOptimisticPerson(temporaryId);
+        if (saved) {
+          PlatformManager.instance.analytics.taggedSegment(
+            resolvedId == 'user' ? 'User' : 'User Person',
+          );
+        }
+      }),
+    );
+    return true;
   }
 
   @override
@@ -119,36 +198,41 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
                   text: (conversation.externalIntegration?.text ?? '').decodeString,
                   maxLines: 1000,
                   linkColor: OmiColors.textSecondary,
-                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.3),
+                  style: OmiType.subhead.copyWith(
+                    color: OmiColors.textSecondary,
+                    height: 1.3,
+                  ),
                   toggleExpand: provider.toggleIsTranscriptExpanded,
                   isExpanded: provider.isTranscriptExpanded,
                 ),
               );
             }
 
-            return Column(children: [
-              SpeakerSummaryAction(provider: provider),
-              Expanded(
-                child: getTranscriptWidget(
-                  false,
-                  segments,
-                  photos,
-                  null,
-                  conversationId: conversation.id,
-                  horizontalMargin: false,
-                  topMargin: false,
-                  canDisplaySeconds: provider.canDisplaySeconds,
-                  isConversationDetail: true,
-                  bottomMargin: 150,
-                  searchQuery: widget.searchQuery,
-                  currentResultIndex: widget.currentResultIndex,
-                  onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
-                  onSegmentTap: widget.onSegmentTap,
-                  onEditSegmentText: (segmentIndex) => _editSegmentText(provider, segmentIndex),
-                  editSegment: (segmentId, speakerId) => _nameSpeaker(provider, segmentId, speakerId),
+            return Column(
+              children: [
+                SpeakerSummaryAction(provider: provider),
+                Expanded(
+                  child: getTranscriptWidget(
+                    false,
+                    segments,
+                    photos,
+                    null,
+                    conversationId: conversation.id,
+                    horizontalMargin: false,
+                    topMargin: false,
+                    canDisplaySeconds: provider.canDisplaySeconds,
+                    isConversationDetail: true,
+                    bottomMargin: 150,
+                    searchQuery: widget.searchQuery,
+                    currentResultIndex: widget.currentResultIndex,
+                    onTapWhenSearchEmpty: widget.onTapWhenSearchEmpty,
+                    onSegmentTap: widget.onSegmentTap,
+                    onEditSegmentText: (segmentIndex) => _editSegmentText(provider, segmentIndex),
+                    editSegment: (segmentId, speakerId) => _nameSpeaker(provider, segmentId, speakerId),
+                  ),
                 ),
-              ),
-            ]);
+              ],
+            );
           },
         ),
       ),

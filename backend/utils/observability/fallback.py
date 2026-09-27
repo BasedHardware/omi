@@ -77,6 +77,7 @@ ALLOWED_COMPONENTS = frozenset(
         'knowledge_graph',
         'agent_tools',
         'conversation_finalization',
+        'conversation_notes',
         'daily_summary',
         'other',
     }

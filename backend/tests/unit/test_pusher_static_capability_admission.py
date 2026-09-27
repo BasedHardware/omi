@@ -13,9 +13,7 @@ import pusher.main as pusher_main
     'env',
     [
         {'MEMORY_ENABLED': 'on', 'SONIOX_API_KEY': 'test-key'},
-        {'MEMORY_MODE': 'write', 'SONIOX_API_KEY': 'test-key'},
-        # The production parser keeps this legacy mode mutation-capable.
-        {'MEMORY_MODE': 'read', 'SONIOX_API_KEY': 'test-key'},
+        {'MEMORY_ENABLED': 'true', 'SONIOX_API_KEY': 'test-key'},
     ],
 )
 def test_pusher_static_capability_admission_accepts_runtime_writable_modes(env: dict[str, str]) -> None:
@@ -28,7 +26,7 @@ def test_pusher_static_capability_admission_accepts_runtime_writable_modes(env: 
         {},
         {'MEMORY_ENABLED': 'off'},
         {'MEMORY_ENABLED': 'invalid'},
-        {'MEMORY_MODE': 'shadow'},
+        {'MEMORY_MODE': 'write'},
     ],
 )
 def test_pusher_static_capability_admission_rejects_non_writable_modes(env: dict[str, str]) -> None:

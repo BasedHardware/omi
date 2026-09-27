@@ -1477,3 +1477,83 @@ final class VoiceProfileSettingToggled extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"setting": setting.wireName, "enabled": enabled, "source": source.wireName, "succeeded": succeeded};
 }
+
+enum VoiceReplyPlaybackOutcome {
+  played("played"),
+  playedWithFallback("played_with_fallback"),
+  fallbackOnly("fallback_only"),
+  skipped("skipped"),
+  interrupted("interrupted"),
+  failed("failed");
+  const VoiceReplyPlaybackOutcome(this.wireName);
+  final String wireName;
+}
+
+enum VoiceReplyPlaybackSkipReason {
+  modeOff("mode_off"),
+  noHeadphones("no_headphones"),
+  headphoneCheckFailed("headphone_check_failed"),
+  none("none");
+  const VoiceReplyPlaybackSkipReason(this.wireName);
+  final String wireName;
+}
+
+enum VoiceReplyPlaybackMode {
+  off("off"),
+  headphonesOnly("headphones_only"),
+  always("always"),
+  unknown("unknown");
+  const VoiceReplyPlaybackMode(this.wireName);
+  final String wireName;
+}
+
+enum VoiceReplyPlaybackOutputRoute {
+  bluetooth("bluetooth"),
+  wired("wired"),
+  airplay("airplay"),
+  usb("usb"),
+  speaker("speaker"),
+  unknown("unknown");
+  const VoiceReplyPlaybackOutputRoute(this.wireName);
+  final String wireName;
+}
+
+enum VoiceReplyPlaybackFallbackReason {
+  none("none"),
+  rateLimited429("rate_limited_429"),
+  unavailable503("unavailable_503"),
+  noResponse("no_response");
+  const VoiceReplyPlaybackFallbackReason(this.wireName);
+  final String wireName;
+}
+
+enum VoiceReplyPlaybackInterruptSource {
+  none("none"),
+  userTyped("user_typed"),
+  newVoiceQuery("new_voice_query"),
+  audioInterruption("audio_interruption"),
+  headphonesUnplugged("headphones_unplugged"),
+  quotaError("quota_error"),
+  streamError("stream_error"),
+  modeOff("mode_off");
+  const VoiceReplyPlaybackInterruptSource(this.wireName);
+  final String wireName;
+}
+
+final class VoiceReplyPlayback extends RegisteredEvent {
+  const VoiceReplyPlayback({required this.outcome, required this.skipReason, required this.mode, required this.outputRoute, required this.chunksRequested, required this.chunksPlayed, required this.chunksDropped, required this.fallbackReason, required this.firstAudioLatencyMs, required this.interruptSource});
+  final VoiceReplyPlaybackOutcome outcome;
+  final VoiceReplyPlaybackSkipReason skipReason;
+  final VoiceReplyPlaybackMode mode;
+  final VoiceReplyPlaybackOutputRoute outputRoute;
+  final int chunksRequested;
+  final int chunksPlayed;
+  final int chunksDropped;
+  final VoiceReplyPlaybackFallbackReason fallbackReason;
+  final int firstAudioLatencyMs;
+  final VoiceReplyPlaybackInterruptSource interruptSource;
+  @override
+  String get wireName => "Voice Reply Playback";
+  @override
+  Map<String, Object> get properties => {"outcome": outcome.wireName, "skip_reason": skipReason.wireName, "mode": mode.wireName, "output_route": outputRoute.wireName, "chunks_requested": chunksRequested, "chunks_played": chunksPlayed, "chunks_dropped": chunksDropped, "fallback_reason": fallbackReason.wireName, "first_audio_latency_ms": firstAudioLatencyMs, "interrupt_source": interruptSource.wireName};
+}

@@ -70,8 +70,10 @@ _stubs = [
     'database._client',
     'database.redis_db',
     'database.conversations',
+    'database.mcp_conversation_pages',
     'database.memories',
     'database.action_items',
+    'database.action_item_sync',
     'database.folders',
     'database.users',
     'database.user_usage',
@@ -177,12 +179,12 @@ def _malformed_conversation(conv_id='conv-bad'):
 
 
 class TestSearchConversationsPoisonPage:
-    @patch('routers.mcp.conversations_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.mcp_server.handlers.conversations.conversations_db')
+    @patch('utils.mcp_server.handlers.conversations.vector_db')
     def test_malformed_record_skipped_returns_only_valid(self, mock_vector_db, mock_conversations_db):
         mock_vector_db.query_vectors.return_value = ['conv-good', 'conv-bad']
         mock_vector_db.search_transcript_chunks.return_value = []
-        mock_conversations_db.get_conversations_by_id.return_value = [
+        mock_conversations_db.get_mcp_conversations_by_id.return_value = [
             _valid_conversation('conv-good'),
             _malformed_conversation('conv-bad'),
         ]
@@ -194,12 +196,12 @@ class TestSearchConversationsPoisonPage:
         assert isinstance(result[0], SimpleConversation)
         assert result[0].id == 'conv-good'
 
-    @patch('routers.mcp.conversations_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.mcp_server.handlers.conversations.conversations_db')
+    @patch('utils.mcp_server.handlers.conversations.vector_db')
     def test_all_valid_returns_all(self, mock_vector_db, mock_conversations_db):
         mock_vector_db.query_vectors.return_value = ['conv-a', 'conv-b']
         mock_vector_db.search_transcript_chunks.return_value = []
-        mock_conversations_db.get_conversations_by_id.return_value = [
+        mock_conversations_db.get_mcp_conversations_by_id.return_value = [
             _valid_conversation('conv-a'),
             _valid_conversation('conv-b'),
         ]
@@ -209,14 +211,14 @@ class TestSearchConversationsPoisonPage:
         assert [c.id for c in result] == ['conv-a', 'conv-b']
         assert all(isinstance(c, SimpleConversation) for c in result)
 
-    @patch('routers.mcp.conversations_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.mcp_server.handlers.conversations.conversations_db')
+    @patch('utils.mcp_server.handlers.conversations.vector_db')
     def test_transcript_chunk_hit_included_when_summary_misses(self, mock_vector_db, mock_conversations_db):
         mock_vector_db.query_vectors.return_value = []
         mock_vector_db.search_transcript_chunks.return_value = [
             {'conversation_id': 'conv-transcript', 'chunk_index': 0, 'score': 0.91},
         ]
-        mock_conversations_db.get_conversations_by_id.return_value = [
+        mock_conversations_db.get_mcp_conversations_by_id.return_value = [
             {
                 **_valid_conversation('conv-transcript'),
                 'transcript_segments': [
@@ -237,8 +239,8 @@ class TestSearchConversationsPoisonPage:
         assert result[0].match_snippets
         assert 'ACME contract' in result[0].match_snippets[0].text
 
-    @patch('routers.mcp.conversations_db')
-    @patch('routers.mcp.vector_db')
+    @patch('utils.mcp_server.handlers.conversations.conversations_db')
+    @patch('utils.mcp_server.handlers.conversations.vector_db')
     def test_empty_when_no_vector_hits(self, mock_vector_db, mock_conversations_db):
         mock_vector_db.query_vectors.return_value = []
         mock_vector_db.search_transcript_chunks.return_value = []
@@ -246,4 +248,4 @@ class TestSearchConversationsPoisonPage:
         result = search_conversations(query="nothing", limit=10, uid="user-1")
 
         assert result == []
-        mock_conversations_db.get_conversations_by_id.assert_not_called()
+        mock_conversations_db.get_mcp_conversations_by_id.assert_not_called()

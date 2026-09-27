@@ -12,6 +12,7 @@ import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/conversation_map_page.dart';
 import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
 import 'package:omi/pages/conversations/widgets/goals_widget.dart';
+import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/pages/conversations/widgets/pending_transcriptions_banner.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
@@ -592,6 +593,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const SliverToBoxAdapter(child: SpeakerTagPromptCard()),
               // Local recordings waiting to be uploaded for transcription.
               const SliverToBoxAdapter(child: PendingTranscriptionsBanner()),
+              const SliverToBoxAdapter(child: CaptureRecoveryBanner()),
 
               // Search bar
               Selector<HomeProvider, bool>(

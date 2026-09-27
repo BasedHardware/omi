@@ -17,7 +17,7 @@ import type { ExportMemory } from '../../shared/types'
 import type { McpCloudConnectorInfo } from '../../shared/mcpExports'
 import {
   detectClaudeCode,
-  claudeMcpConnected,
+  claudeMcpStatus,
   writeClaudeMcpEntry,
   removeClaudeMcpEntry,
   claudeConfigPath
@@ -26,7 +26,7 @@ import {
   probeCliConnector,
   connectCli,
   disconnectCli,
-  cliConnected,
+  cliConnectionState,
   buildSetupCard,
   type CliConnectorId
 } from '../mcp/cliConnectors'
@@ -68,11 +68,11 @@ function storedKey(ownerUserId: string): string | undefined {
 }
 
 function claudeStatus(base: string, key: string | undefined): McpConnectorStatus {
-  const connected = claudeMcpConnected(base, claudeConfigPath(), key)
+  const state = claudeMcpStatus(base, claudeConfigPath(), key)
   const detected = detectClaudeCode()
   return {
     id: 'claudeCode',
-    kind: connected ? 'connected' : detected ? 'available' : 'requiresTool',
+    kind: state === 'disconnected' ? (detected ? 'available' : 'requiresTool') : state,
     configPath: claudeConfigPath()
   }
 }
@@ -80,8 +80,8 @@ function claudeStatus(base: string, key: string | undefined): McpConnectorStatus
 function cliStatus(id: CliConnectorId, base: string, key: string | undefined): McpConnectorStatus {
   const probe = probeCliConnector(id)
   if (!probe.detected) return { id, kind: 'requiresTool' }
-  const connected = key ? cliConnected(id, base, key) : false
-  return { id, kind: connected ? 'connected' : 'available' }
+  const state = key ? cliConnectionState(id, base, key) : 'disconnected'
+  return { id, kind: state === 'disconnected' ? 'available' : state }
 }
 
 function snapshot(ownerUserId: string): McpExportsSnapshot {
@@ -144,9 +144,12 @@ async function disconnect(
 async function rotate(token: string, ownerUserId: string): Promise<McpExportsSnapshot> {
   const base = apiBase()
   const oldKey = storedKey(ownerUserId)
-  // Which connectors were pointing at the OLD key (rewrite only those).
-  const claudeWas = claudeMcpConnected(base, claudeConfigPath(), oldKey)
-  const cliWas = CLI_IDS.filter((id) => (oldKey ? cliConnected(id, base, oldKey) : false))
+  // Which connectors were pointing at the OLD key (rewrite only those) — a
+  // legacy /sse entry counts too: rotation rewrites it to the canonical URL.
+  const claudeWas = claudeMcpStatus(base, claudeConfigPath(), oldKey) !== 'disconnected'
+  const cliWas = CLI_IDS.filter((id) =>
+    oldKey ? cliConnectionState(id, base, oldKey) !== 'disconnected' : false
+  )
   const record = await getService().rotateKey(ownerUserId, token, base)
   if (claudeWas) writeClaudeMcpEntry(base, record.key)
   for (const id of cliWas) {

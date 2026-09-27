@@ -30,9 +30,7 @@ class DeveloperModeProvider extends BaseProvider {
 
   // Experimental switches. Like every switch in Settings they apply and are saved the moment they
   // flip (chat-apps-settings #2); only the webhook URL fields wait for Save.
-  bool followUpQuestionEnabled = false;
   bool transcriptionDiagnosticEnabled = false;
-  bool autoCreateSpeakersEnabled = false;
   bool vadGateEnabled = false;
 
   /// Webhook field values as last loaded or saved; [hasUnsavedWebhookChanges] compares against them.
@@ -142,9 +140,7 @@ class DeveloperModeProvider extends BaseProvider {
     webhookAudioBytes.text = SharedPreferencesUtil().webhookAudioBytes;
     webhookAudioBytesDelay.text = SharedPreferencesUtil().webhookAudioBytesDelay;
     webhookDaySummary.text = SharedPreferencesUtil().webhookDaySummary;
-    followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
     transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
-    autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
     vadGateEnabled = SharedPreferencesUtil().vadGateEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
     transcriptsToggled = SharedPreferencesUtil().transcriptsToggled;
@@ -286,21 +282,9 @@ class DeveloperModeProvider extends BaseProvider {
     notifyListeners();
   }
 
-  void onFollowUpQuestionChanged(bool value) {
-    followUpQuestionEnabled = value;
-    SharedPreferencesUtil().devModeJoanFollowUpEnabled = value;
-    notifyListeners();
-  }
-
   void onTranscriptionDiagnosticChanged(bool value) {
     transcriptionDiagnosticEnabled = value;
     SharedPreferencesUtil().transcriptionDiagnosticEnabled = value;
-    notifyListeners();
-  }
-
-  void onAutoCreateSpeakersChanged(bool value) {
-    autoCreateSpeakersEnabled = value;
-    SharedPreferencesUtil().autoCreateSpeakersEnabled = value;
     notifyListeners();
   }
 

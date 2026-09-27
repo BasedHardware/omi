@@ -31,6 +31,7 @@ from enum import Enum
 from typing import Any, Dict, Optional, Set, cast
 
 from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class, bounded_sync_phase
+from database import sync_dead_letters
 from database.redis_db import r
 
 logger = logging.getLogger(__name__)
@@ -236,6 +237,7 @@ def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
         job['status'] = 'failed'
         job['error'] = 'Job timed out (background worker likely died)'
         job['completed_at'] = time.time()
+        _backfill_dead_letter_pending(job_id, job, job.get('reason_code'))
         r.set(key, json.dumps(job, default=str), ex=JOB_TTL_SECONDS)
 
     return job
@@ -281,6 +283,41 @@ def _as_redis_text(value: Any) -> str:
     if isinstance(value, bytes):
         return value.decode('utf-8')
     return str(value)
+
+
+def _read_raw_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
+    """Raw job doc without the stale self-heal read-side mutation."""
+    data = r.get(f'{JOB_KEY_PREFIX}{job_id}')
+    if not data:
+        return None
+    try:
+        job = json.loads(_as_redis_text(data))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    return cast(Dict[str, Any], job) if isinstance(job, dict) else None
+
+
+def _backfill_dead_letter_pending(job_id: str, job: Optional[Dict[str, Any]], reason_code: Any) -> None:
+    """Write the durable pending record before a backfill terminal Redis publish.
+
+    A Firestore failure must propagate: terminalizing Redis without the
+    durable record is worse than retrying the publish.
+    """
+    if not isinstance(job, dict) or job.get('lane') != 'backfill':
+        return
+    sync_dead_letters.record_dead_letter_pending(
+        job_id=job_id,
+        uid=job.get('uid'),
+        conversation_id=job.get('conversation_id'),
+        failure_code=sync_dead_letters.dead_letter_failure_code(reason_code),
+    )
+
+
+def _backfill_dead_letter_confirmed(job_id: str, job: Optional[Dict[str, Any]]) -> None:
+    """Confirm the pending record after a winning backfill terminal CAS."""
+    if not isinstance(job, dict) or job.get('lane') != 'backfill':
+        return
+    sync_dead_letters.confirm_dead_letter(job_id)
 
 
 _LEGACY_JOB_MUTATION_MAX_RETRIES = 3
@@ -661,9 +698,14 @@ def finalize_sync_job(
     into the stored result or returned document.
     """
     status, total, failed, updates = _sync_job_finalization_updates(result, completed_at=time.time())
+    dead_letter = status in ('failed', 'partial_failure')
+    if dead_letter:
+        _backfill_dead_letter_pending(job_id, _read_raw_sync_job(job_id), result.get('reason_code'))
 
     finalized = update_sync_job(job_id, updates)
     if finalized is not None:
+        if dead_letter:
+            _backfill_dead_letter_confirmed(job_id, finalized)
         _log_sync_job_finalized(
             finalized=finalized,
             result=result,
@@ -697,6 +739,9 @@ def _fenced_finalize_sync_job(
     """
     completed_at = time.time() if now is None else now
     status, total, failed, updates = _sync_job_finalization_updates(result, completed_at=completed_at)
+    dead_letter = status in ('failed', 'partial_failure')
+    if dead_letter:
+        _backfill_dead_letter_pending(job_id, _read_raw_sync_job(job_id), result.get('reason_code'))
     mutation = fenced_update_sync_job(
         job_id,
         run_lock_token,
@@ -705,6 +750,8 @@ def _fenced_finalize_sync_job(
         allowed_current_statuses=allowed_current_statuses,
     )
     if mutation.applied and mutation.job is not None:
+        if dead_letter:
+            _backfill_dead_letter_confirmed(job_id, mutation.job)
         _log_sync_job_finalized(
             finalized=mutation.job,
             result=result,
@@ -783,7 +830,8 @@ def mark_job_failed(
     retry_after: Optional[int] = None,
 ) -> Optional[Dict[str, Any]]:
     """Mark job as failed with error message."""
-    return update_sync_job(
+    _backfill_dead_letter_pending(job_id, _read_raw_sync_job(job_id), reason_code)
+    finalized = update_sync_job(
         job_id,
         {
             'status': 'failed',
@@ -793,6 +841,9 @@ def mark_job_failed(
             'retry_after': retry_after,
         },
     )
+    if finalized is not None:
+        _backfill_dead_letter_confirmed(job_id, finalized)
+    return finalized
 
 
 def fenced_mark_job_failed(
@@ -806,7 +857,8 @@ def fenced_mark_job_failed(
 ) -> FencedSyncJobMutation:
     """Publish an explicit failure only while the caller retains the run lock."""
     completed_at = time.time() if now is None else now
-    return fenced_update_sync_job(
+    _backfill_dead_letter_pending(job_id, _read_raw_sync_job(job_id), reason_code)
+    mutation = fenced_update_sync_job(
         job_id,
         run_lock_token,
         {
@@ -819,6 +871,9 @@ def fenced_mark_job_failed(
         now=completed_at,
         allowed_current_statuses={'queued', 'processing'},
     )
+    if mutation.applied:
+        _backfill_dead_letter_confirmed(job_id, mutation.job)
+    return mutation
 
 
 def mark_job_queued_for_retry(job_id: str, attempt: int, error: str) -> Optional[Dict[str, Any]]:

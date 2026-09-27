@@ -10,6 +10,7 @@ import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'guided_voice_controller.dart';
 import 'guided_voice_io.dart';
 
@@ -127,7 +128,11 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
     if (resume != null) {
       unawaited(() async {
         await _startTask;
-        await resume();
+        try {
+          await resume();
+        } catch (e, st) {
+          Logger.error('[SpeechProfileWidget] capture restart on dispose failed: $e\n$st');
+        }
       }());
     }
     super.dispose();
@@ -151,11 +156,14 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
           };
           await capture.stopStreamDeviceRecording();
         } else if (capture.recordingState == RecordingState.record ||
-            capture.recordingState == RecordingState.interrupted) {
+            capture.recordingState == RecordingState.interrupted ||
+            capture.isPhoneMicPaused) {
           _resumeCapture = () async {
             await capture.streamRecording();
           };
-          await capture.stopStreamRecording();
+          // The voice profile needs the phone mic; a pendant the phone recording took over from
+          // stays paused until the phone recording resumes and finishes.
+          await capture.stopStreamRecording(resumeHandedOffPendant: false);
         }
       }
       if (mounted) await flow.start();

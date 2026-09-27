@@ -324,7 +324,6 @@ struct ProactiveTaskInterruptionConfiguration: Codable, Equatable {
   static let schemaVersion = 1
   static let safeDefault = ProactiveTaskInterruptionConfiguration(
     userOptedIn: false,
-    shippedCohortsEnabled: false,
     dailyLimit: 2,
     minimumSpacing: 90 * 60,
     allowedPreparationKinds: []
@@ -332,21 +331,18 @@ struct ProactiveTaskInterruptionConfiguration: Codable, Equatable {
 
   let schemaVersion: Int
   var userOptedIn: Bool
-  var shippedCohortsEnabled: Bool
   var dailyLimit: Int
   var minimumSpacing: TimeInterval
   var allowedPreparationKinds: Set<String>
 
   init(
     userOptedIn: Bool,
-    shippedCohortsEnabled: Bool,
     dailyLimit: Int,
     minimumSpacing: TimeInterval,
     allowedPreparationKinds: Set<String>
   ) {
     self.schemaVersion = Self.schemaVersion
     self.userOptedIn = userOptedIn
-    self.shippedCohortsEnabled = shippedCohortsEnabled
     self.dailyLimit = max(0, dailyLimit)
     self.minimumSpacing = max(0, minimumSpacing)
     self.allowedPreparationKinds = allowedPreparationKinds
@@ -354,10 +350,7 @@ struct ProactiveTaskInterruptionConfiguration: Codable, Equatable {
 
   func isEnrolled(cohort: ProactiveTaskCohort) -> Bool {
     guard userOptedIn else { return false }
-    switch cohort {
-    case .dogfood: return true
-    case .beta, .production: return shippedCohortsEnabled
-    }
+    return cohort == .dogfood
   }
 }
 
@@ -373,7 +366,6 @@ enum ProactiveTaskInterruptionSettings {
     else { return .safeDefault }
     return ProactiveTaskInterruptionConfiguration(
       userOptedIn: config.userOptedIn,
-      shippedCohortsEnabled: config.shippedCohortsEnabled,
       dailyLimit: config.dailyLimit,
       minimumSpacing: config.minimumSpacing,
       allowedPreparationKinds: config.allowedPreparationKinds
