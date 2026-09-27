@@ -6,7 +6,7 @@ are never disclosed in tool outputs returned to the agent context.
 
 import os
 import sys
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 import pytest
 
 from testing.import_isolation import AutoMockModule, stub_modules
@@ -54,7 +54,9 @@ memory_tools = None
 @pytest.fixture(scope="module", autouse=True)
 def _retrieval_tools_isolation():
     fakes = {name: AutoMockModule(name) for name in _STUB_MODULES}
-    fakes["database.notifications"].get_user_time_zone = MagicMock(return_value="America/Los_Angeles")
+    fakes["database.notifications"].get_user_time_zone = MagicMock(
+        return_value="America/Los_Angeles"
+    )
     fakes["database.conversations"].get_conversations = MagicMock(return_value=[])
     fakes["database.conversations"].get_conversation = MagicMock(return_value=None)
     fakes["database.users"].get_user_name = MagicMock(return_value="Test User")
@@ -78,7 +80,9 @@ def _retrieval_tools_isolation():
         yield
 
 
-CONFIG = {"configurable": {"user_id": "test-user-123", "chat_session_id": "session-456"}}
+CONFIG = {
+    "configurable": {"user_id": "test-user-123", "chat_session_id": "session-456"}
+}
 
 
 # ==============================================================================
@@ -104,14 +108,19 @@ class TestConversationToolsSanitization:
         assert "Traceback" not in res
 
     def test_get_conversations_formatting_exception_sanitized(self):
-        with patch.object(
-            conversation_tools.conversations_db,
-            "get_conversations",
-            return_value=[{"id": "conv-1", "created_at": "2026-09-20T10:00:00Z"}],
-        ), patch.object(
-            conversation_tools,
-            "conversations_to_string",
-            side_effect=RuntimeError("FATAL: postgresql://admin:secret123@db.internal:5432/omi"),
+        with (
+            patch.object(
+                conversation_tools.conversations_db,
+                "get_conversations",
+                return_value=[{"id": "conv-1", "created_at": "2026-09-20T10:00:00Z"}],
+            ),
+            patch.object(
+                conversation_tools,
+                "conversations_to_string",
+                side_effect=RuntimeError(
+                    "FATAL: postgresql://admin:secret123@db.internal:5432/omi"
+                ),
+            ),
         ):
             res = conversation_tools.get_conversations_tool.invoke({}, config=CONFIG)
             assert "encountered an error formatting them" in res
@@ -128,7 +137,11 @@ class TestConversationToolsSanitization:
         assert "ValueError" not in res_start
 
         res_end = conversation_tools.search_conversations_tool.invoke(
-            {"query": "meeting", "start_date": "2026-09-20T10:00:00-08:00", "end_date": "bad-date"},
+            {
+                "query": "meeting",
+                "start_date": "2026-09-20T10:00:00-08:00",
+                "end_date": "bad-date",
+            },
             config=CONFIG,
         )
         assert "Error: Invalid end_date format" in res_end
@@ -166,7 +179,9 @@ class TestMemoryToolsSanitization:
         with patch.object(
             memory_tools,
             "MemoryService",
-            side_effect=RuntimeError("Pinecone internal error: cluster unreachable key=secret_key_abc"),
+            side_effect=RuntimeError(
+                "Pinecone internal error: cluster unreachable key=secret_key_abc"
+            ),
         ):
             res = memory_tools.search_memories_tool.invoke(
                 {"query": "vacation"},
@@ -184,7 +199,11 @@ class TestCalendarToolsSanitization:
     @pytest.mark.asyncio
     async def test_create_calendar_event_invalid_start_time(self):
         res = await calendar_tools.create_calendar_event_tool.ainvoke(
-            {"title": "Sync", "start_time": "invalid-time", "end_time": "2026-09-24T15:00:00-07:00"},
+            {
+                "title": "Sync",
+                "start_time": "invalid-time",
+                "end_time": "2026-09-24T15:00:00-07:00",
+            },
             config=CONFIG,
         )
         assert "Error: Invalid start_time format" in res
@@ -192,14 +211,22 @@ class TestCalendarToolsSanitization:
 
     @pytest.mark.asyncio
     async def test_create_calendar_event_unexpected_exception_sanitized(self):
-        with patch.object(
-            calendar_tools,
-            "prepare_access",
-            return_value=("test-user-123", {"connected": True}, "valid_token", None),
-        ), patch.object(
-            calendar_tools,
-            "create_google_calendar_event",
-            side_effect=RuntimeError("Google Cal API auth fail secret_token_xyz"),
+        with (
+            patch.object(
+                calendar_tools,
+                "prepare_access",
+                return_value=(
+                    "test-user-123",
+                    {"connected": True},
+                    "valid_token",
+                    None,
+                ),
+            ),
+            patch.object(
+                calendar_tools,
+                "create_google_calendar_event",
+                side_effect=RuntimeError("Google Cal API auth fail secret_token_xyz"),
+            ),
         ):
             res = await calendar_tools.create_calendar_event_tool.ainvoke(
                 {
@@ -214,29 +241,47 @@ class TestCalendarToolsSanitization:
 
     @pytest.mark.asyncio
     async def test_get_calendar_events_unexpected_exception_sanitized(self):
-        with patch.object(
-            calendar_tools,
-            "prepare_access",
-            return_value=("test-user-123", {"connected": True}, "valid_token", None),
-        ), patch.object(
-            calendar_tools,
-            "get_google_calendar_events",
-            side_effect=RuntimeError("Socket hangup db=10.0.0.1"),
+        with (
+            patch.object(
+                calendar_tools,
+                "prepare_access",
+                return_value=(
+                    "test-user-123",
+                    {"connected": True},
+                    "valid_token",
+                    None,
+                ),
+            ),
+            patch.object(
+                calendar_tools,
+                "get_google_calendar_events",
+                side_effect=RuntimeError("Socket hangup db=10.0.0.1"),
+            ),
         ):
-            res = await calendar_tools.get_calendar_events_tool.ainvoke({}, config=CONFIG)
+            res = await calendar_tools.get_calendar_events_tool.ainvoke(
+                {}, config=CONFIG
+            )
             assert res == "Error fetching calendar events. Please try again."
             assert "10.0.0.1" not in res
 
     @pytest.mark.asyncio
     async def test_delete_calendar_event_by_id_unexpected_exception_sanitized(self):
-        with patch.object(
-            calendar_tools,
-            "prepare_access",
-            return_value=("test-user-123", {"connected": True}, "valid_token", None),
-        ), patch.object(
-            calendar_tools,
-            "delete_google_calendar_event",
-            side_effect=RuntimeError("Internal GSuite leak key=leak123"),
+        with (
+            patch.object(
+                calendar_tools,
+                "prepare_access",
+                return_value=(
+                    "test-user-123",
+                    {"connected": True},
+                    "valid_token",
+                    None,
+                ),
+            ),
+            patch.object(
+                calendar_tools,
+                "delete_google_calendar_event",
+                side_effect=RuntimeError("Internal GSuite leak key=leak123"),
+            ),
         ):
             res = await calendar_tools.delete_calendar_event_tool.ainvoke(
                 {"event_id": "ev_123"},
@@ -247,18 +292,29 @@ class TestCalendarToolsSanitization:
 
     @pytest.mark.asyncio
     async def test_delete_calendar_event_search_batch_mutation_sanitized(self):
-        with patch.object(
-            calendar_tools,
-            "prepare_access",
-            return_value=("test-user-123", {"connected": True}, "valid_token", None),
-        ), patch.object(
-            calendar_tools,
-            "get_google_calendar_events",
-            return_value=[{"id": "ev_123", "summary": "Private Meeting"}],
-        ), patch.object(
-            calendar_tools,
-            "delete_google_calendar_event",
-            side_effect=RuntimeError("Database down: postgres://root:pass@internal/prod"),
+        with (
+            patch.object(
+                calendar_tools,
+                "prepare_access",
+                return_value=(
+                    "test-user-123",
+                    {"connected": True},
+                    "valid_token",
+                    None,
+                ),
+            ),
+            patch.object(
+                calendar_tools,
+                "get_google_calendar_events",
+                return_value=[{"id": "ev_123", "summary": "Private Meeting"}],
+            ),
+            patch.object(
+                calendar_tools,
+                "delete_google_calendar_event",
+                side_effect=RuntimeError(
+                    "Database down: postgres://root:pass@internal/prod"
+                ),
+            ),
         ):
             res = await calendar_tools.delete_calendar_event_tool.ainvoke(
                 {"event_title": "Private Meeting"},
@@ -271,14 +327,22 @@ class TestCalendarToolsSanitization:
 
     @pytest.mark.asyncio
     async def test_update_calendar_event_unexpected_exception_sanitized(self):
-        with patch.object(
-            calendar_tools,
-            "prepare_access",
-            return_value=("test-user-123", {"connected": True}, "valid_token", None),
-        ), patch.object(
-            calendar_tools,
-            "get_google_calendar_event",
-            side_effect=RuntimeError("Event corrupted in Firestore doc_id=456"),
+        with (
+            patch.object(
+                calendar_tools,
+                "prepare_access",
+                return_value=(
+                    "test-user-123",
+                    {"connected": True},
+                    "valid_token",
+                    None,
+                ),
+            ),
+            patch.object(
+                calendar_tools,
+                "get_google_calendar_event",
+                side_effect=RuntimeError("Event corrupted in Firestore doc_id=456"),
+            ),
         ):
             res = await calendar_tools.update_calendar_event_tool.ainvoke(
                 {"event_id": "ev_456", "title": "Updated Title"},
@@ -286,6 +350,36 @@ class TestCalendarToolsSanitization:
             )
             assert res == "Error getting calendar event. Please try again."
             assert "Firestore doc_id=456" not in res
+
+    @pytest.mark.asyncio
+    async def test_get_calendar_events_google_api_error_message_sanitized(self):
+        from utils.retrieval.tools.google_utils import GoogleAPIError
+
+        with (
+            patch.object(
+                calendar_tools,
+                "prepare_access",
+                return_value=(
+                    "test-user-123",
+                    {"connected": True},
+                    "valid_token",
+                    None,
+                ),
+            ),
+            patch.object(
+                calendar_tools,
+                "get_google_calendar_events",
+                side_effect=GoogleAPIError(
+                    500, "Internal backend failure: secret_gsuite_key=xyz123"
+                ),
+            ),
+        ):
+            res = await calendar_tools.get_calendar_events_tool.ainvoke(
+                {}, config=CONFIG
+            )
+            assert res == "Error fetching calendar events. Please try again."
+            assert "secret_gsuite_key" not in res
+            assert "xyz123" not in res
 
 
 # ==============================================================================
@@ -295,7 +389,9 @@ class TestFileToolsSanitization:
     def test_search_files_config_error_sanitized(self):
         res = file_tools.search_files_tool.func(
             question="What is in the file?",
-            config={"configurable": 12345},  # Non-dict triggers AttributeError on .get()
+            config={
+                "configurable": 12345
+            },  # Non-dict triggers AttributeError on .get()
         )
         assert res == "Error: Configuration error."
 
@@ -303,7 +399,9 @@ class TestFileToolsSanitization:
         with patch.object(
             file_tools.chat_db,
             "get_chat_session_by_id",
-            side_effect=ValueError("Invalid session ID format: hex decode failure 0xDEADBEEF"),
+            side_effect=ValueError(
+                "Invalid session ID format: hex decode failure 0xDEADBEEF"
+            ),
         ):
             res = file_tools.search_files_tool.invoke(
                 {"question": "Summary"},
@@ -316,14 +414,17 @@ class TestFileToolsSanitization:
         with patch.object(
             file_tools.chat_db,
             "get_chat_session_by_id",
-            side_effect=RuntimeError("Storage bucket connection refused secret_key_file"),
+            side_effect=RuntimeError(
+                "Storage bucket connection refused secret_key_file"
+            ),
         ):
             res = file_tools.search_files_tool.invoke(
                 {"question": "Summary"},
                 config=CONFIG,
             )
             assert (
-                res == "I encountered an error while searching the files. Please try again or rephrase your question."
+                res
+                == "I encountered an error while searching the files. Please try again or rephrase your question."
             )
             assert "secret_key_file" not in res
 
@@ -334,18 +435,24 @@ class TestFileToolsSanitization:
 class TestGmailToolsSanitization:
     @pytest.mark.asyncio
     async def test_get_gmail_messages_unexpected_exception_sanitized(self):
-        with patch.object(
-            gmail_tools,
-            "prepare_access",
-            return_value=("test-user-123", {"connected": True}, "token_123", None),
-        ), patch.object(
-            gmail_tools,
-            "google_integration_has_scope",
-            return_value=True,
-        ), patch.object(
-            gmail_tools,
-            "retry_on_auth_async",
-            side_effect=RuntimeError("OAuth token expired: Bearer ya29.secret_auth_token"),
+        with (
+            patch.object(
+                gmail_tools,
+                "prepare_access",
+                return_value=("test-user-123", {"connected": True}, "token_123", None),
+            ),
+            patch.object(
+                gmail_tools,
+                "google_integration_has_scope",
+                return_value=True,
+            ),
+            patch.object(
+                gmail_tools,
+                "retry_on_auth_async",
+                side_effect=RuntimeError(
+                    "OAuth token expired: Bearer ya29.secret_auth_token"
+                ),
+            ),
         ):
             res = await gmail_tools.get_gmail_messages_tool.ainvoke(
                 {"query": "important"},
