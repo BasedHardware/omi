@@ -650,6 +650,16 @@ verdicts are measured but deliberately produce nothing in v1 because the task
 extractor and capture policy have no question-routing destination. This path
 has no realtime wake-word state or notification surface.
 
+After `_write_action_items` persists extracted tasks, its background
+`auto_sync_action_items_batch` worker exports them to the configured default
+task integration. Cloud exports are independent: each item retains one result
+in input order, and a read, OAuth refresh, or export-marker failure does not
+erase earlier successes or skip later items. Per-item exceptions emit bounded
+degraded telemetry and a generic failure; shared configuration failures still
+stop the batch and cancellation propagates. Apple Reminders retains its single
+push. This is best-effort export, not a durable retry queue: the worker does not
+automatically repeat an uncertain provider create after a failed marker write.
+
 With `MEETING_NOTES_RICH_CONTEXT_ENABLED`, notes, memory, and app prompts share
 a normalized meeting roster in the CONVERSATION METADATA prefix: participant
 names and organizations come from the resolved calendar or screen-derived
