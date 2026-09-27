@@ -22,6 +22,9 @@ TEXT = 'A narrated explanation of this chapter.'
 @pytest.fixture(scope='module', autouse=True)
 def dependencies():
     from database import conversations  # noqa: F401
+    from utils.sync import pipeline
+
+    return pipeline
 
 
 def live_row(**extra):
@@ -173,6 +176,48 @@ def test_resolve_returns_the_one_stored_match():
         == 'live'
     )
     assert client.uid == 'u'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('stamped_target', 'candidate_id', 'expected_target'),
+    [
+        ('live', 'live', 'live'),
+        ('previous-generation', 'live', 'live'),
+        ('previous-generation', None, None),
+        (None, None, None),
+    ],
+)
+async def test_pipeline_uses_unique_recording_match_over_local_stamp(
+    monkeypatch, dependencies, stamped_target, candidate_id, expected_target
+):
+    from utils.sync import recording_session_target
+
+    pipeline = dependencies
+
+    async def run_inline(_executor, fn, *args):
+        return fn(*args)
+
+    rows = [live_row()] if candidate_id else []
+    monkeypatch.setattr(recording_session_target, '_candidate_rows', lambda *_args, **_kwargs: rows)
+    monkeypatch.setattr(pipeline, 'run_blocking', run_inline)
+    assert (
+        await pipeline._resolve_safety_wal_target(
+            'u', stamped_target, SESSION, pipeline.ConversationSource.omi, 'pendant', False, 1001.0, 1008.0
+        )
+        == expected_target
+    )
+
+
+@pytest.mark.asyncio
+async def test_pipeline_keeps_legacy_stamp_without_recording_proof(dependencies):
+    pipeline = dependencies
+    assert (
+        await pipeline._resolve_safety_wal_target(
+            'u', 'legacy-target', None, pipeline.ConversationSource.omi, 'pendant', False, None, None
+        )
+        == 'legacy-target'
+    )
 
 
 def test_truncated_candidate_query_cannot_establish_uniqueness():

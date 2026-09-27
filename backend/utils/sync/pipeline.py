@@ -1680,6 +1680,32 @@ async def _run_sync_vad_phase(wav_paths: list, segmented_paths: set) -> tuple[li
     return vad_errors, vad_ms
 
 
+async def _resolve_safety_wal_target(
+    uid: str,
+    stamped_target: Optional[str],
+    recording_session_id: Optional[str],
+    source: ConversationSource,
+    client_device_id: Optional[str],
+    should_lock: bool,
+    audio_start_seconds: Optional[float],
+    audio_end_seconds: Optional[float],
+) -> Optional[str]:
+    """Use server recording proof over the phone's possibly stale local stamp."""
+    if not recording_session_id or audio_start_seconds is None or audio_end_seconds is None:
+        return stamped_target
+    return await run_blocking(
+        db_executor,
+        resolve_recording_session_sync_target,
+        uid,
+        recording_session_id,
+        source,
+        client_device_id,
+        bool(should_lock),
+        audio_start_seconds,
+        audio_end_seconds,
+    )
+
+
 async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralTypeIssues] — legacy coordinator exceeds Pyright's analyzer complexity ceiling
     job_id: str,
     uid: str,
@@ -1725,25 +1751,19 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     # keeps the caller's exact coordinates and returns the input unchanged on
     # any geocode failure, so a miss never drops the user's location.
     geolocation = await async_resolve_geolocation(geolocation)
-    # Resolve before segment intake. Even a WAL carrying a locally stamped
-    # conversation_id must prove that its complete interval belongs to that
-    # live generation; client recording ids can span server silence rollovers.
-    if recording_session_id and audio_start_seconds is not None and audio_end_seconds is not None:
-        resolved_target = await run_blocking(
-            db_executor,
-            resolve_recording_session_sync_target,
-            uid,
-            recording_session_id,
-            source,
-            client_device_id,
-            bool(should_lock),
-            audio_start_seconds,
-            audio_end_seconds,
-        )
-        if target_conversation_id and resolved_target != target_conversation_id:
-            target_conversation_id = None
-        elif not target_conversation_id and resolved_target:
-            target_conversation_id = resolved_target
+    # Resolve before segment intake. A unique server-side match is authoritative
+    # over a local stamp from another silence-rollover generation; no safe match
+    # invalidates the stamp. Old clients without this proof retain their stamp.
+    target_conversation_id = await _resolve_safety_wal_target(
+        uid,
+        target_conversation_id,
+        recording_session_id,
+        source,
+        client_device_id,
+        should_lock,
+        audio_start_seconds,
+        audio_end_seconds,
+    )
 
     sync_provider = 'unknown'
     sync_model = 'unknown'
