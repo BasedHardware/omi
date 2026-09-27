@@ -11371,6 +11371,51 @@ class AppLocalizationsUk extends AppLocalizations {
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Навушники';
 
   @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'хвилин';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Завдання';
+
+  @override
+  String get usageMonth => 'Цей місяць';
+
+  @override
+  String get usageYear => 'Цей рік';
+
+  @override
+  String get usageAll => 'За весь час';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
   String get appearance => 'Вигляд';
 
   @override

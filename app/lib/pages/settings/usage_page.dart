@@ -3,10 +3,10 @@ import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
-import 'package:fl_chart/fl_chart.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -20,6 +20,8 @@ import 'package:omi/models/user_usage.dart';
 import 'package:omi/pages/settings/fair_use_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
+import 'package:omi/pages/settings/widgets/usage/usage_chart.dart';
+import 'package:omi/pages/settings/widgets/usage/usage_stat_tile.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
@@ -29,17 +31,24 @@ import 'package:omi/utils/other/temp.dart';
 
 class UsagePage extends StatefulWidget {
   final bool showUpgradeDialog;
-  const UsagePage({super.key, this.showUpgradeDialog = false});
+  @visibleForTesting
+  final bool debugSkipFetch;
+  @visibleForTesting
+  final DateTime? debugNow;
+  @visibleForTesting
+  final int? debugTooltipIndex;
+  const UsagePage(
+      {super.key, this.showUpgradeDialog = false, this.debugSkipFetch = false, this.debugNow, this.debugTooltipIndex});
 
   @override
   State<UsagePage> createState() => _UsagePageState();
 }
 
-class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
+class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, WidgetsBindingObserver {
   late TabController _tabController;
   final List<GlobalKey> _screenshotKeys = List.generate(4, (_) => GlobalKey());
   final GlobalKey _shareButtonKey = GlobalKey();
-  final List<bool> _isMetricVisible = [true, true, true, true];
+  UsageMetric _selectedMetric = UsageMetric.words;
   late AnimationController _waveController;
   late AnimationController _notesController;
   late AnimationController _arrowController;
@@ -94,7 +103,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       text: TextSpan(
         text: 'omi.me',
         style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.8),
+          color: OmiColors.textPrimary.withValues(alpha: 0.8),
           fontSize: 14 * 3.0, // Scale font size with pixelRatio
           fontWeight: FontWeight.w600,
         ),
@@ -233,36 +242,52 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   }
 
   void _handleTabSelection() {
+    if (mounted) setState(() {});
     if (_tabController.indexIsChanging) {
       return;
     }
-    String period = _getPeriodForIndex(_tabController.index);
+    unawaited(_fetchPeriodIfNeeded(_getPeriodForIndex(_tabController.index)));
+  }
 
+  Future<void> _fetchPeriodIfNeeded(String period) async {
     final provider = context.read<UsageProvider>();
-    bool shouldFetch = false;
-    switch (period) {
-      case 'today':
-        if (provider.todayUsage == null) shouldFetch = true;
-        break;
-      case 'monthly':
-        if (provider.monthlyUsage == null) shouldFetch = true;
-        break;
-      case 'yearly':
-        if (provider.yearlyUsage == null) shouldFetch = true;
-        break;
-      case 'all_time':
-        if (provider.allTimeUsage == null) shouldFetch = true;
-        break;
+    await provider.refreshUsageTimeZone();
+    if (!mounted) return;
+    if (!_hasCachedUsage(provider, period)) {
+      await provider.fetchUsageStats(period: period);
     }
+  }
 
-    if (shouldFetch) {
-      provider.fetchUsageStats(period: period);
+  bool _hasCachedUsage(UsageProvider provider, String period) => switch (period) {
+        'today' => provider.todayUsage != null,
+        'monthly' => provider.monthlyUsage != null,
+        'yearly' => provider.yearlyUsage != null,
+        'all_time' => provider.allTimeUsage != null,
+        _ => false,
+      };
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshActivePeriodOnResume());
+    }
+  }
+
+  Future<void> _refreshActivePeriodOnResume() async {
+    final provider = context.read<UsageProvider>();
+    final previousZone = provider.usageTimeZone;
+    await provider.refreshUsageTimeZone();
+    if (!mounted) return;
+    final period = _getPeriodForIndex(_tabController.index);
+    if (previousZone != provider.usageTimeZone || !_hasCachedUsage(provider, period)) {
+      await provider.fetchUsageStats(period: period);
     }
   }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(_handleTabSelection);
     _waveController = AnimationController(duration: const Duration(milliseconds: 18000), vsync: this)..repeat();
@@ -277,6 +302,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     ).animate(CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut));
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.debugSkipFetch) return;
       context.read<UsageProvider>().fetchUsageStats(period: 'today');
       context.read<UsageProvider>().fetchSubscription();
       _loadAvailablePlans();
@@ -289,6 +315,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _tabController.removeListener(_handleTabSelection);
     _tabController.dispose();
     _waveController.dispose();
@@ -296,6 +323,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     _arrowController.dispose();
     super.dispose();
   }
+
+  Widget _periodSegment(String label) => SizedBox(
+        height: 44,
+        child: Center(child: Text(label, maxLines: 1, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600))),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -312,19 +344,28 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
             onPressed: _shareUsage,
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: OmiColors.accent,
-          isScrollable: true,
-          indicatorWeight: 3,
-          labelStyle: OmiType.callout.copyWith(fontWeight: FontWeight.bold),
-          unselectedLabelStyle: OmiType.callout,
-          tabs: [
-            Tab(text: context.l10n.today),
-            Tab(text: context.l10n.thisMonth),
-            Tab(text: context.l10n.thisYear),
-            Tab(text: context.l10n.allTime),
-          ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(60),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 2, OmiSpacing.md, 8),
+            child: SizedBox(
+              width: double.infinity,
+              child: CupertinoSlidingSegmentedControl<int>(
+                groupValue: _tabController.index,
+                backgroundColor: OmiColors.surface1,
+                thumbColor: OmiColors.surface3,
+                onValueChanged: (index) {
+                  if (index != null) _tabController.animateTo(index);
+                },
+                children: {
+                  0: _periodSegment(context.l10n.today),
+                  1: _periodSegment(context.l10n.usageMonth),
+                  2: _periodSegment(context.l10n.usageYear),
+                  3: _periodSegment(context.l10n.usageAll),
+                },
+              ),
+            ),
+          ),
         ),
       ),
       body: Consumer<UsageProvider>(
@@ -366,44 +407,36 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
             );
           }
 
-          return Column(
+          return TabBarView(
+            controller: _tabController,
             children: [
-              _buildSubscriptionInfo(context, provider),
-              _buildFairUseBanner(),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildUsageListView(
-                      provider.todayUsage,
-                      provider.todayHistory,
-                      'today',
-                      _screenshotKeys[0],
-                      provider,
-                    ),
-                    _buildUsageListView(
-                      provider.monthlyUsage,
-                      provider.monthlyHistory,
-                      'monthly',
-                      _screenshotKeys[1],
-                      provider,
-                    ),
-                    _buildUsageListView(
-                      provider.yearlyUsage,
-                      provider.yearlyHistory,
-                      'yearly',
-                      _screenshotKeys[2],
-                      provider,
-                    ),
-                    _buildUsageListView(
-                      provider.allTimeUsage,
-                      provider.allTimeHistory,
-                      'all_time',
-                      _screenshotKeys[3],
-                      provider,
-                    ),
-                  ],
-                ),
+              _buildUsageListView(
+                provider.todayUsage,
+                provider.todayHistory,
+                'today',
+                _screenshotKeys[0],
+                provider,
+              ),
+              _buildUsageListView(
+                provider.monthlyUsage,
+                provider.monthlyHistory,
+                'monthly',
+                _screenshotKeys[1],
+                provider,
+              ),
+              _buildUsageListView(
+                provider.yearlyUsage,
+                provider.yearlyHistory,
+                'yearly',
+                _screenshotKeys[2],
+                provider,
+              ),
+              _buildUsageListView(
+                provider.allTimeUsage,
+                provider.allTimeHistory,
+                'all_time',
+                _screenshotKeys[3],
+                provider,
               ),
             ],
           );
@@ -430,8 +463,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     final planLabel = currentPlanDisplayName(context, provider.subscription);
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xl, OmiSpacing.md, 0),
-      padding: const EdgeInsets.all(OmiSpacing.md),
+      margin: const EdgeInsets.only(bottom: OmiSpacing.sm),
+      padding: EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: isPaid ? OmiSpacing.xs : OmiSpacing.md),
       decoration: BoxDecoration(
         color: OmiColors.surface1,
         borderRadius: OmiRadius.lgAll,
@@ -443,7 +476,14 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Flexible(child: Text(planLabel, style: OmiType.headline)),
+              Flexible(
+                  child: isPaid
+                      ? Container(
+                          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.xxs),
+                          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+                          child: Text(planLabel, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w700)),
+                        )
+                      : Text(planLabel, style: OmiType.headline)),
               if (isPaid)
                 Semantics(
                   button: true,
@@ -472,6 +512,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
             const SizedBox(height: OmiSpacing.md),
             OmiButton(
               label: context.l10n.upgrade,
+              labelStyle: OmiType.callout.copyWith(fontFamily: 'Roboto', fontWeight: FontWeight.w600),
               expand: true,
               onPressed: _showPlansSheet,
             ),
@@ -570,40 +611,16 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     UsageProvider provider,
   ) {
     Future<void> onRefresh() async {
-      // Using Future.wait to run both fetches concurrently
       await Future.wait([provider.fetchUsageStats(period: period), provider.fetchSubscription(), _loadFairUseStatus()]);
     }
 
-    if (stats == null) {
-      return const OmiLoadingState();
-    }
-
-    if (stats.transcriptionSeconds == 0 &&
-        stats.wordsTranscribed == 0 &&
-        stats.insightsGained == 0 &&
-        stats.memoriesCreated == 0) {
-      return RefreshIndicator(
-        onRefresh: onRefresh,
-        child: RepaintBoundary(
-          key: key,
-          child: Container(
-            color: OmiColors.surface0,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  child: SizedBox(height: constraints.maxHeight, child: _buildEmptyState()),
-                );
-              },
-            ),
-          ),
-        ),
-      );
-    }
-    final numberFormatter = NumberFormat.decimalPattern(context.l10n.localeName);
-    final transcriptionMinutes = (stats.transcriptionSeconds / 60).round();
-    final transcriptionValue = '${numberFormatter.format(transcriptionMinutes)} ${context.l10n.minutes}';
-
+    final l10n = context.l10n;
+    final format = NumberFormat.decimalPattern(l10n.localeName);
+    final zero = stats == null ||
+        (stats.transcriptionSeconds == 0 &&
+            stats.wordsTranscribed == 0 &&
+            stats.insightsGained == 0 &&
+            stats.memoriesCreated == 0);
     return RefreshIndicator(
       onRefresh: onRefresh,
       child: RepaintBoundary(
@@ -611,51 +628,63 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         child: Container(
           color: OmiColors.surface0,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xl, OmiSpacing.md, OmiSpacing.md),
+            key: Key('usage_scroll_$period'),
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.xl),
             children: [
-              if (history != null && history.isNotEmpty) ...[_buildChart(history, period), const SizedBox(height: 24)],
-              _buildUsageCard(
-                context,
-                icon: FontAwesomeIcons.microphone,
-                title: context.l10n.listening,
-                value: transcriptionValue,
-                subtitle: context.l10n.listeningSubtitle,
-                color: Colors.blue.shade300,
-                subscription: provider.subscription,
-              ),
-              const SizedBox(height: 16),
-              _buildUsageCard(
-                context,
-                icon: FontAwesomeIcons.comments,
-                title: context.l10n.understanding,
-                value:
-                    '${numberFormatter.format(stats.wordsTranscribed)} ${context.l10n.understandingWords}', // Use correct key
-                subtitle: context.l10n.understandingSubtitle,
-                color: Colors.green.shade300,
-                subscription: provider.subscription,
-              ),
-              const SizedBox(height: 16),
-              _buildUsageCard(
-                context,
-                icon: FontAwesomeIcons.wandMagicSparkles,
-                title: context.l10n.providing,
-                value: '${numberFormatter.format(stats.insightsGained)} ${context.l10n.insights}',
-                subtitle: context.l10n.providingSubtitle,
-                color: Colors.orange.shade300,
-                subscription: provider.subscription,
-              ),
-              const SizedBox(height: 16),
-              _buildUsageCard(
-                context,
-                icon: FontAwesomeIcons.brain,
-                title: context.l10n.remembering,
-                value: '${numberFormatter.format(stats.memoriesCreated)} ${context.l10n.memories}',
-                subtitle: context.l10n.rememberingSubtitle,
-                color: _memoriesColor,
-                subscription: provider.subscription,
-              ),
-              if (provider.chatQuotaUnit != null && period == 'monthly') ...[
-                const SizedBox(height: 12),
+              _buildSubscriptionInfo(context, provider),
+              _buildFairUseBanner(),
+              if (stats == null)
+                const OmiLoadingState()
+              else if (zero)
+                _buildEmptyState()
+              else ...[
+                const SizedBox(height: OmiSpacing.xs),
+                GridView.count(
+                  key: const Key('usage_stat_grid'),
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  childAspectRatio: 1.7,
+                  mainAxisSpacing: OmiSpacing.sm,
+                  crossAxisSpacing: OmiSpacing.sm,
+                  children: [
+                    UsageStatTile(
+                        label: l10n.usageListened,
+                        value: formatUsageDuration(stats.transcriptionSeconds),
+                        exactValue: '${format.format((stats.transcriptionSeconds / 60).round())} ${l10n.minutes}',
+                        color: Colors.blue.shade300),
+                    UsageStatTile(
+                        label: l10n.usageWordsHeard,
+                        value: formatUsageCount(stats.wordsTranscribed, l10n.localeName),
+                        exactValue: format.format(stats.wordsTranscribed),
+                        color: Colors.green.shade300),
+                    UsageStatTile(
+                        label: l10n.usageTasksNotes,
+                        value: formatUsageCount(stats.insightsGained, l10n.localeName),
+                        exactValue: format.format(stats.insightsGained),
+                        color: Colors.orange.shade300),
+                    UsageStatTile(
+                        label: l10n.memories,
+                        value: formatUsageCount(stats.memoriesCreated, l10n.localeName),
+                        exactValue: format.format(stats.memoriesCreated),
+                        color: _memoriesColor),
+                  ],
+                ),
+                if (history != null && history.isNotEmpty) ...[
+                  const SizedBox(height: OmiSpacing.sm),
+                  UsageChart(
+                      history: history,
+                      period: period,
+                      metric: _selectedMetric,
+                      now: widget.debugNow,
+                      debugTooltipIndex: widget.debugTooltipIndex,
+                      onMetricChanged: (value) => setState(() => _selectedMetric = value)),
+                ],
+              ],
+              if (stats != null) ..._buildFreeMeters(provider.subscription),
+              if (stats != null && provider.chatQuotaUnit != null && period == 'monthly') ...[
+                const SizedBox(height: OmiSpacing.sm),
                 _buildChatQuotaLine(context, provider),
               ],
             ],
@@ -665,333 +694,57 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildChart(List<UsageHistoryPoint> history, String period) {
-    List<UsageHistoryPoint> processedHistory;
-    final now = DateTime.now();
-
-    switch (period) {
-      case 'today':
-        final hourlyMap = {for (var p in history) DateTime.parse(p.date).toLocal().hour: p};
-        processedHistory = List.generate(24, (hour) {
-          if (hourlyMap.containsKey(hour)) {
-            return hourlyMap[hour]!;
-          }
-          final date = DateTime(now.year, now.month, now.day, hour);
-          return UsageHistoryPoint(
-            date: date.toIso8601String(),
-            transcriptionSeconds: 0,
-            speechSeconds: 0,
-            wordsTranscribed: 0,
-            insightsGained: 0,
-            memoriesCreated: 0,
-          );
-        });
-        break;
-      case 'monthly':
-        final dailyMap = {for (var p in history) DateTime.parse(p.date).toLocal().day: p};
-        final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
-        processedHistory = List.generate(daysInMonth, (i) {
-          final day = i + 1;
-          if (dailyMap.containsKey(day)) {
-            return dailyMap[day]!;
-          }
-          final date = DateTime(now.year, now.month, day);
-          return UsageHistoryPoint(
-            date: date.toIso8601String(),
-            transcriptionSeconds: 0,
-            speechSeconds: 0,
-            wordsTranscribed: 0,
-            insightsGained: 0,
-            memoriesCreated: 0,
-          );
-        });
-        break;
-      case 'yearly':
-        final monthlyMap = {for (var p in history) DateTime.parse(p.date).toLocal().month: p};
-        processedHistory = List.generate(12, (i) {
-          final month = i + 1;
-          if (monthlyMap.containsKey(month)) {
-            return monthlyMap[month]!;
-          }
-          final date = DateTime(now.year, month, 1);
-          return UsageHistoryPoint(
-            date: date.toIso8601String(),
-            transcriptionSeconds: 0,
-            speechSeconds: 0,
-            wordsTranscribed: 0,
-            insightsGained: 0,
-            memoriesCreated: 0,
-          );
-        });
-        break;
-      case 'all_time':
-        final yearlyMap = {for (var p in history) DateTime.parse(p.date).toLocal().year: p};
-        var minYear = history.map((p) => DateTime.parse(p.date).toLocal().year).reduce((a, b) => a < b ? a : b);
-        var maxYear = history.map((p) => DateTime.parse(p.date).toLocal().year).reduce((a, b) => a > b ? a : b);
-        minYear--;
-        maxYear++;
-
-        final years = List.generate(maxYear - minYear + 1, (i) => minYear + i);
-        processedHistory = years.map((year) {
-          if (yearlyMap.containsKey(year)) {
-            return yearlyMap[year]!;
-          }
-          final date = DateTime(year, 1, 1);
-          return UsageHistoryPoint(
-            date: date.toIso8601String(),
-            transcriptionSeconds: 0,
-            speechSeconds: 0,
-            wordsTranscribed: 0,
-            insightsGained: 0,
-            memoriesCreated: 0,
-          );
-        }).toList();
-        break;
-      default:
-        processedHistory = List.from(history);
+  List<Widget> _buildFreeMeters(UserSubscriptionResponse? subscription) {
+    if (subscription == null || subscription.subscription.plan != PlanType.basic) return [];
+    final l10n = context.l10n;
+    final format = NumberFormat.decimalPattern(l10n.localeName);
+    final rows = <Widget>[];
+    if (subscription.transcriptionSecondsLimit > 0) {
+      final used = (subscription.transcriptionSecondsUsed / 60).round();
+      final limit = (subscription.transcriptionSecondsLimit / 60).round();
+      final ratio = (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
+      rows.add(_UsageMeter(
+          text: l10n.minsUsedThisMonth(format.format(used), limit),
+          percentage: ratio,
+          color: Colors.blue.shade300,
+          hint: ratio >= 1
+              ? _OnDeviceHint(
+                  before: '${l10n.premiumMinutesUsed} ',
+                  link: l10n.setupOnDevice,
+                  after: ' ${l10n.forUnlimitedFreeTranscription}')
+              : ratio >= .8
+                  ? _OnDeviceHint(
+                      before: '${l10n.premiumMinsLeft(limit - used)} ',
+                      link: l10n.onDevice,
+                      after: ' ${l10n.alwaysAvailable}')
+                  : null));
     }
-
-    final metricColors = [Colors.blue.shade300, Colors.green.shade300, Colors.orange.shade300, _memoriesColor];
-
-    double maxY = 0;
-    for (var point in processedHistory) {
-      if (_isMetricVisible[0]) {
-        final secondsInMinutes = point.transcriptionSeconds / 60.0;
-        if (secondsInMinutes > maxY) maxY = secondsInMinutes;
-      }
-      if (_isMetricVisible[1]) {
-        if (point.wordsTranscribed.toDouble() > maxY) maxY = point.wordsTranscribed.toDouble();
-      }
-      if (_isMetricVisible[2]) {
-        if (point.insightsGained.toDouble() > maxY) maxY = point.insightsGained.toDouble();
-      }
-      if (_isMetricVisible[3]) {
-        if (point.memoriesCreated.toDouble() > maxY) maxY = point.memoriesCreated.toDouble();
-      }
+    if (subscription.wordsTranscribedLimit > 0) {
+      rows.add(_UsageMeter(
+          text: l10n.wordsUsedThisMonth(
+              format.format(subscription.wordsTranscribedUsed), format.format(subscription.wordsTranscribedLimit)),
+          percentage: (subscription.wordsTranscribedUsed / subscription.wordsTranscribedLimit).clamp(0.0, 1.0),
+          color: Colors.green.shade300));
     }
-    maxY = maxY * 1.2;
-    if (maxY == 0) maxY = 1;
-
-    final List<List<FlSpot>> allSpots = List.generate(4, (_) => []);
-    for (var i = 0; i < processedHistory.length; i++) {
-      final point = processedHistory[i];
-      allSpots[0].add(FlSpot(i.toDouble(), point.transcriptionSeconds / 60.0));
-      allSpots[1].add(FlSpot(i.toDouble(), point.wordsTranscribed.toDouble()));
-      allSpots[2].add(FlSpot(i.toDouble(), point.insightsGained.toDouble()));
-      allSpots[3].add(FlSpot(i.toDouble(), point.memoriesCreated.toDouble()));
+    if (subscription.insightsGainedLimit > 0) {
+      rows.add(_UsageMeter(
+          text: l10n.insightsUsedThisMonth(
+              format.format(subscription.insightsGainedUsed), format.format(subscription.insightsGainedLimit)),
+          percentage: (subscription.insightsGainedUsed / subscription.insightsGainedLimit).clamp(0.0, 1.0),
+          color: Colors.orange.shade300));
     }
-
-    List<LineChartBarData> lineBarsData = [];
-    for (var i = 0; i < allSpots.length; i++) {
-      if (_isMetricVisible[i]) {
-        lineBarsData.add(
-          LineChartBarData(
-            spots: allSpots[i],
-            isCurved: true,
-            color: metricColors[i],
-            barWidth: 3,
-            isStrokeCapRound: true,
-            dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(
-              show: true,
-              gradient: LinearGradient(
-                colors: [metricColors[i].withValues(alpha: 0.3), metricColors[i].withValues(alpha: 0.0)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
-          ),
-        );
-      }
-    }
-
-    final lineChartData = LineChartData(
-      minX: 0,
-      maxX: (processedHistory.length - 1).toDouble(),
-      minY: 0,
-      maxY: maxY,
-      gridData: const FlGridData(show: false),
-      borderData: FlBorderData(
-        show: true,
-        border: Border(bottom: BorderSide(color: OmiColors.textPrimary.withValues(alpha: 0.2), width: 1)),
-      ),
-      lineTouchData: LineTouchData(
-        handleBuiltInTouches: true,
-        touchTooltipData: LineTouchTooltipData(
-          getTooltipColor: (touchedSpot) => OmiColors.surface3,
-          getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
-            return touchedBarSpots
-                .map((barSpot) {
-                  final flSpot = barSpot;
-                  final metricNames = [
-                    context.l10n.listeningMins,
-                    context.l10n.understandingWords,
-                    context.l10n.insights,
-                    context.l10n.memories,
-                  ];
-                  final originalIndex = metricColors.indexOf(flSpot.bar.color!);
-                  if (originalIndex == -1) return null;
-
-                  return LineTooltipItem(
-                    '${metricNames[originalIndex]}\n',
-                    TextStyle(color: metricColors[originalIndex], fontWeight: FontWeight.bold),
-                    children: [
-                      TextSpan(
-                        text: NumberFormat.compact(locale: context.l10n.localeName).format(flSpot.y),
-                        style: OmiType.caption.copyWith(color: OmiColors.textPrimary),
-                      ),
-                    ],
-                  );
-                })
-                .whereType<LineTooltipItem>()
-                .toList();
-          },
-        ),
-      ),
-      titlesData: FlTitlesData(
-        leftTitles: AxisTitles(
-          sideTitles: SideTitles(
-            showTitles: true,
-            reservedSize: 40,
-            interval: maxY > 1 ? ((maxY / 4).roundToDouble() > 0 ? (maxY / 4).roundToDouble() : 1.0) : 0.25,
-            getTitlesWidget: (value, meta) {
-              if (value == meta.max) return const SizedBox();
-              return SideTitleWidget(
-                axisSide: meta.axisSide,
-                space: 8,
-                child: Text(
-                  NumberFormat.compact(locale: context.l10n.localeName).format(value),
-                  style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
-                ),
-              );
-            },
-          ),
-        ),
-        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        bottomTitles: AxisTitles(
-          sideTitles: SideTitles(
-            showTitles: true,
-            interval: 1,
-            getTitlesWidget: (double value, TitleMeta meta) {
-              final index = value.toInt();
-              if (index >= processedHistory.length) return const SizedBox();
-              final point = processedHistory[index];
-              final dateTime = DateTime.parse(point.date).toLocal();
-              final locale = OmiDateFormat.of(context).localeName;
-              String text;
-
-              switch (period) {
-                case 'today':
-                  int interval = 1;
-                  if (processedHistory.length > 12) {
-                    interval = 4;
-                  } else if (processedHistory.length > 6) {
-                    interval = 2;
-                  }
-                  if (index % interval == 0) {
-                    text = DateFormat.j(locale).format(dateTime);
-                  } else {
-                    return const SizedBox();
-                  }
-                  break;
-                case 'monthly':
-                  if (index % 7 == 0) {
-                    text = DateFormat.d(locale).format(dateTime);
-                  } else {
-                    return const SizedBox();
-                  }
-                  break;
-                case 'yearly':
-                  text = DateFormat.MMM(locale).format(dateTime);
-                  break;
-                case 'all_time':
-                  text = DateFormat.y(locale).format(dateTime).substring(2);
-                  break;
-                default:
-                  return const SizedBox();
-              }
-
-              return SideTitleWidget(
-                axisSide: meta.axisSide,
-                child: Text(text, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
-              );
-            },
-            reservedSize: 20,
-          ),
-        ),
-      ),
-      lineBarsData: lineBarsData,
-    );
-
-    return Column(
-      children: [
-        Container(
-          height: 200,
-          padding: const EdgeInsets.only(top: OmiSpacing.md, right: OmiSpacing.md),
-          decoration: BoxDecoration(
-            color: OmiColors.surface1,
-            borderRadius: OmiRadius.lgAll,
-            border: Border.all(color: OmiColors.border),
-          ),
-          child: LineChart(lineChartData, duration: const Duration(milliseconds: 250)),
-        ),
-        const SizedBox(height: 16),
-        _buildLegend(),
-      ],
-    );
-  }
-
-  Widget _buildLegend() {
-    final legendItems = [
-      {'color': Colors.blue.shade300, 'text': context.l10n.listeningMins},
-      {'color': Colors.green.shade300, 'text': context.l10n.understandingWords},
-      {'color': Colors.orange.shade300, 'text': context.l10n.insights},
-      {'color': _memoriesColor, 'text': context.l10n.memories},
+    if (rows.isEmpty) return [];
+    return [
+      const SizedBox(height: OmiSpacing.sm),
+      Container(
+        padding: const EdgeInsets.all(OmiSpacing.md),
+        decoration: BoxDecoration(
+            color: OmiColors.surface1, borderRadius: OmiRadius.lgAll, border: Border.all(color: OmiColors.border)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          for (var i = 0; i < rows.length; i++) ...[if (i > 0) const SizedBox(height: OmiSpacing.md), rows[i]],
+        ]),
+      )
     ];
-
-    return Wrap(
-      spacing: 16,
-      runSpacing: 8,
-      alignment: WrapAlignment.center,
-      children: List.generate(legendItems.length, (index) {
-        return _buildLegendItem(
-          legendItems[index]['color'] as Color,
-          legendItems[index]['text'] as String,
-          _isMetricVisible[index],
-          () {
-            setState(() {
-              _isMetricVisible[index] = !_isMetricVisible[index];
-            });
-          },
-        );
-      }),
-    );
-  }
-
-  Widget _buildLegendItem(Color color, String text, bool isVisible, VoidCallback onTap) {
-    return Semantics(
-      button: true,
-      toggled: isVisible,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: OmiRadius.smAll,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 44),
-          child: Opacity(
-            opacity: isVisible ? 1.0 : 0.5,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(width: 10, height: 10, color: color),
-                const SizedBox(width: 6),
-                Text(text, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   Widget _buildChatQuotaLine(BuildContext context, UsageProvider provider) {
@@ -1006,6 +759,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
 
     final String value;
     String? usageText;
+    String? displayText;
     double percentage = 0.0;
 
     if (sub.chatQuotaUnit == 'cost_usd') {
@@ -1013,6 +767,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       final limit = limits.chatCostUsdPerMonth;
       if (limit != null && limit > 0) {
         usageText = l10n.chatUsedOfLimitCompute(used.toStringAsFixed(2), limit.toStringAsFixed(0));
+        displayText = '$value / \$${limit.toStringAsFixed(0)}';
         percentage = (used / limit).clamp(0.0, 1.0);
       }
     } else {
@@ -1020,131 +775,44 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       final limit = limits.chatQuestionsPerMonth;
       if (limit != null && limit > 0) {
         usageText = l10n.chatUsedOfLimitMessages(numberFormatter.format(used.toInt()), numberFormatter.format(limit));
+        displayText = '${numberFormatter.format(used.toInt())} / ${numberFormatter.format(limit)}';
         percentage = (used / limit).clamp(0.0, 1.0);
       }
     }
 
-    return _UsageStatCard(
-      icon: FontAwesomeIcons.solidMessage,
-      title: l10n.chatTitle,
-      value: value,
-      subtitle: l10n.chatQuotaSubtitle,
-      color: color,
-      footer: usageText != null && percentage > 0
-          ? _UsageMeter(text: usageText, percentage: percentage, color: color)
-          : null,
+    return Semantics(
+      label: '${l10n.usageChatThisMonth}, ${usageText ?? value}',
+      child: Container(
+        padding: const EdgeInsets.all(OmiSpacing.md),
+        decoration: BoxDecoration(
+          color: OmiColors.surface1,
+          borderRadius: OmiRadius.lgAll,
+          border: Border.all(color: OmiColors.border),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(
+                child: Text(l10n.usageChatThisMonth, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary))),
+            Text(displayText ?? value, maxLines: 1, style: OmiType.footnote),
+          ]),
+          if (usageText != null) ...[
+            const SizedBox(height: OmiSpacing.xs),
+            LinearProgressIndicator(
+              value: percentage,
+              backgroundColor: OmiColors.surface3,
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+              minHeight: 4,
+              borderRadius: OmiRadius.pillAll,
+            ),
+          ],
+        ]),
+      ),
     );
-  }
-
-  Widget _buildUsageCard(
-    BuildContext context, {
-    required FaIconData icon,
-    required String title,
-    required String value,
-    required String subtitle,
-    required Color color,
-    UserSubscriptionResponse? subscription,
-  }) {
-    final l10n = context.l10n;
-    final numberFormatter = NumberFormat.decimalPattern(l10n.localeName);
-    final onFreePlan = subscription != null && subscription.subscription.plan == PlanType.basic;
-    Widget? footer;
-
-    if (onFreePlan && icon == FontAwesomeIcons.microphone && subscription.transcriptionSecondsLimit > 0) {
-      final minutesUsed = (subscription.transcriptionSecondsUsed / 60).round();
-      final minutesLimit = (subscription.transcriptionSecondsLimit / 60).round();
-      final percentage =
-          (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
-      footer = _UsageMeter(
-        text: l10n.minsUsedThisMonth(numberFormatter.format(minutesUsed), minutesLimit),
-        percentage: percentage,
-        color: color,
-        hint: percentage >= 1.0
-            ? _OnDeviceHint(
-                before: '${l10n.premiumMinutesUsed} ',
-                link: l10n.setupOnDevice,
-                after: ' ${l10n.forUnlimitedFreeTranscription}',
-              )
-            : percentage >= 0.8
-                ? _OnDeviceHint(
-                    before: '${l10n.premiumMinsLeft(minutesLimit - minutesUsed)} ',
-                    link: l10n.onDevice,
-                    after: ' ${l10n.alwaysAvailable}',
-                  )
-                : null,
-      );
-    } else if (onFreePlan && icon == FontAwesomeIcons.comments && subscription.wordsTranscribedLimit > 0) {
-      final used = subscription.wordsTranscribedUsed;
-      final limit = subscription.wordsTranscribedLimit;
-      footer = _UsageMeter(
-        text: l10n.wordsUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
-        percentage: (used / limit).clamp(0.0, 1.0),
-        color: color,
-      );
-    } else if (onFreePlan && icon == FontAwesomeIcons.wandMagicSparkles && subscription.insightsGainedLimit > 0) {
-      final used = subscription.insightsGainedUsed;
-      final limit = subscription.insightsGainedLimit;
-      footer = _UsageMeter(
-        text: l10n.insightsUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
-        percentage: (used / limit).clamp(0.0, 1.0),
-        color: color,
-      );
-    }
-
-    return _UsageStatCard(icon: icon, title: title, value: value, subtitle: subtitle, color: color, footer: footer);
   }
 }
 
 /// Series colour for memories; pink keeps the chart off the brand-banned hues (INV-UI-1).
 final Color _memoriesColor = Colors.pink.shade200;
-
-/// One metric card: the big number, its name and what it means, and an optional meter.
-class _UsageStatCard extends StatelessWidget {
-  const _UsageStatCard({
-    required this.icon,
-    required this.title,
-    required this.value,
-    required this.subtitle,
-    required this.color,
-    this.footer,
-  });
-
-  final FaIconData icon;
-  final String title;
-  final String value;
-  final String subtitle;
-  final Color color;
-  final Widget? footer;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: OmiColors.surface1,
-        borderRadius: OmiRadius.lgAll,
-        border: Border.all(color: OmiColors.border),
-      ),
-      padding: const EdgeInsets.all(OmiSpacing.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(value, style: OmiType.largeTitle.copyWith(color: color, height: 1.1)),
-          const SizedBox(height: OmiSpacing.sm),
-          Row(
-            children: [
-              ExcludeSemantics(child: FaIcon(icon, color: color, size: 16)),
-              const SizedBox(width: OmiSpacing.xs),
-              Expanded(child: Text(title, style: OmiType.callout.copyWith(fontWeight: FontWeight.w500))),
-            ],
-          ),
-          const SizedBox(height: OmiSpacing.xs),
-          Text(subtitle, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4)),
-          if (footer != null) ...[const SizedBox(height: OmiSpacing.md), footer!],
-        ],
-      ),
-    );
-  }
-}
 
 /// "12 of 30 min used this month" with a progress bar, and an optional hint under it.
 class _UsageMeter extends StatelessWidget {

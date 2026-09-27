@@ -11412,6 +11412,51 @@ class AppLocalizationsMk extends AppLocalizations {
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Слушалки';
 
   @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'минути';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'Задачи';
+
+  @override
+  String get usageMonth => 'Овој месец';
+
+  @override
+  String get usageYear => 'Оваа година';
+
+  @override
+  String get usageAll => 'Целото време';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
+
+  @override
   String get appearance => 'Изглед';
 
   @override
