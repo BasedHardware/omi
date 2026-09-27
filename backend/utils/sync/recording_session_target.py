@@ -10,7 +10,7 @@ temporal assignment.
 from __future__ import annotations
 
 import logging
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence, cast
 
 from google.cloud.firestore_v1.base_query import FieldFilter
 
@@ -33,7 +33,7 @@ def _source_value(source: Any) -> str:
 
 
 def select_recording_session_target(
-    rows: list[Mapping[str, Any]],
+    rows: Sequence[Mapping[str, Any]],
     recording_session_id: str,
     *,
     source: Any,
@@ -72,7 +72,7 @@ def select_recording_session_target(
     return matches[0]
 
 
-def _candidate_rows(uid: str, recording_session_id: str, *, firestore_client=None) -> list[dict]:
+def _candidate_rows(uid: str, recording_session_id: str, *, firestore_client: Any = None) -> list[dict[str, Any]]:
     client = firestore_client or get_firestore_client()
     query = (
         client.collection('users')
@@ -81,11 +81,11 @@ def _candidate_rows(uid: str, recording_session_id: str, *, firestore_client=Non
         .where(filter=FieldFilter('external_data.recording_session_id', '==', recording_session_id))
         .limit(_CANDIDATE_LIMIT)
     )
-    rows = []
+    rows: list[dict[str, Any]] = []
     for doc in query.stream():
         data = doc.to_dict()
-        if data:
-            rows.append(data)
+        if isinstance(data, dict):
+            rows.append(cast(dict[str, Any], data))
     return rows
 
 
@@ -96,7 +96,7 @@ def resolve_recording_session_sync_target(
     client_device_id: str | None,
     is_locked: bool,
     *,
-    firestore_client=None,
+    firestore_client: Any = None,
 ) -> str | None:
     """Look up the live conversation for this recording, or None to keep unbound sync.
 
