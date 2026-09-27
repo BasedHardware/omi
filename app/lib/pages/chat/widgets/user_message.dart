@@ -59,7 +59,7 @@ class HumanMessage extends StatelessWidget {
             alignment: WrapAlignment.end,
             children: [
               Container(
-                decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+                decoration: BoxDecoration(color: OmiColors.messageSurface, borderRadius: OmiRadius.lgAll),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 child: SelectableText(
                   messageText.trimRight(),

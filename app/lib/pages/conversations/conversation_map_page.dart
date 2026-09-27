@@ -201,14 +201,14 @@ class ConversationMapPage extends StatelessWidget {
                             Container(
                               width: 36,
                               height: 36,
-                              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                              decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
                               child: Center(
                                 child: group.conversations.length == 1
-                                    ? const Icon(Icons.location_on, color: Colors.black, size: 20)
+                                    ? Icon(Icons.location_on, color: OmiColors.onAccent, size: 20)
                                     : Text(
                                         '${group.conversations.length}',
-                                        style: const TextStyle(
-                                          color: Colors.black,
+                                        style: TextStyle(
+                                          color: OmiColors.onAccent,
                                           fontWeight: FontWeight.w700,
                                         ),
                                       ),
@@ -220,10 +220,11 @@ class ConversationMapPage extends StatelessWidget {
                                 _groupLabel(context, group),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                                style:
+                                    TextStyle(color: OmiColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
                               ),
                             ),
-                            const Icon(Icons.chevron_right, color: Colors.white70),
+                            Icon(Icons.chevron_right, color: OmiColors.textSecondary),
                           ],
                         ),
                       ),

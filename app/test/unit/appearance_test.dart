@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/appearance_provider.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/settings_groups.dart';
@@ -170,5 +172,29 @@ void main() {
       Color(0xFFFF453A),
       Color(0x26FF453A),
     ]);
+  });
+
+  test('light controls contrast their parent surfaces while dark fills stay unchanged', () {
+    expect(OmiPalette.dark.chipSurface, const Color(0xFF2C2C2E));
+    expect(OmiPalette.dark.messageSurface, const Color(0xFF1C1C1E));
+    expect(OmiPalette.dark.categorySurface, const Color(0xFF35343B));
+    expect(OmiPalette.dark.conversationCard, const Color(0xFF1F1F25));
+    expect(OmiPalette.dark.sourceBadgeSurface, const Color(0xFF2A2A31));
+    expect(OmiPalette.light.chipSurface, isNot(OmiPalette.light.surface0));
+    expect(OmiPalette.light.messageSurface, isNot(OmiPalette.light.surface1));
+    expect(OmiPalette.light.categorySurface, isNot(OmiPalette.light.surface1));
+    expect(OmiPalette.light.sourceBadgeSurface, isNot(OmiPalette.light.conversationCard));
+
+    final conversation = ServerConversation(
+      id: 'local',
+      createdAt: DateTime(2026, 9, 27),
+      structured: Structured('Planning', '', emoji: '*'),
+    );
+    OmiColors.active = OmiPalette.light;
+    expect(conversation.getTagColor(), OmiPalette.light.categorySurface);
+    expect(conversation.getTagTextColor(), OmiPalette.light.textPrimary);
+    OmiColors.active = OmiPalette.dark;
+    expect(conversation.getTagColor(), OmiPalette.dark.categorySurface);
+    expect(conversation.getTagTextColor(), OmiPalette.dark.textPrimary);
   });
 }

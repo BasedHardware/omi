@@ -21,6 +21,11 @@ class OmiPalette {
       required this.surface1,
       required this.surface2,
       required this.surface3,
+      required this.chipSurface,
+      required this.messageSurface,
+      required this.categorySurface,
+      required this.conversationCard,
+      required this.sourceBadgeSurface,
       required this.border,
       required this.textPrimary,
       required this.textSecondary,
@@ -38,6 +43,13 @@ class OmiPalette {
   final Color surface1;
   final Color surface2;
   final Color surface3;
+
+  /// Controls on the page, which need a stronger light fill than [surface2].
+  final Color chipSurface;
+  final Color messageSurface;
+  final Color categorySurface;
+  final Color conversationCard;
+  final Color sourceBadgeSurface;
   final Color border;
   final Color textPrimary;
   final Color textSecondary;
@@ -56,6 +68,11 @@ class OmiPalette {
     surface1: Color(0xFF1C1C1E),
     surface2: Color(0xFF2C2C2E),
     surface3: Color(0xFF3A3A3C),
+    chipSurface: Color(0xFF2C2C2E),
+    messageSurface: Color(0xFF1C1C1E),
+    categorySurface: Color(0xFF35343B),
+    conversationCard: Color(0xFF1F1F25),
+    sourceBadgeSurface: Color(0xFF2A2A31),
     border: Color(0xFF3C3C43),
     textPrimary: Color(0xFFFFFFFF),
     textSecondary: Color(0xFFAEAEB2),
@@ -75,6 +92,11 @@ class OmiPalette {
     surface1: Color(0xFFFFFFFF),
     surface2: Color(0xFFF2F2F7),
     surface3: Color(0xFFE5E5EA),
+    chipSurface: Color(0xFFE5E5EA),
+    messageSurface: Color(0xFFE5E5EA),
+    categorySurface: Color(0xFFF2F2F7),
+    conversationCard: Color(0xFFFFFFFF),
+    sourceBadgeSurface: Color(0xFFE5E5EA),
     border: Color(0xFFC6C6C8),
     textPrimary: Color(0xFF000000),
     textSecondary: Color(0x993C3C43),
@@ -101,6 +123,11 @@ abstract final class OmiColors {
   static Color get surface1 => active.surface1;
   static Color get surface2 => active.surface2;
   static Color get surface3 => active.surface3;
+  static Color get chipSurface => active.chipSurface;
+  static Color get messageSurface => active.messageSurface;
+  static Color get categorySurface => active.categorySurface;
+  static Color get conversationCard => active.conversationCard;
+  static Color get sourceBadgeSurface => active.sourceBadgeSurface;
   static Color get border => active.border;
   static Color get textPrimary => active.textPrimary;
   static Color get textSecondary => active.textSecondary;

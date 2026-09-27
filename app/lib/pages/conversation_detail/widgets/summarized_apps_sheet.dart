@@ -630,7 +630,7 @@ class _CreateTemplateListItem extends StatelessWidget {
             context.l10n.createCustomTemplate,
             style: OmiType.callout.copyWith(fontWeight: FontWeight.w500),
           ),
-          trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+          trailing: Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
           onTap: () {
             final conversationId = context.read<ConversationDetailProvider>().conversation.id;
             PlatformManager.instance.analytics.summarizedAppCreateTemplateClicked(conversationId: conversationId);
@@ -667,7 +667,7 @@ class _EnableAppsListItem extends StatelessWidget {
             context.l10n.allTemplates,
             style: OmiType.callout.copyWith(fontWeight: FontWeight.w500),
           ),
-          trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+          trailing: Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
           onTap: () {
             Navigator.pop(context);
             final conversationId = context.read<ConversationDetailProvider>().conversation.id;

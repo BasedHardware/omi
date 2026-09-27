@@ -627,7 +627,10 @@ getPhoneMicRecordingButton(
         const SizedBox(width: 4),
         Text(
           text,
-          style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white, fontWeight: FontWeight.w500),
+          style: Theme.of(context)
+              .textTheme
+              .bodyMedium!
+              .copyWith(color: OmiColors.textPrimary, fontWeight: FontWeight.w500),
         ),
         const SizedBox(width: 4),
       ],
@@ -791,7 +794,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                     // Processing label
                     Container(
                       decoration: BoxDecoration(
-                        color: const Color(0xFF35343B),
+                        color: OmiColors.categorySurface,
                         borderRadius: BorderRadius.circular(16),
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -830,7 +833,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                         key: const Key('processing_conversation_retry_button'),
                         onPressed: _retrying ? null : _onRetry,
                         style: TextButton.styleFrom(
-                          foregroundColor: Colors.white,
+                          foregroundColor: OmiColors.textPrimary,
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           minimumSize: const Size(44, 44),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,

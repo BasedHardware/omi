@@ -143,7 +143,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
             key: const Key('conversation_failed_title_reprocess_button'),
             onPressed: _reprocessing ? null : _onReprocess,
             style: TextButton.styleFrom(
-              foregroundColor: Colors.white,
+              foregroundColor: OmiColors.textPrimary,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               minimumSize: const Size(44, 44),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -526,9 +526,9 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Padding(
-                              padding: EdgeInsets.only(top: 2),
-                              child: Icon(Icons.graphic_eq, size: 14, color: Colors.white70),
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Icon(Icons.graphic_eq, size: 14, color: OmiColors.textSecondary),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
@@ -664,7 +664,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                 if (!widget.conversation.discarded)
                   Text(
                     widget.conversation.structured.getEmoji(),
-                    style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
+                    style: TextStyle(color: OmiColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w500),
                   ),
                 if (widget.conversation.structured.category.isNotEmpty && !widget.conversation.discarded)
                   const SizedBox(width: 8),

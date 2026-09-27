@@ -44,7 +44,7 @@ class CaptureGapListItem extends StatelessWidget {
       padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
       child: Container(
         width: double.maxFinite,
-        decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24.0)),
+        decoration: BoxDecoration(color: OmiColors.conversationCard, borderRadius: BorderRadius.circular(24.0)),
         child: Padding(
           padding: const EdgeInsetsDirectional.symmetric(horizontal: 16, vertical: 14),
           child: Row(
@@ -52,7 +52,7 @@ class CaptureGapListItem extends StatelessWidget {
               Container(
                 width: 40,
                 height: 40,
-                decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(color: OmiColors.categorySurface, borderRadius: BorderRadius.circular(12)),
                 child: Icon(Icons.event_busy, color: OmiColors.textTertiary, size: 20),
               ),
               const SizedBox(width: 14),

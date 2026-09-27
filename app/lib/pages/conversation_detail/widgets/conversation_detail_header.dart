@@ -238,7 +238,7 @@ class _HeaderChip extends StatelessWidget {
     return Container(
       constraints: const BoxConstraints(minHeight: 30),
       padding: EdgeInsets.only(left: 10, right: trailing == true ? 6 : 10, top: 4, bottom: 4),
-      decoration: BoxDecoration(color: background ?? OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+      decoration: BoxDecoration(color: background ?? OmiColors.chipSurface, borderRadius: OmiRadius.pillAll),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [

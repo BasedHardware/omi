@@ -84,9 +84,9 @@ class _Header extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.only(top: 4),
-          child: Icon(Icons.record_voice_over, color: Colors.white, size: 22),
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Icon(Icons.record_voice_over, color: OmiColors.textPrimary, size: 22),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -225,8 +225,8 @@ class _ClipRow extends StatelessWidget {
             child: Container(
               width: 44,
               height: 44,
-              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-              child: Icon(playing ? Icons.stop_rounded : Icons.play_arrow_rounded, color: Colors.black, size: 28),
+              decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+              child: Icon(playing ? Icons.stop_rounded : Icons.play_arrow_rounded, color: OmiColors.onAccent, size: 28),
             ),
           ),
         ),
@@ -339,15 +339,15 @@ class _AnswerChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = primary
         ? FilledButton.styleFrom(
-            backgroundColor: Colors.white,
-            foregroundColor: Colors.black,
+            backgroundColor: OmiColors.accent,
+            foregroundColor: OmiColors.onAccent,
             minimumSize: const Size(0, 44),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             padding: const EdgeInsets.symmetric(horizontal: 16),
             shape: const StadiumBorder(),
           )
         : OutlinedButton.styleFrom(
-            foregroundColor: Colors.white,
+            foregroundColor: OmiColors.textPrimary,
             side: BorderSide(color: OmiColors.border),
             minimumSize: const Size(0, 44),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
