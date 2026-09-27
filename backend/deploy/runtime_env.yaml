@@ -1400,9 +1400,6 @@ environments:
               secret: ENCRYPTION_SECRET
               version: latest
           env:
-            DAILY_SUMMARY_SELECTION_MODE:
-              value: indexed
-              category: rollout
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -3013,9 +3010,6 @@ environments:
               secret: ENCRYPTION_SECRET
               version: latest
           env:
-            DAILY_SUMMARY_SELECTION_MODE:
-              value: indexed
-              category: rollout
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity

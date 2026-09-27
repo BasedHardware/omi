@@ -878,9 +878,6 @@ environment_shared:
             secret: ENCRYPTION_SECRET
             version: latest
         env:
-          DAILY_SUMMARY_SELECTION_MODE:
-            value: indexed
-            category: rollout
           OMI_ENV_STAGE:
             value: '{env}'
             category: runtime_identity
