@@ -200,7 +200,7 @@ class UsageChart extends StatelessWidget {
                 : i == peak
                     ? color
                     : color.withValues(alpha: .55),
-            borderSide: buckets.future[i] ? const BorderSide(color: OmiColors.border, width: 1) : BorderSide.none,
+            borderSide: buckets.future[i] ? BorderSide(color: OmiColors.border, width: 1) : BorderSide.none,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
           ),
         ]),

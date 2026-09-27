@@ -11153,5 +11153,9 @@
     "usageYear": "این سال",
     "usageAll": "همه‌زمان",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "ظاهر",
+    "appearanceSystem": "سیستم",
+    "appearanceLight": "روشن",
+    "appearanceDark": "تیره"
 }

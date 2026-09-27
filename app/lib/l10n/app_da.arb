@@ -3635,5 +3635,9 @@
     "usageYear": "Dette år",
     "usageAll": "Altid",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "Udseende",
+    "appearanceSystem": "System",
+    "appearanceLight": "Lys",
+    "appearanceDark": "Mørk"
 }

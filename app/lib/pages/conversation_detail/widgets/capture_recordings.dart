@@ -48,7 +48,7 @@ class CaptureRecordingsChip extends StatelessWidget {
         child: Container(
           constraints: const BoxConstraints(minHeight: 30),
           padding: const EdgeInsets.only(left: 4, right: 8),
-          decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -59,7 +59,7 @@ class CaptureRecordingsChip extends StatelessWidget {
                 style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
               ),
               const SizedBox(width: 2),
-              const Icon(Icons.keyboard_arrow_down, size: 16, color: OmiColors.textSecondary),
+              Icon(Icons.keyboard_arrow_down, size: 16, color: OmiColors.textSecondary),
             ],
           ),
         ),
@@ -134,7 +134,7 @@ class CaptureRecordingsSheet extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               for (final (index, recording) in recordings.indexed) ...[
-                if (index > 0) const Divider(height: 1, indent: 56, color: OmiColors.border),
+                if (index > 0) Divider(height: 1, indent: 56, color: OmiColors.border),
                 _row(context, recording),
               ],
               if (controller.phase == CaptureGroupSeparationPhase.failed)
@@ -142,7 +142,7 @@ class CaptureRecordingsSheet extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                   child: Row(
                     children: [
-                      const Icon(Icons.error_outline, size: 16, color: OmiColors.warning),
+                      Icon(Icons.error_outline, size: 16, color: OmiColors.warning),
                       const SizedBox(width: 6),
                       Text(
                         context.l10n.captureRecordingSeparateFailed,
@@ -208,7 +208,7 @@ class CaptureRecordingsSheet extends StatelessWidget {
                     if (recording.isCurrent)
                       Semantics(
                         label: context.l10n.captureRecordingViewing,
-                        child: const Icon(Icons.check, size: 18, color: OmiColors.textPrimary),
+                        child: Icon(Icons.check, size: 18, color: OmiColors.textPrimary),
                       ),
                   ],
                 ),

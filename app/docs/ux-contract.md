@@ -69,7 +69,7 @@ There are exactly two ways out, and they mean different things.
 
 | Need | Use | Not |
 |---|---|---|
-| Text action | `OmiButton` — `.primary` (white fill, black label), `.secondary`, `.destructive`, `.tertiary`; size regular (48) or compact (36 visual, 44 target); `isLoading` | `ElevatedButton.styleFrom(...)` with a local colour, height or radius |
+| Text action | `OmiButton` — `.primary` (white fill and black label in dark mode; inverse in light mode), `.secondary`, `.destructive`, `.tertiary`; size regular (48) or compact (36 visual, 44 target); `isLoading` | `ElevatedButton.styleFrom(...)` with a local colour, height or radius |
 | Icon-only action | `OmiIconButton(icon, label: …)` — `label` is required and is the tooltip and the screen-reader name | a bare `GestureDetector`/`InkWell` around an `Icon`, an `IconButton` with no tooltip |
 | Header circle button | `OmiIconButton` filled-circle style (`HeaderCircleButton` is an alias) | a 36 pt circle with a 36 pt target |
 | On/off setting | `OmiSwitch` in an `OmiSettingsRow` | a checkbox, a purple/green/indigo switch |
@@ -82,7 +82,7 @@ There are exactly two ways out, and they mean different things.
 - A button label is a verb in Title Case ("Save", "Delete Task", "Try Again"). A button that is
   busy keeps its size and shows a spinner in place of or beside its label.
 - A disabled control looks disabled. A Send that cannot send is not white.
-- The accent is white/neutral (INV-UI-1, no purple). Colour is for state (danger, success), not
+- The accent is neutral: white in dark mode, black in light mode (INV-UI-1, no purple). Colour is for state (danger, success), not
   decoration.
 
 ## 4. Destructive actions
@@ -192,12 +192,12 @@ participant lists, the speaker filter and every copied, shared or exported trans
 
 ## 10. Tokens
 
-`lib/ui/omi_tokens.dart`, dark only. Where you touch code, replace literals with tokens
+`lib/ui/omi_tokens.dart` has light and dark palettes; System follows OS brightness. Where you touch code, replace literals with tokens
 (`color-literal`, `font-size-literal`, `radius-literal`); new code has none.
 
-- **Colour** `OmiColors`: `surface0` (page black), `surface1/2/3` (card / elevated / pressed),
+- **Colour** `OmiColors`: `surface0` (black in dark mode, grouped #F2F2F7 in light mode), `surface1/2/3` (card / elevated / pressed),
   `border`, `textPrimary` / `textSecondary` / `textTertiary` (tertiary no darker than ~#8E8E93, ≥ 4.5:1
-  on surface1), `accent` (white — INV-UI-1) / `onAccent`, `success`, `warning`, `danger`,
+  on surface1), `accent` (white in dark mode, black in light mode — INV-UI-1) / `onAccent`, `success`, `warning`, `danger`,
   `dangerSurface`. `AppStyles` and `ResponsiveHelper` palettes are legacy.
 - **Type** `OmiType`: an iOS-like ramp (11 / 13 / 15 / 17 / 20 / 24 / 28 / 34) as `TextStyle`s.
 - **Radius** `OmiRadius`: sm 8 · md 12 · lg 16 · xl 24 · pill. **Spacing** `OmiSpacing`: 4 · 8 · 12 · 16 · 20 · 24 · 32.

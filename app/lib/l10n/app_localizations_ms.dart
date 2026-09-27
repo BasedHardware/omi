@@ -11424,4 +11424,16 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get usageChatThisMonth => 'Chat this month';
+
+  @override
+  String get appearance => 'Penampilan';
+
+  @override
+  String get appearanceSystem => 'Sistem';
+
+  @override
+  String get appearanceLight => 'Cerah';
+
+  @override
+  String get appearanceDark => 'Gelap';
 }

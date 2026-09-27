@@ -3593,5 +3593,9 @@
     "usageYear": "Цей рік",
     "usageAll": "За весь час",
     "usageNow": "now",
-    "usageChatThisMonth": "Chat this month"
+    "usageChatThisMonth": "Chat this month",
+    "appearance": "Вигляд",
+    "appearanceSystem": "Система",
+    "appearanceLight": "Світла",
+    "appearanceDark": "Темна"
 }
