@@ -14,7 +14,6 @@ enum CapturePalette {
     static let secondary = Color(red: 0x9A / 255, green: 0xA1 / 255, blue: 0xAD / 255)
     static let ink = Color(red: 0x0A / 255, green: 0x0C / 255, blue: 0x10 / 255)
     static let led = Color(red: 0x4C / 255, green: 0x9B / 255, blue: 0xFF / 255)
-    static let ledOff = Color(red: 0x3A / 255, green: 0x40 / 255, blue: 0x4B / 255)
     /// material.glassThick (dark): rgba(26,29,37,.88).
     static let card = Color(red: 26 / 255, green: 29 / 255, blue: 37 / 255).opacity(0.88)
 }
@@ -305,63 +304,20 @@ private struct CaptureClockText: View {
     }
 }
 
-/// The pendant seen straight on: glass dome, machined rim, graphite core, one LED
-/// (lib.py `pendant`: rim 0.86, core 0.70, LED max(4, 0.052 d) with its glow).
+/// The Omi pendant, as the app shows it: its photo with the light on while audio is captured
+/// (a soft blue glow behind it), and its lights-off photo otherwise.
+@available(iOS 16.1, *)
 struct CapturePendant: View {
     let active: Bool
     let size: CGFloat
 
     var body: some View {
-        let rim = size * 0.86
-        let core = size * 0.70
-        let led = max(4, size * 0.052)
-        ZStack {
-            Circle()
-                .fill(RadialGradient(stops: [
-                    .init(color: .white.opacity(0.06), location: 0),
-                    .init(color: .white.opacity(0.05), location: 0.58),
-                    .init(color: Color(red: 220 / 255, green: 228 / 255, blue: 240 / 255).opacity(0.17), location: 0.80),
-                    .init(color: .white.opacity(0.07), location: 1),
-                ], center: UnitPoint(x: 0.5, y: 0.42), startRadius: 0, endRadius: size * 0.77))
-                .overlay(Circle().strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5))
-            Circle()
-                .fill(RadialGradient(stops: [
-                    .init(color: .clear, location: 0.76),
-                    .init(color: Color(red: 205 / 255, green: 216 / 255, blue: 232 / 255).opacity(0.28), location: 0.84),
-                    .init(color: Color(red: 236 / 255, green: 241 / 255, blue: 248 / 255).opacity(0.62), location: 0.91),
-                    .init(color: Color(red: 205 / 255, green: 216 / 255, blue: 232 / 255).opacity(0.2), location: 0.97),
-                    .init(color: .clear, location: 1),
-                ], center: .center, startRadius: 0, endRadius: rim * 0.71))
-                .frame(width: rim, height: rim)
-            Circle()
-                .fill(RadialGradient(stops: [
-                    .init(color: Color(red: 0x7A / 255, green: 0x80 / 255, blue: 0x8A / 255), location: 0),
-                    .init(color: Color(red: 0x40 / 255, green: 0x45 / 255, blue: 0x4E / 255), location: 0.20),
-                    .init(color: Color(red: 0x1B / 255, green: 0x1E / 255, blue: 0x24 / 255), location: 0.52),
-                    .init(color: Color(red: 0x0C / 255, green: 0x0D / 255, blue: 0x10 / 255), location: 0.80),
-                    .init(color: Color(red: 0x08 / 255, green: 0x09 / 255, blue: 0x0B / 255), location: 1),
-                ], center: UnitPoint(x: 0.68, y: 0.24), startRadius: 0, endRadius: core * 1.02))
-                .frame(width: core, height: core)
-            ledView.frame(width: led, height: led)
-        }
-        .frame(width: size, height: size)
-        .accessibilityHidden(true)
-    }
-
-    @ViewBuilder private var ledView: some View {
-        if active {
-            // .pd-led: white core → #D2E6FF → #4C9BFF with a 3/12 px blue glow.
-            Circle()
-                .fill(RadialGradient(stops: [
-                    .init(color: .white, location: 0),
-                    .init(color: Color(red: 0xD2 / 255, green: 0xE6 / 255, blue: 0xFF / 255), location: 0.30),
-                    .init(color: CapturePalette.led, location: 0.72),
-                ], center: .center, startRadius: 0, endRadius: max(2, size * 0.026)))
-                .shadow(color: CapturePalette.led.opacity(0.95), radius: 1.5)
-                .shadow(color: CapturePalette.led.opacity(0.5), radius: 6)
-        } else {
-            Circle().fill(CapturePalette.ledOff)
-        }
+        Image(active ? "device-omi" : "device-omi-off")
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .shadow(color: CapturePalette.led.opacity(active ? 0.45 : 0), radius: size * 0.18)
+            .accessibilityHidden(true)
     }
 }
 
