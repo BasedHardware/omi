@@ -1,8 +1,20 @@
 {
-  "unreleased": [
-    "Fixed always-on recordings silently failing to upload (and being lost) after being stopped by paywall, sleep, device, or STT-fallback events."
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.12.405",
+      "date": "2026-09-27",
+      "changes": [
+        "Fixed desktop chat usage showing unlimited for keys that do not power chat, and clarified that BYOK covers supported features rather than every Omi service"
+      ]
+    },
+    {
+      "version": "0.12.404",
+      "date": "2026-09-27",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
     {
       "version": "0.12.403",
       "date": "2026-09-27",

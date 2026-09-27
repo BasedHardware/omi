@@ -7,7 +7,7 @@ This package owns uploaded-audio sync admission, decoding, transcription orchest
 - `pipeline.py` coordinates job/run leases, segment processing, persistence fences, and terminal outcomes. `assignment_errors.py` distinguishes terminal user authority from corrupt/mismatched intake.
 - `files.py`, `content_id.py`, and `capture_manifest.py` normalize uploads and identities. Capture assignment never grants fresh-lane provenance.
 - `capture.py` derives retry-stable incoming IDs from the VAD-segment timestamp. VAD exports speech segments only; empty VAD/STT creates no conversation or bridge and bills no speech.
-- `lanes.py`, `backfill.py`, and `rate_limit.py` classify work and enforce admission policy.
+- `lanes.py`, `backfill.py`, and `rate_limit.py` classify work and enforce admission policy. `uid_sequencer.py` dispatches accepted backfill jobs through the Firestore owner/pending registry in `database/sync_backfill_sequencer.py`; it owns no STT or conversation writes. See `backend/docs/runbooks/sync-two-lane.md` for lease, cutover, and monitoring details.
 - `merge_audio.py` and `merge_dedupe.py` contain deterministic merge helpers; `playback.py` reconstructs audio artifacts.
 - `provenance.py` and `telemetry.py` provide bounded attribution and operational labels.
 
@@ -60,3 +60,11 @@ After duplicate removal, the transaction hydrates the surviving conversation's
 allocator and allocates incoming and donor identities. Legacy donors receive a
 stable conversation/speaker scope. Provider labels and recognized person IDs are
 preserved; equal provider numbers never establish that two voices are the same.
+Conversation-wide resolution uses stored private-cloud audio after each sync
+job's append and reprocess. If audio is unavailable or its timeline cannot be
+trusted, the resolver marks the cross-chunk IDs `unavailable` and logs the
+anonymous skip reason; clients must treat those labels as provisional. A sync
+bridge's redirect tombstone remains available to owner detail reads and manual
+speaker assignment: the assignment transaction follows the survivor chain and
+maps the donor's selected speaker number through stable segment IDs so it never
+labels a different survivor voice.

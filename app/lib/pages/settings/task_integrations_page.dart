@@ -397,7 +397,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       child: Container(
         width: 70,
         height: 28,
-        decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
       ),
     );
   }
@@ -436,7 +436,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       trailing = IntegrationStatusChip(context.l10n.connect);
     } else if (isSelected) {
       // Radio mark for connected services
-      trailing = const FaIcon(FontAwesomeIcons.solidCircleCheck, color: OmiColors.success, size: 24);
+      trailing = FaIcon(FontAwesomeIcons.solidCircleCheck, color: OmiColors.success, size: 24);
     } else {
       trailing = Container(
         width: 24,
@@ -543,10 +543,10 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
               // Footer Note
               Container(
                 padding: const EdgeInsets.all(OmiSpacing.md),
-                decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+                decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
                 child: Row(
                   children: [
-                    const FaIcon(FontAwesomeIcons.solidLightbulb, color: OmiColors.textTertiary, size: 20),
+                    FaIcon(FontAwesomeIcons.solidLightbulb, color: OmiColors.textTertiary, size: 20),
                     const SizedBox(width: OmiSpacing.sm),
                     Expanded(
                       child: Text(

@@ -283,6 +283,19 @@ def test_live_scopes_are_not_resolved_until_their_audio_timeline_is_trusted(env,
     assert [s.speaker_id for s in conversation.transcript_segments] == [0, 1, 2, 3]
 
 
+def test_legacy_sync_donor_scope_does_not_block_conversation_resolution(env, monkeypatch):
+    plan = [0, 1] * 6
+    _install_audio(monkeypatch, plan)
+    scopes = [f'sync:job-{i}' for i in range(len(plan))]
+    scopes[0] = 'legacy-conversation:donor:0'
+    conversation = _conversation(plan, scopes=scopes)
+
+    stage.resolve_speakers_for_processing('u1', conversation)
+
+    assert conversation.speaker_resolution.status == 'resolved'
+    assert len({s.speaker_id for s in conversation.transcript_segments}) == 2
+
+
 def test_a_resolved_conversation_that_grew_by_sync_resolves_again(env, monkeypatch):
     plan = [0, 1] * 6
     _install_audio(monkeypatch, plan)
