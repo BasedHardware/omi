@@ -530,6 +530,12 @@ environment_shared:
             provisional: true
             value: 'true'
             category: rollout
+          # 9e6b55b re-armed a one-job-per-uid backfill slot that 429s uploads
+          # (37% of sync uploads refused). Cloud Tasks concurrency paces instead.
+          SYNC_BACKFILL_INFLIGHT_LIMIT:
+            provisional: true
+            value: 'false'
+            category: rollout
           USE_VERTEX_AI:
             value: 'true'
           STT_PRERECORDED_MODEL:
@@ -651,6 +657,12 @@ environment_shared:
           SYNC_BACKFILL_ENABLED:
             provisional: true
             value: 'true'
+            category: rollout
+          # 9e6b55b re-armed a one-job-per-uid backfill slot that 429s uploads
+          # (37% of sync uploads refused). Cloud Tasks concurrency paces instead.
+          SYNC_BACKFILL_INFLIGHT_LIMIT:
+            provisional: true
+            value: 'false'
             category: rollout
           USE_VERTEX_AI:
             value: 'true'
