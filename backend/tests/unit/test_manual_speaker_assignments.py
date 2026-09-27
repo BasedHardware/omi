@@ -133,6 +133,64 @@ def test_legacy_completed_index_and_missing_person(world):
         db.assign_conversation_speaker('u', 'c', person_id='new', segment_index=0)
 
 
+def test_bridged_speaker_assignment_uses_donor_segment_ids(world):
+    store, survivor_path, original = world
+    donor_path = ('users', 'u', 'conversations', 'donor')
+    store.rows[donor_path] = dict(
+        id='donor',
+        deleted=True,
+        sync_merged_into='c',
+        transcript_segments=[dict(original[1], speaker_id=4)],
+    )
+    store.rows[survivor_path]['transcript_segments'] = [
+        dict(original[0], speaker_id=4),
+        dict(original[1], speaker_id=12),
+    ]
+
+    raw, resolved, _, _ = db.assign_conversation_speaker('u', 'donor', person_id='new', speaker_id=4)
+
+    assert raw['id'] == 'c'
+    assert resolved == ['s1']
+    assert raw['transcript_segments'][0]['person_id'] is None
+    assert raw['transcript_segments'][1]['person_id'] == 'new'
+    assert store.rows[donor_path]['deleted'] is True
+
+
+def test_bridged_assignment_prefers_shipped_app_segment_ids_over_stale_speaker_number(world):
+    store, survivor_path, original = world
+    store.rows[('users', 'u', 'conversations', 'donor')] = dict(
+        id='donor', deleted=True, sync_merged_into='c', transcript_segments=[dict(original[1], speaker_id=7)]
+    )
+    store.rows[survivor_path]['transcript_segments'] = [
+        dict(original[0], speaker_id=4),
+        dict(original[1], speaker_id=12),
+    ]
+
+    raw, resolved, _, _ = db.assign_conversation_speaker(
+        'u', 'donor', person_id='new', speaker_id=4, segment_ids=['s1']
+    )
+
+    assert resolved == ['s1']
+    assert raw['transcript_segments'][0]['person_id'] is None
+    assert raw['transcript_segments'][1]['person_id'] == 'new'
+
+
+def test_bridged_assignment_rejects_missing_or_deleted_survivor(world):
+    store, survivor_path, original = world
+    donor_path = ('users', 'u', 'conversations', 'donor')
+    store.rows[donor_path] = dict(
+        id='donor',
+        deleted=True,
+        sync_merged_into='c',
+        transcript_segments=[dict(original[1], id='lost')],
+    )
+    with pytest.raises(ValueError, match='no longer'):
+        db.assign_conversation_speaker('u', 'donor', person_id='new', speaker_id=4)
+    store.rows[survivor_path]['deleted'] = True
+    with pytest.raises(LookupError):
+        db.assign_conversation_speaker('u', 'donor', person_id='new', speaker_id=4)
+
+
 def test_silent_flush_retries_dirty_write_and_publishes_acknowledged_identity(world):
     import asyncio
     from types import SimpleNamespace
