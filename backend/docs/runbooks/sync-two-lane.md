@@ -74,6 +74,35 @@ The terminal `sync_transcription_job_finalized` event adds the first failed
 segment's bounded `failure_phase` and `failure_class`; successful and
 speech-free jobs log `none`.
 
+### Repeated content failures
+
+The 45-day content ledger counts only whole-job, same-content deterministic
+failures: undecodable audio or provider `stt_invalid_input`, and persistence
+failures whose exception chain has no known transient Firestore/network cause.
+Three matching failures within 24 hours pause that content for 24 hours. A
+different failure does not add a strike; an expired window starts at one.
+Firestore `Aborted` (including exhausted contention wrappers), timeouts,
+service outages, provider 5xx, and superseded/fenced jobs remain retryable.
+The first three attempts use the existing STT path unchanged. Successful
+content is still acknowledged through the normal completed ledger.
+
+Admission checks the ledger before dispatch. Capped invalid audio receives
+HTTP 400 `sync_invalid_audio`; shipped mobile treats 400 as a definitive
+upload refusal and retains the local file. Capped persistence receives HTTP
+503 `backfill_capacity` with `Retry-After` bounded by the remaining pause, which pauses upload while
+retaining the WAL. No capped job enters paid STT. The response uses only
+existing client status and reason codes.
+
+Monitor `event=sync_repeat_failure_cap outcome=paused` grouped by the bounded
+`failure_key` and lane. The event includes only `device_hash`, never UID,
+content ID, file names, or exception text. Also monitor
+`sync_transcription_job_finalized` with `failure_phase=persistence` and
+`failure_class`, and `sync_transcription_job outcome=invalid_input` with
+`reason_code=sync_invalid_audio`. A rising cap rate means clients still have
+retained audio requiring investigation; it is not a success count.
+`event=sync_persistence_exception` exposes a bounded exception subtype when
+the closed telemetry class is `OtherException`, without exception text.
+
 ## Run ownership and recovery
 
 ### Epoch-fence rollout modes

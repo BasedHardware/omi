@@ -1112,6 +1112,37 @@ async def sync_local_files_v2(
                     'lane': lane_decision.lane.value,
                 },
             )
+        if claim.get('outcome') == 'capped':
+            await run_blocking(db_executor, delete_sync_job, job_id)
+            if backfill_slot_acquired:
+                await run_blocking(db_executor, release_backfill_slot, uid, job_id)
+                backfill_slot_acquired = False
+            failure_key = claim.get('failure_key')
+            logger.warning(
+                'event=sync_repeat_failure_cap outcome=paused lane=%s failure_key=%s device_hash=%s',
+                lane_decision.lane.value,
+                failure_key if failure_key in {'invalid_audio', 'persistent_persistence'} else 'unknown',
+                client_device_context.client_device_id[-8:] if client_device_context.client_device_id else 'none',
+            )
+            if failure_key == 'invalid_audio':
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        'code': 'sync_invalid_audio',
+                        'detail': 'This audio cannot be decoded; local audio was not consumed',
+                    },
+                )
+            return JSONResponse(
+                status_code=503,
+                headers={
+                    'Retry-After': str(claim.get('retry_after', 86400)),
+                    'X-Omi-Rate-Limit-Reason': 'backfill_capacity',
+                },
+                content={
+                    'code': 'backfill_capacity',
+                    'detail': 'Sync is paused for this audio; local audio was not consumed',
+                },
+            )
         if claim.get('outcome') == 'busy':
             await run_blocking(db_executor, delete_sync_job, job_id)
             if backfill_slot_acquired:
@@ -1442,6 +1473,18 @@ def _sync_finalization_retrying() -> HTTPException:
     )
 
 
+def _terminal_repeat_failure_kwargs(job: dict) -> dict[str, str]:
+    """Carry a terminal job's strike through racing poll/task claim cleanup."""
+    if job.get('status') != 'failed':
+        return {}
+    if job.get('reason_code') in ('sync_invalid_audio', 'stt_invalid_input'):
+        return {'failure_key': 'invalid_audio'}
+    result = job.get('result')
+    if isinstance(result, dict) and result.get('repeat_failure_key') == 'persistent_persistence':
+        return {'failure_key': 'persistent_persistence'}
+    return {}
+
+
 @router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
 def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Poll for the status of an async sync job."""
@@ -1526,7 +1569,9 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         # recoverable again: otherwise a WAL re-upload receives ``busy`` for
         # the ledger stale window and looks permanently stuck to the client.
         try:
-            release_sync_content_claim_after_job_retired(uid, job['content_id'], job_id)
+            release_sync_content_claim_after_job_retired(
+                uid, job['content_id'], job_id, **_terminal_repeat_failure_kwargs(job)
+            )
         except Exception as error:
             logger.error('event=sync_terminal_cleanup outcome=retrying exception_type=%s', type(error).__name__)
             raise _sync_finalization_retrying()
@@ -1715,7 +1760,9 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                 release_claim = (
                     release_sync_content_claim_after_job_retired if ledger_fence_active else release_sync_content_claim
                 )
-                await run_blocking(db_executor, release_claim, uid, content_id, job_id)
+                await run_blocking(
+                    db_executor, release_claim, uid, content_id, job_id, **_terminal_repeat_failure_kwargs(job)
+                )
             if ledger_fence_active:
                 await run_blocking(db_executor, delete_sync_job_run_lock_epoch, job_id)
             return JSONResponse(status_code=200, content={'status': 'acked', 'job_status': job['status']})

@@ -87,6 +87,8 @@ SYNC_EXCEPTION_CLASSES = frozenset(
         'DestructiveOperationInProgress',
         'PrerecordedSTTConfigurationError',
         'SyncAssignmentSuperseded',
+        'SyncAssignmentConflict',
+        'FirestoreContentionExhausted',
         'SyncConversationPersistenceFenced',
         'SyncJobRunLeaseLost',
         'TranscriptionFailure',

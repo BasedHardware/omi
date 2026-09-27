@@ -2346,7 +2346,9 @@ class TestAsyncCoordinatorBehavioral:
 
             stubs['sync_jobs'].mark_job_failed.assert_called_once()
             assert stubs['sync_jobs'].mark_job_failed.call_args.args[1] == 'sync_invalid_audio'
-            stubs['pipeline'].release_sync_content_claim.assert_called_once_with('uid', 'content-3', 'j3')
+            stubs['pipeline'].release_sync_content_claim.assert_called_once_with(
+                'uid', 'content-3', 'j3', failure_key='invalid_audio'
+            )
             stubs['pipeline'].release_sync_content_claim_after_job_retired.assert_not_called()
             stubs['sync_jobs'].finalize_sync_job.assert_not_called()
             stubs['pipeline'].mark_sync_content_completed.assert_not_called()
@@ -3864,6 +3866,60 @@ class TestV2EndpointExecution:
             assert body['poll_after_ms'] == 3000
             mock_sync_jobs.create_sync_job.assert_called_once()
             assert scheduled_tasks == [f"sync_pipeline:{body['job_id']}"]
+        finally:
+            self._cleanup_modules(saved)
+
+    @pytest.mark.parametrize(
+        ('failure_key', 'status_code', 'code'),
+        [
+            ('invalid_audio', 400, 'sync_invalid_audio'),
+            ('persistent_persistence', 503, 'backfill_capacity'),
+        ],
+    )
+    def test_capped_content_stops_before_dispatch_and_keeps_client_audio(self, failure_key, status_code, code):
+        saved, mock_sync_jobs, _ = self._build_test_app()
+        try:
+            sys.modules.pop('routers.sync', None)
+            sys.modules.pop('utils.sync.pipeline', None)
+            import importlib.util
+
+            spec = importlib.util.spec_from_file_location(
+                'sync_post_capped', os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
+            )
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            module._retrieve_file_paths_v2 = MagicMock(return_value=['/tmp/fake.opus'])
+            module._cleanup_files = MagicMock()
+            module.claim_sync_content = MagicMock(
+                return_value={'outcome': 'capped', 'failure_key': failure_key, 'retry_after': 123}
+            )
+            module.start_background_task = MagicMock()
+
+            async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
+                return fn(*args, **kwargs)
+
+            module.run_blocking = _passthrough_run_blocking
+            module.classify_sync_lane = MagicMock(
+                return_value=types.SimpleNamespace(
+                    lane=module.SyncLane.FRESH,
+                    trust=types.SimpleNamespace(value='legacy'),
+                    reason='recent_capture',
+                    maximum_age_seconds=60,
+                    automatic_recovery_allowed=True,
+                )
+            )
+            from starlette.datastructures import UploadFile
+
+            upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+            resp = asyncio.run(module.sync_local_files_v2(files=[upload], uid='test-uid'))
+            assert resp.status_code == status_code
+            assert json.loads(resp.body)['code'] == code
+            assert 'not consumed' in json.loads(resp.body)['detail']
+            if status_code == 503:
+                assert resp.headers['Retry-After'] == '123'
+            mock_sync_jobs.delete_sync_job.assert_called_once()
+            module.start_background_task.assert_not_called()
+            module._cleanup_files.assert_called_once_with(['/tmp/fake.opus'])
         finally:
             self._cleanup_modules(saved)
 
