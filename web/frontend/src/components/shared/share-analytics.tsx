@@ -47,7 +47,7 @@ export function ShareAnalytics() {
         headers: { 'Content-Type': 'application/json' },
         keepalive: true,
         referrerPolicy: 'no-referrer',
-      }).catch(() => {});
+      }).catch(() => undefined);
     };
     const theme = () =>
       document.documentElement.getAttribute('data-share-theme') ||
