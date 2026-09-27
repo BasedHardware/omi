@@ -281,16 +281,9 @@ def test_desktop_meeting_adapter_uses_stored_role_and_skips_non_meeting_or_rotat
         'discarded': False,
         'started_at': NOW,
         'finished_at': NOW + timedelta(seconds=MIN_MEETING_DURATION_SECONDS),
-        # Duration is the transcript span (#19391), so include opening and
-        # closing transcript evidence whose span clears the five-minute bar.
-        'transcript_segments': [
-            {'text': 'Opening exchange', 'start': 0, 'end': 30},
-            {
-                'text': 'Closing exchange',
-                'start': MIN_MEETING_DURATION_SECONDS - 30,
-                'end': MIN_MEETING_DURATION_SECONDS,
-            },
-        ],
+        # Duration is the transcript span (#19391), so the transcript itself
+        # must clear the five-minute bar even though the wall window already does.
+        'transcript_segments': [{'text': 'A substantive exchange', 'start': 0, 'end': MIN_MEETING_DURATION_SECONDS}],
         'structured': {'title': 'Ambient capture'},
         'external_data': {'conversation_role': 'ambient'},
     }
