@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/device_speech_wire.g.dart' as wire;
+import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -70,10 +71,11 @@ Future<String?> getUserSpeechProfile() async {
 
 String? _errorDetail(String body) {
   try {
-    final decoded = jsonDecode(body);
-    if (decoded is Map && decoded['detail'] is String) return decoded['detail'] as String;
-  } catch (_) {}
-  return null;
+    final detail = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).detail;
+    return detail is String ? detail : null;
+  } catch (_) {
+    return null;
+  }
 }
 
 Future<bool> uploadProfile(File file) async {

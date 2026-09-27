@@ -11,7 +11,7 @@ import database.action_items as action_items_db
 import database.redis_db as redis_db
 import database.users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
-from database.vector_db import delete_vector, delete_transcript_chunk_vectors
+from database.vector_db import delete_action_item_vector, delete_vector, delete_transcript_chunk_vectors
 import database.vector_db as vector_db
 from utils.other.storage import delete_conversation_audio_files, delete_speech_profile_blob
 from utils.screen_frames.store import delete_conversation_screen_frames
@@ -40,6 +40,7 @@ from models.conversation import (
     project_shared_conversation,
 )
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
 from utils.conversations.mcp_transcript_search import (
@@ -68,6 +69,7 @@ from utils.conversations.process_conversation import (
     retrieve_in_progress_conversation,
 )
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.capture_shadow_outcomes import record_capture_outcome
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
@@ -118,7 +120,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
+def _get_valid_conversation_by_id(uid: str, conversation_id: str, *, follow_sync_bridge: bool = False) -> dict:
     conversation = conversations_db.get_conversation(
         uid, conversation_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
     )
@@ -126,7 +128,16 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversations_db.is_soft_deleted(conversation):
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        if not follow_sync_bridge or not conversation.get('sync_merged_into'):
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        survivor_id = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
+        if not survivor_id:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        conversation = conversations_db.get_conversation(
+            uid, survivor_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
+        )
+        if not conversation or conversations_db.is_soft_deleted(conversation):
+            raise HTTPException(status_code=404, detail="Conversation not found")
 
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
@@ -209,9 +220,8 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
                     uid,
                     conv_obj.language or 'en',
                     conv_obj,
-                    force_process=True,
-                    is_reprocess=False,
                     app_usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
+                    trigger=ProcessingTrigger.FIRST_OPEN,
                 )
             # The enrichment itself succeeded here; count it now so a receipt
             # publish failure below is not misattributed to enrichment and does
@@ -569,10 +579,10 @@ def process_in_progress_conversation(
             uid,
             conversation.language,
             conversation,
-            force_process=True,
             persistence_observer=record_persistence,
             derived_effects_disposition_observer=record_derived_effects_disposition,
             client_projection=client_projection,
+            trigger=ProcessingTrigger.CLIENT_FINALIZE,
         )
     if not persisted:
         latest = _get_valid_conversation_by_id(uid, conversation.id)
@@ -657,7 +667,7 @@ def finalize_conversation(
             uid,
             conversation.id,
             has_byok_keys=False,
-            force_process=True,
+            trigger=ProcessingTrigger.CLIENT_FINALIZE,
             extra_updates=extra_updates or None,
             require_cloud_tasks=True,
             client_kind=resolve_client_kind(x_app_platform=conversation.client_platform, user_agent=None),
@@ -751,6 +761,7 @@ def reprocess_conversation(
     # on the raw doc because the Conversation model does not carry `deleted`.
     if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
+    was_discarded = bool(conversation.get('discarded'))
     conversation = deserialize_conversation(conversation)
     if not language_code:
         language_code = conversation.language or 'en'
@@ -761,15 +772,21 @@ def reprocess_conversation(
         uid,
         language_code,
         conversation,
-        force_process=True,
-        is_reprocess=True,
-        bypass_jit_first_open=True,
+        trigger=ProcessingTrigger.USER_REPROCESS,
         app_id=app_id,
         explicit_app=explicit_app,
         app_usage_attribution=(
             AppUsageAttribution.EXPLICIT_SELECTION if explicit_app else AppUsageAttribution.NON_USER_REPROCESS
         ),
     )
+
+    # Reprocessing a hidden conversation is an explicit recovery: persist it as
+    # the user's choice (``restore_discarded``) so no later reassessment hides it
+    # again, including when the selected app supplies the summary.
+    if was_discarded and not processed_conversation.discarded:
+        restored = lifecycle_service.restore_discarded(uid, conversation_id)
+        if restored and processed_conversation.sync_relevance == 'review':
+            processed_conversation.sync_relevance = 'keep'
 
     return processed_conversation
 
@@ -836,7 +853,7 @@ def get_conversations(
     limit: PositiveLimit = 100,
     offset: NonNegativeOffset = 0,
     statuses: Optional[str] = "processing,completed",
-    include_discarded: bool = True,
+    include_discarded: bool = False,
     sources: Optional[str] = Query(
         None,
         description="Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
@@ -947,7 +964,7 @@ def get_conversation_by_id(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id, follow_sync_bridge=True)
     if source is not None:
         if source != 'omi':
             raise HTTPException(
@@ -1134,6 +1151,29 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     await write_conversation_link_to_calendar_event(uid, calendar_event.event_id, conversation_id)
 
     return calendar_event
+
+
+@router.post(
+    "/v1/conversations/{conversation_id}/capture-group/separate",
+    response_model=StatusResponse,
+    tags=['conversations'],
+    description=(
+        "Separate this conversation from the capture group (one event recorded by several devices) it belongs to. "
+        "The decision is sticky: this capture is never regrouped with the members it left. Idempotent."
+    ),
+)
+def separate_conversation_from_capture_group(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    group = conversation.get('capture_group') or {}
+    changed = conversations_db.leave_capture_group(uid, conversation_id, sticky=True)
+    if changed:
+        record_capture_outcome(
+            uid,
+            'separate',
+            [m['id'] for m in group.get('members', []) if m.get('id')],
+            separated_id=conversation_id,
+        )
+    return StatusResponse(status='ok' if changed else 'unchanged')
 
 
 @router.patch(
@@ -1416,10 +1456,23 @@ def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=
 
     # Mirror deletion in the standalone action_items collection
     try:
+        from utils.notifications import sync_action_item_reminder
+
         existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         for ai in existing_items:
             if ai.get('description') == data.description:
                 action_items_db.delete_action_item(uid, ai['id'])
+                delete_action_item_vector(uid, ai['id'])
+                # The deleted row may own a client-scheduled reminder; the client only
+                # cancels it on the deletion data message, so send one here too (#5085).
+                if ai.get('due_at') and not ai.get('completed'):
+                    sync_action_item_reminder(
+                        user_id=uid,
+                        action_item_id=ai['id'],
+                        description='',
+                        completed=True,
+                        due_at=None,
+                    )
     except Exception as e:
         logger.error(f'Failed to mirror action item deletion: {e}')
     return {"status": "Ok"}
@@ -1460,6 +1513,7 @@ def _assign_manual_speaker(
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     conversation = deserialize_conversation(raw)
+    resolved_conversation_id = raw.get('id') or conversation_id
     _drop_display_projection(conversation)
     if background_tasks is not None:
         for path in removed:
@@ -1469,12 +1523,12 @@ def _assign_manual_speaker(
                 extract_speaker_samples,
                 uid=uid,
                 person_id=person_id,
-                conversation_id=conversation_id,
+                conversation_id=resolved_conversation_id,
                 segment_ids=teaching_segment_ids(raw.get('transcript_segments') or [], resolved),
             )
     _emit_speaker_identity_confirmed(
         uid=uid,
-        conversation_id=conversation_id,
+        conversation_id=resolved_conversation_id,
         scope='speaker' if speaker_id is not None else 'segment' if segment_index is not None else 'bulk',
         before=[_speaker_assignment(TranscriptSegment(**{'is_user': False, **s})) for s in before],
         after=[_speaker_assignment(s) for s in conversation.transcript_segments if s.id in resolved],
@@ -1518,6 +1572,7 @@ def set_assignee_conversation_speaker(
     speaker_id: int,
     assign_type: str,
     value: Optional[str] = None,
+    data: Optional[BulkAssignSegmentsRequest] = None,
     use_for_speech_training: bool = True,
     uid: str = Depends(auth.get_current_user_uid),
     background_tasks: BackgroundTasks = None,
@@ -1529,6 +1584,7 @@ def set_assignee_conversation_speaker(
         uid,
         background_tasks,
         speaker_id=speaker_id,
+        segment_ids=data.segment_ids if data else None,
         use_for_speech_training=use_for_speech_training,
     )
 

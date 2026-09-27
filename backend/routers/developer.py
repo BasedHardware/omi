@@ -493,6 +493,11 @@ def create_memory(
     - **category**: Memory category (auto-categorized if not provided)
     - **visibility**: Visibility: public or private (default: private)
     - **tags**: List of tags associated with the memory
+
+    A memory is identified by its text. Sending text the user already has (ignoring surrounding
+    whitespace; case-sensitive) returns that memory unchanged, so retries are safe without extra
+    headers. Use PATCH to change an existing memory's fields. After a delete, the same text creates
+    a new memory.
     """
     if not request.content or len(request.content.strip()) == 0:
         raise HTTPException(status_code=422, detail="content cannot be empty")
@@ -561,6 +566,10 @@ def create_memories_batch(
     Create multiple memories in a batch.
 
     - **memories**: List of memories to create (max 25)
+
+    Items follow the single-create rule: text the user already has returns the existing memory at
+    that position, so a retried batch creates nothing twice. `created_count` is the number of
+    memories returned.
     """
     # Fail closed: a legacy/read-only Developer key (no persisted memories.write
     # grant) must not mutate canonical memories. Gated before any memory
@@ -1199,18 +1208,11 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     conversation_role: Literal['ambient', 'meeting'] = 'ambient'
     # Optional for backwards compatibility. When supplied, rotation fragments
     # are persisted but do not create a notes-ready receipt.
-    conversation_finalization_reason: (
-        Literal[
-            'user_stop',
-            'finish_and_continue',
-            'meeting_started',
-            'meeting_ended',
-            'max_duration_rotation',
-            'crash_recovery',
-            'retry',
-        ]
-        | None
-    ) = None
+    # Plain string, not a Literal: this is opaque client-versioned metadata
+    # (only 'max_duration_rotation' is ever compared downstream), and a closed
+    # enum here previously fell out of sync with the desktop client's finalization
+    # reasons, causing every upload carrying a newer reason to fail with a 422.
+    conversation_finalization_reason: Optional[str] = None
 
     @field_validator('client_session_id')
     @classmethod
@@ -2322,7 +2324,7 @@ class GoalResponse(BaseModel):
 
 
 class CreateGoalRequest(BaseModel):
-    model_config = ConfigDict(title='CreateGoalRequest')
+    model_config = ConfigDict(title='CreateGoalRequest', allow_inf_nan=False)
 
     title: str = Field(description="The goal title/description", min_length=1, max_length=500)
     desired_outcome: Optional[str] = Field(default=None, max_length=2000)
@@ -2338,7 +2340,7 @@ class CreateGoalRequest(BaseModel):
 
 
 class UpdateGoalRequest(BaseModel):
-    model_config = ConfigDict(title='UpdateGoalRequest')
+    model_config = ConfigDict(title='UpdateGoalRequest', allow_inf_nan=False)
 
     title: Optional[str] = Field(default=None, description="New title", min_length=1, max_length=500)
     desired_outcome: Optional[str] = Field(default=None, max_length=2000)
@@ -2509,7 +2511,7 @@ def update_goal(
 )
 def update_goal_progress(
     goal_id: str,
-    current_value: float = Query(..., description="New progress value"),
+    current_value: float = Query(..., description="New progress value", allow_inf_nan=False),
     uid: str = Depends(get_uid_with_goals_write),
 ):
     """

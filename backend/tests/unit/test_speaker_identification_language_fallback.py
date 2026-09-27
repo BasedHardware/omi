@@ -38,6 +38,11 @@ def _conversation(language):
 
 
 def _wire_common_stubs(monkeypatch, conversation, captured):
+    monkeypatch.setattr(
+        speaker_identification_mod.voice_profiles_db,
+        "get_voice_profile_settings",
+        lambda uid: {"speaker_tag_prompts_enabled": True, "save_other_voice_profiles": True},
+    )
     monkeypatch.setattr(speaker_identification_mod.users_db, "get_person", lambda uid, pid: {"id": pid})
     monkeypatch.setattr(speaker_identification_mod.users_db, "get_person_speech_samples_count", lambda uid, pid: 0)
     monkeypatch.setattr(speaker_identification_mod.conversations_db, "get_conversation", lambda uid, cid: conversation)
@@ -113,6 +118,28 @@ def test_sync_name_detection_receives_selected_language(monkeypatch):
         language='pt',
     )
     assert seen == ['pt']
+
+
+def test_sync_name_detection_log_omits_transcript_identity(monkeypatch, caplog):
+    import logging
+    from models.transcript_segment import TranscriptSegment
+    from utils.sync import pipeline
+
+    monkeypatch.setattr(pipeline, 'detect_speaker_from_text', lambda *_args, **_kwargs: 'Sensitive Name')
+    monkeypatch.setattr(
+        pipeline.users_db,
+        'get_person_by_name',
+        lambda *_args: {'id': 'sensitive-person-id', 'name': 'Sensitive Name'},
+    )
+    segment = TranscriptSegment(
+        id='synthetic', text='my name is Sensitive Name', start=0, end=2, speaker_id=1, is_user=False
+    )
+    with caplog.at_level(logging.INFO, logger='utils.sync.pipeline'):
+        pipeline.identify_speakers_for_segments([segment], None, {}, 'sensitive-uid')
+    assert segment.person_id == 'sensitive-person-id'
+    assert 'source=text accepted=True' in caplog.text
+    for private_value in ('Sensitive Name', 'sensitive-person-id', 'sensitive-uid'):
+        assert private_value not in caplog.text
 
 
 def test_live_name_detection_receives_session_language(monkeypatch):

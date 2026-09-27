@@ -13,6 +13,15 @@ from models.transcript_segment import TranscriptSegment, legacy_conversation_seg
 TEACHING_CANDIDATE_LIMIT = 3
 
 
+def manual_owner_reserved(receipt: dict) -> bool:
+    """An explicit owner decision reserves the owner even without a voiceprint."""
+    return any(
+        isinstance(entry, dict) and entry.get('is_user') is True
+        for entries in (receipt.get('speakers') or {}, receipt.get('segments') or {})
+        for entry in entries.values()
+    )
+
+
 def teaching_segment_ids(segments: list[dict], resolved: list[str], limit: int = TEACHING_CANDIDATE_LIMIT) -> list[str]:
     """Longest labeled clips first, capped so extraction never walks the whole speaker cluster."""
     by_id = {segment.get('id'): segment for segment in segments if segment.get('id')}
@@ -47,12 +56,13 @@ def apply_manual_assignments(segments: list[dict], receipt: dict) -> list[dict]:
             segment.get('is_user') == is_user
             and segment.get('person_id') == person_id
             and segment.get('speaker_identity_status') == status
+            and segment.get('speaker_match_source') is None
         ):
             continue
         if result is None:
             result = list(segments)
         copied = dict(segment)
-        copied.update(is_user=is_user, person_id=person_id, speaker_identity_status=status)
+        copied.update(is_user=is_user, person_id=person_id, speaker_identity_status=status, speaker_match_source=None)
         result[index] = copied
     return result if result is not None else segments
 
@@ -211,11 +221,28 @@ def merge_live_segments(persisted: list[dict], fresh: list[dict], receipt: dict)
     Reconstruct models on every attempt: combine_segments mutates its inputs.
     Historical segments stay dictionaries, avoiding full model hydration per tick.
     """
+    # The transaction's snapshot is the authority after an ambiguous write:
+    # a commit may have succeeded even when its acknowledgement was lost.
+    # Filter IDs before combine_segments, which otherwise merges/appends the
+    # same words a second time. Also dedupe repeated IDs in one fresh batch.
+    seen_ids = {str(segment['id']) for segment in persisted if segment.get('id')}
+    unique_fresh = []
+    for segment in fresh:
+        segment_id = segment.get('id')
+        if segment_id and str(segment_id) in seen_ids:
+            continue
+        unique_fresh.append(segment)
+        if segment_id:
+            seen_ids.add(str(segment_id))
     tail = [TranscriptSegment(**persisted[-1])] if persisted else []
-    incoming = [TranscriptSegment(**segment) for segment in fresh]
+    incoming = [TranscriptSegment(**segment) for segment in unique_fresh]
     covered = set(receipt.get('segments') or {})
     speakers = receipt.get('speakers') or {}
     covered.update(s.id for s in [*tail, *incoming] if str(s.speaker_id) in speakers and s.id)
+    # Unplaced fallback IDs are the retry receipt. Never absorb one into the
+    # preceding unplaced tail, or a committed retry would no longer find its
+    # ID in the next transaction snapshot.
+    covered.update(s.id for s in incoming if s.audio_alignment == 'unplaced' and s.id)
     combined = TranscriptSegment.combine_segments(tail, incoming, protected_segment_ids=covered)
     result = persisted[:-1] + [segment.model_dump() for segment in combined.segments]
     result.sort(key=lambda s: (s.get('start', 0), s.get('end', 0)))

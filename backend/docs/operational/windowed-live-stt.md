@@ -130,10 +130,50 @@ opens the Parakeet serve-error circuit so new sessions on this pod skip TDT
 for the cooldown — load shedding, not a reconnect stampede. Local *admission*
 overflow (the process session cap) still does not poison provider health.
 
-The windowed TDT leg owns forced-active VAD with a short silence tail. Initial
-noise never reaches TDT. VAD initialization failure skips TDT; inference
-failure on that leg closes it before raw audio can escape. Non-window legs on
-the managed chain behave like today's `GatedSTTSocket`: they honour
+The windowed TDT leg owns forced-active VAD with a short silence tail. It keeps
+the billed path's 0.65 start probability with no hysteresis gap, and differs
+only in the tail: hangover is 300 ms rather than 4 s, because a growing window
+re-posts its own prefix and does not need seconds of trailing silence to avoid
+clipping a word. Quiet far-field is admitted by the level-corrected copy the
+gate scores (below), not by a lower threshold — that copy lifts far-field
+admission from 73.7 s to 91.7 s of a 120 s clip on its own, where a 0.5 / 0.35
+hysteresis added only 5.6 s more and cost words on dense speech. Initial noise
+never reaches TDT. VAD initialization failure skips TDT; inference failure on
+that leg closes it before raw audio can escape.
+
+The windowed leg splits bounded peak AGC into two jobs with the same knobs:
+target 0.8 of full scale (the RNNT path's `AGC_TARGET_PEAK`), hard 4× (12 dB)
+cap, session running-max of *incoming* PCM, fast attack, no release, never
+attenuates, digital silence (peak 0) unchanged. **Admission** gains a copy
+ahead of Silero so quiet far-field can start speech; per-chunk gain is safe
+there because Silero scores frames independently. **Decoding** keeps the
+stored buffer at original level and applies one uniform scale to each posted
+window, taken from **that window's own peak** — but only below a **deadband**
+of 0.4 of full scale (`WINDOW_AGC_DEADBAND_PEAK`, equivalently "never apply
+less than 2×"). Audio already peaking above that is not quiet, and gaining it
+costs accuracy rather than buying anything: gaining loud passages moved
+substitutions from 27 to 37, and reverting the VAD threshold did not move them
+back.
+
+The deadband is judged per window, **not** on the session envelope. A clip
+whose loudest moment is 0.54 still contains passages at 0.37; judging those by
+the session peak denied them gain and dropped them entirely — two such
+passages, 37 reference words — while every passage at 0.42 and above survived
+ungained. Each POST stays internally uniform, which is the property #15566
+established; different gains *between* windows were never the problem.
+Admission is deliberately **not** deadbanded, so quiet far-field is still
+admitted by its gained copy. Ingest cannot write gained
+bytes into the buffer, so the 4× cap cannot compound to 16×. Overlapping
+later POSTs of the same prefix may use a lower gain if the envelope grew;
+each POST stays internally flat. Gain is not frozen after the first POST:
+locking the early (higher) factor would clip later louder speech, and
+freezing per-prefix would rebuild an intra-window ramp. Speaker embeddings
+slice original-level PCM from the stored buffer. Direct
+`WindowedParakeetSocket.send` (no ingest) still peak-normalises the POST.
+The cap exists so a faint noise floor cannot be lifted by orders of
+magnitude the way RNNT's `peak < 1` skip can.
+
+Non-window legs on the managed chain behave like today's `GatedSTTSocket`: they honour
 `vad_gate_override` / `VAD_GATE_MODE`, and a VAD inference error fails open to
 raw send. Flag-on with allocation 0 therefore changes chain order and breakers
 only, not audio gating. A VAD `finalize()` after the 300 ms hangover is a soft
@@ -201,10 +241,50 @@ only when the whole chain cannot serve. That is what #15189's
 accepted sockets, 35% warn / 60% page). Per-leg degraded events do not move
 those ratios.
 
-Grafana split `alerts/live-stt.json` and the combined export cover terminal chain
-exhaustion, per-leg error ratios, authentication deaths, overflow ratio,
-sustained cap occupancy and batch POST error ratio. Traffic floors suppress
-ratio noise; saturation uses a dwell gauge. Existing #15189 fallback alerts and
+Grafana split `alerts/live-stt.json` and the combined export cover per-leg
+error ratios, authentication deaths, overflow ratio, sustained cap occupancy
+and batch POST error ratio. Traffic floors suppress ratio noise; saturation
+uses a dwell gauge. The former `omi-stt-chain-terminal` rule was deleted
+(2026-09-26): it read `omi_stt_chain_exhausted_total`, which the legacy
+connect path never emits, so it sat unfirable through the whole 2026-09-26
+prod incident; chain exhaustion is covered by #15189's
+`omi-stt-chain-exhausted-warn` / `-page` on `omi_fallback_total` plus the
+headline session-outcome page below.
+
+2026-09-26 additions (live-transcription health):
+
+- `omi_live_session_transcript_outcome_total{outcome}` — the headline SLI,
+  emitted exactly once per backend-STT listen session at teardown
+  (`routers/listen/runtime.py::_record_session_transcript_outcome`).
+  `transcribed` = at least one nonempty transcript batch was delivered;
+  `no_transcript` = session ended without one (including STT-terminal
+  failures, which never get the short-session excuse); `too_short` = under
+  ~10 s of audio or zero VAD speech on a clean teardown — excluded from the
+  success ratio so quiet sessions cannot page. Custom-STT sessions are not
+  counted. Unit = one accepted WebSocket: a client reconnect counts once per
+  socket (the runtime cannot see the prior socket's transcripts without
+  cross-connection state).
+- `omi-live-transcription-success-low` — **PAGE**.
+  `transcribed / (transcribed + no_transcript) < 0.90` for 5 m with a
+  `>= 50 counted sessions / 5 m` volume guard. This is the alert the
+  2026-09-26 incident did not have.
+- `omi_stt_provider_connect_total{provider,outcome,error_class}` — recorded
+  on every connect path (legacy order and configured chain) with bounded
+  error classes `budget|auth|server_error|timeout|capability|other`.
+  `omi-stt-leg-error-rate` now reads it instead of the configured-chain-only
+  `omi_stt_leg_attempts_total`.
+- `omi_stt_provider_circuit_open{provider,kind=selection|account}` — per-pod
+  mirror of the process-local breakers; sum across the listen job for "pods
+  with this provider benched".
+- `omi_stt_provider_retired{provider}` — deployment config
+  (`STT_RETIRED_PROVIDERS`, default `deepgram` per the 2026-09 cost ruling:
+  hosted Deepgram is intentionally unfunded). The per-provider budget page
+  and the leg-error rule subtract retired providers so an unfunded leg
+  cannot fire forever.
+
+The Backend-listen dashboard has a "Live transcription health" row: headline
+%, sessions by outcome, per-provider sessions served and connect success %,
+breaker-open pods, and connect failures by error class. Existing #15189 fallback alerts and
 #15218 budget/quota page remain; the auth rule excludes budget refusals to avoid
 duplicate pages. An initialization-terminal rule on
 `omi_live_stt_terminal_failures_total{phase="initialization"}` is **not**

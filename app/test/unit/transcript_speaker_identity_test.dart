@@ -28,8 +28,14 @@ void main() {
     final incoming = [decode('b', speakerId: 2), decode('c', speakerId: 7)];
     segments.addAll(TranscriptSegment.updateSegments(segments, incoming));
     expect(segments.map((s) => s.speakerId), [0, 2, 7]);
-    expect(TranscriptSegment.getDisplaySpeakerId(2, segments), 3);
+    // Canonical ids keep their gaps; the display numbers speakers densely in order of first
+    // appearance (SpeakerNames), so 0, 2, 7 read as Speaker 1, 2, 3.
+    expect(TranscriptSegment.getDisplaySpeakerId(2, segments), 2);
+    expect(TranscriptSegment.getDisplaySpeakerId(7, segments), 3);
+    // Tagging a speaker as the owner takes them out of the count: they read "You", and nobody
+    // is left reading "Speaker 2" next to no "Speaker 1".
     segments.first.isUser = true;
-    expect(TranscriptSegment.getDisplaySpeakerId(2, segments), 3);
+    expect(TranscriptSegment.getDisplaySpeakerId(2, segments), 1);
+    expect(segments.map((s) => s.speakerId), [0, 2, 7], reason: 'canonical identity is untouched');
   });
 }

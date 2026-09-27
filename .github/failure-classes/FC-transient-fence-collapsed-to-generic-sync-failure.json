@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "id": "FC-transient-fence-collapsed-to-generic-sync-failure",
+  "violated_contract": "A transient account-level destructive-operation fence (retention cleanup, legal-hold deletion gate) must surface as a bounded, retryable sync failure. Collapsing it into a generic app-level Failed outcome hides that the gate is temporary, so users hammer Retry while Cloud Tasks still has retry budget, and the true cause is unrecoverable from client telemetry.",
+  "canonical_prevention": "Do not swallow DestructiveOperationInProgress on the sync reprocess path: re-raise it from merged conversation enrichment and from process_segment's generic except. Run _save_action_items inline when is_reprocess=True so the fence is observable. At the Cloud Tasks handler, map the fence to error_code destructive_operation_in_progress before failure_from_exception, keep it retryable (HTTP 500 + fenced_mark_job_queued_for_retry), and record that code in the sync failure-reason ledger.",
+  "canonical_prevention_artifact": [
+    "backend/utils/stt/outcomes.py",
+    "backend/utils/sync/pipeline.py",
+    "backend/utils/conversations/process_conversation.py",
+    "backend/routers/sync.py",
+    "backend/tests/unit/test_sync_cloud_tasks.py",
+    "backend/tests/unit/test_sync_v2.py",
+    "backend/tests/unit/test_transcription_outcomes.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/sync/**",
+    "backend/routers/sync.py",
+    "backend/utils/stt/outcomes.py",
+    "backend/utils/conversations/process_conversation.py"
+  ],
+  "status": "open"
+}

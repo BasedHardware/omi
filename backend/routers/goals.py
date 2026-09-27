@@ -251,7 +251,7 @@ def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_c
 @router.patch('/v1/goals/{goal_id}/progress', tags=['goals'], response_model=GoalResponse)
 def update_goal_progress(
     goal_id: str,
-    current_value: float = Query(..., description="New progress value"),
+    current_value: float = Query(..., description="New progress value", allow_inf_nan=False),
     uid: str = Depends(auth.get_current_user_uid),
 ) -> dict:
     """Update the progress value of a goal."""

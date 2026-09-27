@@ -16,5 +16,29 @@ WINDOW_FORCED_CUTS = Counter(
     'omi_stt_window_forced_cuts_total',
     'Window POSTs that hit max context without a sentence boundary',
 )
+WINDOW_HEAD_RECOVERIES = Counter(
+    'omi_stt_window_head_recoveries_total',
+    'Window POSTs whose skipped leading speech was re-posted on its own',
+    ['outcome'],
+)
+WINDOW_DECODER_LOOPS = Counter(
+    'omi_stt_window_decoder_loops_total',
+    'Repeated-phrase decoder loops collapsed out of windowed TDT segments',
+)
+WINDOW_EMISSION_DROPS = Counter(
+    'omi_stt_window_emission_drops_total',
+    'Windowed TDT segments dropped instead of emitted at a fabricated position',
+    ['reason'],
+)
 CHAIN_EXHAUSTED = Counter('omi_stt_chain_exhausted_total', 'Configured live chains that could not serve')
 LEG_ATTEMPTS = Counter('omi_stt_leg_attempts_total', 'Configured-chain connection results', ['to_mode', 'outcome'])
+LANGUAGE_CONSTRAINT = Counter(
+    'omi_stt_language_constraint_total',
+    'Language information sent on live STT connections',
+    ['provider', 'constraint', 'primary_group', 'arm'],
+)
+OUTPUT_LANGUAGE_SEGMENTS = Counter(
+    'omi_stt_output_language_segments_total',
+    'Finalized live STT segment language conformance',
+    ['provider', 'primary_group', 'arm', 'conformance'],
+)

@@ -1330,17 +1330,14 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   void _cancelDeletionTimer() {
-    if (_deletionTimer != null && _deletionTimer!.isActive) {
-      _deletionTimer!.cancel();
-      _deletionTimer = null;
-    }
+    _deletionTimer?.cancel();
+    _deletionTimer = null;
   }
 
-  void _startDeletionTimer() {
-    _deletionTimer = Timer(const Duration(seconds: 4), () async {
-      await _finalizeDeletion();
-    });
-  }
+  /// Backstop commit; the Undo toast (OmiFeedbackTiming.undo) commits sooner and must close first.
+  static const Duration pendingDeletionWindow = Duration(seconds: 8);
+
+  void _startDeletionTimer() => _deletionTimer = Timer(pendingDeletionWindow, _finalizeDeletion);
 
   Future<void> _finalizeDeletion() async {
     if (_pendingDeletionId == null) {
@@ -1380,14 +1377,16 @@ class MemoriesProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> confirmPendingDeletion() async {
+  /// Commits now; with [id], only if that memory is still the pending one (a stale toast must not).
+  Future<void> confirmPendingDeletion({String? id}) async {
+    if (id != null && id != _pendingDeletionId) return;
     _cancelDeletionTimer();
     await _finalizeDeletion();
   }
 
-  // Restore the last deleted memory
-  Future<bool> restoreLastDeletedMemory() async {
-    if (_lastDeletedMemory == null) return false;
+  /// Restores the pending deletion; with [id], only if still pending (a stale toast must not restore).
+  Future<bool> restoreLastDeletedMemory({String? id}) async {
+    if (_lastDeletedMemory == null || (id != null && _lastDeletedMemory!.id != id)) return false;
 
     _cancelDeletionTimer();
     _pendingDeletionId = null;

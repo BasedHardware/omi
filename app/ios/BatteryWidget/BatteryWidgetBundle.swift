@@ -5,5 +5,7 @@ import SwiftUI
 struct BatteryWidgetBundle: WidgetBundle {
     var body: some Widget {
         OmiBatteryWidget()
+        OmiUpNextWidget()
+        OmiLatestWidget()
     }
 }

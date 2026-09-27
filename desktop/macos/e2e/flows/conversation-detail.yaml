@@ -7,6 +7,10 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationStatusBadge.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationProcessingBanner.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailHeader.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailSections.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationCaptureRecordings.swift
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationConversationRecordingActions.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailRequestIdentity.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationAppSelectorSheet.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationSummarySelection.swift

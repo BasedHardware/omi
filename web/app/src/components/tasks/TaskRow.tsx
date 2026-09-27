@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { formatDueBadge } from '@/lib/taskDue';
 import type { ActionItem } from '@/types/conversation';
 import { SuccessCheck } from '@/components/ui/SuccessCheck';
+import { formatDateInputValue } from '@/lib/dateInput';
 
 interface TaskRowProps {
   task: ActionItem;
@@ -20,10 +21,6 @@ interface TaskRowProps {
   isFocused?: boolean;
   // Double-click to enter selection mode
   onEnterSelectionMode?: (id: string) => void;
-}
-
-function formatDateForInput(date: Date): string {
-  return date.toISOString().split('T')[0];
 }
 
 export function TaskRow({
@@ -282,7 +279,7 @@ export function TaskRow({
                 <div className="flex flex-col gap-2 min-w-[140px]">
                   <input
                     type="date"
-                    value={task.due_at ? formatDateForInput(new Date(task.due_at)) : ''}
+                    value={task.due_at ? formatDateInputValue(new Date(task.due_at)) : ''}
                     onChange={handleDateChange}
                     className={cn(
                       'bg-bg-tertiary border border-bg-quaternary rounded px-2 py-1',

@@ -26,6 +26,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { summarizeMemoryActivity } from '@/lib/memoryActivity';
 import { matchesCategories } from '@/lib/memoryCategory';
 import { useMemories } from '@/hooks/useMemories';
 import { MemoryList, MemoryListSkeleton } from './MemoryList';
@@ -161,59 +162,10 @@ export function MemoriesPage() {
   const allTags = tagStats;
 
   // Combined date calculations in a single pass through memories - uses deferred value
-  const { recentMemoriesCount, todayMemories, activityData } = useMemo(() => {
-    const now = new Date();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayStr = today.toISOString();
-
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const sevenDaysAgoStr = sevenDaysAgo.toISOString();
-
-    now.setHours(23, 59, 59, 999);
-    const thirtyDaysAgo = new Date(now);
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
-    thirtyDaysAgo.setHours(0, 0, 0, 0);
-
-    // Initialize counts for each day
-    const dayCounts: Record<string, number> = {};
-    for (let i = 0; i < 30; i++) {
-      const date = new Date(thirtyDaysAgo);
-      date.setDate(date.getDate() + i);
-      dayCounts[date.toISOString().split('T')[0]] = 0;
-    }
-
-    // Single pass through all memories
-    let recentCount = 0;
-    const todayMems: typeof deferredMemories = [];
-
-    for (const m of deferredMemories) {
-      // Check for recent (last 7 days)
-      if (m.created_at >= sevenDaysAgoStr) {
-        recentCount++;
-      }
-      // Check for today
-      if (m.created_at >= todayStr) {
-        todayMems.push(m);
-      }
-      // Count for activity chart (last 30 days)
-      const dateKey = m.created_at.split('T')[0];
-      if (dateKey in dayCounts) {
-        dayCounts[dateKey]++;
-      }
-    }
-
-    const activityDataResult = Object.entries(dayCounts)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, count]) => ({ date, count }));
-
-    return {
-      recentMemoriesCount: recentCount,
-      todayMemories: todayMems,
-      activityData: activityDataResult,
-    };
-  }, [deferredMemories]);
+  const { recentMemoriesCount, todayMemories, activityData } = useMemo(
+    () => summarizeMemoryActivity(deferredMemories),
+    [deferredMemories],
+  );
 
   // Filter and sort memories - optimized to avoid full copy when not needed
   const filteredMemories = useMemo(() => {

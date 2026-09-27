@@ -489,6 +489,75 @@ class FailureClassCliTests(unittest.TestCase):
         self.assertTrue(by_id["FC-trapping-dict-merge"]["reopen_required"])
         self.assertFalse(by_id["FC-trapping-dict-merge"]["closure_eligible"])
 
+    def write_schema_invalid_definition(self, class_id: str) -> Path:
+        """Write a definition whose schema error `validate` already detects.
+
+        A missing `status` is the unconditional case: `report` reads that field for
+        every definition and `prepare` lists it for every candidate, so neither
+        command needed an event naming this class to reach the bad data.
+        """
+        path = self.root / ".github" / "failure-classes" / f"{class_id}.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "id": class_id,
+                    "violated_contract": "A contract that failed once.",
+                    "canonical_prevention": "Converge the owner.",
+                    "evidence_prs": [],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return path
+
+    def test_report_describes_a_schema_invalid_definition_instead_of_crashing(self) -> None:
+        self.write_schema_invalid_definition("FC-schema-invalid-example")
+
+        result = self.cli(
+            "report",
+            "--events-file",
+            str(REPORT_FIXTURE),
+            "--since",
+            "14d",
+            "--now",
+            "2026-07-16T00:00:00Z",
+        )
+
+        payload = self.payload(result)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertFalse(payload["ok"])
+        self.assertIn("missing_definition_field", {item["code"] for item in payload["errors"]})
+        # One unreadable file must not blank the run: the valid registry is still
+        # reported, and the invalid class is described by an error, not a verdict.
+        reported = {item["id"] for item in payload["classes"]}
+        self.assertNotIn("FC-schema-invalid-example", reported)
+        self.assertIn("FC-trapping-dict-merge", reported)
+
+    def test_prepare_describes_a_schema_invalid_definition_instead_of_crashing(self) -> None:
+        self.write_schema_invalid_definition("FC-schema-invalid-example")
+
+        result = self.cli(
+            "prepare",
+            "--base",
+            self.base,
+            "--head",
+            "HEAD",
+            "--pr-body-file",
+            str(self.body("## Summary\n")),
+        )
+
+        payload = self.payload(result)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertFalse(payload["ok"])
+        self.assertIn("missing_definition_field", {item["code"] for item in payload["errors"]})
+        self.assertNotIn(
+            "FC-schema-invalid-example",
+            {item["id"] for item in payload["advisory_candidates"]},
+        )
+
     def protocol_codes(self, base: str, head: str, body: str) -> tuple[int, list[str], list[str]]:
         self.git("switch", "-q", "--detach", head)
         result = self.cli(

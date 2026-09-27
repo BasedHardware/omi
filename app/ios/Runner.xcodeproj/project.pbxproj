@@ -36,8 +36,10 @@
 		42A7BA4C2E788F0100138969 /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */; };
 		42B17C622F69B9CF00BFDA9D /* OmiBleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */; };
 		42B17C642F69B9E100BFDA9D /* BleHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */; };
+		DAD10002DAD10002DAD10002 /* OmiBleConnectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAD10001DAD10001DAD10001 /* OmiBleConnectionPolicy.swift */; };
 		E91B0002E91B0002E91B0002 /* OmiBleEnergyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */; };
 		E91C0002E91C0002E91C0002 /* OmiBlePairingPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91C0001E91C0001E91C0001 /* OmiBlePairingPolicy.swift */; };
+		E91D0002E91D0002E91D0002 /* OmiBleDiscoveryNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91D0001E91D0001E91D0001 /* OmiBleDiscoveryNaming.swift */; };
 		42B17C7C2F69BC6600BFDA9D /* PigeonCommunicator.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */; };
 		42BABFB82F2A81B100E78A3C /* OmiRecordingAudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */; };
 		42BABFB92F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */; };
@@ -68,20 +70,26 @@
 		715D47AFEB21D49E37F16F3B /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */; };
 		7361ED343F303C57EF2931A2 /* OmiCallCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC82F2A81B100E78A3C /* OmiCallCoordinator.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
+		51794E0351794E0351794E03 /* SyncTransferBackgroundLease.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51794E0151794E0151794E01 /* SyncTransferBackgroundLease.swift */; };
 		E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1293503E1293503E1293503 /* SpeechDeadline.swift */; };
 		7B703A24854FEB9BACB52CCA /* PhoneMicOpusShim.m in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */; };
 		7BB46D8ED545353079641366 /* BatteryWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C2BF831EA0797124264B67C /* BatteryWidget.swift */; };
+		DE48ED224FF11175DA9FFC6A /* OmiHomeWidgets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BFFBC8C660B65EEFE79C220 /* OmiHomeWidgets.swift */; };
+		B7E1D0A2B7E1D0A2B7E1D0A2 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = B7E1D0A1B7E1D0A1B7E1D0A1 /* Localizable.xcstrings */; };
 		7C7857BB4A77A12B03F090B8 /* PhoneMicPigeon.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD01 /* PhoneMicPigeon.g.swift */; };
 		7CB1B7DE57C0BCCDA9AB4B9E /* prodProfile.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = B52E83A1CC630E163A04DC50 /* prodProfile.xcconfig */; };
 		83D001C5192F68F4DD76AB23 /* PhoneMicBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0B /* PhoneMicBatchAudioWriter.swift */; };
 		873C99F3D85C142369688A1D /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
+		51794E0451794E0451794E04 /* SyncTransferBackgroundLease.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51794E0151794E0151794E01 /* SyncTransferBackgroundLease.swift */; };
 		E1293502E1293502E1293502 /* SpeechDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1293503E1293503E1293503 /* SpeechDeadline.swift */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		99ADCEC5933A6FA3EE3AAE5D /* OmiBleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */; };
+		DAD10003DAD10003DAD10003 /* OmiBleConnectionPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAD10001DAD10001DAD10001 /* OmiBleConnectionPolicy.swift */; };
 		E91B0003E91B0003E91B0003 /* OmiBleEnergyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */; };
 		E91C0003E91C0003E91C0003 /* OmiBlePairingPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91C0001E91C0001E91C0001 /* OmiBlePairingPolicy.swift */; };
+		E91D0003E91D0003E91D0003 /* OmiBleDiscoveryNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91D0001E91D0001E91D0001 /* OmiBleDiscoveryNaming.swift */; };
 		9A25BD940EC94B21766CB950 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E5BBFB39079A4743502BBEE /* Pods_Runner.framework */; };
 		9A26EFBA2ABCE6C441ADBE8E /* OmiCallCoordinatorProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFC62F2A81B100E78A3C /* OmiCallCoordinatorProtocol.swift */; };
 		9A519AEFA12F139B0082101F /* Base.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = CF2F518C2EC08EA60025B331 /* Base.xcconfig */; };
@@ -216,8 +224,10 @@
 		42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = System/Library/Frameworks/WatchConnectivity.framework; sourceTree = SDKROOT; };
 		42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleManager.swift; sourceTree = "<group>"; };
 		42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BleHostApiImpl.swift; sourceTree = "<group>"; };
+		DAD10001DAD10001DAD10001 /* OmiBleConnectionPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleConnectionPolicy.swift; sourceTree = "<group>"; };
 		E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleEnergyPolicy.swift; sourceTree = "<group>"; };
 		E91C0001E91C0001E91C0001 /* OmiBlePairingPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBlePairingPolicy.swift; sourceTree = "<group>"; };
+		E91D0001E91D0001E91D0001 /* OmiBleDiscoveryNaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleDiscoveryNaming.swift; sourceTree = "<group>"; };
 		42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PigeonCommunicator.g.swift; sourceTree = "<group>"; };
 		42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiRecordingAudioDevice.swift; sourceTree = "<group>"; };
 		42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiPhoneCallsPlugin.swift; sourceTree = "<group>"; };
@@ -241,6 +251,7 @@
 		5FCEB2FF2C2758C000B17EE8 /* RunnerRelease-dev.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "RunnerRelease-dev.entitlements"; sourceTree = "<group>"; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		51794E0151794E0151794E01 /* SyncTransferBackgroundLease.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncTransferBackgroundLease.swift; sourceTree = "<group>"; };
 		E1293503E1293503E1293503 /* SpeechDeadline.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SpeechDeadline.swift; sourceTree = "<group>"; };
 		79B00761CB247C7EC7C8983B /* devRelease.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devRelease.xcconfig; path = Flutter/devRelease.xcconfig; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
@@ -259,6 +270,8 @@
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		9C2BF831EA0797124264B67C /* BatteryWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BatteryWidget.swift; sourceTree = "<group>"; };
+		9BFFBC8C660B65EEFE79C220 /* OmiHomeWidgets.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OmiHomeWidgets.swift; sourceTree = "<group>"; };
+		B7E1D0A1B7E1D0A1B7E1D0A1 /* Localizable.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		9E3D54F7F2F961A21E817773 /* ja */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ja; path = ja.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		A19E38726A3D1BBD89696C57 /* BatteryWidget.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = BatteryWidget.entitlements; sourceTree = "<group>"; };
 		AC3A09D045C7DE0727BBD027 /* Pods-RunnerRayBanDat.profile-raybandat.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RunnerRayBanDat.profile-raybandat.xcconfig"; path = "Target Support Files/Pods-RunnerRayBanDat/Pods-RunnerRayBanDat.profile-raybandat.xcconfig"; sourceTree = "<group>"; };
@@ -358,6 +371,8 @@
 				7B0B70AE9FE08165F2A53E0B /* SharedDefaults.swift */,
 				A19E38726A3D1BBD89696C57 /* BatteryWidget.entitlements */,
 				585D7D8307721A4D6595AA27 /* Assets.xcassets */,
+				9BFFBC8C660B65EEFE79C220 /* OmiHomeWidgets.swift */,
+				B7E1D0A1B7E1D0A1B7E1D0A1 /* Localizable.xcstrings */,
 			);
 			path = BatteryWidget;
 			sourceTree = "<group>";
@@ -497,6 +512,7 @@
 				1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */,
 				1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */,
 				74858FAE1ED2DC5600515810 /* AppDelegate.swift */,
+				51794E0151794E0151794E01 /* SyncTransferBackgroundLease.swift */,
 				E1293503E1293503E1293503 /* SpeechDeadline.swift */,
 				CD12345678901234567890CD /* AppleRemindersService.swift */,
 				CD12345678901234567890CE /* AppleHealthService.swift */,
@@ -511,7 +527,9 @@
 			isa = PBXGroup;
 			children = (
 				E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */,
+				DAD10001DAD10001DAD10001 /* OmiBleConnectionPolicy.swift */,
 				E91C0001E91C0001E91C0001 /* OmiBlePairingPolicy.swift */,
+				E91D0001E91D0001E91D0001 /* OmiBleDiscoveryNaming.swift */,
 				42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */,
 				42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */,
 			);
@@ -744,6 +762,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CB6580ED5AD268A053F41EB7 /* Assets.xcassets in Resources */,
+				B7E1D0A2B7E1D0A2B7E1D0A2 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -951,9 +970,12 @@
 			buildActionMask = 2147483647;
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
+				51794E0351794E0351794E03 /* SyncTransferBackgroundLease.swift in Sources */,
 				E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */,
 				E91B0002E91B0002E91B0002 /* OmiBleEnergyPolicy.swift in Sources */,
+				DAD10002DAD10002DAD10002 /* OmiBleConnectionPolicy.swift in Sources */,
 				E91C0002E91C0002E91C0002 /* OmiBlePairingPolicy.swift in Sources */,
+				E91D0002E91D0002E91D0002 /* OmiBleDiscoveryNaming.swift in Sources */,
 				42B17C622F69B9CF00BFDA9D /* OmiBleManager.swift in Sources */,
 				BAADF00DF00DF00DF00DF0D2 /* BatchAudioWriter.swift in Sources */,
 				BAADF00DF00DF00DF00DF0D4 /* BaseBatchAudioWriter.swift in Sources */,
@@ -1000,9 +1022,12 @@
 			buildActionMask = 2147483647;
 			files = (
 				873C99F3D85C142369688A1D /* AppDelegate.swift in Sources */,
+				51794E0451794E0451794E04 /* SyncTransferBackgroundLease.swift in Sources */,
 				E1293502E1293502E1293502 /* SpeechDeadline.swift in Sources */,
 				E91B0003E91B0003E91B0003 /* OmiBleEnergyPolicy.swift in Sources */,
+				DAD10003DAD10003DAD10003 /* OmiBleConnectionPolicy.swift in Sources */,
 				E91C0003E91C0003E91C0003 /* OmiBlePairingPolicy.swift in Sources */,
+				E91D0003E91D0003E91D0003 /* OmiBleDiscoveryNaming.swift in Sources */,
 				99ADCEC5933A6FA3EE3AAE5D /* OmiBleManager.swift in Sources */,
 				0658C1BEFC86B56785C10A69 /* BatchAudioWriter.swift in Sources */,
 				BB125CDB70C0DB5AAFB15E9C /* BaseBatchAudioWriter.swift in Sources */,
@@ -1051,6 +1076,7 @@
 				7BB46D8ED545353079641366 /* BatteryWidget.swift in Sources */,
 				A014F817EA8AFCDD9EECCEF5 /* BatteryWidgetBundle.swift in Sources */,
 				2424617E08011B02F15737C3 /* SharedDefaults.swift in Sources */,
+				DE48ED224FF11175DA9FFC6A /* OmiHomeWidgets.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1820,6 +1846,7 @@
 				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
 				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
 				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGNING_ALLOWED = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = 9536L8KLMP;
 				ENABLE_PREVIEWS = YES;

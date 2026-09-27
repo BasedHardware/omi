@@ -36,8 +36,7 @@ struct ChatFirstGoalsPage: View {
           unavailableState(message)
         case .inactive, .loading:
           if goalsStore.activeGoals.isEmpty {
-            ProgressView("Loading goals")
-              .frame(maxWidth: .infinity, maxHeight: .infinity)
+            GlassLoadingState(label: "Loading goals…")
           } else {
             goalContent
           }
@@ -64,30 +63,27 @@ struct ChatFirstGoalsPage: View {
     .accessibilityIdentifier("chat-first-goals-page")
   }
 
+  /// Goals has no top-bar pill, so it is a drill-in: Back to the page that opened it, then the
+  /// shared page title (docs/ux-contract.md §11). Esc takes the same path (`closeGoals`).
   private var header: some View {
-    HStack(alignment: .firstTextBaseline) {
-      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-        Text("Goals")
-          .scaledFont(size: OmiType.title, weight: .bold)
-          .foregroundStyle(Ink.primary)
-        Text("Keep the work that matters in view.")
-          .scaledFont(size: OmiType.body)
-          .foregroundStyle(Ink.secondary)
+    HStack(alignment: .center, spacing: OmiSpacing.md) {
+      BackChip((navigation.goalsOrigin ?? .chat).title, accessibilityIdentifier: "chat-first-goals-back") {
+        navigation.closeGoals()
       }
-      Spacer()
-      Button {
-        Task { await refreshProjectionAndDetail() }
-      } label: {
-        Image(systemName: "arrow.clockwise")
-          .scaledFont(size: OmiType.body, weight: .medium)
+      GlassPageHeader(title: "Goals", subtitle: "Keep the work that matters in view") {
+        refreshButton
       }
-      .buttonStyle(.plain)
-      .disabled(goalsStore.isLoading)
-      .accessibilityLabel("Refresh goals")
-      .accessibilityIdentifier("chat-first-goals-refresh")
     }
-    .padding(.horizontal, OmiSpacing.xxl)
-    .padding(.vertical, OmiSpacing.xl)
+    .padding(.horizontal, OmiSpacing.lg)
+    .padding(.vertical, OmiSpacing.sm + 2)
+  }
+
+  private var refreshButton: some View {
+    OmiIconButton("arrow.clockwise", help: "Refresh goals") {
+      Task { await refreshProjectionAndDetail() }
+    }
+    .disabled(goalsStore.isLoading)
+    .accessibilityIdentifier("chat-first-goals-refresh")
   }
 
   private var goalContent: some View {
@@ -106,8 +102,7 @@ struct ChatFirstGoalsPage: View {
           )
           .id(detail.goal.goalId)
         } else if goalsStore.primaryFocusedGoal != nil || pendingGoalID != nil {
-          ProgressView("Loading goal")
-            .frame(maxWidth: .infinity)
+          GlassLoadingState(label: "Loading goal…", placement: .scrolling)
         }
 
         if !goalsStore.otherActiveGoals.isEmpty {
@@ -140,31 +135,26 @@ struct ChatFirstGoalsPage: View {
   }
 
   private var emptyState: some View {
-    ContentUnavailableView {
-      Label("No active goals", systemImage: "target")
-    } description: {
-      Text("Omi can help you turn what matters into a clear goal.")
-    } actions: {
-      Button("Talk to Omi about a goal") {
+    GlassEmptyState(
+      systemImage: "target",
+      title: "No Active Goals",
+      message: "Omi can help you turn what matters into a clear goal."
+    ) {
+      Button("Talk to Omi About a Goal") {
         navigation.discuss(.goals, using: chatProvider)
       }
+      .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       .accessibilityIdentifier("chat-first-goals-empty-discuss")
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
   private func unavailableState(_ message: String) -> some View {
-    ContentUnavailableView {
-      Label("Goals are unavailable", systemImage: "exclamationmark.triangle")
-    } description: {
-      Text(message)
-    } actions: {
-      Button("Refresh") {
-        Task { await refreshProjectionAndDetail() }
-      }
-      .accessibilityIdentifier("chat-first-goals-unavailable-refresh")
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    GlassErrorState(
+      title: "Goals Are Unavailable",
+      message: message,
+      retryAccessibilityIdentifier: "chat-first-goals-unavailable-refresh",
+      retry: { Task { await refreshProjectionAndDetail() } }
+    )
   }
 
   private func refreshProjectionAndDetail() async {

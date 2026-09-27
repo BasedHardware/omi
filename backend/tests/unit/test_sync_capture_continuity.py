@@ -207,12 +207,14 @@ def test_retry_of_absorbed_chunk_cannot_resurrect_deleted_survivor():
     assert not conversations(store)
 
 
-def test_discarded_filler_is_visibly_demoted():
+def test_discarded_filler_remains_recoverable_and_hidden():
     store = StrictFirestore()
     row = chunk('filler', 1000, text='Hmm.')
     row['discarded'] = True
     result, _, _ = intake(store, row)
-    assert not result['discarded'] and result['sync_relevance'] == 'review'
+    assert result['discarded'] and result['sync_relevance'] == 'review'
+    assert result['transcript_segments'][0]['text'] == 'Hmm.'
+    assert not result.get('deleted')
 
 
 @pytest.mark.parametrize(

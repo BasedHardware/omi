@@ -31,6 +31,7 @@ from utils.memory.retraction_scope import (
 from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import (
     compute_audio_files_fingerprint,
@@ -51,6 +52,7 @@ except ImportError:
 
 
 import logging
+from utils.conversations.capture_shadow_outcomes import record_capture_outcome
 
 logger = logging.getLogger(__name__)
 
@@ -265,7 +267,7 @@ def perform_merge_async(
         # into None.
         created_at = sorted_convs[0].get("created_at") or datetime.now(timezone.utc)
         started_at = sorted_convs[0].get("started_at")
-        finished_at = max((c.get("finished_at") or _UTC_MIN) for c in sorted_convs)
+        finished_at = _resolve_merged_finished_at(sorted_convs)
         language = sorted_convs[0].get("language", "en")
         source = sorted_convs[0].get("source", "omi")
 
@@ -358,8 +360,7 @@ def perform_merge_async(
                         uid,
                         new_conversation.language or "en",
                         new_conversation,
-                        force_process=True,
-                        is_reprocess=False,  # Not a reprocess - this is a new conversation
+                        trigger=ProcessingTrigger.MERGE,
                     )
             except Exception as e:
                 logger.error(f"Error processing merged conversation: {e}")
@@ -392,6 +393,10 @@ def perform_merge_async(
                 on_authoritative_retraction=mark_source_deletion_started,
                 historical_source_ids=historical_source_ids,
             )
+
+        # Sources are now merged and deleted; preserve the user's manual
+        # choice even if the completion notification subsequently fails.
+        record_capture_outcome(uid, 'manual_merge', list(conversation_ids))
 
         # 10. Send FCM notification
         send_merge_completed_message(uid, new_conversation_id, conversation_ids)
@@ -432,13 +437,17 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
     cumulative_offset = 0.0
 
     for i, conv in enumerate(conversations):
-        segments = conv.get("transcript_segments", [])
+        # `.get(key, [])`/`.get(key, 0)` only fall back when the key is absent.
+        # A doc persisted with an explicit `transcript_segments: None` (or a
+        # segment with an explicit `start`/`end: None`) still returns None here,
+        # which crashes the list comprehension / arithmetic below.
+        segments = conv.get("transcript_segments") or []
 
         if i == 0:
             # First conversation - use segments as-is
             merged.extend([copy.deepcopy(s) for s in segments])
             if segments:
-                cumulative_offset = max(s.get("end", 0) for s in segments)
+                cumulative_offset = max((s.get("end") or 0) for s in segments)
             elif conv.get("finished_at") and conv.get("started_at"):
                 cumulative_offset = (conv["finished_at"] - conv["started_at"]).total_seconds()
         else:
@@ -455,18 +464,30 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
             # Adjust timestamps for this conversation's segments
             for seg in segments:
                 seg_copy = copy.deepcopy(seg)
-                seg_copy["start"] = seg.get("start", 0) + offset
-                seg_copy["end"] = seg.get("end", 0) + offset
+                seg_copy["start"] = (seg.get("start") or 0) + offset
+                seg_copy["end"] = (seg.get("end") or 0) + offset
                 merged.append(seg_copy)
 
             # Update cumulative offset for next conversation
             if segments:
-                cumulative_offset = offset + max(s.get("end", 0) for s in segments)
+                cumulative_offset = offset + max((s.get("end") or 0) for s in segments)
             elif conv.get("finished_at") and conv.get("started_at"):
                 duration = (conv["finished_at"] - conv["started_at"]).total_seconds()
                 cumulative_offset = offset + duration
 
     return merged
+
+
+def _resolve_merged_finished_at(sorted_convs: List[Dict]) -> Optional[datetime]:
+    """Return the latest real ``finished_at`` among sources, or None if none has one.
+
+    ``max(c.get("finished_at") or _UTC_MIN for c in sorted_convs)`` used to leak
+    the ``_UTC_MIN`` (year 0001) sentinel straight into the merged conversation's
+    ``finished_at`` field whenever every source had ``finished_at: None`` — the
+    sentinel exists to keep comparisons total, not to become persisted data.
+    """
+    candidates = [c.get("finished_at") for c in sorted_convs if c.get("finished_at")]
+    return max(candidates) if candidates else None
 
 
 def _collect_all_photos(uid: str, conversations: List[Dict]) -> List[Dict]:
@@ -489,15 +510,12 @@ def _collect_all_photos(uid: str, conversations: List[Dict]) -> List[Dict]:
     seen_ids = set()
 
     for conv in conversations:
-        try:
-            photos = conversations_db.get_conversation_photos(uid, conv["id"])
-            for photo in photos:
-                photo_id = photo.get("id")
-                if photo_id and photo_id not in seen_ids:
-                    all_photos.append(photo)
-                    seen_ids.add(photo_id)
-        except Exception as e:
-            logger.error(f"Error fetching photos for {conv['id']}: {e}")
+        photos = conversations_db.get_conversation_photos(uid, conv["id"])
+        for photo in photos:
+            photo_id = photo.get("id")
+            if photo_id and photo_id not in seen_ids:
+                all_photos.append(photo)
+                seen_ids.add(photo_id)
 
     # Sort by creation time with a uniform tz-aware UTC key. Missing or malformed
     # created_at values are retained and ordered first, with structured metrics.
@@ -610,6 +628,51 @@ def _shared_client_device_provenance(
     return client_device_id, client_platform
 
 
+def _sync_source_task_reminder(
+    *,
+    user_id: str,
+    action_item_id: str,
+    description: str,
+    completed: bool,
+    due_at: Any,
+) -> None:
+    """Lazily resolve FCM reminder sync so merge cleanup does not import it until needed.
+
+    ``utils.notifications`` pulls Firebase Admin and token lookup. Constructing that
+    stack at call time is what sent hermetic sync-bridge tests to the GCE metadata
+    server after #15177 imported it unconditionally. Resolve it only when an open
+    dated task actually needs a cancel, and keep the name on this module so tests
+    can inject a fake without widening the network fence.
+    """
+    from utils.notifications import sync_action_item_reminder
+
+    sync_action_item_reminder(
+        user_id=user_id,
+        action_item_id=action_item_id,
+        description=description,
+        completed=completed,
+        due_at=due_at,
+    )
+
+
+def _cancel_open_dated_task_reminders(uid: str, items: List[Dict]) -> None:
+    """Best-effort cancel of client-scheduled reminders for rows just deleted.
+
+    Isolated from the task-store mutation: a delivery failure must not fail merge
+    or sync-bridge cleanup after the rows are already gone. Same split as
+    ``process_conversation._write_action_items``.
+    """
+    for item in items:
+        if item.get('due_at') and not item.get('completed'):
+            _sync_source_task_reminder(
+                user_id=uid,
+                action_item_id=item['id'],
+                description='',
+                completed=True,
+                due_at=None,
+            )
+
+
 def retract_sync_bridge_source(uid: str, source_id: str) -> None:
     """Retract derived data, retaining redirect/audio; propagate failures for retry."""
     _delete_conversation_and_related_data(uid, source_id, retain_capture=True)
@@ -627,6 +690,18 @@ def delete_conversation_with_sync_sources(uid: str, conversation_id: str) -> Non
         if source_id != conversation_id:
             _delete_conversation_and_related_data(uid, source_id, purge_sync_sources=False)
     conversations_db.delete_conversation(uid, conversation_id)
+
+    folder_id = row.get('folder_id')
+    if folder_id:
+        # conversation_count is derived state the folder tabs render. Nothing
+        # else recomputes it after a delete, so a folder keeps counting a
+        # conversation the user removed.
+        try:
+            from database.folders import update_folder_conversation_count
+
+            update_folder_conversation_count(uid, str(folder_id))
+        except Exception as e:
+            logger.error(f"Error refreshing folder {folder_id} count after deleting {conversation_id}: {e}")
 
 
 def _delete_conversation_and_related_data(
@@ -689,12 +764,21 @@ def _delete_conversation_and_related_data(
         raise
 
     try:
-        # Delete action items from standalone collection
+        # Delete action items from standalone collection. Read them first: a deleted
+        # row can still own a client-scheduled reminder, and the client only cancels
+        # it on the deletion data message (#5085), so the merge has to send one per
+        # open dated task, like the conversation delete path does.
+        source_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
     except Exception as e:
         logger.error(f"Error deleting action items for {conversation_id}: {e}")
         if retain_capture:
             raise
+    else:
+        try:
+            _cancel_open_dated_task_reminders(uid, source_items)
+        except Exception as e:
+            logger.error(f"Error cancelling task reminders for {conversation_id}: {e}")
 
     if retain_capture:
         # Sync bridges retain redirect tombstones and original audio: another

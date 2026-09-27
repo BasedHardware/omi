@@ -30,6 +30,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional, Set, cast
 
+from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class, bounded_sync_phase
+from database import sync_dead_letters
 from database.redis_db import r
 
 logger = logging.getLogger(__name__)
@@ -58,7 +60,7 @@ _SYNC_JOB_OUTCOMES = (
 _SYNC_LANES = ('fresh', 'backfill')
 _SYNC_PROVIDERS = ('deepgram', 'modulate', 'parakeet')
 _SYNC_MODELS = ('nova-3', 'velma-2', 'parakeet')
-_SYNC_DISPATCH_MODES = ('inline', 'cloud_tasks')
+_SYNC_DISPATCH_MODES = ('inline', 'cloud_tasks', 'sequenced')
 SYNC_LEDGER_FENCE_MODE_ENV = 'SYNC_LEDGER_FENCE_MODE'
 
 RUN_LOCK_KEY_PREFIX = 'sync_job_lock:'
@@ -200,44 +202,24 @@ def delete_sync_job(job_id: str) -> None:
 
 
 def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
-    """Get a sync job by ID, self-healing a dead worker on read.
+    """Read a sync job without acquiring terminal-write authority.
 
-    A job stuck in 'processing' past STALE_THRESHOLD_SECONDS is finalized to
-    'failed' here, on every read and for every dispatch mode, so the client
-    reverts the WAL to 'miss' and re-uploads within ~10 minutes instead of
-    waiting out the 24h reconcile TTL. The pipeline heartbeats 'updated_at' at
-    every stage and per segment, so 600s of silence only ever means the worker
-    is gone — see is_sync_job_stale. 'queued' jobs are never finalized: no
-    worker has claimed them, and flipping them to 'failed' caused spurious
-    client "retrying" loops (#7469).
+    An old progress timestamp is not proof that the run lease has expired.
+    The authenticated status route owns stale Cloud Tasks recovery: acquire
+    the run lease, re-read, then use the fenced finalizer. Inline work owns
+    its own terminal transition, including executor leaves still in flight.
     """
-    key = f'{JOB_KEY_PREFIX}{job_id}'
-    data = r.get(key)
+    data = r.get(f'{JOB_KEY_PREFIX}{job_id}')
     if not data:
         return None
     try:
-        raw = json.loads(data)
+        raw = json.loads(_as_redis_text(data))
     except (TypeError, ValueError, json.JSONDecodeError):
         # A corrupt or legacy blob must not 500 the status poll. redis_db is fail-open and the
         # fenced mutation paths below already guard the identical json.loads; an unparseable job
         # is treated as an unknown job.
         return None
-    job: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-
-    if is_sync_job_stale(job):
-        updated_at = job.get('updated_at') or job.get('created_at') or time.time()
-        logger.warning(
-            "sync_job %s (uid=%s) stale after %.0fs in 'processing' — marking failed",
-            job_id,
-            job.get('uid'),
-            time.time() - updated_at,
-        )
-        job['status'] = 'failed'
-        job['error'] = 'Job timed out (background worker likely died)'
-        job['completed_at'] = time.time()
-        r.set(key, json.dumps(job, default=str), ex=JOB_TTL_SECONDS)
-
-    return job
+    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
 
 
 def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bool:
@@ -257,6 +239,11 @@ def is_sync_job_stale(job: Dict[str, Any], *, now: Optional[float] = None) -> bo
     and that pending retry must never be flipped terminal by a poll, however
     long its backoff.
     """
+    # The UID owner/sweeper, not a polling reader, owns liveness for accepted
+    # sequenced jobs. Waiting in the per-UID queue is expected to exceed the
+    # direct Cloud Tasks dispatch-stale threshold for a heavy account.
+    if job.get('dispatch_mode') == 'sequenced':
+        return False
     status = job.get('status')
     if status == 'processing':
         threshold = STALE_THRESHOLD_SECONDS
@@ -280,6 +267,51 @@ def _as_redis_text(value: Any) -> str:
     if isinstance(value, bytes):
         return value.decode('utf-8')
     return str(value)
+
+
+def _read_raw_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
+    """Raw job doc without the stale self-heal read-side mutation."""
+    data = r.get(f'{JOB_KEY_PREFIX}{job_id}')
+    if not data:
+        return None
+    try:
+        job = json.loads(_as_redis_text(data))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    return cast(Dict[str, Any], job) if isinstance(job, dict) else None
+
+
+def get_raw_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
+    """Read without the status-poll stale mutation; sequencer recovery owns its lease check."""
+    return _read_raw_sync_job(job_id)
+
+
+def sync_job_run_lock_present(job_id: str) -> bool:
+    """Conservatively refuse a replacement dispatch while a worker still owns its run lock."""
+    return bool(r.exists(f'{RUN_LOCK_KEY_PREFIX}{job_id}'))
+
+
+def _backfill_dead_letter_pending(job_id: str, job: Optional[Dict[str, Any]], reason_code: Any) -> None:
+    """Write the durable pending record before a backfill terminal Redis publish.
+
+    A Firestore failure must propagate: terminalizing Redis without the
+    durable record is worse than retrying the publish.
+    """
+    if not isinstance(job, dict) or job.get('lane') != 'backfill':
+        return
+    sync_dead_letters.record_dead_letter_pending(
+        job_id=job_id,
+        uid=job.get('uid'),
+        conversation_id=job.get('conversation_id'),
+        failure_code=sync_dead_letters.dead_letter_failure_code(reason_code),
+    )
+
+
+def _backfill_dead_letter_confirmed(job_id: str, job: Optional[Dict[str, Any]]) -> None:
+    """Confirm the pending record after a winning backfill terminal CAS."""
+    if not isinstance(job, dict) or job.get('lane') != 'backfill':
+        return
+    sync_dead_letters.confirm_dead_letter(job_id)
 
 
 _LEGACY_JOB_MUTATION_MAX_RETRIES = 3
@@ -601,6 +633,9 @@ def _sync_job_finalization_updates(
             'failed_segments': failed,
             'processed_segments': total,
             'error': error,
+            'reason_code': (
+                'stt_invalid_input' if status == 'failed' and result.get('reason_code') == 'stt_invalid_input' else None
+            ),
         },
     )
 
@@ -612,6 +647,10 @@ def _log_sync_job_finalized(
     status: str,
     total: int,
     failed: int,
+    job_id: Optional[str] = None,
+    attempt_ref: Optional[str] = None,
+    failure_phase: Optional[str] = None,
+    failure_class: Optional[str] = None,
 ) -> None:
     default_outcome = 'success' if status == 'completed' else status
     outcome = result.get('outcome', default_outcome)
@@ -620,7 +659,8 @@ def _log_sync_job_finalized(
     model = result.get('model', 'unknown')
     logger.info(
         'event=sync_transcription_job_finalized status=%s outcome=%s '
-        'provider=%s model=%s lane=%s total_segments=%d failed_segments=%d',
+        'provider=%s model=%s lane=%s total_segments=%d failed_segments=%d '
+        'job_ref=%s attempt_ref=%s failure_phase=%s failure_class=%s',
         status,
         outcome if outcome in _SYNC_JOB_OUTCOMES else 'upstream_error',
         provider if provider in _SYNC_PROVIDERS else 'unknown',
@@ -628,27 +668,51 @@ def _log_sync_job_finalized(
         lane if lane in _SYNC_LANES else 'unknown',
         total,
         failed,
+        bounded_correlation_ref(job_id),
+        bounded_correlation_ref(attempt_ref),
+        bounded_sync_phase(failure_phase),
+        bounded_exception_class(failure_class),
     )
 
 
-def finalize_sync_job(job_id: str, result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def finalize_sync_job(
+    job_id: str,
+    result: Dict[str, Any],
+    *,
+    attempt_ref: Optional[str] = None,
+    failure_phase: Optional[str] = None,
+    failure_class: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
     """Finalize a sync job with a truthful terminal status.
 
     ``completed`` is reserved for batches where every speech-eligible segment
     succeeded (including the valid zero-segment result produced when VAD finds
     no speech). Any segment failure keeps the job visibly retryable as either
     ``partial_failure`` or ``failed``.
+
+    The diagnostic kwargs are logging-only: they join the terminal log line to
+    the worker attempt and first-failure phase/class but are never written
+    into the stored result or returned document.
     """
     status, total, failed, updates = _sync_job_finalization_updates(result, completed_at=time.time())
+    dead_letter = status in ('failed', 'partial_failure')
+    if dead_letter:
+        _backfill_dead_letter_pending(job_id, get_sync_job(job_id), result.get('reason_code'))
 
     finalized = update_sync_job(job_id, updates)
     if finalized is not None:
+        if dead_letter:
+            _backfill_dead_letter_confirmed(job_id, finalized)
         _log_sync_job_finalized(
             finalized=finalized,
             result=result,
             status=status,
             total=total,
             failed=failed,
+            job_id=job_id,
+            attempt_ref=attempt_ref,
+            failure_phase=failure_phase,
+            failure_class=failure_class,
         )
     return finalized
 
@@ -660,6 +724,9 @@ def _fenced_finalize_sync_job(
     *,
     now: Optional[float] = None,
     allowed_current_statuses: Set[str],
+    attempt_ref: Optional[str] = None,
+    failure_phase: Optional[str] = None,
+    failure_class: Optional[str] = None,
 ) -> FencedSyncJobMutation:
     """Publish a terminal result only while the caller retains the run lock.
 
@@ -669,6 +736,9 @@ def _fenced_finalize_sync_job(
     """
     completed_at = time.time() if now is None else now
     status, total, failed, updates = _sync_job_finalization_updates(result, completed_at=completed_at)
+    dead_letter = status in ('failed', 'partial_failure')
+    if dead_letter:
+        _backfill_dead_letter_pending(job_id, get_sync_job(job_id), result.get('reason_code'))
     mutation = fenced_update_sync_job(
         job_id,
         run_lock_token,
@@ -677,12 +747,18 @@ def _fenced_finalize_sync_job(
         allowed_current_statuses=allowed_current_statuses,
     )
     if mutation.applied and mutation.job is not None:
+        if dead_letter:
+            _backfill_dead_letter_confirmed(job_id, mutation.job)
         _log_sync_job_finalized(
             finalized=mutation.job,
             result=result,
             status=status,
             total=total,
             failed=failed,
+            job_id=job_id,
+            attempt_ref=attempt_ref,
+            failure_phase=failure_phase,
+            failure_class=failure_class,
         )
     return mutation
 
@@ -693,6 +769,9 @@ def fenced_finalize_sync_job(
     result: Dict[str, Any],
     *,
     now: Optional[float] = None,
+    attempt_ref: Optional[str] = None,
+    failure_phase: Optional[str] = None,
+    failure_class: Optional[str] = None,
 ) -> FencedSyncJobMutation:
     """Publish ordinary worker terminal work only from the processing state."""
     return _fenced_finalize_sync_job(
@@ -701,6 +780,9 @@ def fenced_finalize_sync_job(
         result,
         now=now,
         allowed_current_statuses={'processing'},
+        attempt_ref=attempt_ref,
+        failure_phase=failure_phase,
+        failure_class=failure_class,
     )
 
 
@@ -710,6 +792,9 @@ def fenced_finalize_sync_job_from_durable_ledger(
     result: Dict[str, Any],
     *,
     now: Optional[float] = None,
+    attempt_ref: Optional[str] = None,
+    failure_phase: Optional[str] = None,
+    failure_class: Optional[str] = None,
 ) -> FencedSyncJobMutation:
     """Converge a validated content-ledger completion after a task retry.
 
@@ -723,6 +808,9 @@ def fenced_finalize_sync_job_from_durable_ledger(
         result,
         now=now,
         allowed_current_statuses={'queued', 'processing'},
+        attempt_ref=attempt_ref,
+        failure_phase=failure_phase,
+        failure_class=failure_class,
     )
 
 
@@ -739,7 +827,8 @@ def mark_job_failed(
     retry_after: Optional[int] = None,
 ) -> Optional[Dict[str, Any]]:
     """Mark job as failed with error message."""
-    return update_sync_job(
+    _backfill_dead_letter_pending(job_id, get_sync_job(job_id), reason_code)
+    finalized = update_sync_job(
         job_id,
         {
             'status': 'failed',
@@ -749,6 +838,9 @@ def mark_job_failed(
             'retry_after': retry_after,
         },
     )
+    if finalized is not None:
+        _backfill_dead_letter_confirmed(job_id, finalized)
+    return finalized
 
 
 def fenced_mark_job_failed(
@@ -762,7 +854,8 @@ def fenced_mark_job_failed(
 ) -> FencedSyncJobMutation:
     """Publish an explicit failure only while the caller retains the run lock."""
     completed_at = time.time() if now is None else now
-    return fenced_update_sync_job(
+    _backfill_dead_letter_pending(job_id, get_sync_job(job_id), reason_code)
+    mutation = fenced_update_sync_job(
         job_id,
         run_lock_token,
         {
@@ -775,6 +868,9 @@ def fenced_mark_job_failed(
         now=completed_at,
         allowed_current_statuses={'queued', 'processing'},
     )
+    if mutation.applied:
+        _backfill_dead_letter_confirmed(job_id, mutation.job)
+    return mutation
 
 
 def mark_job_queued_for_retry(job_id: str, attempt: int, error: str) -> Optional[Dict[str, Any]]:

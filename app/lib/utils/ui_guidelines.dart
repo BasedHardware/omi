@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
-/// UI Guidelines to ensure consistent styling throughout the app
-/// Use this class for reference when creating new UI components
+/// Legacy style constants. Superseded by the tokens in `lib/ui/omi_tokens.dart`: use `OmiColors`,
+/// `OmiType`, `OmiRadius` and `OmiSpacing` in new code, and migrate a file off `AppStyles` when you
+/// touch it. The values here are intentionally left as they were so existing screens do not shift.
 class AppStyles {
   // Text Styles
   static const TextStyle title = TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white);

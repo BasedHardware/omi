@@ -172,7 +172,7 @@ extension ServerConversation {
       geolocation: geolocation, photos: photos, appsResults: appsResults, source: source, language: language,
       audioFiles: audioFiles, conversationAudio: conversationAudio, status: status, discarded: discarded,
       deleted: deleted, isLocked: isLocked, starred: starred, folderId: folderId, inputDeviceName: inputDeviceName,
-      deferred: deferred)
+      deferred: deferred, captureGroup: captureGroup)
   }
 }
 

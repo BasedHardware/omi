@@ -179,6 +179,6 @@ def test_list_observes_every_scanned_document(fake_db, monkeypatch):
     ],
 )
 def test_completed_normalized_to_bool(raw, expected_completed, expected_status):
-    out = action_items._prepare_action_item_for_read(dict(raw))
+    out = action_items.prepare_action_item_for_read(dict(raw))
     assert out['completed'] is expected_completed
     assert out['status'] == expected_status

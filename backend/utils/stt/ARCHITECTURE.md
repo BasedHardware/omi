@@ -21,7 +21,9 @@ The legacy connection chain remains the default. `live_rollout.py` gates the new
 configured chain (`live_chain.py`) and UID allocation; `live_session.py` owns its
 VAD, audio timeline, usage ledger and fresh provider callbacks. `parakeet_window.py`
 subclasses the existing batch adapter with bounded admission, sentence-anchored
-growing POSTs (`window_anchor.py`) and teardown. Fixed 6 s slices that start
+growing POSTs (`window_anchor.py`) and teardown. Bounded peak AGC (0.8 of
+full scale, 4× cap) scores a gained copy at ingest for VAD and applies one
+uniform scale per POST from the original-level buffer. Fixed 6 s slices that start
 mid-utterance make TDT return empty; each POST is `[anchor, now]`, completed
 sentences are emitted, and the next POST starts at that sentence boundary.
 VAD `finalize()` is a soft pause POST (emit the last sentence only when it
@@ -35,6 +37,33 @@ session.
 `live_metrics.py` exposes bounded process/session metrics. Dead providers are excluded
 from that session; each adopted provider gets a new speaker-provider epoch.
 Operational controls and capacity arithmetic: [windowed live STT](../../docs/operational/windowed-live-stt.md).
+
+## Language constraint
+
+`language_policy.py` builds one immutable live-session profile from the client's
+primary language and the account's single-language setting. Multilingual
+non-English sessions expect the primary plus English. A stable UID hash can
+prefer Soniox ahead of the normal configured chain; the percentage defaults
+to zero in production. The profile and arm survive mid-session failover.
+Multichannel, custom STT, and BYOK sessions stay outside routing and hints;
+an explicit client Parakeet preference retains its existing priority.
+`STT_MULTI_LANGUAGE_HINTS=false` restores Soniox's former unhinted `multi`
+request. Soniox always keeps language identification enabled. Other providers
+retain their existing language parameters and order.
+
+Soniox documents a `language` code on every token when identification is on;
+its adapter uses final tokens only and passes a code only when all tokens in
+one segment agree. Velma's live adapter reads an optional `language` on final
+utterance frames (the batch response has per-utterance codes); live frame
+presence has not been verified against a provider connection. When no provider
+code is available, `langdetect` runs off the listen loop. At least 24 letters
+avoid short-phrase guesses, and a 0.95 top-probability floor avoids calling
+close-language guesses a mismatch. A 32-task per-session cap makes overflow
+undetermined; each detector sees at most 512 characters to bound CPU time.
+A local 200-call warm benchmark measured 1.2 ms median and
+1.36 ms p95, with a 125 ms cold maximum, which is why detection runs off-loop.
+Only normalized codes and bounded conformance labels reach metrics and logs;
+the private provider-language field is removed before transcript persistence.
 
 ## Speaker boundaries
 
@@ -50,7 +79,11 @@ mean so a capped speaker cannot drag another speaker's centroid away.
 `speaker_identity.py` scopes provider labels before persistence. It maps
 `(speaker_id_scope, speaker)` to a small conversation-local integer after
 hydrating IDs already stored on the conversation, so reconnects and provider
-changes cannot reuse another numbering space.
+changes cannot reuse another numbering space. The cost is that one voice gets a
+new id per scope; `conversation_speakers.py` (pure) re-diarizes the finished
+conversation from per-segment embeddings so each id is one voice again, and
+`utils/conversations/speaker_resolution.py` runs it before processing.
+`voiceprints.py` owns which stored person embeddings are trusted.
 
 ## Other modules
 

@@ -1,18 +1,83 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
+import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/ui/ui.dart';
 
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+  });
+  testWidgets('sheet closes while a speaker save is pending and the transcript rolls back on failure', (tester) async {
+    final response = Completer<bool>();
+    final provider =
+        ConversationDetailProvider(assignSpeaker: (_, __, {isUser, personId, speakerId}) => response.future);
+    final conversation = ServerConversation(
+        id: 'conversation',
+        createdAt: DateTime(2026),
+        structured: Structured('Title', ''),
+        transcriptSegments: [
+          TranscriptSegment(
+              id: 'segment',
+              text: 'Hello',
+              speaker: 'SPEAKER_00',
+              isUser: false,
+              personId: null,
+              translations: [],
+              start: 0,
+              end: 1)
+        ]);
+    provider.selectedDate = conversation.createdAt;
+    provider.setCachedConversation(conversation);
+    await tester.pumpWidget(MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: provider),
+          ChangeNotifierProvider(create: (_) => PeopleProvider()),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+              body: Builder(
+                  builder: (context) => Column(children: [
+                        Consumer<ConversationDetailProvider>(
+                            builder: (_, detail, __) =>
+                                Text(detail.conversation.transcriptSegments.single.isUser ? 'You' : 'Speaker')),
+                        ElevatedButton(
+                            onPressed: () => showNameSpeakerSheet(context,
+                                    speakerId: 0, segmentId: 'segment', segments: conversation.transcriptSegments,
+                                    onSpeakerAssigned: (_, personId, __, ids, ___) async {
+                                  final pending = provider.startSpeakerAssignment(ids, personId);
+                                  if (pending == null) return false;
+                                  unawaited(pending);
+                                  return true;
+                                }),
+                            child: const Text('Open')),
+                      ]))),
+        )));
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byType(OmiButton));
+    await tester.tap(find.byType(OmiButton));
+    await tester.pumpAndSettle();
+    expect(find.text('You'), findsOneWidget);
+    expect(find.byType(NameSpeakerBottomSheet), findsNothing);
+    response.complete(false);
+    await tester.pumpAndSettle();
+    expect(find.text('Speaker'), findsOneWidget);
+    provider.dispose();
   });
   testWidgets('name-only suggestion survives initialization; failed save stays open and bulk includes corrections',
       (tester) async {
@@ -56,7 +121,7 @@ void main() {
         )));
     await tester.pumpAndSettle();
     expect(find.text('Alex'), findsOneWidget);
-    final save = find.byType(ElevatedButton);
+    final save = find.byType(OmiButton);
     await tester.ensureVisible(save);
     await tester.tap(save);
     await tester.pumpAndSettle();
@@ -110,8 +175,8 @@ void main() {
     final checkbox = tester.widget<CheckboxListTile>(find.byType(CheckboxListTile).first);
     expect(checkbox.value, isTrue);
     expect(checkbox.onChanged, isNotNull);
-    await tester.ensureVisible(find.byType(ElevatedButton));
-    await tester.tap(find.byType(ElevatedButton));
+    await tester.ensureVisible(find.byType(OmiButton));
+    await tester.tap(find.byType(OmiButton));
     await tester.pumpAndSettle();
     expect(calls.single.ids, ['only']);
     expect(calls.single.whole, isTrue);
@@ -146,8 +211,8 @@ void main() {
                   })),
         )));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byType(ElevatedButton));
-    await tester.tap(find.byType(ElevatedButton));
+    await tester.ensureVisible(find.byType(OmiButton));
+    await tester.tap(find.byType(OmiButton));
     await tester.pumpAndSettle();
     expect(calls.single, isFalse);
   });

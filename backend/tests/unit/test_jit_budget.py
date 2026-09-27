@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from llm_gateway.gateway import jit_budget
+from utils.llm.model_config import LUNA_MODEL
 
 
 class _Snapshot:
@@ -101,7 +102,7 @@ def _reserve(*, run_id='run-1'):
         max_attempts=3,
         max_spend_micro_usd=50_000,
         provider='openai',
-        model='gpt-5.6-luna',
+        model=LUNA_MODEL,
         input_tokens=100,
         cached_input_tokens=0,
         output_tokens=10,

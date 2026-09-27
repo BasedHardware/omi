@@ -64,7 +64,7 @@ final class ProactiveLaneClientTests: XCTestCase {
     let data = try JSONSerialization.data(withJSONObject: [
       "operation": "proactive_reasoning",
       "lane": "omi:auto:desktop-proactive-reasoning",
-      "provider_model": "gpt-5.6-luna",
+      "provider_model": "gpt-6-luna",
       "usage": ["cached_tokens": 900, "cache_write_tokens": 0],
       "cache_write": false,
       "fallback_class": "unknown",
@@ -248,7 +248,7 @@ final class ProactiveLaneClientTests: XCTestCase {
   }
 
   func testTelemetryProviderModelIsBounded() {
-    XCTAssertEqual(ContextProactivityTelemetry.boundedProviderModel("gpt-5.6-luna"), "gpt-5.6-luna")
+    XCTAssertEqual(ContextProactivityTelemetry.boundedProviderModel("gpt-6-luna"), "gpt-6-luna")
     XCTAssertEqual(ContextProactivityTelemetry.boundedProviderModel("attacker-controlled-model"), "other")
   }
 
@@ -1077,7 +1077,7 @@ final class ProactiveLaneClientTests: XCTestCase {
     try JSONSerialization.data(withJSONObject: [
       "operation": operation,
       "lane": "omi:auto:desktop-\(operation.replacingOccurrences(of: "_", with: "-"))",
-      "provider_model": "gpt-5.6-luna",
+      "provider_model": "gpt-6-luna",
       "usage": ["cached_tokens": 0, "cache_write_tokens": 0],
       "cache_write": false,
       "fallback_class": "unknown",

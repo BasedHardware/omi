@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/services/devices/bluetooth_readiness.dart';
+import 'package:omi/ui/prompts/prompt_queue.dart';
 import 'package:omi/widgets/bluetooth_guidance_listener.dart';
 
 void main() {
@@ -32,7 +33,7 @@ void main() {
     expect(find.text('Omi needs Bluetooth to connect to your wearable. Please enable Bluetooth and try again.'),
         findsOneWidget);
 
-    await tester.tap(find.text('Ok'));
+    await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
 
     expect(readiness.guidance, isNull);
@@ -95,5 +96,37 @@ void main() {
 
     expect(find.text('Permissions Required'), findsOneWidget);
     expect(find.text('Open Settings'), findsOneWidget);
+  });
+  testWidgets('waits in the prompt queue while prompts are held, then shows once released', (tester) async {
+    final readiness = BluetoothReadiness(readState: () async => 'off', observeBridge: false);
+    final navigatorKey = GlobalKey<NavigatorState>();
+    final queue = PromptQueue(contextProvider: () => navigatorKey.currentState?.overlay?.context);
+    var busy = true;
+    queue.blocked = () => busy;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigatorKey,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        builder: (context, child) => BluetoothGuidanceListener(
+          readiness: readiness,
+          navigatorKey: navigatorKey,
+          promptQueue: queue,
+          child: child!,
+        ),
+        home: const Scaffold(body: SizedBox()),
+      ),
+    );
+
+    expect(await readiness.ensureReady(BluetoothUse.discovery), isFalse);
+    await tester.pumpAndSettle();
+    expect(find.text('Enable Bluetooth'), findsNothing);
+    expect(queue.pendingIds, hasLength(1));
+
+    busy = false;
+    queue.pump();
+    await tester.pumpAndSettle();
+    expect(find.text('Enable Bluetooth'), findsOneWidget);
   });
 }

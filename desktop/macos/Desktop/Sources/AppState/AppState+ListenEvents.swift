@@ -50,6 +50,7 @@ extension AppState {
 
     for segment in segments {
       guard !segment.text.isEmpty else { continue }
+      UpdateInstallActivity.markTranscriptActivity()
 
       // Extract speaker_id from backend (e.g. "SPEAKER_00" → 0)
       let speakerId = segment.speaker_id ?? 0
@@ -512,9 +513,15 @@ extension AppState {
       // confusing and a battery/trust hit. Sticky until next app launch or
       // successful plan reactivation.
       isPaywalled = true
+      // The admission event is fresher than the 60s trial-metadata poll: record
+      // it so `fetchTrialMetadata` cannot immediately clear the flag and let a
+      // persisted-intent restore re-arm capture into another rejection — a
+      // verdict disagreement would otherwise loop stop/start forever (SCA-526).
+      lastPaywallAdmissionStopAt = Date()
       if isTranscribing {
         log("Paywall: stopping transcription (freemium threshold)")
-        stopTranscription()
+        captureAttempt?.noteErrorTerminal()
+        stopTranscription(finalizationReason: .paywall)
       }
       Task { @MainActor in
         ProactiveAssistantsPlugin.shared.stopMonitoring(reason: .paywall)

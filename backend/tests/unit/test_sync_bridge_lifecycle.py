@@ -112,6 +112,10 @@ def test_shared_cleanup_retains_capture_and_propagates_task_failure(monkeypatch)
     monkeypatch.setattr(merge, 'retraction_can_be_skipped', lambda *a, **kw: True)
     monkeypatch.setattr(merge, 'MemoryService', MagicMock())
     tasks = MagicMock(side_effect=RuntimeError('task store unavailable'))
+    # The current merge cleanup reads source tasks before deleting them so it
+    # can cancel client reminders. Keep this test hermetic across both the
+    # legacy delete-only path and the reminder-aware path.
+    monkeypatch.setattr(action_items, 'get_action_items_by_conversation', lambda *a, **kw: [])
     monkeypatch.setattr(action_items, 'delete_action_items_for_conversation', tasks)
     audio = MagicMock()
     delete = MagicMock()
@@ -258,6 +262,9 @@ def test_sync_bridge_retraction_does_not_claim_the_account_destructive_gate(monk
 
     monkeypatch.setattr(merge, 'retraction_can_be_skipped', lambda *a, **kw: False)
     monkeypatch.setattr(merge, 'MemoryService', FakeMemoryService)
+    # Source-task lookup is part of merge cleanup on current main; avoid
+    # constructing a real Firestore client in this seam-focused test.
+    monkeypatch.setattr(action_items, 'get_action_items_by_conversation', lambda *a, **kw: [])
     monkeypatch.setattr(action_items, 'delete_action_items_for_conversation', MagicMock(return_value=0))
     monkeypatch.setattr(merge, 'delete_conversation_audio_files', MagicMock())
     monkeypatch.setattr(merge.conversations_db, 'delete_conversation', MagicMock())
@@ -265,6 +272,38 @@ def test_sync_bridge_retraction_does_not_claim_the_account_destructive_gate(monk
     monkeypatch.setattr(merge, 'delete_vector', MagicMock())
     merge.retract_sync_bridge_source('u', 'donor')
     assert seen.get('claim_destructive_gate') is False
+
+
+def test_shared_cleanup_reminder_failure_does_not_fail_bridge_retraction(monkeypatch):
+    """FCM cancel is best-effort after the task rows are already gone.
+
+    Sync-bridge cleanup retries the whole donor retraction. If reminder delivery
+    shared the task-store try, an FCM/ADC fault would raise after delete and
+    consume that retry budget; a later retry would see no rows and never send
+    the cancel. Keep delivery isolated, like process_conversation replacement.
+    """
+    from utils.conversations import merge_conversations as merge
+    from database import action_items
+
+    monkeypatch.setattr(merge, 'retraction_can_be_skipped', lambda *a, **kw: True)
+    monkeypatch.setattr(merge, 'MemoryService', MagicMock())
+    monkeypatch.setattr(
+        action_items,
+        'get_action_items_by_conversation',
+        lambda *a, **kw: [{'id': 'task-open', 'due_at': '2026-09-21T09:00:00+00:00', 'completed': False}],
+    )
+    monkeypatch.setattr(action_items, 'delete_action_items_for_conversation', MagicMock(return_value=1))
+    monkeypatch.setattr(merge, '_sync_source_task_reminder', MagicMock(side_effect=RuntimeError('fcm unavailable')))
+    audio = MagicMock()
+    delete = MagicMock()
+    monkeypatch.setattr(merge, 'delete_conversation_audio_files', audio)
+    monkeypatch.setattr(merge.conversations_db, 'delete_conversation', delete)
+    monkeypatch.setattr(merge.conversations_db, '_delete_conversation_search_index', MagicMock())
+    monkeypatch.setattr(merge, 'delete_vector', MagicMock())
+    merge.retract_sync_bridge_source('u', 'donor')
+    audio.assert_not_called()
+    delete.assert_not_called()
+    merge._sync_source_task_reminder.assert_called_once()
 
 
 def test_bridge_failure_log_includes_bounded_reason(system, caplog):

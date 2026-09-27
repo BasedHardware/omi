@@ -8,10 +8,13 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/transcription_demo_step.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/single_press_step.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/voice_reply_step.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/power_cycle_step.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/double_press_config_step.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/all_set_step.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_intro_screen.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
 class InteractiveDeviceOnboardingWrapper extends StatefulWidget {
@@ -60,6 +63,13 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
     if (_started && !_completed) {
       AnalyticsManager().deviceOnboardingAbandoned(_onboardingProvider.currentStep);
     }
+    // Cancel only a tutorial-owned voice session. Opening Settings → Device
+    // Tutorial attaches CaptureProvider in the post-frame callback before the
+    // user starts the flow; exiting the intro must not discard an unrelated
+    // in-flight Omi voice command. `_showIntro` stays true until `_startTutorial`.
+    if (!_showIntro) {
+      _captureProvider?.cancelTutorialOwnedVoiceSession();
+    }
     _captureProvider?.restoreBatchModeAfterOnboarding();
     _captureProvider?.deviceOnboardingProvider = null;
     _onboardingProvider.dispose();
@@ -80,14 +90,38 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
 
   Widget _buildStep(int step) {
     switch (step) {
-      case 0:
-        return TranscriptionDemoStep(key: const ValueKey(0), onComplete: () => _onStepComplete('transcription_demo'));
-      case 1:
-        return SinglePressStep(key: const ValueKey(1), onComplete: () => _onStepComplete('single_press_ask_question'));
-      case 2:
-        return PowerCycleStep(key: const ValueKey(2), onComplete: () => _onStepComplete('power_cycle'));
+      case DeviceOnboardingProvider.transcriptionStep:
+        return TranscriptionDemoStep(
+          key: const ValueKey(DeviceOnboardingProvider.transcriptionStep),
+          onComplete: () => _onStepComplete('transcription_demo'),
+        );
+      case DeviceOnboardingProvider.askQuestionStep:
+        return SinglePressStep(
+          key: const ValueKey(DeviceOnboardingProvider.askQuestionStep),
+          onComplete: () => _onStepComplete('single_press_ask_question'),
+        );
+      case DeviceOnboardingProvider.voiceReplyStep:
+        return VoiceReplyStep(
+          key: const ValueKey(DeviceOnboardingProvider.voiceReplyStep),
+          firstRun: !widget.allowExit,
+          previewText: _onboardingProvider.aiResponse,
+          onComplete: () => _onStepComplete('voice_reply'),
+        );
+      case DeviceOnboardingProvider.powerCycleStep:
+        return PowerCycleStep(
+          key: const ValueKey(DeviceOnboardingProvider.powerCycleStep),
+          onComplete: () => _onStepComplete('power_cycle'),
+        );
+      case DeviceOnboardingProvider.doublePressStep:
+        return DoublePressConfigStep(
+          key: const ValueKey(DeviceOnboardingProvider.doublePressStep),
+          onComplete: () => _onStepComplete('double_press_config'),
+        );
       default:
-        return DoublePressConfigStep(key: const ValueKey(3), onComplete: () => _onStepComplete('double_press_config'));
+        return AllSetStep(
+          key: const ValueKey(DeviceOnboardingProvider.allSetStep),
+          onComplete: () => _onStepComplete('all_set'),
+        );
     }
   }
 
@@ -116,8 +150,9 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
       value: _onboardingProvider,
       child: PopScope(
         // Intercept system back so leaving mid-tutorial persists completion —
-        // otherwise the forced flow re-fires on next launch. _completeOnboarding
-        // and _skipOnboarding pop directly (didPop == true) and skip this path.
+        // otherwise the forced flow re-fires on next launch. System back does what
+        // the on-screen close X does. _completeOnboarding and _skipOnboarding pop
+        // directly (didPop == true) and skip this path.
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
           if (didPop) return;
@@ -126,16 +161,16 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
         child: Scaffold(
           backgroundColor: Colors.transparent,
           body: Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Color(0xFF2A2342), Colors.black],
+                colors: [OmiColors.surface1, OmiColors.surface0],
               ),
             ),
             child: SafeArea(
               child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 320),
+                duration: OmiMotion.of(context).standard,
                 child: _showIntro
                     ? OnboardingIntroScreen(
                         key: const ValueKey('intro'),
@@ -146,13 +181,15 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
                         key: const ValueKey('steps'),
                         children: [
                           // Always dismissible: a stuck step (e.g. the mic-test
-                          // waiting on a response) must never trap the user.
+                          // waiting on a response) must never trap the user. The
+                          // tutorial floats over the app, so it leaves by a trailing
+                          // close X, never a back chevron (docs/ux-contract.md §1).
                           SizedBox(
                             height: 48,
                             child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: IconButton(
-                                icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+                              alignment: AlignmentDirectional.centerEnd,
+                              child: OmiCloseButton(
+                                key: const Key('device_onboarding_close_button'),
                                 onPressed: _skipOnboarding,
                               ),
                             ),

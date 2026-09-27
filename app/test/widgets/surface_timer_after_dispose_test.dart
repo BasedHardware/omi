@@ -17,7 +17,9 @@ import 'package:omi/pages/capture/connect.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
+import 'package:omi/pages/conversation_detail/widgets/conversation_tasks_tab.dart';
 import 'package:omi/pages/memories/page.dart';
+import 'package:omi/pages/memories/widgets/memory_delete_undo.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -42,7 +44,7 @@ void main() {
     PlatformManager.initializeForLocalHarness();
   });
 
-  testWidgets('MemoriesPage overlay and deletion delays are cancelled on dispose', (tester) async {
+  testWidgets('MemoriesPage undo toast and deletion delays are cancelled on dispose', (tester) async {
     late MemoriesProvider memories;
     await tester.pumpWidget(
       _l10nApp(
@@ -66,9 +68,11 @@ void main() {
     );
     await tester.pump();
 
-    final state = tester.state<MemoriesPageState>(find.byType(MemoriesPage));
-    state.showDeleteNotification('deleted memory', null);
-    memories.deleteMemory(
+    // A delete from the page shows the shared Undo toast and holds the server delete back; the
+    // pending toast and the provider's backstop timer must not outlive the page.
+    deleteMemoryWithUndo(
+      tester.element(find.byType(MemoriesPage)),
+      memories,
       Memory(
         id: 'mem-timer',
         uid: 'uid',

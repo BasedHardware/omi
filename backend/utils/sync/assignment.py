@@ -6,10 +6,13 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 """
 
 from copy import deepcopy
-import re
 from typing import TYPE_CHECKING, Callable, Optional
 
 from utils.manual_speaker_assignments import apply_manual_assignments
+
+from utils.conversations.fragment_visibility import is_low_signal_sync_fragment
+from utils.conversations.relevance import sync_intake_decision
+from utils.conversations.relevance_rules import deterministic_relevance
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.sync.assignment_index import AssignmentIndex
 from utils.sync.assignment_errors import SyncAssignmentSuperseded, SyncAssignmentConflict
@@ -22,20 +25,24 @@ if TYPE_CHECKING:
 
 
 def needs_fragment_review(segments: list[dict]) -> bool:
-    """Defer only short, filler-only content. Unknown language/content stays kept.
+    """Whether the deterministic relevance rules discard this transcript outright.
 
     Speaker IDs, profiles, and is_user are intentionally not consulted. Even a
-    false positive keeps a visible transcript, and subsequent content is assessed
-    over the entire merged recording, allowing automatic promotion.
+    false positive keeps a recoverable transcript, and subsequent content is assessed
+    over the entire merged recording, allowing automatic promotion. Everything
+    the rules cannot settle stays ``keep`` here and is assessed by the
+    relevance step when the sync pipeline processes it.
     """
-    words = re.findall(r"[^\W_]+", ' '.join(s.get('text', '') for s in segments).casefold())
-    duration = sum(max(0, s['end'] - s['start']) for s in segments)
-    return (
-        bool(words)
-        and len(words) <= 12
-        and duration <= 15
-        and set(words)
-        <= {'mm', 'hmm', 'hm', 'mhm', 'huh', 'uh', 'um', 'hmmh', 'mmh', 'hmmmh', 'hmmmmm', 'ha', 'haha', 'hahaha'}
+    verdict, rule = fragment_rule(segments)
+    # Segments with no recognized words are unknown content here, not filler:
+    # intake keeps them, and the relevance step settles them when processed.
+    return verdict == 'discard' and rule != 'empty_transcript'
+
+
+def fragment_rule(segments: list[dict]) -> tuple[Optional[str], str]:
+    return deterministic_relevance(
+        [s.get('text', '') for s in segments],
+        sum(max(0, s['end'] - s['start']) for s in segments),
     )
 
 
@@ -67,6 +74,7 @@ def auto_mergeable(row: dict) -> bool:
         or row.get('user_title')
         or row.get('starred')
         or row.get('folder_user_set')
+        or row.get('sync_relevance_user_kept')
         or row.get('visibility', 'private') not in (None, 'private')
     )
 
@@ -192,6 +200,11 @@ def assign_in_transaction(
     for row in sorted(records, key=lambda row: row['id'] != canonical):
         new = deepcopy(row.get('transcript_segments', []))
         for segment in new:
+            if row['id'] == canonical and not result['sync_live_target'] and not segment.get('speaker_id_scope'):
+                # A pre-scope sync survivor is still audio-aligned. Leave its
+                # visible ID intact (manual receipts may name it), but give
+                # conversation resolution the provenance it needs.
+                segment['speaker_id_scope'] = f"legacy-conversation:{row['id']}:{segment.get('speaker_id')}"
             segment['timestamp'] = row['started_at'].timestamp() + segment['start']
             duration = segment['end'] - segment['start']
             segment['start'] = segment['timestamp'] - origin
@@ -207,7 +220,14 @@ def assign_in_transaction(
     for segment in new:
         segment['timestamp'] = incoming['started_at'].timestamp() + segment['start']
     survivors = dedupe_segments_for_merge(
-        origin, existing, new, text_match_slop_seconds=600 if target and not target.get('sync_content_revision') else 0
+        origin,
+        existing,
+        new,
+        text_match_slop_seconds=600 if target and not target.get('sync_content_revision') else 0,
+        # A bound safety WAL can mix one duplicate with genuinely new speech.
+        # Near-exact text, duration, and time are enough to drop that one line;
+        # broader clock-offset matches still require the batch gate.
+        single_match_slop_seconds=2 if target and result['sync_live_target'] else 0,
     )
     for segment in survivors:
         allocator.assign(segment)
@@ -223,9 +243,17 @@ def assign_in_transaction(
         transcript_segments=apply_manual_assignments(segments, result.get('manual_speaker_assignments') or {}),
     )
     result['has_content'] = bool(segments)
-    result['discarded'] = False  # sync relevance demotes visibly; it never discards capture
     result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1
-    result['sync_relevance'] = 'review' if not segments or needs_fragment_review(segments) else 'keep'
+    result['sync_relevance'] = (
+        'review'
+        if not result.get('sync_relevance_user_kept') and (not segments or needs_fragment_review(segments))
+        else 'keep'
+    )
+    # Discard is a recoverable list filter, never a deletion of captured speech.
+    # Meaningful later intake automatically promotes the complete recording.
+    result['discarded'] = is_low_signal_sync_fragment(result)
+    if result['discarded']:
+        result['relevance_decision'] = sync_intake_decision(fragment_rule(segments)[1])
     result['is_locked'] = bool(incoming.get('is_locked'))
     result['private_cloud_sync_enabled'] = any(row.get('private_cloud_sync_enabled') for row in [incoming, *records])
     # A codec must never be downgraded when bridge donors have mixed protection.

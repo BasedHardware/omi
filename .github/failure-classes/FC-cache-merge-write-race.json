@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "id": "FC-cache-merge-write-race",
+  "violated_contract": "A cache value that multiple independent writers merge into -- each request reads the whole blob, edits only its own entry, and writes the whole blob back -- must serialize that read-modify-write. Otherwise two writers racing on the same key silently drop whichever entry the losing writer's SET overwrote, indistinguishable from a successful write, and nothing detects or heals the loss.",
+  "canonical_prevention": "Perform the merge as a single atomic server-side operation (a Lua script, or a per-field command such as HSET) instead of a GET-modify-SET in the caller, so no writer's read can observe a value another writer is about to overwrite.",
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/redis_db.py"
+  ],
+  "status": "open"
+}

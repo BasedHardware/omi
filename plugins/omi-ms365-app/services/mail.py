@@ -1,9 +1,33 @@
 """Outlook / Exchange mail operations via Microsoft Graph."""
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from services.graph_client import GraphClient
+
+
+def _normalize_email_list(emails: Any) -> list[str]:
+    """Normalize a recipient input (single string, comma/semicolon-separated string, or list) into a list of emails."""
+    if not emails:
+        return []
+    if isinstance(emails, str):
+        return [p.strip() for p in re.split(r"[,;]", emails) if p.strip()]
+    if isinstance(emails, (list, tuple, set)):
+        result: list[str] = []
+        for item in emails:
+            if isinstance(item, str):
+                for p in re.split(r"[,;]", item):
+                    if p.strip():
+                        result.append(p.strip())
+            elif isinstance(item, dict):
+                addr = item.get("address")
+                if not addr and isinstance(item.get("emailAddress"), dict):
+                    addr = item["emailAddress"].get("address")
+                if addr and str(addr).strip():
+                    result.append(str(addr).strip())
+        return result
+    return []
 
 
 def _slim_message(m: dict[str, Any]) -> dict[str, Any]:
@@ -91,27 +115,27 @@ async def read(user_id: str, message_id: str) -> dict[str, Any]:
 
 async def send(
     user_id: str,
-    to: list[str],
+    to: list[str] | str,
     subject: str,
     body: str,
     *,
     body_type: str = "Text",
-    cc: list[str] | None = None,
+    cc: list[str] | str | None = None,
 ) -> dict[str, Any]:
-    def addr_list(emails: list[str]) -> list[dict[str, Any]]:
-        return [{"emailAddress": {"address": e}} for e in emails]
+    norm_to = _normalize_email_list(to)
+    norm_cc = _normalize_email_list(cc)
 
     payload: dict[str, Any] = {
         "message": {
             "subject": subject,
             "body": {"contentType": body_type, "content": body},
-            "toRecipients": addr_list(to),
+            "toRecipients": [{"emailAddress": {"address": e}} for e in norm_to],
         },
         "saveToSentItems": True,
     }
-    if cc:
-        payload["message"]["ccRecipients"] = addr_list(cc)
+    if norm_cc:
+        payload["message"]["ccRecipients"] = [{"emailAddress": {"address": e}} for e in norm_cc]
 
     async with GraphClient(user_id) as g:
         await g.post("/me/sendMail", json=payload, expect_json=False)
-        return {"status": "sent", "to": to, "subject": subject}
+        return {"status": "sent", "to": norm_to, "subject": subject}
