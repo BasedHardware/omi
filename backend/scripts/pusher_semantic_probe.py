@@ -354,6 +354,22 @@ def _alignment_word_count_ok(observed: int, expected: int) -> bool:
     return expected > 0 and expected * 0.8 <= observed <= expected * 1.2
 
 
+def _base_word_count_ok(observed: int, expected: int, fixture_words: int) -> bool:
+    """Allow a rollover to own trailing sends, but reject excess duplication.
+
+    The durable phrase check separately proves a full fixture pass belongs to
+    this conversation. test_release_probe_discard_gate.py:3-6 records about
+    six of eight passes in the client conversation before a rollover. Require
+    four passes, leaving two passes of headroom for that observed split while
+    rejecting a readback that lost most of the eight sends.
+    """
+    return (
+        fixture_words > 0
+        and expected >= fixture_words
+        and fixture_words * (DISCARD_KEEP_AUDIO_PASSES // 2) <= observed <= expected * 1.2
+    )
+
+
 def _http_json_method(url: str, token: str, method: str = "GET") -> tuple[int, dict[str, Any] | None]:
     import urllib.request as _request
 
@@ -839,6 +855,9 @@ def _receipt(
     failure_stage: str | None,
     live_window_matched: bool | None = None,
     live_window_transcript: str = "",
+    live_word_count: int | None = None,
+    expected_word_count: int | None = None,
+    consumer_readback_passed: bool = False,
 ) -> dict[str, Any]:
     image = deployment_receipt.get("image") if isinstance(deployment_receipt.get("image"), dict) else {}
     receipt: dict[str, Any] = {
@@ -861,11 +880,12 @@ def _receipt(
             "status": "PASS" if status == "PASS" else "FAIL",
             "candidate_pod_count": candidate_pod_count,
         },
-        "consumer_readback": {"status": "PASS" if status == "PASS" else "FAIL"},
+        "consumer_readback": {"status": "PASS" if consumer_readback_passed or status == "PASS" else "FAIL"},
         "live_segment_window": {
             "matched": live_window_matched,
             "segment_text_chars": len(live_window_transcript),
         },
+        "word_counts": {"live": live_word_count, "expected": expected_word_count},
     }
     if failure_stage is not None:
         receipt["failure_stage"] = failure_stage
@@ -878,6 +898,9 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
     failure_stage: str | None = None
     candidate_pod_count = 0
     receipt_kwargs: dict[str, Any] = {}
+    live_word_count: int | None = None
+    expected_word_count: int | None = None
+    consumer_readback_passed = False
     try:
         token = _read_token(args.bearer_token_file)
         fixture = load_fixture()
@@ -910,10 +933,11 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
                 args.finalization_timeout_seconds,
                 expected_phrase=fixture.expected_phrase,
             )
-            live_count, expected_count = _alignment_word_counts(
+            consumer_readback_passed = True
+            live_word_count, expected_word_count = _alignment_word_counts(
                 conversation.get("transcript_segments") or [], fixture.expected_phrase, DISCARD_KEEP_AUDIO_PASSES
             )
-            if not _alignment_word_count_ok(live_count, expected_count):
+            if not _base_word_count_ok(live_word_count, expected_word_count, len(fixture.expected_phrase.split())):
                 raise ProbeError("transcript_word_count")
         finally:
             probe_socket_hold.set()
@@ -947,6 +971,9 @@ async def run_probe(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
             ended_at=ended_at,
             candidate_pod_count=candidate_pod_count,
             failure_stage=failure_stage,
+            live_word_count=live_word_count,
+            expected_word_count=expected_word_count,
+            consumer_readback_passed=consumer_readback_passed,
             **receipt_kwargs,
         ),
         passed,
@@ -982,7 +1009,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0 if passed else 1
     receipt, passed = asyncio.run(run_probe(args))
     args.output.write_text(json.dumps(receipt, sort_keys=True) + "\n", encoding="utf-8")
-    print(f"Pusher semantic probe status={receipt['status']} evidence_id={receipt['evidence_id']}")
+    counts = receipt["word_counts"]
+    print(
+        f"Pusher semantic probe status={receipt['status']} "
+        f"failure_stage={receipt.get('failure_stage', 'none')} "
+        f"word_counts_live={counts['live']} word_counts_expected={counts['expected']} "
+        f"consumer_readback={receipt['consumer_readback']['status']} "
+        f"candidate_pod_count={receipt['producer_observation']['candidate_pod_count']} "
+        f"evidence_id={receipt['evidence_id']}"
+    )
     return 0 if passed else 1
 
 
