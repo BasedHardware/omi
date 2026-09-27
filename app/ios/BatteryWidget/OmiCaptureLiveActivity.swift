@@ -196,7 +196,8 @@ private struct CaptureStatus: View {
         if state.actionFailed { return "Open Omi to continue" }
         switch state.status {
         case "ended": return "Finished"
-        case "paused", "interrupted": return "Paused"
+        case "paused": return "Muted"
+        case "interrupted": return "Paused"
         case "connecting": return "Connecting…"
         case "recording": return "Recording"
         case "reconnecting": return "Reconnecting…"
@@ -449,11 +450,11 @@ private struct CaptureActions: View {
     var body: some View {
         if #available(iOS 17.0, *), !snapshot.isStale, state.status != "ended" {
             HStack(spacing: 8) {
-                // Stop pauses and Start resumes. Start is offered only after the user stopped;
-                // recovery states keep Stop.
+                // The pendant keeps picking up audio; Mute and Unmute say whether Omi uses it.
+                // Unmute is offered only after the user muted; recovery states keep Mute.
                 if state.canPause {
                     let resume = state.status == "paused"
-                    action(resume ? "Start" : "Stop", value: resume ? "resume" : "pause", enabled: true)
+                    action(resume ? "Unmute" : "Mute", value: resume ? "resume" : "pause", enabled: true)
                 }
                 // End always closes this card, saving the conversation first when there is one
                 // (LiveActivityManager).
@@ -473,6 +474,8 @@ private struct CaptureActions: View {
             Text(label)
                 .font(.subheadline.weight(primary ? .bold : .semibold))
                 .lineLimit(1)
+                // Long translations ("Reactivează sunetul") shrink a little rather than cut off.
+                .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity, minHeight: height)
                 .foregroundStyle(filled ? CapturePalette.ink : CapturePalette.label.opacity(available ? 1 : 0.5))
                 .background(filled ? CapturePalette.label : Color.white.opacity(secondaryFill), in: Capsule())
