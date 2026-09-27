@@ -274,39 +274,6 @@ actor SiriIndexer {
     scheduleNextMemoryExpiry(owner: expectedOwner)
   }
 
-  @available(macOS 27, *)
-  func indexConversations(_ entities: [ConversationEntity], expectedOwner: String) async throws {
-    guard let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
-    defer { finishOperation() }
-    for chunk in entities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
-    for entity in entities {
-      indexedConversationCutoffs[entity.id] = entity.creationDate?.addingTimeInterval(SiriIndexScope.conversationAge)
-    }
-    scheduleNextMemoryExpiry(owner: expectedOwner)
-  }
-
-  func indexMemories(_ entities: [MemoryEntity], expectedOwner: String) async throws {
-    guard #available(macOS 27, *) else { return }
-    guard let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
-    defer { finishOperation() }
-    for chunk in entities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
-    for entity in entities { indexedMemoryExpirations[entity.id] = entity.eligibilityCutoff }
-    scheduleNextMemoryExpiry(owner: expectedOwner)
-  }
-
-  @available(macOS 27, *)
-  func indexTasks(_ entities: [TaskEntity], expectedOwner: String) async throws {
-    guard let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
-    defer { finishOperation() }
-    for chunk in entities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
-    for entity in entities {
-      indexedTaskCutoffs[entity.id] =
-        entity.isCompleted
-        ? entity.completionDate?.addingTimeInterval(SiriIndexScope.completedTaskAge) : nil
-    }
-    scheduleNextMemoryExpiry(owner: expectedOwner)
-  }
-
   /// Resolve the requested IDs after acquiring the owner operation slot. A
   /// query that fetched before a local delete must never restore that row
   /// after its delete operation has finished.

@@ -48,22 +48,11 @@ enum SiriIndexHooks {
     do {
       switch kind {
       case .memory:
-        let entities = try await MemoryEntityQuery().entities(for: ids)
-        try await SiriIndexer.shared.indexMemories(entities, expectedOwner: owner)
-        let present = Set(entities.map(\.id))
-        let missing = ids.filter { !present.contains($0) }
-        try await SiriIndexer.shared.deleteMemories(ids: missing, expectedOwner: owner)
+        try await SiriIndexer.shared.reindexMemories(ids: ids, expectedOwner: owner)
       case .conversation:
-        let entities = try await ConversationEntityQuery().entities(for: ids)
-        try await SiriIndexer.shared.indexConversations(entities, expectedOwner: owner)
-        let present = Set(entities.map(\.id))
-        try await SiriIndexer.shared.deleteConversations(
-          ids: ids.filter { !present.contains($0) }, expectedOwner: owner)
+        try await SiriIndexer.shared.reindexConversations(ids: ids, expectedOwner: owner)
       case .task:
-        let entities = try await TaskEntityQuery().entities(for: ids)
-        try await SiriIndexer.shared.indexTasks(entities, expectedOwner: owner)
-        let present = Set(entities.map(\.id))
-        try await SiriIndexer.shared.deleteTasks(ids: ids.filter { !present.contains($0) }, expectedOwner: owner)
+        try await SiriIndexer.shared.reindexTasks(ids: ids, expectedOwner: owner)
       }
     } catch { log("Siri \(kind) index batch deferred: \(error.localizedDescription)") }
   }
