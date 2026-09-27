@@ -3632,5 +3632,6 @@
     "appearance": "Görünüm",
     "appearanceSystem": "Sistem",
     "appearanceLight": "Açık",
-    "appearanceDark": "Koyu"
+    "appearanceDark": "Koyu",
+    "voiceQuestionNoSpeech": "Anlayamadım — tekrar deneyin"
 }

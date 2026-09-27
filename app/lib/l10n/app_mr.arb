@@ -11157,5 +11157,6 @@
     "appearance": "दृश्य",
     "appearanceSystem": "सिस्टम",
     "appearanceLight": "हलका",
-    "appearanceDark": "गडद"
+    "appearanceDark": "गडद",
+    "voiceQuestionNoSpeech": "ऐकू आले नाही — पुन्हा प्रयत्न करा"
 }

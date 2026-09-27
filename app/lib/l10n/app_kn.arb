@@ -11157,5 +11157,6 @@
     "appearance": "ಗೋಚರತೆ",
     "appearanceSystem": "ಸಿಸ್ಟಮ್",
     "appearanceLight": "ಬೆಳಕು",
-    "appearanceDark": "ಕತ್ತಲೆ"
+    "appearanceDark": "ಕತ್ತಲೆ",
+    "voiceQuestionNoSpeech": "ಕೇಳಿಸಲಿಲ್ಲ — ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ"
 }

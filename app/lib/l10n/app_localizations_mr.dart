@@ -11413,4 +11413,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get appearanceDark => 'गडद';
+
+  @override
+  String get voiceQuestionNoSpeech => 'ऐकू आले नाही — पुन्हा प्रयत्न करा';
 }

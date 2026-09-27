@@ -11416,4 +11416,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Gelap';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Tidak terdengar — coba lagi';
 }

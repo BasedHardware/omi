@@ -3597,5 +3597,6 @@
     "appearance": "外观",
     "appearanceSystem": "系统",
     "appearanceLight": "浅色",
-    "appearanceDark": "深色"
+    "appearanceDark": "深色",
+    "voiceQuestionNoSpeech": "没听清楚 — 请再试一次"
 }

@@ -11157,5 +11157,6 @@
     "appearance": "চেহারা",
     "appearanceSystem": "সিস্টেম",
     "appearanceLight": "হালকা",
-    "appearanceDark": "গাঢ়"
+    "appearanceDark": "গাঢ়",
+    "voiceQuestionNoSpeech": "শুনতে পাইনি — আবার চেষ্টা করুন"
 }

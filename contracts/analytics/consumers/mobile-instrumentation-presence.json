@@ -125,7 +125,8 @@
     "liveTranscriptCardClicked",
     "appleRemindersSyncCompleted",
     "wrappedGenerationCompleted",
-    "voiceReplyPlayback"
+    "voiceReplyPlayback",
+    "pendantVoiceQuestionDropped"
   ],
   "namespace_property": "$app_namespace",
   "dimensions": [

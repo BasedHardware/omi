@@ -11419,4 +11419,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get appearanceDark => 'Tamno';
+
+  @override
+  String get voiceQuestionNoSpeech => 'Нисам разумео — покушајте поново';
 }

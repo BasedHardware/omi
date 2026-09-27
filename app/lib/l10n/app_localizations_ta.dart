@@ -11483,4 +11483,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get appearanceDark => 'இருள்';
+
+  @override
+  String get voiceQuestionNoSpeech => 'கேட்கவில்லை — மீண்டும் முயற்சிக்கவும்';
 }

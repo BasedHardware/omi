@@ -3597,5 +3597,6 @@
     "appearance": "Вигляд",
     "appearanceSystem": "Система",
     "appearanceLight": "Світла",
-    "appearanceDark": "Темна"
+    "appearanceDark": "Темна",
+    "voiceQuestionNoSpeech": "Не вдалося розчути — спробуйте ще раз"
 }

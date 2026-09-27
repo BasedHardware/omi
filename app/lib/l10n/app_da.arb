@@ -3639,5 +3639,6 @@
     "appearance": "Udseende",
     "appearanceSystem": "System",
     "appearanceLight": "Lys",
-    "appearanceDark": "Mørk"
+    "appearanceDark": "Mørk",
+    "voiceQuestionNoSpeech": "Jeg fangede det ikke — prøv igen"
 }

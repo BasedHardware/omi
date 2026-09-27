@@ -3597,5 +3597,6 @@
     "appearance": "Uiterlijk",
     "appearanceSystem": "Systeem",
     "appearanceLight": "Licht",
-    "appearanceDark": "Donker"
+    "appearanceDark": "Donker",
+    "voiceQuestionNoSpeech": "Dat heb ik niet verstaan — probeer het opnieuw"
 }

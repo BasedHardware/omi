@@ -11314,4 +11314,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get appearanceDark => 'כהה';
+
+  @override
+  String get voiceQuestionNoSpeech => 'לא הבנתי — נסה שוב';
 }
