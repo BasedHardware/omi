@@ -1329,6 +1329,7 @@ export interface ConversationScreenFrameSet {
   adjudicated_at?: string | null;
   banner?: ConversationScreenFrame | null;
   revision: number;
+  selection_fingerprint?: string | null;
   strip?: Array<ConversationScreenFrame>;
 }
 
