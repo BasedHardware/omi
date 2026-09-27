@@ -125,9 +125,15 @@ List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
   final ordered = List<Wal>.from(pending)..sort((a, b) => b.timerStart.compareTo(a.timerStart));
   if (ordered.isEmpty) return const [];
   final conversationId = ordered.first.conversationId;
+  final recordingSessionId = ordered.first.recordingSessionId;
   final locationKey = _walLocationBatchKey(ordered.first);
   return ordered
-      .where((wal) => wal.conversationId == conversationId && _walLocationBatchKey(wal) == locationKey)
+      .where(
+        (wal) =>
+            wal.conversationId == conversationId &&
+            wal.recordingSessionId == recordingSessionId &&
+            _walLocationBatchKey(wal) == locationKey,
+      )
       .take(_syncUploadBatchLimit)
       .toList();
 }
@@ -149,6 +155,20 @@ class LocalWalSyncImpl implements LocalWalSync {
   String? _deviceModel;
   Geolocation? _sessionGeolocation;
   int? _sessionGeolocationSetAt;
+  String? _activeRecordingSessionId;
+  String? _conversationStampRecordingId;
+
+  void setActiveRecordingSessionId(String? recordingSessionId) {
+    final trimmed = recordingSessionId?.trim();
+    _activeRecordingSessionId = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+  }
+
+  /// Recording id captured before a flush. [stampConversationId] keeps its
+  /// original signature so session spies do not have to learn a new argument.
+  void prepareConversationStamp(String? recordingSessionId) {
+    final trimmed = recordingSessionId?.trim();
+    _conversationStampRecordingId = (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+  }
 
   bool _isCancelled = false;
 
@@ -486,6 +506,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           syncedFrameOffset: syncedOffset,
           ownerUid: _currentWalOwnerUid(),
           geolocation: _copyGeolocation(_sessionGeolocation),
+          recordingSessionId: _activeRecordingSessionId,
         );
         _wals.add(wal);
       } else {
@@ -725,6 +746,7 @@ class LocalWalSyncImpl implements LocalWalSync {
             syncedFrameOffset: syncedOffset,
             ownerUid: _currentWalOwnerUid(),
             geolocation: _copyGeolocation(_sessionGeolocation),
+            recordingSessionId: _activeRecordingSessionId,
           ),
         );
     }
@@ -740,15 +762,27 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   /// Stamp all session WALs with the given conversationId and persist to disk.
   /// This makes WAL→conversation linkage survive app kill.
+  ///
+  /// A WAL created for the recording passed to [prepareConversationStamp] is
+  /// stamped even when its backdated [Wal.timerStart] is earlier than
+  /// [sessionStartSeconds]. A WAL that already belongs to a different recording
+  /// is left alone, so a session roll during the flush cannot attach the next
+  /// recording to this conversation.
   Future<void> stampConversationId(int sessionStartSeconds, String conversationId) async {
     final generation = _sessionGeneration;
     final now = _now().millisecondsSinceEpoch ~/ 1000;
+    final recordingId = _conversationStampRecordingId;
+    _conversationStampRecordingId = null;
+    final matchRecording = recordingId != null && recordingId.isNotEmpty;
     int stamped = 0;
     for (final wal in _wals) {
-      if (wal.status == WalStatus.miss &&
-          wal.timerStart >= sessionStartSeconds &&
-          wal.timerStart <= now &&
-          wal.conversationId == null) {
+      if (wal.status != WalStatus.miss || wal.conversationId != null) continue;
+      final walRecording = wal.recordingSessionId;
+      final foreignRecording = walRecording != null && walRecording.isNotEmpty && walRecording != recordingId;
+      if (foreignRecording) continue;
+      final matchesRecording = matchRecording && walRecording == recordingId;
+      final inWindow = wal.timerStart >= sessionStartSeconds && wal.timerStart <= now;
+      if (matchesRecording || inWindow) {
         wal.conversationId = conversationId;
         stamped++;
       }
@@ -1054,6 +1088,10 @@ class LocalWalSyncImpl implements LocalWalSync {
         final result = await _uploadGate.upload(
           files,
           conversationId: batchWals.first.conversationId,
+          recordingSessionId: batchWals.first.recordingSessionId,
+          audioStartSeconds: batchWals.map((wal) => wal.timerStart).reduce((a, b) => a < b ? a : b).toDouble(),
+          audioEndSeconds:
+              batchWals.map((wal) => wal.timerStart + wal.seconds).reduce((a, b) => a > b ? a : b).toDouble(),
           claimLiveCapture: claimLiveCapture,
           geolocation: batchWals.first.geolocation,
         );
@@ -1280,6 +1318,9 @@ class LocalWalSyncImpl implements LocalWalSync {
       final result = await _uploadGate.upload(
         [walFile],
         conversationId: walToSync.conversationId,
+        recordingSessionId: walToSync.recordingSessionId,
+        audioStartSeconds: walToSync.timerStart.toDouble(),
+        audioEndSeconds: (walToSync.timerStart + walToSync.seconds).toDouble(),
         claimLiveCapture: claimLiveCapture,
         geolocation: walToSync.geolocation,
       );

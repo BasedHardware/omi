@@ -220,7 +220,14 @@ def assign_in_transaction(
     for segment in new:
         segment['timestamp'] = incoming['started_at'].timestamp() + segment['start']
     survivors = dedupe_segments_for_merge(
-        origin, existing, new, text_match_slop_seconds=600 if target and not target.get('sync_content_revision') else 0
+        origin,
+        existing,
+        new,
+        text_match_slop_seconds=600 if target and not target.get('sync_content_revision') else 0,
+        # A bound safety WAL can mix one duplicate with genuinely new speech.
+        # Near-exact text, duration, and time are enough to drop that one line;
+        # broader clock-offset matches still require the batch gate.
+        single_match_slop_seconds=2 if target and result['sync_live_target'] else 0,
     )
     for segment in survivors:
         allocator.assign(segment)
