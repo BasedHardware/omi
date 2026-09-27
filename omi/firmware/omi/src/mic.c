@@ -12,6 +12,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 
+#include "diagnostics.h"
 #include "lib/core/settings.h"
 
 #ifdef CONFIG_OMI_ENABLE_T5838_AAD
@@ -115,6 +116,7 @@ static void process_audio_buffer(void *buffer, uint32_t size)
 
     /* Verify we don't exceed static buffer size */
     if (frames > MAX_FRAMES) {
+        omi_diagnostics_inc_mic_overrun();
         LOG_ERR("Frame count %zu exceeds MAX_FRAMES %d", frames, MAX_FRAMES);
         k_mem_slab_free(&mem_slab, buffer);
         return;
