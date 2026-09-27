@@ -127,6 +127,8 @@ def verify_phone_number(
         result = start_caller_id_verification(phone_number)
         phone_calls_db.set_pending_verification(uid, phone_number)
         return VerifyPhoneNumberResponse(**result)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except TwilioRestException as e:
         # Error 21450: a validation request already exists for this number.
         # This could mean (a) it's already verified by another user, or (b) a verification is still pending.
@@ -190,8 +192,11 @@ def check_phone_verification(
         'verified_at': datetime.now(timezone.utc).isoformat(),
         'is_primary': len(existing_numbers) == 0,
     }
-    phone_calls_db.upsert_phone_number(uid, phone_number_data)
-    phone_calls_db.delete_pending_verification(phone_number)
+    try:
+        phone_calls_db.upsert_phone_number(uid, phone_number_data)
+        phone_calls_db.delete_pending_verification(phone_number)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     return CheckVerificationResponse(verified=True, phone_number_id=phone_number_id)
 
@@ -217,7 +222,10 @@ def remove_phone_number(phone_number_id: str, uid: str = Depends(auth.get_curren
     if twilio_sid:
         delete_caller_id(twilio_sid)
 
-    phone_calls_db.delete_phone_number(uid, phone_number_id)
+    try:
+        phone_calls_db.delete_phone_number(uid, phone_number_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {'success': True}
 
 
