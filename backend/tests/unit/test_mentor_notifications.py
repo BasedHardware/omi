@@ -133,6 +133,7 @@ def _apply_fakes(monkeypatch):
     monkeypatch.setattr(app_int, 'get_user_goals', mock_get_user_goals)
     # Date grounding reads a user timezone in production; this lane is hermetic.
     monkeypatch.setattr(app_int, 'current_date_for_uid', lambda uid: '2026-09-21')
+    monkeypatch.setattr(notifications_db, 'resolve_user_timezone', lambda uid: 'UTC')
     monkeypatch.setattr(app_int, 'get_prompt_memories', mock_get_prompt_memories)
     monkeypatch.setattr(app_int, 'get_app_messages', mock_get_app_messages)
     monkeypatch.setattr(app_int, 'get_user_language_preference', mock_get_user_language)

@@ -118,6 +118,20 @@ def test_fragmented_conversation_is_rewritten_to_one_id_per_voice(env, monkeypat
     assert sorted(resolution.participant_speaker_ids) == sorted(next(iter(i)) for i in ids_by_voice.values())
 
 
+def test_two_sync_batches_with_no_audio_withdraw_automatic_owner_claims():
+    conversation = _conversation([0, 1], pcs=False, scopes=['sync:batch-a', 'sync:batch-b'])
+    for segment in conversation.transcript_segments:
+        segment.is_user = True
+        segment.speaker_identity_status = 'user'
+        segment.speaker_match_source = 'sync_embedding'
+
+    stage.resolve_speakers_for_processing('u', conversation)
+
+    assert conversation.speaker_resolution.status == 'unavailable'
+    assert all(not segment.is_user for segment in conversation.transcript_segments)
+    assert all(segment.speaker_identity_status == 'ambiguous' for segment in conversation.transcript_segments)
+
+
 def test_cache_means_a_growing_conversation_embeds_each_segment_once(env, monkeypatch):
     store, diarizer = env
     plan = [0, 1] * 6
@@ -329,3 +343,27 @@ def test_a_run_cut_short_reports_uncountable_then_resumes_to_resolved(env, monke
     assert diarizer.calls == len(plan)
     assert conversation.speaker_resolution.status == 'resolved'
     assert len({s.speaker_id for s in conversation.transcript_segments}) == 2
+
+
+@pytest.mark.parametrize('distances,expected', [((0.40, 0.45), []), ((0.40, 0.63), [0]), ((0.631, 0.645), [])])
+def test_resolution_replaces_capture_owner_guesses_with_joint_evidence(env, monkeypatch, distances, expected):
+    plan = [0, 1] * 10
+    _install_audio(monkeypatch, plan)
+    conversation = _conversation(plan)
+    for segment in conversation.transcript_segments:
+        segment.is_user = True
+        segment.speaker_identity_status = 'user'
+        segment.speaker_match_source = 'sync_embedding'
+    vectors = np.zeros_like(VOICES)
+    for i, d in enumerate(distances):
+        vectors[i, :2] = [1 - d, (-1) ** i * np.sqrt(1 - (1 - d) ** 2)]
+    monkeypatch.setattr(__import__(__name__, fromlist=['VOICES']), 'VOICES', vectors)
+    monkeypatch.setattr(stage.users_db, 'get_user_speaker_embedding', lambda uid: np.eye(1, 64)[0].tolist())
+    stage.resolve_speakers_for_processing('u1', conversation)
+    assert len({s.speaker_id for s in conversation.transcript_segments}) == 2
+    assert {v for s, v in zip(conversation.transcript_segments, plan) if s.is_user} == set(expected)
+    if distances == (0.40, 0.45):
+        assert all(s.speaker_identity_status == 'ambiguous' for s in conversation.transcript_segments)
+    # Persistence/client projection retains unnamed voices and the evidence state.
+    restored = Conversation(**conversation.model_dump())
+    assert [s.is_user for s in restored.transcript_segments] == [s.is_user for s in conversation.transcript_segments]

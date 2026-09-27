@@ -153,6 +153,7 @@ from utils.sync.assignment import fragment_rule, needs_fragment_review
 from utils.sync.speaker_identity import SpeakerIdentityDependencies, USER_SELF_PERSON_ID
 from utils.sync.speaker_identity import build_person_embeddings_cache as _build_person_embeddings_cache
 from utils.sync.speaker_identity import identify_speakers_for_segments as _identify_speakers_for_segments
+from utils.manual_speaker_assignments import manual_owner_reserved
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
 from utils.metrics import OMI_SYNC_BACKFILL_DAILY_USED_MS, OMI_SYNC_LANE_SPEECH_MS_TOTAL, record_conversation_relevance
 
@@ -1008,6 +1009,8 @@ def identify_speakers_for_segments(
     person_embeddings_cache: Dict[str, dict],
     uid: str,
     language: Optional[str] = None,
+    *,
+    owner_reserved: bool = False,
 ) -> None:
     _identify_speakers_for_segments(
         transcript_segments,
@@ -1015,6 +1018,7 @@ def identify_speakers_for_segments(
         person_embeddings_cache,
         uid,
         language,
+        owner_reserved=owner_reserved,
         dependencies=_speaker_identity_dependencies(),
     )
 
@@ -1157,28 +1161,6 @@ def process_segment(
             empty_retried = True
             _log_empty_retry('started')
 
-        # Download the segment audio once — used for speaker ID and/or to persist the
-        # conversation's audio as a private-cloud chunk (realtime parity, below).
-        phase = 'download'
-        audio_bytes = _download_audio_bytes(url) if (person_embeddings_cache or private_cloud_sync_enabled) else None
-        try:
-            identify_speakers_for_segments(
-                transcript_segments,
-                audio_bytes if person_embeddings_cache else None,
-                person_embeddings_cache or {},
-                uid,
-                language=language,
-            )
-        except Exception as e:
-            logger.warning(
-                'event=sync_speaker_id outcome=failed exception_type=%s',
-                _bounded_exception_type(e),
-            )
-        finally:
-            # Keep audio_bytes for chunk storage when private cloud sync is on; free it now otherwise.
-            if audio_bytes is not None and not private_cloud_sync_enabled:
-                audio_bytes = None
-
         # Chronological scheduling reduces bridge work; the transaction remains
         # correct when independent jobs or a timed-out worker arrive out of order.
         phase = 'assignment'
@@ -1198,6 +1180,33 @@ def process_segment(
             if target_conversation_id
             else get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
         )
+        candidate_id = target_conversation_id or (closest_memory['id'] if closest_memory else None)
+        owner_reserved = False
+        if candidate_id:
+            try:
+                owner_reserved = manual_owner_reserved(conversations_db.get_manual_speaker_receipt(uid, candidate_id))
+            except Exception as error:
+                # A receipt read failure cannot authorize an automatic owner.
+                owner_reserved = True
+                logger.warning('event=sync_speaker_receipt outcome=failed exception_type=%s', type(error).__name__)
+
+        # Download once for matching and optional private-cloud chunk storage.
+        phase = 'download'
+        audio_bytes = _download_audio_bytes(url) if (person_embeddings_cache or private_cloud_sync_enabled) else None
+        try:
+            identify_speakers_for_segments(
+                transcript_segments,
+                audio_bytes if person_embeddings_cache else None,
+                person_embeddings_cache or {},
+                uid,
+                language=language,
+                owner_reserved=owner_reserved,
+            )
+        except Exception as e:
+            logger.warning('event=sync_speaker_id outcome=failed exception_type=%s', _bounded_exception_type(e))
+        finally:
+            if audio_bytes is not None and not private_cloud_sync_enabled:
+                audio_bytes = None
         started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
         create_memory = CreateConversation(
             started_at=started_at,

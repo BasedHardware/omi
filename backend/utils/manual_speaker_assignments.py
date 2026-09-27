@@ -13,6 +13,15 @@ from models.transcript_segment import TranscriptSegment, legacy_conversation_seg
 TEACHING_CANDIDATE_LIMIT = 3
 
 
+def manual_owner_reserved(receipt: dict) -> bool:
+    """An explicit owner decision reserves the owner even without a voiceprint."""
+    return any(
+        isinstance(entry, dict) and entry.get('is_user') is True
+        for entries in (receipt.get('speakers') or {}, receipt.get('segments') or {})
+        for entry in entries.values()
+    )
+
+
 def teaching_segment_ids(segments: list[dict], resolved: list[str], limit: int = TEACHING_CANDIDATE_LIMIT) -> list[str]:
     """Longest labeled clips first, capped so extraction never walks the whole speaker cluster."""
     by_id = {segment.get('id'): segment for segment in segments if segment.get('id')}
