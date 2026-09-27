@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import {
+  attributedCtaHref,
   ctaTarget,
   deviceClass,
   shareId,
@@ -72,8 +73,16 @@ export function ShareAnalytics() {
       }
       const anchor = element?.closest('a[href]');
       if (anchor) {
-        const target = ctaTarget(anchor.getAttribute('href'));
-        if (target) capture('Share CTA Clicked', { target });
+        const href = anchor.getAttribute('href');
+        const target = ctaTarget(href);
+        if (target) {
+          capture('Share CTA Clicked', { target });
+          // Update before the anchor's default navigation, including target=_blank.
+          anchor.setAttribute(
+            'href',
+            attributedCtaHref(href, surface, common.s, common.share_id),
+          );
+        }
       }
     };
     const onCopy = () => capture('Share Link Re-copied');
