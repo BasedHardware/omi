@@ -1088,6 +1088,13 @@ def update_app(
     app_id: str, app_data: str = Form(...), file: UploadFile = File(None), uid=Depends(auth.get_current_user_uid)
 ):
     data = parse_form_json(dict, app_data, 'app_data')
+    # Released clients serialize an omitted field as null, not absent. The App model requires
+    # these fields, so writing a null over the stored value would make every App(**doc) read
+    # raise ValidationError (500 on app detail, personas, OAuth token, notifications) with no
+    # un-poisoning path. A null here can only mean "not sent".
+    for field in ('name', 'category', 'author', 'description', 'image', 'capabilities'):
+        if data.get(field) is None:
+            data.pop(field, None)
     app = get_available_app_by_id(app_id, uid)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
@@ -2059,7 +2066,10 @@ async def mcp_oauth_callback(code: str, state: str):
         )
     except Exception as e:
         logger.error(f"Token exchange failed: {e}")
-        return HTMLResponse('<html><body><h1>Token exchange failed</h1><p>Failed to exchange authorization code for access token.</p></body></html>', status_code=502)
+        return HTMLResponse(
+            '<html><body><h1>Token exchange failed</h1><p>Failed to exchange authorization code for access token.</p></body></html>',
+            status_code=502,
+        )
 
     # Update stored tokens
     oauth_tokens['access_token'] = token_data['access_token']
@@ -2072,7 +2082,10 @@ async def mcp_oauth_callback(code: str, state: str):
         tools = await discover_mcp_tools(server_url, token_data['access_token'])
     except Exception as e:
         logger.error(f"Tool discovery failed: {e}")
-        return HTMLResponse('<html><body><h1>Tool discovery failed</h1><p>Failed to discover tools on the MCP server.</p></body></html>', status_code=502)
+        return HTMLResponse(
+            '<html><body><h1>Tool discovery failed</h1><p>Failed to discover tools on the MCP server.</p></body></html>',
+            status_code=502,
+        )
 
     # Use the resolved URL from the first tool (discover_mcp_tools stores the working URL)
     resolved_url = tools[0].endpoint if tools else server_url
