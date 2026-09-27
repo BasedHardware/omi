@@ -139,8 +139,12 @@ async def _perplexity_gateway_search(query: str) -> str:
         logger.error("⚠️ perplexity_web_search_tool - Unexpected response format")
         return "Error: Unexpected response format from Perplexity API"
     except Exception as e:
-        logger.error(f"❌ perplexity_web_search_tool - Unexpected error: {e}")
-        return f"Error: An unexpected error occurred while searching: {str(e)}"
+        logger.error(
+            "❌ perplexity_web_search_tool - Unexpected error: %s",
+            type(e).__name__,
+            exc_info=True,
+        )
+        return "Error: An unexpected error occurred while searching. Please try again later."
 
 
 async def _post_gateway_chat_completion(content: str) -> httpx.Response:
