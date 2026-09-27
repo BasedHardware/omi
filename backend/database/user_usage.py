@@ -626,6 +626,43 @@ def get_yearly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
     return _aggregate_stats(query)
 
 
+def _local_boundary_utc(user_tz: Any, local_boundary: datetime) -> datetime:
+    """Resolve a local period boundary to its first possible UTC instant.
+
+    A repeated midnight begins at its DST occurrence. A skipped midnight
+    begins at the first valid wall time after the gap.
+    """
+
+    try:
+        localized = user_tz.localize(local_boundary, is_dst=None)
+    except pytz.AmbiguousTimeError:
+        localized = user_tz.localize(local_boundary, is_dst=True)
+    except pytz.NonExistentTimeError:
+        lower = local_boundary
+        step = timedelta(minutes=1)
+        while True:
+            upper = local_boundary + step
+            try:
+                user_tz.localize(upper, is_dst=None)
+                break
+            except pytz.AmbiguousTimeError:
+                break
+            except pytz.NonExistentTimeError:
+                lower = upper
+                step *= 2
+        while upper - lower > timedelta(microseconds=1):
+            middle = lower + (upper - lower) // 2
+            try:
+                user_tz.localize(middle, is_dst=None)
+                upper = middle
+            except pytz.AmbiguousTimeError:
+                upper = middle
+            except pytz.NonExistentTimeError:
+                lower = middle
+        localized = user_tz.localize(upper, is_dst=True)
+    return localized.astimezone(timezone.utc)
+
+
 def _local_period_usage(
     uid: str, now: datetime, user_tz: Any, period: str
 ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
@@ -641,8 +678,8 @@ def _local_period_usage(
     else:
         local_start = datetime(local_now.year, 1, 1)
         local_end = datetime(local_now.year + 1, 1, 1)
-    start = user_tz.localize(local_start).astimezone(timezone.utc)
-    end = user_tz.localize(local_end).astimezone(timezone.utc)
+    start = _local_boundary_utc(user_tz, local_start)
+    end = _local_boundary_utc(user_tz, local_end)
     collection = db.collection('users').document(uid).collection('hourly_usage')
     main = collection.where(filter=FieldFilter('year', '==', local_now.year))
     if period == 'monthly':
@@ -879,8 +916,8 @@ def get_current_user_usage(
         if user_tz is not None:
             try:
                 display_date = now.astimezone(user_tz).date()
-                start = user_tz.localize(datetime.combine(display_date, time.min)).astimezone(timezone.utc)
-                end = user_tz.localize(datetime.combine(display_date, time.max)).astimezone(timezone.utc)
+                start = _local_boundary_utc(user_tz, datetime.combine(display_date, time.min))
+                end = _local_boundary_utc(user_tz, datetime.combine(display_date + timedelta(days=1), time.min))
             except Exception as e:
                 # Keep serving the UTC day rather than failing the request, but say so: a stored
                 # zone we cannot parse is a data problem worth seeing, not something to swallow.

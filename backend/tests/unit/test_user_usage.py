@@ -514,6 +514,48 @@ def test_local_period_edges_and_dst_are_counted_once(mock_db, zone, period, now,
     assert result[period]['words_transcribed'] == sum(value for _, value in actual)
 
 
+@pytest.mark.parametrize(
+    'zone,local_boundary,expected_utc,now,hours,expected_date',
+    [
+        (
+            'America/Havana',
+            datetime(2026, 11, 1),
+            datetime(2026, 11, 1, 4, tzinfo=timezone.utc),
+            datetime(2026, 11, 1, 12, tzinfo=timezone.utc),
+            [('2026-11-01T03:00:00', 99), ('2026-11-01T04:00:00', 10), ('2026-11-01T05:00:00', 20)],
+            '2026-11-01',
+        ),
+        (
+            'Africa/Cairo',
+            datetime(2014, 8, 1),
+            datetime(2014, 7, 31, 22, tzinfo=timezone.utc),
+            datetime(2014, 7, 31, 23, tzinfo=timezone.utc),
+            [('2014-07-31T21:00:00', 99), ('2014-07-31T22:00:00', 10), ('2014-07-31T23:00:00', 20)],
+            '2014-08-01',
+        ),
+    ],
+)
+def test_midnight_transition_month_and_today_boundaries(
+    mock_db, zone, local_boundary, expected_utc, now, hours, expected_date
+):
+    assert user_usage._local_boundary_utc(user_usage.pytz.timezone(zone), local_boundary) == expected_utc
+    docs = []
+    for timestamp, words in hours:
+        hour = datetime.fromisoformat(timestamp)
+        docs.append(
+            {'year': hour.year, 'month': hour.month, 'day': hour.day, 'hour': hour.hour, 'words_transcribed': words}
+        )
+    _setup_hourly_docs(mock_db, docs)
+
+    monthly = user_usage.get_current_user_usage('uid', 'monthly', tz_name=zone, now=now)
+    today = user_usage.get_current_user_usage('uid', 'today', tz_name=zone, now=now)
+
+    assert monthly['monthly']['words_transcribed'] == 30
+    assert [(row['date'], row['words_transcribed']) for row in monthly['history']] == [(expected_date, 30)]
+    assert today['today']['words_transcribed'] == 30
+    assert [row['words_transcribed'] for row in today['history']] == [10, 20]
+
+
 @pytest.mark.parametrize('period', ['monthly', 'yearly'])
 def test_invalid_timezone_keeps_utc_period_buckets(mock_db, period):
     _setup_hourly_docs(mock_db, _LA_HOURLY_DOCS)

@@ -178,4 +178,61 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('Chat this month', skipOffstage: false), findsOneWidget);
   });
+
+  testWidgets('month and year refetch with the new device timezone after a tab change', (tester) async {
+    var zone = 'Asia/Tokyo';
+    final requests = <(String, String?)>[];
+    final provider = UsageProvider(
+      deviceTimeZone: () async => zone,
+      usageRequest: ({required String period, required String? timeZone}) async {
+        requests.add((period, timeZone));
+        return UserUsageResponse(
+          monthly: period == 'monthly' ? stats() : null,
+          yearly: period == 'yearly' ? stats() : null,
+          allTime: period == 'all_time' ? stats() : null,
+          history: [],
+        );
+      },
+    );
+    provider.debugSetSubscription(UserSubscriptionResponse(
+      subscription: Subscription(plan: PlanType.architect, status: SubscriptionStatus.active),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+    ));
+    provider.debugSetUsage('today', stats(), []);
+    await provider.fetchUsageStats(period: 'monthly');
+    await provider.fetchUsageStats(period: 'yearly');
+    await provider.fetchUsageStats(period: 'all_time');
+
+    await tester.pumpWidget(app(const UsagePage(debugSkipFetch: true), provider: provider));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('Month').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(requests.length, 3); // Cached month did not refetch.
+
+    zone = 'America/Los_Angeles';
+    await tester.tap(find.text('Year').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(requests.last, ('yearly', zone));
+    expect(provider.monthlyUsage, isNull);
+    expect(provider.allTimeUsage, isNotNull);
+
+    await tester.tap(find.text('Month').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(requests.last, ('monthly', zone));
+    expect(provider.monthlyUsage, isNotNull);
+
+    zone = 'Asia/Kolkata';
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(requests.last, ('monthly', zone));
+  });
 }

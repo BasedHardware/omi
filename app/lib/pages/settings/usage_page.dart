@@ -44,7 +44,7 @@ class UsagePage extends StatefulWidget {
   State<UsagePage> createState() => _UsagePageState();
 }
 
-class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
+class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, WidgetsBindingObserver {
   late TabController _tabController;
   final List<GlobalKey> _screenshotKeys = List.generate(4, (_) => GlobalKey());
   final GlobalKey _shareButtonKey = GlobalKey();
@@ -246,9 +246,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     if (_tabController.indexIsChanging) {
       return;
     }
-    String period = _getPeriodForIndex(_tabController.index);
+    unawaited(_fetchPeriodIfNeeded(_getPeriodForIndex(_tabController.index)));
+  }
 
+  Future<void> _fetchPeriodIfNeeded(String period) async {
     final provider = context.read<UsageProvider>();
+    await provider.refreshUsageTimeZone();
+    if (!mounted) return;
     bool shouldFetch = false;
     switch (period) {
       case 'today':
@@ -266,13 +270,29 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     }
 
     if (shouldFetch) {
-      provider.fetchUsageStats(period: period);
+      await provider.fetchUsageStats(period: period);
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshActivePeriodOnResume());
+    }
+  }
+
+  Future<void> _refreshActivePeriodOnResume() async {
+    final provider = context.read<UsageProvider>();
+    final changed = await provider.refreshUsageTimeZone();
+    if (mounted && changed) {
+      await provider.fetchUsageStats(period: _getPeriodForIndex(_tabController.index));
     }
   }
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(_handleTabSelection);
     _waveController = AnimationController(duration: const Duration(milliseconds: 18000), vsync: this)..repeat();
@@ -300,6 +320,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _tabController.removeListener(_handleTabSelection);
     _tabController.dispose();
     _waveController.dispose();

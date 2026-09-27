@@ -8,7 +8,21 @@ import 'package:omi/models/user_usage.dart';
 import 'package:omi/services/capture/transcription_allowance_cache.dart';
 import 'package:omi/utils/logger.dart';
 
+typedef UsageRequest = Future<UserUsageResponse?> Function({required String period, required String? timeZone});
+
 class UsageProvider with ChangeNotifier {
+  UsageProvider({Future<String?> Function()? deviceTimeZone, UsageRequest? usageRequest})
+      : _deviceTimeZone = deviceTimeZone ?? getUsageDeviceTimeZone,
+        _usageRequest = usageRequest ?? getUserUsage;
+
+  final Future<String?> Function() _deviceTimeZone;
+  final UsageRequest _usageRequest;
+  String? _usageTimeZone;
+  bool _usageTimeZoneResolved = false;
+  int _timeZoneLookupGeneration = 0;
+  int _usageTimeZoneGeneration = 0;
+  Future<void>? _usageFetchInFlight;
+
   UserSubscriptionResponse? _subscription;
   UserSubscriptionResponse? get subscription => _subscription;
 
@@ -143,6 +157,11 @@ class UsageProvider with ChangeNotifier {
     _monthlyHistory = null;
     _yearlyHistory = null;
     _allTimeHistory = null;
+    _usageTimeZone = null;
+    _usageTimeZoneResolved = false;
+    _timeZoneLookupGeneration++;
+    _usageTimeZoneGeneration++;
+    _usageFetchInFlight = null;
     _availablePlans = null;
     _forceOutOfCredits = false;
     _error = null;
@@ -196,17 +215,61 @@ class UsageProvider with ChangeNotifier {
   /// Alias for fetchSubscription - refreshes subscription data from backend
   Future<void> refreshSubscription() => fetchSubscription();
 
-  Future<void> fetchUsageStats({required String period}) async {
-    if (_isUsageLoading) return;
+  /// Drop local-calendar periods when the device zone used by the API changes.
+  /// All-time usage has no local period boundary and remains reusable.
+  Future<bool> refreshUsageTimeZone() async {
+    final session = _sessionGeneration;
+    final lookup = ++_timeZoneLookupGeneration;
+    String? zone;
+    try {
+      zone = await _deviceTimeZone();
+    } catch (_) {
+      // Match the API fallback when the platform timezone is unavailable.
+    }
+    if (session != _sessionGeneration || lookup != _timeZoneLookupGeneration) return false;
+    if (!_usageTimeZoneResolved) {
+      _usageTimeZone = zone;
+      _usageTimeZoneResolved = true;
+      return false;
+    }
+    if (_usageTimeZone == zone) return false;
+    _usageTimeZone = zone;
+    _usageTimeZoneGeneration++;
+    _todayUsage = null;
+    _monthlyUsage = null;
+    _yearlyUsage = null;
+    _todayHistory = null;
+    _monthlyHistory = null;
+    _yearlyHistory = null;
+    notifyListeners();
+    return true;
+  }
 
+  Future<void> fetchUsageStats({required String period}) async {
+    while (_usageFetchInFlight != null) {
+      await _usageFetchInFlight;
+    }
+    final fetch = _fetchUsageStats(period);
+    _usageFetchInFlight = fetch;
+    try {
+      await fetch;
+    } finally {
+      if (identical(_usageFetchInFlight, fetch)) _usageFetchInFlight = null;
+    }
+  }
+
+  Future<void> _fetchUsageStats(String period) async {
     final generation = _sessionGeneration;
+    await refreshUsageTimeZone();
+    if (generation != _sessionGeneration) return;
+    final timeZoneGeneration = _usageTimeZoneGeneration;
     _isUsageLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      final response = await getUserUsage(period: period);
-      if (generation != _sessionGeneration) return; // Session cleared mid-flight; discard stale response.
+      final response = await _usageRequest(period: period, timeZone: _usageTimeZone);
+      if (generation != _sessionGeneration || timeZoneGeneration != _usageTimeZoneGeneration) return;
       if (response != null) {
         switch (period) {
           case 'today':
@@ -230,7 +293,7 @@ class UsageProvider with ChangeNotifier {
         _error = 'Failed to load usage data. Please try again later.';
       }
     } catch (e) {
-      if (generation != _sessionGeneration) return;
+      if (generation != _sessionGeneration || timeZoneGeneration != _usageTimeZoneGeneration) return;
       _error = 'Failed to load usage data. Please try again later.';
       Logger.debug('Failed to fetch usage stats: $e');
     } finally {
