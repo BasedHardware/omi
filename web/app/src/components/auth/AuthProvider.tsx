@@ -18,7 +18,7 @@ import {
   getIdToken,
   completeRedirectSignIn,
 } from '@/lib/firebase';
-import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { PostHogManager } from '@/lib/analytics/posthog';
 
 interface AuthContextType {
   user: User | null;
@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Initialize Mixpanel
-    MixpanelManager.init();
+    PostHogManager.init();
 
     // Subscribe to auth state changes
     const unsubscribe = onAuthStateChange((user) => {
@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Identify user with Mixpanel when authenticated
       if (user && !previousUserRef.current) {
-        MixpanelManager.identify(user.uid, {
+        PostHogManager.identify(user.uid, {
           name: user.displayName || undefined,
           email: user.email || undefined,
         });
@@ -79,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void completeRedirectSignIn()
       .then((redirectedUser) => {
         if (redirectedUser) {
-          MixpanelManager.track('Sign In Completed', { method: 'redirect' });
+          PostHogManager.track('Sign In Completed', { method: 'redirect' });
         }
       })
       .catch((error) => {
@@ -93,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const handleSignInWithGoogle = async () => {
     try {
       await signInWithGoogle();
-      MixpanelManager.track('Sign In Completed', { method: 'google' });
+      PostHogManager.track('Sign In Completed', { method: 'google' });
     } catch (error) {
       console.error('Failed to sign in with Google:', error);
       throw error;
@@ -103,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const handleSignInWithApple = async () => {
     try {
       await signInWithApple();
-      MixpanelManager.track('Sign In Completed', { method: 'apple' });
+      PostHogManager.track('Sign In Completed', { method: 'apple' });
     } catch (error) {
       console.error('Failed to sign in with Apple:', error);
       throw error;
@@ -112,8 +112,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const handleSignOut = async () => {
     try {
-      MixpanelManager.track('Sign Out');
-      MixpanelManager.reset();
+      PostHogManager.track('Sign Out');
+      PostHogManager.reset();
       await signOutUser();
     } catch (error) {
       console.error('Failed to sign out:', error);
