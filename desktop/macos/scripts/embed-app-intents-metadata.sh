@@ -28,7 +28,7 @@ trap 'rm -rf "$work_dir"' EXIT
 # dependency metadata must not be mistaken for Omi's own actions.
 find "$build_root" -type f -name '*.swiftconstvalues' \
   -path "*/${configuration}/*/Objects-normal/${architecture}/*" \
-  | rg '/(Omi Computer|Omi_Computer)(-p)?\.build/Objects-normal/' \
+  | grep -E '/(Omi Computer|Omi_Computer)(-p)?\.build/Objects-normal/' \
   | sort > "$work_dir/const-values.list"
 [[ -s "$work_dir/const-values.list" ]] || {
   echo "Omi Computer constant-value files missing; build with -Xswiftc -emit-const-values" >&2

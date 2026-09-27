@@ -490,6 +490,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("-emit-const-values", _runner_text())
         self.assertIn("Metadata.appintents", advisory)
         self.assertIn("Siri release metadata requires Xcode 27.0", embed)
+        self.assertNotRegex(embed, r"\brg\b", "release metadata script must run on stock macos-26")
 
     def test_mobile_27_only_sources_compile_out_on_required_ci(self):
         root = REPO_ROOT / "app/ios/Runner/SiriIntegration"
