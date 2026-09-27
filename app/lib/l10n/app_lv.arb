@@ -3578,5 +3578,20 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Atskaņo skaļi caur tālruņa skaļruni.",
     "deviceOnboardingVoiceReplySettingsHint": "To jebkurā laikā varat mainīt pa tālruni {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Atkārtojiet šo ceļojumu jebkurā laikā {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Austiņas"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Austiņas",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "minūtes",
+    "usageWords": "Words",
+    "usageTasks": "Uzdevumi",
+    "usageMonth": "Šomēnes",
+    "usageYear": "Šogad",
+    "usageAll": "Visu laiku",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month"
 }

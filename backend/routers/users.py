@@ -1093,9 +1093,21 @@ def set_location_context_consent(update: LocationContextConsentUpdate, uid: str 
 def get_user_usage_stats_endpoint(
     uid: str = Depends(auth.get_current_user_uid),
     period: UsagePeriod = UsagePeriod.TODAY,
+    time_zone: str | None = None,
 ):
     """Gets daily and monthly usage stats for the authenticated user."""
-    stats = user_usage_db.get_current_user_usage(uid, period.value, tz_name=notification_db.get_user_time_zone(uid))
+
+    def valid_zone(value: str | None) -> str | None:
+        if not value:
+            return None
+        try:
+            pytz.timezone(value)
+        except (pytz.UnknownTimeZoneError, ValueError):
+            return None
+        return value
+
+    zone = valid_zone(time_zone) or valid_zone(notification_db.get_user_time_zone(uid)) or 'UTC'
+    stats = user_usage_db.get_current_user_usage(uid, period.value, tz_name=zone)
     return stats
 
 

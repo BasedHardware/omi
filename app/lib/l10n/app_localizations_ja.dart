@@ -11159,4 +11159,49 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'ヘッドフォン';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => '分';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'タスク';
+
+  @override
+  String get usageMonth => '今月';
+
+  @override
+  String get usageYear => '今年';
+
+  @override
+  String get usageAll => '全期間';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
 }

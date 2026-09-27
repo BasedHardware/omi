@@ -24,6 +24,7 @@ from google.auth.transport import requests as google_auth_requests
 from google.cloud import tasks_v2
 from google.oauth2 import id_token
 from google.protobuf import duration_pb2
+from google.protobuf import timestamp_pb2
 
 from utils.log_sanitizer import sanitize
 
@@ -56,6 +57,7 @@ SYNC_JOB_TASK_PAYLOAD_KEYS = frozenset(
         'ledger_fence_mode',
     }
 )
+SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS = SYNC_JOB_TASK_PAYLOAD_KEYS | {'sequencer_epoch'}
 
 _tasks_client: Optional[tasks_v2.CloudTasksClient] = None
 _google_auth_request: Optional[google_auth_requests.Request] = None
@@ -233,6 +235,7 @@ def _enqueue_named_task(
     *,
     audience: Optional[str] = None,
     invoker_sa: Optional[str] = None,
+    schedule_at: Optional[int] = None,
 ) -> None:
     """Enqueue one named HTTP task. Duplicate names are treated as success —
     Cloud Tasks deduplicates named tasks. Any other failure raises."""
@@ -257,6 +260,7 @@ def _enqueue_named_task(
             ),
         ),
         dispatch_deadline=duration_pb2.Duration(seconds=DISPATCH_DEADLINE_SECONDS),
+        schedule_time=timestamp_pb2.Timestamp(seconds=schedule_at) if schedule_at is not None else None,
     )
     try:
         client.create_task(parent=parent, task=task)  # type: ignore[reportUnknownMemberType]  # google.cloud.tasks_v2 partially untyped
@@ -285,8 +289,13 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
     (request-based) rather than the ~4-dispatch lane that caused the incident.
     The lane label is always carried on the payload for metering and reporting.
     """
-    if frozenset(payload) != SYNC_JOB_TASK_PAYLOAD_KEYS:
+    keys = frozenset(payload)
+    if keys not in (SYNC_JOB_TASK_PAYLOAD_KEYS, SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS):
         raise ValueError('sync job payload does not match the durable worker schema')
+    sequencer_epoch = payload.get('sequencer_epoch')
+    if sequencer_epoch is not None and (not isinstance(sequencer_epoch, int) or sequencer_epoch <= 0):
+        raise ValueError('sync job sequencer epoch must be a positive integer')
+    task_id = f"{payload['job_id']}-s{sequencer_epoch}" if sequencer_epoch is not None else str(payload['job_id'])
     if payload.get('lane') == 'backfill' and is_sync_backfill_routing_enabled():
         queue = os.getenv('SYNC_BACKFILL_TASKS_QUEUE', '').strip()
         handler_url = os.getenv('SYNC_BACKFILL_TASKS_HANDLER_URL', '').strip()
@@ -294,12 +303,28 @@ def enqueue_sync_job(payload: Dict[str, Any]) -> None:
             _enqueue_named_task(
                 queue,
                 handler_url,
-                str(payload['job_id']),
+                task_id,
                 payload,
                 audience=os.getenv('SYNC_BACKFILL_TASKS_OIDC_AUDIENCE') or handler_url,
             )
             return
-    _enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), str(payload['job_id']), payload)
+    _enqueue_named_task(os.getenv('SYNC_TASKS_QUEUE', ''), _handler_url(), task_id, payload)
+
+
+def enqueue_sync_uid_wake(uid: str, uid_hash: str, deadline: int) -> None:
+    """Wake a cutover-delayed UID without occupying a worker during the wait."""
+    handler = _handler_url()
+    if not handler.endswith('/v2/sync-jobs/run'):
+        raise RuntimeError('sync task handler URL is not the expected v2 route')
+    wake_url = handler.removesuffix('/v2/sync-jobs/run') + '/v2/sync-backfill-sequencer/wake'
+    _enqueue_named_task(
+        os.getenv('SYNC_TASKS_QUEUE', ''),
+        wake_url,
+        f'sbu-{uid_hash}-{deadline}',
+        {'uid': uid},
+        audience=_oidc_audience(),
+        schedule_at=deadline,
+    )
 
 
 def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:

@@ -110,11 +110,18 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         if (mounted) OmiFeedback.error(context, context.l10n.failedToShareRecap);
         return;
       }
-      PlatformManager.instance.analytics.dailySummaryShared(summaryId: widget.summaryId, date: summary.date);
-      final url = recapShareUrl(widget.summaryId);
-      await SharePlus.instance.share(
+      final sid = newShareId();
+      final url = recapShareUrl(widget.summaryId, sid: sid);
+      final outcome = await SharePlus.instance.share(
         ShareParams(uri: Uri.parse(url), subject: summary.headline, sharePositionOrigin: shareSheetOrigin()),
       );
+      final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
+      PlatformManager.instance.analytics.track('Daily Summary Shared', properties: {
+        'summary_id': widget.summaryId,
+        'date': summary.date,
+        'share_id': sid,
+        if (targetApp != null) 'target_app': targetApp,
+      });
     } finally {
       if (mounted) setState(() => _isSharing = false);
     }

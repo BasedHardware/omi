@@ -3613,5 +3613,20 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Joue à haute voix via le haut-parleur du téléphone.",
     "deviceOnboardingVoiceReplySettingsHint": "Vous pouvez modifier cela à tout moment au {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Revivez cette tournée à tout moment au {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Écouteurs"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Écouteurs",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "minutes",
+    "usageWords": "Words",
+    "usageTasks": "Tâches",
+    "usageMonth": "Ce mois-ci",
+    "usageYear": "Cette année",
+    "usageAll": "Depuis toujours",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month"
 }

@@ -32,3 +32,13 @@ WINDOW_EMISSION_DROPS = Counter(
 )
 CHAIN_EXHAUSTED = Counter('omi_stt_chain_exhausted_total', 'Configured live chains that could not serve')
 LEG_ATTEMPTS = Counter('omi_stt_leg_attempts_total', 'Configured-chain connection results', ['to_mode', 'outcome'])
+LANGUAGE_CONSTRAINT = Counter(
+    'omi_stt_language_constraint_total',
+    'Language information sent on live STT connections',
+    ['provider', 'constraint', 'primary_group', 'arm'],
+)
+OUTPUT_LANGUAGE_SEGMENTS = Counter(
+    'omi_stt_output_language_segments_total',
+    'Finalized live STT segment language conformance',
+    ['provider', 'primary_group', 'arm', 'conformance'],
+)

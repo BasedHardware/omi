@@ -3578,5 +3578,20 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Wird laut über den Telefonlautsprecher abgespielt.",
     "deviceOnboardingVoiceReplySettingsHint": "Sie können dies jederzeit unter {settings} › {voiceResponse} ändern",
     "deviceOnboardingAllSetReplayHint": "Wiederholen Sie diese Tour jederzeit unter {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Kopfhörer"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Kopfhörer",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "Minuten",
+    "usageWords": "Words",
+    "usageTasks": "Aufgaben",
+    "usageMonth": "Diesen Monat",
+    "usageYear": "Dieses Jahr",
+    "usageAll": "Gesamte Zeit",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month"
 }

@@ -3578,5 +3578,20 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Spelas högt genom telefonens högtalare.",
     "deviceOnboardingVoiceReplySettingsHint": "Du kan ändra detta när som helst i {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Spela om den här turnén när som helst i {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Hörlurar"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Hörlurar",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "minuter",
+    "usageWords": "Words",
+    "usageTasks": "Uppgifter",
+    "usageMonth": "Denna månad",
+    "usageYear": "Detta år",
+    "usageAll": "All tid",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month"
 }

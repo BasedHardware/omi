@@ -3578,5 +3578,20 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Viene riprodotto ad alta voce attraverso l'altoparlante del telefono.",
     "deviceOnboardingVoiceReplySettingsHint": "Puoi modificarlo in qualsiasi momento al numero {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Riproduci questo tour in qualsiasi momento al numero {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Cuffie"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Cuffie",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "minuti",
+    "usageWords": "Words",
+    "usageTasks": "Attività",
+    "usageMonth": "Questo Mese",
+    "usageYear": "Quest'Anno",
+    "usageAll": "Sempre",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month"
 }
