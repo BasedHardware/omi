@@ -16,6 +16,8 @@
   (Malay agent guide).
 * [`agent_quickstart.cy.md`](agent_quickstart.cy.md) — canllaw omi-cli ar gyfer
   asiantau (Welsh agent guide).
+* [`agent_quickstart.th.md`](agent_quickstart.th.md) — คู่มือ omi-cli สำหรับ
+  AI agent (Thai agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_ics.md`](conversations_ics.md) — put conversation history on a
@@ -183,9 +185,3 @@
 * [`quickstart.an.md`](quickstart.an.md) — os primers pasos con omi-cli (Aragonese Quickstart).
 * [`quickstart.rn.md`](quickstart.rn.md) — intambwe ya mbere na omi-cli (Kirundi Quickstart).
 * [`quickstart.bn.md`](quickstart.bn.md) — omi-cli দিয়ে শুরু করা (Bengali Quickstart).
-* [`quickstart.nl.md`](quickstart.nl.md) — Snelstartgids (Nederlands).
-* [`quickstart.pl.md`](quickstart.pl.md) — Przewodnik szybkiego startu (Polski).
-* [`quickstart.sv.md`](quickstart.sv.md) — Snabbstartsguide (Svenska).
-* [`quickstart.uk.md`](quickstart.uk.md) — Посібник швидкого старту (Українська).
-* [`quickstart.zh.md`](quickstart.zh.md) — 快速入门指南 (中文).
-* [`quickstart.ko.md`](quickstart.ko.md) — 빠른 시작 가이드 (한국어).
