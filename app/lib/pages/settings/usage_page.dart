@@ -253,26 +253,18 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     final provider = context.read<UsageProvider>();
     await provider.refreshUsageTimeZone();
     if (!mounted) return;
-    bool shouldFetch = false;
-    switch (period) {
-      case 'today':
-        if (provider.todayUsage == null) shouldFetch = true;
-        break;
-      case 'monthly':
-        if (provider.monthlyUsage == null) shouldFetch = true;
-        break;
-      case 'yearly':
-        if (provider.yearlyUsage == null) shouldFetch = true;
-        break;
-      case 'all_time':
-        if (provider.allTimeUsage == null) shouldFetch = true;
-        break;
-    }
-
-    if (shouldFetch) {
+    if (!_hasCachedUsage(provider, period)) {
       await provider.fetchUsageStats(period: period);
     }
   }
+
+  bool _hasCachedUsage(UsageProvider provider, String period) => switch (period) {
+        'today' => provider.todayUsage != null,
+        'monthly' => provider.monthlyUsage != null,
+        'yearly' => provider.yearlyUsage != null,
+        'all_time' => provider.allTimeUsage != null,
+        _ => false,
+      };
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
@@ -283,9 +275,12 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
 
   Future<void> _refreshActivePeriodOnResume() async {
     final provider = context.read<UsageProvider>();
-    final changed = await provider.refreshUsageTimeZone();
-    if (mounted && changed) {
-      await provider.fetchUsageStats(period: _getPeriodForIndex(_tabController.index));
+    final previousZone = provider.usageTimeZone;
+    await provider.refreshUsageTimeZone();
+    if (!mounted) return;
+    final period = _getPeriodForIndex(_tabController.index);
+    if (previousZone != provider.usageTimeZone || !_hasCachedUsage(provider, period)) {
+      await provider.fetchUsageStats(period: period);
     }
   }
 

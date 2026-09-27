@@ -20,6 +20,7 @@ class UsageProvider with ChangeNotifier {
   final UsageRequest _usageRequest;
   final DateTime Function() _now;
   String? _usageTimeZone;
+  String? get usageTimeZone => _usageTimeZone;
   bool _usageTimeZoneResolved = false;
   int _timeZoneLookupGeneration = 0;
   int _usageTimeZoneGeneration = 0;

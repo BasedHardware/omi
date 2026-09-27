@@ -342,4 +342,40 @@ void main() {
     expect(requests.last, 'yearly');
     expect(requests.length, 6);
   });
+
+  testWidgets('calendar rollover keeps cached All time on resume', (tester) async {
+    var now = DateTime(2026, 9, 30, 23, 59);
+    var zone = 'Asia/Tokyo';
+    final requests = <String>[];
+    final provider = UsageProvider(
+      now: () => now,
+      deviceTimeZone: () async => zone,
+      usageRequest: ({required String period, required String? timeZone}) async {
+        requests.add(period);
+        return UserUsageResponse(today: stats(), allTime: stats(), history: []);
+      },
+    );
+    await provider.fetchUsageStats(period: 'today');
+    await provider.fetchUsageStats(period: 'all_time');
+    await tester.pumpWidget(app(const UsagePage(debugSkipFetch: true), provider: provider));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('All time').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(requests, ['today', 'all_time']);
+
+    now = DateTime(2026, 10, 1);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(provider.todayUsage, isNull);
+    expect(provider.allTimeUsage, isNotNull);
+    expect(requests, ['today', 'all_time']);
+
+    zone = 'America/Los_Angeles';
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(requests, ['today', 'all_time', 'all_time']);
+  });
 }
