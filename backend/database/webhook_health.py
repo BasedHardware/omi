@@ -172,7 +172,20 @@ def _get_failure_script():
 
 
 def _record_redirect_not_followed(app_id: str, status_code: int, endpoint: str) -> int:
-    """Record a 3xx delivery without advancing the auto-disable clock."""
+    """Record a 3xx delivery without advancing the auto-disable clock.
+
+    We send webhooks with ``follow_redirects=False`` so a redirect cannot escape
+    the pinned destination IP, so a 3xx does mean the payload was not delivered.
+    It does not mean the developer's host is down — the host answered — and the
+    fix is a one-line URL change the developer can only make if they are told.
+    Scoring it as an outage instead auto-disabled apps whose servers were up,
+    with the reason recorded as an opaque ``HTTP 307``.
+
+    So a redirect notifies, repeatedly if it persists, and never disables. The
+    accepted cost is that an app left permanently redirecting keeps failing
+    delivery instead of being switched off; that is the developer's endpoint to
+    fix, and it is recoverable, which the auto-disable was not.
+    """
     if not app_id or not isinstance(app_id, str) or not app_id.strip():
         return ACTION_NONE
     clean_app_id = app_id.strip()
@@ -337,7 +350,7 @@ def get_app_webhook_health(app_id: str, endpoint: Optional[str] = None) -> Optio
     clean_app_id = app_id.strip()
     try:
         if endpoint:
-            clean_endpoint = endpoint.strip() if isinstance(endpoint, str) and endpoint.strip() else endpoint
+            clean_endpoint = endpoint.strip() if isinstance(endpoint, str) and endpoint.strip() else ENDPOINT_REALTIME
             key = f'app_webhook_health:{clean_app_id}:{clean_endpoint}'
             data = cast(Dict[bytes, bytes], r.hgetall(key))
             if not data:
