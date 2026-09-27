@@ -266,6 +266,14 @@ def get_home_page_html(
     # corrupt the query (same hardening as the other plugin apps).
     uid_q = quote(uid or "", safe="")
 
+    # display_name/email are rendered in text context; folder_name is rendered
+    # inside a double-quoted HTML attribute. Escape both so a hostile value
+    # (from the Dropbox profile or a prior POST /settings) cannot inject markup
+    # or break out of the value="" attribute (stored XSS — issue #14578).
+    display_name_e = html.escape(display_name or "", quote=True)
+    email_e = html.escape(email or "", quote=True)
+    folder_name_e = html.escape(settings.get("folder_name", "Omi Conversations"), quote=True)
+
     if connected:
         return f"""
 <!DOCTYPE html>
@@ -297,14 +305,14 @@ def get_home_page_html(
         <h1>Dropbox Connected</h1>
         <p class="status">Your Dropbox account is connected</p>
         <div class="user-info">
-            <strong>{display_name}</strong><br>
-            <span style="color: #666;">{email}</span>
+            <strong>{display_name_e}</strong><br>
+            <span style="color: #666;">{email_e}</span>
         </div>
 
         <form class="settings-form" method="POST" action="/settings?uid={uid_q}">
             <div class="form-group">
                 <label for="folder_name">Folder Name</label>
-                <input type="text" id="folder_name" name="folder_name" value="{settings.get('folder_name', 'Omi Conversations')}" placeholder="Omi Conversations">
+                <input type="text" id="folder_name" name="folder_name" value="{folder_name_e}" placeholder="Omi Conversations">
             </div>
 
             <div class="form-group">
@@ -524,7 +532,8 @@ async def auth_callback(
         return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
 
     except Exception as e:
-        return HTMLResponse(f"Error during authorization: {str(e)}", status_code=500)
+        print(f"[AUTH] Dropbox authorization error: {e}")
+        return HTMLResponse("Error during authorization. Please try again.", status_code=500)
 
 
 @app.get("/disconnect")
