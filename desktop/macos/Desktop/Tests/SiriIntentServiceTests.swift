@@ -4,6 +4,30 @@ import XCTest
 @testable import Omi_Computer
 
 final class SiriIntentServiceTests: XCTestCase {
+  func testRebuildPreparationFailurePreservesExistingIndex() async {
+    guard #available(macOS 15.4, *) else { return }
+    actor Writes {
+      var count = 0
+      func replace() { count += 1 }
+    }
+    let writes = Writes()
+    do {
+      try await SiriIndexer.shared.prepareThenReplace(
+        prepare: { () async throws -> Int in throw URLError(.cannotOpenFile) },
+        replace: { (_: Int) async throws in await writes.replace() })
+      XCTFail("Expected the local read to fail")
+    } catch {}
+    let count = await writes.count
+    XCTAssertEqual(count, 0)
+  }
+
+  func testRebuildRetryUsesBoundedBackoff() {
+    guard #available(macOS 15.4, *) else { return }
+    XCTAssertEqual(SiriIndexer.rebuildRetryDelay(attempt: 0), 5)
+    XCTAssertEqual(SiriIndexer.rebuildRetryDelay(attempt: 1), 10)
+    XCTAssertEqual(SiriIndexer.rebuildRetryDelay(attempt: 20), 300)
+  }
+
   func testOpenTaskRechecksTheCurrentIndexedScope() {
     let now = Date()
     var task = ActionItemRecord(backendId: "open-task", backendSynced: true, description: "Task")

@@ -671,6 +671,11 @@ final class SiriSnapshotStore {
             lock.lock()
             let count = snapshot.conversations.count + 2 * snapshot.memories.count + snapshot.tasks.count + 3
             lock.unlock()
+            // Resolve the owner-fenced snapshot before replacing Spotlight.
+            let conversationEntities = conversations(ids: nil)
+            let memoryEntities = memories(ids: nil)
+            let memoryNoteEntities = memoryNotes(ids: nil)
+            let taskEntities = tasks(ids: nil)
             do {
             try await serialized {
                 try requireValidOwner(uid)
@@ -681,13 +686,13 @@ final class SiriSnapshotStore {
                 try requireValidOwner(uid)
                 try await index.indexAppEntities([OmiListEntity.omi], priority: 0)
                 try requireValidOwner(uid)
-                try await index.indexAppEntities(conversations(ids: nil), priority: 0)
+                try await index.indexAppEntities(conversationEntities, priority: 0)
                 try requireValidOwner(uid)
-                try await index.indexAppEntities(memories(ids: nil), priority: 0)
+                try await index.indexAppEntities(memoryEntities, priority: 0)
                 try requireValidOwner(uid)
-                try await index.indexAppEntities(memoryNotes(ids: nil), priority: 0)
+                try await index.indexAppEntities(memoryNoteEntities, priority: 0)
                 try requireValidOwner(uid)
-                try await index.indexAppEntities(tasks(ids: nil), priority: 0)
+                try await index.indexAppEntities(taskEntities, priority: 0)
                 try requireValidOwner(uid)
             }
             scheduleNextExpiry()

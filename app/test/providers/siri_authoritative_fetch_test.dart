@@ -240,6 +240,37 @@ void main() {
     expect(host.memories, isEmpty);
   });
 
+  test('failed ledger history cannot make a useful-now memory fetch authoritative', () async {
+    final host = _SnapshotHost();
+    SiriIntegration.testInstance = SiriIntegration.forTest(host, 'siri-fetch-owner',
+        memoryPageFetcher: ({required limit, required offset, cursor}) async =>
+            const GetMemoriesResult([], true, truncated: true));
+    addTearDown(() => SiriIntegration.testInstance = null);
+    final now = DateTime.now();
+    Memory row(String id) => Memory(
+        id: id,
+        uid: 'siri-fetch-owner',
+        content: id,
+        category: MemoryCategory.manual,
+        createdAt: now,
+        updatedAt: now,
+        visibility: MemoryVisibility.private);
+    await SiriIntegration.current.upsertMemories([row('outside-useful-now')]);
+    final requestedViews = <MemoryReadView?>[];
+    final provider = MemoriesProvider(
+      fetchMemoriesCursorRequest: ({limit = 100, offset = 0, thisDeviceOnly = false, cursor, view}) async {
+        requestedViews.add(view);
+        return GetMemoriesResult([row('useful-now')], true, beliefEnabled: true);
+      },
+      fetchLedgerHistoryRequest: ({limit = 500, offset = 0}) async =>
+          const GetLedgerHistoryResult([], supported: false),
+    );
+    addTearDown(provider.dispose);
+    await provider.loadMemories();
+    expect(requestedViews, contains(MemoryReadView.usefulNow));
+    expect(host.memories.keys, contains('outside-useful-now'));
+  });
+
   test('confirmed memory review removes a rejected row from the index', () async {
     final host = hostForTest();
     final row = Memory(

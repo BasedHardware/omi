@@ -26,6 +26,40 @@ actor SiriIndexer {
   private var indexedConversationCutoffs: [String: Date] = [:]
   private var indexedTaskCutoffs: [String: Date] = [:]
   private var memoryExpiryTimer: Task<Void, Never>?
+  private var rebuildRetryTask: Task<Void, Never>?
+  private var rebuildRetryAttempt = 0
+
+  nonisolated static func rebuildRetryDelay(attempt: Int) -> Int {
+    min(5 * (1 << min(max(attempt, 0), 6)), 300)
+  }
+
+  /// Keep the existing Spotlight index until every local projection succeeds.
+  func prepareThenReplace<Value>(
+    prepare: () async throws -> Value,
+    replace: (Value) async throws -> Void
+  ) async throws {
+    let value = try await prepare()
+    try await replace(value)
+  }
+
+  private func cancelRebuildRetry() {
+    rebuildRetryTask?.cancel()
+    rebuildRetryTask = nil
+    rebuildRetryAttempt = 0
+  }
+
+  private func scheduleRebuildRetry(owner: String) {
+    let delay = Self.rebuildRetryDelay(attempt: rebuildRetryAttempt)
+    rebuildRetryAttempt += 1
+    rebuildRetryTask?.cancel()
+    rebuildRetryTask = Task { [weak self] in
+      try? await Task.sleep(for: .seconds(delay))
+      guard !Task.isCancelled, RuntimeOwnerIdentity.currentOwnerId() == owner else { return }
+      do { try await self?.rebuild() } catch {
+        log("Siri index rebuild retry pending: \(error.localizedDescription)")
+      }
+    }
+  }
 
   private init() {
     indexedOwner = UserDefaults.standard.string(forKey: ownerKey)
@@ -122,11 +156,6 @@ actor SiriIndexer {
     {
       do { try await rebuild(now: now) } catch {
         log("Siri age cutoff rebuild pending retry: \(error.localizedDescription)")
-        memoryExpiryTimer = Task { [weak self] in
-          try? await Task.sleep(for: .seconds(5))
-          guard !Task.isCancelled else { return }
-          await self?.expireDueMemories(expectedOwner: expectedOwner)
-        }
       }
       return
     }
@@ -165,6 +194,7 @@ actor SiriIndexer {
             try await self.index(for: owner).deleteAllSearchableItems()
           }
           resetMemoryExpirations()
+          cancelRebuildRetry()
           UserDefaults.standard.set(current, forKey: ownerKey)
           finishTransition()
         } catch {
@@ -205,6 +235,7 @@ actor SiriIndexer {
     do {
       if let indexedOwner { try await index(for: indexedOwner).deleteAllSearchableItems() }
       resetMemoryExpirations()
+      cancelRebuildRetry()
       indexedOwner = nil
       UserDefaults.standard.removeObject(forKey: ownerKey)
       finishTransition()
@@ -347,6 +378,35 @@ actor SiriIndexer {
     scheduleNextMemoryExpiry(owner: expectedOwner)
   }
 
+  @available(macOS 27, *)
+  private struct RebuildProjection {
+    let conversations: [ConversationEntity]
+    let memories: [MemoryEntity]
+    let tasks: [TaskEntity]
+    var count: Int { 3 + conversations.count + memories.count + tasks.count }
+  }
+
+  @available(macOS 27, *)
+  private func loadRebuildProjection(now: Date) async throws -> RebuildProjection {
+    let records = try await TranscriptionStorage.shared.getSiriEligibleSessions(
+      limit: SiriIndexScope.conversationLimit,
+      since: now.addingTimeInterval(-SiriIndexScope.conversationAge))
+    let conversations = SiriIndexScope.eligibleConversations(records, now: now).map(ConversationEntity.init)
+    let memories = try await MemoryStorage.shared.getSiriMemoryCandidates()
+    let memoryEntities = SiriIndexScope.capped(
+      memories.filter { SiriIndexScope.memory($0, now: now) }, at: SiriIndexScope.memoryLimit
+    ).map(MemoryEntity.init)
+    let tasks = try await ActionItemStorage.shared.getAllLocalActionItems()
+    var taskEntities: [TaskEntity] = []
+    for task in tasks where !task.id.hasPrefix("local_") && !task.isRetired {
+      guard let record = try await ActionItemStorage.shared.getActionItemByBackendId(task.id),
+        SiriIndexScope.task(record, now: now)
+      else { continue }
+      taskEntities.append(TaskEntity(record))
+    }
+    return RebuildProjection(conversations: conversations, memories: memoryEntities, tasks: taskEntities)
+  }
+
   func rebuild(now: Date = Date()) async throws {
     guard Self.supportsSpotlightIndexing(ProcessInfo.processInfo.operatingSystemVersion), #available(macOS 27, *) else {
       if indexedOwner != nil { try await wipe() }
@@ -357,48 +417,34 @@ actor SiriIndexer {
     defer { finishOperation() }
     var count = 0
     do {
-      try await index.deleteAllSearchableItems()
-      resetMemoryExpirations()
-      try await index.indexAppEntities([OmiFolderEntity.conversations, .memories], priority: 0)
-      try await index.indexAppEntities([OmiListEntity.omi], priority: 0)
-      count += 3
-      let records = try await TranscriptionStorage.shared.getSiriEligibleSessions(
-        limit: SiriIndexScope.conversationLimit,
-        since: now.addingTimeInterval(-SiriIndexScope.conversationAge))
-      let entities = SiriIndexScope.eligibleConversations(records, now: now).map(ConversationEntity.init)
-      for chunk in entities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
-      for entity in entities {
-        indexedConversationCutoffs[entity.id] = entity.creationDate?.addingTimeInterval(
-          SiriIndexScope.conversationAge)
+      try await prepareThenReplace(prepare: { try await loadRebuildProjection(now: now) }) { projection in
+        count = projection.count
+        try await index.deleteAllSearchableItems()
+        try await index.indexAppEntities([OmiFolderEntity.conversations, .memories], priority: 0)
+        try await index.indexAppEntities([OmiListEntity.omi], priority: 0)
+        for chunk in projection.conversations.chunkedSiriIndex(200) {
+          try await index.indexAppEntities(chunk, priority: 0)
+        }
+        for chunk in projection.memories.chunkedSiriIndex(200) {
+          try await index.indexAppEntities(chunk, priority: 0)
+        }
+        for chunk in projection.tasks.chunkedSiriIndex(200) {
+          try await index.indexAppEntities(chunk, priority: 0)
+        }
+        resetMemoryExpirations()
+        for entity in projection.conversations {
+          indexedConversationCutoffs[entity.id] = entity.creationDate?.addingTimeInterval(
+            SiriIndexScope.conversationAge)
+        }
+        for entity in projection.memories { indexedMemoryExpirations[entity.id] = entity.eligibilityCutoff }
+        for entity in projection.tasks {
+          indexedTaskCutoffs[entity.id] =
+            entity.isCompleted
+            ? entity.completionDate?.addingTimeInterval(SiriIndexScope.completedTaskAge) : nil
+        }
       }
-      count += entities.count
-
-      let memories = try await MemoryStorage.shared.getSiriMemoryCandidates()
-      let memoryEntities = SiriIndexScope.capped(
-        memories.filter { SiriIndexScope.memory($0, now: now) }, at: SiriIndexScope.memoryLimit
-      ).map(MemoryEntity.init)
-      for chunk in memoryEntities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
-      for entity in memoryEntities { indexedMemoryExpirations[entity.id] = entity.eligibilityCutoff }
       if let indexedOwner { scheduleNextMemoryExpiry(owner: indexedOwner) }
-      count += memoryEntities.count
-
-      let tasks = try await ActionItemStorage.shared.getAllLocalActionItems()
-      var taskEntities: [TaskEntity] = []
-      for task in tasks
-      where !task.id.hasPrefix("local_") && !task.isRetired {
-        guard let record = try await ActionItemStorage.shared.getActionItemByBackendId(task.id),
-          SiriIndexScope.task(record, now: now)
-        else { continue }
-        taskEntities.append(TaskEntity(record))
-      }
-      for chunk in taskEntities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
-      for entity in taskEntities {
-        indexedTaskCutoffs[entity.id] =
-          entity.isCompleted
-          ? entity.completionDate?.addingTimeInterval(SiriIndexScope.completedTaskAge) : nil
-      }
-      count += taskEntities.count
-      if let indexedOwner { scheduleNextMemoryExpiry(owner: indexedOwner) }
+      cancelRebuildRetry()
       await PostHogManager.shared.track(
         "Siri Index Rebuilt",
         properties: [
@@ -406,6 +452,7 @@ actor SiriIndexer {
           "duration_ms": Int(Date().timeIntervalSince(started) * 1_000), "outcome": "ok",
         ])
     } catch {
+      if let indexedOwner { scheduleRebuildRetry(owner: indexedOwner) }
       await PostHogManager.shared.track(
         "Siri Index Rebuilt",
         properties: [

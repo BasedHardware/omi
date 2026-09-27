@@ -651,6 +651,7 @@ class MemoriesProvider extends ChangeNotifier {
     var offset = 0;
     String? memoryCursor;
     var currentTraversalComplete = false;
+    var currentFetchCoversAll = false;
     var viewProtocolRestarts = 0;
     var deviceScopeSupported = true;
     var ledgerHistorySupported = false;
@@ -659,6 +660,7 @@ class MemoriesProvider extends ChangeNotifier {
     var ledgerHistoryOffset = 0;
     String? ledgerHistoryNextCursor;
     for (var page = 0; page < maxPages; page++) {
+      final requestedView = _beliefEnabled == true ? serverView : null;
       final result = await _fetchMemoryPage(
         limit: limit,
         // Cursor pages and offset pages are different protocols. The API
@@ -670,7 +672,7 @@ class MemoriesProvider extends ChangeNotifier {
         // Do not send a temporal selector until the capability probe has
         // confirmed it. A restart below binds the first cursor page to the
         // same selector used by every continuation page.
-        view: _beliefEnabled == true ? serverView : null,
+        view: requestedView,
       );
       if (generation != _sessionGeneration || loadSequence != _loadSequence) {
         return;
@@ -688,7 +690,6 @@ class MemoriesProvider extends ChangeNotifier {
         return;
       }
       deviceScopeSupported = result.deviceScopeSupported;
-      final requestedView = _beliefEnabled == true ? serverView : null;
       // A missing header is a capability reset. Do not let a prior true value
       // leak into a stable/older response on the next page or account.
       _beliefEnabled = result.beliefEnabled;
@@ -698,6 +699,7 @@ class MemoriesProvider extends ChangeNotifier {
           viewProtocolRestarts++;
           all.clear();
           seenCurrent.clear();
+          currentFetchCoversAll = false;
           offset = 0;
           memoryCursor = null;
           Logger.debug(
@@ -710,6 +712,9 @@ class MemoriesProvider extends ChangeNotifier {
         );
         break;
       }
+      // Scope belongs to the successful current-page response. The separate
+      // ledger-history request may reset capability without broadening it.
+      currentFetchCoversAll = result.beliefEnabled != true || requestedView == MemoryReadView.all;
       all.addAll(result.memories.where((memory) => seenCurrent.add(memory.id)));
       // A truncated page is an honest partial response with no resumable cursor;
       // stop loading instead of continuing with an unstable offset.
@@ -836,9 +841,7 @@ class MemoriesProvider extends ChangeNotifier {
     _memories = effectiveTombstoneId != null ? all.where((memory) => memory.id != effectiveTombstoneId).toList() : all;
     // The default useful-now/device views do not cover every indexed memory.
     // Only an exhausted, owner-wide all/current view may remove absent IDs.
-    final siriMemoryFetchIsAuthoritative = currentTraversalComplete &&
-        !_filterThisDeviceOnly &&
-        (_beliefEnabled != true || serverView == MemoryReadView.all);
+    final siriMemoryFetchIsAuthoritative = currentTraversalComplete && !_filterThisDeviceOnly && currentFetchCoversAll;
     if (siriMemoryFetchIsAuthoritative) {
       await SiriIntegration.current.reconcileMemories(_memories);
     } else {
