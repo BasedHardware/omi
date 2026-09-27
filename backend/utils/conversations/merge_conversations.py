@@ -52,6 +52,7 @@ except ImportError:
 
 
 import logging
+from utils.conversations.capture_jev_shadow import record_capture_outcome
 
 logger = logging.getLogger(__name__)
 
@@ -392,6 +393,10 @@ def perform_merge_async(
                 on_authoritative_retraction=mark_source_deletion_started,
                 historical_source_ids=historical_source_ids,
             )
+
+        # Sources are now merged and deleted; preserve the user's manual
+        # choice even if the completion notification subsequently fails.
+        record_capture_outcome(uid, 'manual_merge', list(conversation_ids))
 
         # 10. Send FCM notification
         send_merge_completed_message(uid, new_conversation_id, conversation_ids)
