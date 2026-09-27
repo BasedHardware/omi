@@ -145,6 +145,7 @@ class ConversationScreenFrameSet(BaseModel):
     banner: Optional[ConversationScreenFrame] = None
     strip: List[ConversationScreenFrame] = Field(default_factory=list, max_length=6)
     adjudicated_at: Optional[datetime] = None
+    selection_fingerprint: Optional[str] = None
     """When an adjudication pass last ran, whatever it decided.
 
     A client must use this, not `revision`, to decide whether to offer candidates. `revision`

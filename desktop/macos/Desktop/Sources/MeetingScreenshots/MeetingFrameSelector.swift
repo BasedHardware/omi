@@ -24,6 +24,68 @@
 import Foundation
 import GRDB
 
+/// The wall-clock interval in which a conversation is known to contain transcript content.
+///
+/// `started_at...finished_at` is a capture lifecycle envelope, not a content interval: legacy
+/// listen conversations can retain an early socket origin across a rollover. Transcript offsets
+/// are only projected onto that origin when the origin is independently trustworthy (desktop
+/// `/from-segments`, audio-timeline v2) or when the projection agrees with `finished_at`.
+struct MeetingScreenshotSelectionWindow: Equatable, Sendable {
+  static let policy = "meeting-content-v1"
+  static let legacyConsistencyTolerance: TimeInterval = 30
+
+  let start: Date
+  let end: Date
+
+  var fingerprint: String {
+    let startMilliseconds = Int64((start.timeIntervalSince1970 * 1_000).rounded())
+    let endMilliseconds = Int64((end.timeIntervalSince1970 * 1_000).rounded())
+    return "\(Self.policy):\(startMilliseconds):\(endMilliseconds)"
+  }
+
+  func contains(_ date: Date) -> Bool { date >= start && date <= end }
+
+  static func resolve(_ conversation: ServerConversation) -> Self? {
+    // List projections may omit transcript_segments entirely. Wait for the detail response rather
+    // than mistaking an incomplete projection for an empty or differently bounded transcript.
+    guard conversation.transcriptSegmentsIncluded else { return nil }
+    let spans = conversation.transcriptSegments.compactMap { segment -> (Double, Double)? in
+      guard !segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+      return (segment.start, segment.end)
+    }
+    return resolve(
+      startedAt: conversation.startedAt,
+      finishedAt: conversation.finishedAt,
+      segmentSpans: spans,
+      hasTrustedOrigin: conversation.createdFromSegments || conversation.audioTimelineVersion == 2)
+  }
+
+  /// Pure policy entry point used by regression tests without constructing a complete conversation.
+  static func resolve(
+    startedAt: Date?,
+    finishedAt: Date?,
+    segmentSpans: [(Double, Double)],
+    hasTrustedOrigin: Bool
+  ) -> Self? {
+    guard let startedAt else { return nil }
+    let valid = segmentSpans.filter {
+      $0.0.isFinite && $0.1.isFinite && $0.0 >= 0 && $0.1 > $0.0
+    }
+    guard let firstOffset = valid.map(\.0).min(), let lastOffset = valid.map(\.1).max() else {
+      return nil
+    }
+
+    let start = startedAt.addingTimeInterval(firstOffset)
+    let end = startedAt.addingTimeInterval(lastOffset)
+    if !hasTrustedOrigin {
+      guard let finishedAt,
+        abs(end.timeIntervalSince(finishedAt)) <= legacyConsistencyTolerance
+      else { return nil }
+    }
+    return Self(start: start, end: end)
+  }
+}
+
 // MARK: - Candidate
 
 /// One frame that survived the deterministic filter. Deliberately the same seven columns
@@ -161,6 +223,10 @@ enum MeetingFrameSelector {
       to: end,
       unfinalizedChunk: unfinalizedChunk,
       perceptualHash: { await MeetingFrameSimilarity.perceptualHash(of: $0) })
+  }
+
+  static func selectCandidates(in window: MeetingScreenshotSelectionWindow) async -> Outcome {
+    await selectCandidates(from: window.start, to: window.end)
   }
 
   /// The production filtering policy over already-read frames. Keeping the time boundary here as
