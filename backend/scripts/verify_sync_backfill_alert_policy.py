@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Fail deployment if a same-name sequencer alert has drifted from its contract.
+"""Strictly verify the sync-backfill alert contract after bounded reconciliation.
 
-The lifecycle action owns creation but intentionally does not overwrite an
-existing operator-managed policy. A stale policy must not silently satisfy the
-alert gate before Cloud Run traffic promotion.
+The lifecycle action may repair notification channels after checking policy
+identity and every condition field. This verifier remains read-only and fails
+for any policy that still differs from the declared contract before promotion.
 """
 
 from __future__ import annotations
