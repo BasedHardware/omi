@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-automatic-silent-mic-terminal-stop",
+  "violated_contract": "An automatic recording start with persisted intent must not permanently stop after a temporarily silent input route, especially when an update relaunch happens while the user is away.",
+  "canonical_prevention": "Release CoreAudio and STT on automatic silent-mic exhaustion, retain intent in an explicit waiting state, retry on bounded backoff and recovery signals, and measure the route and recovery outcome with bounded telemetry.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/ArmedCaptureRecoveryPolicyTests.swift",
+    "desktop/macos/Desktop/Tests/SilentMicDiagnosticTelemetryTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/AppState/",
+    "desktop/macos/Desktop/Sources/AudioCaptureService.swift"
+  ],
+  "status": "open"
+}

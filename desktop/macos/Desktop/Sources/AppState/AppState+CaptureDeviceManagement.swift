@@ -9,13 +9,15 @@ import Foundation
 extension AppState {
   /// Fall back from a silent Bluetooth mic to the built-in microphone.
   /// Triggered by `AudioCaptureService.onSilentMicDetected`.
-  func handleSilentMicFallback() {
+  func handleSilentMicFallback(detection: AudioCaptureService.SilentMicDetection) async {
     guard isTranscribing, !silentMicFallbackInProgress else { return }
+    recordSilentMicDiagnostic(detection: detection, phase: "initial", result: "watchdog_trip")
     silentMicFallbackInProgress = true
 
     guard let builtInID = AudioCaptureService.findBuiltInMicDeviceID() else {
       log("Transcription: silent-mic detected but no built-in microphone available — leaving capture as-is")
       silentMicFallbackInProgress = false
+      await handleSharedCaptureSilentMicDetection(detection: detection, recordTrip: false)
       return
     }
 
@@ -147,9 +149,18 @@ extension AppState {
   /// A fresh `AudioCaptureService` resets its own watchdog cap. Keep the terminal policy at
   /// the session owner so an unrecoverable USB/built-in route cannot loop forever while the
   /// UI continues to claim it is recording.
-  func handleSharedCaptureSilentMicDetection(reason: String) async {
+  func handleSharedCaptureSilentMicDetection(
+    detection: AudioCaptureService.SilentMicDetection, recordTrip: Bool = true
+  ) async {
     guard isTranscribing else { return }
     silentMicRecoveryAttempts += 1
+    if recordTrip {
+      recordSilentMicDiagnostic(
+        detection: detection,
+        phase: armedMicrophoneRecovery.isProbing
+          ? "armed_retry" : silentMicRecoveryAttempts == 1 ? "initial" : "rebuild",
+        result: "watchdog_trip")
+    }
 
     switch SharedCaptureSilentMicRecoveryPolicy.action(for: silentMicRecoveryAttempts) {
     case .rebuild:
@@ -161,13 +172,39 @@ extension AppState {
         reason: "local_heal",
         outcome: .degraded,
         extra: ["recovery_attempts": silentMicRecoveryAttempts, "user_visible": false])
-      await rebuildCoreAudioCaptureStack(reason: reason)
+      await rebuildCoreAudioCaptureStack(reason: detection.reason)
+      if isTranscribing {
+        recordSilentMicDiagnostic(detection: nil, phase: "rebuild", result: "capture_restarted")
+      }
     case .stopAndSurfaceError:
       log("Transcription: stopping after repeated silent microphone recovery failures")
-      DesktopDiagnosticsManager.shared.recordTranscriptionSilentCaptureExhausted(
-        recoveryAttempts: silentMicRecoveryAttempts)
+      let shouldArm =
+        captureAttempt?.intent == .auto
+        && audioSource == .microphone
+        && AudioCaptureService.authorizationStatus() == .authorized
+        && AssistantSettings.shared.audioRecordingMode != .off
+      if !shouldArm {
+        DesktopDiagnosticsManager.shared.recordTranscriptionSilentCaptureExhausted(
+          recoveryAttempts: silentMicRecoveryAttempts)
+      }
+      if shouldArm {
+        recordSilentMicDiagnostic(detection: detection, phase: "armed_retry", result: "armed_waiting")
+      }
+      let exhaustedLaunchContext = captureAttempt?.launchContext
+      let exhaustedUpdateAttemptID = captureAttempt?.updateAttemptID
       captureAttempt?.noteErrorTerminal()
-      stopTranscription(finalizationReason: .silentMicExhausted)
+      if shouldArm { armedMicrophoneTransitionInFlight = true }
+      let teardown = stopTranscription(finalizationReason: .silentMicExhausted)
+      if shouldArm {
+        await teardown?.value
+        armedMicrophoneTransitionInFlight = false
+        guard !isTranscribing, AssistantSettings.shared.audioRecordingMode != .off else { return }
+        armedMicrophoneRecovery.enter(
+          appState: self, launchContext: exhaustedLaunchContext,
+          updateAttemptID: exhaustedUpdateAttemptID)
+        log("Transcription: automatic capture waiting for a live microphone")
+        return
+      }
       // An unauthorized app receives exactly this symptom — endless zero samples — so
       // the policy checks permission before blaming the hardware.
       switch MicrophoneCaptureAuthorizationPolicy.terminalAlert(
