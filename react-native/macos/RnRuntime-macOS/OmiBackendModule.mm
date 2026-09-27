@@ -3,6 +3,8 @@
 #import "OmiBackendModule.h"
 #import "OmiAuthModule.h"
 
+#include <stdio.h>
+
 #include "omi_backend_http.h"
 #include "omi_backend_policy.h"
 
@@ -12,6 +14,8 @@
 static NSString *const OmiContractVersion = @"1.0.0";
 static NSString *const OmiDevelopmentBackendUnsupportedBody = @"{\"error\":{\"code\":\"development_backend_unsupported\",\"retryable\":false,\"action\":\"none\"}}";
 static NSString *const OmiSoftwarePlaneDefaultsKey = @"omi.backend.softwarePlane";
+
+static void OmiBackendSessionLog(NSString *message);
 static NSString *const OmiBackendSessionInvalidatedEvent = @"omiBackendSessionInvalidated";
 static NSString *const OmiBackendGenerationFrameEvent = @"omiGenerationFrame";
 
@@ -50,7 +54,7 @@ static NSURL *OmiValidatedV5URL(NSString *value);
 
 static BOOL OmiSoftwarePlaneIsNew(void) {
   NSString *stored = [NSUserDefaults.standardUserDefaults stringForKey:OmiSoftwarePlaneDefaultsKey];
-  BOOL stamped = OmiValidatedV5URL(NSProcessInfo.processInfo.environment[@"OMI_V5_BACKEND_URL"]) != nil;
+  BOOL stamped = OmiValidatedV5BackendURLFromEnvironment() != nil;
   return omi_backend_software_plane_is_new(
     [stored isKindOfClass:NSString.class] ? stored.UTF8String : nullptr,
     stamped ? 1 : 0) == 1;
@@ -92,7 +96,15 @@ static NSURL *OmiValidatedV5URL(NSString *value) {
 }
 
 NSURL *OmiValidatedV5BackendURLFromEnvironment(void) {
-  return OmiValidatedV5URL(NSProcessInfo.processInfo.environment[@"OMI_V5_BACKEND_URL"]);
+  NSURL *url = OmiValidatedV5URL(NSProcessInfo.processInfo.environment[@"OMI_V5_BACKEND_URL"]);
+  if (url != nil) {
+    return url;
+  }
+  // Dev convenience: launching from Finder/Dock carries no process
+  // environment, so a dev origin written once to defaults keeps the v5 plane
+  // usable without a terminal. Same validation as the env stamp, so this can
+  // never redirect api traffic to an arbitrary host.
+  return OmiValidatedV5URL([NSUserDefaults.standardUserDefaults stringForKey:@"omi.dev.v5-origin"]);
 }
 
 static NSURL *OmiRequestBaseURL(OmiBackendPolicy *policy, NSString *path) {
@@ -189,7 +201,18 @@ static BOOL OmiStoreOwnKeychainCloudSession(NSDictionary *session) {
   }
 }
 
+static void OmiBackendSessionLog(NSString *message) {
+  NSString *line = [NSString stringWithFormat:@"%@ [OmiBackend] %@\n", NSDate.date, message];
+  const char *utf8 = line.UTF8String;
+  if (utf8 == NULL) return;
+  FILE *log = fopen("/tmp/omi-auth-debug.log", "a");
+  if (log == NULL) return;
+  fwrite(utf8, 1, strlen(utf8), log);
+  fclose(log);
+}
+
 static BOOL OmiClearOwnKeychainCloudSession(void) {
+  OmiBackendSessionLog(@"deleteOwnCloudSession");
   NSMutableDictionary *query = [@{
     (__bridge id)kSecClass : (__bridge id)kSecClassGenericPassword,
     (__bridge id)kSecAttrService : OmiAuthKeychainService(),
@@ -254,6 +277,8 @@ static BOOL OmiClearUnauthorizedCloudSession(OmiBackendPolicy *policy, NSInteger
           OmiCloudRefreshTokensEqual(currentRefreshToken, policy.refreshToken)) {
         BOOL cleared = OmiClearOwnKeychainCloudSession();
         if (cleared) {
+          OmiBackendSessionLog([NSString stringWithFormat:
+              @"cleared session after 401 from %@", policy.url.absoluteString]);
           OmiAuthSetEnvironmentCloudTokensIgnored(YES);
           OmiAuthSetShippingSessionIgnored(YES);
         }
@@ -332,6 +357,11 @@ static void OmiRefreshOwnKeychainCloudSession(
           : [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
       if (error != nil || status < 200 || status >= 300 || ![json isKindOfClass:NSDictionary.class]) {
         if (OmiCloudRefreshFailureIsDefinitive(status, json)) {
+          OmiBackendSessionLog([NSString stringWithFormat:
+              @"cleared session after definitive refresh failure (status=%ld, message=%@)",
+              (long)status,
+              [json[@"error"][@"message"] isKindOfClass:NSString.class]
+                  ? json[@"error"][@"message"] : @"none"]);
           OmiClearOwnKeychainCloudSessionIfCurrent(refreshToken);
           OmiAuthSetShippingSessionIgnored(YES);
           OmiAuthSetEnvironmentCloudTokensIgnored(YES);
@@ -417,7 +447,9 @@ static OmiBackendPolicy *OmiResolvedBackendPolicy(NSDictionary<NSString *, NSStr
   if (cloud.length == 0 && !OmiAuthEnvironmentCloudTokensIgnored()) {
     cloud = environment[@"OMI_CLOUD_API_TOKEN"] ?: environment[@"OMI_API_TOKEN"];
   }
-  if (cloud.length == 0) return nil;
+  if (cloud.length == 0) {
+    return nil;
+  }
   OmiBackendPolicy *policy = [[OmiBackendPolicy alloc] init];
   policy.url = OmiValidatedURL(@"https://api.omi.me", NO);
   policy.token = [cloud copy];
@@ -427,12 +459,17 @@ static OmiBackendPolicy *OmiResolvedBackendPolicy(NSDictionary<NSString *, NSStr
   }
   policy.clientId = @"omi-macos";
   policy.kind = OmiBackendCredentialKindCloud;
-  NSString *v5URL = environment[@"OMI_V5_BACKEND_URL"];
-  NSURL *v5 = v5URL.length > 0 ? OmiValidatedV5URL(v5URL) : nil;
+  NSURL *v5 = OmiValidatedV5URL(environment[@"OMI_V5_BACKEND_URL"]);
+  if (v5 == nil) v5 = OmiValidatedV5BackendURLFromEnvironment();
   if (OmiSoftwarePlaneIsNew() && v5 == nil) return nil;
   if (OmiSoftwarePlaneIsNew() && v5 != nil) {
+    // A stamped v5 origin replaces the API origin, not just the capture
+    // plane: a session minted by the v5 desktop handoff belongs to the v5
+    // Firebase project, so sending its account reads to api.omi.me draws a
+    // 401 that erases the session and bounces the app back to onboarding.
     policy.captureOriginRequired = YES;
     policy.captureURL = v5;
+    policy.url = v5;
   }
   return policy;
 }
@@ -1452,6 +1489,7 @@ RCT_REMAP_METHOD(setSoftwarePlane,
                  resolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
   NSString *value = [plane isEqualToString:@"new"] ? @"new" : @"old";
+  OmiBackendSessionLog([NSString stringWithFormat:@"plane write %@", value]);
   [NSUserDefaults.standardUserDefaults setObject:value forKey:OmiSoftwarePlaneDefaultsKey];
   self.policy = OmiResolvedBackendPolicy(NSProcessInfo.processInfo.environment);
   resolve(value);
@@ -1460,7 +1498,7 @@ RCT_REMAP_METHOD(setSoftwarePlane,
 RCT_REMAP_METHOD(stampedV5BackendOrigin,
                  stampedV5BackendOriginWithResolver:(RCTPromiseResolveBlock)resolve
                  rejecter:(RCTPromiseRejectBlock)reject) {
-  NSURL *url = OmiValidatedV5URL(NSProcessInfo.processInfo.environment[@"OMI_V5_BACKEND_URL"]);
+  NSURL *url = OmiValidatedV5BackendURLFromEnvironment();
   resolve(url.absoluteString ?: [NSNull null]);
 }
 

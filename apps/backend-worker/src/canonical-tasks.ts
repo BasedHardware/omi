@@ -10,6 +10,7 @@ import {
   type CanonicalCaller,
   type CanonicalService,
 } from "./canonical-service";
+import { backendError } from "./wire";
 
 export type CanonicalTasksRequest = {
   service: CanonicalService | undefined;
@@ -21,18 +22,22 @@ export type CanonicalTasksRequest = {
 );
 
 export function canonicalTasksUnavailable(method: "GET" | "POST"): Response {
+  // GET reads surface the same projection_unavailable body the memories
+  // projection returns when the canonical service is unbound, so desktop
+  // clients classify the 503 as a soft "projection not wired" outage
+  // instead of a hard service failure.
+  if (method === "GET") {
+    return backendError("projection_unavailable", "retry", 503, true);
+  }
   const unavailable = WRITE_AVAILABILITY.control_unavailable;
-  return new Response(
-    method === "POST" ? unavailable.body : '{"error":"internal_server_error"}',
-    {
-      status: 503,
-      headers: {
-        "content-type": "application/json",
-        "cache-control": "no-store",
-        "retry-after": String(unavailable.retryAfterSeconds),
-      },
-    }
-  );
+  return new Response(unavailable.body, {
+    status: 503,
+    headers: {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "retry-after": String(unavailable.retryAfterSeconds),
+    },
+  });
 }
 
 export async function requestCanonicalTasks(

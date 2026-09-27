@@ -4,6 +4,26 @@ import ReactTestRenderer, {act} from 'react-test-renderer';
 import {AppNav} from './AppNav';
 import {FocusPressable} from './Pressable';
 
+// MaterialIcon glyphs render as Text with the icon font; labels don't.
+const labelTexts = (view: ReactTestRenderer.ReactTestRenderer) =>
+  view.root
+    .findAllByType(Text)
+    .filter(node => {
+      const styles = Array.isArray(node.props.style)
+        ? (node.props.style as unknown[])
+        : [node.props.style];
+      const fontFamily = styles.find(
+        s =>
+          typeof s === 'object' &&
+          s !== null &&
+          'fontFamily' in s &&
+          (s as {fontFamily?: string}).fontFamily ===
+            'Material Symbols Rounded',
+      );
+      return !fontFamily;
+    })
+    .map(node => node.props.children);
+
 test('collapsed navigation keeps accessible destinations without hidden label layout', async () => {
   const navigate = jest.fn();
   let view!: ReactTestRenderer.ReactTestRenderer;
@@ -18,10 +38,8 @@ test('collapsed navigation keeps accessible destinations without hidden label la
     );
   });
   try {
-    const labels = () =>
-      view.root.findAllByType(Text).map(node => node.props.children);
     const buttons = () => view.root.findAllByType(FocusPressable);
-    expect(labels()).toEqual(['omi']);
+    expect(labelTexts(view)).toEqual(['omi']);
     expect(
       buttons()
         .filter(node => node.props.accessibilityRole === 'tab')
@@ -39,7 +57,7 @@ test('collapsed navigation keeps accessible destinations without hidden label la
         .find(node => node.props.accessibilityLabel === 'Expand sidebar')!
         .props.onPress(),
     );
-    expect(labels()).toContain('Settings');
+    expect(labelTexts(view)).toContain('Settings');
     await act(async () =>
       buttons()
         .find(node => node.props.accessibilityLabel === 'Settings')!
@@ -51,7 +69,7 @@ test('collapsed navigation keeps accessible destinations without hidden label la
         .find(node => node.props.accessibilityLabel === 'Collapse sidebar')!
         .props.onPress(),
     );
-    expect(labels()).toEqual(['omi']);
+    expect(labelTexts(view)).toEqual(['omi']);
   } finally {
     await act(async () => view.unmount());
   }
@@ -65,9 +83,7 @@ test('compact navigation retains visible destination labels', async () => {
     );
   });
   try {
-    expect(
-      view.root.findAllByType(Text).map(node => node.props.children),
-    ).toEqual([
+    expect(labelTexts(view)).toEqual([
       'Home',
       'Conversations',
       'Memories',

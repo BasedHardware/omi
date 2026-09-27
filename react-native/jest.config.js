@@ -5,11 +5,10 @@ module.exports = {
     '^react-native/(.*)$': '<rootDir>/../node_modules/react-native/$1',
     '^@omi-core/ratified-contracts/(.*)$':
       '<rootDir>/../packages/contracts/ratified/dist/$1.js',
-    '^lucide-react-native/icons/(.*)$': '<rootDir>/test/lucideIcon.js',
     '^react-native-webrtc$': '<rootDir>/test/react-native-webrtc.js',
   },
   preset: 'react-native',
   transformIgnorePatterns: [
-    'node_modules/(?!((\\.bun/[^/]+/node_modules/)?(@react-native|react-native|lucide-react-native|react-native-safe-area-context|react-native-svg|react-native-marked|react-native-webrtc|react-native-reanimated-table|marked|github-slugger|@jsamr)(@|/)))',
+    'node_modules/(?!((\\.bun/[^/]+/node_modules/)?(@react-native|react-native|react-native-safe-area-context|react-native-svg|react-native-marked|react-native-webrtc|react-native-reanimated-table|marked|github-slugger|@jsamr)(@|/)))',
   ],
 };

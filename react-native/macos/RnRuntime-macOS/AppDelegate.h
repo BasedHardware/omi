@@ -4,6 +4,7 @@
 @interface AppDelegate : RCTAppDelegate
 
 @property (nonatomic, strong, nullable) id omiWindowUpdateObserver;
+@property (nonatomic, strong, nullable) id omiWindowCloseObserver;
 @property (nonatomic, strong, nullable) id omiAppearanceObserver;
 @property (nonatomic, strong, nullable) id omiWindowPresentationObserver;
 @property (nonatomic, strong, nullable) id omiTitlebarLayoutObserver;
@@ -12,6 +13,7 @@
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSValue *> *omiWindowFrames;
 @property (nonatomic, strong, nullable) NSTimer *omiGuidePlacementTimer;
 @property (nonatomic, assign) BOOL omiGuideFitsBesideSettings;
+@property (nonatomic, assign) BOOL omiWindowToreDown;
 @property (nonatomic, strong, nullable) id omiWindowDragMonitor;
 @property (nonatomic, strong, nullable) NSView *omiWindowGlass;
 @property (nonatomic, strong, nullable) NSTitlebarAccessoryViewController *omiTitlebarAccessory;

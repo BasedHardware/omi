@@ -8,7 +8,8 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import ChevronLeft from 'lucide-react-native/icons/chevron-left';
+import {MaterialIcon} from '../ui/MaterialIcon';
+
 import {isStreamingAssistant, type ChatMessage} from '../chatClient';
 import {useReduceMotion} from '../app/useReduceMotion';
 import {ChatMessageRow, ChatThinking} from '../ui/ChatTranscript';
@@ -57,7 +58,7 @@ export function MobileChat({
           accessibilityLabel="Close chat"
           onPress={onClose}
           style={local.back}>
-          <ChevronLeft color={color.text} size={22} />
+          <MaterialIcon name="chevron_left" color={color.text} size={22} />
         </FocusPressable>
         <OmiAvatar
           tone="ink"

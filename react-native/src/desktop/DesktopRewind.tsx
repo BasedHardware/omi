@@ -9,8 +9,9 @@ import {
   View,
 } from 'react-native';
 import {FocusPressable} from '../ui/Pressable';
-import Monitor from 'lucide-react-native/icons/monitor';
-import {DesktopEmptyState, PageHeading} from './DesktopRows';
+import {MaterialIcon} from '../ui/MaterialIcon';
+
+import {DesktopEmptyState} from './DesktopRows';
 import {
   type DesktopTokens,
   useDesktopTheme,
@@ -50,6 +51,33 @@ function errorCopy(error: unknown) {
     return 'Sign in again from Settings to open your screen history.';
   }
   return 'Screen history could not be loaded.';
+}
+
+function dayLabel(atMs: number) {
+  const day = new Date(atMs);
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const deltaDays = Math.round(
+    (startOfToday.getTime() - new Date(atMs).setHours(0, 0, 0, 0)) / 86400000,
+  );
+  if (deltaDays <= 0) {
+    return 'Today';
+  }
+  if (deltaDays === 1) {
+    return 'Yesterday';
+  }
+  return day.toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function timeLabel(atMs: number) {
+  return new Date(atMs).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 export function DesktopRewind({
@@ -259,11 +287,6 @@ export function DesktopRewind({
   };
   return (
     <View style={styles.root} accessibilityLabel="Recall screen history">
-      <PageHeading
-        title="Find your way back."
-        subtitle="Your screen history, kept on this Mac."
-        eyebrow="RECALL"
-      />
       {error !== null && frames.length > 0 ? (
         <Text accessibilityRole="alert" style={styles.text}>
           {error}
@@ -271,7 +294,7 @@ export function DesktopRewind({
       ) : null}
       {frames.length === 0 ? (
         <DesktopEmptyState
-          icon={Monitor}
+          icon="monitor"
           error={!busy && error !== null}
           title={
             busy
@@ -300,37 +323,65 @@ export function DesktopRewind({
               onContentSizeChange={fade.onContentSizeChange}
               scrollEventThrottle={16}
               contentContainerStyle={styles.rows}>
-              {frames.map(frame => (
-                <FocusPressable
-                  key={frame.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`View capture ${frame.id}`}
-                  accessibilityState={{selected: selected?.id === frame.id}}
-                  onPress={() => setSelected(frame)}
-                  style={[
-                    styles.row,
-                    selected?.id === frame.id && styles.selected,
-                  ]}>
-                  <Text style={styles.text}>
-                    {frame.appName || 'Captured screen'}
-                  </Text>
-                  <Text style={styles.meta} numberOfLines={2}>
-                    {frame.windowTitle}
-                  </Text>
-                  <Text style={styles.meta}>
-                    {new Date(frame.capturedAtMs).toLocaleString()}
-                  </Text>
-                </FocusPressable>
-              ))}
+              {(() => {
+                let lastDay = '';
+                return frames.map(frame => {
+                  const day = dayLabel(frame.capturedAtMs);
+                  const showDay = day !== lastDay;
+                  lastDay = day;
+                  const isSelected = selected?.id === frame.id;
+                  return (
+                    <View key={frame.id}>
+                      {showDay ? <Text style={styles.day}>{day}</Text> : null}
+                      <FocusPressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`View capture ${frame.id}`}
+                        accessibilityState={{selected: isSelected}}
+                        onPress={() => setSelected(frame)}
+                        style={[styles.row, isSelected && styles.selected]}>
+                        <Text style={styles.time}>
+                          {timeLabel(frame.capturedAtMs)}
+                        </Text>
+                        <View style={styles.dotColumn}>
+                          <View
+                            style={[styles.dot, isSelected && styles.dotOn]}
+                          />
+                        </View>
+                        <View style={styles.rowBody}>
+                          <Text style={styles.text} numberOfLines={1}>
+                            {frame.appName || 'Captured screen'}
+                          </Text>
+                          <Text style={styles.meta} numberOfLines={2}>
+                            {frame.windowTitle}
+                          </Text>
+                        </View>
+                      </FocusPressable>
+                    </View>
+                  );
+                });
+              })()}
               {busy ? (
                 <Text style={styles.meta}>Loading screen history…</Text>
+              ) : hasMore ? (
+                <FocusPressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Load more history"
+                  disabled={busy}
+                  onPress={() => void more()}
+                  style={styles.more}>
+                  <Text style={styles.moreText}>Load more</Text>
+                </FocusPressable>
               ) : null}
             </ScrollView>
           </ScrollFade>
           <View style={styles.preview}>
             {selected === null ? (
               <View style={styles.previewPrompt}>
-                <Monitor size={32} color={token.color.inkFaint} />
+                <MaterialIcon
+                  name="monitor"
+                  size={32}
+                  color={token.color.inkFaint}
+                />
                 <Text style={styles.meta}>Select a capture to view it.</Text>
               </View>
             ) : imageError !== null ? (
@@ -355,44 +406,65 @@ export function DesktopRewind({
           </View>
         </View>
       )}
-      {hasMore ? (
-        <FocusPressable
-          accessibilityRole="button"
-          accessibilityLabel="Load more history"
-          disabled={busy}
-          onPress={() => void more()}
-          style={styles.button}>
-          <Text style={styles.text}>Load more</Text>
-        </FocusPressable>
-      ) : null}
     </View>
   );
 }
 
 const createStyles = (token: DesktopTokens) =>
   StyleSheet.create({
-    root: {flex: 1, paddingHorizontal: 24, paddingTop: 8, paddingBottom: 12},
-    toolbar: {flexDirection: 'row', gap: 8, alignItems: 'center'},
-    button: {
-      padding: 12,
-      borderRadius: 12,
-      backgroundColor: token.color.glassQuiet,
-    },
+    root: {flex: 1, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 12},
     text: {color: token.color.ink, fontSize: 14, lineHeight: 21},
     meta: {color: token.color.inkMuted, fontSize: 12, lineHeight: 19},
-    status: {flex: 1},
-    content: {flex: 1, flexDirection: 'row', gap: 16},
-    list: {width: 280, flexBasis: 280, flexGrow: 0, flexShrink: 1},
-    rows: {gap: 8, paddingBottom: 12},
+    content: {flex: 1, flexDirection: 'row', gap: 20},
+    list: {width: 300, flexBasis: 300, flexGrow: 0, flexShrink: 1},
+    rows: {gap: 2, paddingBottom: 24},
+    day: {
+      color: token.color.inkMuted,
+      fontFamily: token.font,
+      fontSize: 12,
+      fontWeight: '600',
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+      marginTop: 16,
+      marginBottom: 6,
+      marginLeft: 60,
+    },
     row: {
-      padding: 16,
-      gap: 6,
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 8,
+      paddingVertical: 8,
+      paddingRight: 8,
       borderRadius: 12,
-      backgroundColor: token.color.glassStrong,
-      borderWidth: 1,
-      borderColor: token.color.line,
     },
     selected: {backgroundColor: token.color.glassSelected},
+    time: {
+      color: token.color.inkFaint,
+      fontSize: 11,
+      lineHeight: 21,
+      width: 44,
+      textAlign: 'right',
+    },
+    dotColumn: {width: 14, alignItems: 'center', paddingTop: 7},
+    dot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: token.color.inkFaint,
+      opacity: 0.7,
+    },
+    dotOn: {backgroundColor: token.color.ink, opacity: 1},
+    rowBody: {flex: 1, minWidth: 0},
+    more: {
+      alignSelf: 'flex-start',
+      marginLeft: 60,
+      marginTop: 10,
+      paddingVertical: 8,
+      paddingHorizontal: 14,
+      borderRadius: 10,
+      backgroundColor: token.color.glassQuiet,
+    },
+    moreText: {color: token.color.inkMuted, fontSize: 12},
     preview: {
       flex: 1,
       minWidth: 0,

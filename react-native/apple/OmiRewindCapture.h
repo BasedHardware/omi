@@ -9,6 +9,7 @@ typedef void (^OmiRewindCaptureCompletion)(NSDictionary * _Nullable, NSError * _
 - (instancetype)initWithIdentity:(OmiRewindIdentity)identity root:(NSURL *)root authorityLock:(id)authorityLock;
 - (instancetype)initWithIdentity:(OmiRewindIdentity)identity root:(NSURL *)root source:(OmiRewindFrameSource)source permission:(BOOL (^)(void))permission;
 - (NSString *)requestCapturePermission;
+- (NSString *)capturePermissionStatus;
 - (BOOL)startCapture:(NSError **)error;
 - (void)stopCapture;
 - (void)captureFrame:(OmiRewindCaptureCompletion)completion;

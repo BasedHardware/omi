@@ -29,7 +29,7 @@ import {omiAuth, omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
 import {styles} from '../ui/styles';
 import {mobileColor} from '../mobile/mobileTokens';
-import Puzzle from 'lucide-react-native/icons/puzzle';
+import {MaterialIcon} from '../ui/MaterialIcon';
 
 const catalogTabs = ['Explore', 'Installed', 'My Apps', 'Services'] as const;
 
@@ -202,7 +202,11 @@ export function ConnectorsPage({
           </View>
         ) : phase === 'signed-out' || phase === 'error' ? (
           <View style={[styles.destinationSection, catalogStyles.state]}>
-            <Puzzle color={mobileColor.textMuted} size={28} />
+            <MaterialIcon
+              name="extension"
+              color={mobileColor.textMuted}
+              size={28}
+            />
             <Text style={styles.destinationSectionTitle}>
               {phase === 'signed-out' ? 'Signed out' : 'Apps unavailable'}
             </Text>
@@ -263,7 +267,11 @@ export function ConnectorsPage({
                       key={`${section.key}-${app.id}`}
                       style={catalogStyles.card}>
                       <View style={catalogStyles.appIcon}>
-                        <Puzzle color={mobileColor.text} size={24} />
+                        <MaterialIcon
+                          name="extension"
+                          color={mobileColor.text}
+                          size={24}
+                        />
                       </View>
                       <View style={styles.cloudRowBody}>
                         <Text style={styles.cloudRowTitle}>{app.name}</Text>

@@ -11,8 +11,10 @@ int main() {
     require(legacy[@"journalLogin"] == nil);
     require(OmiRecordingInitializeLogin(nil) == nil);
     NSDictionary *claims = @{@"aud":@"based-hardware",@"iss":@"https://securetoken.google.com/based-hardware",@"sub":@"existing-owner"};
+    NSDictionary *devClaims = @{@"aud":@"based-hardware-dev",@"iss":@"https://securetoken.google.com/based-hardware-dev",@"sub":@"existing-owner"};
     require([OmiRecordingLocalIdentity(initialized, claims)[@"uid"] isEqual:@"existing-owner"]);
-    for (NSDictionary *change in @[@{@"aud":@"another-project"},@{@"iss":@"https://securetoken.google.com/another-project"},@{@"sub":@"other-owner"},@{@"user_id":@"other-owner"}]) {
+    require([OmiRecordingLocalIdentity(initialized, devClaims)[@"uid"] isEqual:@"existing-owner"]);
+    for (NSDictionary *change in @[@{@"aud":@"another-project"},@{@"iss":@"https://securetoken.google.com/another-project"},@{@"sub":@"other-owner"},@{@"user_id":@"other-owner"},@{@"aud":@"based-hardware-dev"},@{@"iss":@"https://securetoken.google.com/based-hardware-dev"}]) {
       NSMutableDictionary *wrong = [claims mutableCopy]; [wrong addEntriesFromDictionary:change];
       require(OmiRecordingLocalIdentity(initialized, wrong) == nil);
     }

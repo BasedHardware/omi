@@ -5,6 +5,9 @@ type CaptureNative = {
   requestCapturePermission(): Promise<
     'granted' | 'denied' | 'restartRequired' | 'unsupported'
   >;
+  capturePermissionStatus?: () => Promise<
+    'granted' | 'denied' | 'restartRequired' | 'unsupported'
+  >;
   startCapture(): Promise<void>;
   stopCapture(): Promise<void>;
   captureFrame(): Promise<{captured: boolean}>;
@@ -85,82 +88,93 @@ export function useRewindCapture(
     if (!enabled || !autoStart) {
       return;
     }
-    void start();
+    void start({prompt: false});
     const subscription = AppState.addEventListener('change', state => {
       if (state === 'active') {
-        void start();
+        void start({prompt: false});
       }
     });
     return () => subscription.remove();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, autoStart]);
-  const start = useCallback(async () => {
-    if (
-      !enabledRef.current ||
-      native === undefined ||
-      starting.current ||
-      active.current
-    )
-      return;
-    const current = (epoch.current += 1);
-    const valid = () => current === epoch.current && enabledRef.current;
-    starting.current = true;
-    setBusy(true);
-    setError(null);
-    try {
-      const permission = await native.requestCapturePermission();
-      if (!valid()) return;
-      if (permission !== 'granted') {
-        setError(
-          permission === 'restartRequired'
-            ? 'Restart this app to use the newly granted screen recording permission.'
-            : permission === 'unsupported'
-            ? 'Screen capture requires macOS 14 or later.'
-            : 'Allow Screen Recording for this app in System Settings, then try again.',
-        );
+  const start = useCallback(
+    async (options?: {prompt?: boolean}) => {
+      // prompt defaults to true for user-initiated starts (Settings toggle,
+      // toolbar button). Automatic start passes prompt:false so a rebuild's
+      // fresh code signature can never make the app re-ask for screen
+      // recording on launch: it preflights silently and surfaces status.
+      const prompt = options?.prompt !== false;
+      if (
+        !enabledRef.current ||
+        native === undefined ||
+        starting.current ||
+        active.current
+      )
         return;
-      }
-      await native.startCapture();
-      if (!valid()) return;
-      active.current = true;
-      starting.current = false;
-      setBusy(false);
-      setCapturing(true);
-      while (valid() && active.current) {
-        const result = await native.captureFrame();
-        if (!valid() || !active.current) return;
-        if (result.captured) capturedRef.current();
-        await new Promise<void>(resolve => {
-          wake.current = resolve;
-          timer.current = setTimeout(() => {
-            timer.current = null;
-            wake.current = null;
-            resolve();
-          }, 3000);
-        });
-      }
-    } catch (failure) {
-      if (valid()) {
-        const code =
-          failure !== null && typeof failure === 'object' && 'code' in failure
-            ? failure.code
-            : null;
-        setError(
-          code === 'OMI_CAPTURE_QUOTA'
-            ? 'Capture stopped because this app’s Rewind storage reached its 1 GB limit.'
-            : code === 'OMI_CAPTURE_STOPPED'
-            ? 'Capture stopped. Start again when your Mac is unlocked and this account is ready.'
-            : 'Capture stopped because a frame could not be saved. Check permission and available storage, then try again.',
-        );
-        await stop().catch(() => undefined);
-      }
-    } finally {
-      if (valid()) {
+      const current = (epoch.current += 1);
+      const valid = () => current === epoch.current && enabledRef.current;
+      starting.current = true;
+      setBusy(true);
+      setError(null);
+      try {
+        const permission = prompt
+          ? await native.requestCapturePermission()
+          : await (native.capturePermissionStatus?.() ??
+              native.requestCapturePermission());
+        if (!valid()) return;
+        if (permission !== 'granted') {
+          setError(
+            permission === 'restartRequired'
+              ? 'Restart this app to use the newly granted screen recording permission.'
+              : permission === 'unsupported'
+              ? 'Screen capture requires macOS 14 or later.'
+              : 'Allow Screen Recording for this app in System Settings, then try again.',
+          );
+          return;
+        }
+        await native.startCapture();
+        if (!valid()) return;
+        active.current = true;
         starting.current = false;
         setBusy(false);
+        setCapturing(true);
+        while (valid() && active.current) {
+          const result = await native.captureFrame();
+          if (!valid() || !active.current) return;
+          if (result.captured) capturedRef.current();
+          await new Promise<void>(resolve => {
+            wake.current = resolve;
+            timer.current = setTimeout(() => {
+              timer.current = null;
+              wake.current = null;
+              resolve();
+            }, 3000);
+          });
+        }
+      } catch (failure) {
+        if (valid()) {
+          const code =
+            failure !== null && typeof failure === 'object' && 'code' in failure
+              ? failure.code
+              : null;
+          setError(
+            code === 'OMI_CAPTURE_QUOTA'
+              ? 'Capture stopped because this app’s Rewind storage reached its 1 GB limit.'
+              : code === 'OMI_CAPTURE_STOPPED'
+              ? 'Capture stopped. Start again when your Mac is unlocked and this account is ready.'
+              : 'Capture stopped because a frame could not be saved. Check permission and available storage, then try again.',
+          );
+          await stop().catch(() => undefined);
+        }
+      } finally {
+        if (valid()) {
+          starting.current = false;
+          setBusy(false);
+        }
       }
-    }
-  }, [native, stop]);
+    },
+    [native, stop],
+  );
   return {
     available: native?.captureFrame !== undefined,
     capturing,

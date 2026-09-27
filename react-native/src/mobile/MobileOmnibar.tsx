@@ -1,10 +1,7 @@
 import React from 'react';
 import {StyleSheet, TextInput, View} from 'react-native';
-import ArrowUp from 'lucide-react-native/icons/arrow-up';
-import MessageCircle from 'lucide-react-native/icons/message-circle';
-import Search from 'lucide-react-native/icons/search';
-import Square from 'lucide-react-native/icons/square';
-import X from 'lucide-react-native/icons/x';
+import {MaterialIcon} from '../ui/MaterialIcon';
+
 import {FocusPressable} from '../ui/Pressable';
 import {mobileColor as color} from './mobileTokens';
 
@@ -52,12 +49,14 @@ export function MobileOmnibar({
             onPress={() => onModeChange(item)}
             style={[styles.mode, mode === item && styles.selected]}>
             {item === 'Ask' ? (
-              <MessageCircle
+              <MaterialIcon
+                name="chat_bubble"
                 size={19}
                 color={mode === item ? color.text : color.textMuted}
               />
             ) : (
-              <Search
+              <MaterialIcon
+                name="search"
                 size={19}
                 color={mode === item ? color.text : color.textMuted}
               />
@@ -81,7 +80,7 @@ export function MobileOmnibar({
             accessibilityLabel="Clear search"
             onPress={() => onChange('')}
             style={styles.clear}>
-            <X size={18} color={color.textMuted} />
+            <MaterialIcon name="close" size={18} color={color.textMuted} />
           </FocusPressable>
         )}
         <FocusPressable
@@ -97,15 +96,20 @@ export function MobileOmnibar({
           onPress={submit}
           style={[styles.submit, disabled && styles.disabled]}>
           {stopping ? (
-            <Square
+            <MaterialIcon
+              name="stop"
               size={14}
               fill={color.background}
               color={color.background}
             />
           ) : mode === 'Ask' ? (
-            <ArrowUp size={20} color={color.background} />
+            <MaterialIcon
+              name="arrow_upward"
+              size={20}
+              color={color.background}
+            />
           ) : (
-            <Search size={18} color={color.background} />
+            <MaterialIcon name="search" size={18} color={color.background} />
           )}
         </FocusPressable>
       </View>

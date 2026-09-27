@@ -106,11 +106,6 @@ export type DesktopReadProjection =
   | MemoryProjection
   | TaskProjection;
 
-export type TimelineGroup = {
-  label: string;
-  items: DesktopReadProjection[];
-};
-
 export function projectionTimestamp(
   item: DesktopReadProjection,
 ): number | null {
@@ -123,30 +118,6 @@ export function projectionTimestamp(
         : item.timestamp * 1000
       : item.createdAt;
   return timestamp === null || !Number.isFinite(timestamp) ? null : timestamp;
-}
-
-export function timelineGroups(
-  items: DesktopReadProjection[],
-  nowEpochMilliseconds: number,
-): TimelineGroup[] {
-  const groups = new Map<string, TimelineGroup>();
-  for (const item of items) {
-    const timestamp = projectionTimestamp(item);
-    const label =
-      timestamp === null
-        ? 'Date unavailable'
-        : conversationGroupLabel(
-            new Date(timestamp).toISOString(),
-            nowEpochMilliseconds,
-          );
-    const group = groups.get(label);
-    if (group === undefined) {
-      groups.set(label, {label, items: [item]});
-    } else {
-      group.items.push(item);
-    }
-  }
-  return [...groups.values()];
 }
 
 export type ReadPageState = {

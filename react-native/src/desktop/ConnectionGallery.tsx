@@ -1,14 +1,7 @@
 import React, {useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import Calendar from 'lucide-react-native/icons/calendar';
-import Mail from 'lucide-react-native/icons/mail';
-import Folder from 'lucide-react-native/icons/folder';
-import Notebook from 'lucide-react-native/icons/notebook';
-import MessageCircle from 'lucide-react-native/icons/message-circle';
-import Terminal from 'lucide-react-native/icons/terminal';
-import Command from 'lucide-react-native/icons/command';
-import Orbit from 'lucide-react-native/icons/orbit';
-import Sparkles from 'lucide-react-native/icons/sparkles';
+import {MaterialIcon, type MaterialIconName} from '../ui/MaterialIcon';
+
 import {
   ONBOARDING_HARNESSES,
   type HarnessKind,
@@ -19,64 +12,64 @@ import {type DesktopTokens, useDesktopStyleSheets} from './DesktopTheme';
 
 const artwork: Record<
   string,
-  {Icon: typeof Orbit; color: string; fill: string; category: string}
+  {icon: MaterialIconName; color: string; fill: string; category: string}
 > = {
   openclaw: {
-    Icon: Orbit,
+    icon: 'orbit',
     color: '#ad5740',
     fill: '#f6e8e1',
     category: 'Computer use',
   },
   hermes: {
-    Icon: Command,
+    icon: 'keyboard_command_key',
     color: '#466e5c',
     fill: '#e5ede6',
     category: 'Automation',
   },
   claudeCode: {
-    Icon: Sparkles,
+    icon: 'auto_awesome',
     color: '#a86836',
     fill: '#f6eadb',
     category: 'Development',
   },
   codex: {
-    Icon: Terminal,
+    icon: 'terminal',
     color: '#506c91',
     fill: '#e6ecf3',
     category: 'Development',
   },
   calendar: {
-    Icon: Calendar,
+    icon: 'calendar_month',
     color: '#506c91',
     fill: '#e6ecf3',
     category: 'Your schedule',
   },
   email: {
-    Icon: Mail,
+    icon: 'mail',
     color: '#ad5740',
     fill: '#f6e8e1',
     category: 'Your inbox',
   },
   'local-files': {
-    Icon: Folder,
+    icon: 'folder',
     color: '#506c91',
     fill: '#e6ecf3',
     category: 'Your workspace',
   },
   'apple-notes': {
-    Icon: Notebook,
+    icon: 'book',
     color: '#8b722d',
     fill: '#f3edda',
     category: 'Your ideas',
   },
   x: {
-    Icon: MessageCircle,
+    icon: 'chat_bubble',
     color: '#555b55',
     fill: '#e9eae6',
     category: 'Your interests',
   },
   chatgpt: {
-    Icon: Sparkles,
+    icon: 'auto_awesome',
     color: '#466e5c',
     fill: '#e5ede6',
     category: 'Your context',
@@ -104,7 +97,7 @@ export function ConnectionGallery({kind}: {kind: HarnessKind}) {
       onLayout={event => setWidth(event.nativeEvent.layout.width)}>
       <View style={styles.grid}>
         {ONBOARDING_HARNESSES.filter(item => item.kind === kind).map(item => {
-          const {Icon, color, fill, category} = artwork[item.id];
+          const {color, fill, icon, category} = artwork[item.id];
           const active = selected?.id === item.id;
           return (
             <View
@@ -124,7 +117,7 @@ export function ConnectionGallery({kind}: {kind: HarnessKind}) {
                 style={[styles.card, active && styles.cardSelected]}>
                 <View style={styles.cardTop}>
                   <View style={[styles.icon, {backgroundColor: fill}]}>
-                    <Icon color={color} size={22} strokeWidth={1.5} />
+                    <MaterialIcon color={color} name={icon} size={22} />
                   </View>
                   <Text style={styles.category}>{category}</Text>
                 </View>

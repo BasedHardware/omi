@@ -1,4 +1,5 @@
 #import "OmiAuthModule.h"
+#import <stdio.h>
 #import "OmiBackendModule.h"
 #import "../../apple/OmiRecordingPolicy.h"
 
@@ -36,6 +37,34 @@ id OmiAuthKeychainLock(void) {
   return OmiAuthKeychainService();
 }
 
+// The Data Protection keychain requires keychain-access-groups entitlements
+// backed by a provisioning profile. A team-signed build without a profile
+// (CLI-signed dev builds) fails every SecItemAdd with errSecMissingEntitlement
+// (-34018), which would break sign-in entirely. Probe once and only use the
+// data-protection keychain when this signing identity can actually write it.
+static BOOL OmiAuthDataProtectionKeychainWorks(void) {
+  NSDictionary *probe = @{
+    (__bridge id)kSecClass : (__bridge id)kSecClassGenericPassword,
+    (__bridge id)kSecAttrService : @"com.omi.rnruntime.keychain-probe",
+    (__bridge id)kSecAttrAccount : @"probe",
+    (__bridge id)kSecValueData : [@"1" dataUsingEncoding:NSUTF8StringEncoding],
+    (__bridge id)kSecUseDataProtectionKeychain : @YES,
+  };
+  if (SecItemAdd((__bridge CFDictionaryRef)probe, NULL) != errSecSuccess) return NO;
+  SecItemDelete((__bridge CFDictionaryRef)probe);
+  return YES;
+}
+
+static void OmiAuthLog(NSString *message) {
+  NSString *line = [NSString stringWithFormat:@"%@ [OmiAuth] %@\n", NSDate.date, message];
+  const char *utf8 = line.UTF8String;
+  if (utf8 == NULL) return;
+  FILE *log = fopen("/tmp/omi-auth-debug.log", "a");
+  if (log == NULL) return;
+  fwrite(utf8, 1, strlen(utf8), log);
+  fclose(log);
+}
+
 NSString *OmiAuthKeychainService(void) {
   static NSString *service;
   static dispatch_once_t once;
@@ -51,7 +80,9 @@ NSString *OmiAuthKeychainService(void) {
           ? info[(__bridge id)kSecCodeInfoTeamIdentifier] : nil;
       if (signedTeam.length > 0) {
         identity = [@"team." stringByAppendingString:signedTeam];
-        OmiAuthDataProtectionKeychain = YES;
+        OmiAuthDataProtectionKeychain = OmiAuthDataProtectionKeychainWorks();
+        OmiAuthLog([NSString stringWithFormat:@"identity=%@ dataProtectionKeychain=%d",
+                    identity, OmiAuthDataProtectionKeychain]);
       } else {
         NSData *unique = [info[(__bridge id)kSecCodeInfoUnique] isKindOfClass:NSData.class]
             ? info[(__bridge id)kSecCodeInfoUnique] : nil;
@@ -199,22 +230,43 @@ static BOOL OmiAuthPeerIsLoopback(int client) {
 // logged-in confirmation so the leftover callback tab never flashes
 // about:blank, then replace and try to close; the app comes forward.
 static NSString *OmiAuthBlankCallbackHTML(void) {
+  // The eight-dot Omi mark (same geometry as ui/OmiAvatar: canvas 260,
+  // centre 129.5, axis radius 86.71, diagonal radius 91.92, dot r 17.2)
+  // with the 900 ms brightness lap, plus a visible countdown before the
+  // tab replaces itself with about:blank and tries to close.
   return @"<!doctype html><html><head><meta charset='utf-8'>"
       @"<meta name='viewport' content='width=device-width,initial-scale=1'>"
       @"<style>html,body{margin:0;height:100%;background:#101210;color:#f2f4ef;"
       @"font-family:-apple-system,'SF Pro Text',system-ui,sans-serif}"
       @".wrap{height:100%;display:flex;align-items:center;justify-content:center}"
       @".card{text-align:center;padding:0 24px}"
-      @".mark{width:44px;height:44px;margin:0 auto 14px;border-radius:14px;"
-      @"background:linear-gradient(160deg,#2ee6c4,#7aa2ff);"
-      @"box-shadow:0 6px 24px rgba(46,230,196,.35)}"
+      @"svg.mark{width:76px;height:76px;margin:0 auto 16px;display:block}"
+      @"svg.mark circle{animation:lap .9s linear infinite}"
+      @"@keyframes lap{0%,100%{opacity:.5}50%{opacity:1}}"
       @"h1{font-size:19px;margin:0 0 6px;font-weight:600}"
       @"p{font-size:13px;margin:0;color:rgba(242,244,239,.6)}"
+      @".count{font-size:12px;margin-top:14px;color:rgba(242,244,239,.42)}"
       @"</style></head><body><div class='wrap'><div class='card'>"
-      @"<div class='mark'></div><h1>Logged in successfully</h1>"
-      @"<p>You can close this tab and return to Omi.</p></div></div>"
-      @"<script>setTimeout(function(){location.replace('about:blank');"
-      @"try{window.close();}catch(e){}},1500);</script></body></html>";
+      @"<svg class='mark' viewBox='0 0 260 260' aria-hidden='true'>"
+      @"<circle cx='129.5' cy='42.8' r='17.2' fill='#f2f4ef'/>"
+      @"<circle cx='194.5' cy='64.5' r='17.2' fill='#f2f4ef' style='animation-delay:.11s'/>"
+      @"<circle cx='216.2' cy='129.5' r='17.2' fill='#f2f4ef' style='animation-delay:.22s'/>"
+      @"<circle cx='194.5' cy='194.5' r='17.2' fill='#f2f4ef' style='animation-delay:.34s'/>"
+      @"<circle cx='129.5' cy='216.2' r='17.2' fill='#f2f4ef' style='animation-delay:.45s'/>"
+      @"<circle cx='64.5' cy='194.5' r='17.2' fill='#f2f4ef' style='animation-delay:.56s'/>"
+      @"<circle cx='42.8' cy='129.5' r='17.2' fill='#f2f4ef' style='animation-delay:.67s'/>"
+      @"<circle cx='64.5' cy='64.5' r='17.2' fill='#f2f4ef' style='animation-delay:.78s'/>"
+      @"</svg><h1>Logged in successfully</h1>"
+      @"<p>You can close this tab and return to Omi.</p>"
+      @"<div class='count' id='count'>Closing in 3</div></div></div>"
+      @"<script>(function(){var left=3;"
+      @"var el=document.getElementById('count');"
+      @"var tick=setInterval(function(){left-=1;"
+      @"if(left>0){el.textContent='Closing in '+left;return;}"
+      @"clearInterval(tick);el.textContent='Closing…';"
+      @"setTimeout(function(){location.replace('about:blank');"
+      @"try{window.close();}catch(e){}},350);},1000);})();</script>"
+      @"</body></html>";
 }
 
 static NSURL *OmiAuthValidatedCallbackURL(NSString *request, NSString *expectedState, uint16_t port) {
@@ -409,10 +461,18 @@ static BOOL OmiAuthCopySessionIntoOwnKeychain(NSDictionary *session) {
   @synchronized (OmiAuthKeychainLock()) {
     NSDictionary *query = OmiAuthKeychainQuery();
     OSStatus status = SecItemUpdate((__bridge CFDictionaryRef)query, (__bridge CFDictionaryRef)attributes);
-    if (status == errSecItemNotFound) {
+    if (status != errSecSuccess) {
+      // An item written under a different keychain mode or signing identity can
+      // fail SecItemUpdate with errSecAuthFailed or errSecMissingEntitlement.
+      // Replace the item outright instead of failing the whole sign-in.
+      SecItemDelete((__bridge CFDictionaryRef)query);
       NSMutableDictionary *add = [query mutableCopy];
       [add addEntriesFromDictionary:attributes];
       status = SecItemAdd((__bridge CFDictionaryRef)add, NULL);
+    }
+    if (status != errSecSuccess) {
+      OmiAuthLog([NSString stringWithFormat:@"storeSession failed status=%d service=%@ dp=%d",
+                  (int)status, OmiAuthKeychainService(), OmiAuthUsesDataProtectionKeychain()]);
     }
     return status == errSecSuccess;
   }
@@ -453,6 +513,7 @@ static NSDictionary *OmiAuthStoredSession(void) {
 }
 
 static OSStatus OmiAuthClearSession(void) {
+  OmiAuthLog(@"clearSession (signOut/clearIfCurrent)");
   @synchronized (OmiAuthKeychainLock()) {
     return SecItemDelete((__bridge CFDictionaryRef)OmiAuthKeychainQuery());
   }
@@ -531,10 +592,18 @@ static BOOL OmiAuthStoreSession(NSString *idToken, NSString *refreshToken, NSNum
   @synchronized (OmiAuthKeychainLock()) {
     NSDictionary *query = OmiAuthKeychainQuery();
     OSStatus status = SecItemUpdate((__bridge CFDictionaryRef)query, (__bridge CFDictionaryRef)attributes);
-    if (status == errSecItemNotFound) {
+    if (status != errSecSuccess) {
+      // An item written under a different keychain mode or signing identity can
+      // fail SecItemUpdate with errSecAuthFailed or errSecMissingEntitlement.
+      // Replace the item outright instead of failing the whole sign-in.
+      SecItemDelete((__bridge CFDictionaryRef)query);
       NSMutableDictionary *add = [query mutableCopy];
       [add addEntriesFromDictionary:attributes];
       status = SecItemAdd((__bridge CFDictionaryRef)add, NULL);
+    }
+    if (status != errSecSuccess) {
+      OmiAuthLog([NSString stringWithFormat:@"storeSession failed status=%d service=%@ dp=%d",
+                  (int)status, OmiAuthKeychainService(), OmiAuthUsesDataProtectionKeychain()]);
     }
     return status == errSecSuccess;
   }
@@ -789,12 +858,17 @@ RCT_EXPORT_MODULE(OmiAuth)
   } options:0 error:nil];
   [self performRequest:firebase completion:^(NSDictionary *tokens, NSError *firebaseError) {
     dispatch_async(dispatch_get_main_queue(), ^{
-    if (![self isSignInAttemptCurrent:attempt]) return;
+    if (![self isSignInAttemptCurrent:attempt]) {
+      OmiAuthLog(@"customToken redemption dropped: attempt no longer current");
+      return;
+    }
     NSString *firebaseIdToken = [tokens[@"idToken"] isKindOfClass:NSString.class] ? tokens[@"idToken"] : nil;
     NSString *refreshToken = [tokens[@"refreshToken"] isKindOfClass:NSString.class] ? tokens[@"refreshToken"] : nil;
     if (firebaseError != nil || firebaseIdToken.length == 0 || refreshToken.length == 0 ||
         !OmiAuthStoreSession(firebaseIdToken, refreshToken, tokens[@"expiresIn"],
                              tokens[@"localId"], firebaseKey, nil, nil, nil)) {
+      OmiAuthLog([NSString stringWithFormat:@"customToken redemption failed error=%@ idToken=%d refreshToken=%d",
+                  firebaseError.localizedDescription, firebaseIdToken.length > 0, refreshToken.length > 0]);
       [self finishSignInAttempt:attempt value:nil code:@"OMI_AUTH_UNAUTHORIZED"
                         message:@"Omi cloud could not establish a Firebase session" error:firebaseError
                         resolve:resolve reject:reject];
@@ -802,6 +876,7 @@ RCT_EXPORT_MODULE(OmiAuth)
     }
     [self finishSignInAttempt:attempt value:@{@"signedIn" : @YES} code:nil message:nil error:nil
                       resolve:resolve reject:reject];
+    OmiAuthLog(@"customToken redemption stored session");
     });
   }];
 }
@@ -997,17 +1072,26 @@ RCT_REMAP_METHOD(cancelSignIn,
                           resolve:resolve reject:reject];
         return;
       }
-      // The desktop owns the code; the user retypes it into the browser page,
-      // proving they hold both ends of the handoff.
+      // The code rides in the URL fragment so the browser page can finish the
+      // handoff by itself after sign-in; the user never retypes it. Fragments
+      // never reach the server — the complete endpoint still verifies the
+      // code against the stored confirmation challenge.
+      NSString *handoffUrl = browserUrl;
+      if (confirmationCode.length == 6) {
+        handoffUrl = [browserUrl stringByAppendingFormat:@"#c=%@", confirmationCode];
+      }
+      OmiAuthLog([NSString stringWithFormat:
+          @"handoff code=%@ sessionId=%@ expiresAt=%f",
+          confirmationCode, sessionId, [expiresAt doubleValue]]);
       [self sendEventWithName:@"omiAuthDesktopHandoff" body:@{
         @"code" : confirmationCode,
         @"expiresAt" : expiresAt,
-        @"browserUrl" : browserUrl,
+        @"browserUrl" : handoffUrl,
       }];
-      if (![NSWorkspace.sharedWorkspace openURL:[NSURL URLWithString:browserUrl]]) {
+      if (![NSWorkspace.sharedWorkspace openURL:[NSURL URLWithString:handoffUrl]]) {
         // Not fatal: the event carries browserUrl so the app UI can offer an
         // explicit link while the poll below keeps running.
-        NSLog(@"OmiAuth: could not open desktop handoff page %@", browserUrl);
+        NSLog(@"OmiAuth: could not open desktop handoff page %@", handoffUrl);
       }
       [self pollDesktopAuthExchange:backend
                           sessionId:sessionId
@@ -1058,6 +1142,11 @@ RCT_REMAP_METHOD(cancelSignIn,
           if (attempt != self.signInAttempt || self.settled || self.signInCompleting) return;
           self.signInCompleting = YES;
         }
+        // A session minted by the v5 desktop handoff is only valid against the
+        // stamped v5 origin. Pin the plane to "new" so a stale "old" plane can
+        // never route this session to api.omi.me, draw a 401, and erase it.
+        [NSUserDefaults.standardUserDefaults setObject:@"new" forKey:@"omi.backend.softwarePlane"];
+        OmiAuthLog(@"plane pinned new after v5 handoff redemption");
         [self finishWithFirebaseCustomToken:customToken attempt:attempt resolve:resolve reject:reject];
         return;
       }

@@ -138,6 +138,17 @@ static void CaptureSource(void (^completion)(CGImageRef, NSString *, NSString *,
   }
   return @"unsupported";
 }
+// Preflight only: reports the same states as requestCapturePermission
+// without ever prompting. Automatic capture start uses this so a rebuild's
+// fresh code signature cannot make every launch re-ask for screen recording.
+- (NSString *)capturePermissionStatus {
+  if (@available(macOS 14.0, *)) {
+    @synchronized(self) { if (self.disposed) return @"denied"; }
+    if (!self.permission()) { return @"denied"; }
+    return self.grantAtLaunch ? @"granted" : @"restartRequired";
+  }
+  return @"unsupported";
+}
 - (BOOL)startCapture:(NSError **)error {
   if (@available(macOS 14.0, *)) {} else { if (error) *error = CaptureError(@"OMI_CAPTURE_UNSUPPORTED"); return NO; }
   @synchronized(self) {

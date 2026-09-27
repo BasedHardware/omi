@@ -14,7 +14,8 @@ import {
   View,
 } from 'react-native';
 import omiPendant from '../../assets/omi-pendant.webp';
-import ChevronLeft from 'lucide-react-native/icons/chevron-left';
+import {MaterialIcon} from '../ui/MaterialIcon';
+
 import {
   cancelChatGeneration,
   ChatBackendError,
@@ -1399,7 +1400,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                         setHomeChatOpen(false);
                       }}
                       style={[styles.backButton, styles.mobileBackButton]}>
-                      <ChevronLeft color="#b0b0b0" size={18} strokeWidth={2} />
+                      <MaterialIcon
+                        name="chevron_left"
+                        color="#b0b0b0"
+                        size={18}
+                      />
                       <Text style={styles.backButtonText}>Home</Text>
                     </FocusPressable>
                   )}
@@ -1575,10 +1580,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                           styles.backButton,
                           pressed && styles.pressed,
                         ]}>
-                        <ChevronLeft
+                        <MaterialIcon
+                          name="chevron_left"
                           color="#b0b0b0"
                           size={18}
-                          strokeWidth={2}
                         />
                         <Text style={styles.backButtonText}>Home</Text>
                       </FocusPressable>

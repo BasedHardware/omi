@@ -48,10 +48,13 @@ static BOOL OmiGlassLightMode(void)
 
 @end
 
-// Fade content itself so the existing window material remains uninterrupted.
+// Fade content near the bottom edge so list rows dissolve into the window
+// tint instead of clipping hard at the scroll view's end. A CALayer mask
+// does not clip React Native's NSView subviews, so this draws a gradient
+// overlay above the content that blends toward the glass scrim tone.
 @interface OmiScrollFadeView : RCTView
 @property (nonatomic) BOOL fadeVisible;
-@property (nonatomic, strong) CAGradientLayer *contentMask;
+@property (nonatomic, strong) CAGradientLayer *bottomFade;
 @end
 
 @implementation OmiScrollFadeView
@@ -68,26 +71,31 @@ static BOOL OmiGlassLightMode(void)
   self.wantsLayer = YES;
   CGFloat height = NSHeight(self.bounds);
   if (!self.fadeVisible || height <= 0) {
-    self.layer.mask = nil;
+    self.bottomFade.hidden = YES;
     return;
   }
-  if (self.contentMask == nil) {
-    self.contentMask = [CAGradientLayer layer];
-    self.contentMask.colors = @[
-      (id)NSColor.clearColor.CGColor, (id)NSColor.blackColor.CGColor,
-      (id)NSColor.blackColor.CGColor, (id)NSColor.clearColor.CGColor
+  if (self.bottomFade == nil) {
+    self.bottomFade = [CAGradientLayer layer];
+    // Transparent at the top of the band, scrim-toned at the bottom edge.
+    BOOL light = OmiGlassLightMode();
+    NSColor *tint = light ? NSColor.whiteColor : NSColor.blackColor;
+    CGFloat alpha = light ? 0.62 : 0.58;
+    self.bottomFade.colors = @[
+      (id)NSColor.clearColor.CGColor,
+      (id)[tint colorWithAlphaComponent:alpha * 0.55].CGColor,
+      (id)[tint colorWithAlphaComponent:alpha].CGColor,
     ];
+    self.bottomFade.startPoint = CGPointMake(0.5, 1);
+    self.bottomFade.endPoint = CGPointMake(0.5, 0);
+    self.bottomFade.locations = @[@0, @0.7, @1];
+    [self.layer addSublayer:self.bottomFade];
   }
-  CGFloat fade = MIN(48.0, height / 4.0);
+  CGFloat fade = MIN(56.0, height / 3.0);
   [CATransaction begin];
   [CATransaction setDisableActions:YES];
-  self.contentMask.frame = self.bounds;
-  self.contentMask.startPoint = CGPointMake(0.5, self.isFlipped ? 0 : 1);
-  self.contentMask.endPoint = CGPointMake(0.5, self.isFlipped ? 1 : 0);
-  self.contentMask.locations = @[
-    @0, @(fade / height), @(MAX(fade / height, 1 - fade / height)), @1
-  ];
-  self.layer.mask = self.contentMask;
+  self.bottomFade.hidden = NO;
+  // CALayer geometry is bottom-left origin: y=0 is the visual bottom edge.
+  self.bottomFade.frame = CGRectMake(0, 0, NSWidth(self.bounds), fade);
   [CATransaction commit];
 }
 
@@ -222,6 +230,10 @@ RCT_EXPORT_VIEW_PROPERTY(fadeVisible, BOOL)
     }
   }
   self.appearance = appearance;
+  // The material renders according to its OWN effective appearance: leaving
+  // it pinned to DarkAqua keeps even the light material dark, which strands
+  // the light ink on a charcoal base.
+  self.material.appearance = appearance;
   // The HUD material is inherently dark; the light mode switches to the
   // under-window background material so the vibrancy base is light.
   self.material.material = light ? NSVisualEffectMaterialUnderWindowBackground

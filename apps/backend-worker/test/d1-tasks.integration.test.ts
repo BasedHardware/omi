@@ -93,6 +93,6 @@ describe("D1-authoritative tasks read", () => {
     expect(response.status).toBe(503);
     const text = await response.text();
     expect(parseTaskPageJson(text)).toBeNull();
-    expect(text).toContain("internal_server_error");
+    expect(text).toContain("projection_unavailable");
   });
 });

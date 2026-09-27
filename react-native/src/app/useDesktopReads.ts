@@ -10,6 +10,7 @@ import {
   desktopBackendConfigurationCopy,
   desktopBackendServiceCopy,
   desktopLocalBackendServiceCopy,
+  desktopProjectionUnavailableCopy,
   type DomainReadOutcome,
   type DesktopReadOutcomes,
   type DesktopReadProjection,
@@ -266,7 +267,6 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
           outcomes.memories,
           outcomes.tasks,
         ];
-        const failed = homeOutcomes.some(outcome => outcome.status === 'error');
         // Merge first, then judge the phase from what the shell will actually
         // show. A non-transient failure replaces prior success rows; claiming
         // "showing saved data" after those rows are gone is a lie. Transient
@@ -300,8 +300,20 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
           outcome =>
             outcome.status === 'success' && outcome.value.items.length > 0,
         );
+        // A projection the backend legitimately cannot serve yet (a dev
+        // backend without the canonical store wired) is not a Home-level
+        // "history failed" nag: the affected card already renders its plain
+        // empty copy, so only hard failures degrade the phase.
+        const hardFailed = homeOutcomes.some(
+          outcome =>
+            outcome.status === 'error' &&
+            outcome.error !== desktopProjectionUnavailableCopy,
+        );
+        // Projection-only failures (a dev backend without the canonical
+        // store wired) are not a "history failed" state either: every card
+        // already renders its plain empty copy, so Home reads as ready.
         setReadsPhase(
-          failed
+          hardFailed
             ? showingSavedRows
               ? 'saved-but-refresh-failed'
               : 'unavailable'

@@ -1,9 +1,10 @@
 import React, {useEffect, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
-import Puzzle from 'lucide-react-native/icons/puzzle';
-import ListChecks from 'lucide-react-native/icons/list-checks';
+import {MaterialIcon, type MaterialIconName} from '../ui/MaterialIcon';
+
 import {loadConnectors, type CloudApp} from '../desktopCloudClient';
 import {
+  desktopProjectionUnavailableCopy,
   projectionTimestamp,
   type DesktopReadOutcomes,
 } from '../desktopReadClient';
@@ -69,6 +70,8 @@ export function LibraryPage({
   const readError = [outcome, memoryOutcome]
     .filter(value => value?.status === 'error')
     .map(value => (value?.status === 'error' ? value.error : ''))
+    // Unserved projections are surfaced as empty copy, not as an alert.
+    .filter(error => error !== desktopProjectionUnavailableCopy)
     .join(' ');
   useEffect(() => {
     if (selectedId !== null && selected === null) {
@@ -79,7 +82,11 @@ export function LibraryPage({
     outcome === null
       ? 'Loading conversations…'
       : outcome.status === 'error'
-      ? outcome.error
+      ? // A projection the dev backend cannot serve yet reads as plain
+        // empty; only real failures surface their error copy.
+        outcome.error === desktopProjectionUnavailableCopy
+        ? 'Nothing captured in this window yet.'
+        : outcome.error
       : query.trim() !== ''
       ? 'No loaded conversations or memories match.'
       : 'Nothing captured in this window yet.';
@@ -255,7 +262,10 @@ export function TasksPage({
     outcome === null
       ? 'Loading tasks…'
       : outcome.status === 'error'
-      ? outcome.error
+      ? // Same as conversations: an unserved projection is just empty.
+        outcome.error === desktopProjectionUnavailableCopy
+        ? 'No tasks yet'
+        : outcome.error
       : 'No tasks yet';
   return (
     <View style={styles.page}>
@@ -342,7 +352,7 @@ export function TasksPage({
             })
           ) : (
             <DesktopEmptyState
-              icon={ListChecks}
+              icon="checklist"
               error={outcome?.status === 'error'}
               title={
                 outcome === null
@@ -365,7 +375,7 @@ export function TasksPage({
 }
 
 type AppTileModel = {
-  Icon: typeof Puzzle;
+  Icon: MaterialIconName;
   id: string;
   name: string;
   source: string;
@@ -394,7 +404,7 @@ function cloudAppSource(app: CloudApp): string {
 
 function tilesFromCatalog(apps: CloudApp[]): AppTileModel[] {
   return apps.map(app => ({
-    Icon: Puzzle,
+    Icon: 'extension',
     id: app.id,
     name: app.name,
     source: cloudAppSource(app),
@@ -410,7 +420,7 @@ function AppTile({item}: {item: AppTileModel}) {
     <View style={styles.appSlot}>
       <View style={styles.appCard}>
         <View style={styles.appIcon}>
-          <Icon color={token.color.ink} size={22} />
+          <MaterialIcon name={Icon} color={token.color.ink} size={22} />
         </View>
         <Text style={styles.rowTitle}>{item.name}</Text>
         <Text style={styles.rowMeta}>{item.source}</Text>
@@ -489,20 +499,20 @@ export function AppsPage({session}: {session: DesktopSession}) {
               style={tiles && tiles.length > 0 ? styles.appGrid : undefined}>
               {tiles === undefined ? (
                 <DesktopEmptyState
-                  icon={Puzzle}
+                  icon="extension"
                   title="Finding your apps…"
                   detail="Loading apps…"
                 />
               ) : tiles === null ? (
                 <DesktopEmptyState
-                  icon={Puzzle}
+                  icon="extension"
                   error
                   title="Your apps are out of reach"
                   detail="Apps could not be loaded."
                 />
               ) : tiles.length === 0 ? (
                 <DesktopEmptyState
-                  icon={Puzzle}
+                  icon="extension"
                   title="Your collection starts here."
                   detail="No apps are available."
                 />

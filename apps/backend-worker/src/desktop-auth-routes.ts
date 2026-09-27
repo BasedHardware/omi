@@ -287,7 +287,7 @@ function showCredentials() {
     var view = el(
       '<form id="form">' +
       "<h1>Omi development sign-in</h1>" +
-      "<p>Development build. Sign in with a development Omi account (email and password), then enter the code shown in the Omi app.</p>" +
+      "<p>Development build. Sign in with a development Omi account (email and password) \u2014 Omi finishes the handoff on its own.</p>" +
       '<label for="email">Email</label><input id="email" type="email" autocomplete="email" required>' +
       '<label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required>' +
       '<button id="submit" type="submit">Continue</button>' +
@@ -331,7 +331,12 @@ function showCredentials() {
               return;
             }
             state.idToken = body.idToken;
-            showCode();
+            var linked = /^#c=([0-9]{6})$/.exec(location.hash);
+            if (linked) {
+              autoComplete(linked[1]);
+            } else {
+              showCode();
+            }
           });
         })
         .catch(function () {
@@ -361,6 +366,41 @@ function firebaseError(body, signUp) {
     return "Too many attempts. Wait a moment and try again.";
   }
   return signUp ? "Could not create the account. Try again." : "Could not sign in. Try again.";
+}
+
+function autoComplete(code) {
+  app.replaceChildren(
+    el(
+      '<div class="done">' +
+      "<h1>Finishing sign-in\u2026</h1>" +
+      "<p>Completing the Omi handoff automatically.</p>" +
+      "</div>"
+    )
+  );
+  fetch("/v1/auth/desktop/complete", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: "Bearer " + state.idToken,
+    },
+    body: JSON.stringify({
+      sessionId: CONFIG.sessionId,
+      confirmationCode: code,
+    }),
+  })
+    .then(function (response) {
+      if (response.ok) {
+        showDone();
+        return;
+      }
+      // The link carried a stale or mismatched code; fall back to typing it.
+      showCode(response.status === 409
+        ? "That link code is not right, or the handoff already finished. Enter the code shown in the Omi app."
+        : "Could not finish sign-in automatically. Enter the code shown in the Omi app.");
+    })
+    .catch(function () {
+      showCode("Network problem. Enter the code shown in the Omi app.");
+    });
 }
 
 function showCode(message) {

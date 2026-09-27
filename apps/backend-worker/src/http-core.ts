@@ -44,6 +44,7 @@ import {
   parseDeviceSessionAudioBatch,
   parseDeviceSessionCreate,
 } from "./device-sessions";
+import { handleDesktopGlance } from "./desktop-glance";
 import { type RetrievalEnv } from "./retrieval";
 import { type CanonicalService } from "./canonical-service";
 import { readCanonicalMemoryPage } from "./memory-service";
@@ -1082,6 +1083,7 @@ export const v1Routes: readonly CoreRoute[] = [
   { method: "GET", path: "/v1/conversations", handle: handleConversations },
   { method: "GET", path: "/v1/memories", handle: handleMemories },
   { method: "GET", path: "/v1/tasks", handle: handleTasks },
+  { method: "POST", path: "/v1/desktop/glance", handle: handleDesktopGlance },
 ];
 
 function account(context: CoreContext): AccountPort {

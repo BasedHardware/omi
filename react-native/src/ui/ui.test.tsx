@@ -91,7 +91,6 @@ import {Animated} from 'react-native';
 import {Button} from './Button';
 import {ReadStatus} from './ReadStatus';
 import {Field} from './Field';
-import {Icon} from './Icon';
 import {FocusPressable} from './Pressable';
 import {tokens} from './tokens';
 import {Onboarding} from './Onboarding';
@@ -188,42 +187,6 @@ describe('UI primitives', () => {
         },
       ]),
     );
-  });
-
-  test('Icon uses an SF Symbol on macOS without rendering its fallback', () => {
-    const Fallback = jest.fn((props: Record<string, unknown>) =>
-      mockReact.createElement('FallbackIcon', props),
-    );
-    const renderer = render(<Icon fallback={Fallback} symbolName="house" />);
-
-    const symbol = renderer.toJSON() as ReactTestRenderer.ReactTestRendererJSON;
-    expect(symbol.type).toBe('OmiSFSymbol');
-    expect(symbol.props.symbolName).toBe('house');
-    expect(Fallback).not.toHaveBeenCalled();
-  });
-
-  test('Icon uses lucide-compatible fallback props off macOS', () => {
-    mockPlatformOS = 'ios';
-    const Fallback = jest.fn((props: Record<string, unknown>) =>
-      mockReact.createElement('FallbackIcon', props),
-    );
-    const renderer = render(
-      <Icon
-        accessibilityLabel="Fallback home"
-        fallback={Fallback}
-        symbolName="house"
-      />,
-    );
-
-    const fallback =
-      renderer.toJSON() as ReactTestRenderer.ReactTestRendererJSON;
-    expect(fallback.type).toBe('FallbackIcon');
-    expect(fallback.props).toMatchObject({
-      accessibilityLabel: 'Fallback home',
-      color: tokens.color.text,
-      size: tokens.size.icon,
-      strokeWidth: tokens.icon.strokeWidth,
-    });
   });
 
   test('Button and Field expose accessible native control contracts', () => {

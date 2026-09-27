@@ -39,6 +39,8 @@
 	<string>Main</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>ATSApplicationFontsPath</key>
+	<string>.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Omi uses Bluetooth to connect to your device.</string>
 	<key>NSMicrophoneUsageDescription</key>

@@ -8,11 +8,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import Check from 'lucide-react-native/icons/check';
-import ShieldCheck from 'lucide-react-native/icons/shield-check';
-import Monitor from 'lucide-react-native/icons/monitor';
-import Mic from 'lucide-react-native/icons/mic';
-import Bell from 'lucide-react-native/icons/bell';
+import {MaterialIcon, type MaterialIconName} from '../ui/MaterialIcon';
+
 import {useReduceMotion} from '../app/useReduceMotion';
 import {
   DESKTOP_VALUE_CLAIMS,
@@ -26,8 +23,10 @@ import {
   type DesktopOnboardingStep,
 } from '../app/onboardingFlow';
 import {
+  loadDesktopPreferences,
   loadPermissionStatus,
   requestDesktopPermission,
+  setDesktopPreference,
   type PermissionKind,
   type PermissionState,
 } from '../desktopSettingsClient';
@@ -50,14 +49,14 @@ const permissions: {
   kind: PermissionKind;
   title: string;
   description: string;
-  icon: typeof Monitor;
+  icon: MaterialIconName;
   instructions: string[];
 }[] = [
   {
     kind: 'screen',
     title: 'Screen',
     description: 'Remember what you’re working on.',
-    icon: Monitor,
+    icon: 'monitor',
     instructions: [
       'Open Privacy & Security → Screen Recording in System Settings.',
       'Switch on Omi. If macOS asks you to quit and reopen, reopen Omi to finish.',
@@ -67,7 +66,7 @@ const permissions: {
     kind: 'microphone',
     title: 'Microphone',
     description: 'Turn conversations into memories.',
-    icon: Mic,
+    icon: 'mic',
     instructions: [
       'Choose Allow in the macOS permission prompt.',
       'Already said no? Open Privacy & Security → Microphone in System Settings and switch on Omi.',
@@ -77,7 +76,7 @@ const permissions: {
     kind: 'notifications',
     title: 'Notifications',
     description: 'A nudge when something needs you.',
-    icon: Bell,
+    icon: 'notifications',
     instructions: [
       'Choose Allow in the macOS notification prompt.',
       'Already said no? Open Notifications → Omi in System Settings and turn on Allow Notifications.',
@@ -130,6 +129,21 @@ export function DesktopOnboarding({
   const [guidance, setGuidance] = useState<PermissionKind | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [greeting, setGreeting] = useState(0);
+  const [plane, setPlane] = useState<'old' | 'new'>('old');
+  useEffect(() => {
+    let active = true;
+    loadDesktopPreferences().then(
+      prefs => {
+        if (active) {
+          setPlane(prefs.softwarePlane);
+        }
+      },
+      () => {},
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
   const operation = useRef(0);
   const signedIn = useRef(setupRequired);
   const scroll = useRef<ScrollView>(null);
@@ -293,6 +307,43 @@ export function DesktopOnboarding({
   return (
     <View accessibilityLabel="First-run onboarding" style={styles.surface}>
       <DesktopWindow presentation={guide ? 'permission-guide' : 'onboarding'} />
+      {!guide ? (
+        <View
+          accessibilityLabel="Backend"
+          style={styles.planeToggle}
+          pointerEvents="box-none">
+          {(['old', 'new'] as const).map(option => (
+            <FocusPressable
+              accessibilityLabel={`Use ${option} backend`}
+              accessibilityRole="button"
+              accessibilityState={{
+                disabled: signingIn,
+                selected: plane === option,
+              }}
+              disabled={signingIn}
+              key={option}
+              onPress={() => {
+                if (plane !== option) {
+                  setPlane(option);
+                  void setDesktopPreference('softwarePlane', option);
+                }
+              }}
+              style={({pressed}) => [
+                styles.planeOption,
+                plane === option && styles.planeOptionActive,
+                pressed && styles.planePressed,
+              ]}>
+              <Text
+                style={[
+                  styles.planeText,
+                  plane === option && styles.planeTextActive,
+                ]}>
+                {option === 'new' ? 'New' : 'Old'}
+              </Text>
+            </FocusPressable>
+          ))}
+        </View>
+      ) : null}
       {guide ? (
         <>
           <ScrollView contentContainerStyle={styles.guide}>
@@ -340,7 +391,11 @@ export function DesktopOnboarding({
               )}
               <View accessibilityLiveRegion="polite" style={styles.guideStatus}>
                 {guideGranted ? (
-                  <Check size={15} color={token.color.ink} />
+                  <MaterialIcon
+                    name="check"
+                    size={15}
+                    color={token.color.ink}
+                  />
                 ) : (
                   <View style={styles.waitingDot} />
                 )}
@@ -484,7 +539,11 @@ export function DesktopOnboarding({
                       </View>
                     ) : null}
                     <View style={styles.note}>
-                      <ShieldCheck size={22} color={token.color.inkMuted} />
+                      <MaterialIcon
+                        name="verified_user"
+                        size={22}
+                        color={token.color.inkMuted}
+                      />
                       <Text style={[styles.small, styles.flex]}>
                         Your existing memories stay with your account. Nothing
                         starts recording when you sign in.
@@ -522,7 +581,8 @@ export function DesktopOnboarding({
                               title={title}
                               description={description}
                               icon={
-                                <PermissionIcon
+                                <MaterialIcon
+                                  name={PermissionIcon}
                                   size={21}
                                   color={token.color.inkMuted}
                                 />
@@ -609,7 +669,11 @@ export function DesktopOnboarding({
                       A calmer place for your day starts here.
                     </Text>
                     <View style={styles.note}>
-                      <ShieldCheck size={22} color={token.color.inkMuted} />
+                      <MaterialIcon
+                        name="verified_user"
+                        size={22}
+                        color={token.color.inkMuted}
+                      />
                       <Text style={[styles.small, styles.flex]}>
                         No capture starts automatically. You choose what Omi can
                         remember.
@@ -733,6 +797,31 @@ function OnboardingProgress({
 const createStyles = (token: DesktopTokens) =>
   StyleSheet.create({
     surface: {flex: 1, backgroundColor: 'transparent'},
+    planeToggle: {
+      position: 'absolute',
+      top: 14,
+      right: 18,
+      flexDirection: 'row',
+      gap: 2,
+      padding: 2,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: token.color.line,
+      backgroundColor: token.color.glassQuiet,
+    },
+    planeOption: {
+      paddingHorizontal: 11,
+      paddingVertical: 5,
+      borderRadius: 8,
+    },
+    planeOptionActive: {backgroundColor: token.color.glassSelected},
+    planePressed: {opacity: 0.7},
+    planeText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: token.color.inkMuted,
+    },
+    planeTextActive: {color: token.color.ink},
     content: {
       flexGrow: 1,
       paddingHorizontal: 40,

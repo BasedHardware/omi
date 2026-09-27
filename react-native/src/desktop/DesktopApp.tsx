@@ -1,4 +1,4 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {StyleSheet, TextInput, View} from 'react-native';
 import type {ChatMessage} from '../chatClient';
 import {subscribeDesktopSearchCommand} from '../desktopCommands';
@@ -31,6 +31,17 @@ import {LibraryPage, TasksPage} from './DesktopPages';
 import type {TaskMutationProps} from '../ui/TaskEditor';
 import {DesktopSettings} from './DesktopSettings';
 import type {DesktopPreferences} from '../desktopSettingsClient';
+import {
+  loadDesktopPreferences,
+  setDesktopPreference,
+} from '../desktopSettingsClient';
+import {
+  EXPLORE_CHECKLIST,
+  exploreCheckForRoute,
+  parseExploreProgress,
+  serializeExploreProgress,
+  type ExploreCheck,
+} from './exploreChecklist';
 import {DesktopChat} from './DesktopChat';
 import {DesktopRewind} from './DesktopRewind';
 import {useRewindCapture} from '../app/useRewindCapture';
@@ -139,6 +150,67 @@ export function DesktopApp({
     captureAutoStart,
   );
   const [route, setRoute] = useState<DesktopRoute>('Home');
+  const [exploreDone, setExploreDone] = useState<Set<ExploreCheck> | null>(
+    null,
+  );
+  const [guideTarget, setGuideTarget] = useState<DesktopRoute | null>(null);
+  const guideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearGuideTimer = useCallback(() => {
+    if (guideTimer.current !== null) {
+      clearTimeout(guideTimer.current);
+      guideTimer.current = null;
+    }
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    loadDesktopPreferences()
+      .then(prefs => {
+        if (!cancelled) {
+          setExploreDone(parseExploreProgress(prefs?.exploreProgress));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setExploreDone(new Set());
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  useEffect(() => clearGuideTimer, [clearGuideTimer]);
+  // Arriving at a surface ticks its checklist item off, once, forever.
+  useEffect(() => {
+    if (exploreDone === null) {
+      return;
+    }
+    const check = exploreCheckForRoute(route);
+    if (check === null || exploreDone.has(check)) {
+      return;
+    }
+    const next = new Set(exploreDone);
+    next.add(check);
+    setExploreDone(next);
+    setDesktopPreference(
+      'exploreProgress',
+      serializeExploreProgress(next),
+    ).catch(() => undefined);
+  }, [exploreDone, route]);
+  useEffect(() => {
+    if (guideTarget !== null && route === guideTarget) {
+      clearGuideTimer();
+      setGuideTarget(null);
+    }
+  }, [clearGuideTimer, guideTarget, route]);
+  const startExploreGuide = (check: ExploreCheck) => {
+    const item = EXPLORE_CHECKLIST.find(entry => entry.id === check);
+    if (item === undefined || route === item.route) {
+      return;
+    }
+    clearGuideTimer();
+    setGuideTarget(item.route);
+    guideTimer.current = setTimeout(() => setGuideTarget(null), 6000);
+  };
   const [proveItSeen, setProveItSeen] = useState(false);
   const [confettiFalling, setConfettiFalling] = useState(false);
   const [mode, setMode] = useState<OmnibarMode>('Ask');
@@ -221,7 +293,6 @@ export function DesktopApp({
       <View accessibilityLabel="Omi desktop" style={styles.root}>
         <DesktopChrome
           chatBusy={chatBusy}
-          capture={capture}
           activeGenerationId={activeGenerationId}
           chatNotice={null}
           draft={draft}
@@ -238,6 +309,7 @@ export function DesktopApp({
             }
           }}
           onNavigate={navigate}
+          guideTarget={guideTarget}
           onSend={() => {
             if (mode === 'Ask') {
               setChatSubmission(value => value + 1);
@@ -258,7 +330,8 @@ export function DesktopApp({
           {route === 'Home' ? (
             <DesktopHome
               draft={mode === 'Search' ? draft : ''}
-              onOpenRewind={() => navigate('Rewind')}
+              exploreDone={exploreDone}
+              onExploreGuide={startExploreGuide}
               onOpenTasks={() => setRoute('Tasks')}
               onOpenConversations={() => setRoute('Conversations')}
               onRefresh={onRefresh}

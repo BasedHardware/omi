@@ -485,6 +485,7 @@ describe("worker request contract", () => {
       "/v1/conversations",
       "/v1/memories",
       "/v1/tasks",
+      "/v1/desktop/glance",
     ];
     const statuses = await Promise.all(
       paths.map(
@@ -767,6 +768,7 @@ describe("worker request contract", () => {
       emptyConversationPage()
     );
     expect((await memories.json()) as unknown).toEqual(projectionUnavailable());
+    expect((await tasks.json()) as unknown).toEqual(projectionUnavailable());
   });
 
   test("conversations project grouped D1 chat sessions, not a 503", async () => {
