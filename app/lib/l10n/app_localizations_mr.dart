@@ -11356,4 +11356,16 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'हेडफोन्स';
+
+  @override
+  String get appearance => 'दृश्य';
+
+  @override
+  String get appearanceSystem => 'सिस्टम';
+
+  @override
+  String get appearanceLight => 'हलका';
+
+  @override
+  String get appearanceDark => 'गडद';
 }

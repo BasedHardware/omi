@@ -11357,4 +11357,16 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Hörlurar';
+
+  @override
+  String get appearance => 'Utseende';
+
+  @override
+  String get appearanceSystem => 'System';
+
+  @override
+  String get appearanceLight => 'Ljust';
+
+  @override
+  String get appearanceDark => 'Mörkt';
 }

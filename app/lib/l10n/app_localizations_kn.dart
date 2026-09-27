@@ -11384,4 +11384,16 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'ಹೆಡ್‌ಫೋನ್‌ಗಳು';
+
+  @override
+  String get appearance => 'ಗೋಚರತೆ';
+
+  @override
+  String get appearanceSystem => 'ಸಿಸ್ಟಮ್';
+
+  @override
+  String get appearanceLight => 'ಬೆಳಕು';
+
+  @override
+  String get appearanceDark => 'ಕತ್ತಲೆ';
 }

@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Groja garsiai per telefono garsiakalbį.",
     "deviceOnboardingVoiceReplySettingsHint": "Tai galite bet kada pakeisti numeriu {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Pakartokite šią kelionę bet kuriuo metu {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Ausinės"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Ausinės",
+    "appearance": "Išvaizda",
+    "appearanceSystem": "Sistema",
+    "appearanceLight": "Šviesus",
+    "appearanceDark": "Tamsus"
 }

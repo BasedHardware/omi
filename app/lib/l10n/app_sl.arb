@@ -11138,5 +11138,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Predvaja na glas prek zvočnika telefona.",
     "deviceOnboardingVoiceReplySettingsHint": "To lahko kadar koli spremenite v {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Predvajajte to turnejo kadar koli v {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Slušalke"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Slušalke",
+    "appearance": "Videz",
+    "appearanceSystem": "Sistem",
+    "appearanceLight": "Svetlo",
+    "appearanceDark": "Temno"
 }

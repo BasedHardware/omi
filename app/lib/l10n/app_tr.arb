@@ -3613,5 +3613,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Telefonun hoparlöründen yüksek sesle çalar.",
     "deviceOnboardingVoiceReplySettingsHint": "Bunu istediğiniz zaman {settings} › {voiceResponse} numaralı telefondan değiştirebilirsiniz.",
     "deviceOnboardingAllSetReplayHint": "Bu turu istediğiniz zaman {settings} › {deviceSettings} › {deviceTutorial}'da tekrar oynatın",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Kulaklıklar"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Kulaklıklar",
+    "appearance": "Görünüm",
+    "appearanceSystem": "Sistem",
+    "appearanceLight": "Açık",
+    "appearanceDark": "Koyu"
 }

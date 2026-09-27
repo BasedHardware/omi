@@ -11163,4 +11163,16 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => '헤드폰';
+
+  @override
+  String get appearance => '화면 모드';
+
+  @override
+  String get appearanceSystem => '시스템';
+
+  @override
+  String get appearanceLight => '라이트';
+
+  @override
+  String get appearanceDark => '다크';
 }

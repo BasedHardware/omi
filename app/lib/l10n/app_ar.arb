@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "يتم تشغيله بصوت عالٍ من خلال مكبر صوت الهاتف.",
     "deviceOnboardingVoiceReplySettingsHint": "يمكنك تغيير هذا في أي وقت في {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "أعد تشغيل هذه الجولة في أي وقت على {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "سماعات الرأس"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "سماعات الرأس",
+    "appearance": "المظهر",
+    "appearanceSystem": "النظام",
+    "appearanceLight": "فاتح",
+    "appearanceDark": "داكن"
 }

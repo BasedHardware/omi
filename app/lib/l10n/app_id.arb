@@ -3613,5 +3613,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Dimainkan dengan suara keras melalui speaker telepon.",
     "deviceOnboardingVoiceReplySettingsHint": "Anda dapat mengubahnya kapan saja di {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Putar ulang tur ini kapan saja di {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Headphone"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Headphone",
+    "appearance": "Tampilan",
+    "appearanceSystem": "Sistem",
+    "appearanceLight": "Terang",
+    "appearanceDark": "Gelap"
 }

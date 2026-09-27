@@ -11138,5 +11138,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "فون اسپیکر کے ذریعے اونچی آواز میں چلاتا ہے۔",
     "deviceOnboardingVoiceReplySettingsHint": "آپ اسے کسی بھی وقت {settings} › {voiceResponse} میں تبدیل کر سکتے ہیں۔",
     "deviceOnboardingAllSetReplayHint": "اس ٹور کو کسی بھی وقت {settings} › {deviceSettings} › {deviceTutorial} میں دوبارہ چلائیں۔",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "ہیڈ فون"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "ہیڈ فون",
+    "appearance": "ظاہری شکل",
+    "appearanceSystem": "سسٹم",
+    "appearanceLight": "روشن",
+    "appearanceDark": "گہرا"
 }

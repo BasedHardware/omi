@@ -11351,4 +11351,16 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Kuulokkeet';
+
+  @override
+  String get appearance => 'Ulkoasu';
+
+  @override
+  String get appearanceSystem => 'Järjestelmä';
+
+  @override
+  String get appearanceLight => 'Vaalea';
+
+  @override
+  String get appearanceDark => 'Tumma';
 }

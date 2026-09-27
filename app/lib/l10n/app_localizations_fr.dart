@@ -11446,4 +11446,16 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Écouteurs';
+
+  @override
+  String get appearance => 'Apparence';
+
+  @override
+  String get appearanceSystem => 'Système';
+
+  @override
+  String get appearanceLight => 'Clair';
+
+  @override
+  String get appearanceDark => 'Sombre';
 }

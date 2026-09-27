@@ -11282,4 +11282,16 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'หูฟัง';
+
+  @override
+  String get appearance => 'รูปลักษณ์';
+
+  @override
+  String get appearanceSystem => 'ระบบ';
+
+  @override
+  String get appearanceLight => 'สว่าง';
+
+  @override
+  String get appearanceDark => 'มืด';
 }

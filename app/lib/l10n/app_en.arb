@@ -13493,5 +13493,9 @@
     "deviceOnboardingVoiceReplyGenericHeadphones": "Headphones",
     "@deviceOnboardingVoiceReplyGenericHeadphones": {
         "description": "Generic fallback name for connected headphones when the system does not provide a device name"
-    }
+    },
+    "appearance": "Appearance",
+    "appearanceSystem": "System",
+    "appearanceLight": "Light",
+    "appearanceDark": "Dark"
 }

@@ -11138,5 +11138,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "ஃபோன் ஸ்பீக்கர் மூலம் சத்தமாக விளையாடுகிறது.",
     "deviceOnboardingVoiceReplySettingsHint": "இதை எப்போது வேண்டுமானாலும் {settings} › {voiceResponse} என்ற எண்ணில் மாற்றலாம்",
     "deviceOnboardingAllSetReplayHint": "இந்த உலாவை எப்போது வேண்டுமானாலும் {settings} › {deviceSettings} › {deviceTutorial} இல் மீண்டும் இயக்கவும்",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "ஹெட்ஃபோன்கள்"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "ஹெட்ஃபோன்கள்",
+    "appearance": "தோற்றம்",
+    "appearanceSystem": "சிஸ்டம்",
+    "appearanceLight": "ஒளி",
+    "appearanceDark": "இருள்"
 }

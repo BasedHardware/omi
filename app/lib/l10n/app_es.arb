@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Se reproduce en voz alta a través del altavoz del teléfono.",
     "deviceOnboardingVoiceReplySettingsHint": "Puedes cambiar esto en cualquier momento en {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Reproduce este recorrido en cualquier momento en {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "auriculares"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "auriculares",
+    "appearance": "Apariencia",
+    "appearanceSystem": "Sistema",
+    "appearanceLight": "Claro",
+    "appearanceDark": "Oscuro"
 }

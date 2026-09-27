@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "เล่นเสียงดังผ่านลำโพงโทรศัพท์",
     "deviceOnboardingVoiceReplySettingsHint": "คุณสามารถเปลี่ยนได้ตลอดเวลาใน {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "เล่นทัวร์นี้ซ้ำได้ทุกเมื่อใน {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "หูฟัง"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "หูฟัง",
+    "appearance": "รูปลักษณ์",
+    "appearanceSystem": "ระบบ",
+    "appearanceLight": "สว่าง",
+    "appearanceDark": "มืด"
 }

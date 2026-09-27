@@ -11426,4 +11426,16 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'ஹெட்ஃபோன்கள்';
+
+  @override
+  String get appearance => 'தோற்றம்';
+
+  @override
+  String get appearanceSystem => 'சிஸ்டம்';
+
+  @override
+  String get appearanceLight => 'ஒளி';
+
+  @override
+  String get appearanceDark => 'இருள்';
 }

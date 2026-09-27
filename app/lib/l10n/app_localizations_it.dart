@@ -11414,4 +11414,16 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Cuffie';
+
+  @override
+  String get appearance => 'Aspetto';
+
+  @override
+  String get appearanceSystem => 'Sistema';
+
+  @override
+  String get appearanceLight => 'Chiaro';
+
+  @override
+  String get appearanceDark => 'Scuro';
 }

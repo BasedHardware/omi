@@ -458,7 +458,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                           Text(context.l10n.managePlan,
                               style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
                           const SizedBox(width: OmiSpacing.xxs),
-                          const Icon(Icons.chevron_right, color: OmiColors.textSecondary, size: 20),
+                          Icon(Icons.chevron_right, color: OmiColors.textSecondary, size: 20),
                         ],
                       ),
                     ),
@@ -813,7 +813,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       gridData: const FlGridData(show: false),
       borderData: FlBorderData(
         show: true,
-        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.2), width: 1)),
+        border: Border(bottom: BorderSide(color: OmiColors.textPrimary.withValues(alpha: 0.2), width: 1)),
       ),
       lineTouchData: LineTouchData(
         handleBuiltInTouches: true,

@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Es reprodueix en veu alta a través de l'altaveu del telèfon.",
     "deviceOnboardingVoiceReplySettingsHint": "Podeu canviar-ho en qualsevol moment al {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Repetiu aquesta gira en qualsevol moment a {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Auriculars"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Auriculars",
+    "appearance": "Aparença",
+    "appearanceSystem": "Sistema",
+    "appearanceLight": "Clar",
+    "appearanceDark": "Fosc"
 }

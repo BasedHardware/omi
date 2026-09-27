@@ -11378,4 +11378,16 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Slušalke';
+
+  @override
+  String get appearance => 'Videz';
+
+  @override
+  String get appearanceSystem => 'Sistem';
+
+  @override
+  String get appearanceLight => 'Svetlo';
+
+  @override
+  String get appearanceDark => 'Temno';
 }

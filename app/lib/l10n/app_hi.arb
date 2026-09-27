@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "फ़ोन स्पीकर के माध्यम से ज़ोर से बजता है।",
     "deviceOnboardingVoiceReplySettingsHint": "आप इसे {settings} › {voiceResponse} पर कभी भी बदल सकते हैं",
     "deviceOnboardingAllSetReplayHint": "इस दौरे को किसी भी समय {settings} › {deviceSettings} › {deviceTutorial} पर दोबारा चलाएं",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "हेडफोन"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "हेडफोन",
+    "appearance": "दिखावट",
+    "appearanceSystem": "सिस्टम",
+    "appearanceLight": "लाइट",
+    "appearanceDark": "डार्क"
 }

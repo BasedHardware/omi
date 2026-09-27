@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Възпроизвежда на висок глас през високоговорителя на телефона.",
     "deviceOnboardingVoiceReplySettingsHint": "Можете да промените това по всяко време в {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Повторете тази обиколка по всяко време в {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Слушалки"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Слушалки",
+    "appearance": "Облик",
+    "appearanceSystem": "Система",
+    "appearanceLight": "Светла",
+    "appearanceDark": "Тъмна"
 }

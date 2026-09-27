@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Wordt hardop afgespeeld via de luidspreker van de telefoon.",
     "deviceOnboardingVoiceReplySettingsHint": "Je kunt dit op elk moment wijzigen via {settings} ›{voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Speel deze tour op elk gewenst moment opnieuw af in {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Koptelefoon"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Koptelefoon",
+    "appearance": "Uiterlijk",
+    "appearanceSystem": "Systeem",
+    "appearanceLight": "Licht",
+    "appearanceDark": "Donker"
 }

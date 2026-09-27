@@ -11138,5 +11138,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Reproducira se naglas preko zvučnika telefona.",
     "deviceOnboardingVoiceReplySettingsHint": "Ovo možete promijeniti bilo kada u {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Ponovite ovu turneju bilo kada u {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Slušalice"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Slušalice",
+    "appearance": "Izgled",
+    "appearanceSystem": "Sistem",
+    "appearanceLight": "Svijetlo",
+    "appearanceDark": "Tamno"
 }

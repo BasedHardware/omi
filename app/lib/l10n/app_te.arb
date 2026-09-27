@@ -11138,5 +11138,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "ఫోన్ స్పీకర్ ద్వారా బిగ్గరగా ప్లే చేస్తుంది.",
     "deviceOnboardingVoiceReplySettingsHint": "మీరు దీన్ని ఎప్పుడైనా {settings} › {voiceResponse}లో మార్చవచ్చు",
     "deviceOnboardingAllSetReplayHint": "ఈ పర్యటనను ఎప్పుడైనా {settings} › {deviceSettings} › {deviceTutorial}లో మళ్లీ ప్లే చేయండి",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "హెడ్‌ఫోన్‌లు"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "హెడ్‌ఫోన్‌లు",
+    "appearance": "రూపం",
+    "appearanceSystem": "సిస్టమ్",
+    "appearanceLight": "లైట్",
+    "appearanceDark": "డార్క్"
 }

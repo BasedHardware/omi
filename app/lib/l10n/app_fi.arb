@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Toistaa ääneen puhelimen kaiuttimesta.",
     "deviceOnboardingVoiceReplySettingsHint": "Voit muuttaa tätä milloin tahansa numerossa {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Toista tämä kiertue milloin tahansa numerossa {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Kuulokkeet"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Kuulokkeet",
+    "appearance": "Ulkoasu",
+    "appearanceSystem": "Järjestelmä",
+    "appearanceLight": "Vaalea",
+    "appearanceDark": "Tumma"
 }

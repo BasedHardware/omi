@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Wird laut über den Telefonlautsprecher abgespielt.",
     "deviceOnboardingVoiceReplySettingsHint": "Sie können dies jederzeit unter {settings} › {voiceResponse} ändern",
     "deviceOnboardingAllSetReplayHint": "Wiederholen Sie diese Tour jederzeit unter {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Kopfhörer"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Kopfhörer",
+    "appearance": "Darstellung",
+    "appearanceSystem": "System",
+    "appearanceLight": "Hell",
+    "appearanceDark": "Dunkel"
 }

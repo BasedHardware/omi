@@ -10,7 +10,6 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/omi_map_preview.dart';
 
 const _mapClusterDistanceMeters = 100.0;
@@ -122,9 +121,9 @@ class ConversationMapPage extends StatelessWidget {
               ),
               subtitle: Text(
                 dates.dateTime(conversation.startedAt ?? conversation.createdAt),
-                style: const TextStyle(color: OmiColors.textSecondary),
+                style: TextStyle(color: OmiColors.textSecondary),
               ),
-              trailing: const Icon(Icons.chevron_right, color: OmiColors.textTertiary),
+              trailing: Icon(Icons.chevron_right, color: OmiColors.textTertiary),
               onTap: () {
                 Navigator.of(sheetContext).pop();
                 _openConversation(context, conversation);
@@ -147,7 +146,7 @@ class ConversationMapPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final groups = buildConversationMapGroups(conversations);
     return Scaffold(
-      backgroundColor: AppStyles.backgroundPrimary,
+      backgroundColor: OmiColors.surface0,
       appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.conversationMap)),
       body: groups.isEmpty
           ? OmiEmptyState(
@@ -172,7 +171,7 @@ class ConversationMapPage extends StatelessWidget {
                           pins: [
                             for (final group in groups) OmiMapPin(latitude: group.latitude, longitude: group.longitude),
                           ],
-                          backgroundColor: AppStyles.backgroundPrimary,
+                          backgroundColor: OmiColors.surface0,
                         ),
                       ),
                     ),
@@ -194,7 +193,7 @@ class ConversationMapPage extends StatelessWidget {
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                         decoration: BoxDecoration(
-                          color: AppStyles.backgroundSecondary,
+                          color: OmiColors.surface1,
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Row(

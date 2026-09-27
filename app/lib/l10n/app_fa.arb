@@ -11138,5 +11138,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "با صدای بلند از طریق بلندگوی تلفن پخش می شود.",
     "deviceOnboardingVoiceReplySettingsHint": "شما می توانید این را در هر زمان تغییر دهید در {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "این تور را هر زمان خواستید در {settings} › {deviceSettings} › {deviceTutorial} تکرار کنید",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "هدفون"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "هدفون",
+    "appearance": "ظاهر",
+    "appearanceSystem": "سیستم",
+    "appearanceLight": "روشن",
+    "appearanceDark": "تیره"
 }

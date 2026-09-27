@@ -11334,4 +11334,16 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Hovedtelefoner';
+
+  @override
+  String get appearance => 'Udseende';
+
+  @override
+  String get appearanceSystem => 'System';
+
+  @override
+  String get appearanceLight => 'Lys';
+
+  @override
+  String get appearanceDark => 'Mørk';
 }

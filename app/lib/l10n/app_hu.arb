@@ -3674,5 +3674,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Hangosan játszik le a telefon hangszóróján keresztül.",
     "deviceOnboardingVoiceReplySettingsHint": "Ezt bármikor módosíthatja a {settings} › {voiceResponse} számon",
     "deviceOnboardingAllSetReplayHint": "A körutat bármikor újra lejátszhatja a következő számon: {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Fejhallgató"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Fejhallgató",
+    "appearance": "Megjelenés",
+    "appearanceSystem": "Rendszer",
+    "appearanceLight": "Világos",
+    "appearanceDark": "Sötét"
 }

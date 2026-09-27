@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Phát to qua loa điện thoại.",
     "deviceOnboardingVoiceReplySettingsHint": "Bạn có thể thay đổi điều này bất cứ lúc nào trong {settings} > {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Phát lại chuyến tham quan này bất cứ lúc nào trong {settings} > {deviceSettings} > {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Tai nghe"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Tai nghe",
+    "appearance": "Giao diện",
+    "appearanceSystem": "Hệ thống",
+    "appearanceLight": "Sáng",
+    "appearanceDark": "Tối"
 }

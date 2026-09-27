@@ -44,9 +44,9 @@ class _SpeakerTagPromptCardState extends State<SpeakerTagPromptCard> {
           },
           child: Container(
             key: const Key('speaker_tag_prompt_card'),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: OmiColors.surface1,
-              borderRadius: BorderRadius.all(Radius.circular(OmiRadius.xl)),
+              borderRadius: const BorderRadius.all(Radius.circular(OmiRadius.xl)),
             ),
             margin: const EdgeInsets.fromLTRB(16, 15, 16, 0),
             padding: const EdgeInsets.fromLTRB(16, 12, 8, 16),
@@ -61,7 +61,7 @@ class _SpeakerTagPromptCardState extends State<SpeakerTagPromptCard> {
                 ),
                 if (provider.firstTime) ...[
                   const SizedBox(height: 12),
-                  const Divider(color: OmiColors.border, height: 1),
+                  Divider(color: OmiColors.border, height: 1),
                   const SizedBox(height: 8),
                   _SaveVoicesToggle(provider: provider),
                 ],
@@ -108,7 +108,7 @@ class _Header extends StatelessWidget {
         IconButton(
           key: const Key('speaker_tag_prompt_close'),
           visualDensity: VisualDensity.compact,
-          icon: const Icon(Icons.close, color: OmiColors.textSecondary, size: 20),
+          icon: Icon(Icons.close, color: OmiColors.textSecondary, size: 20),
           tooltip: context.l10n.close,
           onPressed: provider.close,
         ),
@@ -348,7 +348,7 @@ class _AnswerChip extends StatelessWidget {
           )
         : OutlinedButton.styleFrom(
             foregroundColor: Colors.white,
-            side: const BorderSide(color: OmiColors.border),
+            side: BorderSide(color: OmiColors.border),
             minimumSize: const Size(0, 44),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             padding: const EdgeInsets.symmetric(horizontal: 16),

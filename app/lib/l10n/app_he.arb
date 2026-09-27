@@ -11138,5 +11138,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "מתנגן בקול רם דרך רמקול הטלפון.",
     "deviceOnboardingVoiceReplySettingsHint": "אתה יכול לשנות זאת בכל עת בטלפון {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "הפעל מחדש את הסיור הזה בכל עת ב-{settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "אוזניות"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "אוזניות",
+    "appearance": "מראה",
+    "appearanceSystem": "מערכת",
+    "appearanceLight": "בהיר",
+    "appearanceDark": "כהה"
 }

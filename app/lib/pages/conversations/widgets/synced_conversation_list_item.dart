@@ -117,7 +117,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                               )
                             : Padding(
                                 padding: const EdgeInsets.all(8.0),
-                                child: Icon(Icons.refresh_outlined, color: Colors.grey.shade400),
+                                child: Icon(Icons.refresh_outlined, color: OmiColors.textTertiary),
                               ),
                       )
                     : const SizedBox.shrink(),

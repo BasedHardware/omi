@@ -153,7 +153,7 @@ class _AppsListState extends State<_AppsList> {
             Container(
               width: 32,
               height: 32,
-              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
             ),
             const SizedBox(width: 16),
             // Title and subtitle placeholders
@@ -164,15 +164,15 @@ class _AppsListState extends State<_AppsList> {
                   Container(
                     width: double.infinity,
                     height: 16,
-                    decoration: const BoxDecoration(
-                        color: OmiColors.surface1, borderRadius: BorderRadius.all(Radius.circular(4))),
+                    decoration: BoxDecoration(
+                        color: OmiColors.surface1, borderRadius: const BorderRadius.all(Radius.circular(4))),
                   ),
                   const SizedBox(height: 8),
                   Container(
                     width: 200,
                     height: 12,
-                    decoration: const BoxDecoration(
-                        color: OmiColors.surface1, borderRadius: BorderRadius.all(Radius.circular(4))),
+                    decoration: BoxDecoration(
+                        color: OmiColors.surface1, borderRadius: const BorderRadius.all(Radius.circular(4))),
                   ),
                 ],
               ),
@@ -462,7 +462,7 @@ class _AppListItemState extends State<_AppListItem> {
         gradient: LinearGradient(
           begin: isLeft ? Alignment.centerLeft : Alignment.centerRight,
           end: isLeft ? Alignment.centerRight : Alignment.centerLeft,
-          colors: const [OmiColors.surface3, Colors.transparent],
+          colors: [OmiColors.surface3, Colors.transparent],
         ),
       ),
       alignment: isLeft ? Alignment.centerLeft : Alignment.centerRight,
@@ -497,7 +497,7 @@ class _AppListItemState extends State<_AppListItem> {
           selected: widget.isSelected,
           onTap: widget.onTap,
         ),
-        const Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
+        Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
       ],
     );
   }
@@ -581,7 +581,7 @@ class _AppListItemState extends State<_AppListItem> {
         widget.provider!.selectedAppForReprocessing?.id == widget.app.id;
 
     if (widget.isSelected) {
-      return const Icon(Icons.check, color: OmiColors.textPrimary, size: 20);
+      return Icon(Icons.check, color: OmiColors.textPrimary, size: 20);
     } else if (widget.isInstalling || isProcessing) {
       return const OmiSpinner(size: OmiSpinnerSize.small);
     } else {
@@ -602,10 +602,10 @@ class _AppListItemState extends State<_AppListItem> {
           child: Icon(Icons.error_outline_rounded, size: 16),
         );
       },
-      progressIndicatorBuilder: (context, url, progress) => const CircleAvatar(
+      progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
         backgroundColor: OmiColors.surface2,
         radius: 16,
-        child: OmiSpinner(size: OmiSpinnerSize.small),
+        child: const OmiSpinner(size: OmiSpinnerSize.small),
       ),
     );
   }
@@ -642,7 +642,7 @@ class _CreateTemplateListItem extends StatelessWidget {
             showCreateTemplateBottomSheet(context, conversationId: conversationId);
           },
         ),
-        const Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
+        Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
       ],
     );
   }
@@ -687,7 +687,7 @@ class _EnableAppsListItem extends StatelessWidget {
             PlatformManager.instance.analytics.pageOpened('Summary Apps');
           },
         ),
-        const Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
+        Divider(height: 1, thickness: 0.5, color: OmiColors.border, indent: 56, endIndent: 16),
       ],
     );
   }

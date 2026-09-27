@@ -71,6 +71,15 @@ class SharedPreferencesUtil {
   String get deviceIdHash => _preferences?.getString('deviceIdHash') ?? '';
   set deviceIdHash(String value) => _preferences?.setString('deviceIdHash', value);
 
+  static const String appearanceModeKey = 'appearanceMode';
+
+  String get appearanceMode => _preferences?.getString(appearanceModeKey) ?? 'system';
+
+  Future<void> setAppearanceMode(String mode) async {
+    final prefs = _preferences ?? await SharedPreferences.getInstance();
+    await prefs.setString(appearanceModeKey, mode);
+  }
+
   static Future<void> init({FlutterSecureStorage? secureStorage, bool? mirrorNativeAuthToken}) async {
     _preferences = await SharedPreferences.getInstance();
     _mirrorNativeAuthToken = mirrorNativeAuthToken ?? Platform.isAndroid;

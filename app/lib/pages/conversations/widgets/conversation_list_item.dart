@@ -434,7 +434,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
   }
 
-  static const _metaStyle = TextStyle(color: OmiColors.textTertiary, fontSize: 14);
+  static TextStyle get _metaStyle => TextStyle(color: OmiColors.textTertiary, fontSize: 14);
 
   /// Time and length, with the New badge beside them (hub audit #16) and the star.
   Widget _buildMetaRow(BuildContext context) {
@@ -447,12 +447,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
           maxLines: 1,
         ),
         if (duration.isNotEmpty) ...[
-          const Text(' • ', style: _metaStyle),
+          Text(' • ', style: _metaStyle),
           Text(duration, style: _metaStyle, maxLines: 1),
         ],
         // One row stands for an event several devices recorded.
         if (_captureSources.length > 1) ...[
-          const Text(' • ', style: _metaStyle),
+          Text(' • ', style: _metaStyle),
           CaptureSourceIcons(sources: _captureSources),
         ],
         if (isNew) ...[
@@ -488,7 +488,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                   Container(
                     width: 40,
                     height: 40,
-                    decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                    decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
                     alignment: Alignment.center,
                     child: Text(
                       widget.conversation.structured.getEmoji(),
@@ -587,11 +587,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
               if (widget.conversation.photos.isNotEmpty) ...[
                 Row(
                   children: [
-                    Icon(Icons.photo_library, color: Colors.grey.shade400, size: 18),
+                    Icon(Icons.photo_library, color: OmiColors.textTertiary, size: 18),
                     const SizedBox(width: 12),
                     Text(
                       context.l10n.conversationPhotosCount(widget.conversation.photos.length),
-                      style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
+                      style:
+                          Theme.of(context).textTheme.bodyMedium!.copyWith(color: OmiColors.textSecondary, height: 1.3),
                     ),
                   ],
                 ),
@@ -599,7 +600,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
               ],
               Text(
                 conversationSnippet(widget.conversation),
-                style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade300, height: 1.3),
+                style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: OmiColors.textSecondary, height: 1.3),
               ),
             ],
           ),
@@ -618,7 +619,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
             _searchSnippetText()!,
             style: Theme.of(
               context,
-            ).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade400, height: 1.35, fontStyle: FontStyle.italic),
+            ).textTheme.bodyMedium!.copyWith(color: OmiColors.textTertiary, height: 1.35, fontStyle: FontStyle.italic),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -705,7 +706,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                     padding: const EdgeInsets.only(left: 8.0),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+                      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
                       child: Text(_getConversationDuration(context), style: OmiType.caption, maxLines: 1),
                     ),
                   ),

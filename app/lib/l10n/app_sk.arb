@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Prehráva sa nahlas cez reproduktor telefónu.",
     "deviceOnboardingVoiceReplySettingsHint": "Toto môžete kedykoľvek zmeniť na čísle {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Prehrajte si túto prehliadku kedykoľvek na čísle {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Slúchadlá"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Slúchadlá",
+    "appearance": "Vzhľad",
+    "appearanceSystem": "Systém",
+    "appearanceLight": "Svetlý",
+    "appearanceDark": "Tmavý"
 }

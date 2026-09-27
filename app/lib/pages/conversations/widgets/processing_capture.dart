@@ -335,7 +335,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           if (provider.isConversationMarkedForStarring) ...[
             const SizedBox(height: OmiSpacing.sm),
             Row(children: [
-              const FaIcon(FontAwesomeIcons.solidStar, size: 12, color: OmiColors.textSecondary),
+              FaIcon(FontAwesomeIcons.solidStar, size: 12, color: OmiColors.textSecondary),
               const SizedBox(width: OmiSpacing.xs),
               Text(context.l10n.starred, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
             ]),
@@ -607,8 +607,8 @@ getPhoneMicRecordingButton(
         margin: const EdgeInsets.only(right: 4),
         width: 24,
         height: 24,
-        decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-        child: const Center(child: Icon(Icons.play_arrow, color: OmiColors.onAccent, size: 14)),
+        decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+        child: Center(child: Icon(Icons.play_arrow, color: OmiColors.onAccent, size: 14)),
       );
     } else {
       text = context.l10n.continueRecording;
@@ -819,7 +819,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                   const SizedBox(height: 12),
                   Text(
                     context.l10n.processingTakingLonger,
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.3),
+                    style: TextStyle(color: OmiColors.textTertiary, fontSize: 13, height: 1.3),
                   ),
                   const SizedBox(height: 10),
                   Align(

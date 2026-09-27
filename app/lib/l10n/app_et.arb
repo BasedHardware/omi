@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Mängib valjult läbi telefoni kõlari.",
     "deviceOnboardingVoiceReplySettingsHint": "Saate seda igal ajal muuta numbril {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Esitage seda ringkäiku igal ajal uuesti numbril {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Kõrvaklapid"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Kõrvaklapid",
+    "appearance": "Välimus",
+    "appearanceSystem": "Süsteem",
+    "appearanceLight": "Hele",
+    "appearanceDark": "Tume"
 }

@@ -11138,5 +11138,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Репродуцира гласно преку звучникот на телефонот.",
     "deviceOnboardingVoiceReplySettingsHint": "Можете да го промените ова во секое време во {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Повторете ја оваа турнеја во секое време во {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Слушалки"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Слушалки",
+    "appearance": "Изглед",
+    "appearanceSystem": "Систем",
+    "appearanceLight": "Светло",
+    "appearanceDark": "Темно"
 }

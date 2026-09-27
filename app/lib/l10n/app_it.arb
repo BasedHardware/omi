@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Viene riprodotto ad alta voce attraverso l'altoparlante del telefono.",
     "deviceOnboardingVoiceReplySettingsHint": "Puoi modificarlo in qualsiasi momento al numero {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Riproduci questo tour in qualsiasi momento al numero {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Cuffie"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Cuffie",
+    "appearance": "Aspetto",
+    "appearanceSystem": "Sistema",
+    "appearanceLight": "Chiaro",
+    "appearanceDark": "Scuro"
 }

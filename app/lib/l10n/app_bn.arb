@@ -11138,5 +11138,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "ফোন স্পিকারের মাধ্যমে জোরে বাজে।",
     "deviceOnboardingVoiceReplySettingsHint": "আপনি {settings} › {voiceResponse} এ যেকোনো সময় এটি পরিবর্তন করতে পারেন",
     "deviceOnboardingAllSetReplayHint": "{settings} › {deviceSettings} › {deviceTutorial} এ যেকোনও সময় এই সফরটি পুনরায় চালান",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "হেডফোন"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "হেডফোন",
+    "appearance": "চেহারা",
+    "appearanceSystem": "সিস্টেম",
+    "appearanceLight": "হালকা",
+    "appearanceDark": "গাঢ়"
 }

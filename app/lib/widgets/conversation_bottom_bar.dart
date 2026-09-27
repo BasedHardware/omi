@@ -648,7 +648,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                 ),
               ),
               // Dropdown arrow
-              const Icon(Icons.keyboard_arrow_down, color: OmiColors.textPrimary, size: 18),
+              Icon(Icons.keyboard_arrow_down, color: OmiColors.textPrimary, size: 18),
             ],
           ),
         ),
@@ -756,8 +756,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                         alignment: Alignment.centerLeft,
                         widthFactor: progress,
                         child: Container(
-                          decoration: const BoxDecoration(
-                              color: OmiColors.accent, borderRadius: BorderRadius.all(Radius.circular(2))),
+                          decoration: BoxDecoration(
+                              color: OmiColors.accent, borderRadius: const BorderRadius.all(Radius.circular(2))),
                         ),
                       ),
                     ),
@@ -898,7 +898,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     }
 
     if (isUnknownApp) {
-      return const SizedBox(
+      return SizedBox(
         width: size,
         height: size,
         child: Icon(Icons.apps_outlined, color: OmiColors.textPrimary, size: 24),

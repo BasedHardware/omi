@@ -3620,5 +3620,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Spiller højt gennem telefonens højttaler.",
     "deviceOnboardingVoiceReplySettingsHint": "Du kan til enhver tid ændre dette i {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Gentag denne tur når som helst i {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Hovedtelefoner"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Hovedtelefoner",
+    "appearance": "Udseende",
+    "appearanceSystem": "System",
+    "appearanceLight": "Lys",
+    "appearanceDark": "Mørk"
 }

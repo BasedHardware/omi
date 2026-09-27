@@ -11373,4 +11373,16 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Austiņas';
+
+  @override
+  String get appearance => 'Izskats';
+
+  @override
+  String get appearanceSystem => 'Sistēma';
+
+  @override
+  String get appearanceLight => 'Gaišs';
+
+  @override
+  String get appearanceDark => 'Tumšs';
 }

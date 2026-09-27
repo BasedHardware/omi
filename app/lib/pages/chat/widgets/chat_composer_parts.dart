@@ -157,8 +157,7 @@ class ChatSelectedFilesStrip extends StatelessWidget {
                 ),
                 child: Stack(
                   children: [
-                    if (!isImage)
-                      const Center(child: Icon(Icons.insert_drive_file, color: OmiColors.textPrimary, size: 24)),
+                    if (!isImage) Center(child: Icon(Icons.insert_drive_file, color: OmiColors.textPrimary, size: 24)),
                     if (provider.isFileUploading(file.path))
                       Container(
                         decoration: BoxDecoration(
@@ -209,8 +208,8 @@ class _RemoveFileButton extends StatelessWidget {
                 width: 20,
                 height: 20,
                 margin: const EdgeInsets.all(OmiSpacing.xxs),
-                decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-                child: const Center(child: FaIcon(FontAwesomeIcons.xmark, size: 10, color: OmiColors.onAccent)),
+                decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+                child: Center(child: FaIcon(FontAwesomeIcons.xmark, size: 10, color: OmiColors.onAccent)),
               ),
             ),
           ),

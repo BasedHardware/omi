@@ -11138,5 +11138,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Tumutugtog nang malakas sa pamamagitan ng speaker ng telepono.",
     "deviceOnboardingVoiceReplySettingsHint": "Maaari mo itong baguhin anumang oras sa {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "I-replay ang tour na ito anumang oras sa {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Mga headphone"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Mga headphone",
+    "appearance": "Hitsura",
+    "appearanceSystem": "System",
+    "appearanceLight": "Maliwanag",
+    "appearanceDark": "Madilim"
 }

@@ -11137,4 +11137,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => '耳机';
+
+  @override
+  String get appearance => '外观';
+
+  @override
+  String get appearanceSystem => '系统';
+
+  @override
+  String get appearanceLight => '浅色';
+
+  @override
+  String get appearanceDark => '深色';
 }

@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "通过手机扬声器大声播放。",
     "deviceOnboardingVoiceReplySettingsHint": "您可以随时在 {settings} › {voiceResponse} 中更改此设置",
     "deviceOnboardingAllSetReplayHint": "随时重播此导览 {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "耳机"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "耳机",
+    "appearance": "外观",
+    "appearanceSystem": "系统",
+    "appearanceLight": "浅色",
+    "appearanceDark": "深色"
 }

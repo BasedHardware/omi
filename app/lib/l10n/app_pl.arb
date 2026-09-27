@@ -3613,5 +3613,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Odtwarza głośno przez głośnik telefonu.",
     "deviceOnboardingVoiceReplySettingsHint": "Możesz to zmienić w dowolnym momencie w {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Odtwórz ponownie tę wycieczkę w dowolnym momencie w {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Słuchawki"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Słuchawki",
+    "appearance": "Wygląd",
+    "appearanceSystem": "System",
+    "appearanceLight": "Jasny",
+    "appearanceDark": "Ciemny"
 }

@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Atskaņo skaļi caur tālruņa skaļruni.",
     "deviceOnboardingVoiceReplySettingsHint": "To jebkurā laikā varat mainīt pa tālruni {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Atkārtojiet šo ceļojumu jebkurā laikā {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Austiņas"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Austiņas",
+    "appearance": "Izskats",
+    "appearanceSystem": "Sistēma",
+    "appearanceLight": "Gaišs",
+    "appearanceDark": "Tumšs"
 }

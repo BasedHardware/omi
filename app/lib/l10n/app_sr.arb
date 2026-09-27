@@ -11138,5 +11138,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Свира наглас преко звучника телефона.",
     "deviceOnboardingVoiceReplySettingsHint": "Ово можете променити било када у {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Поновите овај обилазак било када у {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Слушалице"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Слушалице",
+    "appearance": "Izgled",
+    "appearanceSystem": "Sistem",
+    "appearanceLight": "Svetlo",
+    "appearanceDark": "Tamno"
 }

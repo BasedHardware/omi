@@ -23,7 +23,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/capture_sources.dart';
 
-const _metaColor = OmiColors.textSecondary;
+Color get _metaColor => OmiColors.textSecondary;
 
 /// The conversation page's header, shared by every tab so switching between
 /// Summary, Transcript and Action items never loses the title or the facts.
@@ -204,7 +204,7 @@ class ConversationDetailHeader extends StatelessWidget {
 
   Widget _peopleChip(BuildContext context, ServerConversation conversation, String label) {
     final chip = _HeaderChip(
-      icon: const Icon(Icons.people_outline, size: 15, color: OmiColors.textSecondary),
+      icon: Icon(Icons.people_outline, size: 15, color: OmiColors.textSecondary),
       label: label,
       color: OmiColors.textSecondary,
     );
@@ -445,7 +445,7 @@ class _VisibilityChip extends StatelessWidget {
                   ],
                 ),
               ),
-              if (isSelected) const Icon(Icons.check_circle, color: OmiColors.textPrimary, size: 22),
+              if (isSelected) Icon(Icons.check_circle, color: OmiColors.textPrimary, size: 22),
             ],
           ),
         ),

@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "電話のスピーカーから大音量で再生されます。",
     "deviceOnboardingVoiceReplySettingsHint": "これはいつでも {settings} › {voiceResponse} で変更できます。",
     "deviceOnboardingAllSetReplayHint": "{settings} › {deviceSettings} › {deviceTutorial} でいつでもこのツアーを再生できます",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "ヘッドフォン"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "ヘッドフォン",
+    "appearance": "外観",
+    "appearanceSystem": "システム",
+    "appearanceLight": "ライト",
+    "appearanceDark": "ダーク"
 }

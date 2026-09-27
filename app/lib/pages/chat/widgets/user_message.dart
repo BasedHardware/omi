@@ -41,7 +41,7 @@ class HumanMessage extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.subdirectory_arrow_right, size: 14, color: OmiColors.textTertiary),
+                    Icon(Icons.subdirectory_arrow_right, size: 14, color: OmiColors.textTertiary),
                     const SizedBox(width: OmiSpacing.xs),
                     Flexible(
                       child: Text(
@@ -59,7 +59,7 @@ class HumanMessage extends StatelessWidget {
             alignment: WrapAlignment.end,
             children: [
               Container(
-                decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+                decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 child: SelectableText(
                   messageText.trimRight(),

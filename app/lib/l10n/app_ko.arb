@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "전화 스피커를 통해 큰 소리로 재생됩니다.",
     "deviceOnboardingVoiceReplySettingsHint": "{settings} › {voiceResponse}에서 언제든지 변경할 수 있습니다.",
     "deviceOnboardingAllSetReplayHint": "{settings} › {deviceSettings} › {deviceTutorial}에서 언제든지 이 둘러보기를 다시 재생하세요.",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "헤드폰"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "헤드폰",
+    "appearance": "화면 모드",
+    "appearanceSystem": "시스템",
+    "appearanceLight": "라이트",
+    "appearanceDark": "다크"
 }

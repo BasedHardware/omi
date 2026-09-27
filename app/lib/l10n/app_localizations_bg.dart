@@ -11391,4 +11391,16 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Слушалки';
+
+  @override
+  String get appearance => 'Облик';
+
+  @override
+  String get appearanceSystem => 'Система';
+
+  @override
+  String get appearanceLight => 'Светла';
+
+  @override
+  String get appearanceDark => 'Тъмна';
 }

@@ -504,8 +504,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         await _openSetupInstructions();
                         checkSetupCompleted();
                       },
-                      trailing: const Padding(
-                        padding: EdgeInsets.only(right: OmiSpacing.sm),
+                      trailing: Padding(
+                        padding: const EdgeInsets.only(right: OmiSpacing.sm),
                         child: FaIcon(FontAwesomeIcons.chevronRight, size: 20, color: OmiColors.textTertiary),
                       ),
                       title: Text(l10n.integrationInstructions, style: OmiType.headline),

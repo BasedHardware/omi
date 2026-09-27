@@ -870,7 +870,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       PullDownMenuItem(
         title: l10n.deleteConversation,
         isDestructive: true,
-        iconWidget: const FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
+        iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
         onTap: () => _handleMenuSelection(context, 'delete', provider),
       ),
     ];

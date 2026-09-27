@@ -11384,4 +11384,16 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Słuchawki';
+
+  @override
+  String get appearance => 'Wygląd';
+
+  @override
+  String get appearanceSystem => 'System';
+
+  @override
+  String get appearanceLight => 'Jasny';
+
+  @override
+  String get appearanceDark => 'Ciemny';
 }

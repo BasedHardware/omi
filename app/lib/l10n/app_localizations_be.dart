@@ -11378,4 +11378,16 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'Навушнікі';
+
+  @override
+  String get appearance => 'Выгляд';
+
+  @override
+  String get appearanceSystem => 'Сістэма';
+
+  @override
+  String get appearanceLight => 'Светлы';
+
+  @override
+  String get appearanceDark => 'Цёмны';
 }

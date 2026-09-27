@@ -11359,4 +11359,16 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'ہیڈ فون';
+
+  @override
+  String get appearance => 'ظاہری شکل';
+
+  @override
+  String get appearanceSystem => 'سسٹم';
+
+  @override
+  String get appearanceLight => 'روشن';
+
+  @override
+  String get appearanceDark => 'گہرا';
 }

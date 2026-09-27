@@ -11138,5 +11138,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Прайграванне ўслых праз дынамік тэлефона.",
     "deviceOnboardingVoiceReplySettingsHint": "Вы можаце змяніць гэта ў любы час у {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Паўтарыце гэты тур у любы час у {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Навушнікі"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Навушнікі",
+    "appearance": "Выгляд",
+    "appearanceSystem": "Сістэма",
+    "appearanceLight": "Светлы",
+    "appearanceDark": "Цёмны"
 }

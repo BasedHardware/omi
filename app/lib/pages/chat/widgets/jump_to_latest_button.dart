@@ -38,7 +38,7 @@ class ChatJumpToLatestButton extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.keyboard_arrow_down_rounded, color: OmiColors.textPrimary, size: 22),
+                    Icon(Icons.keyboard_arrow_down_rounded, color: OmiColors.textPrimary, size: 22),
                     const SizedBox(width: 6),
                     Text(
                       label,

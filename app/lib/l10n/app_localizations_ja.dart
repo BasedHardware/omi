@@ -11159,4 +11159,16 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'ヘッドフォン';
+
+  @override
+  String get appearance => '外観';
+
+  @override
+  String get appearanceSystem => 'システム';
+
+  @override
+  String get appearanceLight => 'ライト';
+
+  @override
+  String get appearanceDark => 'ダーク';
 }

@@ -3613,5 +3613,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Joue à haute voix via le haut-parleur du téléphone.",
     "deviceOnboardingVoiceReplySettingsHint": "Vous pouvez modifier cela à tout moment au {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Revivez cette tournée à tout moment au {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Écouteurs"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Écouteurs",
+    "appearance": "Apparence",
+    "appearanceSystem": "Système",
+    "appearanceLight": "Clair",
+    "appearanceDark": "Sombre"
 }

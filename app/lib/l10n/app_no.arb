@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Spiller høyt gjennom telefonens høyttaler.",
     "deviceOnboardingVoiceReplySettingsHint": "Du kan endre dette når som helst i {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Spill denne turen på nytt når som helst i {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Hodetelefoner"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Hodetelefoner",
+    "appearance": "Utseende",
+    "appearanceSystem": "System",
+    "appearanceLight": "Lys",
+    "appearanceDark": "Mørk"
 }

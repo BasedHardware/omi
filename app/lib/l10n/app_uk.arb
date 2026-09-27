@@ -3578,5 +3578,9 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Відтворюється вголос через динамік телефону.",
     "deviceOnboardingVoiceReplySettingsHint": "Ви можете будь-коли змінити це в {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Повторіть цей тур будь-коли в {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Навушники"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Навушники",
+    "appearance": "Вигляд",
+    "appearanceSystem": "Система",
+    "appearanceLight": "Світла",
+    "appearanceDark": "Темна"
 }
