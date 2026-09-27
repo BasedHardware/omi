@@ -52,7 +52,7 @@ except ImportError:
 
 
 import logging
-from utils.conversations.capture_jev_shadow import record_capture_outcome
+from utils.conversations.capture_shadow_outcomes import record_capture_outcome
 
 logger = logging.getLogger(__name__)
 

@@ -48,13 +48,12 @@ Same-source pairs without both `client_device_id` values are reported as
 Structured `jev_capture_shadow` logs carry UID, pair IDs, category, shipped
 group result, score/would-decision when available, outcome, version, served
 model, and timestamps for every admitted attempt.
-They contain **no transcript or summary text**. Only allowlisted UIDs also
-get an identifier-only `users/{uid}/jev_capture_shadow/{record_id}` document
-for David's prospective labeling; the readout uses logging exports so it adds
-no fleet Firestore reads. A successful Separate or manual Merge action emits
+They contain **no transcript or summary text**. The readout exports
+identifier-only records for allowlisted UIDs for David's prospective labeling;
+it adds no Firestore reads or writes. A successful Separate or manual Merge action emits
 an identifier-only `jev_capture_shadow_outcome` log after the action. Those
 outcomes are proxies: other reasons can drive a split or merge, and delayed
-actions have censoring. Logs and label docs must follow the customer-data
+actions have censoring. Logs and label exports must follow the customer-data
 retention/access policy; no transcript text belongs in either.
 
 ## Go/no-go

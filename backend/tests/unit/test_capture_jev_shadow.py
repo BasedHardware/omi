@@ -7,6 +7,7 @@ import fakeredis
 
 from config.jev_decisions import capture_jev_shadow_enabled
 from utils.conversations import capture_jev_shadow as shadow
+from utils.conversations import capture_shadow_outcomes as outcomes
 
 
 def test_hard_expiry_even_if_flag_and_later_override(monkeypatch):
@@ -26,6 +27,17 @@ def test_expired_shadow_never_submits(monkeypatch):
     shadow.submit_same_scene('david', 'a', 'b')
     shadow.submit_resummary('david', 'a', 'b')
     assert not submitted
+
+
+def test_outcome_log_obeys_flag_and_expiry(monkeypatch):
+    emitted = []
+    monkeypatch.setattr(outcomes.logger, 'info', lambda *args: emitted.append(args))
+    monkeypatch.delenv('CAPTURE_JEV_SHADOW_ENABLED', raising=False)
+    outcomes.record_capture_outcome('uid', 'separate', ['a', 'b'], separated_id='a')
+    monkeypatch.setenv('CAPTURE_JEV_SHADOW_ENABLED', 'true')
+    monkeypatch.setenv('CAPTURE_JEV_SHADOW_EXPIRY', '2026-09-01T00:00:00Z')
+    outcomes.record_capture_outcome('uid', 'separate', ['a', 'b'], separated_id='a')
+    assert not emitted
 
 
 def test_cohort_default_allowlist_only(monkeypatch):
@@ -61,7 +73,7 @@ def test_fail_closed_error_and_timeout(monkeypatch):
     )
     monkeypatch.setattr(shadow, '_cap', lambda *args: 'admitted')
     emitted = []
-    monkeypatch.setattr(shadow, '_record', lambda uid, record: emitted.append(record))
+    monkeypatch.setattr(shadow, '_record', lambda record: emitted.append(record))
     monkeypatch.setattr(shadow, 'ask_jev', lambda *args, **kwargs: None)
     shadow.submit_same_scene('david', 'a', 'b')
     assert emitted[-1]['p'] is None and emitted[-1]['would_decide'] is None
@@ -118,7 +130,7 @@ def test_success_telemetry_and_identifier_only_record(monkeypatch):
 
     monkeypatch.setattr(shadow, 'ask_jev', lambda *args, **kwargs: Answer())
     emitted = []
-    monkeypatch.setattr(shadow, '_record', lambda uid, record: emitted.append(record))
+    monkeypatch.setattr(shadow, '_record', lambda record: emitted.append(record))
     before = shadow.CAPTURE_JEV_SHADOW_AGREEMENT.labels('same_source_different_device', 'jev_only')._value.get()
     shadow.submit_same_scene('david', 'a', 'b')
     assert emitted[0]['would_decide'] is True
@@ -159,7 +171,7 @@ def test_resummary_uses_pinned_threshold_and_never_revises(monkeypatch):
 
     monkeypatch.setattr(shadow, 'ask_jev', lambda *args, **kwargs: Answer())
     emitted = []
-    monkeypatch.setattr(shadow, '_record', lambda uid, record: emitted.append(record))
+    monkeypatch.setattr(shadow, '_record', lambda record: emitted.append(record))
     shadow.submit_resummary('david', 'a', 'b')
     assert emitted[0]['would_decide'] is False
     assert emitted[0]['group_id'] == 'g'

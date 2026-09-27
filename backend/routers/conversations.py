@@ -69,7 +69,7 @@ from utils.conversations.process_conversation import (
     retrieve_in_progress_conversation,
 )
 from utils.conversations import lifecycle as lifecycle_service
-from utils.conversations.capture_jev_shadow import record_capture_outcome
+from utils.conversations.capture_shadow_outcomes import record_capture_outcome
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event

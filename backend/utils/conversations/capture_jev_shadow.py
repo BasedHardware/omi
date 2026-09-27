@@ -19,7 +19,6 @@ from typing import Any, Mapping
 from config.jev_decisions import JEV_MODEL, capture_jev_shadow_enabled
 from database import conversations as conversations_db
 from database import redis_db
-from database._client import get_firestore_client
 from utils.conversations.shared_speech import transcript_words
 from utils.executors import llm_executor, submit_with_context
 from utils.llm.jev_client import ask_jev, truncate_state
@@ -182,15 +181,8 @@ def _category(first: Any, second: Any) -> str:
     return 'same_source_same_device' if device_a == device_b else 'same_source_different_device'
 
 
-def _record(uid: str, record: dict[str, Any]) -> None:
+def _record(record: dict[str, Any]) -> None:
     logger.info('jev_capture_shadow %s', json.dumps(record, separators=(',', ':'), sort_keys=True))
-    if uid in _allowlist():
-        try:
-            get_firestore_client().collection('users').document(uid).collection('jev_capture_shadow').document(
-                record['id']
-            ).set(record)
-        except Exception:
-            logger.warning('capture Jev label record write failed uid=%s', uid)
 
 
 def _decision_record(
@@ -210,7 +202,6 @@ def _decision_record(
     first_group = _field(first, 'capture_group') or {}
     second_group = _field(second, 'capture_group') or {}
     _record(
-        uid,
         {
             'event': 'jev_capture_shadow',
             'id': str(uuid.uuid4()),
@@ -382,29 +373,3 @@ def submit_same_scene(uid: str, first_id: str, second_id: str) -> None:
 
 def submit_resummary(uid: str, primary_id: str, joining_id: str) -> None:
     _submit(uid, 'resummary', primary_id, joining_id)
-
-
-def record_capture_outcome(
-    uid: str, action: str, conversation_ids: list[str], *, separated_id: str | None = None
-) -> None:
-    """Fleet-wide proxy; offline readout joins these IDs to shadow pair records."""
-    if len(conversation_ids) < 2:
-        return
-    try:
-        logger.info(
-            'jev_capture_shadow_outcome %s',
-            json.dumps(
-                {
-                    'event': 'jev_capture_shadow_outcome',
-                    'uid': uid,
-                    'action': action,
-                    'conversation_ids': sorted(set(conversation_ids)),
-                    'separated_id': separated_id,
-                    'timestamp': datetime.now(timezone.utc).isoformat(),
-                },
-                separators=(',', ':'),
-                sort_keys=True,
-            ),
-        )
-    except Exception:
-        logger.warning('capture shadow outcome telemetry failed action=%s', action)
