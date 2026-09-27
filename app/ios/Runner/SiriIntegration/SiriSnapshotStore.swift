@@ -24,12 +24,21 @@ struct SiriStorageNamespace {
     }
 }
 
+enum SiriStorageLocation {
+    static func container(groupURL: URL?, appSupportURL: URL) -> URL {
+        groupURL ?? appSupportURL.appendingPathComponent("SiriIndex", isDirectory: true)
+    }
+}
+
 /// Only the fields approved for Apple's on-device index are kept here.
 final class SiriSnapshotStore {
     static let shared = SiriSnapshotStore()
     private let lock = NSLock()
-    private let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")!
-    private let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.friend-app-with-wearable.ios12")!
+    private let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12") ?? .standard
+    private let container = SiriStorageLocation.container(
+        groupURL: FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.friend-app-with-wearable.ios12"),
+        appSupportURL: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory)
     private let namespace = SiriStorageNamespace.current
     private var ownerKey: String { namespace.ownerKey }
     private var pendingWipeOwnersKey: String { namespace.pendingWipeOwnersKey }
@@ -71,6 +80,7 @@ final class SiriSnapshotStore {
         }
     }
     private init() {
+        try? FileManager.default.createDirectory(at: container, withIntermediateDirectories: true)
         snapshot = (try? Data(contentsOf: container.appendingPathComponent(SiriStorageNamespace.current.snapshotFileName)))
             .flatMap { try? JSONDecoder().decode(Snapshot.self, from: $0) } ?? Snapshot()
         // Older snapshots did not retain the memory layer. Their rows cannot

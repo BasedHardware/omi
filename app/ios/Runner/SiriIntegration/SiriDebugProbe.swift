@@ -26,6 +26,15 @@ enum SiriDebugProbe {
     static func runIfRequested() {
         guard ProcessInfo.processInfo.arguments.contains("-omi-siri-probe") else { return }
         Task {
+            let support = FileManager.default.temporaryDirectory.appendingPathComponent("siri-storage-probe")
+            let fallback = SiriStorageLocation.container(groupURL: nil, appSupportURL: support)
+            let group = support.appendingPathComponent("group")
+            let fallbackCorrect = fallback.standardizedFileURL.path ==
+                support.appendingPathComponent("SiriIndex").standardizedFileURL.path
+            let groupCorrect = SiriStorageLocation.container(groupURL: group, appSupportURL: support)
+                .standardizedFileURL.path == group.standardizedFileURL.path
+            NSLog("[SiriProbe] missingAppGroupFallback=%@",
+                  fallbackCorrect && groupCorrect ? "PASS" : "FAIL")
             let production = SiriStorageNamespace(bundleID: "com.friend-app-with-wearable.ios12")
             let development = SiriStorageNamespace(bundleID: "com.friend-app-with-wearable.ios12.development")
             let productionKeys = [production.ownerKey, production.pendingWipeOwnersKey,
