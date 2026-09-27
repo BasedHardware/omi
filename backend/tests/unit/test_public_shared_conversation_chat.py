@@ -7,6 +7,7 @@ import tracemalloc
 import zlib
 
 import httpx
+import fakeredis
 import pytest
 import yaml
 from fastapi import FastAPI
@@ -35,9 +36,18 @@ from utils.conversations.shared_chat import (
     check_public_shared_chat_rate_limits,
     resolve_shared_public_conversation,
 )
+import utils.conversations.shared_chat as shared_chat_limits
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 _TRANSCRIPT_TRUNCATION_MARKER_TEXT = '[... transcript truncated at segment boundaries ...]'
+
+
+@pytest.fixture(autouse=True)
+def _stub_route_daily_budgets(monkeypatch):
+    # Route tests stay hermetic; rolling Redis admission is exercised separately.
+    monkeypatch.setattr(shared_chat_router, 'check_anonymous_shared_chat_daily_limits', lambda *_args: 2)
+    monkeypatch.setattr(shared_chat_router, 'check_signed_shared_chat_daily_limits', lambda *_args: 'test-reservation')
+    monkeypatch.setattr(shared_chat_router, 'release_signed_shared_chat_daily_limits', lambda *_args: None)
 
 
 def _valid_request() -> dict[str, object]:
@@ -866,7 +876,7 @@ def test_route_builds_context_server_side_and_sends_no_tools_or_persistence(monk
     response = TestClient(app).post('/v1/conversations/shared/chat', json=_valid_request())
 
     assert response.status_code == 200
-    assert response.json() == {'message': 'A server-owned answer.'}
+    assert response.json() == {'message': 'A server-owned answer.', 'remaining_free_questions': 2}
     assert response.headers['Cache-Control'] == 'no-store'
     messages = captured['messages']
     assert isinstance(messages, list)
@@ -919,7 +929,8 @@ def test_gateway_config_inventory_and_promotion_contract():
     assert lane.capabilities.streaming is False
     assert lane.capabilities.tools is False
     assert route.primary.provider == 'openai'
-    assert route.primary.model == 'gpt-5-nano'
+    assert route.primary.model == 'gpt-6-luna'
+    assert route.provider_options.get('reasoning_effort') == 'none'
     assert route.artifact_digest == route.content_digest
     assert route.fallbacks == []
     assert route.retry.max_attempts == 1
@@ -961,16 +972,21 @@ def test_public_shared_chat_route_policy_and_openapi_contract_are_explicit():
     assert '/v1/conversations/shared/chat' not in app.openapi()['paths']
 
 
-def test_public_shared_chat_runtime_mode_is_explicitly_off_on_every_backend_surface():
+def test_public_shared_chat_runtime_mode_per_backend_surface():
+    # Dev enables every surface. Prod enables the Cloud Run services only: the
+    # prod load balancer sends /v1/conversations/shared/chat to Cloud Run
+    # `backend`, never to GKE backend-listen, which stays off (no Helm roll).
     with (BACKEND_DIR / 'deploy/runtime_env.yaml').open(encoding='utf-8') as handle:
         manifest = yaml.safe_load(handle)
 
     for environment in ('dev', 'prod'):
         listener_env = manifest['environments'][environment]['gke']['backend-listen']['env']
-        assert listener_env['PUBLIC_SHARED_CONVERSATION_CHAT_MODE']['value'] == 'off'
+        assert listener_env['PUBLIC_SHARED_CONVERSATION_CHAT_MODE']['value'] == (
+            'gateway' if environment == 'dev' else 'off'
+        )
         services = manifest['environments'][environment]['cloud_run']['services']
         for service in services.values():
-            assert service['env']['PUBLIC_SHARED_CONVERSATION_CHAT_MODE']['value'] == 'off'
+            assert service['env']['PUBLIC_SHARED_CONVERSATION_CHAT_MODE']['value'] == 'gateway'
         backend_env = services['backend']['env']
         assert backend_env['PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE']['env_var'] == (
             'PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE'
@@ -978,3 +994,221 @@ def test_public_shared_chat_runtime_mode_is_explicitly_off_on_every_backend_surf
         assert backend_env['PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA']['env_var'] == (
             'PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA'
         )
+
+        chart_path = BACKEND_DIR / 'charts' / 'backend-listen' / f'{environment}_omi_backend_listen_values.yaml'
+        with chart_path.open(encoding='utf-8') as chart_handle:
+            chart = yaml.safe_load(chart_handle)
+        chart_env = {item['name']: item.get('value') for item in chart['env']}
+        assert (
+            chart_env['PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_INVOKER_SA']
+            == {
+                'dev': '1031333818730-compute@developer.gserviceaccount.com',
+                'prod': '208440318997-compute@developer.gserviceaccount.com',
+            }[environment]
+        )
+        assert (
+            chart_env['PUBLIC_SHARED_CONVERSATION_CHAT_FRONTEND_AUDIENCE']
+            == {
+                'dev': 'https://backend-dt5lrfkkoa-uc.a.run.app',
+                'prod': 'https://api.omi.me',
+            }[environment]
+        )
+
+
+def test_rolling_anonymous_budgets_are_atomic_and_report_every_reason(monkeypatch):
+    fake_redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(
+        shared_chat_limits,
+        '_ROLLING_LIMIT_LUA',
+        fake_redis.register_script(shared_chat_limits._ROLLING_LIMIT_LUA.script),
+    )
+    subject = 'a' * 64
+    for remaining in (2, 1, 0):
+        assert shared_chat_limits.check_anonymous_shared_chat_daily_limits(subject, 'conversation-1') == remaining
+    with pytest.raises(PublicSharedChatRateLimited) as exc:
+        shared_chat_limits.check_anonymous_shared_chat_daily_limits(subject, 'conversation-1')
+    assert exc.value.reason == 'free_questions_exhausted'
+    assert exc.value.retry_after > 0
+
+    monkeypatch.setattr(shared_chat_limits, 'CONVERSATION_DAILY_LIMIT', 3)
+    with pytest.raises(PublicSharedChatRateLimited) as exc:
+        shared_chat_limits.check_anonymous_shared_chat_daily_limits('b' * 64, 'conversation-1')
+    assert exc.value.reason == 'conversation_daily'
+
+    monkeypatch.setattr(shared_chat_limits, 'ANONYMOUS_GLOBAL_DAILY_LIMIT', 3)
+    with pytest.raises(PublicSharedChatRateLimited) as exc:
+        shared_chat_limits.check_anonymous_shared_chat_daily_limits('c' * 64, 'conversation-2')
+    assert exc.value.reason == 'global_daily'
+    # A rejection must not spend the free budget for the new conversation.
+    assert fake_redis.zcard('public_shared_chat:v2:free:' + 'c' * 64 + ':conversation-2') == 0
+
+
+def test_signed_budgets_are_separate_and_report_both_reasons(monkeypatch):
+    fake_redis = fakeredis.FakeRedis()
+    monkeypatch.setattr(
+        shared_chat_limits,
+        '_ROLLING_LIMIT_LUA',
+        fake_redis.register_script(shared_chat_limits._ROLLING_LIMIT_LUA.script),
+    )
+    monkeypatch.setattr(shared_chat_limits, 'SIGNED_USER_DAILY_LIMIT', 2)
+    monkeypatch.setattr(shared_chat_limits, 'SIGNED_GLOBAL_DAILY_LIMIT', 2)
+    shared_chat_limits.check_signed_shared_chat_daily_limits('uid-1')
+    shared_chat_limits.check_signed_shared_chat_daily_limits('uid-1')
+    with pytest.raises(PublicSharedChatRateLimited) as exc:
+        shared_chat_limits.check_signed_shared_chat_daily_limits('uid-1')
+    assert exc.value.reason == 'signed_user_daily'
+    with pytest.raises(PublicSharedChatRateLimited) as exc:
+        shared_chat_limits.check_signed_shared_chat_daily_limits('uid-2')
+    assert exc.value.reason == 'signed_global_daily'
+    assert fake_redis.zcard('public_shared_chat:v2:signed:uid-2') == 0
+
+
+@pytest.mark.parametrize(
+    'policy,reason',
+    [
+        ('public_shared_conversation_chat:per_ip', 'subject_minute'),
+        ('public_shared_conversation_chat:global', 'global_minute'),
+    ],
+)
+def test_minute_limits_report_reason(policy, reason):
+    def check(_key, current_policy, limit, _window):
+        return (False, 0, 13) if current_policy == policy else (True, limit - 1, 0)
+
+    with pytest.raises(PublicSharedChatRateLimited) as exc:
+        check_public_shared_chat_rate_limits('a' * 64, rate_limit_check=check)
+    assert (exc.value.reason, exc.value.retry_after) == (reason, 13)
+
+
+def test_signed_route_verifies_token_and_uses_only_signed_budget(monkeypatch):
+    calls = []
+    monkeypatch.setenv('PUBLIC_SHARED_CONVERSATION_CHAT_MODE', 'gateway')
+    monkeypatch.setattr(
+        shared_chat_router.firebase_admin.auth,
+        'verify_id_token',
+        lambda token, check_revoked: {'uid': 'omi-user'} if token == 'valid' and check_revoked else {},
+    )
+    monkeypatch.setattr(shared_chat_router.users_db, 'is_exists_user', lambda uid: calls.append(('user', uid)) or True)
+    monkeypatch.setattr(
+        shared_chat_router,
+        'check_signed_shared_chat_daily_limits',
+        lambda uid: calls.append(('signed_budget', uid)) or 'test-reservation',
+    )
+    monkeypatch.setattr(
+        shared_chat_router,
+        'check_public_shared_chat_rate_limits',
+        lambda _subject: (_ for _ in ()).throw(AssertionError('anonymous budget used')),
+    )
+    monkeypatch.setattr(
+        shared_chat_router,
+        'resolve_shared_public_conversation',
+        lambda _id: type('Resolved', (), {'conversation': {'transcript_segments': []}})(),
+    )
+
+    async def answer(_messages):
+        calls.append(('gateway',))
+        return 'Signed answer.'
+
+    monkeypatch.setattr(shared_chat_router, 'invoke_public_shared_conversation_chat_gateway', answer)
+    app = FastAPI()
+    app.include_router(shared_chat_router.router)
+    app.dependency_overrides[shared_chat_router.require_trusted_frontend_subject] = lambda: 'a' * 64
+    response = TestClient(app).post(
+        '/v1/conversations/shared/chat', headers={'X-Omi-User-Id-Token': 'valid'}, json=_valid_request()
+    )
+    assert response.status_code == 200
+    assert response.json() == {'message': 'Signed answer.', 'remaining_free_questions': None}
+    assert calls == [('signed_budget', 'omi-user'), ('user', 'omi-user'), ('gateway',)]
+
+
+def test_non_omi_and_invalid_token_never_reach_gateway(monkeypatch):
+    monkeypatch.setenv('PUBLIC_SHARED_CONVERSATION_CHAT_MODE', 'gateway')
+    monkeypatch.setattr(
+        shared_chat_router.firebase_admin.auth,
+        'verify_id_token',
+        lambda token, check_revoked: {'uid': 'new-user'} if token == 'valid' else (_ for _ in ()).throw(ValueError()),
+    )
+    monkeypatch.setattr(shared_chat_router.users_db, 'is_exists_user', lambda _uid: False)
+    monkeypatch.setattr(
+        shared_chat_router,
+        'resolve_shared_public_conversation',
+        lambda _id: (_ for _ in ()).throw(AssertionError('Firestore conversation read')),
+    )
+    releases = []
+    monkeypatch.setattr(
+        shared_chat_router,
+        'release_signed_shared_chat_daily_limits',
+        lambda uid, reservation: releases.append((uid, reservation)),
+    )
+    app = FastAPI()
+    app.include_router(shared_chat_router.router)
+    app.dependency_overrides[shared_chat_router.require_trusted_frontend_subject] = lambda: 'a' * 64
+    client = TestClient(app)
+    for token, status, reason in [('invalid', 401, 'invalid_token'), ('valid', 403, 'no_omi_account')]:
+        response = client.post(
+            '/v1/conversations/shared/chat', headers={'X-Omi-User-Id-Token': token}, json=_valid_request()
+        )
+        assert response.status_code == status
+        assert response.json()['reason'] == reason
+    assert releases == [('new-user', 'test-reservation')]
+
+
+@pytest.mark.parametrize('reason', ['free_questions_exhausted', 'conversation_daily', 'global_daily'])
+def test_anonymous_daily_rejections_skip_firestore_and_gateway(monkeypatch, reason):
+    monkeypatch.setenv('PUBLIC_SHARED_CONVERSATION_CHAT_MODE', 'gateway')
+    monkeypatch.setattr(shared_chat_router, 'check_public_shared_chat_rate_limits', lambda _subject: None)
+    monkeypatch.setattr(
+        shared_chat_router,
+        'check_anonymous_shared_chat_daily_limits',
+        lambda *_args: (_ for _ in ()).throw(PublicSharedChatRateLimited(42, reason)),
+    )
+    monkeypatch.setattr(
+        shared_chat_router,
+        'resolve_shared_public_conversation',
+        lambda _id: (_ for _ in ()).throw(AssertionError('Firestore read')),
+    )
+    app = FastAPI()
+    app.include_router(shared_chat_router.router)
+    app.dependency_overrides[shared_chat_router.require_trusted_frontend_subject] = lambda: 'a' * 64
+    response = TestClient(app).post('/v1/conversations/shared/chat', json=_valid_request())
+    assert response.status_code == 429
+    assert response.json() == {'reason': reason, 'retry_after': 42}
+    assert response.headers['Retry-After'] == '42'
+
+
+@pytest.mark.parametrize('reason', ['signed_user_daily', 'signed_global_daily'])
+def test_signed_limit_rejection_skips_firestore_and_gateway(monkeypatch, reason):
+    monkeypatch.setenv('PUBLIC_SHARED_CONVERSATION_CHAT_MODE', 'gateway')
+    monkeypatch.setattr(
+        shared_chat_router.firebase_admin.auth,
+        'verify_id_token',
+        lambda _token, check_revoked: {'uid': 'omi-user'} if check_revoked else {},
+    )
+    monkeypatch.setattr(
+        shared_chat_router,
+        'check_signed_shared_chat_daily_limits',
+        lambda _uid: (_ for _ in ()).throw(PublicSharedChatRateLimited(18, reason)),
+    )
+    monkeypatch.setattr(
+        shared_chat_router.users_db,
+        'is_exists_user',
+        lambda _uid: (_ for _ in ()).throw(AssertionError('Firestore user read')),
+    )
+    app = FastAPI()
+    app.include_router(shared_chat_router.router)
+    app.dependency_overrides[shared_chat_router.require_trusted_frontend_subject] = lambda: 'a' * 64
+    response = TestClient(app).post(
+        '/v1/conversations/shared/chat', headers={'X-Omi-User-Id-Token': 'valid'}, json=_valid_request()
+    )
+    assert response.status_code == 429
+    assert response.json() == {'reason': reason, 'retry_after': 18}
+
+
+def test_shared_chat_cost_limits_are_pinned():
+    assert shared_chat_limits.SUBJECT_MINUTE_LIMIT == 8
+    assert shared_chat_limits.ANONYMOUS_FREE_QUESTIONS == 3
+    assert shared_chat_limits.CONVERSATION_DAILY_LIMIT == 60
+    assert shared_chat_limits.ANONYMOUS_GLOBAL_MINUTE_LIMIT == 20
+    assert shared_chat_limits.ANONYMOUS_GLOBAL_DAILY_LIMIT == 3_000
+    assert shared_chat_limits.SIGNED_USER_DAILY_LIMIT == 30
+    assert shared_chat_limits.SIGNED_GLOBAL_DAILY_LIMIT == 2_000
+    assert shared_chat_limits.DAY_SECONDS == 86_400

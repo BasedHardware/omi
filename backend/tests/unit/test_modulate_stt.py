@@ -401,6 +401,20 @@ class TestUtteranceHandling(unittest.TestCase):
         self.assertAlmostEqual(self.segments[0]['start'], 2.5)
         self.assertAlmostEqual(self.segments[0]['end'], 4.0)
 
+    def test_final_utterance_language_is_ephemeral_metadata(self):
+        sock = self._make_socket()
+        sock._handle_utterance(
+            {
+                'type': 'utterance',
+                'text': 'synthetic words',
+                'start_ms': 0,
+                'duration_ms': 500,
+                'speaker': 1,
+                'language': 'pt',
+            }
+        )
+        self.assertEqual(self.segments[0]['_provider_language'], 'pt')
+
 
 class TestModulatePrerecorded(unittest.TestCase):
     @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})

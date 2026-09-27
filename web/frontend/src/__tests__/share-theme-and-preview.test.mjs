@@ -125,7 +125,9 @@ describe('link preview image', () => {
   });
 
   it('is wired into the page metadata and never cached for a year', () => {
-    assert.match(pageSource, /url: `\$\{ogUrl\}\/og`/);
+    assert.match(pageSource, /new URL\(`\$\{ogUrl\}\/og`\)/);
+    assert.match(pageSource, /url: ogImageUrl\.toString\(\)/);
+    assert.match(pageSource, /ogImageUrl\.searchParams\.set\('sid'/);
     assert.match(pageSource, /twitter:/);
     assert.match(ogSource, /ImageResponse/);
     assert.match(ogSource, /'Cache-Control'/);

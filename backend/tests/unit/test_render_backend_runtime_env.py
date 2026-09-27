@@ -224,13 +224,25 @@ def test_memory_maintenance_entrypoint_does_not_invoke_daily_sweep_job():
     assert 'memory_maintenance_job.py' in dockerfile
 
 
+def _without_named_env(node, name: str):
+    if isinstance(node, dict):
+        return {key: _without_named_env(value, name) for key, value in node.items() if key != name}
+    if isinstance(node, list):
+        return [_without_named_env(item, name) for item in node]
+    return node
+
+
 def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admission():
     dev = deepcopy(_MANIFEST['environments']['dev'])
     # The dev-only ledger drain has an explicit operational fence for the two
     # owner test accounts. Product/runtime surfaces must still contain no
-    # first-user or capture admission lists.
+    # first-user or capture admission lists. EXP-003 is the one approved
+    # allowlist-only vendor shadow for this UID.
     dev['cloud_run']['jobs'].pop('knowledge-ledger-drain-job', None)
-    serialized = json.dumps(dev, sort_keys=True)
+    serialized = json.dumps(
+        _without_named_env(dev, 'CAPTURE_JEV_SHADOW_UID_ALLOWLIST'),
+        sort_keys=True,
+    )
     assert 'vi7SA9ckQCe4ccobWNxlbdcNdC23' not in serialized
 
     cloud_run = _MANIFEST['environments']['dev']['cloud_run']
@@ -503,13 +515,13 @@ VERTEX_PT_CONTRACT = 'Vertex PT: 5 GSU gemini-2.5-flash us-central1, expires ~20
 
 
 @pytest.mark.parametrize(
-    ('env', 'project'),
+    ('env', 'project', 'gemini_secret'),
     [
-        ('dev', 'based-hardware-dev'),
-        ('prod', 'based-hardware'),
+        ('dev', 'based-hardware-dev', 'GEMINI_API_KEY'),
+        ('prod', 'based-hardware', 'DESKTOP_GEMINI_API_KEY'),
     ],
 )
-def test_desktop_backend_compose_pins_vertex_pt(env, project):
+def test_desktop_backend_compose_pins_vertex_pt(env, project, gemini_secret):
     desktop = _MANIFEST['environments'][env]['desktop_backend']
     rendered = _MODULE['_render_env_vars'](desktop['env'])
     assert 'USE_VERTEX_AI=true' in rendered, VERTEX_PT_CONTRACT
@@ -517,7 +529,9 @@ def test_desktop_backend_compose_pins_vertex_pt(env, project):
     assert 'GCP_LOCATION=us-central1' in rendered, VERTEX_PT_CONTRACT
     assert 'PROMETHEUS_SIDECAR_PORT=9090' in rendered
     assert _MODULE['_render_secrets'](desktop['secrets']) == (
-        'METRICS_SECRET=METRICS_SECRET:latest\nPOSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest'
+        f'GEMINI_API_KEY={gemini_secret}:latest\n'
+        'METRICS_SECRET=METRICS_SECRET:latest\n'
+        'POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest'
     )
     docs = Path(__file__).resolve().parents[2] / 'docs' / 'vertex-pt-flash.md'
     assert VERTEX_PT_CONTRACT.split(',')[0] in docs.read_text(encoding='utf-8')

@@ -106,7 +106,7 @@ class LiveCaptureCard extends StatelessWidget {
         width: sourceDiameter,
         height: sourceDiameter,
         alignment: Alignment.center,
-        decoration: const BoxDecoration(color: OmiColors.surface2, shape: BoxShape.circle),
+        decoration: BoxDecoration(color: OmiColors.surface2, shape: BoxShape.circle),
         child: Icon(isCall ? Icons.call_rounded : CaptureSources.icon(source), size: 18, color: OmiColors.textPrimary),
       ),
     );
@@ -118,7 +118,7 @@ class LiveCaptureCard extends StatelessWidget {
     Widget text = Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         if (problem) ...[
-          const ExcludeSemantics(child: Icon(Icons.warning_amber_rounded, size: 18, color: OmiColors.warning)),
+          ExcludeSemantics(child: Icon(Icons.warning_amber_rounded, size: 18, color: OmiColors.warning)),
           const SizedBox(width: OmiSpacing.xxs),
         ],
         // The short status always fits in English; a longer translation gives up its tail only.
@@ -153,7 +153,7 @@ class LiveCaptureCard extends StatelessWidget {
       const SizedBox(width: OmiSpacing.xs),
       Expanded(child: text),
       if (isCall)
-        const SizedBox(
+        SizedBox(
           width: kOmiMinTapTarget,
           child: Icon(Icons.chevron_right_rounded, size: 22, color: OmiColors.textTertiary),
         )
