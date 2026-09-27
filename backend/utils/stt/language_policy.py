@@ -19,6 +19,7 @@ from config.stt_provider_policy import (
     soniox_accepts_language_hint,
 )
 from langdetect import DetectorFactory, detect_langs
+from utils.executors import run_blocking, sync_executor
 from utils.stt.live_metrics import LANGUAGE_CONSTRAINT, OUTPUT_LANGUAGE_SEGMENTS
 
 logger = logging.getLogger(__name__)
@@ -157,7 +158,11 @@ class LiveLanguageObservations:
             return
 
         async def detect() -> None:
-            self._record(provider, await asyncio.to_thread(classify_output, text, self.profile))
+            try:
+                result = await run_blocking(sync_executor, classify_output, text, self.profile)
+            except Exception:
+                result = ('undetermined', None)
+            self._record(provider, result)
 
         task = spawn(detect(), name='stt_language_detect')
         self.pending.add(task)
