@@ -123,6 +123,25 @@ final class MeetingScreenshotsTests: XCTestCase {
     XCTAssertEqual(outcome.candidates.map(\.id), [2])
   }
 
+  func testLegacyTranscriptWindowAllowsSTTLatencyUpToSixtySeconds() throws {
+    let lifecycleStart = Date(timeIntervalSince1970: 20_000)
+    let transcriptEnd = 10 * 60.0
+
+    let withinTolerance = MeetingScreenshotSelectionWindow.resolve(
+      startedAt: lifecycleStart,
+      finishedAt: lifecycleStart.addingTimeInterval(transcriptEnd - 60),
+      segmentSpans: [(0, transcriptEnd)],
+      hasTrustedOrigin: false)
+    XCTAssertEqual(withinTolerance?.end, lifecycleStart.addingTimeInterval(transcriptEnd))
+
+    let outsideTolerance = MeetingScreenshotSelectionWindow.resolve(
+      startedAt: lifecycleStart,
+      finishedAt: lifecycleStart.addingTimeInterval(transcriptEnd - 61),
+      segmentSpans: [(0, transcriptEnd)],
+      hasTrustedOrigin: false)
+    XCTAssertNil(outsideTolerance)
+  }
+
   func testSelectorWindowIsInclusiveAndRejectsInvalidWindows() async {
     let start = Date(timeIntervalSince1970: 1_000)
     let end = start.addingTimeInterval(600)

@@ -32,7 +32,7 @@ import GRDB
 /// `/from-segments`, audio-timeline v2) or when the projection agrees with `finished_at`.
 struct MeetingScreenshotSelectionWindow: Equatable, Sendable {
   static let policy = "meeting-content-v1"
-  static let legacyConsistencyTolerance: TimeInterval = 30
+  static let legacyConsistencyTolerance: TimeInterval = 60
 
   let start: Date
   let end: Date
