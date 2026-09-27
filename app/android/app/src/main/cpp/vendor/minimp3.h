@@ -177,7 +177,7 @@ end:
 #define VREV(x) vcombine_f32(vget_high_f32(vrev64q_f32(x)), vget_low_f32(vrev64q_f32(x)))
 typedef float32x4_t f4;
 static int have_simd()
-{   /* TODO: detect neon for !MINIMP3_ONLY_SIMD */
+{   /* Upstream note: detect neon for !MINIMP3_ONLY_SIMD */
     return 1;
 }
 #else /* SIMD checks... */
