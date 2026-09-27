@@ -38,6 +38,17 @@ environments:
               key: TWILIO_TWIML_APP_SID
           USE_VERTEX_AI:
             value: 'true'
+          TTS_PROVIDER:
+            value: gemini
+            category: rollout
+          GEMINI_API_KEY:
+            secret:
+              name: dev-omi-backend-secrets
+              key: GEMINI_API_KEY
+          ELEVENLABS_API_KEY:
+            secret:
+              name: dev-omi-backend-secrets
+              key: ELEVENLABS_API_KEY
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
@@ -73,6 +84,12 @@ environments:
             category: runtime_identity
           STT_CONNECT_ORDER_FROM_CONFIG:
             value: 'true'
+            category: rollout
+          STT_MULTI_LANGUAGE_HINTS:
+            value: 'true'
+            category: rollout
+          STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
+            value: '100'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
             value: '100'
@@ -550,6 +567,9 @@ environments:
           category: rollout
         USE_VERTEX_AI:
           value: 'true'
+        TTS_PROVIDER:
+          value: gemini
+          category: rollout
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware-dev
         GCP_LOCATION:
@@ -563,6 +583,9 @@ environments:
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
       secrets:
+        GEMINI_API_KEY:
+          secret: GEMINI_API_KEY
+          version: latest
         METRICS_SECRET:
           secret: METRICS_SECRET
           version: latest
@@ -1650,6 +1673,17 @@ environments:
               key: TWILIO_TWIML_APP_SID
           USE_VERTEX_AI:
             value: 'true'
+          TTS_PROVIDER:
+            value: gemini
+            category: rollout
+          GEMINI_API_KEY:
+            secret:
+              name: prod-omi-backend-secrets
+              key: GEMINI_API_KEY
+          ELEVENLABS_API_KEY:
+            secret:
+              name: prod-omi-backend-secrets
+              key: ELEVENLABS_API_KEY
           STT_PRERECORDED_MODEL:
             value: parakeet,modulate-velma-2
             category: stt_policy
@@ -1685,6 +1719,12 @@ environments:
             category: runtime_identity
           STT_CONNECT_ORDER_FROM_CONFIG:
             value: 'true'
+            category: rollout
+          STT_MULTI_LANGUAGE_HINTS:
+            value: 'true'
+            category: rollout
+          STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT:
+            value: '0'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
             value: '0'
@@ -2053,6 +2093,9 @@ environments:
           category: rollout
         USE_VERTEX_AI:
           value: 'true'
+        TTS_PROVIDER:
+          value: gemini
+          category: rollout
         GOOGLE_CLOUD_PROJECT:
           value: based-hardware
         GCP_LOCATION:
@@ -2066,6 +2109,9 @@ environments:
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
       secrets:
+        GEMINI_API_KEY:
+          secret: DESKTOP_GEMINI_API_KEY
+          version: latest
         METRICS_SECRET:
           secret: METRICS_SECRET
           version: latest

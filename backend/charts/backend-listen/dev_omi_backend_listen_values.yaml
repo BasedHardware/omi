@@ -137,6 +137,8 @@ env:
     value: "0.01"
   - name: USE_VERTEX_AI
     value: "true"
+  - name: TTS_PROVIDER
+    value: "gemini"
   # Direct-provider surfaces (desktop_proxy, omni_relay) write their attempts
   # to the gateway ledger under this switch; the manifest declares it, this is
   # where it actually reaches the pod.
@@ -147,6 +149,11 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: GEMINI_API_KEY
+  - name: ELEVENLABS_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: ELEVENLABS_API_KEY
   - name: MODULATE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -300,6 +307,10 @@ env:
     value: "false"
   - name: STT_CONNECT_ORDER_FROM_CONFIG
     value: "true"
+  - name: STT_MULTI_LANGUAGE_HINTS
+    value: "true"
+  - name: STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT
+    value: "100"
   - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
     value: "100"
   - name: PARAKEET_WINDOW_MAX_SESSIONS
