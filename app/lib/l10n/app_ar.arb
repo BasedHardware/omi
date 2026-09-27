@@ -24,7 +24,7 @@
     "testPrompt": "اختبار الأمر",
     "reprocessConversation": "إعادة معالجة المحادثة",
     "reprocessTranscription": "إعادة معالجة التفريغ النصي",
-    "retranscribingConversation": "جارٍ إعادة تفريغ المحادثة...\nقد يستغرق هذا بضع ثوانٍ",
+    "retranscribingConversation": "إعادة تحويل المحادثة نصيًا...\nقد يستغرق هذا بعض الوقت في المحادثات الأطول",
     "errorReprocessingTranscription": "حدث خطأ أثناء إعادة معالجة التفريغ النصي. يرجى المحاولة لاحقًا.",
     "errorNoStoredAudio": "لا يوجد صوت محفوظ لهذه المحادثة.",
     "deleteConversation": "حذف المحادثة",

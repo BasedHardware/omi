@@ -24,7 +24,7 @@
     "testPrompt": "Testează promptul",
     "reprocessConversation": "Reprocesează conversația",
     "reprocessTranscription": "Reprocesează transcrierea",
-    "retranscribingConversation": "Retranscriere conversație...\nAceasta poate dura câteva secunde",
+    "retranscribingConversation": "Retranscriere conversației...\nAcest lucru poate dura ceva mai mult pentru conversații lungi",
     "errorReprocessingTranscription": "Eroare la reprocesarea transcrierii. Încearcă din nou mai târziu.",
     "errorNoStoredAudio": "Nu există audio stocat pentru această conversație.",
     "deleteConversation": "Șterge conversația",

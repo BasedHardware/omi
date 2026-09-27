@@ -24,7 +24,7 @@
     "testPrompt": "Tester le prompt",
     "reprocessConversation": "Retraiter la conversation",
     "reprocessTranscription": "Retraiter la transcription",
-    "retranscribingConversation": "Retranscription de la conversation...\nCela peut prendre quelques secondes",
+    "retranscribingConversation": "Nouvelle transcription de la conversation...\nCela peut prendre un peu de temps pour les conversations plus longues",
     "errorReprocessingTranscription": "Erreur lors du retraitement de la transcription. Réessaie plus tard.",
     "errorNoStoredAudio": "Aucun audio enregistré n'est disponible pour cette conversation.",
     "deleteConversation": "Supprimer la conversation",

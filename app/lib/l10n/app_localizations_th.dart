@@ -81,7 +81,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get reprocessTranscription => 'ประมวลผลการถอดเสียงใหม่';
 
   @override
-  String get retranscribingConversation => 'กำลังถอดเสียงบทสนทนาใหม่...\nอาจใช้เวลาสักครู่';
+  String get retranscribingConversation => 'กำลังถอดเสียงบทสนทนาใหม่...\nอาจใช้เวลาสักครู่สำหรับบทสนทนาที่ยาวนาน';
 
   @override
   String get errorReprocessingTranscription => 'เกิดข้อผิดพลาดขณะประมวลผลการถอดเสียงใหม่ โปรดลองอีกครั้งในภายหลัง';

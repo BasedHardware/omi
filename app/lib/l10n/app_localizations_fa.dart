@@ -81,7 +81,8 @@ class AppLocalizationsFa extends AppLocalizations {
   String get reprocessTranscription => 'پردازش مجدد رونویسی';
 
   @override
-  String get retranscribingConversation => 'در حال رونویسی مجدد گفتگو...\nممکن است چند ثانیه طول بکشد';
+  String get retranscribingConversation =>
+      'در حال رونویسی مجدد گفتگو...\nاین کار برای گفتگوهای طولانی‌تر ممکن است کمی طول بکشد';
 
   @override
   String get errorReprocessingTranscription => 'خطا در پردازش مجدد رونویسی. لطفاً بعداً دوباره تلاش کنید.';

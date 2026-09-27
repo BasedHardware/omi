@@ -81,7 +81,8 @@ class AppLocalizationsFr extends AppLocalizations {
   String get reprocessTranscription => 'Retraiter la transcription';
 
   @override
-  String get retranscribingConversation => 'Retranscription de la conversation...\nCela peut prendre quelques secondes';
+  String get retranscribingConversation =>
+      'Nouvelle transcription de la conversation...\nCela peut prendre un peu de temps pour les conversations plus longues';
 
   @override
   String get errorReprocessingTranscription => 'Erreur lors du retraitement de la transcription. Réessaie plus tard.';

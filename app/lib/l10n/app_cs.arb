@@ -24,7 +24,7 @@
     "testPrompt": "Testovat výzvu",
     "reprocessConversation": "Znovu zpracovat konverzaci",
     "reprocessTranscription": "Znovu zpracovat přepis",
-    "retranscribingConversation": "Přepisování konverzace...\nMůže to trvat několik sekund",
+    "retranscribingConversation": "Přepis konverzace se opakuje...\nTo může u delších konverzací chvíli trvat",
     "errorReprocessingTranscription": "Chyba při opětovném zpracování přepisu. Zkuste to později.",
     "errorNoStoredAudio": "Pro tuto konverzaci není k dispozici uložený zvuk.",
     "deleteConversation": "Smazat konverzaci",

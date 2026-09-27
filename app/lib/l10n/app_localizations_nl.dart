@@ -82,7 +82,8 @@ class AppLocalizationsNl extends AppLocalizations {
   String get reprocessTranscription => 'Transcriptie opnieuw verwerken';
 
   @override
-  String get retranscribingConversation => 'Gesprek opnieuw transcriberen...\nDit kan een paar seconden duren';
+  String get retranscribingConversation =>
+      'Gesprek wordt opnieuw getranscribeerd...\nDit kan even duren bij langere gesprekken';
 
   @override
   String get errorReprocessingTranscription =>

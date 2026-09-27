@@ -520,6 +520,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     try {
       final result = await (client ?? reProcessTranscriptionServer)(target.id);
       if (_isDisposed) return false;
+      // Same event as summary reprocess: both replays are re-process actions
+      // from the user's perspective (analytics parity per review).
+      PlatformManager.instance.analytics.reProcessConversation(conversation);
       updateReprocessTranscriptionLoadingState(false);
       updateReprocessConversationId('');
       if (result.conversation == null) {

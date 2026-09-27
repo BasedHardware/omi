@@ -81,7 +81,8 @@ class AppLocalizationsUk extends AppLocalizations {
   String get reprocessTranscription => 'Перепрацювати транскрипцію';
 
   @override
-  String get retranscribingConversation => 'Повторна транскрипція розмови...\nЦе може зайняти кілька секунд';
+  String get retranscribingConversation =>
+      'Повторна транскрипція розмови...\nЦе може зайняти деякий час для довших розмов';
 
   @override
   String get errorReprocessingTranscription => 'Помилка під час повторної обробки транскрипції. Спробуйте пізніше.';

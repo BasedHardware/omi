@@ -24,7 +24,7 @@
     "testPrompt": "Provar indicació",
     "reprocessConversation": "Reprocessar conversa",
     "reprocessTranscription": "Reprocessar la transcripció",
-    "retranscribingConversation": "S'està retranscrivint la conversa...\nAixò pot trigar uns segons",
+    "retranscribingConversation": "Tornant a transcriure la conversa...\nAixò pot trigar una estona en converses llargues",
     "errorReprocessingTranscription": "Error en reprocessar la transcripció. Torna-ho a provar més tard.",
     "errorNoStoredAudio": "No hi ha àudio desat per a aquesta conversa.",
     "deleteConversation": "Suprimir conversa",

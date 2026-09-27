@@ -24,7 +24,7 @@
     "testPrompt": "Testar prompt",
     "reprocessConversation": "Reprocessar conversa",
     "reprocessTranscription": "Reprocessar transcrição",
-    "retranscribingConversation": "Retranscrevendo conversa...\nIsto pode levar alguns segundos",
+    "retranscribingConversation": "A retranscrever a conversa...\nIsto pode demorar um pouco em conversas mais longas",
     "errorReprocessingTranscription": "Erro ao reprocessar a transcrição. Tente novamente mais tarde.",
     "errorNoStoredAudio": "Não há áudio guardado para esta conversa.",
     "deleteConversation": "Excluir Conversa",

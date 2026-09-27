@@ -82,7 +82,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get retranscribingConversation =>
-      'Повторно транскрибирање на разговорот...\nОва може да потрае неколку секунди';
+      'Повторна транскрипција на разговорот...\nОва може да потрачи кај подолги разговори';
 
   @override
   String get errorReprocessingTranscription =>

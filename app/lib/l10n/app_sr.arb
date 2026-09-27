@@ -88,7 +88,7 @@
     "@reprocessTranscription": {
         "description": "Menu item to re-run speech-to-text on stored conversation audio"
     },
-    "retranscribingConversation": "Поновно транскрибовање разговора...\nОво може потрајати неколико секунди",
+    "retranscribingConversation": "Поновна транскрипција разговора...\nОво може потрајати код дужих разговора",
     "@retranscribingConversation": {
         "description": "Loading message shown while transcription is being reprocessed"
     },

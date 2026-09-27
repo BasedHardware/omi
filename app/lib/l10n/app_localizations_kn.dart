@@ -82,7 +82,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get retranscribingConversation =>
-      'ಸಂವಾದವನ್ನು ಮತ್ತೆ ಲಿಪ್ಯಂತರಿಸಲಾಗುತ್ತಿದೆ...\nಇದಕ್ಕೆ ಕೆಲವು ಸೆಕೆಂಡುಗಳು ಬೇಕಾಗಬಹುದು';
+      'ಸಂಭಾಷಣೆಯನ್ನು ಮರು-ಲಿಪ್ಯಂತರಿಸಲಾಗುತ್ತಿದೆ...\nಉದ್ದವಾದ ಸಂಭಾಷಣೆಗಳಿಗೆ ಇದಕ್ಕೆ ಸ್ವಲ್ಪ ಸಮಯ ಬೇಕಾಗಬಹುದು';
 
   @override
   String get errorReprocessingTranscription => 'ಲಿಪ್ಯಂತರವನ್ನು ಮರುಪ್ರಕ್ರಿಯೆಗೊಳಿಸುವಾಗ ದೋಷ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';

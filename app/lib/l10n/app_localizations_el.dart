@@ -82,7 +82,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get retranscribingConversation =>
-      'Επανάληψη απομαγνητοφώνησης συνομιλίας...\nΑυτό μπορεί να διαρκέσει λίγα δευτερόλεπτα';
+      'Επανάληψη μεταγραφής συνομιλίας...\nΑυτό μπορεί να πάρει λίγο χρόνο για μεγαλύτερες συνομιλίες';
 
   @override
   String get errorReprocessingTranscription =>

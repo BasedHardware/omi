@@ -81,7 +81,8 @@ class AppLocalizationsTa extends AppLocalizations {
   String get reprocessTranscription => 'படியெடுப்பை மீண்டும் செயல்படுத்தவும்';
 
   @override
-  String get retranscribingConversation => 'உரையாடல் மீண்டும் படியெடுக்கப்படுகிறது...\nஇதற்கு சில விநாடிகள் ஆகலாம்';
+  String get retranscribingConversation =>
+      'உரையாடலை மீண்டும் எழுத்துப்பெயர்ப்பு செய்கிறது...\nநீளமான உரையாடல்களுக்கு இதற்கு சிறிது நேரம் ஆகலாம்';
 
   @override
   String get errorReprocessingTranscription =>

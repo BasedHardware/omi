@@ -81,7 +81,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get reprocessTranscription => 'עבד מחדש תמלול';
 
   @override
-  String get retranscribingConversation => 'מתמלל את השיחה מחדש...\nזה עשוי לקחת כמה שניות';
+  String get retranscribingConversation => 'מתבצעת תמלול מחדש של השיחה...\nזו עשויה להימשך זמן מה בשיחות ארוכות יותר';
 
   @override
   String get errorReprocessingTranscription => 'שגיאה בעיבוד מחדש של התמלול. נסה שוב מאוחר יותר.';

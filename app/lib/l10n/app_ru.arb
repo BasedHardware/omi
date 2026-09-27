@@ -24,7 +24,7 @@
     "testPrompt": "Тестовый запрос",
     "reprocessConversation": "Переобработать разговор",
     "reprocessTranscription": "Переобработать транскрипцию",
-    "retranscribingConversation": "Повторная транскрипция разговора...\nЭто может занять несколько секунд",
+    "retranscribingConversation": "Повторная расшифровка разговора...\nЭто может занять некоторое время для длинных разговоров",
     "errorReprocessingTranscription": "Ошибка при повторной обработке транскрипции. Попробуйте позже.",
     "errorNoStoredAudio": "Для этого разговора нет сохранённого аудио.",
     "deleteConversation": "Удалить разговор",

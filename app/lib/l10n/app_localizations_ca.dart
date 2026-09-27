@@ -81,7 +81,8 @@ class AppLocalizationsCa extends AppLocalizations {
   String get reprocessTranscription => 'Reprocessar la transcripció';
 
   @override
-  String get retranscribingConversation => 'S\'està retranscrivint la conversa...\nAixò pot trigar uns segons';
+  String get retranscribingConversation =>
+      'Tornant a transcriure la conversa...\nAixò pot trigar una estona en converses llargues';
 
   @override
   String get errorReprocessingTranscription => 'Error en reprocessar la transcripció. Torna-ho a provar més tard.';

@@ -81,7 +81,8 @@ class AppLocalizationsMr extends AppLocalizations {
   String get reprocessTranscription => 'ट्रान्सक्रिप्शन पुन्हा प्रक्रिया करा';
 
   @override
-  String get retranscribingConversation => 'संभाषण पुन्हा ट्रान्सक्राइब करत आहे...\nयाला काही सेकंद लागू शकतात';
+  String get retranscribingConversation =>
+      'संभाषणाचे पुन्हा लिप्यंतरण सुरू आहे...\nलांब संभाषणांसाठी याला थोडा वेळ लागू शकतो';
 
   @override
   String get errorReprocessingTranscription =>

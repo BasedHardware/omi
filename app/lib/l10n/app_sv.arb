@@ -24,7 +24,7 @@
     "testPrompt": "Testa prompt",
     "reprocessConversation": "Bearbeta konversation igen",
     "reprocessTranscription": "Bearbeta transkription igen",
-    "retranscribingConversation": "Transkriberar konversationen igen...\nDetta kan ta några sekunder",
+    "retranscribingConversation": "Transkriberar konversationen igen...\nDetta kan ta lite tid för längre konversationer",
     "errorReprocessingTranscription": "Fel vid ominbearbetning av transkriptionen. Försök igen senare.",
     "errorNoStoredAudio": "Ingen sparad ljudfil finns för den här konversationen.",
     "deleteConversation": "Radera konversation",

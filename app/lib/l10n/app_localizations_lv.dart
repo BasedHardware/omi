@@ -81,7 +81,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get reprocessTranscription => 'Atkārtoti apstrādāt transkripciju';
 
   @override
-  String get retranscribingConversation => 'Saruna tiek transkribēta no jauna...\nTas var aizņemt dažas sekundes';
+  String get retranscribingConversation =>
+      'Atkārtota sarunas transcribēšana...\nTas var aizņemt nedaudz laika garākām sarunām';
 
   @override
   String get errorReprocessingTranscription => 'Kļūda, atkārtoti apstrādājot transkripciju. Mēģiniet vēlāk.';

@@ -24,7 +24,7 @@
     "testPrompt": "Uji Prompt",
     "reprocessConversation": "Proses Ulang Percakapan",
     "reprocessTranscription": "Proses Ulang Transkripsi",
-    "retranscribingConversation": "Mentranskripsi ulang percakapan...\nIni mungkin memakan waktu beberapa detik",
+    "retranscribingConversation": "Mentranskripsi ulang percakapan...\nIni bisa memakan waktu cukup lama untuk percakapan yang lebih panjang",
     "errorReprocessingTranscription": "Kesalahan saat memproses ulang transkripsi. Coba lagi nanti.",
     "errorNoStoredAudio": "Tidak ada audio tersimpan untuk percakapan ini.",
     "deleteConversation": "Hapus Percakapan",

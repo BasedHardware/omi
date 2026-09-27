@@ -88,7 +88,7 @@
     "@reprocessTranscription": {
         "description": "Menu item to re-run speech-to-text on stored conversation audio"
     },
-    "retranscribingConversation": "संभाषण पुन्हा ट्रान्सक्राइब करत आहे...\nयाला काही सेकंद लागू शकतात",
+    "retranscribingConversation": "संभाषणाचे पुन्हा लिप्यंतरण सुरू आहे...\nलांब संभाषणांसाठी याला थोडा वेळ लागू शकतो",
     "@retranscribingConversation": {
         "description": "Loading message shown while transcription is being reprocessed"
     },

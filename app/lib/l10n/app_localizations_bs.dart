@@ -81,7 +81,8 @@ class AppLocalizationsBs extends AppLocalizations {
   String get reprocessTranscription => 'Ponovo obradi transkripciju';
 
   @override
-  String get retranscribingConversation => 'Ponovno transkribovanje razgovora...\nOvo može potrajati nekoliko sekundi';
+  String get retranscribingConversation =>
+      'Ponovna transkripcija razgovora...\nOvo može potrajati malo duže kod dužih razgovora';
 
   @override
   String get errorReprocessingTranscription => 'Greška pri ponovnoj obradi transkripcije. Pokušajte ponovo kasnije.';

@@ -24,7 +24,7 @@
     "testPrompt": "Prova Prompt",
     "reprocessConversation": "Rielabora Conversazione",
     "reprocessTranscription": "Rielabora trascrizione",
-    "retranscribingConversation": "Ritrascrizione della conversazione...\nPotrebbero volerci alcuni secondi",
+    "retranscribingConversation": "Nuova trascrizione della conversazione...\nPuò richiedere qualche istante in più per conversazioni lunghe",
     "errorReprocessingTranscription": "Errore durante la rielaborazione della trascrizione. Riprova più tardi.",
     "errorNoStoredAudio": "Nessun audio salvato disponibile per questa conversazione.",
     "deleteConversation": "Elimina conversazione",

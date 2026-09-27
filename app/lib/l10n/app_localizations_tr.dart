@@ -81,7 +81,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get reprocessTranscription => 'Transkripsiyonu Yeniden İşle';
 
   @override
-  String get retranscribingConversation => 'Konuşma yeniden yazıya dökülüyor...\nBu birkaç saniye sürebilir';
+  String get retranscribingConversation =>
+      'Konuşma yeniden yazıya dökülüyor...\nDaha uzun konuşmalarda bu biraz zaman alabilir';
 
   @override
   String get errorReprocessingTranscription =>

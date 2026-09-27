@@ -24,7 +24,7 @@
     "testPrompt": "İstemi Test Et",
     "reprocessConversation": "Konuşmayı Yeniden İşle",
     "reprocessTranscription": "Transkripsiyonu Yeniden İşle",
-    "retranscribingConversation": "Konuşma yeniden yazıya dökülüyor...\nBu birkaç saniye sürebilir",
+    "retranscribingConversation": "Konuşma yeniden yazıya dökülüyor...\nDaha uzun konuşmalarda bu biraz zaman alabilir",
     "errorReprocessingTranscription": "Transkripsiyon yeniden işlenirken hata oluştu. Lütfen daha sonra tekrar dene.",
     "errorNoStoredAudio": "Bu konuşma için kayıtlı ses yok.",
     "deleteConversation": "Sohbeti Sil",

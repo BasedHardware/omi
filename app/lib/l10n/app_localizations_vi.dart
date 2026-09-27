@@ -81,7 +81,8 @@ class AppLocalizationsVi extends AppLocalizations {
   String get reprocessTranscription => 'Xử lý lại bản ghi';
 
   @override
-  String get retranscribingConversation => 'Đang phiên âm lại cuộc trò chuyện...\nViệc này có thể mất vài giây';
+  String get retranscribingConversation =>
+      'Đang ghi lại bản chép lời cuộc trò chuyện...\nViệc này có thể mất một chút đối với cuộc trò chuyện dài';
 
   @override
   String get errorReprocessingTranscription => 'Lỗi khi xử lý lại bản ghi. Vui lòng thử lại sau.';

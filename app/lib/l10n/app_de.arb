@@ -24,7 +24,7 @@
     "testPrompt": "Prompt testen",
     "reprocessConversation": "Unterhaltung neu verarbeiten",
     "reprocessTranscription": "Transkription neu verarbeiten",
-    "retranscribingConversation": "Unterhaltung wird neu transkribiert...\nDas kann ein paar Sekunden dauern",
+    "retranscribingConversation": "Konversation wird erneut transkribiert...\nDas kann bei längeren Konversationen eine Weile dauern",
     "errorReprocessingTranscription": "Fehler beim erneuten Verarbeiten der Transkription. Bitte später erneut versuchen.",
     "errorNoStoredAudio": "Für diese Unterhaltung ist keine gespeicherte Audioaufnahme vorhanden.",
     "deleteConversation": "Gespräch löschen",

@@ -24,7 +24,7 @@
     "testPrompt": "Тествай подсказка",
     "reprocessConversation": "Преработи разговор",
     "reprocessTranscription": "Преработи транскрипцията",
-    "retranscribingConversation": "Повторно транскрибиране на разговора...\nТова може да отнеме няколко секунди",
+    "retranscribingConversation": "Повторно транскрибиране на разговора...\nТова може да отнеме малко време при по-дълги разговори",
     "errorReprocessingTranscription": "Грешка при повторна обработка на транскрипцията. Опитайте отново по-късно.",
     "errorNoStoredAudio": "Няма запазено аудио за този разговор.",
     "deleteConversation": "Изтриване на разговор",

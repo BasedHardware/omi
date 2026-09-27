@@ -24,7 +24,7 @@
     "testPrompt": "Testuj prompt",
     "reprocessConversation": "Przetwórz ponownie rozmowę",
     "reprocessTranscription": "Przetwórz transkrypcję ponownie",
-    "retranscribingConversation": "Ponowne transkrybowanie rozmowy...\nTo może zająć kilka sekund",
+    "retranscribingConversation": "Ponowna transkrypcja rozmowy...\nMoże to chwilę potrwać w przypadku dłuższych rozmów",
     "errorReprocessingTranscription": "Błąd podczas ponownego przetwarzania transkrypcji. Spróbuj ponownie później.",
     "errorNoStoredAudio": "Brak zapisanego dźwięku dla tej rozmowy.",
     "deleteConversation": "Usuń rozmowę",

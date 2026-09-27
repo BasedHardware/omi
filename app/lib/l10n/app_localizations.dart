@@ -333,10 +333,10 @@ abstract class AppLocalizations {
   /// **'Reprocess Transcription'**
   String get reprocessTranscription;
 
-  /// Loading message shown while transcription is being reprocessed
+  /// Loading message shown while transcription is being reprocessed; long conversations can take noticeably longer
   ///
   /// In en, this message translates to:
-  /// **'Retranscribing conversation...\nThis may take a few seconds'**
+  /// **'Retranscribing conversation...\nThis can take a little while for longer conversations'**
   String get retranscribingConversation;
 
   /// Error message when transcription reprocess fails

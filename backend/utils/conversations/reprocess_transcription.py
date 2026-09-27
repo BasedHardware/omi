@@ -58,6 +58,13 @@ def collect_conversation_audio_timestamps(uid: str, conversation: Any) -> List[f
 
 
 def _resolve_stt_language(uid: str, language_code: str | None, conversation: Any) -> tuple[str, bool, List[str]]:
+    """Resolve the STT language for a transcription replay.
+
+    User STT preferences win: when ``single_language_mode`` is on and a stored
+    preference exists, the ``language_code`` argument and
+    ``conversation.language`` are intentionally ignored in favour of the saved
+    preference. Only when no saved preference exists do those fallbacks apply.
+    """
     prefs = get_user_transcription_preferences(uid)
     user_vocab = [word for word in dict.fromkeys(prefs.get('vocabulary', [])) if word != 'Omi']
     vocabulary = ['Omi'] + user_vocab[:99]

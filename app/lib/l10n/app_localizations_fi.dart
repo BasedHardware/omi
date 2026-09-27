@@ -81,7 +81,8 @@ class AppLocalizationsFi extends AppLocalizations {
   String get reprocessTranscription => 'Käsittele litterointi uudelleen';
 
   @override
-  String get retranscribingConversation => 'Keskustelua litteroidaan uudelleen...\nTämä voi kestää muutaman sekunnin';
+  String get retranscribingConversation =>
+      'Transkroi keskustelua uudelleen...\nTämä voi kestää hetken pidempien keskustelujen kohdalla';
 
   @override
   String get errorReprocessingTranscription => 'Virhe litteroinnin uudelleenkäsittelyssä. Yritä myöhemmin uudelleen.';

@@ -81,7 +81,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get reprocessTranscription => 'Znovu zpracovat přepis';
 
   @override
-  String get retranscribingConversation => 'Přepisování konverzace...\nMůže to trvat několik sekund';
+  String get retranscribingConversation => 'Přepis konverzace se opakuje...\nTo může u delších konverzací chvíli trvat';
 
   @override
   String get errorReprocessingTranscription => 'Chyba při opětovném zpracování přepisu. Zkuste to později.';

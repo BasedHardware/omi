@@ -81,7 +81,8 @@ class AppLocalizationsEt extends AppLocalizations {
   String get reprocessTranscription => 'Töötle transkriptsioon uuesti';
 
   @override
-  String get retranscribingConversation => 'Vestluse uuesti transkribeerimine...\nSee võib võtta mõne sekundi';
+  String get retranscribingConversation =>
+      'Vestlust transkribeeritakse uuesti...\nSee võib pikemate vestluste puhul veidi aega võtta';
 
   @override
   String get errorReprocessingTranscription => 'Viga transkriptsiooni uuesti töötlemisel. Proovi hiljem uuesti.';

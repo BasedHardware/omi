@@ -24,7 +24,7 @@
     "testPrompt": "Thử nghiệm",
     "reprocessConversation": "Xử lý lại cuộc trò chuyện",
     "reprocessTranscription": "Xử lý lại bản ghi",
-    "retranscribingConversation": "Đang phiên âm lại cuộc trò chuyện...\nViệc này có thể mất vài giây",
+    "retranscribingConversation": "Đang ghi lại bản chép lời cuộc trò chuyện...\nViệc này có thể mất một chút đối với cuộc trò chuyện dài",
     "errorReprocessingTranscription": "Lỗi khi xử lý lại bản ghi. Vui lòng thử lại sau.",
     "errorNoStoredAudio": "Không có âm thanh đã lưu cho cuộc trò chuyện này.",
     "deleteConversation": "Xóa cuộc trò chuyện",

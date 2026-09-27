@@ -82,7 +82,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get retranscribingConversation =>
-      'సంభాషణను తిరిగి ట్రాన్స్‌క్రైబ్ చేస్తున్నాం...\nఇది కొన్ని సెకన్లు తీసుకోవచ్చు';
+      'సంభాషణను మళ్లీ ట్రాన్స్‌క్రిప్షన్ చేస్తోంది...\nపొడవైన సంభాషణలకు ఇందుకు కొంచెం సమయం పట్టవచ్చు';
 
   @override
   String get errorReprocessingTranscription =>

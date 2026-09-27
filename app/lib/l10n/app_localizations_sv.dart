@@ -81,7 +81,8 @@ class AppLocalizationsSv extends AppLocalizations {
   String get reprocessTranscription => 'Bearbeta transkription igen';
 
   @override
-  String get retranscribingConversation => 'Transkriberar konversationen igen...\nDetta kan ta några sekunder';
+  String get retranscribingConversation =>
+      'Transkriberar konversationen igen...\nDetta kan ta lite tid för längre konversationer';
 
   @override
   String get errorReprocessingTranscription => 'Fel vid ominbearbetning av transkriptionen. Försök igen senare.';

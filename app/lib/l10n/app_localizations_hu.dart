@@ -81,7 +81,8 @@ class AppLocalizationsHu extends AppLocalizations {
   String get reprocessTranscription => 'Átírás újrafeldolgozása';
 
   @override
-  String get retranscribingConversation => 'Beszélgetés újraátírása...\nEz eltarthat néhány másodpercig';
+  String get retranscribingConversation =>
+      'A beszélgetés újraátiratazása...\nEz hosszabb beszélgetések esetén eltarthat egy ideig';
 
   @override
   String get errorReprocessingTranscription => 'Hiba az átírás újrafeldolgozásakor. Próbáld meg később.';

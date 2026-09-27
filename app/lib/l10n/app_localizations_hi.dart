@@ -82,7 +82,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get retranscribingConversation =>
-      'बातचीत को फिर से ट्रांसक्राइब किया जा रहा है...\nइसमें कुछ सेकंड लग सकते हैं';
+      'बातचीत का फिर से ट्रांसक्रिप्शन हो रहा है...\nलंबी बातचीत में इसमें कुछ समय लग सकता है';
 
   @override
   String get errorReprocessingTranscription =>

@@ -81,7 +81,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reprocessTranscription => '文字起こしを再処理';
 
   @override
-  String get retranscribingConversation => '会話を再文字起こししています...\n数秒かかる場合があります';
+  String get retranscribingConversation => '会話を再文字起こししています...\n長い会話では時間がかかることがあります';
 
   @override
   String get errorReprocessingTranscription => '文字起こしの再処理中にエラーが発生しました。後でもう一度お試しください。';

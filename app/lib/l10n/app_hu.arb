@@ -24,7 +24,7 @@
     "testPrompt": "Prompt tesztelése",
     "reprocessConversation": "Beszélgetés újrafeldolgozása",
     "reprocessTranscription": "Átírás újrafeldolgozása",
-    "retranscribingConversation": "Beszélgetés újraátírása...\nEz eltarthat néhány másodpercig",
+    "retranscribingConversation": "A beszélgetés újraátiratazása...\nEz hosszabb beszélgetések esetén eltarthat egy ideig",
     "errorReprocessingTranscription": "Hiba az átírás újrafeldolgozásakor. Próbáld meg később.",
     "errorNoStoredAudio": "Ehhez a beszélgetéshez nincs tárolt hang.",
     "deleteConversation": "Beszélgetés törlése",

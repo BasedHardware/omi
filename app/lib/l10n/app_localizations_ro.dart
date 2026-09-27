@@ -81,7 +81,8 @@ class AppLocalizationsRo extends AppLocalizations {
   String get reprocessTranscription => 'Reprocesează transcrierea';
 
   @override
-  String get retranscribingConversation => 'Retranscriere conversație...\nAceasta poate dura câteva secunde';
+  String get retranscribingConversation =>
+      'Retranscriere conversației...\nAcest lucru poate dura ceva mai mult pentru conversații lungi';
 
   @override
   String get errorReprocessingTranscription => 'Eroare la reprocesarea transcrierii. Încearcă din nou mai târziu.';

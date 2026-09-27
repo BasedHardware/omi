@@ -81,7 +81,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reprocessTranscription => '重新处理转写';
 
   @override
-  String get retranscribingConversation => '正在重新转写对话...\n这可能需要几秒钟';
+  String get retranscribingConversation => '正在重新转录对话...\n较长的对话可能需要稍长时间';
 
   @override
   String get errorReprocessingTranscription => '重新处理转写时出错。请稍后再试。';
