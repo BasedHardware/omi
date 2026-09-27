@@ -5,18 +5,23 @@ Unit tests for backup_bundle tool.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
-from backup_bundle import (
-    count_records,
-    create_backup_bundle,
-    main,
-    sha256_bytes,
-    verify_backup_bundle,
-)
+# Load backup_bundle example script dynamically
+script_path = Path(__file__).resolve().parent.parent / "examples" / "backup_bundle.py"
+spec = importlib.util.spec_from_file_location("backup_bundle", script_path)
+bb = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(bb)
+
+count_records = bb.count_records
+create_backup_bundle = bb.create_backup_bundle
+main = bb.main
+sha256_bytes = bb.sha256_bytes
+verify_backup_bundle = bb.verify_backup_bundle
 
 
 class TestBackupBundle(unittest.TestCase):
@@ -74,6 +79,26 @@ class TestBackupBundle(unittest.TestCase):
     def test_cli_missing_bundle(self):
         exit_code = main(["verify", "nonexistent_bundle.tar.gz"])
         self.assertEqual(exit_code, 1)
+
+    def test_source_date_epoch_reproducibility(self):
+        import os
+        import tarfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bundle_file = Path(tmpdir) / "repro.tar.gz"
+            old_val = os.environ.get("SOURCE_DATE_EPOCH")
+            try:
+                os.environ["SOURCE_DATE_EPOCH"] = "1700000000"
+                manifest = create_backup_bundle({"memories": b"[]"}, bundle_file)
+                self.assertEqual(manifest["created_at"], "2023-11-14T22:13:20+00:00")
+                with tarfile.open(bundle_file, "r:gz") as tar:
+                    member = tar.getmember("memories.json")
+                    self.assertEqual(member.mtime, 1700000000)
+            finally:
+                if old_val is not None:
+                    os.environ["SOURCE_DATE_EPOCH"] = old_val
+                else:
+                    os.environ.pop("SOURCE_DATE_EPOCH", None)
 
 
 if __name__ == "__main__":

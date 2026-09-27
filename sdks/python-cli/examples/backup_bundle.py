@@ -56,7 +56,18 @@ def create_backup_bundle(
     if ".." in output_path.parts:
         raise ValueError(f"Output path cannot contain directory traversal '..': {output_path}")
 
-    timestamp = datetime.now(timezone.utc).isoformat()
+    source_date_epoch = os.environ.get("SOURCE_DATE_EPOCH")
+    if source_date_epoch is not None:
+        try:
+            tar_mtime = int(source_date_epoch)
+            timestamp = datetime.fromtimestamp(tar_mtime, timezone.utc).isoformat()
+        except ValueError:
+            tar_mtime = int(datetime.now(timezone.utc).timestamp())
+            timestamp = datetime.now(timezone.utc).isoformat()
+    else:
+        tar_mtime = int(datetime.now(timezone.utc).timestamp())
+        timestamp = datetime.now(timezone.utc).isoformat()
+
     manifest: Dict[str, Any] = {
         "manifest_version": "1.0",
         "created_at": timestamp,
@@ -94,7 +105,7 @@ def create_backup_bundle(
             for arcname, data_bytes in tar_members.items():
                 tarinfo = tarfile.TarInfo(name=arcname)
                 tarinfo.size = len(data_bytes)
-                tarinfo.mtime = int(datetime.now(timezone.utc).timestamp())
+                tarinfo.mtime = tar_mtime
                 tar.addfile(tarinfo, io.BytesIO(data_bytes))
 
         os.replace(partial_path, output_path)
