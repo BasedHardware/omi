@@ -93,10 +93,14 @@ def _load_main():
     storage.save_users = MagicMock()
     sys.modules["simple_storage"] = storage
 
+    client_path = APP_ROOT / "twitter_client.py"
+    with open(client_path, "r", encoding="utf-8") as f:
+        client_code = compile(f.read(), str(client_path), "exec")
+
     tclient = types.ModuleType("twitter_client")
-    client_inst = MagicMock()
-    tclient.TwitterClient = MagicMock(return_value=client_inst)
+    tclient.__file__ = str(client_path)
     sys.modules["twitter_client"] = tclient
+    exec(client_code, tclient.__dict__)
 
     tdetector = types.ModuleType("tweet_detector")
     tdetector.TweetDetector = MagicMock()
@@ -111,13 +115,13 @@ def _load_main():
     sys.modules["main_simple"] = mod
     exec(code, mod.__dict__)
 
-    return mod, client_inst, saved
+    return mod, tclient, saved
 
 
 class TestTwitterAppErrorSanitization(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.main_mod, cls.client_inst, cls.saved_modules = _load_main()
+        cls.main_mod, cls.twitter_client_mod, cls.saved_modules = _load_main()
 
     @classmethod
     def tearDownClass(cls):
@@ -126,6 +130,25 @@ class TestTwitterAppErrorSanitization(unittest.TestCase):
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = mod
+
+    def test_refresh_access_token_sanitizes_exception(self):
+        client = self.twitter_client_mod.TwitterClient()
+        leak = "Sensitive OAuth 2.0 Secret: secret_leak_xyz"
+        with patch.object(sys.modules["requests"], "post", side_effect=RuntimeError(leak)):
+            with self.assertRaises(Exception) as ctx:
+                client.refresh_access_token("test_refresh_token")
+            self.assertEqual(str(ctx.exception), "Failed to refresh token")
+            self.assertNotIn(leak, str(ctx.exception))
+
+    def test_refresh_access_token_sanitizes_http_error(self):
+        client = self.twitter_client_mod.TwitterClient()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 401
+        with patch.object(sys.modules["requests"], "post", side_effect=None, return_value=mock_resp):
+            with self.assertRaises(Exception) as ctx:
+                client.refresh_access_token("test_refresh_token")
+            self.assertEqual(str(ctx.exception), "Failed to refresh token")
+            self.assertNotIn("401", str(ctx.exception))
 
     def test_auth_start_sanitizes_exception(self):
         with patch.object(
